@@ -44,7 +44,6 @@ function createWebActivityMessage(
         : {}),
       callId: payload.callId,
       queries: payload.queries,
-      resultText: payload.resultText,
       status,
     };
   }
@@ -67,7 +66,6 @@ function createWebActivityMessage(
     url: payload.url,
     prompt: payload.prompt,
     pattern: payload.pattern,
-    resultText: payload.resultText,
     status,
   };
 }
@@ -94,7 +92,6 @@ function mergeWebActivityMessage(
 
   if (target.kind === "web-search" && payload.itemKind === "web-search") {
     target.queries = payload.queries;
-    target.resultText = payload.resultText;
     return;
   }
 
@@ -102,7 +99,6 @@ function mergeWebActivityMessage(
     target.url = payload.url;
     target.prompt = payload.prompt;
     target.pattern = payload.pattern;
-    target.resultText = payload.resultText;
   }
 }
 

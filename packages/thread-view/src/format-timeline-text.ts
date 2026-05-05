@@ -1,37 +1,27 @@
 import type {
   TimelineCommandWorkRow,
-  TimelineFileChange,
-  TimelineFileChangeWorkRow,
   TimelineRow,
   TimelineRowStatus,
-  TimelineToolWorkRow,
-  TimelineWebFetchWorkRow,
-  TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
-import { durationToCompactString, plural } from "./format-helpers.js";
 import {
-  buildTimelineActivitySummaryLabel,
+  buildTimelineWorkSummaryLabel,
   buildTimelineViewRows,
 } from "./timeline-view.js";
 import {
-  formatFileChangePath,
-  getFileChangeAction,
-  getFileChangeActionPastTense,
-  getFileChangeActionPresentTense,
-} from "./file-change-summary.js";
-import {
   formatTimelineActivityIntentDetail,
-  formatTimelineActivityIntentTitle,
   getTimelineActivityIntentDetailDedupeKey,
   hasTimelineExplorationIntent,
-  primaryTimelineActivityIntent,
   type TimelineExplorationWorkRow,
 } from "./timeline-activity-intents.js";
+import {
+  buildTimelineActivityIntentTitles,
+  buildTimelineRowTitle,
+  type BuildTimelineRowTitleOptions,
+} from "./timeline-row-title.js";
 import type {
   ThreadTimelineViewRow,
-  TimelineActivitySummaryRow,
-  TimelineViewDelegationWorkRow,
+  TimelineWorkSummaryRow,
   TimelineViewTurnRow,
   TimelineViewWorkRow,
 } from "./timeline-view.js";
@@ -50,6 +40,11 @@ interface TimelineTextFormatContext {
   depth: number;
   truncateForAudit: boolean;
 }
+
+const CLI_TITLE_OPTIONS = {
+  summaryStyle: "bundle",
+  workStyle: "default",
+} satisfies BuildTimelineRowTitleOptions;
 
 type TimelineConversationViewRow = Extract<
   ThreadTimelineViewRow,
@@ -181,36 +176,6 @@ function maybeTruncateBodyLinesForAudit(
   return truncateBodyLinesForAudit(lines);
 }
 
-function statusVerb(status: TimelineRowStatus, running: string, past: string) {
-  switch (status) {
-    case "pending":
-      return running;
-    case "completed":
-      return past;
-    case "error":
-      return "Failed";
-    case "interrupted":
-      return "Interrupted";
-    default:
-      return assertNever(status);
-  }
-}
-
-function plainStatusLabel(status: TimelineRowStatus): string {
-  switch (status) {
-    case "pending":
-      return "running";
-    case "completed":
-      return "completed";
-    case "error":
-      return "error";
-    case "interrupted":
-      return "interrupted";
-    default:
-      return assertNever(status);
-  }
-}
-
 function statusLabel(status: TimelineRowStatus, color: boolean): string {
   switch (status) {
     case "pending":
@@ -246,150 +211,23 @@ function workStatusLabel(row: TimelineViewWorkRow, color: boolean): string {
   return statusLabel(row.status, color);
 }
 
-function formatDiffStats(change: TimelineFileChange): string | null {
-  const { added, removed } = change.diffStats;
-  if (added === 0 && removed === 0) {
+function formatWorkTitle(row: TimelineViewWorkRow): string {
+  const explorationTitle = formatExplorationWorkTitle(row);
+  if (explorationTitle !== null) {
+    return explorationTitle;
+  }
+  return buildTimelineRowTitle(row, CLI_TITLE_OPTIONS).plain;
+}
+
+function formatExplorationWorkTitle(row: TimelineViewWorkRow): string | null {
+  if (
+    (row.workKind !== "command" && row.workKind !== "tool") ||
+    !hasTimelineExplorationIntent(row)
+  ) {
     return null;
   }
-  if (added === 0) {
-    return `-${removed}`;
-  }
-  if (removed === 0) {
-    return `+${added}`;
-  }
-  return `+${added} -${removed}`;
-}
-
-function formatFileChangeTitle(row: TimelineFileChangeWorkRow): string {
-  const change = row.change;
-  const action = getFileChangeAction(change);
-  const completedVerb = getFileChangeActionPastTense(action);
-  const verb =
-    row.status === "pending"
-      ? getFileChangeActionPresentTense(action)
-      : statusVerb(row.status, "Editing", completedVerb);
-  const stats = formatDiffStats(change);
-  return [verb, formatFileChangePath({ change, mode: "full" }), stats]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function formatStatusDurationSuffix(
-  status: TimelineRowStatus,
-  durationMs: number | null,
-): string {
-  const parts = [plainStatusLabel(status)];
-  if (durationMs !== null) {
-    parts.push(durationToCompactString(durationMs));
-  }
-  return `(${parts.join(", ")})`;
-}
-
-function formatCommandTitle(row: TimelineCommandWorkRow): string {
-  const intent = primaryTimelineActivityIntent(row);
-  if (intent) {
-    return formatTimelineActivityIntentTitle({
-      intent,
-      pathMode: "full",
-      pending: row.status === "pending",
-    });
-  }
-  if (row.approvalStatus === "waiting_for_approval") {
-    return "Command (waiting)";
-  }
-  if (row.approvalStatus === "denied") {
-    return "Command (denied)";
-  }
-  if (row.status === "error") {
-    const duration =
-      row.durationMs !== null
-        ? ` ${durationToCompactString(row.durationMs)}`
-        : "";
-    return `Ran command${duration}`;
-  }
-  const verb = row.status === "pending" ? "Running" : "Ran";
-  return `${verb} command ${formatStatusDurationSuffix(row.status, row.durationMs)}`;
-}
-
-function formatToolTitle(row: TimelineToolWorkRow): string {
-  const intent = primaryTimelineActivityIntent(row);
-  if (intent) {
-    return formatTimelineActivityIntentTitle({
-      intent,
-      pathMode: "full",
-      pending: row.status === "pending",
-    });
-  }
-  if (row.approvalStatus === "waiting_for_approval") {
-    return `Tool (waiting): ${row.label}`;
-  }
-  if (row.approvalStatus === "denied") {
-    return `Tool (denied): ${row.label}`;
-  }
-  const verb = statusVerb(row.status, "Running", "Ran");
-  return `${verb} tool: ${row.label}`;
-}
-
-function formatDelegationTitle(row: TimelineViewDelegationWorkRow): string {
-  const description = row.description ?? (row.output.trim() || row.toolName);
-  const metadata = row.subagentType ? ` (${row.subagentType})` : "";
-  const duration =
-    row.durationMs !== null
-      ? ` ${durationToCompactString(row.durationMs)}`
-      : "";
-  return `${statusVerb(row.status, "Running subagent", "Ran subagent")}: ${description}${metadata}${duration}`;
-}
-
-function formatWebSearchTitle(row: TimelineWebSearchWorkRow): string {
-  const query = row.queries.join(", ") || "web search";
-  switch (row.status) {
-    case "pending":
-      return `Running web search: ${query}`;
-    case "completed":
-      return `Ran web search: ${query}`;
-    case "error":
-      return `Failed web search: ${query}`;
-    case "interrupted":
-      return `Interrupted web search: ${query}`;
-    default:
-      return assertNever(row.status);
-  }
-}
-
-function formatWebFetchTitle(row: TimelineWebFetchWorkRow): string {
-  switch (row.status) {
-    case "pending":
-      return `Fetching: ${row.url}`;
-    case "completed":
-      return `Fetched: ${row.url}`;
-    case "error":
-      return `Failed fetch: ${row.url}`;
-    case "interrupted":
-      return `Interrupted fetch: ${row.url}`;
-    default:
-      return assertNever(row.status);
-  }
-}
-
-function formatWorkTitle(row: TimelineViewWorkRow): string {
-  switch (row.workKind) {
-    case "command":
-      return formatCommandTitle(row);
-    case "tool":
-      return formatToolTitle(row);
-    case "file-change":
-      return formatFileChangeTitle(row);
-    case "web-search":
-      return formatWebSearchTitle(row);
-    case "web-fetch":
-      return formatWebFetchTitle(row);
-    case "approval":
-      return row.title;
-    case "delegation":
-      return formatDelegationTitle(row);
-    default:
-      return assertNever(row);
-  }
+  const titles = buildTimelineActivityIntentTitles(row);
+  return titles.length === 1 ? (titles[0]?.title.plain ?? null) : null;
 }
 
 function formatWorkOutput(output: string, color: boolean): string {
@@ -409,7 +247,7 @@ function formatCommandExitCodeLine(
   if (row.exitCode === 0) {
     return dim("  exit code 0", color);
   }
-  return red(`  exit ${row.exitCode}`, color);
+  return dim(`  exit ${row.exitCode}`, color);
 }
 
 function formatWorkBody(
@@ -455,14 +293,8 @@ function formatWorkBody(
       }
       return lines;
     case "web-search":
-      if (context.verbose && row.resultText) {
-        lines.push(dim(indentBlock(row.resultText, "  "), context.color));
-      }
       return lines;
     case "web-fetch":
-      if (context.verbose && row.resultText) {
-        lines.push(dim(indentBlock(row.resultText, "  "), context.color));
-      }
       return lines;
     case "approval":
       return lines;
@@ -509,14 +341,18 @@ function formatExplorationWorkDetails(
       dedupedDetailKeys.add(dedupeKey);
     }
     details.push(
-      formatTimelineActivityIntentDetail({ intent, pathMode: "full" }),
+      formatTimelineActivityIntentDetail({
+        intent,
+        pathMode: "full",
+        pending: row.status === "pending",
+      }),
     );
   }
   return details;
 }
 
-function formatActivitySummaryDetails(
-  row: TimelineActivitySummaryRow,
+function formatWorkSummaryDetails(
+  row: TimelineWorkSummaryRow,
   context: TimelineTextFormatContext,
 ): string[] {
   const lines: string[] = [];
@@ -543,13 +379,13 @@ function formatActivitySummaryDetails(
   return lines;
 }
 
-function formatActivitySummary(
-  row: TimelineActivitySummaryRow,
+function formatWorkSummary(
+  row: TimelineWorkSummaryRow,
   context: TimelineTextFormatContext,
 ): string {
-  const lines = [rowHeader(buildTimelineActivitySummaryLabel(row), context)];
-  if (context.verbose) {
-    const details = formatActivitySummaryDetails(row, context);
+  const lines = [rowHeader(buildTimelineWorkSummaryLabel(row), context)];
+  if (context.verbose || row.kind === "bundle-summary") {
+    const details = formatWorkSummaryDetails(row, context);
     if (details.length > 0) {
       lines.push(indentBlock(details.join("\n"), "  "));
     }
@@ -558,13 +394,7 @@ function formatActivitySummary(
 }
 
 function formatTurnTitle(row: TimelineViewTurnRow): string {
-  if (row.durationMs !== null && row.durationMs >= 1_000) {
-    return `Worked for ${durationToCompactString(row.durationMs)}`;
-  }
-  if (row.summaryCount > 0) {
-    return `Worked on ${plural(row.summaryCount, "item")}`;
-  }
-  return "Turn";
+  return buildTimelineRowTitle(row, CLI_TITLE_OPTIONS).plain;
 }
 
 function formatConversationRequestLabel(
@@ -611,8 +441,9 @@ function formatRow(
       ]
         .filter((line) => line.length > 0)
         .join("\n");
-    case "activity-summary":
-      return formatActivitySummary(row, context);
+    case "bundle-summary":
+    case "step-summary":
+      return formatWorkSummary(row, context);
     case "turn": {
       const label = formatTurnTitle(row);
       if (!row.children || row.children.length === 0) {

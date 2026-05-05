@@ -182,8 +182,8 @@ export function ThreadDetailView() {
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
   const timelineRows = useMemo(
-    () => [...(timeline?.rows ?? []), ...(timeline?.pendingSteers ?? [])],
-    [timeline?.pendingSteers, timeline?.rows],
+    () => timeline?.rows ?? [],
+    [timeline?.rows],
   );
   const hostConnectionNotice = useMemo(
     () => (thread ? buildHostConnectionNotice(thread) : null),
@@ -412,6 +412,9 @@ export function ThreadDetailView() {
   }
 
   const canUseGitUi = !isManagerThread;
+  const turnSummaryRowsIdentity = `${thread.id}:${
+    managerTimelineView ?? "default"
+  }`;
   const hasAssignableManager = managerSelectorOptions.some(
     (option) => option.value !== "none",
   );
@@ -711,6 +714,7 @@ export function ThreadDetailView() {
           timelineRows,
           threadId: thread.id,
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
+          turnSummaryRowsIdentity,
           turnSummaryRowsById,
         }}
       />

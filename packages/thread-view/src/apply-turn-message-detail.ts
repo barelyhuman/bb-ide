@@ -6,6 +6,7 @@ import type {
 } from "./event-projection-types.js";
 import {
   findLastTerminalTimelineMessage,
+  isTimelineTerminalMessage,
   isTimelineUngroupableMessage,
 } from "./timeline-message-helpers.js";
 
@@ -50,6 +51,9 @@ function shouldIncludeSummaryTurnMessages(
     if (terminalMessage && message.id === terminalMessage.id) {
       foundTerminalMessage = true;
       continue;
+    }
+    if (terminalMessage && isTimelineTerminalMessage(message)) {
+      return true;
     }
     if (isTimelineUngroupableMessage(message)) {
       return true;

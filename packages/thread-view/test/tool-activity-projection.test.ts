@@ -377,6 +377,21 @@ describe("tool activity projection", () => {
     ]);
   });
 
+  it("derives pending command duration from the latest update timestamp", () => {
+    const state = createProjectionState();
+
+    beginCommandWithoutOutput(state);
+    onExecOutput(
+      state,
+      eventMeta(2_001),
+      commandOutput({ output: "still running\n" }),
+      true,
+      false,
+    );
+
+    expect(activeCommandMessage(state)?.durationMs).toBe(2_000);
+  });
+
   it("applies late command output to a finalized history row", () => {
     const state = createProjectionState();
 

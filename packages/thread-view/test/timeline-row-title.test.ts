@@ -4,6 +4,7 @@ import type {
   TimelineCommandWorkRow,
   TimelineFileChangeWorkRow,
   TimelineRowBase,
+  TimelineSystemRow,
   TimelineToolWorkRow,
   TimelineWebFetchWorkRow,
   TimelineWebSearchWorkRow,
@@ -15,12 +16,13 @@ import {
   type TimelineViewDelegationWorkRow,
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
+  type TimelineWorkSummaryKind,
+  type TimelineWorkSummaryRow,
 } from "../src/index.js";
-import type { TimelineActivitySummaryRow } from "../src/timeline-view.js";
 
 const DEFAULT_OPTIONS: BuildTimelineRowTitleOptions = {
-  preferOngoingLabel: false,
   summaryStyle: "bundle",
+  workStyle: "default",
 };
 
 function baseRow(id: string): TimelineRowBase {
@@ -167,7 +169,6 @@ function webSearchRow(): TimelineWebSearchWorkRow {
     status: "completed",
     callId: "web-search-call-1",
     queries: ["timeline renderer"],
-    resultText: null,
   };
 }
 
@@ -181,7 +182,6 @@ function webFetchRow(): TimelineWebFetchWorkRow {
     url: "https://example.com/thread-view",
     prompt: null,
     pattern: null,
-    resultText: null,
   };
 }
 
@@ -201,12 +201,24 @@ function delegationRow(): TimelineViewDelegationWorkRow {
   };
 }
 
-function activitySummaryRow(
+function systemOperationRow(): TimelineSystemRow {
+  return {
+    ...baseRow("system-1"),
+    kind: "system",
+    systemKind: "operation",
+    title: "Thread release failed",
+    detail: null,
+    status: "error",
+  };
+}
+
+function workSummaryRow(
   children: TimelineViewWorkRow[],
-): TimelineActivitySummaryRow {
+  kind: TimelineWorkSummaryKind = "step-summary",
+): TimelineWorkSummaryRow {
   return {
     ...baseRow("summary-1"),
-    kind: "activity-summary",
+    kind,
     status: "completed",
     children,
   };
@@ -238,6 +250,83 @@ describe("buildTimelineRowTitle", () => {
       truncate: false,
     });
   });
+
+  it("shows pending command duration once it is over one second", () => {
+    const title = buildTimelineRowTitle(
+      {
+        ...commandRow(),
+        status: "pending",
+        exitCode: null,
+        durationMs: 2_100,
+      },
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe(
+      "Running pnpm exec turbo run test --filter=@bb/app 2s",
+    );
+    expect(title.prefix).toBe("Running");
+    expect(title.content).toBe("pnpm exec turbo run test --filter=@bb/app");
+    expect(title.suffix).toEqual({
+      kind: "text",
+      text: "2s",
+      truncate: false,
+    });
+    expect(title.motion).toBe("shimmer");
+  });
+
+  it("can render completed work leaves with muted summary title treatment", () => {
+    const title = buildTimelineRowTitle(commandRow(), {
+      summaryStyle: "background",
+      workStyle: "summary",
+    });
+
+    expect(title.plain).toBe(
+      "Ran pnpm exec turbo run test --filter=@bb/app 2s",
+    );
+    expect(title.prefix).toBe("Ran");
+    expect(title.content).toBe("pnpm exec turbo run test --filter=@bb/app");
+    expect(title.contentTone).toBe("muted");
+    expect(title.tone).toBe("summary");
+  });
+
+  it.each([
+    {
+      expectedPlain:
+        "Permission denied: pnpm exec turbo run test --filter=@bb/app 2s",
+      row: {
+        ...commandRow(),
+        approvalStatus: "denied",
+      } satisfies TimelineCommandWorkRow,
+    },
+    {
+      expectedPlain: "Permission denied: src/existing-file.ts +1 -1",
+      row: {
+        ...editedFileRow(),
+        approvalStatus: "denied",
+      } satisfies TimelineFileChangeWorkRow,
+    },
+    {
+      expectedPlain: "Permission denied: Read /repo/src/app.ts 2s",
+      row: {
+        ...toolRow(),
+        approvalStatus: "denied",
+      } satisfies TimelineToolWorkRow,
+    },
+  ])(
+    "keeps denied $row.workKind titles destructive when summary work style is requested",
+    ({ expectedPlain, row }) => {
+      const title = buildTimelineRowTitle(row, {
+        summaryStyle: "background",
+        workStyle: "summary",
+      });
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.prefix).toBe("Permission denied:");
+      expect(title.contentTone).toBe("emphasis");
+      expect(title.tone).toBe("destructive");
+    },
+  );
 
   it("keeps error commands as command rows with status metadata", () => {
     const row = {
@@ -369,19 +458,92 @@ describe("buildTimelineRowTitle", () => {
     });
   });
 
+  it.each([
+    {
+      status: "error" as const,
+      expectedPlain:
+        "Failed subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) 45s",
+      expectedTone: "destructive",
+    },
+    {
+      status: "interrupted" as const,
+      expectedPlain:
+        "Interrupted subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) 45s",
+      expectedTone: "default",
+    },
+  ])(
+    "uses lifecycle wording for $status delegation titles",
+    ({ status, expectedPlain, expectedTone }) => {
+      const row = {
+        ...delegationRow(),
+        status,
+      } satisfies TimelineViewDelegationWorkRow;
+
+      const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.tone).toBe(expectedTone);
+    },
+  );
+
+  it("uses destructive tone for failed system operation titles", () => {
+    const title = buildTimelineRowTitle(systemOperationRow(), DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Thread release failed");
+    expect(title.contentTone).toBe("emphasis");
+    expect(title.tone).toBe("destructive");
+  });
+
   it("formats turn durations over 60 minutes as hours", () => {
     const title = buildTimelineRowTitle(turnRow(), DEFAULT_OPTIONS);
 
     expect(title.plain).toBe("Worked for 1h 1m 1s");
   });
 
-  it("can render activity summaries as bundle titles or muted background summaries", () => {
-    const row = activitySummaryRow([webSearchRow(), webFetchRow()]);
+  it("hides subsecond turn durations", () => {
+    const row = {
+      ...turnRow(),
+      durationMs: 250,
+      summaryCount: 3,
+    } satisfies TimelineViewTurnRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Worked");
+  });
+
+  it("hides one-second turn durations", () => {
+    const row = {
+      ...turnRow(),
+      durationMs: 1_000,
+      status: "pending",
+    } satisfies TimelineViewTurnRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Working");
+    expect(title.motion).toBe("shimmer");
+  });
+
+  it("does not use item-count fallback titles when turn duration is missing", () => {
+    const row = {
+      ...turnRow(),
+      durationMs: null,
+      summaryCount: 3,
+    } satisfies TimelineViewTurnRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Worked");
+  });
+
+  it("can render step summaries as bundle titles or muted background summaries", () => {
+    const row = workSummaryRow([webSearchRow(), webFetchRow()]);
 
     const bundleTitle = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
     const backgroundTitle = buildTimelineRowTitle(row, {
-      preferOngoingLabel: false,
       summaryStyle: "background",
+      workStyle: "default",
     });
 
     expect(bundleTitle.plain).toBe("Ran 1 web search, fetched 1 web page");
@@ -396,7 +558,7 @@ describe("buildTimelineRowTitle", () => {
 
   it("summarizes file changes by action", () => {
     const title = buildTimelineRowTitle(
-      activitySummaryRow([
+      workSummaryRow([
         createdFileRow(),
         deletedFileRow(),
         editedFileRow(),
@@ -407,15 +569,132 @@ describe("buildTimelineRowTitle", () => {
     expect(title.plain).toBe("Created 1 file, deleted 1 file, edited 1 file");
   });
 
-  it("uses active wording for tail summaries only when requested", () => {
-    const row = activitySummaryRow([webSearchRow()]);
-    const title = buildTimelineRowTitle(row, {
-      preferOngoingLabel: true,
+  it("does not relabel completed summaries as active", () => {
+    const title = buildTimelineRowTitle(workSummaryRow([webSearchRow()]), {
       summaryStyle: "bundle",
+      workStyle: "default",
+    });
+
+    expect(title.plain).toBe("Ran 1 web search");
+    expect(title.motion).toBe("none");
+  });
+
+  it("keeps non-success summary status visible without destructive tone", () => {
+    const row = {
+      ...workSummaryRow([
+        {
+          ...commandRow(),
+          status: "error",
+        },
+      ]),
+      status: "error",
+    } satisfies TimelineWorkSummaryRow;
+
+    const title = buildTimelineRowTitle(row, {
+      summaryStyle: "background",
+      workStyle: "default",
+    });
+
+    expect(title.plain).toBe("Ran 1 command (error)");
+    expect(title.suffix).toEqual({
+      kind: "text",
+      text: "(error)",
+      truncate: false,
+    });
+    expect(title.tone).toBe("summary");
+  });
+
+  it("keeps interrupted summary status visible", () => {
+    const row = {
+      ...workSummaryRow([
+        {
+          ...commandRow(),
+          status: "interrupted",
+        },
+      ]),
+      status: "interrupted",
+    } satisfies TimelineWorkSummaryRow;
+
+    const title = buildTimelineRowTitle(row, {
+      summaryStyle: "background",
+      workStyle: "default",
+    });
+
+    expect(title.plain).toBe("Ran 1 command (interrupted)");
+    expect(title.tone).toBe("summary");
+  });
+
+  it("uses active wording for bundle summaries", () => {
+    const row = {
+      ...workSummaryRow(
+        [
+          {
+            ...webSearchRow(),
+            status: "pending",
+          },
+        ],
+        "bundle-summary",
+      ),
+      status: "pending",
+    } satisfies TimelineWorkSummaryRow;
+    const title = buildTimelineRowTitle(row, {
+      summaryStyle: "bundle",
+      workStyle: "default",
     });
 
     expect(title.plain).toBe("Running 1 web search");
-    expect(title.shimmerPrefix).toBe(true);
+    expect(title.motion).toBe("shimmer");
+  });
+
+  it("uses semantic active wording for mixed bundle summaries", () => {
+    const row = {
+      ...workSummaryRow(
+        [
+          {
+            ...toolRow(),
+            status: "pending",
+          },
+          {
+            ...commandRow(),
+            status: "pending",
+          },
+        ],
+        "bundle-summary",
+      ),
+      status: "pending",
+    } satisfies TimelineWorkSummaryRow;
+    const title = buildTimelineRowTitle(row, {
+      summaryStyle: "bundle",
+      workStyle: "default",
+    });
+
+    expect(title.plain).toBe("Exploring 1 file, running 1 command");
+    expect(title.motion).toBe("shimmer");
+  });
+
+  it("uses active wording for tool-only bundle summaries", () => {
+    const row = {
+      ...workSummaryRow(
+        [
+          {
+            ...toolRow(),
+            activityIntents: [],
+            label: "UnknownTool",
+            toolName: "UnknownTool",
+            status: "pending",
+          },
+        ],
+        "bundle-summary",
+      ),
+      status: "pending",
+    } satisfies TimelineWorkSummaryRow;
+    const title = buildTimelineRowTitle(row, {
+      summaryStyle: "bundle",
+      workStyle: "default",
+    });
+
+    expect(title.plain).toBe("Running 1 tool");
+    expect(title.motion).toBe("shimmer");
   });
 
   it("builds compact exploration intent titles with read de-duping", () => {
@@ -437,6 +716,27 @@ describe("buildTimelineRowTitle", () => {
     expect(titles[0]?.title.prefix).toBe("Read");
     expect(titles[0]?.title.content).toBe("app.ts");
     expect(titles.every((entry) => entry.title.contentTone === "muted")).toBe(
+      true,
+    );
+  });
+
+  it("uses active wording for pending compact exploration intent titles", () => {
+    const row = {
+      ...commandRow(),
+      status: "pending",
+      exitCode: null,
+      activityIntents: [readIntent("src/app.ts"), searchIntent("TODO", "src")],
+    } satisfies TimelineCommandWorkRow;
+
+    const titles = buildTimelineActivityIntentTitles(row);
+
+    expect(titles.map((entry) => entry.title.plain)).toEqual([
+      "Reading src/app.ts",
+      "Searching for TODO in src",
+    ]);
+    expect(titles[0]?.title.prefix).toBe("Reading");
+    expect(titles[0]?.title.content).toBe("app.ts");
+    expect(titles.every((entry) => entry.title.motion === "shimmer")).toBe(
       true,
     );
   });

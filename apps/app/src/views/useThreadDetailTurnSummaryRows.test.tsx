@@ -47,7 +47,7 @@ describe("useThreadDetailTurnSummaryRows", () => {
     );
   });
 
-  it("updates the loader callback when timeline mode changes", () => {
+  it("keeps the loader callback stable when timeline mode changes", () => {
     const { wrapper } = createQueryClientTestHarness();
     const initialProps: ThreadDetailTurnSummaryRowsHookProps = {
       managerTimelineView: undefined,
@@ -64,7 +64,7 @@ describe("useThreadDetailTurnSummaryRows", () => {
       unrelatedValue: "initial",
     });
 
-    expect(result.current.handleLoadTurnSummaryRows).not.toBe(
+    expect(result.current.handleLoadTurnSummaryRows).toBe(
       originalLoadTurnSummaryRows,
     );
   });

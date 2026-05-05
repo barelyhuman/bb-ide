@@ -6,7 +6,6 @@ export interface WebSearchLifecycleEvent {
   itemKind: "web-search";
   callId: string;
   queries: string[];
-  resultText: string | null;
   parentToolCallId?: string;
 }
 
@@ -17,7 +16,6 @@ export interface WebFetchLifecycleEvent {
   url: string;
   prompt: string | null;
   pattern: string | null;
-  resultText: string | null;
   parentToolCallId?: string;
 }
 
@@ -43,7 +41,6 @@ export function parseWebActivityLifecycleEvent(
       itemKind: "web-search",
       callId,
       queries: decoded.item.queries,
-      resultText: decoded.item.resultText,
       ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
@@ -62,7 +59,6 @@ export function parseWebActivityLifecycleEvent(
       url: decoded.item.url,
       prompt: decoded.item.prompt,
       pattern: decoded.item.pattern,
-      resultText: decoded.item.resultText,
       ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }

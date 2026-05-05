@@ -6,11 +6,12 @@ import type { TimelineTitle } from "@bb/thread-view";
 import { ExpandableTimelineRow } from "../src/thread-timeline/ExpandableTimelineRow.js";
 
 const TITLE: TimelineTitle = {
+  action: null,
   content: "details",
   contentTone: "emphasis",
+  motion: "none",
   plain: "Ran details",
   prefix: "Ran",
-  shimmerPrefix: false,
   suffix: null,
   tone: "default",
 };

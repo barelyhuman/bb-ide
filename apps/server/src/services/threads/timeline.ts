@@ -151,7 +151,6 @@ export function buildThreadTimeline(
 
   return {
     rows: timeline.rows,
-    pendingSteers: timeline.pendingSteers,
     activeThinking: timeline.activeThinking,
     contextWindowUsage: timeline.contextWindowUsage ?? undefined,
   };

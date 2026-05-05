@@ -11,6 +11,10 @@ import type { TimelineEventFactory } from "./timeline-test-harness.js";
 type TimelineFixtureEvent = ReturnType<
   TimelineEventFactory[keyof TimelineEventFactory]
 >;
+type TimelineWebWorkRow = Extract<
+  TimelineRow,
+  { kind: "work"; workKind: "web-fetch" | "web-search" }
+>;
 
 function renderIdleTimeline(events: TimelineFixtureEvent[]) {
   return renderTimelineFixture({
@@ -74,8 +78,27 @@ function flattenTimelineRows(rows: readonly TimelineRow[]): TimelineRow[] {
   return flattenedRows;
 }
 
+function isTimelineWebWorkRow(row: TimelineRow): row is TimelineWebWorkRow {
+  return (
+    row.kind === "work" &&
+    (row.workKind === "web-search" || row.workKind === "web-fetch")
+  );
+}
+
+function getOnlyTimelineWebWorkRow(
+  rows: readonly TimelineRow[],
+): TimelineWebWorkRow {
+  const webRows = rows.filter(isTimelineWebWorkRow);
+  expect(webRows).toHaveLength(1);
+  const row = webRows[0];
+  if (!row) {
+    throw new Error("Expected one timeline web work row");
+  }
+  return row;
+}
+
 describe("timeline CLI rendering snapshots", () => {
-  it("preserves segment durations when a turn summary is split by a steer", () => {
+  it("keeps accepted steer segments out of turn summaries", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted({ createdAt: 0 }),
@@ -116,12 +139,19 @@ describe("timeline CLI rendering snapshots", () => {
       event.turnCompleted({ createdAt: 17_000 }),
     ]);
 
-    expect(timeline.turnRows.map((row) => row.durationMs)).toEqual([
-      5_000,
-      6_000,
-    ]);
-    expect(timeline.text).toContain("Worked for 5s");
-    expect(timeline.text).toContain("Worked for 6s");
+    expect(timeline.turnRows).toHaveLength(0);
+    expect(timeline.text).not.toContain("Worked for");
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── Ran pnpm test 5s ────────────────────────────────────────
+        $ pnpm test
+
+      ── User ────────────────────────────────────────────────────
+      Please keep going
+      steer
+
+      ── Ran pnpm lint 6s ────────────────────────────────────────
+        $ pnpm lint"
+    `);
   });
 
   it("truncates audit output only inside conversation and leaf row bodies", () => {
@@ -187,10 +217,10 @@ describe("timeline CLI rendering snapshots", () => {
       third user line
       ... [truncated 1 lines]
 
-      ── Worked on 2 items ───────────────────────────────────────
+      ── Worked ──────────────────────────────────────────────────
         ── Explored 1 search, ran 1 command
           ── Searched for timelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimeline in packages/core-ui
-          ── Ran command (completed)
+          ── Ran git show 2bc512e57 --stat | head -20
             $ git show 2bc512e57 --stat | head -20
             commit 2bc512e57819f74a07688ac6f49dfc0522c46a1a
             Author: OpenAI Codex <codex@openai.com>
@@ -278,8 +308,8 @@ describe("timeline CLI rendering snapshots", () => {
           "text": "── User ────────────────────────────────────────────────────
       Patch the timeline output
 
-      ── Exploring 1 search ──────────────────────────────────────
-        ── Searched for timeline in packages/core-ui",
+      ── Searching for timeline in packages/core-ui ──────────────
+        $ rg timeline packages/core-ui",
         },
         {
           "messageKinds": [
@@ -290,8 +320,8 @@ describe("timeline CLI rendering snapshots", () => {
           "text": "── User ────────────────────────────────────────────────────
       Patch the timeline output
 
-      ── Explored 1 search ───────────────────────────────────────
-        ── Searched for timeline in packages/core-ui",
+      ── Searched for timeline in packages/core-ui ───────────────
+        $ rg timeline packages/core-ui",
         },
         {
           "messageKinds": [
@@ -304,10 +334,11 @@ describe("timeline CLI rendering snapshots", () => {
           "text": "── User ────────────────────────────────────────────────────
       Patch the timeline output
 
-      ── Working on 3 items ──────────────────────────────────────
+      ── Explored 1 search, ran 1 web search ─────────────────────
         ── Searched for timeline in packages/core-ui
         ── Ran web search: timeline rendering
-        ── Editing /repo/packages/core-ui/src/format-timeline-text.ts",
+
+      ── Editing /repo/packages/core-ui/src/format-timeline-text.ts",
         },
         {
           "messageKinds": [
@@ -321,7 +352,7 @@ describe("timeline CLI rendering snapshots", () => {
           "text": "── User ────────────────────────────────────────────────────
       Patch the timeline output
 
-      ── Worked on 3 items ───────────────────────────────────────
+      ── Worked ──────────────────────────────────────────────────
         ── Explored 1 search, ran 1 web search, edited 1 file
           ── Searched for timeline in packages/core-ui
           ── Ran web search: timeline rendering
@@ -360,10 +391,78 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(messageKinds(timeline.messages)).toEqual(["user", "command"]);
     expect(commandMessage?.output).toBe("collecting tests\n");
-    expect(timeline.text).toContain("Running 1 command");
+    expect(timeline.text).toContain("Running pnpm test -- --runInBand");
     expect(timeline.text).toContain("$ pnpm test -- --runInBand");
     expect(timeline.text).toContain("collecting tests");
     expect(timeline.text).not.toContain("exit code");
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── User ────────────────────────────────────────────────────
+      Run the focused tests
+
+      ── Running pnpm test -- --runInBand ────────────────────────
+        $ pnpm test -- --runInBand
+        collecting tests"
+    `);
+  });
+
+  it("shows active bundle leaves in minimal output without verbose bodies", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderActiveTimeline([
+      event.turnStarted(),
+      event.commandStarted({
+        itemId: "cmd-test",
+        command: "pnpm test",
+      }),
+      event.commandOutputDelta({
+        itemId: "cmd-test",
+        delta: "collecting tests\n",
+      }),
+      event.commandStarted({
+        itemId: "cmd-lint",
+        command: "pnpm lint",
+      }),
+    ]);
+
+    const minimalText = formatThreadTimelineText(timeline.rows, {
+      color: false,
+      verbose: false,
+    });
+
+    expect(minimalText).not.toContain("collecting tests");
+    expect(minimalText).toMatchInlineSnapshot(`
+      "── Running 2 commands ──────────────────────────────────────
+        ── Running pnpm test
+          $ pnpm test
+        ── Running pnpm lint
+          $ pnpm lint"
+    `);
+  });
+
+  it("uses shared turn title fallback text in CLI output", () => {
+    const text = formatThreadTimelineText(
+      [
+        {
+          id: "thread-1:turn-1:turn",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          startedAt: 1,
+          createdAt: 1,
+          kind: "turn",
+          status: "completed",
+          summaryCount: 0,
+          durationMs: null,
+          children: null,
+        } satisfies TimelineRow,
+      ],
+      {
+        color: false,
+        verbose: false,
+      },
+    );
+
+    expect(text).toMatchInlineSnapshot(`"── Worked ──────────────────────────────────────────────────"`);
   });
 
   it("shows an unacknowledged active-turn steer from the client request", () => {
@@ -391,23 +490,33 @@ describe("timeline CLI rendering snapshots", () => {
       "command",
       "assistant-text",
     ]);
+    expect(timeline.turnRows).toHaveLength(1);
+    expect(timeline.turnRows[0]).toMatchObject({
+      kind: "turn",
+      status: "completed",
+    });
     expect(
       timeline.rows.some(
         (row) => row.kind === "conversation" && row.role === "user",
       ),
-    ).toBe(false);
-    expect(timeline.pendingSteers).toHaveLength(1);
-    expect(timeline.pendingSteers[0]?.sourceSeqStart).toBe(3);
-    expect(timeline.pendingSteers[0]?.userRequest).toEqual({
+    ).toBe(true);
+    const pendingSteerRow = timeline.rows.find(
+      (row) =>
+        row.kind === "conversation" &&
+        row.role === "user" &&
+        row.userRequest.status === "pending",
+    );
+    expect(pendingSteerRow?.sourceSeqStart).toBe(3);
+    expect(pendingSteerRow?.userRequest).toEqual({
       kind: "steer",
       status: "pending",
     });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 2 items ───────────────────────────────────────
+      "── Worked ──────────────────────────────────────────────────
         ── Ran 2 commands
-          ── Ran command (completed)
+          ── Ran pnpm test
             $ pnpm test
-          ── Ran command (completed)
+          ── Ran sqlite3 ~/.bb-dev/bb.db '.tables'
             $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
@@ -456,7 +565,14 @@ describe("timeline CLI rendering snapshots", () => {
       kind: "steer",
       status: "accepted",
     });
-    expect(timeline.pendingSteers).toHaveLength(0);
+    expect(
+      timeline.rows.filter(
+        (row) =>
+          row.kind === "conversation" &&
+          row.role === "user" &&
+          row.userRequest.status === "pending",
+      ),
+    ).toHaveLength(0);
     const steerRow = timeline.rows.find(
       (row) => row.kind === "conversation" && row.role === "user",
     );
@@ -466,19 +582,15 @@ describe("timeline CLI rendering snapshots", () => {
       status: "accepted",
     });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 1 item ────────────────────────────────────────
-        ── Ran 1 command
-          ── Ran command (completed)
-            $ pnpm test
+      "── Ran pnpm test ───────────────────────────────────────────
+        $ pnpm test
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
       steer
 
-      ── Worked on 1 item ────────────────────────────────────────
-        ── Ran 1 command
-          ── Ran command (completed)
-            $ sqlite3 ~/.bb-dev/bb.db '.tables'
+      ── Ran sqlite3 ~/.bb-dev/bb.db '.tables' ───────────────────
+        $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -542,7 +654,6 @@ describe("timeline CLI rendering snapshots", () => {
       { kind: "message", status: "accepted" },
       { kind: "message", status: "accepted" },
     ]);
-    expect(timeline.pendingSteers).toHaveLength(0);
     const topLevelUserRows = timeline.rows.filter(
       (row) => row.kind === "conversation" && row.role === "user",
     );
@@ -560,10 +671,8 @@ describe("timeline CLI rendering snapshots", () => {
       ── User ────────────────────────────────────────────────────
       Follow-up task
 
-      ── Worked on 1 item ────────────────────────────────────────
-        ── Ran 1 command
-          ── Ran command (completed)
-            $ pnpm test
+      ── Ran pnpm test ───────────────────────────────────────────
+        $ pnpm test
 
       ── Assistant ───────────────────────────────────────────────
       Follow-up done."
@@ -659,10 +768,10 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.turnRows).toHaveLength(1);
     expect(timeline.turnRows[0]?.summaryCount).toBe(2);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 2 items ───────────────────────────────────────
+      "── Worked ──────────────────────────────────────────────────
         ── Explored 1 search, ran 1 command
           ── Searched for TODO in packages/core-ui
-          ── Ran command (completed)
+          ── Ran pnpm test
             $ pnpm test
             Tests passed
 
@@ -671,7 +780,20 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
-  it("keeps tool work after terminal assistant output visible", () => {
+  it("shows pending context compaction with active wording", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderActiveTimeline([
+      event.turnStarted(),
+      event.contextCompactionStarted(),
+    ]);
+
+    expect(messageKinds(timeline.messages)).toEqual(["operation"]);
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── Compacting context ──────────────────────────────────────"
+    `);
+  });
+
+  it("keeps a finished-turn summary when work follows an assistant step", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
@@ -697,19 +819,66 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.turnRows).toHaveLength(1);
-    expect(timeline.turnRows[0]?.summaryCount).toBe(1);
+    expect(timeline.turnRows[0]).toMatchObject({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 1 item ────────────────────────────────────────
-        ── Ran 1 command
-          ── Ran command (completed)
-            $ pnpm test
-            Tests passed
+      "── Worked ──────────────────────────────────────────────────
+        ── Ran pnpm test
+          $ pnpm test
+          Tests passed
 
       ── Assistant ───────────────────────────────────────────────
       I found the test path.
 
-      ── Explored 1 search ───────────────────────────────────────
-        ── Searched for setState in packages/excalidraw/tests/helpers/ui.ts"
+      ── Searched for setState in packages/excalidraw/tests/helpers/ui.ts
+        $ rg setState packages/excalidraw/tests/helpers/ui.ts"
+    `);
+  });
+
+  it("keeps summary projections compact with a finished-turn summary", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderTimelineFixture({
+      events: [
+        event.turnStarted(),
+        event.commandCompleted({
+          itemId: "call-1",
+          command: "/bin/zsh -lc 'pnpm test'",
+        }),
+        event.assistantCompleted({
+          itemId: "assistant-1",
+          text: "I found the test path.",
+        }),
+        event.commandCompleted({
+          itemId: "call-2",
+          command:
+            "/bin/zsh -lc 'rg setState packages/excalidraw/tests/helpers/ui.ts'",
+        }),
+        event.assistantCompleted({
+          itemId: "assistant-2",
+          text: "Done.",
+        }),
+        event.turnCompleted(),
+      ],
+      includeNestedRows: false,
+      projectionOptions: {
+        systemClientRequestVisibility: "hidden",
+        threadStatus: "idle",
+        turnMessageDetail: "summary",
+      },
+    });
+
+    expect(timeline.turnRows).toHaveLength(1);
+    expect(timeline.turnRows[0]).toMatchObject({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 6,
+    });
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── Worked ──────────────────────────────────────────────────
+
+      ── Assistant ───────────────────────────────────────────────
+      Done."
     `);
   });
 
@@ -805,7 +974,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 5 items ───────────────────────────────────────
+      "── Worked ──────────────────────────────────────────────────
         ── Explored 1 file, 1 search, 2 lists
           ── Read src/a.ts
           ── Listed files in src
@@ -869,7 +1038,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 4 items ───────────────────────────────────────
+      "── Worked ──────────────────────────────────────────────────
         ── Created 1 file, deleted 1 file, edited 2 files
           ── Created /repo/src/a.ts +1
             @@ -0,0 +1 @@
@@ -914,7 +1083,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 2 items ───────────────────────────────────────
+      "── Worked ──────────────────────────────────────────────────
         ── Created 1 file, deleted 1 file
           ── Created /repo/src/created.ts +2
             first line
@@ -952,9 +1121,8 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.turnRows[0]?.summaryCount).toBe(1);
     expect(timeline.text).not.toContain("Reasoning");
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 1 item ────────────────────────────────────────
-        ── Ran 1 tool
-          ── Ran tool: exec_command { cmd: sed -n '1,80p' packages/core-ui/src/i... }
+      "── Worked ──────────────────────────────────────────────────
+        ── Ran tool: exec_command { cmd: sed -n '1,80p' packages/core-ui/src/i... }
 
       ── Assistant ───────────────────────────────────────────────
       The extension point is the timeline row builder."
@@ -1056,8 +1224,15 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).not.toContain("Large search result payload");
     expect(timeline.text).not.toContain("Large MDN page payload");
+    const webRows = flattenTimelineRows(timeline.rows).filter(
+      isTimelineWebWorkRow,
+    );
+    expect(webRows).toHaveLength(3);
+    for (const row of webRows) {
+      expect(row).not.toHaveProperty("resultText");
+    }
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 3 items ───────────────────────────────────────
+      "── Worked ──────────────────────────────────────────────────
         ── Ran 1 web search, fetched 2 web pages
           ── Ran web search: EyeDropper API browser compatibility
           ── Fetched: https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
@@ -1095,6 +1270,37 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
+  it("omits direct active web result text even in verbose output", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const searchTimeline = renderActiveTimeline([
+      event.turnStarted(),
+      event.webSearchStarted({
+        itemId: "web-search-1",
+        queries: ["React Suspense docs"],
+        resultText:
+          "Direct search payload that should not be exposed in verbose output.",
+      }),
+    ]);
+    const fetchTimeline = renderActiveTimeline([
+      event.turnStarted(),
+      event.webFetchStarted({
+        itemId: "web-fetch-1",
+        url: "https://react.dev/reference/react/Suspense",
+        resultText:
+          "Direct fetch payload that should not be exposed in verbose output.",
+      }),
+    ]);
+
+    expect(searchTimeline.text).not.toContain("Direct search payload");
+    expect(fetchTimeline.text).not.toContain("Direct fetch payload");
+    const searchRow = getOnlyTimelineWebWorkRow(searchTimeline.rows);
+    const fetchRow = getOnlyTimelineWebWorkRow(fetchTimeline.rows);
+    expect(searchRow).toMatchObject({ workKind: "web-search" });
+    expect(fetchRow).toMatchObject({ workKind: "web-fetch" });
+    expect(searchRow).not.toHaveProperty("resultText");
+    expect(fetchRow).not.toHaveProperty("resultText");
+  });
+
   it("capitalizes fetch-only web summaries", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
@@ -1109,9 +1315,8 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).not.toContain("Fetched page payload");
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 1 item ────────────────────────────────────────
-        ── Fetched 1 web page
-          ── Fetched: https://example.com/page"
+      "── Worked ──────────────────────────────────────────────────
+        ── Fetched: https://example.com/page"
     `);
   });
 
@@ -1135,7 +1340,7 @@ describe("timeline CLI rendering snapshots", () => {
       "── Waiting for approval to grant Bash ──────────────────────
 
       ── Denied 1 command ────────────────────────────────────────
-        ── Command (denied)
+        ── Permission denied: git push
           $ git push"
     `);
   });
@@ -1161,11 +1366,18 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Ran 1 command ───────────────────────────────────────────
-        ── Ran command 2s
+        ── Ran pnpm test 2s
           $ pnpm test
           Tests failed
           exit 1"
     `);
+
+    const coloredText = formatThreadTimelineText(timeline.rows, {
+      color: true,
+      verbose: true,
+    });
+    expect(coloredText).toContain("exit 1");
+    expect(coloredText).not.toContain("\u001B[31m");
   });
 
   it("keeps zero exit code visible when a completed command has no output", () => {
@@ -1189,10 +1401,9 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran 1 command ───────────────────────────────────────────
-        ── Ran command (completed, 4s)
-          $ pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1
-          exit code 0"
+      "── Ran pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1 4s
+        $ pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1
+        exit code 0"
     `);
   });
 

@@ -172,7 +172,6 @@ function webSearchRow(seq: number): TimelineWebSearchWorkRow {
     status: "completed",
     callId: "web-search-1",
     queries: ["React timeline renderer"],
-    resultText: "Search result summary",
   };
 }
 
@@ -186,7 +185,6 @@ function webFetchRow(seq: number): TimelineWebFetchWorkRow {
     url: "https://example.com/thread-view",
     prompt: null,
     pattern: null,
-    resultText: "Fetched page text",
   };
 }
 
@@ -259,6 +257,7 @@ function TimelineRowsStory({
             onLoadTurnSummaryRows={() => undefined}
             timelineRows={rows}
             threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
+            turnSummaryRowsIdentity="test-view"
             turnSummaryRowsById={turnSummaryRowsById}
           />
         </ConversationTimeline>
@@ -318,6 +317,7 @@ export function MixedRows() {
         systemRow(),
         lazyTurnRow(),
       ]}
+      turnSummaryRowsIdentity="test-view"
       turnSummaryRowsById={{
         "turn-summary-1": [
           commandRow({

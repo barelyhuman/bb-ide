@@ -72,6 +72,13 @@ interface RunningExecutionBase {
   outputBuffer: VisibleTextBuffer;
 }
 
+interface ExecutionTiming {
+  createdAt: number;
+  durationMs: number | null;
+  startedAt?: number;
+  status: ViewProviderExecutionMessage["status"];
+}
+
 interface PendingExecutionOutput {
   callId: string;
   parentToolCallId?: string;
@@ -714,6 +721,24 @@ type ExecutionMergeSource =
   | ProviderExecutionUpdate
   | ExecutionOutputUpdate;
 
+function resolveProjectedExecutionDurationMs({
+  createdAt,
+  durationMs,
+  startedAt,
+  status,
+}: ExecutionTiming): number | null {
+  if (status !== "pending") {
+    return durationMs;
+  }
+  return Math.max(durationMs ?? 0, createdAt - (startedAt ?? createdAt), 0);
+}
+
+function refreshProjectedExecutionDuration(
+  target: ExecutionMergeTarget,
+): void {
+  target.durationMs = resolveProjectedExecutionDurationMs(target);
+}
+
 function mergeExecutionOutput(
   target: ExecutionMergeTarget,
   incoming: ExecutionMergeSource,
@@ -870,6 +895,7 @@ function createExecMessage(
   call: RunningExecCall,
 ): ViewProviderExecutionMessage {
   const rowKindForId = call.kind === "tool-call" ? "tool" : call.kind;
+  const durationMs = resolveProjectedExecutionDurationMs(call);
   const base = {
     id: messageId(call.threadId, rowKindForId, call.callId),
     threadId: call.threadId,
@@ -883,7 +909,7 @@ function createExecMessage(
       : {}),
     callId: call.callId,
     output: call.output,
-    durationMs: call.durationMs,
+    durationMs,
     status: call.status,
   };
 
@@ -957,6 +983,7 @@ export function onExecBegin(
         call.createdAt,
       );
     }
+    refreshProjectedExecutionDuration(existingInActive);
     return;
   }
 
@@ -1016,6 +1043,7 @@ export function onExecOutput(
         meta.createdAt,
       );
     }
+    refreshProjectedExecutionDuration(activeCall);
   }
 
   const historyMatch = findExecMessageInHistoryCells(state, incoming.callId);
@@ -1049,6 +1077,7 @@ export function onExecOutput(
   historyMatch.cell.status =
     mergeCallStatus(historyMatch.cell.status, incoming.status) ??
     historyMatch.cell.status;
+  refreshProjectedExecutionDuration(historyMatch.call);
 }
 
 export function onExecEnd(

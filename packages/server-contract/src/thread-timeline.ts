@@ -200,7 +200,6 @@ export const timelineWebSearchWorkRowSchema = timelineWorkRowBaseSchema.extend({
   workKind: z.literal("web-search"),
   callId: z.string(),
   queries: z.array(z.string()),
-  resultText: z.string().nullable(),
 });
 export type TimelineWebSearchWorkRow = z.infer<
   typeof timelineWebSearchWorkRowSchema
@@ -212,7 +211,6 @@ export const timelineWebFetchWorkRowSchema = timelineWorkRowBaseSchema.extend({
   url: z.string(),
   prompt: z.string().nullable(),
   pattern: z.string().nullable(),
-  resultText: z.string().nullable(),
 });
 export type TimelineWebFetchWorkRow = z.infer<
   typeof timelineWebFetchWorkRowSchema

@@ -55,7 +55,22 @@ function suffixToneClass(title: TimelineTitle): string {
   return exhaustiveTone;
 }
 
-function renderDiffStatsSuffix(added: number, removed: number) {
+function renderDiffStatsSuffix(
+  title: TimelineTitle,
+  added: number,
+  removed: number,
+) {
+  if (title.tone === "summary") {
+    const parts = [
+      added > 0 ? `+${added}` : null,
+      removed > 0 ? `-${removed}` : null,
+    ].filter((part): part is string => part !== null);
+    return (
+      <span className={cn("shrink-0 whitespace-pre", suffixToneClass(title))}>
+        {parts.join(" ")}
+      </span>
+    );
+  }
   return (
     <span className="shrink-0 whitespace-pre">
       {added > 0 ? <span className="text-diff-added">+{added}</span> : null}
@@ -74,7 +89,11 @@ function renderSuffix(title: TimelineTitle) {
 
   switch (title.suffix.kind) {
     case "diff-stats":
-      return renderDiffStatsSuffix(title.suffix.added, title.suffix.removed);
+      return renderDiffStatsSuffix(
+        title,
+        title.suffix.added,
+        title.suffix.removed,
+      );
     case "text":
       return (
         <span
@@ -98,7 +117,11 @@ export function TimelineTitleView({
 }: TimelineTitleViewProps) {
   const onClick =
     title.action && onTitleAction ? onTitleAction(title.action) : null;
-  const contentClassName = cn("min-w-0 truncate", contentToneClass(title));
+  const contentClassName = cn(
+    "min-w-0 truncate",
+    contentToneClass(title),
+    title.motion === "shimmer" && !title.prefix ? "animate-shine" : null,
+  );
 
   return (
     <span
@@ -114,7 +137,7 @@ export function TimelineTitleView({
           className={cn(
             "shrink-0 whitespace-pre",
             titleToneClass(title),
-            title.shimmerPrefix ? "animate-shine" : null,
+            title.motion === "shimmer" ? "animate-shine" : null,
           )}
         >
           {title.prefix}

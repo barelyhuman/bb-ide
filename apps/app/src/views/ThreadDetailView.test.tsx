@@ -5,6 +5,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { SidebarProvider } from "@bb/ui-core";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -63,6 +64,11 @@ interface ThreadDetailSuccessFetchRoutesArgs {
 }
 
 type ThreadListHandler = (request: Request) => Response;
+
+const EMPTY_THREAD_TIMELINE_RESPONSE = {
+  activeThinking: null,
+  rows: [],
+} satisfies ThreadTimelineResponse;
 
 function createThreadResponse(
   overrides: ThreadResponseOverrides = {},
@@ -190,13 +196,7 @@ function createThreadDetailSuccessRoutes(
       : []),
     {
       pathname: "/api/v1/threads/thr-1/timeline",
-      handler: () =>
-        jsonResponse({
-          activeThinking: null,
-          contextWindowUsage: null,
-          pendingSteers: [],
-          rows: [],
-        }),
+      handler: () => jsonResponse(EMPTY_THREAD_TIMELINE_RESPONSE),
     },
     {
       pathname: "/api/v1/threads",
@@ -403,12 +403,7 @@ describe("ThreadDetailView", () => {
       },
       {
         pathname: "/api/v1/threads/thr-1/timeline",
-        handler: () =>
-          jsonResponse({
-            activeThinking: null,
-            contextWindowUsage: null,
-            rows: [],
-          }),
+        handler: () => jsonResponse(EMPTY_THREAD_TIMELINE_RESPONSE),
       },
       {
         pathname: "/api/v1/threads",
@@ -452,12 +447,7 @@ describe("ThreadDetailView", () => {
       },
       {
         pathname: "/api/v1/threads/thr-1/timeline",
-        handler: () =>
-          jsonResponse({
-            activeThinking: null,
-            contextWindowUsage: null,
-            rows: [],
-          }),
+        handler: () => jsonResponse(EMPTY_THREAD_TIMELINE_RESPONSE),
       },
       {
         pathname: "/api/v1/threads",

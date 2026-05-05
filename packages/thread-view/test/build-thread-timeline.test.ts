@@ -1,4 +1,4 @@
-import { turnScope } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import type {
   JsonObject,
   ThreadEventFileChange,
@@ -8,6 +8,7 @@ import type {
   ThreadContextWindowUsage,
   TimelineFileChangeWorkRow,
   TimelineRow,
+  TimelineSystemRow,
   TimelineToolWorkRow,
 } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
@@ -44,6 +45,43 @@ interface ToolCallItemEventArgs {
 interface TurnStartedEventArgs {
   seq: number;
 }
+
+interface SystemOperationEventArgs {
+  message: string;
+  metadata?: JsonObject;
+  operation?: string;
+  operationId?: string;
+  seq: number;
+  status?: "running" | "completed" | "failed";
+}
+
+interface OwnershipOperationCase {
+  action: string;
+  message: string;
+  nextParentThreadId: string | null;
+  previousParentThreadId: string | null;
+}
+
+const ownershipOperationCases: OwnershipOperationCase[] = [
+  {
+    action: "assign",
+    message: "Thread assigned to manager",
+    nextParentThreadId: "thr-manager",
+    previousParentThreadId: null,
+  },
+  {
+    action: "release",
+    message: "Thread released from manager",
+    nextParentThreadId: null,
+    previousParentThreadId: "thr-manager",
+  },
+  {
+    action: "transfer",
+    message: "Thread transferred to new manager",
+    nextParentThreadId: "thr-manager-next",
+    previousParentThreadId: "thr-manager-previous",
+  },
+];
 
 function contextWindowUsageEvent({
   estimated,
@@ -148,6 +186,33 @@ function turnStartedEvent({ seq }: TurnStartedEventArgs): ThreadEventWithMeta {
   };
 }
 
+function systemOperationEvent({
+  message,
+  metadata,
+  operation = "ownership_change",
+  operationId = "operation-1",
+  seq,
+  status = "completed",
+}: SystemOperationEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "system/operation",
+      threadId: "thread-1",
+      scope: threadScope(),
+      message,
+      operation,
+      operationId,
+      status,
+      ...(metadata ? { metadata } : {}),
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
 function buildContextWindowUsage(
   contextWindowEvents: ThreadEventWithMeta[],
 ): ThreadContextWindowUsage | null {
@@ -230,6 +295,24 @@ function collectToolRows(rows: readonly TimelineRow[]): TimelineToolWorkRow[] {
   return toolRows;
 }
 
+function collectSystemRows(rows: readonly TimelineRow[]): TimelineSystemRow[] {
+  const systemRows: TimelineSystemRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "system") {
+      systemRows.push(row);
+      continue;
+    }
+    if (row.kind === "turn" && row.children) {
+      systemRows.push(...collectSystemRows(row.children));
+      continue;
+    }
+    if (row.kind === "work" && row.workKind === "delegation") {
+      systemRows.push(...collectSystemRows(row.childRows));
+    }
+  }
+  return systemRows;
+}
+
 function fileChangeRowIdByPath(
   rows: readonly TimelineFileChangeWorkRow[],
 ): Record<string, string> {
@@ -241,6 +324,53 @@ function fileChangeRowIdByPath(
 }
 
 describe("buildThreadTimelineFromEvents", () => {
+  it.each(ownershipOperationCases)(
+    "does not duplicate $action ownership operation titles as row detail",
+    ({ action, message, nextParentThreadId, previousParentThreadId }) => {
+      const rows = buildTimelineRows([
+        systemOperationEvent({
+          message,
+          metadata: {
+            action,
+            nextParentThreadId,
+            previousParentThreadId,
+          },
+          seq: 1,
+        }),
+      ]);
+
+      expect(collectSystemRows(rows)).toEqual([
+        expect.objectContaining({
+          detail: null,
+          systemKind: "operation",
+          title: message,
+        }),
+      ]);
+    },
+  );
+
+  it("uses neutral ownership title for unknown ownership actions", () => {
+    const rows = buildTimelineRows([
+      systemOperationEvent({
+        message: "Thread ownership updated by migration",
+        metadata: {
+          action: "migrate",
+          nextParentThreadId: "thr-manager",
+          previousParentThreadId: null,
+        },
+        seq: 1,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        detail: "Thread ownership updated by migration",
+        systemKind: "operation",
+        title: "Ownership changed",
+      }),
+    ]);
+  });
+
   it("suppresses low-value ToolSearch rows", () => {
     const rows = buildTimelineRows([
       turnStartedEvent({ seq: 0 }),

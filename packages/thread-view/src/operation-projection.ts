@@ -695,7 +695,7 @@ export function onCompactionBegin(
     existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
     existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
     existing.status = "pending";
-    existing.title = "Context compacting...";
+    existing.title = "Compacting context";
     existing.detail = payload.detail ?? existing.detail;
     return;
   }
@@ -712,7 +712,7 @@ export function onCompactionBegin(
       ? eventProjectionMessageTurnScopeFields(turnId)
       : eventProjectionMessageThreadScopeFields()),
     opType: "compaction",
-    title: "Context compacting...",
+    title: "Compacting context",
     detail: payload.detail,
     status: "pending",
   };

@@ -71,24 +71,8 @@ function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
 }
 
 function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
-  return makeTimelineResponseWithPendingSteers({
-    rows,
-    pendingSteers: [],
-  });
-}
-
-interface TimelineResponseWithPendingSteersArgs {
-  pendingSteers: TimelineUserConversationRow[];
-  rows: TimelineRow[];
-}
-
-function makeTimelineResponseWithPendingSteers({
-  pendingSteers,
-  rows,
-}: TimelineResponseWithPendingSteersArgs): ThreadTimelineResponse {
   return {
     rows,
-    pendingSteers,
     activeThinking: null,
   };
 }
@@ -1360,6 +1344,15 @@ describe("CLI command output contracts", () => {
     expect(console.error).toHaveBeenCalledWith(
       "Error: Invalid permission mode 'unsafe'. Expected full, workspace-write, or readonly.",
     );
+  });
+
+  it("bb thread log help describes verbose as expanded timeline output", async () => {
+    const helpOutput = await getHelpOutput(["thread", "log"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(helpOutput).toContain("verbose (expanded timeline)");
+    expect(helpOutput).not.toContain("verbose (full timeline)");
   });
 
   it("bb thread list supports parent-thread filtering", async () => {
@@ -3118,10 +3111,7 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log renders pending steers for human output", async () => {
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () =>
-      makeTimelineResponseWithPendingSteers({
-        rows: [],
-        pendingSteers: [makePendingSteerTimelineRow()],
-      }),
+      makeTimelineResponse([makePendingSteerTimelineRow()]),
     );
     createClientMock.mockReturnValue(
       asServerClient({
@@ -3160,10 +3150,7 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log renders pending steers with default formatting", async () => {
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () =>
-      makeTimelineResponseWithPendingSteers({
-        rows: [],
-        pendingSteers: [makePendingSteerTimelineRow()],
-      }),
+      makeTimelineResponse([makePendingSteerTimelineRow()]),
     );
     createClientMock.mockReturnValue(
       asServerClient({
@@ -3267,7 +3254,7 @@ describe("CLI JSON output contracts", () => {
     );
 
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
-    expect(output).toContain("Command (waiting)");
+    expect(output).toContain("Waiting for approval to run git push");
     expect(output).toContain("git push");
     expect(output).toContain("denied");
     expect(output).toContain("example.ts");
@@ -3281,7 +3268,6 @@ describe("CLI JSON output contracts", () => {
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () => ({
       rows: [],
-      pendingSteers: [],
       activeThinking: null,
     }));
     createClientMock.mockReturnValue(

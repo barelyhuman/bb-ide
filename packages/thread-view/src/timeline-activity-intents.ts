@@ -26,6 +26,7 @@ export interface FormatTimelineActivityIntentTitleArgs {
 export interface FormatTimelineActivityIntentDetailArgs {
   intent: TimelineActivityIntent;
   pathMode: TimelinePathDisplayMode;
+  pending: boolean;
 }
 
 export function primaryTimelineActivityIntent(
@@ -81,23 +82,32 @@ export function formatTimelineActivityIntentTitle({
 export function formatTimelineActivityIntentDetail({
   intent,
   pathMode,
+  pending,
 }: FormatTimelineActivityIntentDetailArgs): string {
   switch (intent.type) {
-    case "read":
-      return `Read ${formatReadTarget(intent, pathMode)}`;
-    case "list_files":
-      return intent.path ? `Listed files in ${intent.path}` : "Listed files";
-    case "search":
+    case "read": {
+      const verb = pending ? "Reading" : "Read";
+      return `${verb} ${formatReadTarget(intent, pathMode)}`;
+    }
+    case "list_files": {
+      const verb = pending ? "Listing" : "Listed";
+      return intent.path
+        ? `${verb} files in ${intent.path}`
+        : `${verb} files`;
+    }
+    case "search": {
+      const verb = pending ? "Searching" : "Searched";
       if (intent.query && intent.path) {
-        return `Searched for ${intent.query} in ${intent.path}`;
+        return `${verb} for ${intent.query} in ${intent.path}`;
       }
       if (intent.path) {
-        return `Searched in ${intent.path}`;
+        return `${verb} in ${intent.path}`;
       }
       if (intent.query) {
-        return `Searched for ${intent.query}`;
+        return `${verb} for ${intent.query}`;
       }
-      return "Searched files";
+      return `${verb} files`;
+    }
     case "unknown":
       return intent.command;
     default:

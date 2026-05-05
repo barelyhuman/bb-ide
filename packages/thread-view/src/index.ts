@@ -12,6 +12,7 @@ export type {
   TimelineTitle,
   TimelineTitleAction,
   TimelineTitleContentTone,
+  TimelineTitleMotion,
   TimelineTitleSuffix,
   TimelineTitleTone,
 } from "./timeline-row-title.js";
@@ -27,12 +28,20 @@ export {
   buildThreadTimelineTurnDetailsFromEvents,
 } from "./build-thread-timeline.js";
 export type { SystemClientRequestVisibility } from "./event-projection-message.js";
-export { buildTimelineViewRows } from "./timeline-view.js";
+export {
+  buildTimelineViewRows,
+  buildTimelineWorkSummaryLabel,
+  isCompletedNonDeniedWorkRow,
+} from "./timeline-view.js";
 export type {
   ThreadTimelineViewRow,
+  TimelineBundleSummaryRow,
+  TimelineStepSummaryRow,
   TimelineViewDelegationWorkRow,
   TimelineViewTurnRow,
   TimelineViewWorkRow,
+  TimelineWorkSummaryKind,
+  TimelineWorkSummaryRow,
 } from "./timeline-view.js";
 export { compactThreadTimelineSummaryEvents } from "./summary-event-compaction.js";
 export { decodeThreadEventRow } from "./event-decode.js";

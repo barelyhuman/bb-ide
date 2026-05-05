@@ -173,7 +173,6 @@ function webSearchRow(): TimelineWebSearchWorkRow {
     status: "completed",
     callId: "web-search-1",
     queries: ["timeline renderer"],
-    resultText: "search result body",
   };
 }
 
@@ -278,7 +277,6 @@ function webFetchRow(): TimelineWebFetchWorkRow {
     url: "https://example.com/docs",
     prompt: null,
     pattern: null,
-    resultText: "fetch result body",
   };
 }
 
@@ -301,6 +299,7 @@ function renderRowsToStaticMarkup(timelineRows: TimelineRow[]): string {
       onLoadTurnSummaryRows={() => {}}
       timelineRows={timelineRows}
       threadRuntimeDisplayStatus="idle"
+      turnSummaryRowsIdentity="test-view"
       turnSummaryRowsById={{}}
     />,
   );
@@ -314,6 +313,7 @@ function renderTimelineRows(timelineRows: TimelineRow[]) {
       onLoadTurnSummaryRows={() => {}}
       timelineRows={timelineRows}
       threadRuntimeDisplayStatus="idle"
+      turnSummaryRowsIdentity="test-view"
       turnSummaryRowsById={{}}
     />,
   );
@@ -398,6 +398,7 @@ describe("ThreadTimelineRows", () => {
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         timelineRows={timelineRows}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={turnSummaryRowsById}
       />,
     );
@@ -412,6 +413,7 @@ describe("ThreadTimelineRows", () => {
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         timelineRows={timelineRows}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={turnSummaryRowsById}
       />,
     );
@@ -419,7 +421,7 @@ describe("ThreadTimelineRows", () => {
     expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
   });
 
-  it("uses active wording for the tail activity summary in an active scope", () => {
+  it("keeps completed activity summaries in past tense in an active scope", () => {
     const html = renderToStaticMarkup(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -430,15 +432,54 @@ describe("ThreadTimelineRows", () => {
             id: "read-1",
             command: "cat src/app.ts",
             activityIntents: [readIntent("src/app.ts")],
+            sourceSeqStart: 1,
+          }),
+          commandRow({
+            id: "read-2",
+            command: "cat src/other.ts",
+            activityIntents: [readIntent("src/other.ts")],
+            sourceSeqStart: 2,
           }),
         ]}
         threadRuntimeDisplayStatus="active"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    expect(html).toContain("Exploring");
-    expect(html).toContain("1 file");
+    expect(html).toContain("Explored");
+    expect(html).not.toContain("Exploring");
+    expect(html).toContain("2 files");
+  });
+
+  it("uses active wording for pending tail activity summaries in an active scope", () => {
+    const html = renderToStaticMarkup(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-pending-1",
+            command: "pnpm test",
+            sourceSeqStart: 1,
+            status: "pending",
+          }),
+          commandRow({
+            id: "command-pending-2",
+            command: "pnpm lint",
+            sourceSeqStart: 2,
+            status: "pending",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="active"
+        turnSummaryRowsIdentity="test-view"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(html).toContain("Running");
+    expect(html).toContain("2 commands");
   });
 
   it("renders activity summary exploration details as compact static rows", () => {
@@ -456,9 +497,18 @@ describe("ThreadTimelineRows", () => {
               searchIntent("TODO", "src"),
             ],
             output: "large file contents",
+            sourceSeqStart: 1,
+          }),
+          commandRow({
+            id: "exploration-2",
+            command: "rg FIXME src",
+            activityIntents: [searchIntent("FIXME", "src")],
+            output: "more large output",
+            sourceSeqStart: 2,
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -478,6 +528,7 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain(
       "large file contents",
     );
+    expect(view.container.textContent ?? "").not.toContain("more large output");
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
@@ -489,6 +540,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[delegationRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -497,11 +549,14 @@ describe("ThreadTimelineRows", () => {
       "Final subagent answer.",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 subagent/u }));
     fireEvent.click(screen.getByRole("button", { name: /Ran subagent:/u }));
     expect(view.container.textContent ?? "").toContain("Final subagent answer.");
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Ran\s+rg timeline packages\/ui-core/u,
+      }),
+    );
 
     expect(view.container.textContent ?? "").toContain(
       "rg timeline packages/ui-core",
@@ -516,6 +571,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[webSearchRow(), webFetchRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -543,6 +599,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -575,6 +632,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -598,6 +656,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[turnRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{
           "turn-summary-1": [
             commandRow({
@@ -642,6 +701,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -667,7 +727,7 @@ describe("ThreadTimelineRows", () => {
     expect(bundledCommandButton.classList.contains("px-2")).toBe(false);
   });
 
-  it("keeps mounted activity summary rows when streaming appends to the run", () => {
+  it("groups completed work once a second completed row appends to the run", () => {
     const firstCommand = commandRow({
       id: "command-1",
       command: "pnpm test",
@@ -680,15 +740,12 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[firstCommand]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    const summaryButton = screen.getByRole("button", {
-      name: /Ran 1 command/u,
-    });
-    fireEvent.click(summaryButton);
-    const childButton = screen.getByRole("button", {
+    const directCommandButton = screen.getByRole("button", {
       name: /Ran\s+pnpm test\s+2s/u,
     });
 
@@ -706,16 +763,14 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    expect(
-      screen.getByRole("button", { name: /Ran 2 commands/u }),
-    ).toBe(summaryButton);
-    expect(
-      screen.getByRole("button", { name: /Ran\s+pnpm test\s+2s/u }),
-    ).toBe(childButton);
+    expect(screen.queryByRole("button", { name: /Ran\s+pnpm test\s+2s/u }))
+      .not.toBe(directCommandButton);
+    expect(screen.getByRole("button", { name: /Ran 2 commands/u })).toBeTruthy();
   });
 
   it("style contract: uses flush horizontal padding for static title rows inside activity summaries", () => {
@@ -726,6 +781,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[webSearchRow(), webFetchRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -750,6 +806,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
         timelineRows={[turnRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -764,6 +821,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
         timelineRows={[turnRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -780,6 +838,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
         timelineRows={[turnRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -794,6 +853,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
         timelineRows={[turnRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -805,6 +865,96 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(2);
+  });
+
+  it("reloads lazy turn details after the loaded-row identity changes", () => {
+    const onLoadTurnSummaryRows = vi.fn();
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="thread-1:conversation"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const turnButton = screen.getByRole("button", {
+      name: /Worked for\s*4s/u,
+    });
+    fireEvent.click(turnButton);
+    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="thread-1:conversation"
+        turnSummaryRowsById={{
+          "turn-summary-1": [
+            conversationRow({
+              id: "conversation-detail-1",
+              text: "Conversation view details",
+            }),
+          ],
+        }}
+      />,
+    );
+    expect(view.container.textContent ?? "").toContain(
+      "Conversation view details",
+    );
+
+    fireEvent.click(turnButton);
+    expect(turnButton.getAttribute("aria-expanded")).toBe("false");
+
+    view.rerender(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="thread-1:standard"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const standardTurnButton = screen.getByRole("button", {
+      name: /Worked for\s*4s/u,
+    });
+    fireEvent.click(standardTurnButton);
+    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(2);
+    expect(view.container.textContent ?? "").toContain(
+      "Loading turn details...",
+    );
+
+    view.rerender(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="thread-1:standard"
+        turnSummaryRowsById={{
+          "turn-summary-1": [
+            conversationRow({
+              id: "standard-detail-1",
+              text: "Standard view details",
+            }),
+          ],
+        }}
+      />,
+    );
+    expect(view.container.textContent ?? "").toContain("Standard view details");
+    expect(view.container.textContent ?? "").not.toContain(
+      "Loading turn details...",
+    );
   });
 
   it("hides command detail until the row is expanded", () => {
@@ -820,15 +970,13 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
     expect(view.container.textContent ?? "").toContain("Ran");
-    expect(view.container.textContent ?? "").not.toContain("$ true");
-
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
-    expect(view.container.textContent ?? "").toContain("Ran");
+    expect(screen.queryByRole("button", { name: /Ran 1 command/u })).toBeNull();
     expect(view.container.textContent ?? "").not.toContain("$ true");
 
     fireEvent.click(screen.getByRole("button", { name: /Ran\s+true/u }));
@@ -853,11 +1001,11 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 tool/u }));
     fireEvent.click(
       screen.getByRole("button", { name: /Ran tool:\s+LookupTool/u }),
     );
@@ -887,11 +1035,11 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Running 1 command/u }));
     fireEvent.click(
       screen.getByRole("button", { name: /Running\s+pnpm test/u }),
     );
@@ -914,6 +1062,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -922,7 +1071,7 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("first chunk");
   });
 
-  it("renders error command titles without error decorations", () => {
+  it("renders error command summaries with neutral status metadata", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -936,11 +1085,16 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
+    const summaryButton = screen.getByRole("button", {
+      name: /Ran 1 command \(error\)/u,
+    });
+
+    fireEvent.click(summaryButton);
 
     const button = screen.getByRole("button", {
       name: /Ran\s+pnpm test\s+2s/u,
@@ -962,11 +1116,16 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Explored 1 file/u }));
+    const summaryButton = screen.getByRole("button", {
+      name: /Explored 1 file \(error\)/u,
+    });
+
+    fireEvent.click(summaryButton);
 
     const button = screen.getByRole("button", {
       name: /Read\s+\/repo\/src\/app\.ts/u,
@@ -996,6 +1155,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -1014,7 +1174,7 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("test failure");
   });
 
-  it("auto-expands pending single-row summaries in an active turn", () => {
+  it("auto-expands pending single work rows in an active turn", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -1029,23 +1189,19 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="active"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    const summaryButton = screen.getByRole("button", {
-      name: /Running 1 command/u,
-    });
-    expect(summaryButton.getAttribute("aria-expanded")).toBe("true");
-
     const commandButton = screen.getByRole("button", {
-      name: /Running\s+pnpm test/u,
+      name: /Running\s+pnpm test\s+2s/u,
     });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("still running");
+    expect(commandButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("still running");
   });
 
-  it("does not auto-expand pending work already summarized by an active bundle", () => {
+  it("auto-expands pending work summarized by an active bundle", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -1068,6 +1224,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="active"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -1080,9 +1237,109 @@ describe("ThreadTimelineRows", () => {
     const commandButton = screen.getByRole("button", {
       name: /Running\s+pnpm test/u,
     });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("first output");
-    expect(view.container.textContent ?? "").not.toContain("second output");
+    expect(commandButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("first output");
+    expect(view.container.textContent ?? "").toContain("second output");
+  });
+
+  it("auto-expands pending summaries when a pending steer is the trailing row", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-pending-1",
+            command: "pnpm test",
+            output: "first output",
+            sourceSeqStart: 1,
+            status: "pending",
+          }),
+          commandRow({
+            id: "command-pending-2",
+            command: "pnpm lint",
+            output: "second output",
+            sourceSeqStart: 2,
+            status: "pending",
+          }),
+          conversationRow({
+            id: "pending-steer-1",
+            role: "user",
+            text: "Keep this in mind",
+            userRequest: { kind: "steer", status: "pending" },
+          }),
+        ]}
+        threadRuntimeDisplayStatus="active"
+        turnSummaryRowsIdentity="test-view"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const bundleButton = screen.getByRole("button", {
+      name: /Running 2 commands/u,
+    });
+    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("first output");
+    expect(view.container.textContent ?? "").toContain("second output");
+    expect(screen.getByText("steer pending")).toBeTruthy();
+  });
+
+  it("auto-expands pending summaries even when completed work follows", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-pending-1",
+            command: "pnpm test",
+            output: "first still running",
+            sourceSeqStart: 1,
+            status: "pending",
+          }),
+          commandRow({
+            id: "command-pending-2",
+            command: "pnpm lint",
+            output: "second still running",
+            sourceSeqStart: 2,
+            status: "pending",
+          }),
+          commandRow({
+            id: "command-completed-1",
+            command: "date",
+            output: "today",
+            sourceSeqStart: 3,
+            status: "completed",
+          }),
+          commandRow({
+            id: "command-completed-2",
+            command: "pwd",
+            output: "/repo",
+            sourceSeqStart: 4,
+            status: "completed",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="active"
+        turnSummaryRowsIdentity="test-view"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const pendingBundleButton = screen.getByRole("button", {
+      name: /Running 2 commands/u,
+    });
+    expect(pendingBundleButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("first still running");
+    expect(view.container.textContent ?? "").toContain("second still running");
+
+    const completedBundleButton = screen.getByRole("button", {
+      name: /Ran 2 commands/u,
+    });
+    expect(completedBundleButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("today");
+    expect(view.container.textContent ?? "").not.toContain("/repo");
   });
 
   it("omits command cwd metadata and mutes exit code detail", () => {
@@ -1102,11 +1359,11 @@ describe("ThreadTimelineRows", () => {
           },
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
     fireEvent.click(screen.getByRole("button", { name: /Ran\s+pwd/u }));
 
     expect(view.container.textContent ?? "").not.toContain("cwd:");
@@ -1127,11 +1384,11 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
     fireEvent.click(screen.getByRole("button", { name: /Ran\s+printf color/u }));
 
     expect(view.container.textContent ?? "").toContain("red");
@@ -1146,14 +1403,12 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[fileChangeRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
     expect(view.container.textContent ?? "").toContain("Edited");
-    expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /Edited 1 file/u }));
     expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
 
     fireEvent.click(
@@ -1164,6 +1419,25 @@ describe("ThreadTimelineRows", () => {
       view.container.querySelector("[data-timeline-file-diff]"),
     ).not.toBeNull();
     expect(view.container.textContent ?? "").not.toContain("applied");
+  });
+
+  it("style contract: mutes completed single file change title diff stats", () => {
+    const html = renderToStaticMarkup(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[fileChangeRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(html).toContain("+1");
+    expect(html).toContain("-1");
+    expect(html).not.toContain("text-diff-added");
+    expect(html).not.toContain("text-diff-removed");
   });
 
   it("renders file-change stderr without rendering stdout below diffs", () => {
@@ -1179,11 +1453,11 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Edited 1 file/u }));
     fireEvent.click(
       screen.getByRole("button", { name: /Edited\s+src\/app\.ts/u }),
     );
@@ -1213,11 +1487,10 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: /Created 1 file/u }));
 
     expect(
       screen.getByRole("button", {
@@ -1324,6 +1597,7 @@ describe("ThreadTimelineRows", () => {
         onLoadTurnSummaryRows={() => {}}
         timelineRows={[turnRow()]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{
           "turn-summary-1": [
             commandRow({
@@ -1369,6 +1643,7 @@ describe("ThreadTimelineRows", () => {
           },
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{
           "turn-summary-1": [
             commandRow({
@@ -1385,10 +1660,10 @@ describe("ThreadTimelineRows", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Working for\s*4s/u }));
 
-    const nestedBundleButton = screen.getByRole("button", {
-      name: /Running 1 command/u,
+    const nestedCommandButton = screen.getByRole("button", {
+      name: /Running\s+pnpm test/u,
     });
-    expect(nestedBundleButton.getAttribute("aria-expanded")).toBe("false");
+    expect(nestedCommandButton.getAttribute("aria-expanded")).toBe("false");
     expect(view.container.textContent ?? "").not.toContain("still running");
   });
 
@@ -1401,6 +1676,7 @@ describe("ThreadTimelineRows", () => {
           onLoadTurnSummaryRows={() => {}}
           timelineRows={[systemRow()]}
           threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsIdentity="test-view"
           turnSummaryRowsById={{}}
         />,
       );
@@ -1422,6 +1698,33 @@ describe("ThreadTimelineRows", () => {
     });
   });
 
+  it("uses destructive detail tone for failed system operations", () => {
+    const failedOperationRow = {
+      ...systemRow("Release command failed"),
+      title: "Thread release failed",
+      status: "error",
+    } satisfies TimelineSystemRow;
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[failedOperationRow]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Thread release failed/u }),
+    );
+
+    const detail = view.container.querySelector("pre");
+    expect(detail?.textContent).toBe("Release command failed");
+    expect(detail?.className).toContain("text-destructive");
+  });
+
   it("keeps expanded system details pinned unless the user scrolls up", () => {
     withElementScrollMetrics(() => {
       const view = render(
@@ -1431,6 +1734,7 @@ describe("ThreadTimelineRows", () => {
           onLoadTurnSummaryRows={() => {}}
           timelineRows={[systemRow("first\nsecond")]}
           threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsIdentity="test-view"
           turnSummaryRowsById={{}}
         />,
       );
@@ -1454,6 +1758,7 @@ describe("ThreadTimelineRows", () => {
           onLoadTurnSummaryRows={() => {}}
           timelineRows={[systemRow("first\nsecond\nthird")]}
           threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsIdentity="test-view"
           turnSummaryRowsById={{}}
         />,
       );
@@ -1469,6 +1774,7 @@ describe("ThreadTimelineRows", () => {
           onLoadTurnSummaryRows={() => {}}
           timelineRows={[systemRow("first\nsecond\nthird\nfourth")]}
           threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsIdentity="test-view"
           turnSummaryRowsById={{}}
         />,
       );
@@ -1492,6 +1798,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );
@@ -1535,6 +1842,7 @@ describe("ThreadTimelineRows", () => {
           }),
         ]}
         threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="test-view"
         turnSummaryRowsById={{}}
       />,
     );

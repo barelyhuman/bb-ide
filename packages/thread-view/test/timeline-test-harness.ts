@@ -38,7 +38,6 @@ export interface RenderTimelineFixtureArgs {
 export interface RenderedTimelineFixture {
   events: ThreadEventRow[];
   messages: EventProjectionMessage[];
-  pendingSteers: Extract<TimelineRow, { kind: "conversation"; role: "user" }>[];
   projection: EventProjection;
   rows: TimelineRow[];
   text: string;
@@ -1063,20 +1062,18 @@ export function renderTimelineFixture(
           },
   });
   const rows = timeline.rows;
-  const displayRows = [...rows, ...timeline.pendingSteers];
   const messages = flattenEventProjectionMessagesDeep(projection);
-  const text = formatThreadTimelineText(displayRows, {
+  const text = formatThreadTimelineText(rows, {
     color: false,
     verbose: args.verbose ?? true,
   });
-  const turnRows = displayRows.filter(
+  const turnRows = rows.filter(
     (row): row is Extract<TimelineRow, { kind: "turn" }> => row.kind === "turn",
   );
 
   return {
     events: args.events,
     messages,
-    pendingSteers: timeline.pendingSteers,
     projection,
     rows,
     text,

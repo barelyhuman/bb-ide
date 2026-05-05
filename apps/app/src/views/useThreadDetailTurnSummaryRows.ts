@@ -27,6 +27,7 @@ export function useThreadDetailTurnSummaryRows({
   );
 
   return useTurnSummaryRowLoader({
+    managerTimelineView,
     threadId,
     loadTurnSummaryRows,
   });

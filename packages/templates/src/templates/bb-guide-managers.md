@@ -39,3 +39,7 @@ Common manager interactions via thread commands:
   bb thread list --parent-thread <manager-id>    List managed threads
   bb thread tell <manager-id> "message"          Message a manager
   bb thread log <manager-id>                     Show manager log
+
+Manager thread logs use the conversation view by default. `--format verbose`
+expands returned timeline details but does not switch to the internal manager
+debug timeline.

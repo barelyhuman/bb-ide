@@ -32,11 +32,23 @@ export type TimelineViewSourceRow =
   | TimelineViewWorkRow
   | TimelineSystemRow;
 
-export interface TimelineActivitySummaryRow extends TimelineRowBase {
-  kind: "activity-summary";
+export interface TimelineStepSummaryRow extends TimelineRowBase {
+  kind: "step-summary";
   status: TimelineRowStatus;
   children: TimelineViewWorkRow[];
 }
+
+export interface TimelineBundleSummaryRow extends TimelineRowBase {
+  kind: "bundle-summary";
+  status: TimelineRowStatus;
+  children: TimelineViewWorkRow[];
+}
+
+export type TimelineWorkSummaryRow =
+  | TimelineStepSummaryRow
+  | TimelineBundleSummaryRow;
+
+export type TimelineWorkSummaryKind = TimelineWorkSummaryRow["kind"];
 
 export interface TimelineViewTurnRow extends Omit<TimelineTurnRow, "children"> {
   children: ThreadTimelineViewRow[] | null;
@@ -44,10 +56,10 @@ export interface TimelineViewTurnRow extends Omit<TimelineTurnRow, "children"> {
 
 export type ThreadTimelineViewRow =
   | TimelineViewSourceRow
-  | TimelineActivitySummaryRow
+  | TimelineWorkSummaryRow
   | TimelineViewTurnRow;
 
-export interface TimelineActivitySummaryCounts {
+export interface TimelineWorkSummaryCounts {
   commands: number;
   createdFiles: number;
   deletedFiles: number;
@@ -63,7 +75,7 @@ export interface TimelineActivitySummaryCounts {
   webSearches: number;
 }
 
-type TimelineActivitySummaryCategory =
+type TimelineWorkSummaryCategory =
   | "commands"
   | "delegations"
   | "exploration"
@@ -71,7 +83,9 @@ type TimelineActivitySummaryCategory =
   | "tools"
   | "webResearch";
 
-interface TimelineActivitySummaryRange extends TimelineRowBase {
+type TimelineWorkSummaryPhraseList = readonly string[];
+
+interface TimelineWorkSummaryRange extends TimelineRowBase {
   status: TimelineRowStatus;
 }
 
@@ -98,7 +112,7 @@ function getExploredFileIdentity(
 
 function countExplorationIntents(
   row: TimelineCommandWorkRow | TimelineToolWorkRow,
-  counts: TimelineActivitySummaryCounts,
+  counts: TimelineWorkSummaryCounts,
   exploredFileIdentities: Set<string>,
 ): void {
   for (const intent of row.activityIntents) {
@@ -128,10 +142,10 @@ function getFileChangeIdentity(row: TimelineFileChangeWorkRow): string {
   return row.change.movePath ?? row.change.path;
 }
 
-export function summarizeTimelineActivity(
+export function summarizeTimelineWork(
   rows: readonly TimelineViewWorkRow[],
-): TimelineActivitySummaryCounts {
-  const counts: TimelineActivitySummaryCounts = {
+): TimelineWorkSummaryCounts {
+  const counts: TimelineWorkSummaryCounts = {
     commands: 0,
     createdFiles: 0,
     deletedFiles: 0,
@@ -214,7 +228,7 @@ export function summarizeTimelineActivity(
 }
 
 function explorationDetail(
-  counts: TimelineActivitySummaryCounts,
+  counts: TimelineWorkSummaryCounts,
 ): string | null {
   const parts = [
     counts.files > 0 ? plural(counts.files, "file") : null,
@@ -222,73 +236,6 @@ function explorationDetail(
     counts.lists > 0 ? plural(counts.lists, "list") : null,
   ].filter((part): part is string => part !== null);
   return parts.length === 0 ? null : parts.join(", ");
-}
-
-function hasOnlyExploration(counts: TimelineActivitySummaryCounts): boolean {
-  return (
-    counts.commands === 0 &&
-    counts.delegations === 0 &&
-    counts.fileChanges === 0 &&
-    counts.tools === 0 &&
-    counts.webFetches === 0 &&
-    counts.webSearches === 0 &&
-    (counts.files > 0 || counts.searches > 0 || counts.lists > 0)
-  );
-}
-
-function hasOnlyCommands(counts: TimelineActivitySummaryCounts): boolean {
-  return (
-    counts.commands > 0 &&
-    counts.delegations === 0 &&
-    counts.fileChanges === 0 &&
-    counts.files === 0 &&
-    counts.lists === 0 &&
-    counts.searches === 0 &&
-    counts.tools === 0 &&
-    counts.webFetches === 0 &&
-    counts.webSearches === 0
-  );
-}
-
-function hasOnlyDelegations(counts: TimelineActivitySummaryCounts): boolean {
-  return (
-    counts.delegations > 0 &&
-    counts.commands === 0 &&
-    counts.fileChanges === 0 &&
-    counts.files === 0 &&
-    counts.lists === 0 &&
-    counts.searches === 0 &&
-    counts.tools === 0 &&
-    counts.webFetches === 0 &&
-    counts.webSearches === 0
-  );
-}
-
-function hasOnlyWebResearch(counts: TimelineActivitySummaryCounts): boolean {
-  return (
-    counts.commands === 0 &&
-    counts.delegations === 0 &&
-    counts.fileChanges === 0 &&
-    counts.files === 0 &&
-    counts.lists === 0 &&
-    counts.searches === 0 &&
-    counts.tools === 0 &&
-    (counts.webFetches > 0 || counts.webSearches > 0)
-  );
-}
-
-function hasOnlyFileChanges(counts: TimelineActivitySummaryCounts): boolean {
-  return (
-    counts.fileChanges > 0 &&
-    counts.commands === 0 &&
-    counts.delegations === 0 &&
-    counts.files === 0 &&
-    counts.lists === 0 &&
-    counts.searches === 0 &&
-    counts.tools === 0 &&
-    counts.webFetches === 0 &&
-    counts.webSearches === 0
-  );
 }
 
 function approvalStatusSummaryLabel(
@@ -355,9 +302,9 @@ function approvalStatusSummaryLabel(
     : `Waiting for approval on ${detail}`;
 }
 
-function getTimelineActivitySummaryCategory(
+function getTimelineWorkSummaryCategory(
   row: TimelineViewWorkRow,
-): TimelineActivitySummaryCategory | null {
+): TimelineWorkSummaryCategory | null {
   switch (row.workKind) {
     case "command":
       return hasTimelineExplorationIntent(row) ? "exploration" : "commands";
@@ -379,10 +326,10 @@ function getTimelineActivitySummaryCategory(
 
 function getOrderedSummaryCategories(
   rows: readonly TimelineViewWorkRow[],
-): TimelineActivitySummaryCategory[] {
-  const categories: TimelineActivitySummaryCategory[] = [];
+): TimelineWorkSummaryCategory[] {
+  const categories: TimelineWorkSummaryCategory[] = [];
   for (const row of rows) {
-    const category = getTimelineActivitySummaryCategory(row);
+    const category = getTimelineWorkSummaryCategory(row);
     if (category && !categories.includes(category)) {
       categories.push(category);
     }
@@ -391,7 +338,7 @@ function getOrderedSummaryCategories(
 }
 
 function fileChangeSummaryPhrase(
-  counts: TimelineActivitySummaryCounts,
+  counts: TimelineWorkSummaryCounts,
   active: boolean,
 ): string | null {
   const parts = [
@@ -428,8 +375,8 @@ function fileChangeSummaryPhrase(
 }
 
 function completedSummaryPhrase(
-  category: TimelineActivitySummaryCategory,
-  counts: TimelineActivitySummaryCounts,
+  category: TimelineWorkSummaryCategory,
+  counts: TimelineWorkSummaryCounts,
   exploration: string | null,
 ): string | null {
   switch (category) {
@@ -454,8 +401,45 @@ function completedSummaryPhrase(
   }
 }
 
+function activeSummaryPhrase(
+  category: TimelineWorkSummaryCategory,
+  counts: TimelineWorkSummaryCounts,
+  exploration: string | null,
+): string | null {
+  switch (category) {
+    case "exploration":
+      return exploration ? `Exploring ${exploration}` : null;
+    case "commands":
+      return counts.commands > 0
+        ? `Running ${plural(counts.commands, "command")}`
+        : null;
+    case "fileChanges":
+      return fileChangeSummaryPhrase(counts, true);
+    case "webResearch":
+      return webResearchSummaryPhrase(counts, true);
+    case "delegations":
+      return counts.delegations > 0
+        ? `Running ${plural(counts.delegations, "subagent")}`
+        : null;
+    case "tools":
+      return counts.tools > 0
+        ? `Running ${plural(counts.tools, "tool")}`
+        : null;
+    default:
+      return assertNever(category);
+  }
+}
+
+function joinSummaryPhrases(
+  phrases: TimelineWorkSummaryPhraseList,
+): string {
+  return phrases
+    .map((phrase, index) => (index === 0 ? phrase : lowerFirst(phrase)))
+    .join(", ");
+}
+
 function webResearchSummaryPhrase(
-  counts: TimelineActivitySummaryCounts,
+  counts: TimelineWorkSummaryCounts,
   active: boolean,
 ): string | null {
   const parts: string[] = [];
@@ -483,54 +467,31 @@ function webResearchSummaryPhrase(
   return parts.length === 0 ? null : parts.join(", ");
 }
 
-export function buildTimelineActivitySummaryLabel(
-  row: TimelineActivitySummaryRow,
+export function buildTimelineWorkSummaryLabel(
+  row: TimelineWorkSummaryRow,
 ): string {
   const approvalSummaryLabel = approvalStatusSummaryLabel(row.children);
   if (approvalSummaryLabel !== null) {
     return approvalSummaryLabel;
   }
 
-  const counts = summarizeTimelineActivity(row.children);
-  const active = row.status === "pending";
+  const counts = summarizeTimelineWork(row.children);
+  const active = row.kind === "bundle-summary";
   const exploration = explorationDetail(counts);
 
-  if (active) {
-    if (exploration && hasOnlyExploration(counts)) {
-      return `Exploring ${exploration}`;
-    }
-    if (hasOnlyCommands(counts)) {
-      return `Running ${plural(counts.commands, "command")}`;
-    }
-    if (hasOnlyDelegations(counts)) {
-      return `Running ${plural(counts.delegations, "subagent")}`;
-    }
-    if (hasOnlyWebResearch(counts)) {
-      return (
-        webResearchSummaryPhrase(counts, true) ??
-        `Working on ${plural(row.children.length, "item")}`
-      );
-    }
-    if (hasOnlyFileChanges(counts)) {
-      return (
-        fileChangeSummaryPhrase(counts, true) ??
-        `Working on ${plural(row.children.length, "item")}`
-      );
-    }
-    return `Working on ${plural(row.children.length, "item")}`;
-  }
-
   const phrases = getOrderedSummaryCategories(row.children)
-    .map((category) => completedSummaryPhrase(category, counts, exploration))
+    .map((category) =>
+      active
+        ? activeSummaryPhrase(category, counts, exploration)
+        : completedSummaryPhrase(category, counts, exploration),
+    )
     .filter((phrase): phrase is string => phrase !== null);
 
   if (phrases.length === 0) {
-    return `Worked on ${plural(row.children.length, "item")}`;
+    return active ? "Working" : "Worked";
   }
 
-  return phrases
-    .map((phrase, index) => (index === 0 ? phrase : lowerFirst(phrase)))
-    .join(", ");
+  return joinSummaryPhrases(phrases);
 }
 
 function mergeTimelineStatus(
@@ -551,7 +512,7 @@ function mergeTimelineStatus(
 
 function summarizeRange(
   children: readonly TimelineViewWorkRow[],
-): TimelineActivitySummaryRange {
+): TimelineWorkSummaryRange {
   const first = children[0];
   if (!first) {
     throw new Error("Cannot summarize an empty timeline activity run");
@@ -579,7 +540,7 @@ function summarizeRange(
     id: [
       first.threadId,
       turnId ?? "thread",
-      "activity-summary",
+      "work-summary",
       first.id,
     ].join(":"),
     threadId: first.threadId,
@@ -598,16 +559,81 @@ function isSummarizableWorkRow(
   return row.kind === "work" && row.workKind !== "approval";
 }
 
-function shouldSummarizeRun(rows: readonly TimelineViewWorkRow[]): boolean {
-  return rows.length > 0;
+function isNonTerminalWorkRow(row: TimelineViewWorkRow): boolean {
+  if (row.status === "pending") {
+    return true;
+  }
+  switch (row.workKind) {
+    case "command":
+    case "file-change":
+    case "tool":
+      return row.approvalStatus === "waiting_for_approval";
+    case "delegation":
+    case "web-fetch":
+    case "web-search":
+    case "approval":
+      return false;
+    default:
+      return assertNever(row);
+  }
 }
 
-function buildActivitySummaryRow(
+function isDeniedApprovalGatedWorkRow(row: TimelineViewWorkRow): boolean {
+  switch (row.workKind) {
+    case "command":
+    case "file-change":
+    case "tool":
+      return row.approvalStatus === "denied";
+    case "delegation":
+    case "web-fetch":
+    case "web-search":
+    case "approval":
+      return false;
+    default:
+      return assertNever(row);
+  }
+}
+
+export function isCompletedNonDeniedWorkRow(
+  row: ThreadTimelineViewRow,
+): row is TimelineViewWorkRow {
+  return (
+    row.kind === "work" &&
+    row.status === "completed" &&
+    !isDeniedApprovalGatedWorkRow(row)
+  );
+}
+
+function shouldSummarizeRun(rows: readonly TimelineViewWorkRow[]): boolean {
+  if (rows.length === 0) {
+    return false;
+  }
+  if (rows.length > 1) {
+    return true;
+  }
+
+  const row = rows[0];
+  if (!row) {
+    return false;
+  }
+  if (isNonTerminalWorkRow(row)) {
+    return false;
+  }
+  if (isCompletedNonDeniedWorkRow(row)) {
+    return false;
+  }
+  return true;
+}
+
+function buildWorkSummaryRow(
   children: TimelineViewWorkRow[],
-): TimelineActivitySummaryRow {
+): TimelineWorkSummaryRow {
+  const kind: TimelineWorkSummaryKind = children.some(isNonTerminalWorkRow)
+    ? "bundle-summary"
+    : "step-summary";
   return {
     ...summarizeRange(children),
-    kind: "activity-summary",
+    kind,
     children,
   };
 }
@@ -652,7 +678,7 @@ export function buildTimelineViewRows(
       return;
     }
     if (shouldSummarizeRun(run)) {
-      groupedRows.push(buildActivitySummaryRow(run));
+      groupedRows.push(buildWorkSummaryRow(run));
     } else {
       groupedRows.push(...run);
     }
@@ -664,6 +690,12 @@ export function buildTimelineViewRows(
       flushRun();
       groupedRows.push(row);
       continue;
+    }
+    if (
+      run.length > 0 &&
+      isNonTerminalWorkRow(run[0]) !== isNonTerminalWorkRow(row)
+    ) {
+      flushRun();
     }
     run.push(row);
   }

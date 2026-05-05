@@ -16,7 +16,7 @@ import {
   getFileChangeActionPastTense,
   getFileChangeActionPresentTense,
 } from "./file-change-summary.js";
-import { durationToCompactString, plural } from "./format-helpers.js";
+import { durationToCompactString } from "./format-helpers.js";
 import {
   formatTimelineActivityIntentDetail,
   getTimelineActivityIntentDetailDedupeKey,
@@ -24,9 +24,9 @@ import {
   type TimelineExplorationWorkRow,
 } from "./timeline-activity-intents.js";
 import {
-  buildTimelineActivitySummaryLabel,
+  buildTimelineWorkSummaryLabel,
   type ThreadTimelineViewRow,
-  type TimelineActivitySummaryRow,
+  type TimelineWorkSummaryRow,
   type TimelineViewDelegationWorkRow,
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
@@ -34,6 +34,7 @@ import {
 
 export type TimelineTitleTone = "default" | "destructive" | "summary";
 export type TimelineTitleContentTone = "emphasis" | "muted";
+export type TimelineTitleMotion = "none" | "shimmer";
 
 export type TimelineTitleSuffix =
   | {
@@ -69,16 +70,16 @@ export interface TimelineTitle {
   action: TimelineTitleAction | null;
   content: string;
   contentTone: TimelineTitleContentTone;
+  motion: TimelineTitleMotion;
   plain: string;
   prefix: string | null;
-  shimmerPrefix: boolean;
   suffix: TimelineTitleSuffix | null;
   tone: TimelineTitleTone;
 }
 
 export interface BuildTimelineRowTitleOptions {
-  preferOngoingLabel: boolean;
   summaryStyle: "bundle" | "background";
+  workStyle: "default" | "summary";
 }
 
 export interface TimelineActivityIntentTitle {
@@ -90,16 +91,15 @@ interface TitlePartsArgs {
   action?: TimelineTitleAction | null;
   content: string;
   contentTone?: TimelineTitleContentTone;
+  motion?: TimelineTitleMotion;
   plainContent?: string;
   prefix?: string | null;
-  shimmerPrefix?: boolean;
   suffix?: TimelineTitleSuffix | null;
   tone?: TimelineTitleTone;
 }
 
 interface DisplayStatusArgs {
   approvalStatus: TimelineApprovalStatus;
-  preferOngoingLabel: boolean;
   status: TimelineRowStatus;
 }
 
@@ -137,9 +137,9 @@ function titleFromParts({
   action = null,
   content,
   contentTone = "emphasis",
+  motion = "none",
   plainContent,
   prefix = null,
-  shimmerPrefix = false,
   suffix = null,
   tone = "default",
 }: TitlePartsArgs): TimelineTitle {
@@ -149,12 +149,16 @@ function titleFromParts({
     action,
     content,
     contentTone,
+    motion,
     plain: `${head}${plainSuffixText(suffix)}`,
     prefix,
-    shimmerPrefix,
     suffix,
     tone,
   };
+}
+
+function pendingMotion(pending: boolean): TimelineTitleMotion {
+  return pending ? "shimmer" : "none";
 }
 
 function durationSuffix(durationMs: number | null): TimelineTitleSuffix | null {
@@ -220,7 +224,6 @@ function diffStatsSuffix(
 
 function displayStatus({
   approvalStatus,
-  preferOngoingLabel,
   status,
 }: DisplayStatusArgs): "waiting" | "denied" | TimelineRowStatus {
   if (approvalStatus === "waiting_for_approval") {
@@ -229,19 +232,12 @@ function displayStatus({
   if (approvalStatus === "denied") {
     return "denied";
   }
-  if (preferOngoingLabel && status === "completed") {
-    return "pending";
-  }
   return status;
 }
 
-function executionPrefix(
-  row: TimelineExecutionWorkRow,
-  preferOngoingLabel: boolean,
-): string {
+function executionPrefix(row: TimelineExecutionWorkRow): string {
   const status = displayStatus({
     approvalStatus: row.approvalStatus,
-    preferOngoingLabel,
     status: row.status,
   });
   switch (status) {
@@ -270,11 +266,8 @@ function titleToneForExecution(
   return row.approvalStatus === "denied" ? "destructive" : "default";
 }
 
-function buildExecutionTitle(
-  row: TimelineExecutionWorkRow,
-  options: BuildTimelineRowTitleOptions,
-): TimelineTitle {
-  const prefix = executionPrefix(row, options.preferOngoingLabel);
+function buildExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
+  const prefix = executionPrefix(row);
   const content = row.workKind === "command" ? row.command : row.label;
   const statusSuffix =
     row.status === "interrupted"
@@ -284,18 +277,16 @@ function buildExecutionTitle(
     prefix,
     content,
     suffix: statusSuffix,
-    shimmerPrefix: row.status === "pending" && row.approvalStatus !== "denied",
+    motion: pendingMotion(
+      row.status === "pending" && row.approvalStatus !== "denied",
+    ),
     tone: titleToneForExecution(row),
   });
 }
 
-function buildFileChangeTitle(
-  row: TimelineFileChangeWorkRow,
-  options: BuildTimelineRowTitleOptions,
-): TimelineTitle {
+function buildFileChangeTitle(row: TimelineFileChangeWorkRow): TimelineTitle {
   const status = displayStatus({
     approvalStatus: row.approvalStatus,
-    preferOngoingLabel: options.preferOngoingLabel,
     status: row.status,
   });
   const prefix = (() => {
@@ -328,7 +319,7 @@ function buildFileChangeTitle(
     content: formatFileChangePath({ change: row.change, mode: "compact" }),
     plainContent: formatFileChangePath({ change: row.change, mode: "full" }),
     suffix: diffStatsSuffix(row.change),
-    shimmerPrefix: status === "pending",
+    motion: pendingMotion(status === "pending"),
     tone: status === "denied" || status === "error" ? "destructive" : "default",
   });
 }
@@ -341,7 +332,7 @@ function buildWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
         prefix: "Running web search:",
         content: query,
         contentTone: "muted",
-        shimmerPrefix: true,
+        motion: "shimmer",
       });
     case "completed":
       return titleFromParts({
@@ -375,7 +366,7 @@ function buildWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
         prefix: "Fetching:",
         content: row.url,
         contentTone: "muted",
-        shimmerPrefix: true,
+        motion: "shimmer",
       });
     case "completed":
       return titleFromParts({
@@ -405,43 +396,61 @@ function buildWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
 function buildDelegationTitle(
   row: TimelineViewDelegationWorkRow,
 ): TimelineTitle {
-  const prefix =
-    row.status === "pending" ? "Running subagent:" : "Ran subagent:";
+  const prefix = delegationTitlePrefix(row.status);
   const content = row.description ?? (row.output.trim() || row.toolName);
   return titleFromParts({
     prefix,
     content,
     suffix: metadataDurationSuffix(row.subagentType, row.durationMs),
-    shimmerPrefix: row.status === "pending",
+    motion: pendingMotion(row.status === "pending"),
     tone: row.status === "error" ? "destructive" : "default",
   });
+}
+
+function delegationTitlePrefix(status: TimelineRowStatus): string {
+  switch (status) {
+    case "pending":
+      return "Running subagent:";
+    case "completed":
+      return "Ran subagent:";
+    case "error":
+      return "Failed subagent:";
+    case "interrupted":
+      return "Interrupted subagent:";
+    default:
+      return assertNever(status);
+  }
 }
 
 function buildApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
   return titleFromParts({
     content: row.title,
     contentTone: "muted",
-    shimmerPrefix: row.status === "pending",
+    motion: pendingMotion(row.status === "pending"),
     tone: row.status === "error" ? "destructive" : "default",
   });
 }
 
 function buildTimelineActivityIntentTitle(
   intent: TimelineActivityIntent,
+  pending: boolean,
 ): TimelineTitle {
   const detail = formatTimelineActivityIntentDetail({
     intent,
     pathMode: "compact",
+    pending,
   });
   const plainDetail = formatTimelineActivityIntentDetail({
     intent,
     pathMode: "full",
+    pending,
   });
   const spaceIndex = detail.indexOf(" ");
   if (spaceIndex === -1) {
     return titleFromParts({
       content: detail,
       contentTone: "muted",
+      motion: pendingMotion(pending),
       plainContent: plainDetail,
     });
   }
@@ -450,6 +459,7 @@ function buildTimelineActivityIntentTitle(
     prefix: detail.slice(0, spaceIndex),
     content: detail.slice(spaceIndex + 1),
     contentTone: "muted",
+    motion: pendingMotion(pending),
     plainContent:
       plainSpaceIndex === -1
         ? plainDetail
@@ -461,40 +471,47 @@ function buildWorkTitle(
   row: TimelineViewWorkRow,
   options: BuildTimelineRowTitleOptions,
 ): TimelineTitle {
-  switch (row.workKind) {
-    case "command":
-    case "tool":
-      return buildExecutionTitle(row, options);
-    case "file-change":
-      return buildFileChangeTitle(row, options);
-    case "web-search":
-      return buildWebSearchTitle(row);
-    case "web-fetch":
-      return buildWebFetchTitle(row);
-    case "delegation":
-      return buildDelegationTitle(row);
-    case "approval":
-      return buildApprovalTitle(row);
-    default:
-      return assertNever(row);
+  const title = (() => {
+    switch (row.workKind) {
+      case "command":
+      case "tool":
+        return buildExecutionTitle(row);
+      case "file-change":
+        return buildFileChangeTitle(row);
+      case "web-search":
+        return buildWebSearchTitle(row);
+      case "web-fetch":
+        return buildWebFetchTitle(row);
+      case "delegation":
+        return buildDelegationTitle(row);
+      case "approval":
+        return buildApprovalTitle(row);
+      default:
+        return assertNever(row);
+    }
+  })();
+
+  if (options.workStyle === "default" || title.tone === "destructive") {
+    return title;
   }
+  return {
+    ...title,
+    contentTone: "muted",
+    tone: "summary",
+  };
 }
 
-function buildActivitySummaryTitle(
-  row: TimelineActivitySummaryRow,
+function buildWorkSummaryTitle(
+  row: TimelineWorkSummaryRow,
   options: BuildTimelineRowTitleOptions,
 ): TimelineTitle {
-  const activeStatus: TimelineRowStatus =
-    options.preferOngoingLabel && row.status === "completed"
-      ? "pending"
-      : row.status;
-  const activeRow =
-    activeStatus === row.status ? row : { ...row, status: activeStatus };
-  const label = buildTimelineActivitySummaryLabel(activeRow);
+  const label = buildTimelineWorkSummaryLabel(row);
+  const suffix = workSummaryStatusSuffix(row.status);
   if (options.summaryStyle === "background") {
     return titleFromParts({
       content: label,
       contentTone: "muted",
+      suffix,
       tone: "summary",
     });
   }
@@ -503,44 +520,57 @@ function buildActivitySummaryTitle(
     return titleFromParts({
       content: label,
       contentTone: "emphasis",
-      shimmerPrefix: activeRow.status === "pending",
+      motion: pendingMotion(row.kind === "bundle-summary"),
+      suffix,
     });
   }
   return titleFromParts({
     prefix: label.slice(0, spaceIndex),
     content: label.slice(spaceIndex + 1),
-    shimmerPrefix: activeRow.status === "pending",
+    motion: pendingMotion(row.kind === "bundle-summary"),
+    suffix,
   });
 }
 
-function buildTurnTitle(
-  row: TimelineViewTurnRow,
-  options: BuildTimelineRowTitleOptions,
-): TimelineTitle {
-  const status =
-    options.preferOngoingLabel && row.status === "completed"
-      ? "pending"
-      : row.status;
-  if (row.durationMs !== null && row.durationMs > 1_000) {
+function workSummaryStatusSuffix(
+  status: TimelineRowStatus,
+): TimelineTitleSuffix | null {
+  switch (status) {
+    case "error":
+      return { kind: "text", text: "(error)", truncate: false };
+    case "interrupted":
+      return { kind: "text", text: "(interrupted)", truncate: false };
+    case "completed":
+    case "pending":
+      return null;
+    default:
+      return assertNever(status);
+  }
+}
+
+function buildTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
+  const status = row.status;
+  const duration = visibleDurationText(row.durationMs);
+  if (duration !== null) {
     return titleFromParts({
       prefix: status === "pending" ? "Working for" : "Worked for",
-      content: durationToCompactString(row.durationMs),
-      shimmerPrefix: status === "pending",
+      content: duration,
+      motion: pendingMotion(status === "pending"),
     });
   }
   return titleFromParts({
-    prefix: status === "pending" ? "Working on" : "Worked on",
-    content: plural(row.summaryCount, "item"),
-    shimmerPrefix: status === "pending",
+    content: status === "pending" ? "Working" : "Worked",
+    motion: pendingMotion(status === "pending"),
   });
 }
 
 function buildSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
+  const hasErrorTone = row.systemKind === "error" || row.status === "error";
   return titleFromParts({
     content: row.systemKind === "error" ? `Error: ${row.title}` : row.title,
-    contentTone: row.systemKind === "error" ? "emphasis" : "muted",
-    shimmerPrefix: row.status === "pending",
-    tone: row.systemKind === "error" ? "destructive" : "default",
+    contentTone: hasErrorTone ? "emphasis" : "muted",
+    motion: pendingMotion(row.status === "pending"),
+    tone: hasErrorTone ? "destructive" : "default",
   });
 }
 
@@ -576,7 +606,7 @@ export function buildTimelineActivityIntentTitles(
     }
     titles.push({
       id: `${row.id}:activity-intent:${index}`,
-      title: buildTimelineActivityIntentTitle(intent),
+      title: buildTimelineActivityIntentTitle(intent, row.status === "pending"),
     });
   });
 
@@ -594,10 +624,11 @@ export function buildTimelineRowTitle(
       return buildSystemTitle(row);
     case "work":
       return buildWorkTitle(row, options);
-    case "activity-summary":
-      return buildActivitySummaryTitle(row, options);
+    case "bundle-summary":
+    case "step-summary":
+      return buildWorkSummaryTitle(row, options);
     case "turn":
-      return buildTurnTitle(row, options);
+      return buildTurnTitle(row);
     default:
       return assertNever(row);
   }

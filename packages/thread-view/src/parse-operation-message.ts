@@ -24,6 +24,8 @@ type ParseOperationMessageOptions = Pick<
   "includeOptionalOperations" | "includeProviderUnhandledOperations"
 >;
 
+type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
+
 function providerDisplayName(providerId: string): string {
   switch (providerId) {
     case "claude-code":
@@ -74,6 +76,20 @@ function createThreadOperationMetadata(
   };
 }
 
+function parseThreadOwnershipChangeAction(
+  metadata: EventProjectionThreadOperationMetadata["metadata"],
+): ThreadOwnershipChangeAction | null {
+  const action = metadata?.action;
+  if (
+    action === "assign" ||
+    action === "release" ||
+    action === "transfer"
+  ) {
+    return action;
+  }
+  return null;
+}
+
 function threadInterruptedTitle(reason: SystemThreadInterruptedReason): string {
   switch (reason) {
     case "manual-stop":
@@ -94,13 +110,21 @@ export function threadOperationTitle(
 
   switch (operation) {
     case "ownership_change": {
-      const action =
-        typeof metadata?.action === "string" ? metadata.action : undefined;
+      const action = parseThreadOwnershipChangeAction(metadata);
       switch (status) {
         case "completed":
-          return action === "release"
-            ? "Thread management transferred"
-            : "Thread assigned to manager";
+          switch (action) {
+            case "assign":
+              return "Thread assigned to manager";
+            case "release":
+              return "Thread released from manager";
+            case "transfer":
+              return "Thread transferred to new manager";
+            case null:
+              return "Ownership changed";
+            default:
+              return assertNever(action);
+          }
         case "failed":
           return "Ownership change failed";
         default:
@@ -288,8 +312,11 @@ export function parseOperationMessage(
       typeof decoded.metadata?.branch === "string"
         ? decoded.metadata.branch
         : undefined;
+    const messageDetail = decoded.message.trim();
     const detailParts = [
-      decoded.message,
+      messageDetail.length > 0 && messageDetail !== title
+        ? messageDetail
+        : undefined,
       branch ? `Branch: ${branch}` : undefined,
     ].filter((value): value is string => Boolean(value));
 

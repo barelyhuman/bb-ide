@@ -4,7 +4,10 @@ import type {
   ThreadGitDiffResponse,
   WorkspaceStatus,
 } from "@bb/domain";
-import type { ThreadTimelineResponse } from "@bb/server-contract";
+import type {
+  ManagerTimelineView,
+  ThreadTimelineResponse,
+} from "@bb/server-contract";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
@@ -46,6 +49,24 @@ function resolveThreadScopedPlaceholder<TData>(
   ) === nextThreadId
     ? previousData
     : undefined;
+}
+
+export function extractManagerTimelineViewFromThreadTimelineQueryKey(
+  queryKey: QueryKey | undefined,
+): ManagerTimelineView | undefined {
+  if (!queryKey || queryKey[0] !== THREAD_TIMELINE_QUERY_KEY) {
+    return undefined;
+  }
+
+  const managerTimelineView = queryKey[2];
+  if (
+    managerTimelineView === "conversation" ||
+    managerTimelineView === "standard"
+  ) {
+    return managerTimelineView;
+  }
+
+  return undefined;
 }
 
 export function resolveEnvironmentWorkStatusPlaceholder(
@@ -91,11 +112,21 @@ export function resolveThreadTimelinePlaceholder(
   previousData: ThreadTimelineResponse | undefined,
   previousQueryKey: QueryKey | undefined,
   nextThreadId: string,
+  nextManagerTimelineView: ManagerTimelineView | undefined,
 ): ThreadTimelineResponse | undefined {
-  return resolveThreadScopedPlaceholder(
-    previousData,
+  if (previousData === undefined) {
+    return undefined;
+  }
+
+  const previousThreadId = extractThreadIdFromThreadScopedQueryKey(
     previousQueryKey,
-    nextThreadId,
     THREAD_TIMELINE_QUERY_KEY,
   );
+  const previousManagerTimelineView =
+    extractManagerTimelineViewFromThreadTimelineQueryKey(previousQueryKey);
+
+  return previousThreadId === nextThreadId &&
+    previousManagerTimelineView === nextManagerTimelineView
+    ? previousData
+    : undefined;
 }

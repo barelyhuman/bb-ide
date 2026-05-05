@@ -20,6 +20,7 @@ import {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   buildTimelineViewRows,
+  isCompletedNonDeniedWorkRow,
   type BuildTimelineRowTitleOptions,
   type ThreadTimelineViewRow,
   type TimelineActivityIntentTitle,
@@ -58,6 +59,7 @@ export interface ThreadTimelineRowsProps {
   themeType?: ThreadTimelineTheme;
   timelineRows: TimelineRow[];
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
+  turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
@@ -90,7 +92,6 @@ interface TimelineRowWrapperClassNameArgs {
 
 interface TimelineRowViewProps {
   compactActivityIntents: boolean;
-  isTail: boolean;
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
   spacing: TimelineRowsListSpacing;
@@ -132,14 +133,18 @@ interface CollectTimelineAutoExpandedRowIdsArgs {
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
-interface RowActivityContext {
-  isTail: boolean;
+interface ActiveSummaryTreatmentArgs {
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
 }
 
-interface TimelineRowTitleRenderStateArgs extends RowActivityContext {
+interface TimelineRowTitleRenderStateArgs extends ActiveSummaryTreatmentArgs {
   compactActivityIntents: boolean;
+  spacing: TimelineRowsListSpacing;
+}
+
+interface TimelineRowTitleOptionsArgs extends ActiveSummaryTreatmentArgs {
+  spacing: TimelineRowsListSpacing;
 }
 
 interface TimelineRowTitleRenderStateCache {
@@ -347,7 +352,8 @@ function timelineRowRenderSignature(row: ThreadTimelineViewRow): string {
         row.title,
         row.detail,
       ]);
-    case "activity-summary":
+    case "bundle-summary":
+    case "step-summary":
       return joinSignatureParts([
         baseSignature,
         row.status,
@@ -370,23 +376,23 @@ function timelineRowRenderSignature(row: ThreadTimelineViewRow): string {
 
 function timelineRowTitleRenderStateKey({
   compactActivityIntents,
-  isTail,
   row,
   scopeActive,
+  spacing,
 }: TimelineRowTitleRenderStateArgs): string {
   return joinSignatureParts([
     timelineRowRenderSignature(row),
     compactActivityIntents,
-    isTail,
     scopeActive,
+    spacing,
   ]);
 }
 
 function buildTimelineRowTitleRenderState({
   compactActivityIntents,
-  isTail,
   row,
   scopeActive,
+  spacing,
 }: TimelineRowTitleRenderStateArgs): TimelineRowTitleRenderState {
   if (compactActivityIntents && shouldRenderCompactActivityIntentRows(row)) {
     const titles = buildTimelineActivityIntentTitles(row);
@@ -400,7 +406,11 @@ function buildTimelineRowTitleRenderState({
 
   const title = buildTimelineRowTitle(
     row,
-    timelineRowTitleOptions({ isTail, row, scopeActive }),
+    timelineRowTitleOptions({
+      row,
+      scopeActive,
+      spacing,
+    }),
   );
   return {
     kind: "row-title",
@@ -438,7 +448,6 @@ function areTimelineRowViewPropsEqual(
 ): boolean {
   return (
     previous.compactActivityIntents === next.compactActivityIntents &&
-    previous.isTail === next.isTail &&
     previous.scopeActive === next.scopeActive &&
     previous.spacing === next.spacing &&
     (previous.row === next.row ||
@@ -553,7 +562,8 @@ function isRowExpandable(row: ThreadTimelineViewRow): boolean {
       return false;
     case "system":
       return row.detail !== null && row.detail.trim().length > 0;
-    case "activity-summary":
+    case "bundle-summary":
+    case "step-summary":
       return row.children.length > 0;
     case "turn":
       return true;
@@ -570,7 +580,9 @@ function rowHasPendingStatus(row: ThreadTimelineViewRow): boolean {
       return false;
     case "system":
       return row.status === "pending";
-    case "activity-summary":
+    case "bundle-summary":
+      return true;
+    case "step-summary":
     case "turn":
     case "work":
       return row.status === "pending";
@@ -606,23 +618,33 @@ function buildExpandableStructuredToolTitle(
 }
 
 function shouldAutoExpandRow({
-  isTail,
   row,
   scopeActive,
-}: RowActivityContext): boolean {
+}: ActiveSummaryTreatmentArgs): boolean {
   if (!isRowExpandable(row)) {
     return false;
   }
   if (!scopeActive) {
     return false;
   }
+  if (row.kind === "bundle-summary") {
+    return shouldUseActiveSummaryTreatment({ row, scopeActive });
+  }
   if (!rowHasPendingStatus(row)) {
     return false;
   }
-  if (row.kind === "activity-summary") {
-    return scopeActive && isTail;
-  }
   return true;
+}
+
+function shouldUseActiveSummaryTreatment({
+  row,
+  scopeActive,
+}: ActiveSummaryTreatmentArgs): boolean {
+  return (
+    row.kind === "bundle-summary" &&
+    scopeActive &&
+    rowHasPendingStatus(row)
+  );
 }
 
 function collectTimelineAutoExpandedRowIds({
@@ -641,14 +663,13 @@ function collectTimelineAutoExpandedRowIds({
       return;
     }
 
-    currentRows.forEach((row, index) => {
-      const isTail = index === currentRows.length - 1;
-      if (shouldAutoExpandRow({ isTail, row, scopeActive: currentScopeActive })) {
+    currentRows.forEach((row) => {
+      if (shouldAutoExpandRow({ row, scopeActive: currentScopeActive })) {
         autoExpandedRowIds.add(row.id);
       }
 
-      if (row.kind === "activity-summary") {
-        visitRows(row.children, false);
+      if (row.kind === "bundle-summary" || row.kind === "step-summary") {
+        visitRows(row.children, rowHasPendingStatus(row));
       } else if (row.kind === "work" && row.workKind === "delegation") {
         visitRows(row.childRows, row.status === "pending");
       } else if (row.kind === "turn") {
@@ -669,15 +690,20 @@ function collectTimelineAutoExpandedRowIds({
 }
 
 function timelineRowTitleOptions({
-  isTail,
   row,
   scopeActive,
-}: RowActivityContext): BuildTimelineRowTitleOptions {
-  const useActiveBundleLabel =
-    row.kind === "activity-summary" && scopeActive && isTail;
+  spacing,
+}: TimelineRowTitleOptionsArgs): BuildTimelineRowTitleOptions {
+  const useActiveBundleLabel = shouldUseActiveSummaryTreatment({
+    row,
+    scopeActive,
+  });
   return {
-    preferOngoingLabel: useActiveBundleLabel,
     summaryStyle: useActiveBundleLabel ? "bundle" : "background",
+    workStyle:
+      isCompletedNonDeniedWorkRow(row) && spacing !== "bundle"
+        ? "summary"
+        : "default",
   };
 }
 
@@ -793,11 +819,12 @@ function TimelineExpandableBody({
   } = useTimelineRendererContext();
 
   switch (row.kind) {
-    case "activity-summary":
+    case "bundle-summary":
+    case "step-summary":
       return (
         <TimelineRowsList
           rows={row.children}
-          scopeActive={false}
+          scopeActive={rowHasPendingStatus(row)}
           compactActivityIntents={true}
           spacing="bundle"
         />
@@ -844,7 +871,11 @@ function TimelineExpandableBody({
       return row.detail ? (
         <TimelineSystemDetailBlock
           detail={row.detail}
-          tone={row.systemKind === "error" ? "danger" : "default"}
+          tone={
+            row.systemKind === "error" || row.status === "error"
+              ? "danger"
+              : "default"
+          }
         />
       ) : null;
     case "conversation":
@@ -938,7 +969,6 @@ function TurnRowBody({
 
 function TimelineRowView({
   compactActivityIntents,
-  isTail,
   row,
   scopeActive,
   spacing,
@@ -947,9 +977,9 @@ function TimelineRowView({
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const titleState = useTimelineRowTitleRenderState({
     compactActivityIntents,
-    isTail,
     row,
     scopeActive,
+    spacing,
   });
 
   if (row.kind === "conversation") {
@@ -1078,14 +1108,13 @@ function TimelineRowsList({
       )}
       data-timeline-row-list={spacing}
     >
-      {rows.map((row, index) => (
+      {rows.map((row) => (
         <div
           key={row.id}
           className={timelineRowWrapperClassName({ row, spacing })}
         >
           <MemoizedTimelineRowView
             row={row}
-            isTail={index === rows.length - 1}
             scopeActive={scopeActive}
             spacing={spacing}
             compactActivityIntents={compactActivityIntents}
@@ -1097,6 +1126,15 @@ function TimelineRowsList({
 }
 
 function ThreadTimelineRowsComponent(props: ThreadTimelineRowsProps) {
+  return (
+    <ThreadTimelineRowsForIdentity
+      key={props.turnSummaryRowsIdentity}
+      {...props}
+    />
+  );
+}
+
+function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
   const getViewRows = useTimelineViewRowsCache();
   const rows = useMemo(
     () => getViewRows(props.timelineRows),

@@ -80,7 +80,6 @@ export interface BuildThreadTimelineFromEventsArgs {
 export interface ThreadTimelineFromEventsResult {
   activeThinking: ActiveThinking | null;
   contextWindowUsage: ThreadContextWindowUsage | null;
-  pendingSteers: TimelineUserConversationRow[];
   rows: TimelineRow[];
 }
 
@@ -411,7 +410,6 @@ function convertMessage(
           status: message.status,
           callId: message.callId,
           queries: message.queries,
-          resultText: message.resultText,
         },
       ];
     case "web-fetch":
@@ -425,7 +423,6 @@ function convertMessage(
           url: message.url,
           prompt: message.prompt,
           pattern: message.pattern,
-          resultText: message.resultText,
         },
       ];
     case "delegation":
@@ -524,7 +521,7 @@ function buildPendingSteerRowsFromEvents(
   const orderedEvents = getOrderedThreadEvents(events);
   const acceptedClientRequestBySequence =
     buildAcceptedClientRequestBySequence(orderedEvents);
-  const pendingSteers: TimelineUserConversationRow[] = [];
+  const pendingSteerRows: TimelineUserConversationRow[] = [];
 
   for (const { event, meta } of orderedEvents) {
     const pendingSteer = parsePendingSteerFromClientRequest({
@@ -536,12 +533,12 @@ function buildPendingSteerRowsFromEvents(
     if (!pendingSteer) {
       continue;
     }
-    pendingSteers.push(
+    pendingSteerRows.push(
       convertPendingSteerMessage(pendingSteer, ROOT_TIMELINE_ROW_ID_PREFIX),
     );
   }
 
-  return pendingSteers;
+  return pendingSteerRows;
 }
 
 function isReconnectSystemRow(row: TimelineRow): boolean {
@@ -682,6 +679,10 @@ function buildCompletedTurnSummaryRows({
     const sourceRows = item.sourceMessages.flatMap((message) =>
       convertMessage(message, { includeNestedRows, rowIdPrefix }),
     );
+    if (item.segmentIndex !== null) {
+      rows.push(...sourceRows);
+      continue;
+    }
     const turnRow = buildTurnSummaryRow({
       durationMs: item.durationMs,
       includeNestedRows,
@@ -839,6 +840,17 @@ export function buildThreadTimelineFromEvents(
       ? buildEventProjectionEntries(args.events, projectionOptions)
       : buildEventProjection(args.events, projectionOptions);
 
+  const rows =
+    args.options.viewMode === "manager-conversation"
+      ? buildManagerConversationRows(projection)
+      : [
+          ...buildTimelineRows(projection, {
+            includeNestedRows: args.options.includeNestedRows,
+            rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
+          }),
+          ...buildPendingSteerRowsFromEvents(args.events, args.options),
+        ];
+
   return {
     activeThinking:
       args.options.viewMode === "manager-conversation"
@@ -847,17 +859,7 @@ export function buildThreadTimelineFromEvents(
     contextWindowUsage: extractThreadContextWindowUsage(
       args.contextWindowEvents,
     ),
-    pendingSteers:
-      args.options.viewMode === "manager-conversation"
-        ? []
-        : buildPendingSteerRowsFromEvents(args.events, args.options),
-    rows:
-      args.options.viewMode === "manager-conversation"
-        ? buildManagerConversationRows(projection)
-        : buildTimelineRows(projection, {
-            includeNestedRows: args.options.includeNestedRows,
-            rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
-          }),
+    rows,
   };
 }
 

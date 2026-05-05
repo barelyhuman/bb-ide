@@ -34,6 +34,7 @@ interface ThreadTimelinePaneProps {
   timelineRows: TimelineRow[];
   threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
+  turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
@@ -60,6 +61,7 @@ export function ThreadTimelinePane({
   timelineRows,
   threadId,
   threadRuntimeDisplayStatus,
+  turnSummaryRowsIdentity,
   turnSummaryRowsById,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
@@ -106,6 +108,7 @@ export function ThreadTimelinePane({
               themeType={preferredTheme}
               timelineRows={timelineRows}
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
+              turnSummaryRowsIdentity={turnSummaryRowsIdentity}
               turnSummaryRowsById={turnSummaryRowsById}
             />
           ) : null}
@@ -119,22 +122,22 @@ export function ThreadTimelinePane({
               }
             />
           ) : null}
+          {showOngoingIndicator ? (
+            <ConversationWorkingIndicator
+              key={ongoingIndicatorKey}
+              details={activeThinkingDetails}
+              isThinking={showActiveThinking}
+              label={ongoingIndicatorLabel}
+            />
+          ) : null}
         </ConversationTimeline>
-        {showOngoingIndicator ? (
-          <ConversationWorkingIndicator
-            key={ongoingIndicatorKey}
-            details={activeThinkingDetails}
-            isThinking={showActiveThinking}
-            label={ongoingIndicatorLabel}
-          />
-        ) : null}
       </PageShell>
     </div>
   );
 }
 
 // Delay before revealing the loading indicator so fast loads don't flash.
-const LOADING_INDICATOR_REVEAL_DELAY_MS = 200;
+export const LOADING_INDICATOR_REVEAL_DELAY_MS = 200;
 
 function DelayedThreadLoadingIndicator() {
   const [visible, setVisible] = useState(false);
@@ -151,6 +154,6 @@ function DelayedThreadLoadingIndicator() {
   }
 
   return (
-    <ConversationWorkingIndicator label="Loading thread..." className="mt-6" />
+    <ConversationStatusIndicator label="Loading thread..." className="mt-6" />
   );
 }

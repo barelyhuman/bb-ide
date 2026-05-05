@@ -28,14 +28,20 @@ import {
   type EnvironmentWorkStatusQueryKey,
   type ThreadListQueryFilters,
 } from "./query-keys";
+import { extractManagerTimelineViewFromThreadTimelineQueryKey } from "./query-placeholders";
 
 type TimelineRowsUpdater = (
   rows: readonly TimelineRow[],
 ) => readonly TimelineRow[] | null;
 
-type PendingSteersUpdater = (
-  rows: readonly TimelineUserConversationRow[],
-) => readonly TimelineUserConversationRow[] | null;
+type TimelineRowsUpdatePredicate = (queryKey: QueryKey) => boolean;
+
+interface UpdateCachedTimelineRowsArgs {
+  queryClient: QueryClient;
+  shouldUpdate: TimelineRowsUpdatePredicate;
+  threadId: string;
+  updater: TimelineRowsUpdater;
+}
 
 export interface EnvironmentInvalidationParams {
   environmentId: string;
@@ -308,17 +314,23 @@ export function optimisticallyInsertThread(
   }
 }
 
-function updateCachedTimelineRows(
-  queryClient: QueryClient,
-  threadId: string,
-  updater: TimelineRowsUpdater,
-): void {
+const updateEveryTimelineQuery: TimelineRowsUpdatePredicate = () => true;
+
+function updateCachedTimelineRows({
+  queryClient,
+  shouldUpdate,
+  threadId,
+  updater,
+}: UpdateCachedTimelineRowsArgs): void {
   const timelineQueries = queryClient.getQueriesData<ThreadTimelineResponse>({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
   });
 
   for (const [queryKey, response] of timelineQueries) {
     if (!response) {
+      continue;
+    }
+    if (!shouldUpdate(queryKey)) {
       continue;
     }
 
@@ -334,35 +346,7 @@ function updateCachedTimelineRows(
   }
 }
 
-function updateCachedPendingSteers(
-  queryClient: QueryClient,
-  threadId: string,
-  updater: PendingSteersUpdater,
-): void {
-  const timelineQueries = queryClient.getQueriesData<ThreadTimelineResponse>({
-    queryKey: threadTimelineQueryKeyPrefix(threadId),
-  });
-
-  for (const [queryKey, response] of timelineQueries) {
-    if (!response) {
-      continue;
-    }
-
-    const nextRows = updater(response.pendingSteers);
-    if (nextRows === null) {
-      continue;
-    }
-
-    queryClient.setQueryData<ThreadTimelineResponse>(queryKey, {
-      ...response,
-      pendingSteers: [...nextRows],
-    });
-  }
-}
-
-function isPendingSteerRow(
-  row: TimelineRow,
-): row is TimelineUserConversationRow {
+function isPendingSteerRow(row: TimelineRow): row is TimelineUserConversationRow {
   return (
     row.kind === "conversation" &&
     row.role === "user" &&
@@ -371,16 +355,33 @@ function isPendingSteerRow(
   );
 }
 
+function buildPendingSteerTimelineQueryPredicate(
+  thread: ThreadWithRuntime | undefined,
+): TimelineRowsUpdatePredicate {
+  if (thread?.type !== "manager") {
+    return updateEveryTimelineQuery;
+  }
+  return (queryKey) =>
+    extractManagerTimelineViewFromThreadTimelineQueryKey(queryKey) ===
+    "standard";
+}
+
 export function insertOptimisticTimelineRow(
   queryClient: QueryClient,
   threadId: string,
   row: TimelineRow,
 ): void {
-  if (isPendingSteerRow(row)) {
-    updateCachedPendingSteers(queryClient, threadId, (rows) => [...rows, row]);
-    return;
-  }
-  updateCachedTimelineRows(queryClient, threadId, (rows) => [...rows, row]);
+  const shouldUpdate = isPendingSteerRow(row)
+    ? buildPendingSteerTimelineQueryPredicate(
+        queryClient.getQueryData<ThreadWithRuntime>(threadQueryKey(threadId)),
+      )
+    : updateEveryTimelineQuery;
+  updateCachedTimelineRows({
+    queryClient,
+    shouldUpdate,
+    threadId,
+    updater: (rows) => [...rows, row],
+  });
 }
 
 export function removeOptimisticTimelineRow(
@@ -388,13 +389,14 @@ export function removeOptimisticTimelineRow(
   threadId: string,
   rowId: string,
 ): void {
-  updateCachedPendingSteers(queryClient, threadId, (rows) => {
-    const nextRows = rows.filter((row) => row.id !== rowId);
-    return nextRows.length === rows.length ? null : nextRows;
-  });
-  updateCachedTimelineRows(queryClient, threadId, (rows) => {
-    const nextRows = rows.filter((row) => row.id !== rowId);
-    return nextRows.length === rows.length ? null : nextRows;
+  updateCachedTimelineRows({
+    queryClient,
+    shouldUpdate: updateEveryTimelineQuery,
+    threadId,
+    updater: (rows) => {
+      const nextRows = rows.filter((row) => row.id !== rowId);
+      return nextRows.length === rows.length ? null : nextRows;
+    },
   });
 }
 

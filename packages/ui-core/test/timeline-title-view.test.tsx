@@ -16,9 +16,9 @@ function title(parts: TimelineTitleOverrides): TimelineTitle {
     action: null,
     content: "pnpm exec turbo run test --filter=@bb/app",
     contentTone: "emphasis",
+    motion: "none",
     plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
     prefix: "Ran",
-    shimmerPrefix: false,
     suffix: { kind: "text", text: "2s", truncate: false },
     tone: "default",
     ...parts,
@@ -128,6 +128,24 @@ describe("TimelineTitleView", () => {
 
     expect(html).toContain("text-muted-foreground/60");
     expect(html).not.toContain("font-semibold");
+  });
+
+  it("applies ongoing motion to content-only titles", () => {
+    render(
+      <TimelineTitleView
+        title={title({
+          content: "Provisioning thread",
+          motion: "shimmer",
+          plain: "Provisioning thread",
+          prefix: null,
+          suffix: null,
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Provisioning thread").className).toContain(
+      "animate-shine",
+    );
   });
 
   it("renders title content as a plain span when no resolver is provided", () => {

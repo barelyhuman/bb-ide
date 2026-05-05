@@ -2293,7 +2293,12 @@ describe("buildThreadTimeline", () => {
         isDevelopment: false,
       },
     );
-    expect(defaultTimeline.pendingSteers).toEqual([]);
+    expect(defaultTimeline.rows).not.toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        text: "system-pending-steer",
+      }),
+    );
 
     const managerStandardTimeline = buildThreadTimeline(
       harness.db,
@@ -2302,8 +2307,16 @@ describe("buildThreadTimeline", () => {
         isDevelopment: false,
       },
     );
-    expect(managerStandardTimeline.pendingSteers).toHaveLength(1);
-    expect(managerStandardTimeline.pendingSteers[0]).toMatchObject({
+    const managerStandardPendingSteerRows =
+      managerStandardTimeline.rows.filter(
+        (row) =>
+          row.kind === "conversation" &&
+          row.role === "user" &&
+          row.userRequest.kind === "steer" &&
+          row.userRequest.status === "pending",
+      );
+    expect(managerStandardPendingSteerRows).toHaveLength(1);
+    expect(managerStandardPendingSteerRows[0]).toMatchObject({
       role: "user",
       text: "system-pending-steer",
       userRequest: {
@@ -2315,7 +2328,12 @@ describe("buildThreadTimeline", () => {
     const standardTimeline = buildThreadTimeline(harness.db, standardThread, {
       isDevelopment: false,
     });
-    expect(standardTimeline.pendingSteers).toEqual([]);
+    expect(standardTimeline.rows).not.toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        text: "system-pending-steer",
+      }),
+    );
   });
 
   it("keeps manager-visible messages that would otherwise be buried in turn summaries", async () => {

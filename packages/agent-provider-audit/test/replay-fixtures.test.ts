@@ -167,7 +167,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
           snapshot.fixture === "excalidraw/claude-code/search-feature" &&
           snapshot.threadStatus === "active" &&
           snapshot.timelinePreview.some((line) =>
-            line.includes("Running 1 subagent"),
+            line.includes("Running subagent:"),
           ),
       );
     expect(activeSubagentPrefix).toBeDefined();

@@ -146,7 +146,6 @@ export interface EventProjectionWebSearchMessage extends EventProjectionMessageB
   kind: "web-search";
   callId: string;
   queries: string[];
-  resultText: string | null;
   status: Extract<
     EventProjectionMessageStatus,
     "pending" | "completed" | "interrupted"
@@ -159,7 +158,6 @@ export interface EventProjectionWebFetchMessage extends EventProjectionMessageBa
   url: string;
   prompt: string | null;
   pattern: string | null;
-  resultText: string | null;
   status: Extract<
     EventProjectionMessageStatus,
     "pending" | "completed" | "interrupted"

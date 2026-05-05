@@ -313,7 +313,7 @@ export function registerShowCommand(
     )
     .option(
       "--format <format>",
-      "Output format: json (raw events), minimal (compact timeline), verbose (full timeline)",
+      "Output format: json (raw events), minimal (compact timeline), verbose (expanded timeline)",
       "minimal",
     )
     .option(
@@ -359,13 +359,10 @@ export function registerShowCommand(
           }),
         );
         const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
-        const text = formatThreadTimelineText(
-          [...timeline.rows, ...timeline.pendingSteers],
-          {
-            verbose: format === "verbose",
-            color,
-          },
-        );
+        const text = formatThreadTimelineText(timeline.rows, {
+          verbose: format === "verbose",
+          color,
+        });
         console.log(text);
       }),
     );

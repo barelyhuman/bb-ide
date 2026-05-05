@@ -54,7 +54,6 @@ describe("timeline response helpers", () => {
           children: [ASSISTANT_ROW],
         },
       ],
-      pendingSteers: [],
       activeThinking: null,
     } satisfies ThreadTimelineResponse;
 
@@ -87,7 +86,6 @@ describe("timeline response helpers", () => {
           childRows: [ASSISTANT_ROW],
         },
       ],
-      pendingSteers: [],
       activeThinking: null,
     } satisfies ThreadTimelineResponse;
 
@@ -100,7 +98,6 @@ describe("timeline response helpers", () => {
   it("does not treat user conversation rows as assistant output", () => {
     const timeline = {
       rows: [USER_ROW],
-      pendingSteers: [],
       activeThinking: null,
     } satisfies ThreadTimelineResponse;
 

@@ -199,7 +199,6 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("keeps previous timeline rows when the same thread query refreshes", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
-      pendingSteers: [],
       rows: [
         {
           id: "assistant-1",
@@ -221,24 +220,56 @@ describe("resolveThreadTimelinePlaceholder", () => {
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", false],
+        ["threadTimeline", "thread-1", "conversation"],
         "thread-1",
+        "conversation",
       ),
     ).toBe(previousTimeline);
+  });
+
+  it("drops previous timeline rows when switching manager timeline view", () => {
+    const previousTimeline: ThreadTimelineResponse = {
+      activeThinking: null,
+      rows: [
+        {
+          id: "manager-conversation-row",
+          kind: "conversation",
+          role: "assistant",
+          threadId: "thread-1",
+          turnId: null,
+          text: "Manager conversation row",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          startedAt: 1,
+          createdAt: 1,
+          attachments: null,
+          userRequest: null,
+        },
+      ],
+    };
+
+    expect(
+      resolveThreadTimelinePlaceholder(
+        previousTimeline,
+        ["threadTimeline", "thread-1", "conversation"],
+        "thread-1",
+        "standard",
+      ),
+    ).toBeUndefined();
   });
 
   it("drops previous timeline rows when switching to a different thread", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
-      pendingSteers: [],
       rows: [],
     };
 
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", false],
+        ["threadTimeline", "thread-1", undefined],
         "thread-2",
+        undefined,
       ),
     ).toBeUndefined();
   });

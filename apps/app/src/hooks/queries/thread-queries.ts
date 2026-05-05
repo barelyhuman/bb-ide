@@ -209,6 +209,7 @@ export function useThreadTimeline(
         previousData,
         previousQuery?.queryKey,
         id,
+        managerTimelineView,
       ),
   });
 }
