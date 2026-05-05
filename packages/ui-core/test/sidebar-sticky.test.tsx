@@ -23,13 +23,13 @@ afterEach(() => {
 });
 
 describe("SidebarStickyStack", () => {
-  it("renders a scoped sticky stack with labeled tiers and optional fades", () => {
+  it("renders a scoped sticky stack with labeled tiers and no overflow fades", () => {
     const view = render(
       <SidebarStickyStack>
-        <SidebarStickyTier tier="label" showBelowFade>
+        <SidebarStickyTier tier="label">
           Projects
         </SidebarStickyTier>
-        <SidebarStickyTier tier="project" showBelowFade={false}>
+        <SidebarStickyTier tier="project">
           Project Alpha
         </SidebarStickyTier>
       </SidebarStickyStack>,
@@ -52,10 +52,7 @@ describe("SidebarStickyStack", () => {
     expect(label.getAttribute("data-sidebar")).toBe("group-label");
     expect(label.getAttribute("data-sidebar-sticky-tier")).toBe("label");
     expect(project.getAttribute("data-sidebar-sticky-tier")).toBe("project");
-
-    const labelFade = label.querySelector("[data-overflow-fade]");
-    expect(labelFade?.getAttribute("data-overflow-fade")).toBe("below");
-    expect(labelFade?.getAttribute("data-overflow-fade-tone")).toBe("sidebar");
+    expect(label.querySelector("[data-overflow-fade]")).toBeNull();
     expect(project.querySelector("[data-overflow-fade]")).toBeNull();
   });
 });

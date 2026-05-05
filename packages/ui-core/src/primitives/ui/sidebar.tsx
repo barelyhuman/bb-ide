@@ -8,7 +8,6 @@ import {
 
 import { useIsMobile } from "../hooks/use-mobile.js";
 import { cn } from "../cn.js";
-import { OverflowFade, type OverflowFadePlacement } from "../overflow-fade.js";
 import { Button } from "./button.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
 import { Input } from "./input.js";
@@ -380,32 +379,19 @@ const SidebarHeader = React.forwardRef<
 });
 SidebarHeader.displayName = "SidebarHeader";
 
-interface SidebarFooterProps extends React.ComponentProps<"div"> {
-  /** Omit to render a plain footer with no anchored overflow fade. */
-  overflowFadePlacement?: OverflowFadePlacement;
-}
-
-const SidebarFooter = React.forwardRef<HTMLDivElement, SidebarFooterProps>(
-  ({ children, className, overflowFadePlacement, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        data-sidebar="footer"
-        className={cn(
-          "flex flex-col gap-2 p-2",
-          overflowFadePlacement && "relative bg-sidebar",
-          className,
-        )}
-        {...props}
-      >
-        {overflowFadePlacement ? (
-          <OverflowFade placement={overflowFadePlacement} tone="sidebar" />
-        ) : null}
-        {children}
-      </div>
-    );
-  },
-);
+const SidebarFooter = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"div">
+>(({ className, ...props }, ref) => {
+  return (
+    <div
+      ref={ref}
+      data-sidebar="footer"
+      className={cn("flex flex-col gap-2 p-2", className)}
+      {...props}
+    />
+  );
+});
 SidebarFooter.displayName = "SidebarFooter";
 
 const SidebarSeparator = React.forwardRef<
@@ -483,7 +469,6 @@ export type SidebarStickyTierKind = "label" | "project" | "manager";
 type SidebarStickyStackProps = React.ComponentProps<"div">;
 
 interface SidebarStickyTierProps extends React.ComponentProps<"div"> {
-  showBelowFade: boolean;
   tier: SidebarStickyTierKind;
 }
 
@@ -506,7 +491,7 @@ SidebarStickyStack.displayName = "SidebarStickyStack";
 const SidebarStickyTier = React.forwardRef<
   HTMLDivElement,
   SidebarStickyTierProps
->(({ children, className, showBelowFade, tier, ...props }, ref) => {
+>(({ children, className, tier, ...props }, ref) => {
   return (
     <div
       ref={ref}
@@ -519,7 +504,6 @@ const SidebarStickyTier = React.forwardRef<
         className,
       )}
     >
-      {showBelowFade ? <OverflowFade placement="below" tone="sidebar" /> : null}
       {children}
     </div>
   );

@@ -20,12 +20,8 @@ afterEach(() => {
 });
 
 describe("SidebarFooter", () => {
-  it("anchors and blends the optional overflow fade", () => {
-    const view = render(
-      <SidebarFooter overflowFadePlacement="above">
-        Footer actions
-      </SidebarFooter>,
-    );
+  it("renders a plain footer without an overflow fade", () => {
+    const view = render(<SidebarFooter>Footer actions</SidebarFooter>);
 
     screen.getByText("Footer actions");
 
@@ -33,25 +29,9 @@ describe("SidebarFooter", () => {
       view.container.querySelector('[data-sidebar="footer"]'),
       "Sidebar footer was not rendered",
     );
-    const fade = requireHTMLElement(
-      footer.querySelector("[data-overflow-fade]"),
-      "Sidebar footer fade was not rendered",
-    );
 
-    expect(footer.classList.contains("relative")).toBe(true);
-    expect(footer.classList.contains("bg-sidebar")).toBe(true);
-    expect(fade.getAttribute("data-overflow-fade")).toBe("above");
-    expect(fade.getAttribute("data-overflow-fade-tone")).toBe("sidebar");
-  });
-
-  it("does not render an overflow fade unless requested", () => {
-    const view = render(<SidebarFooter>Footer actions</SidebarFooter>);
-
-    const footer = requireHTMLElement(
-      view.container.querySelector('[data-sidebar="footer"]'),
-      "Sidebar footer was not rendered",
-    );
-
+    expect(footer.classList.contains("relative")).toBe(false);
+    expect(footer.classList.contains("bg-sidebar")).toBe(false);
     expect(footer.querySelector("[data-overflow-fade]")).toBeNull();
   });
 });

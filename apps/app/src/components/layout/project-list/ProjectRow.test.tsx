@@ -17,7 +17,9 @@ import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";
 
 interface RenderProjectRowArgs {
   collapsedManagerIds?: Set<string>;
+  isActive?: boolean;
   isCollapsed?: boolean;
+  selectedThreadId?: string;
   threadListState?: ProjectThreadListState;
 }
 
@@ -114,8 +116,8 @@ async function renderProjectRow(args: RenderProjectRowArgs = {}) {
           threadListState={
             args.threadListState ?? { status: "ready", threads: [] }
           }
-          selectedThreadId={undefined}
-          isActive={false}
+          selectedThreadId={args.selectedThreadId}
+          isActive={args.isActive ?? false}
           isCollapsed={args.isCollapsed ?? false}
           collapsedManagerIds={args.collapsedManagerIds ?? new Set()}
           isLocalPathInvalid={false}
@@ -206,26 +208,14 @@ describe("ProjectRow", () => {
     expect(managedRow.hasAttribute("data-sidebar-sticky-tier")).toBe(false);
     expect(regularRow.hasAttribute("data-sidebar-sticky-tier")).toBe(false);
 
-    const projectFade = projectRow.querySelector("[data-overflow-fade]");
-    const managerFade = managerRow.querySelector("[data-overflow-fade]");
-    expect(projectFade?.getAttribute("data-overflow-fade")).toBe("below");
-    expect(projectFade?.getAttribute("data-overflow-fade-tone")).toBe(
-      "sidebar",
-    );
-    expect(managerFade?.getAttribute("data-overflow-fade")).toBe("below");
-    expect(managerFade?.getAttribute("data-overflow-fade-tone")).toBe(
-      "sidebar",
-    );
+    expect(projectRow.querySelector("[data-overflow-fade]")).toBeNull();
+    expect(managerRow.querySelector("[data-overflow-fade]")).toBeNull();
     expect(managedRow.querySelector('[data-overflow-fade="below"]')).toBeNull();
 
     expect(isBefore(projectRow, managerRow)).toBe(true);
     expect(isBefore(managerRow, managedRow)).toBe(true);
     expect(isBefore(managedRow, regularRow)).toBe(true);
 
-    // JSDOM does not simulate sticky scroll adhesion, and app.css cannot be
-    // loaded in this test target because Tailwind resolves workspace CSS
-    // package exports incorrectly. Browser verification should scroll an
-    // expanded sidebar and confirm project/manager rows stack without overlap.
   });
 
   it("preserves collapsed project behavior while keeping the project row sticky", async () => {
@@ -256,7 +246,7 @@ describe("ProjectRow", () => {
     expect(screen.queryByLabelText("Open Manager One")).toBeNull();
   });
 
-  it("omits the manager fade when managed children are collapsed", async () => {
+  it("keeps sidebar rows free of overflow fades when managed children are collapsed", async () => {
     const managerThread = createThread({
       id: "thr_manager",
       type: "manager",
@@ -291,10 +281,42 @@ describe("ProjectRow", () => {
       "Manager row was not rendered",
     );
 
-    expect(projectRow.querySelector('[data-overflow-fade="below"]')).not.toBe(
-      null,
-    );
+    expect(projectRow.querySelector("[data-overflow-fade]")).toBeNull();
     expect(managerRow.querySelector("[data-overflow-fade]")).toBeNull();
     expect(screen.queryByLabelText("Open Managed Child")).toBeNull();
+  });
+
+  it("uses opaque active backgrounds for sticky project and manager rows", async () => {
+    const managerThread = createThread({
+      id: "thr_manager",
+      type: "manager",
+      title: "Manager One",
+      titleFallback: "Manager One",
+    });
+
+    await renderProjectRow({
+      isActive: true,
+      selectedThreadId: managerThread.id,
+      threadListState: {
+        status: "ready",
+        threads: [managerThread],
+      },
+    });
+
+    await screen.findByText("Project Alpha");
+
+    const projectRow = requireHTMLElement(
+      screen.getByText("Project Alpha").parentElement,
+      "Project row was not rendered",
+    );
+    const managerRow = requireHTMLElement(
+      screen.getByLabelText("Open Manager One").parentElement,
+      "Manager row was not rendered",
+    );
+
+    expect(projectRow.classList.contains("bg-sidebar-border")).toBe(true);
+    expect(projectRow.classList.contains("bg-sidebar-border/80")).toBe(false);
+    expect(managerRow.classList.contains("bg-sidebar-border")).toBe(true);
+    expect(managerRow.classList.contains("bg-sidebar-border/80")).toBe(false);
   });
 });

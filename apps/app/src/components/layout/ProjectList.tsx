@@ -334,11 +334,7 @@ function ProjectListComponent({
 
   return (
     <SidebarStickyStack>
-      <SidebarStickyTier
-        tier="label"
-        showBelowFade
-        className="justify-between pr-1"
-      >
+      <SidebarStickyTier tier="label" className="justify-between pr-1">
         Projects
         {onNewProject ? (
           <button

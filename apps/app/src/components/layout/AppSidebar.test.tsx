@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe("AppSidebar", () => {
-  it("renders the sidebar footer overflow fade", async () => {
+  it("renders the sidebar without a footer overflow fade", async () => {
     installAppSidebarRoutes();
 
     const wrapper = createAppSidebarWrapper();
@@ -93,8 +93,6 @@ describe("AppSidebar", () => {
       "Sidebar footer was not rendered",
     );
 
-    const fade = footer.querySelector("[data-overflow-fade]");
-    expect(fade?.getAttribute("data-overflow-fade")).toBe("above");
-    expect(fade?.getAttribute("data-overflow-fade-tone")).toBe("sidebar");
+    expect(footer.querySelector("[data-overflow-fade]")).toBeNull();
   });
 });

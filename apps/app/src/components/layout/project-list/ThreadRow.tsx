@@ -213,10 +213,9 @@ function ThreadRowComponent(props: ThreadRowProps) {
         : COARSE_POINTER_ROW_HEIGHT_CLASS,
     isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
     isActive
-      ? "bg-sidebar-border/80 text-sidebar-foreground"
+      ? "bg-sidebar-border text-sidebar-foreground"
       : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
   );
-  const showManagerFade = hasManagedChildren && !isManagerCollapsed;
   const rowContent = (
     <>
       <NavLink
@@ -330,11 +329,7 @@ function ThreadRowComponent(props: ThreadRowProps) {
 
   if (isManager) {
     return (
-      <SidebarStickyTier
-        tier="manager"
-        showBelowFade={showManagerFade}
-        className={rowClassName}
-      >
+      <SidebarStickyTier tier="manager" className={rowClassName}>
         {rowContent}
       </SidebarStickyTier>
     );

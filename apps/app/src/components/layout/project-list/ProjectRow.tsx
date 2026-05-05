@@ -74,19 +74,14 @@ export function ProjectRow({
     thread.environmentHostId === localHostId &&
     thread.environmentBranchName === promotedBranchName &&
     thread.environmentWorkspaceDisplayKind !== "other";
-  const hasVisibleProjectBody =
-    !isCollapsed &&
-    (threadListState.status === "loading" || projectThreads.length > 0);
-
   return (
     <SidebarMenuItem data-sidebar-sticky-project-item="">
       <SidebarStickyTier
         tier="project"
-        showBelowFade={hasVisibleProjectBody}
         className={cn(
           "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
           isActive
-            ? "bg-sidebar-border/80 text-sidebar-foreground"
+            ? "bg-sidebar-border text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
         title={project.name}

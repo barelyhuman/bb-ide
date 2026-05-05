@@ -126,13 +126,29 @@
     height: var(--bb-sidebar-sticky-tier-height);
     min-height: var(--bb-sidebar-sticky-tier-height);
     z-index: var(--bb-sidebar-sticky-tier-z-index);
-    background: var(--sidebar);
+    isolation: isolate;
+    background-color: var(--sidebar);
+  }
+
+  [data-sidebar-sticky-stack] [data-sidebar-sticky-tier]::before {
+    content: "";
+    position: absolute;
+    inset: var(--bb-sidebar-sticky-tier-shield-top, 0) 0
+      var(--bb-sidebar-sticky-tier-shield-bottom, 0) 0;
+    z-index: -1;
+    background-color: var(--sidebar);
   }
 
   [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="label"] {
     --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-label-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-label-height);
-    --bb-sidebar-sticky-tier-z-index: 20;
+    --bb-sidebar-sticky-tier-z-index: 60;
+    --bb-sidebar-sticky-tier-shield-top: calc(
+      var(--bb-sidebar-sticky-stack-padding) * -1
+    );
+    --bb-sidebar-sticky-tier-shield-bottom: calc(
+      var(--bb-sidebar-sticky-label-gap) * -1
+    );
 
     margin-bottom: var(--bb-sidebar-sticky-label-gap);
   }
@@ -140,13 +156,19 @@
   [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="project"] {
     --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-project-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
-    --bb-sidebar-sticky-tier-z-index: 30;
+    --bb-sidebar-sticky-tier-z-index: 50;
+    --bb-sidebar-sticky-tier-shield-bottom: calc(
+      var(--bb-sidebar-sticky-row-gap) * -1
+    );
   }
 
   [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="manager"] {
     --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-manager-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
     --bb-sidebar-sticky-tier-z-index: 40;
+    --bb-sidebar-sticky-tier-shield-bottom: calc(
+      var(--bb-sidebar-sticky-row-gap) * -1
+    );
   }
 
   [data-sidebar-sticky-stack]

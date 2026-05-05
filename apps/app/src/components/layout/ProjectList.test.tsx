@@ -96,7 +96,7 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
-  it("renders the sticky project heading with a sidebar overflow fade", async () => {
+  it("renders the sticky project heading without a sidebar overflow fade", async () => {
     installFetchRoutes([
       {
         pathname: "/api/v1/projects",
@@ -130,13 +130,7 @@ describe("ProjectList", () => {
       projectGroup?.hasAttribute("data-sidebar-sticky-stack") ?? false,
     ).toBe(true);
 
-    const fade = projectHeading.querySelector("[data-overflow-fade]");
-    expect(fade?.getAttribute("data-overflow-fade")).toBe("below");
-    expect(fade?.getAttribute("data-overflow-fade-tone")).toBe("sidebar");
-
-    // JSDOM does not simulate sticky scroll attachment; this test covers the
-    // sticky tier DOM contract, while browser verification should confirm the
-    // heading remains fixed as sidebar content scrolls underneath the fade.
+    expect(projectHeading.querySelector("[data-overflow-fade]")).toBeNull();
   });
 
   it("keeps showing project skeletons when the project request fails before the websocket connects", async () => {
