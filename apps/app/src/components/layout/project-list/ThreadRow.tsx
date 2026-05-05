@@ -57,7 +57,6 @@ interface ThreadRowProps {
 
 interface ManagerChevronProps {
   isCollapsed: boolean;
-  isBusy: boolean;
   onToggle: () => void;
   threadTitle: string;
 }
@@ -76,7 +75,6 @@ function EmptyLeadingSlot() {
 
 function ManagerChevron({
   isCollapsed,
-  isBusy,
   onToggle,
   threadTitle,
 }: ManagerChevronProps) {
@@ -109,23 +107,12 @@ function ManagerChevron({
           COARSE_POINTER_ICON_SIZE_CLASS,
         )}
       >
-        {isBusy ? (
-          <CircleDashed
-            className={cn(
-              "absolute animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0",
-              COARSE_POINTER_ICON_SIZE_CLASS,
-            )}
-            aria-hidden="true"
-          />
-        ) : null}
         <ChevronRight
           className={cn(
             "absolute transition-all duration-150",
             COARSE_POINTER_ICON_SIZE_CLASS,
             !isCollapsed && "rotate-90",
-            isBusy
-              ? "opacity-0 group-hover/thread-row:opacity-100"
-              : "opacity-100",
+            "opacity-100",
           )}
         />
       </span>
@@ -133,29 +120,17 @@ function ManagerChevron({
   );
 }
 
-function ManagedChildChevron({
-  hasPendingInteraction,
-  isBusy,
-  showUnreadBadge,
-}: ThreadStatusGlyphProps) {
-  const showStatusGlyph = hasPendingInteraction || isBusy || showUnreadBadge;
+function ManagedChildChevron() {
   return (
     <span
+      aria-hidden="true"
       data-managed-child-marker=""
       className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
     >
-      {showStatusGlyph ? (
-        <ThreadStatusGlyph
-          hasPendingInteraction={hasPendingInteraction}
-          isBusy={isBusy}
-          showUnreadBadge={showUnreadBadge}
-        />
-      ) : (
-        <ChevronDown
-          aria-hidden="true"
-          className={cn("rotate-45", COARSE_POINTER_ICON_SIZE_CLASS)}
-        />
-      )}
+      <ChevronDown
+        aria-hidden="true"
+        className={cn("rotate-45", COARSE_POINTER_ICON_SIZE_CLASS)}
+      />
     </span>
   );
 }
@@ -209,34 +184,44 @@ function ThreadStatusGlyph({
   return null;
 }
 
-function ThreadLeadingStatusSlot({
-  hasPendingInteraction,
-  isBusy,
-  showUnreadBadge,
-}: ThreadStatusGlyphProps) {
-  return (
-    <span className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}>
-      <ThreadStatusGlyph
-        hasPendingInteraction={hasPendingInteraction}
-        isBusy={isBusy}
-        showUnreadBadge={showUnreadBadge}
-      />
-    </span>
-  );
-}
-
 interface ThreadTrailingIconProps {
   environmentIcon: LucideIcon | null;
   environmentIconLabel: string | null;
+  hasPendingInteraction: boolean;
+  isBusy: boolean;
   isManager: boolean;
+  showUnreadBadge: boolean;
 }
 
 function ThreadTrailingIcon({
   environmentIcon: EnvironmentIcon,
   environmentIconLabel,
+  hasPendingInteraction,
+  isBusy,
   isManager,
+  showUnreadBadge,
 }: ThreadTrailingIconProps) {
   if (isManager) {
+    if (isBusy) {
+      return (
+        <ThreadStatusGlyph
+          hasPendingInteraction={false}
+          isBusy={true}
+          showUnreadBadge={false}
+        />
+      );
+    }
+
+    if (hasPendingInteraction) {
+      return (
+        <ThreadStatusGlyph
+          hasPendingInteraction={true}
+          isBusy={false}
+          showUnreadBadge={false}
+        />
+      );
+    }
+
     return (
       <UserRound
         className={cn(
@@ -244,6 +229,16 @@ function ThreadTrailingIcon({
           COARSE_POINTER_ICON_SIZE_CLASS,
         )}
         aria-label="Manager"
+      />
+    );
+  }
+
+  if (hasPendingInteraction || isBusy || showUnreadBadge) {
+    return (
+      <ThreadStatusGlyph
+        hasPendingInteraction={hasPendingInteraction}
+        isBusy={isBusy}
+        showUnreadBadge={showUnreadBadge}
       />
     );
   }
@@ -281,6 +276,7 @@ function ThreadRowComponent({
   const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
   const isManagerBusy =
     isManager && (threadIsBusy || managedChildBusyCount > 0);
+  const trailingIconIsBusy = isManager ? isManagerBusy : threadIsBusy;
   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -293,7 +289,7 @@ function ThreadRowComponent({
     isManagedChild
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    isManagedChild ? "pl-1" : "pl-2",
+    isManagedChild ? "pl-0" : "pl-2",
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
       : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -310,28 +306,15 @@ function ThreadRowComponent({
       {managerOptions && hasManagedChildren ? (
         <ManagerChevron
           isCollapsed={isManagerCollapsed}
-          isBusy={isManagerBusy}
           onToggle={() => {
             managerOptions.onToggleCollapsed(thread.id);
           }}
           threadTitle={threadTitle}
         />
-      ) : isManagedChild ? (
-        <EmptyLeadingSlot />
       ) : (
-        <ThreadLeadingStatusSlot
-          hasPendingInteraction={hasPendingInteraction}
-          isBusy={threadIsBusy}
-          showUnreadBadge={showUnreadBadge}
-        />
+        <EmptyLeadingSlot />
       )}
-      {isManagedChild ? (
-        <ManagedChildChevron
-          hasPendingInteraction={hasPendingInteraction}
-          isBusy={threadIsBusy}
-          showUnreadBadge={showUnreadBadge}
-        />
-      ) : null}
+      {isManagedChild ? <ManagedChildChevron /> : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
         {isManager ? (
@@ -380,7 +363,10 @@ function ThreadRowComponent({
             <ThreadTrailingIcon
               environmentIcon={EnvironmentIcon}
               environmentIconLabel={environmentIconLabel}
+              hasPendingInteraction={hasPendingInteraction}
+              isBusy={trailingIconIsBusy}
               isManager={isManager}
+              showUnreadBadge={showUnreadBadge}
             />
           </span>
           <div
