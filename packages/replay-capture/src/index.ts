@@ -9,7 +9,7 @@ import {
   resolvedThreadExecutionOptionsSchema,
 } from "@bb/domain";
 
-export const REPLAY_CAPTURE_SCHEMA_VERSION = 2 as const;
+export const REPLAY_CAPTURE_SCHEMA_VERSION = 3 as const;
 export const REPLAY_CAPTURE_ID_PATTERN = /^cap_[0-9a-z]+_[0-9a-z]{8}$/u;
 export const REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION =
   "cap_<base36 timestamp>_<8 lowercase base36 chars>";
@@ -18,6 +18,19 @@ export const REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX = 120;
 
 export const replayCaptureKindSchema = z.enum(["thread-start", "turn-start"]);
 export type ReplayCaptureKind = z.infer<typeof replayCaptureKindSchema>;
+
+export const replayCaptureSourceSchema = z.enum([
+  "live-dev-capture",
+  "corpus-fixture",
+]);
+export type ReplayCaptureSource = z.infer<typeof replayCaptureSourceSchema>;
+
+export const gitSnapshotSchema = z.object({
+  headSha: z.string().nullable(),
+  isClean: z.boolean(),
+  statusLines: z.array(z.string()),
+}).strict();
+export type GitSnapshot = z.infer<typeof gitSnapshotSchema>;
 
 export const jsonRpcMessageSchema = z.custom<JsonRpcEnvelope>(
   (value) => jsonRpcEnvelopeSchema.safeParse(value).success,
@@ -38,30 +51,41 @@ export type ReplayRawProviderCaptureEntry = z.infer<
   typeof replayRawProviderCaptureEntrySchema
 >;
 
+export const replayCaptureTurnSchema = z.object({
+  turnId: z.string().min(1),
+  userInput: z.array(promptInputSchema).min(1),
+  createdAt: z.number().int().nonnegative(),
+}).strict();
+export type ReplayCaptureTurn = z.infer<typeof replayCaptureTurnSchema>;
+
+export const replayCaptureEventCountsSchema = z.object({
+  rawProviderEvents: z.number().int().nonnegative(),
+  droppedRecords: z.number().int().nonnegative(),
+}).strict();
+export type ReplayCaptureEventCounts = z.infer<
+  typeof replayCaptureEventCountsSchema
+>;
+
 export const replayCaptureManifestSchema = z.object({
   schemaVersion: z.literal(REPLAY_CAPTURE_SCHEMA_VERSION),
   captureId: z.string().regex(REPLAY_CAPTURE_ID_PATTERN),
   capturedAt: z.number().int().nonnegative(),
   completedAt: z.number().int().nonnegative().nullable(),
-  source: z.literal("live-dev-capture"),
+  source: replayCaptureSourceSchema,
   providerId: z.string().min(1),
   projectId: z.string().min(1),
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
   /** Null means the provider did not emit a provider thread identity before the capture was read/finalized. */
   providerThreadId: z.string().nullable(),
-  turnIds: z.array(z.string()),
   title: z.string().nullable(),
   kind: replayCaptureKindSchema,
-  userInput: z.array(promptInputSchema),
+  turns: z.array(replayCaptureTurnSchema).min(1),
   userInputPreview: z.string(),
   execution: resolvedThreadExecutionOptionsSchema,
-  eventCounts: z.object({
-    rawProviderEvents: z.number().int().nonnegative(),
-    droppedRecords: z.number().int().nonnegative(),
-  }),
+  eventCounts: replayCaptureEventCountsSchema,
   errorMessage: z.string().nullable(),
-});
+}).strict();
 export type ReplayCaptureManifest = z.infer<typeof replayCaptureManifestSchema>;
 
 export const replayRawProviderEventRecordSchema = z.object({
@@ -96,6 +120,12 @@ export function createReplayCaptureId(
     );
   }
   return `cap_${now.toString(36)}_${suffix}`;
+}
+
+export function createReplayCapturePlaceholderTurnId(
+  captureId: string,
+): string {
+  return `replay:${captureId}`;
 }
 
 export function replayCaptureRoot(dataDir: string): string {
@@ -160,6 +190,26 @@ export function parseReplayCaptureManifest(
   value: unknown,
 ): ReplayCaptureManifest {
   return replayCaptureManifestSchema.parse(value);
+}
+
+export function getReplayCaptureInitialTurn(
+  manifest: ReplayCaptureManifest,
+): ReplayCaptureTurn {
+  const turn = manifest.turns[0];
+  if (!turn) {
+    throw new Error("Replay capture manifest has no turns");
+  }
+  return turn;
+}
+
+export function getReplayCaptureTerminalTurnId(
+  manifest: ReplayCaptureManifest,
+): string {
+  const turn = manifest.turns.at(-1);
+  if (!turn) {
+    throw new Error("Replay capture manifest has no turns");
+  }
+  return turn.turnId;
 }
 
 export const replayCaptureSummarySchema = replayCaptureManifestSchema.pick({
@@ -231,4 +281,3 @@ export const replayRunResponseSchema = z.object({
   projectId: z.string(),
 });
 export type ReplayRunResponse = z.infer<typeof replayRunResponseSchema>;
-

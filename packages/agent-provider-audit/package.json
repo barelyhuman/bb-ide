@@ -26,6 +26,7 @@
   "dependencies": {
     "@bb/agent-runtime": "workspace:*",
     "@bb/domain": "workspace:*",
+    "@bb/replay-capture": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/thread-view": "workspace:*",
     "@bb/ui-core": "workspace:*",

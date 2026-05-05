@@ -7,14 +7,8 @@ import type {
   AgentRuntimeRawProviderEventCaptureEntry,
   AgentRuntimeTranslatedThreadEventCaptureEntry,
 } from "@bb/agent-runtime/capture";
-import { z } from "zod";
 import { buildBundle, writeBundle } from "./capture.js";
-import {
-  providerAuditClientRequestSchema,
-  providerAuditManifestSchema,
-  providerAuditRawProviderEventCaptureEntrySchema,
-  readJsonFile,
-} from "./json-file.js";
+import { readFixtureBundle } from "./fixture-bundle.js";
 import type {
   ProviderAuditCoverageIssues,
   ProviderAuditBundle,
@@ -94,22 +88,11 @@ function loadFixtureBundle(args: {
     args.taskId,
   );
   return {
-    corpusId: args.corpusId,
-    providerId: args.providerId,
-    taskId: args.taskId,
-    fixturePath,
-    manifestPath: join(fixturePath, "manifest.json"),
-    manifest: readJsonFile({
-      filePath: join(fixturePath, "manifest.json"),
-      schema: providerAuditManifestSchema,
-    }),
-    clientRequests: readJsonFile({
-      filePath: join(fixturePath, "client-requests.json"),
-      schema: z.array(providerAuditClientRequestSchema),
-    }),
-    rawProviderEvents: readJsonFile({
-      filePath: join(fixturePath, "raw-provider-events.json"),
-      schema: z.array(providerAuditRawProviderEventCaptureEntrySchema),
+    ...readFixtureBundle({
+      corpusId: args.corpusId,
+      providerId: args.providerId,
+      taskId: args.taskId,
+      fixturePath,
     }),
   };
 }
@@ -204,10 +187,7 @@ function withReplayOutputDir(args: {
   mkdirSync(outputDir, { recursive: true });
   return {
     ...args.bundle,
-    manifest: {
-      ...args.bundle.manifest,
-      outputDir,
-    },
+    outputDir,
   };
 }
 
@@ -227,7 +207,6 @@ function replayFixtureBundle(args: {
   const baseBundle = buildBundle({
     manifest: args.fixture.manifest,
     captures,
-    clientRequests: args.fixture.clientRequests,
   });
 
   if (!args.outputRoot) {
@@ -243,10 +222,13 @@ function replayFixtureBundle(args: {
     fixture: args.fixture,
   });
   writeBundle(outputBundle);
+  if (outputBundle.outputDir === null) {
+    throw new Error("Replay output bundle was not assigned an outputDir");
+  }
   return {
     fixture: args.fixture,
     bundle: outputBundle,
-    outputDir: outputBundle.manifest.outputDir,
+    outputDir: outputBundle.outputDir,
   };
 }
 

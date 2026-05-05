@@ -1,23 +1,60 @@
 {
+  "schemaVersion": 3,
+  "captureId": "cap_mn8m444s_sgb5knvf",
+  "capturedAt": 1774598476780,
+  "completedAt": 1774598723318,
+  "source": "corpus-fixture",
   "providerId": "claude-code",
+  "projectId": "provider-audit-round2-other-02-1549",
+  "environmentId": "fixture-excalidraw-claude-code-excalidraw-eyedropper-preview-bugfix",
+  "threadId": "provider-audit-claude-code-eyedropper-preview-bugfix-20260327T080116Z-1549",
+  "providerThreadId": null,
+  "title": "Provider-neutral eyedropper preview bug-fix task against the real Excalidraw repo",
+  "kind": "thread-start",
+  "turns": [
+    {
+      "turnId": "turn_0_cap_mn8m444s_sgb5knvf",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases."
+        }
+      ],
+      "createdAt": 1774598476844
+    },
+    {
+      "turnId": "turn_1_cap_mn8m444s_sgb5knvf",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "Explain how the old positioning logic failed and how your regression coverage would have caught it."
+        }
+      ],
+      "createdAt": 1774598567148
+    }
+  ],
+  "userInputPreview": "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead…",
+  "execution": {
+    "model": "provider-default",
+    "serviceTier": "fast",
+    "reasoningLevel": "medium",
+    "permissionMode": "full",
+    "source": "client/turn/requested"
+  },
+  "eventCounts": {
+    "rawProviderEvents": 2313,
+    "droppedRecords": 0
+  },
+  "errorMessage": null,
+  "corpusId": "excalidraw",
   "scenarioId": "excalidraw-eyedropper-preview-bugfix",
   "scenarioDescription": "Provider-neutral eyedropper preview bug-fix task against the real Excalidraw repo",
   "model": null,
-  "source": "live-capture",
-  "capturedAt": 1774598476780,
-  "completedAt": 1774598723318,
   "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "workspacePath": "$EXCALIDRAW_REPO",
   "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
   "envWorkspacePath": "$EXCALIDRAW_REPO",
-  "outputDir": "$FIXTURE_ROOT/excalidraw/claude-code/eyedropper-preview-bugfix",
-  "threadId": "provider-audit-claude-code-eyedropper-preview-bugfix-20260327T080116Z-1549",
-  "projectId": "provider-audit-round2-other-02-1549",
-  "turns": [
-    "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
-    "Explain how the old positioning logic failed and how your regression coverage would have caught it."
-  ],
-  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "runtimeWorkspaceGitStart": {
     "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
     "isClean": true,

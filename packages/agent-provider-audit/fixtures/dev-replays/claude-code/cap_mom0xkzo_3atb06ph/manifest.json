@@ -1,22 +1,50 @@
 {
+  "schemaVersion": 3,
+  "captureId": "cap_mom0xkzo_227br1bc",
+  "capturedAt": 1777586208900,
+  "completedAt": 1777586809510,
+  "source": "corpus-fixture",
   "providerId": "claude-code",
+  "projectId": "proj_gyz9przugq",
+  "environmentId": "fixture-dev-replays-claude-code-cap_mom0xkzo_3atb06ph",
+  "threadId": "thr_2mp6rkmsxy",
+  "providerThreadId": null,
+  "title": "please review codex/timeline-bundle-unification using @docs/CODE_REVIEW.md use subagents and then verify their comments…",
+  "kind": "thread-start",
+  "turns": [
+    {
+      "turnId": "turn_0_cap_mom0xkzo_227br1bc",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "please review codex/timeline-bundle-unification using @docs/CODE_REVIEW.md\n\nuse subagents and then verify their comments before you synthesize the final report"
+        }
+      ],
+      "createdAt": 1777586208900
+    }
+  ],
+  "userInputPreview": "please review codex/timeline-bundle-unification using @docs/CODE_REVIEW.md use subagents and then verify their comments…",
+  "execution": {
+    "model": "claude-opus-4-7[1m]",
+    "serviceTier": "fast",
+    "reasoningLevel": "medium",
+    "permissionMode": "full",
+    "source": "client/turn/requested"
+  },
+  "eventCounts": {
+    "rawProviderEvents": 787,
+    "droppedRecords": 0
+  },
+  "errorMessage": null,
+  "corpusId": "dev-replays",
   "scenarioId": "cap_mom0xkzo_3atb06ph",
   "scenarioDescription": "please review codex/timeline-bundle-unification using @docs/CODE_REVIEW.md use subagents and then verify their comments…",
   "model": "claude-opus-4-7[1m]",
-  "source": "live-capture",
-  "capturedAt": 1777586208900,
-  "completedAt": 1777586809510,
   "gitSha": null,
+  "gitResetRef": null,
   "workspacePath": "$BB_DEV_WORKSPACE",
   "runtimeWorkspacePath": "$BB_DEV_WORKSPACE",
   "envWorkspacePath": "$BB_DEV_WORKSPACE",
-  "outputDir": "$FIXTURE_ROOT/dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
-  "threadId": "thr_2mp6rkmsxy",
-  "projectId": "proj_gyz9przugq",
-  "turns": [
-    "please review codex/timeline-bundle-unification using @docs/CODE_REVIEW.md\n\nuse subagents and then verify their comments before you synthesize the final report"
-  ],
-  "gitResetRef": null,
   "runtimeWorkspaceGitStart": null,
   "runtimeWorkspaceGitEnd": null
 }

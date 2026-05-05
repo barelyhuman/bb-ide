@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -6,10 +7,12 @@ import {
   rm,
   stat,
   utimes,
+  writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import type { ResolvedThreadExecutionOptions, ThreadEvent } from "@bb/domain";
 
@@ -21,13 +24,21 @@ const DEFAULT_TEST_EXECUTION: ResolvedThreadExecutionOptions = {
   source: "client/turn/requested",
 };
 import {
+  createReplayCaptureId,
   isReplayCaptureId,
   replayCaptureDir,
   replayCaptureManifestPath,
   replayCaptureManifestSchema,
   replayRawProviderEventsPath,
+  type ReplayCaptureManifest,
+  type ReplayRawProviderEventRecord,
 } from "../src/index.js";
-import { createReplayCaptureService } from "../src/writer.js";
+import {
+  readManifest,
+  readReplayCaptureManifest,
+  streamRawProviderRecords,
+} from "../src/reader.js";
+import { createReplayCaptureService, writeFixture } from "../src/writer.js";
 
 function logger() {
   return {
@@ -109,6 +120,31 @@ async function readCaptureManifest(dataDir: string, captureId: string) {
   );
 }
 
+async function readRawJsonFile(filePath: string): Promise<unknown> {
+  const parsed: unknown = JSON.parse(await readFile(filePath, "utf8"));
+  return parsed;
+}
+
+async function readRawCaptureManifestJson(
+  dataDir: string,
+  captureId: string,
+): Promise<unknown> {
+  return readRawJsonFile(replayCaptureManifestPath(dataDir, captureId));
+}
+
+function expectNoLegacyManifestKeys(manifest: unknown): void {
+  expect(manifest).not.toHaveProperty("userInput");
+  expect(manifest).not.toHaveProperty("turnIds");
+}
+
+function expectRawManifestJson(
+  manifest: unknown,
+  expected: ReplayCaptureManifest,
+): void {
+  expect(manifest).toEqual(expected);
+  expectNoLegacyManifestKeys(manifest);
+}
+
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
@@ -121,6 +157,59 @@ async function pathExists(filePath: string): Promise<boolean> {
 type ReplayCaptureServiceInstance = NonNullable<
   ReturnType<typeof createReplayCaptureService>
 >;
+
+function replayFixtureManifest(captureId: string): ReplayCaptureManifest {
+  return {
+    schemaVersion: 3,
+    captureId,
+    capturedAt: 1_000,
+    completedAt: 1_050,
+    source: "live-dev-capture",
+    providerId: "codex",
+    projectId: "proj-1",
+    environmentId: "env-1",
+    threadId: "thr-1",
+    providerThreadId: "provider-thread-1",
+    title: "Fixture writer test",
+    kind: "thread-start",
+    turns: [
+      {
+        turnId: "turn-1",
+        userInput: [{ type: "text", text: "Fixture prompt" }],
+        createdAt: 1_000,
+      },
+    ],
+    userInputPreview: "Fixture prompt",
+    execution: DEFAULT_TEST_EXECUTION,
+    eventCounts: {
+      rawProviderEvents: 2,
+      droppedRecords: 0,
+    },
+    errorMessage: null,
+  };
+}
+
+function replayRawRecord(
+  ordinal: number,
+  rawCaptureId: string,
+): ReplayRawProviderEventRecord {
+  return {
+    ordinal,
+    relativeMs: ordinal * 10,
+    entry: {
+      kind: "raw-provider-event",
+      capturedAt: 1_000 + ordinal * 10,
+      providerId: "codex",
+      captureId: rawCaptureId,
+      rawLine: "{}",
+      rawEvent: {
+        jsonrpc: "2.0",
+        method: "turn/started",
+      },
+      sourceThreadId: "provider-thread-1",
+    },
+  };
+}
 
 interface CompleteCaptureArgs {
   completeAt: number;
@@ -229,6 +318,275 @@ async function completeCapture(args: CompleteCaptureArgs): Promise<string> {
   return captureId;
 }
 
+async function readRawRecords(
+  dataDir: string,
+  captureId: string,
+): Promise<ReplayRawProviderEventRecord[]> {
+  const records: ReplayRawProviderEventRecord[] = [];
+  for await (const record of streamRawProviderRecords({ captureId, dataDir })) {
+    records.push(record);
+  }
+  return records;
+}
+
+describe("readReplayCaptureManifest", () => {
+  it("rejects stale v2 top-level fields on v3 manifests", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-read-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    await mkdir(replayCaptureDir(dataDir, captureId), { recursive: true });
+    await writeFile(
+      replayCaptureManifestPath(dataDir, captureId),
+      JSON.stringify(
+        {
+          ...replayFixtureManifest(captureId),
+          userInput: [{ type: "text", text: "legacy" }],
+          turnIds: ["turn-legacy"],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await expect(
+      readReplayCaptureManifest({ captureId, dataDir }),
+    ).rejects.toMatchObject({
+      code: "invalid_replay_capture",
+      message: expect.stringContaining("Replay capture manifest is invalid"),
+    });
+  });
+
+  it("rejects v2 manifests with a specific cleanup message", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-read-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    await mkdir(replayCaptureDir(dataDir, captureId), { recursive: true });
+    await writeFile(
+      replayCaptureManifestPath(dataDir, captureId),
+      JSON.stringify(
+        {
+          ...replayFixtureManifest(captureId),
+          schemaVersion: 2,
+        },
+        null,
+        2,
+      ),
+    );
+
+    await expect(
+      readReplayCaptureManifest({ captureId, dataDir }),
+    ).rejects.toMatchObject({
+      code: "invalid_replay_capture",
+      message:
+        "Replay capture schema version 2 is no longer supported. Delete ~/.bb-dev/replays/ or re-capture with schema version 3.",
+    });
+  });
+
+  it("reads extended v3 manifests through a caller-provided schema", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-read-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    const manifestPath = replayCaptureManifestPath(dataDir, captureId);
+    const schema = replayCaptureManifestSchema
+      .extend({
+        extensionValue: z.string(),
+      })
+      .strict();
+    await mkdir(replayCaptureDir(dataDir, captureId), { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify(
+        {
+          ...replayFixtureManifest(captureId),
+          extensionValue: "fixture-only",
+        },
+        null,
+        2,
+      ),
+    );
+
+    await expect(readManifest({ manifestPath, schema })).resolves.toEqual({
+      ...replayFixtureManifest(captureId),
+      extensionValue: "fixture-only",
+    });
+  });
+});
+
+describe("streamRawProviderRecords", () => {
+  it("rejects bridge-envelope raw provider events while reading", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-read-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    await mkdir(replayCaptureDir(dataDir, captureId), { recursive: true });
+    await writeFile(
+      replayCaptureManifestPath(dataDir, captureId),
+      JSON.stringify(replayFixtureManifest(captureId), null, 2),
+    );
+    await writeFile(
+      replayRawProviderEventsPath(dataDir, captureId),
+      `${JSON.stringify({
+        ...replayRawRecord(1, "raw-bridge"),
+        entry: {
+          ...replayRawRecord(1, "raw-bridge").entry,
+          rawEvent: {
+            method: "turn/started",
+          },
+        },
+      })}\n`,
+    );
+
+    await expect(readRawRecords(dataDir, captureId)).rejects.toMatchObject({
+      code: "invalid_replay_capture",
+      message: "Replay raw provider event record is invalid",
+    });
+  });
+
+  it("rejects non-contiguous ordinals while reading", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-read-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    await mkdir(replayCaptureDir(dataDir, captureId), { recursive: true });
+    await writeFile(
+      replayCaptureManifestPath(dataDir, captureId),
+      JSON.stringify(replayFixtureManifest(captureId), null, 2),
+    );
+    await writeFile(
+      replayRawProviderEventsPath(dataDir, captureId),
+      `${JSON.stringify(replayRawRecord(2, "raw-skipped"))}\n`,
+    );
+
+    await expect(readRawRecords(dataDir, captureId)).rejects.toMatchObject({
+      code: "invalid_replay_capture",
+      message:
+        "Replay capture ordinal 2 did not match expected ordinal 1",
+    });
+  });
+});
+
+describe("writeFixture", () => {
+  it("writes a v3 manifest and contiguous raw provider event records", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-fixture-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    const manifest = replayFixtureManifest(captureId);
+    const records = [replayRawRecord(1, "raw-1"), replayRawRecord(2, "raw-2")];
+
+    await writeFixture({
+      destinationDir: replayCaptureDir(dataDir, captureId),
+      manifest,
+      rawProviderEventRecords: records,
+    });
+
+    await expect(
+      readReplayCaptureManifest({ captureId, dataDir }),
+    ).resolves.toEqual(manifest);
+    expectRawManifestJson(
+      await readRawCaptureManifestJson(dataDir, captureId),
+      manifest,
+    );
+
+    await expect(readRawRecords(dataDir, captureId)).resolves.toEqual(records);
+  });
+
+  it("cleans up temp files when manifest writes fail", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-fixture-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    const destinationDir = replayCaptureDir(dataDir, captureId);
+    const manifestTempPath = path.join(destinationDir, "manifest.json.tmp");
+    const rawProviderEventsTempPath = path.join(
+      destinationDir,
+      "raw-provider-events.ndjson.tmp",
+    );
+    await mkdir(manifestTempPath, { recursive: true });
+
+    await expect(
+      writeFixture({
+        destinationDir,
+        manifest: replayFixtureManifest(captureId),
+        rawProviderEventRecords: [replayRawRecord(1, "raw-1")],
+      }),
+    ).rejects.toThrow();
+    await expect(pathExists(manifestTempPath)).resolves.toBe(false);
+    await expect(pathExists(rawProviderEventsTempPath)).resolves.toBe(false);
+  });
+
+  it("cleans final raw provider events when manifest rename fails", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-fixture-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    const destinationDir = replayCaptureDir(dataDir, captureId);
+    const manifestPath = path.join(destinationDir, "manifest.json");
+    const manifestTempPath = path.join(destinationDir, "manifest.json.tmp");
+    const rawProviderEventsPath = replayRawProviderEventsPath(
+      dataDir,
+      captureId,
+    );
+    const rawProviderEventsTempPath = path.join(
+      destinationDir,
+      "raw-provider-events.ndjson.tmp",
+    );
+    await mkdir(manifestPath, { recursive: true });
+
+    await expect(
+      writeFixture({
+        destinationDir,
+        manifest: replayFixtureManifest(captureId),
+        rawProviderEventRecords: [replayRawRecord(1, "raw-1")],
+      }),
+    ).rejects.toThrow();
+    await expect(pathExists(rawProviderEventsPath)).resolves.toBe(false);
+    await expect(pathExists(manifestTempPath)).resolves.toBe(false);
+    await expect(pathExists(rawProviderEventsTempPath)).resolves.toBe(false);
+  });
+
+  it("rejects non-contiguous raw provider event ordinals", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-fixture-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+
+    await expect(
+      writeFixture({
+        destinationDir: replayCaptureDir(dataDir, captureId),
+        manifest: replayFixtureManifest(captureId),
+        rawProviderEventRecords: [replayRawRecord(2, "raw-skipped")],
+      }),
+    ).rejects.toThrow("expected ordinal 1");
+  });
+
+  it("rejects duplicate and non-positive raw provider event ordinals", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-fixture-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+
+    await expect(
+      writeFixture({
+        destinationDir: replayCaptureDir(dataDir, captureId),
+        manifest: replayFixtureManifest(captureId),
+        rawProviderEventRecords: [replayRawRecord(0, "raw-zero")],
+      }),
+    ).rejects.toThrow("expected ordinal 1");
+
+    await expect(
+      writeFixture({
+        destinationDir: replayCaptureDir(dataDir, captureId),
+        manifest: replayFixtureManifest(captureId),
+        rawProviderEventRecords: [
+          replayRawRecord(1, "raw-1"),
+          replayRawRecord(1, "raw-duplicate"),
+        ],
+      }),
+    ).rejects.toThrow("expected ordinal 2");
+  });
+
+  it("rejects raw provider event relativeMs decreases", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-fixture-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    const secondRecord = {
+      ...replayRawRecord(2, "raw-2"),
+      relativeMs: 5,
+    };
+
+    await expect(
+      writeFixture({
+        destinationDir: replayCaptureDir(dataDir, captureId),
+        manifest: replayFixtureManifest(captureId),
+        rawProviderEventRecords: [replayRawRecord(1, "raw-1"), secondRecord],
+      }),
+    ).rejects.toThrow("relativeMs 5 decreased");
+  });
+});
+
 describe("createReplayCaptureService", () => {
   it("writes correlated raw provider capture files", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-capture-"));
@@ -302,22 +660,51 @@ describe("createReplayCaptureService", () => {
     expect(captureId).toBeDefined();
     if (!captureId) return;
 
-    const manifest = replayCaptureManifestSchema.parse(
-      JSON.parse(
-        await readFile(
-          path.join(replayRoot, captureId, "manifest.json"),
-          "utf8",
-        ),
-      ),
+    const expectedManifest: ReplayCaptureManifest = {
+      schemaVersion: 3,
+      captureId,
+      capturedAt: 1_000,
+      completedAt: 1_050,
+      source: "live-dev-capture",
+      providerId: "codex",
+      projectId: "proj-1",
+      environmentId: "env-1",
+      threadId: "thr-1",
+      providerThreadId: "provider-thread-1",
+      title: "Original",
+      kind: "thread-start",
+      turns: [
+        {
+          turnId: "turn-1",
+          userInput: [{ type: "text", text: "Original prompt text" }],
+          createdAt: 1_000,
+        },
+      ],
+      userInputPreview: "Original prompt text",
+      execution: DEFAULT_TEST_EXECUTION,
+      eventCounts: {
+        rawProviderEvents: 1,
+        droppedRecords: 0,
+      },
+      errorMessage: null,
+    };
+    const rawManifest = await readRawJsonFile(
+      path.join(replayRoot, captureId, "manifest.json"),
     );
+    expectRawManifestJson(rawManifest, expectedManifest);
+    const manifest = replayCaptureManifestSchema.parse(rawManifest);
     expect(manifest.projectId).toBe("proj-1");
     expect(manifest.environmentId).toBe("env-1");
     expect(manifest.eventCounts.rawProviderEvents).toBe(1);
     expect(manifest.eventCounts.droppedRecords).toBe(0);
     expect(manifest.completedAt).toBe(1_050);
     expect(manifest.kind).toBe("thread-start");
-    expect(manifest.userInput).toEqual([
-      { type: "text", text: "Original prompt text" },
+    expect(manifest.turns).toEqual([
+      {
+        turnId: "turn-1",
+        userInput: [{ type: "text", text: "Original prompt text" }],
+        createdAt: 1_000,
+      },
     ]);
     expect(manifest.userInputPreview).toBe("Original prompt text");
 
@@ -435,9 +822,15 @@ describe("createReplayCaptureService", () => {
     const captureId = await captureIdForThread(dataDir, "thr-follow-up");
     const manifest = await readCaptureManifest(dataDir, captureId);
     expect(manifest.kind).toBe("turn-start");
-    expect(manifest.userInput).toEqual([
-      { type: "text", text: "Follow-up question" },
-      { type: "localFile", path: "/tmp/notes.md", name: "notes.md" },
+    expect(manifest.turns).toEqual([
+      {
+        turnId: "turn-1",
+        userInput: [
+          { type: "text", text: "Follow-up question" },
+          { type: "localFile", path: "/tmp/notes.md", name: "notes.md" },
+        ],
+        createdAt: 1_000,
+      },
     ]);
     expect(manifest.userInputPreview).toBe(
       "Follow-up question [file: notes.md]",
@@ -828,8 +1221,7 @@ describe("createReplayCaptureService", () => {
     await service.drain();
     const captureId = await captureIdForThread(dataDir, "thr-append-failure");
     const rawPath = replayRawProviderEventsPath(dataDir, captureId);
-    await rm(rawPath);
-    await mkdir(rawPath);
+    await chmod(rawPath, 0o400);
 
     currentTime += 10;
     recordRawTranslatedThreadEvent({
@@ -842,14 +1234,55 @@ describe("createReplayCaptureService", () => {
     await service.drain();
 
     const manifest = await readCaptureManifest(dataDir, captureId);
+    expect(manifest.eventCounts.rawProviderEvents).toBe(0);
     expect(manifest.eventCounts.droppedRecords).toBe(1);
-    expect(manifest.errorMessage).toContain("EISDIR");
+    expect(manifest.errorMessage).toMatch(/EACCES|EPERM/u);
+    await expect(readRawRecords(dataDir, captureId)).resolves.toEqual([]);
     expect(log.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         captureId,
         label: "append",
       }),
       "failed to write replay capture record",
+    );
+  });
+
+  it("cleans manifest temp files when manifest rename fails", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-capture-"));
+    const log = logger();
+    let currentTime = 1_000;
+    const service = createReplayCaptureService({
+      dataDir,
+      enabled: true,
+      logger: log,
+      now: () => currentTime,
+    });
+    expect(service).not.toBeNull();
+    if (!service) return;
+
+    recordStarted(service, "thr-manifest-failure", currentTime);
+    await service.drain();
+    const captureId = await captureIdForThread(dataDir, "thr-manifest-failure");
+    const manifestPath = replayCaptureManifestPath(dataDir, captureId);
+    const manifestTempPath = `${manifestPath}.tmp`;
+    await rm(manifestPath);
+    await mkdir(manifestPath);
+
+    currentTime += 10;
+    recordCompleted(service, "thr-manifest-failure", currentTime);
+    await service.drain();
+
+    await expect(pathExists(manifestTempPath)).resolves.toBe(false);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        captureId,
+        label: "finalize",
+      }),
+      "failed to write replay capture record",
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ captureId }),
+      "failed to write replay capture failure state",
     );
   });
 

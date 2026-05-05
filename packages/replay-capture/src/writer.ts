@@ -22,6 +22,7 @@ import {
   REPLAY_CAPTURE_SCHEMA_VERSION,
   REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX,
   createReplayCaptureId,
+  createReplayCapturePlaceholderTurnId,
   isReplayCaptureId,
   replayCaptureDir,
   replayCaptureIndexPath,
@@ -105,6 +106,7 @@ interface ActiveCapture {
   pruned: boolean;
   rawProviderBytes: number;
   rawProviderEvents: number;
+  rawProviderRecordWriteState: ReplayRawProviderEventRecordWriteState;
   rawCaptureIds: Set<string>;
   threadId: string;
 }
@@ -125,6 +127,37 @@ export interface ReplayCaptureService {
   recordThreadEvent(input: ReplayThreadEventInput): void;
   recordThreadMetadata(metadata: ReplayCaptureThreadMetadata): void;
   recordTurnRequest(input: ReplayTurnRequestInput): void;
+}
+
+export type ReplayRawProviderEventRecordSource =
+  | AsyncIterable<ReplayRawProviderEventRecord>
+  | Iterable<ReplayRawProviderEventRecord>;
+
+export interface WriteFixtureArgs {
+  /** Caller-resolved fixture directory; containment belongs to the corpus boundary. */
+  destinationDir: string;
+  manifest: ReplayCaptureManifest;
+  rawProviderEventRecords: ReplayRawProviderEventRecordSource;
+}
+
+interface FixtureTempFiles {
+  manifestTempPath: string;
+  rawProviderEventsTempPath: string;
+}
+
+export interface ReplayRawProviderEventRecordWriteState {
+  expectedOrdinal: number;
+  previousRelativeMs: number;
+}
+
+export interface SerializedReplayRawProviderEventRecord {
+  line: string;
+  nextState: ReplayRawProviderEventRecordWriteState;
+}
+
+export interface SerializeReplayRawProviderEventRecordArgs {
+  record: ReplayRawProviderEventRecord;
+  state: ReplayRawProviderEventRecordWriteState;
 }
 
 function createRandomSuffix(): string {
@@ -177,6 +210,106 @@ async function pathMtimeMs(path: string): Promise<number> {
     return (await stat(path)).mtimeMs;
   } catch {
     return 0;
+  }
+}
+
+export function createReplayRawProviderEventRecordWriteState(): ReplayRawProviderEventRecordWriteState {
+  return {
+    expectedOrdinal: 1,
+    previousRelativeMs: 0,
+  };
+}
+
+export function serializeReplayRawProviderEventRecord(
+  args: SerializeReplayRawProviderEventRecordArgs,
+): SerializedReplayRawProviderEventRecord {
+  if (args.record.ordinal !== args.state.expectedOrdinal) {
+    throw new Error(
+      `Replay fixture raw provider event ordinal ${args.record.ordinal} did not match expected ordinal ${args.state.expectedOrdinal}`,
+    );
+  }
+  if (args.record.relativeMs < args.state.previousRelativeMs) {
+    throw new Error(
+      `Replay fixture raw provider event relativeMs ${args.record.relativeMs} decreased below previous relativeMs ${args.state.previousRelativeMs}`,
+    );
+  }
+
+  return {
+    line: `${JSON.stringify(args.record)}\n`,
+    nextState: {
+      expectedOrdinal: args.state.expectedOrdinal + 1,
+      previousRelativeMs: args.record.relativeMs,
+    },
+  };
+}
+
+export function commitReplayRawProviderEventRecordWriteState(
+  state: ReplayRawProviderEventRecordWriteState,
+  nextState: ReplayRawProviderEventRecordWriteState,
+): void {
+  state.expectedOrdinal = nextState.expectedOrdinal;
+  state.previousRelativeMs = nextState.previousRelativeMs;
+}
+
+export function serializeReplayRawProviderEventRecords(
+  records: Iterable<ReplayRawProviderEventRecord>,
+): string {
+  const state = createReplayRawProviderEventRecordWriteState();
+  const lines: string[] = [];
+  for (const record of records) {
+    const serialized = serializeReplayRawProviderEventRecord({
+      record,
+      state,
+    });
+    lines.push(serialized.line);
+    commitReplayRawProviderEventRecordWriteState(state, serialized.nextState);
+  }
+  return lines.join("");
+}
+
+async function removeFixtureTempFiles(args: FixtureTempFiles): Promise<void> {
+  await Promise.all([
+    rm(args.manifestTempPath, { force: true, recursive: true }),
+    rm(args.rawProviderEventsTempPath, { force: true, recursive: true }),
+  ]);
+}
+
+export async function writeFixture(args: WriteFixtureArgs): Promise<void> {
+  await mkdir(args.destinationDir, { recursive: true });
+
+  const manifestPath = path.join(args.destinationDir, "manifest.json");
+  const rawProviderEventsPath = path.join(
+    args.destinationDir,
+    "raw-provider-events.ndjson",
+  );
+  const manifestTempPath = `${manifestPath}.tmp`;
+  const rawProviderEventsTempPath = `${rawProviderEventsPath}.tmp`;
+  let rawProviderEventsRenamed = false;
+
+  try {
+    await writeFile(rawProviderEventsTempPath, "");
+    const state = createReplayRawProviderEventRecordWriteState();
+    for await (const record of args.rawProviderEventRecords) {
+      const serialized = serializeReplayRawProviderEventRecord({
+        record,
+        state,
+      });
+      await appendFile(rawProviderEventsTempPath, serialized.line);
+      commitReplayRawProviderEventRecordWriteState(state, serialized.nextState);
+    }
+    await writeFile(manifestTempPath, JSON.stringify(args.manifest, null, 2));
+    await rename(rawProviderEventsTempPath, rawProviderEventsPath);
+    rawProviderEventsRenamed = true;
+    await rename(manifestTempPath, manifestPath);
+  } catch (error) {
+    await removeFixtureTempFiles({
+      manifestTempPath,
+      rawProviderEventsTempPath,
+    });
+    if (rawProviderEventsRenamed) {
+      await rm(rawProviderEventsPath, { force: true, recursive: true });
+    }
+    throw error;
   }
 }
 
@@ -245,8 +378,13 @@ export function createReplayCaptureService(
       capture.captureId,
     );
     const tempPath = `${manifestPath}.tmp`;
-    await writeFile(tempPath, JSON.stringify(capture.manifest, null, 2));
-    await rename(tempPath, manifestPath);
+    try {
+      await writeFile(tempPath, JSON.stringify(capture.manifest, null, 2));
+      await rename(tempPath, manifestPath);
+    } catch (error) {
+      await rm(tempPath, { force: true, recursive: true });
+      throw error;
+    }
   }
 
   function getMetadata(threadId: string): ReplayCaptureThreadMetadata | null {
@@ -341,10 +479,15 @@ export function createReplayCaptureService(
         environmentId: metadata.environmentId,
         threadId: metadata.threadId,
         providerThreadId: null,
-        turnIds: [],
         title: metadata.title,
         kind: turnRequest.kind,
-        userInput: turnRequest.input,
+        turns: [
+          {
+            turnId: createReplayCapturePlaceholderTurnId(captureId),
+            userInput: turnRequest.input,
+            createdAt: capturedAt,
+          },
+        ],
         userInputPreview: deriveReplayCaptureUserInputPreview(turnRequest.input),
         execution: turnRequest.execution,
         eventCounts: {
@@ -357,6 +500,8 @@ export function createReplayCaptureService(
       pruned: false,
       rawProviderBytes: 0,
       rawProviderEvents: 0,
+      rawProviderRecordWriteState:
+        createReplayRawProviderEventRecordWriteState(),
       rawCaptureIds: new Set<string>(),
       threadId,
     };
@@ -374,34 +519,73 @@ export function createReplayCaptureService(
     return capture;
   }
 
-  function appendJsonLine(
+  function scheduleRawProviderEventAppend(
     capture: ActiveCapture,
-    filePath: string,
-    value: object,
-  ): boolean {
-    const line = `${JSON.stringify(value)}\n`;
-    const nextBytes =
-      capture.rawProviderBytes + Buffer.byteLength(line, "utf8");
-    if (nextBytes > maxCaptureFileBytes) {
-      capture.manifest.eventCounts.droppedRecords += 1;
-      scheduleCaptureWrite(capture, "capture-file-cap", async () => {
-        await writeManifest(capture);
-      });
-      return false;
-    }
-
-    capture.rawProviderBytes = nextBytes;
+    entry: ReplayRawProviderCaptureEntry,
+  ): void {
     scheduleCaptureWrite(capture, "append", async () => {
-      await appendFile(filePath, line);
+      const record: ReplayRawProviderEventRecord = {
+        ordinal: capture.rawProviderRecordWriteState.expectedOrdinal,
+        relativeMs: Math.max(
+          0,
+          entry.capturedAt - capture.manifest.capturedAt,
+        ),
+        entry,
+      };
+      const serialized = serializeReplayRawProviderEventRecord({
+        record,
+        state: capture.rawProviderRecordWriteState,
+      });
+      const nextBytes =
+        capture.rawProviderBytes + Buffer.byteLength(serialized.line, "utf8");
+      if (nextBytes > maxCaptureFileBytes) {
+        capture.manifest.eventCounts.droppedRecords += 1;
+        await writeManifest(capture);
+        return;
+      }
+
+      await appendFile(
+        replayRawProviderEventsPath(options.dataDir, capture.captureId),
+        serialized.line,
+      );
+      commitReplayRawProviderEventRecordWriteState(
+        capture.rawProviderRecordWriteState,
+        serialized.nextState,
+      );
+      capture.rawProviderBytes = nextBytes;
+      capture.rawProviderEvents += 1;
     });
-    return true;
   }
 
-  function addTurnId(capture: ActiveCapture, event: ThreadEvent): void {
+  function updateTurnId(capture: ActiveCapture, event: ThreadEvent): void {
     const turnId = getTurnId(event);
-    if (turnId && !capture.manifest.turnIds.includes(turnId)) {
-      capture.manifest.turnIds = [...capture.manifest.turnIds, turnId];
+    if (!turnId) {
+      return;
     }
+    const firstTurn = capture.manifest.turns[0];
+    if (!firstTurn) {
+      return;
+    }
+    if (firstTurn.turnId === turnId) {
+      return;
+    }
+    const placeholderTurnId = createReplayCapturePlaceholderTurnId(
+      capture.captureId,
+    );
+    if (firstTurn.turnId !== placeholderTurnId) {
+      options.logger.warn(
+        {
+          captureId: capture.captureId,
+          currentTurnId: firstTurn.turnId,
+          incomingTurnId: turnId,
+        },
+        "ignoring mismatched replay capture turn id",
+      );
+      return;
+    }
+    // Live captures are single-turn. The placeholder exists only until the
+    // first translated provider event carries the server turn id.
+    capture.manifest.turns = [{ ...firstTurn, turnId }];
   }
 
   function updateProviderThreadId(
@@ -421,21 +605,8 @@ export function createReplayCaptureService(
     if (capture.rawCaptureIds.has(entry.captureId)) {
       return;
     }
-    const record: ReplayRawProviderEventRecord = {
-      ordinal: capture.rawProviderEvents + 1,
-      relativeMs: Math.max(0, entry.capturedAt - capture.manifest.capturedAt),
-      entry,
-    };
-    const appended = appendJsonLine(
-      capture,
-      replayRawProviderEventsPath(options.dataDir, capture.captureId),
-      record,
-    );
-    if (!appended) {
-      return;
-    }
-    capture.rawProviderEvents += 1;
     capture.rawCaptureIds.add(entry.captureId);
+    scheduleRawProviderEventAppend(capture, entry);
   }
 
   function dropPendingRawForCapture(capture: ActiveCapture): void {
@@ -465,7 +636,7 @@ export function createReplayCaptureService(
       }
       return;
     }
-    addTurnId(capture, entry.event);
+    updateTurnId(capture, entry.event);
     updateProviderThreadId(capture, entry.event);
     if (entry.rawCaptureId) {
       const pendingRaw = pendingRawByCaptureId.get(entry.rawCaptureId);
@@ -543,7 +714,7 @@ export function createReplayCaptureService(
       return;
     }
     const eventCapturedAt = input.createdAt ?? now();
-    addTurnId(capture, input.event);
+    updateTurnId(capture, input.event);
     updateProviderThreadId(capture, input.event);
     if (capture.finalized) {
       capture.manifest.completedAt = eventCapturedAt;

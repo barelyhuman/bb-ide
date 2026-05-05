@@ -13,17 +13,35 @@ import {
   decodeThreadEventRow,
   formatThreadTimelineText,
 } from "@bb/thread-view";
-import { buildThreadEvent, buildThreadEventRow, threadScope } from "@bb/domain";
+import {
+  buildThreadEvent,
+  buildThreadEventRow,
+  encodeClientTurnRequestIdNumber,
+  threadScope,
+} from "@bb/domain";
 import type {
+  ResolvedThreadExecutionOptions,
   ThreadEventRow,
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
 import type { TimelineRow, TimelineSystemRow } from "@bb/server-contract";
 import type { RuntimeThreadExecutionOptions } from "@bb/domain";
+import {
+  REPLAY_CAPTURE_SCHEMA_VERSION,
+  createReplayCaptureId,
+  replayRawProviderCaptureEntrySchema,
+  type ReplayCaptureTurn,
+  type ReplayRawProviderCaptureEntry,
+  type ReplayRawProviderEventRecord,
+} from "@bb/replay-capture";
+import {
+  deriveReplayCaptureUserInputPreview,
+  serializeReplayRawProviderEventRecords,
+  writeFixture,
+} from "@bb/replay-capture/writer";
 import type {
   ProviderAuditBundle,
-  ProviderAuditClientRequest,
   ProviderAuditCliArgs,
   ProviderAuditDebugRawEvent,
   ProviderAuditGitSnapshot,
@@ -38,13 +56,14 @@ import type {
   ProviderAuditScenarioToolFixture,
   ProviderAuditUntranslatedRawEvent,
 } from "./types.js";
-import { buildProviderAuditClientRequestId } from "./types.js";
+import { fixtureManifestSchema } from "./fixture-schema.js";
 
 const DEFAULT_PROVIDER_ID = "codex";
 const DEFAULT_SCENARIO_ID = "excalidraw-ttd-explanation";
 const DEFAULT_PROJECT_ID = "provider-audit";
 const DEFAULT_THREAD_ID = "provider-audit-thread";
 const DEFAULT_TIMEOUT_MS = 90_000;
+const CAPTURE_CORPUS_ID = "provider-audit";
 
 interface BuildExecutionOptionsArgs {
   model?: string;
@@ -52,6 +71,10 @@ interface BuildExecutionOptionsArgs {
 }
 
 type ProviderAuditResolvedExecutionOptions = RuntimeThreadExecutionOptions;
+type RuntimeRawProviderEventCaptureEntry = Extract<
+  AgentRuntimeCaptureEntry,
+  { kind: "raw-provider-event" }
+>;
 
 const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   "excalidraw-ttd-explanation": {
@@ -330,6 +353,10 @@ function defaultOutputDir(providerId: string, scenarioId: string): string {
   );
 }
 
+function createRandomReplayCaptureSuffix(): string {
+  return Math.random().toString(36).slice(2, 10).padEnd(8, "0");
+}
+
 function getGitSha(workspacePath: string): string | null {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], {
@@ -547,6 +574,10 @@ function prepareScenarioWorkspace(args: {
   };
 }
 
+function buildScenarioEnvironmentId(threadId: string): string {
+  return `${threadId}-env`;
+}
+
 function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
 ): ProviderAuditResolvedExecutionOptions {
@@ -570,40 +601,48 @@ function buildExecutionOptions(
   };
 }
 
-function buildClientRequestRows(args: {
-  clientRequests: ProviderAuditClientRequest[];
+function buildResolvedExecutionOptions(args: {
   execution?: ProviderAuditScenarioExecutionOptions;
   model?: string;
-  threadId: string;
-}): ThreadEventRow[] {
-  const execution = buildExecutionOptions({
-    model: args.model,
-    execution: args.execution,
-  });
+}): ResolvedThreadExecutionOptions {
+  return {
+    model: args.model ?? "provider-default",
+    serviceTier: args.execution?.serviceTier ?? "fast",
+    reasoningLevel: args.execution?.reasoningLevel ?? "medium",
+    permissionMode: args.execution?.permissionMode ?? "full",
+    source: "client/turn/requested",
+  };
+}
 
-  return args.clientRequests.map((request) => {
+function buildClientRequestRows(args: {
+  execution: ResolvedThreadExecutionOptions;
+  threadId: string;
+  turns: ReplayCaptureTurn[];
+}): ThreadEventRow[] {
+  return args.turns.map((turn, index) => {
+    const isFirstTurn = index === 0;
     return buildThreadEventRow({
-      id: request.id,
+      id: `audit-client-row-${index + 1}`,
       scope: threadScope(),
       threadId: args.threadId,
       seq: 0,
-      createdAt: request.createdAt,
+      createdAt: turn.createdAt,
       event: {
-        type: request.type,
+        type: "client/turn/requested",
         threadId: args.threadId,
         scope: threadScope(),
         direction: "outbound",
-        requestId: request.requestId,
+        requestId: encodeClientTurnRequestIdNumber({ value: index + 1 }),
         source: "tell",
         initiator: "user",
-        input: [{ type: "text", text: request.text }],
-        target: request.target,
+        input: turn.userInput,
+        target: isFirstTurn ? { kind: "thread-start" } : { kind: "new-turn" },
         request: {
-          method: request.requestMethod,
+          method: isFirstTurn ? "thread/start" : "turn/start",
           params: {},
         },
         execution: {
-          ...execution,
+          ...args.execution,
           source: "client/turn/requested",
         },
       },
@@ -616,16 +655,14 @@ function buildThreadEventRows(args: {
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
   >[];
-  clientRequests: ProviderAuditClientRequest[];
-  execution?: ProviderAuditScenarioExecutionOptions;
-  model?: string;
+  execution: ResolvedThreadExecutionOptions;
   threadId: string;
+  turns: ReplayCaptureTurn[];
 }): ThreadEventRow[] {
   const clientRows = buildClientRequestRows({
-    clientRequests: args.clientRequests,
     execution: args.execution,
-    model: args.model,
     threadId: args.threadId,
+    turns: args.turns,
   });
 
   const providerRows = args.translatedCaptures.map((entry, index) => {
@@ -667,10 +704,7 @@ function buildThreadEventRows(args: {
 }
 
 function buildRawEventKindSummaries(
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[],
+  rawProviderEvents: ReplayRawProviderCaptureEntry[],
 ): ProviderAuditRawEventKindSummary[] {
   if (rawProviderEvents.length === 0) {
     return [];
@@ -709,10 +743,7 @@ function buildRawEventKindSummaries(
 }
 
 function buildUntranslatedRawProviderEvents(
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[],
+  rawProviderEvents: ReplayRawProviderCaptureEntry[],
   translatedCaptures: Extract<
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
@@ -750,10 +781,7 @@ function buildUntranslatedRawProviderEvents(
 }
 
 function buildObservedToolCalls(
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[],
+  rawProviderEvents: ReplayRawProviderCaptureEntry[],
 ): ProviderAuditObservedToolCallSummary[] {
   if (rawProviderEvents.length === 0) {
     return [];
@@ -828,10 +856,7 @@ function buildDebugRawEvents(
 }
 
 function buildAuditReport(args: {
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[];
+  rawProviderEvents: ReplayRawProviderCaptureEntry[];
   translatedCaptures: Extract<
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
@@ -969,10 +994,57 @@ function writeJson(outputDir: string, fileName: string, value: object): void {
   );
 }
 
+function buildRawProviderEventRecords(
+  bundle: ProviderAuditBundle,
+): ReplayRawProviderEventRecord[] {
+  return bundle.rawProviderEvents.map((entry, index) => ({
+    ordinal: index + 1,
+    relativeMs: Math.max(0, entry.capturedAt - bundle.manifest.capturedAt),
+    entry,
+  }));
+}
+
+function writeRawProviderEventRecords(
+  outputDir: string,
+  records: ReplayRawProviderEventRecord[],
+): void {
+  writeFileSync(
+    join(outputDir, "raw-provider-events.ndjson"),
+    serializeReplayRawProviderEventRecords(records),
+  );
+}
+
+function writeBundleArtifacts(
+  outputDir: string,
+  bundle: ProviderAuditBundle,
+): void {
+  writeJson(outputDir, "thread-events.json", bundle.threadEvents);
+  writeJson(outputDir, "thread-event-rows.json", bundle.threadEventRows);
+  writeJson(outputDir, "timeline-rows.json", bundle.timelineRows);
+  writeJson(outputDir, "audit-report.json", bundle.auditReport);
+  writeFileSync(join(outputDir, "timeline.txt"), bundle.timelineText + "\n");
+  writeFileSync(
+    join(outputDir, "timeline.verbose.txt"),
+    bundle.timelineVerboseText + "\n",
+  );
+}
+
 function cloneCaptureEntry(
   entry: AgentRuntimeCaptureEntry,
 ): AgentRuntimeCaptureEntry {
   return structuredClone(entry);
+}
+
+function isRuntimeRawProviderEventCaptureEntry(
+  entry: AgentRuntimeCaptureEntry,
+): entry is RuntimeRawProviderEventCaptureEntry {
+  return entry.kind === "raw-provider-event";
+}
+
+function toReplayRawProviderCaptureEntry(
+  entry: RuntimeRawProviderEventCaptureEntry,
+): ReplayRawProviderCaptureEntry {
+  return replayRawProviderCaptureEntrySchema.parse(entry);
 }
 
 function buildToolFixturesByName(
@@ -998,13 +1070,14 @@ function buildDefaultToolResponse(request: ToolCallRequest): ToolCallResponse {
 }
 
 async function runScenario(args: {
+  captureId: string;
   runtime: ReturnType<typeof createAgentRuntime>;
   scenario: ProviderAuditScenario;
   providerId: string;
   model?: string;
   threadId: string;
   projectId: string;
-  clientRequests: ProviderAuditClientRequest[];
+  turns: ReplayCaptureTurn[];
   translatedCaptures: Extract<
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
@@ -1017,7 +1090,7 @@ async function runScenario(args: {
   });
 
   await args.runtime.startThread({
-    environmentId: `${args.threadId}-env`,
+    environmentId: buildScenarioEnvironmentId(args.threadId),
     threadId: args.threadId,
     projectId: args.projectId,
     providerId: args.providerId,
@@ -1027,15 +1100,10 @@ async function runScenario(args: {
 
   for (let index = 0; index < args.scenario.turns.length; index += 1) {
     const targetTurnCount = index + 1;
-    const requestId = buildProviderAuditClientRequestId(index);
-    args.clientRequests.push({
-      id: `audit-client-row-${index + 1}`,
-      requestId,
-      turnIndex: index,
-      type: "client/turn/requested",
-      target: index === 0 ? { kind: "thread-start" } : { kind: "new-turn" },
-      requestMethod: index === 0 ? "thread/start" : "turn/start",
-      text: args.scenario.turns[index],
+    const requestId = encodeClientTurnRequestIdNumber({ value: index + 1 });
+    args.turns.push({
+      turnId: `turn_${index}_${args.captureId}`,
+      userInput: [{ type: "text", text: args.scenario.turns[index] }],
       createdAt: Date.now(),
     });
     await args.runtime.runTurn({
@@ -1061,58 +1129,76 @@ async function runScenario(args: {
 }
 
 function buildManifest(args: {
+  captureId: string;
+  corpusId: string;
   providerId: string;
   scenario: ProviderAuditScenario;
   model?: string;
   workspacePath: string;
   runtimeWorkspacePath: string;
   envWorkspacePath: string;
-  outputDir: string;
   threadId: string;
   projectId: string;
+  environmentId: string;
   capturedAt: number;
   completedAt: number;
   gitResetRef?: string;
+  rawProviderEventCount: number;
   runtimeWorkspaceGitStart: ProviderAuditGitSnapshot | null;
   runtimeWorkspaceGitEnd: ProviderAuditGitSnapshot | null;
+  turns: ReplayCaptureTurn[];
 }): ProviderAuditManifest {
-  return {
+  const firstTurn = args.turns[0];
+  if (!firstTurn) {
+    throw new Error("Cannot build provider audit manifest without turns");
+  }
+
+  return fixtureManifestSchema.parse({
+    schemaVersion: REPLAY_CAPTURE_SCHEMA_VERSION,
+    captureId: args.captureId,
     providerId: args.providerId,
+    capturedAt: args.capturedAt,
+    completedAt: args.completedAt,
+    source: "corpus-fixture",
+    projectId: args.projectId,
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+    providerThreadId: null,
+    title: args.scenario.description,
+    kind: "thread-start",
+    turns: args.turns,
+    userInputPreview: deriveReplayCaptureUserInputPreview(firstTurn.userInput),
+    execution: buildResolvedExecutionOptions({
+      model: args.model,
+      execution: args.scenario.execution,
+    }),
+    eventCounts: {
+      rawProviderEvents: args.rawProviderEventCount,
+      droppedRecords: 0,
+    },
+    errorMessage: null,
+    corpusId: args.corpusId,
     scenarioId: args.scenario.id,
     scenarioDescription: args.scenario.description,
     model: args.model ?? null,
-    source: "live-capture",
-    capturedAt: args.capturedAt,
-    completedAt: args.completedAt,
     gitSha: getGitSha(args.workspacePath),
     workspacePath: args.workspacePath,
     runtimeWorkspacePath: args.runtimeWorkspacePath,
     envWorkspacePath: args.envWorkspacePath,
-    outputDir: args.outputDir,
-    threadId: args.threadId,
-    projectId: args.projectId,
-    turns: args.scenario.turns,
     gitResetRef: args.gitResetRef ?? null,
     runtimeWorkspaceGitStart: args.runtimeWorkspaceGitStart,
     runtimeWorkspaceGitEnd: args.runtimeWorkspaceGitEnd,
-  };
+  });
 }
 
 export function buildBundle(args: {
   manifest: ProviderAuditManifest;
   captures: AgentRuntimeCaptureEntry[];
-  clientRequests: ProviderAuditClientRequest[];
-  execution?: ProviderAuditScenarioExecutionOptions;
-  model?: string;
+  outputDir?: string;
 }): ProviderAuditBundle {
-  const rawProviderEvents = args.captures.filter(
-    (
-      entry,
-    ): entry is Extract<
-      AgentRuntimeCaptureEntry,
-      { kind: "raw-provider-event" }
-    > => entry.kind === "raw-provider-event",
-  );
+  const rawProviderEvents = args.captures
+    .filter(isRuntimeRawProviderEventCaptureEntry)
+    .map(toReplayRawProviderCaptureEntry);
   const translatedCaptures = args.captures.filter(
     (
       entry,
@@ -1158,10 +1244,9 @@ export function buildBundle(args: {
   const threadEvents = translatedCaptures.map((entry) => entry.event);
   const threadEventRows = buildThreadEventRows({
     translatedCaptures,
-    clientRequests: args.clientRequests,
-    execution: args.execution,
-    model: args.model,
+    execution: args.manifest.execution,
     threadId: args.manifest.threadId,
+    turns: args.manifest.turns,
   });
   const decodedRows = threadEventRows.map((row) => decodeThreadEventRow(row));
   const timelineProjection = buildThreadTimelineFromEvents({
@@ -1231,7 +1316,7 @@ export function buildBundle(args: {
   return {
     manifest: args.manifest,
     captures: args.captures,
-    clientRequests: args.clientRequests,
+    outputDir: args.outputDir ?? null,
     rawProviderEvents,
     translatedCaptures,
     toolCallRequests,
@@ -1250,42 +1335,28 @@ export function buildBundle(args: {
 }
 
 export function writeBundle(bundle: ProviderAuditBundle): void {
-  mkdirSync(bundle.manifest.outputDir, { recursive: true });
-  writeJson(bundle.manifest.outputDir, "manifest.json", bundle.manifest);
-  writeJson(
-    bundle.manifest.outputDir,
-    "client-requests.json",
-    bundle.clientRequests,
+  if (bundle.outputDir === null) {
+    throw new Error("Cannot write provider audit bundle without outputDir");
+  }
+  mkdirSync(bundle.outputDir, { recursive: true });
+  writeJson(bundle.outputDir, "manifest.json", bundle.manifest);
+  writeRawProviderEventRecords(
+    bundle.outputDir,
+    buildRawProviderEventRecords(bundle),
   );
-  writeJson(
-    bundle.manifest.outputDir,
-    "raw-provider-events.json",
-    bundle.rawProviderEvents,
-  );
-  writeJson(
-    bundle.manifest.outputDir,
-    "thread-events.json",
-    bundle.threadEvents,
-  );
-  writeJson(
-    bundle.manifest.outputDir,
-    "thread-event-rows.json",
-    bundle.threadEventRows,
-  );
-  writeJson(
-    bundle.manifest.outputDir,
-    "timeline-rows.json",
-    bundle.timelineRows,
-  );
-  writeJson(bundle.manifest.outputDir, "audit-report.json", bundle.auditReport);
-  writeFileSync(
-    join(bundle.manifest.outputDir, "timeline.txt"),
-    bundle.timelineText + "\n",
-  );
-  writeFileSync(
-    join(bundle.manifest.outputDir, "timeline.verbose.txt"),
-    bundle.timelineVerboseText + "\n",
-  );
+  writeBundleArtifacts(bundle.outputDir, bundle);
+}
+
+async function writeCapturedBundle(bundle: ProviderAuditBundle): Promise<void> {
+  if (bundle.outputDir === null) {
+    throw new Error("Cannot write provider audit capture without outputDir");
+  }
+  await writeFixture({
+    destinationDir: bundle.outputDir,
+    manifest: bundle.manifest,
+    rawProviderEventRecords: buildRawProviderEventRecords(bundle),
+  });
+  writeBundleArtifacts(bundle.outputDir, bundle);
 }
 
 export async function runProviderAuditCapture(
@@ -1296,13 +1367,14 @@ export async function runProviderAuditCapture(
     args.outputDir ?? defaultOutputDir(args.providerId, args.scenarioId);
   const threadId = args.threadId ?? DEFAULT_THREAD_ID;
   const projectId = args.projectId ?? DEFAULT_PROJECT_ID;
+  const environmentId = buildScenarioEnvironmentId(threadId);
   const preparedWorkspace = prepareScenarioWorkspace({
     outputDir,
     scenario,
     workspacePath: args.workspacePath,
   });
   const captures: AgentRuntimeCaptureEntry[] = [];
-  const clientRequests: ProviderAuditClientRequest[] = [];
+  const turns: ReplayCaptureTurn[] = [];
   const translatedCaptures: Extract<
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
@@ -1324,6 +1396,10 @@ export async function runProviderAuditCapture(
   );
   try {
     const capturedAt = Date.now();
+    const captureId = createReplayCaptureId(
+      capturedAt,
+      createRandomReplayCaptureSuffix(),
+    );
     const runtime = createAgentRuntime({
       workspacePath: preparedWorkspace.runtimeWorkspacePath,
       env: loadDotEnv(preparedWorkspace.envWorkspacePath),
@@ -1345,13 +1421,14 @@ export async function runProviderAuditCapture(
     });
     try {
       await runScenario({
+        captureId,
         runtime,
         scenario,
         providerId: args.providerId,
         model: args.model,
         threadId,
         projectId,
-        clientRequests,
+        turns,
         translatedCaptures,
         timeoutMs: args.timeoutMs,
       });
@@ -1364,29 +1441,33 @@ export async function runProviderAuditCapture(
       preparedWorkspace.runtimeWorkspacePath,
     );
     const manifest = buildManifest({
+      captureId,
+      corpusId: CAPTURE_CORPUS_ID,
       providerId: args.providerId,
       scenario,
       model: args.model,
       workspacePath: args.workspacePath,
       runtimeWorkspacePath: preparedWorkspace.runtimeWorkspacePath,
       envWorkspacePath: preparedWorkspace.envWorkspacePath,
-      outputDir,
       threadId,
       projectId,
+      environmentId,
       capturedAt,
       completedAt,
       gitResetRef: args.gitResetRef,
+      rawProviderEventCount: captures.filter(
+        (entry) => entry.kind === "raw-provider-event",
+      ).length,
       runtimeWorkspaceGitStart,
       runtimeWorkspaceGitEnd,
+      turns,
     });
     const bundle = buildBundle({
       manifest,
       captures,
-      clientRequests,
-      execution: scenario.execution,
-      model: args.model,
+      outputDir,
     });
-    writeBundle(bundle);
+    await writeCapturedBundle(bundle);
     return {
       outputDir,
       bundle,

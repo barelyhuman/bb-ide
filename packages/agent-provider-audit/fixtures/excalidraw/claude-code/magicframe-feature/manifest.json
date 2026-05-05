@@ -1,23 +1,60 @@
 {
+  "schemaVersion": 3,
+  "captureId": "cap_mn8m9ewq_8qypizni",
+  "capturedAt": 1774598724026,
+  "completedAt": 1774599182958,
+  "source": "corpus-fixture",
   "providerId": "claude-code",
+  "projectId": "provider-audit-round2-other-03-1549",
+  "environmentId": "fixture-excalidraw-claude-code-excalidraw-magicframe-feature",
+  "threadId": "provider-audit-claude-code-magicframe-feature-20260327T080523Z-1549",
+  "providerThreadId": null,
+  "title": "Provider-neutral Magic Frame feature task against the real Excalidraw repo",
+  "kind": "thread-start",
+  "turns": [
+    {
+      "turnId": "turn_0_cap_mn8m9ewq_8qypizni",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring."
+        }
+      ],
+      "createdAt": 1774598724090
+    },
+    {
+      "turnId": "turn_1_cap_mn8m9ewq_8qypizni",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "Summarize the user-visible behavior and the validation you ran."
+        }
+      ],
+      "createdAt": 1774599173675
+    }
+  ],
+  "userInputPreview": "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only…",
+  "execution": {
+    "model": "provider-default",
+    "serviceTier": "fast",
+    "reasoningLevel": "medium",
+    "permissionMode": "full",
+    "source": "client/turn/requested"
+  },
+  "eventCounts": {
+    "rawProviderEvents": 4943,
+    "droppedRecords": 0
+  },
+  "errorMessage": null,
+  "corpusId": "excalidraw",
   "scenarioId": "excalidraw-magicframe-feature",
   "scenarioDescription": "Provider-neutral Magic Frame feature task against the real Excalidraw repo",
   "model": null,
-  "source": "live-capture",
-  "capturedAt": 1774598724026,
-  "completedAt": 1774599182958,
   "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "workspacePath": "$EXCALIDRAW_REPO",
   "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
   "envWorkspacePath": "$EXCALIDRAW_REPO",
-  "outputDir": "$FIXTURE_ROOT/excalidraw/claude-code/magicframe-feature",
-  "threadId": "provider-audit-claude-code-magicframe-feature-20260327T080523Z-1549",
-  "projectId": "provider-audit-round2-other-03-1549",
-  "turns": [
-    "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
-    "Summarize the user-visible behavior and the validation you ran."
-  ],
-  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "runtimeWorkspaceGitStart": {
     "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
     "isClean": true,

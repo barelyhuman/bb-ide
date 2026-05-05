@@ -10,7 +10,7 @@ import {
 import { threadEventTypeValues, type ThreadEventType } from "@bb/domain";
 import { timelineRowSchema, type TimelineRow } from "@bb/server-contract";
 import { z } from "zod";
-import { readJsonFile } from "./json-file.js";
+import { readJsonFile } from "./json-read.js";
 import {
   collectCoverageIssues,
   replayFixtures,

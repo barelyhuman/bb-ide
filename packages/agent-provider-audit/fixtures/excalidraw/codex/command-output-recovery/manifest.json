@@ -1,22 +1,50 @@
 {
+  "schemaVersion": 3,
+  "captureId": "cap_mo951a4e_137y09ma",
+  "capturedAt": 1776807039614,
+  "completedAt": 1776807048141,
+  "source": "corpus-fixture",
   "providerId": "codex",
+  "projectId": "provider-audit",
+  "environmentId": "fixture-excalidraw-codex-excalidraw-command-output-recovery",
+  "threadId": "provider-audit-thread",
+  "providerThreadId": null,
+  "title": "Provider-targeted delayed shell output task against the real Excalidraw repo",
+  "kind": "thread-start",
+  "turns": [
+    {
+      "turnId": "turn_0_cap_mo951a4e_137y09ma",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE."
+        }
+      ],
+      "createdAt": 1776807039738
+    }
+  ],
+  "userInputPreview": "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n';…",
+  "execution": {
+    "model": "gpt-5.4",
+    "serviceTier": "fast",
+    "reasoningLevel": "medium",
+    "permissionMode": "full",
+    "source": "client/turn/requested"
+  },
+  "eventCounts": {
+    "rawProviderEvents": 60,
+    "droppedRecords": 0
+  },
+  "errorMessage": null,
+  "corpusId": "excalidraw",
   "scenarioId": "excalidraw-command-output-recovery",
   "scenarioDescription": "Provider-targeted delayed shell output task against the real Excalidraw repo",
   "model": "gpt-5.4",
-  "source": "live-capture",
-  "capturedAt": 1776807039614,
-  "completedAt": 1776807048141,
   "gitSha": "792275053c7d418a397bc017d120bcf864872597",
+  "gitResetRef": null,
   "workspacePath": "$EXCALIDRAW_REPO",
   "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
   "envWorkspacePath": "$EXCALIDRAW_REPO",
-  "outputDir": "$FIXTURE_ROOT/excalidraw/codex/command-output-recovery",
-  "threadId": "provider-audit-thread",
-  "projectId": "provider-audit",
-  "turns": [
-    "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE."
-  ],
-  "gitResetRef": null,
   "runtimeWorkspaceGitStart": {
     "headSha": "792275053c7d418a397bc017d120bcf864872597",
     "isClean": true,

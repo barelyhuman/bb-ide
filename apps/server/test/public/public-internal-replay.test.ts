@@ -63,7 +63,7 @@ function captureManifest(args: {
   threadId: string;
 }): ReplayCaptureManifest {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     captureId: args.captureId,
     capturedAt: 1_000,
     completedAt: 1_100,
@@ -73,10 +73,15 @@ function captureManifest(args: {
     environmentId: args.environmentId,
     threadId: args.threadId,
     providerThreadId: "provider-thread-1",
-    turnIds: ["turn-1"],
     title: "Original thread",
     kind: "thread-start",
-    userInput: [{ type: "text", text: "Original prompt" }],
+    turns: [
+      {
+        turnId: "turn-1",
+        userInput: [{ type: "text", text: "Original prompt" }],
+        createdAt: 1_000,
+      },
+    ],
     userInputPreview: "Original prompt",
     execution: {
       model: "gpt-5",
@@ -527,6 +532,9 @@ describe("public development-only replay routes", () => {
       const replayRequestData = turnRequestEventDataSchema.parse(
         JSON.parse(replayRequestRow.data),
       );
+      expect(replayRequestData.input).toEqual([
+        { type: "text", text: "Original prompt" },
+      ]);
       const replayCommand = await waitForReplayRunCommand(harness, host.id);
       expect(replayCommand.row.id).toBe(body.commandId);
       const queuedRow = replayCommand.row;

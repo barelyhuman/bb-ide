@@ -31,7 +31,7 @@ function replayRequestId(value: number) {
 
 function baseManifest(captureId: string): ReplayCaptureManifest {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     captureId,
     capturedAt: 1_000,
     completedAt: 1_100,
@@ -41,10 +41,15 @@ function baseManifest(captureId: string): ReplayCaptureManifest {
     environmentId: "env-1",
     threadId: "thr-original",
     providerThreadId: "provider-thread-1",
-    turnIds: ["turn-1"],
     title: "Original",
     kind: "thread-start",
-    userInput: [{ type: "text", text: "Original prompt" }],
+    turns: [
+      {
+        turnId: "turn-1",
+        userInput: [{ type: "text", text: "Original prompt" }],
+        createdAt: 1_000,
+      },
+    ],
     userInputPreview: "Original prompt",
     execution: {
       model: "gpt-5",
@@ -265,7 +270,8 @@ describe("replay capture commands", () => {
       ),
     ).rejects.toMatchObject({
       code: "invalid_replay_capture",
-      message: "Replay capture manifest is invalid",
+      message:
+        "Replay capture schema version 999 is not supported. Replay captures must use schema version 3.",
     });
   });
 });

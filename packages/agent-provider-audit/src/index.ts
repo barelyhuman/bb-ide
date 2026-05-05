@@ -6,10 +6,17 @@ export {
 } from "./build-artifacts.js";
 export {
   importDevReplayFixtures,
-  importFixtureCorpus,
   parseImportDevReplaysArgs,
-  parseImportFixturesArgs,
 } from "./fixtures.js";
+export {
+  fixtureManifestSchema,
+  type FixtureManifest,
+} from "./fixture-schema.js";
+export {
+  promoteCaptureToFixture,
+  readFixtureBundle,
+  readFixtureManifest,
+} from "./fixture-bundle.js";
 export {
   collectCoverageIssues,
   listFixtureBundles,
@@ -42,7 +49,6 @@ export type {
 export type {
   ProviderAuditBundle,
   ProviderAuditBuildLadleStoryDataArgs,
-  ProviderAuditClientRequest,
   ProviderAuditCliArgs,
   ProviderAuditCoverageIssues,
   ProviderAuditExportLadleDataArgs,
@@ -53,11 +59,12 @@ export type {
   ProviderAuditGitSnapshot,
   ProviderAuditImportDevReplaysArgs,
   ProviderAuditImportFixtureResult,
-  ProviderAuditImportFixturesArgs,
   ProviderAuditImportFixturesResult,
   ProviderAuditLadleFixture,
   ProviderAuditLadleStoryData,
   ProviderAuditManifest,
+  ProviderAuditPromoteCaptureToFixtureArgs,
+  ProviderAuditPromoteCaptureToFixtureResult,
   ProviderAuditReport,
   ProviderAuditReplayFixtureResult,
   ProviderAuditReplayFixturesArgs,

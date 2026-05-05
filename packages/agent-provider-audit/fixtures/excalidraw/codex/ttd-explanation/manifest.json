@@ -1,23 +1,60 @@
 {
+  "schemaVersion": 3,
+  "captureId": "cap_mn6x0fmn_38nf6poe",
+  "capturedAt": 1774495848479,
+  "completedAt": 1774496383840,
+  "source": "corpus-fixture",
   "providerId": "codex",
+  "projectId": "provider-audit",
+  "environmentId": "fixture-excalidraw-codex-excalidraw-ttd-explanation",
+  "threadId": "provider-audit-thread",
+  "providerThreadId": null,
+  "title": "Provider-neutral explanation task against the real Excalidraw repo",
+  "kind": "thread-start",
+  "turns": [
+    {
+      "turnId": "turn_0_cap_mn6x0fmn_38nf6poe",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references."
+        }
+      ],
+      "createdAt": 1774495849184
+    },
+    {
+      "turnId": "turn_1_cap_mn6x0fmn_38nf6poe",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?"
+        }
+      ],
+      "createdAt": 1774496345184
+    }
+  ],
+  "userInputPreview": "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI…",
+  "execution": {
+    "model": "provider-default",
+    "serviceTier": "fast",
+    "reasoningLevel": "medium",
+    "permissionMode": "full",
+    "source": "client/turn/requested"
+  },
+  "eventCounts": {
+    "rawProviderEvents": 3085,
+    "droppedRecords": 0
+  },
+  "errorMessage": null,
+  "corpusId": "excalidraw",
   "scenarioId": "excalidraw-ttd-explanation",
   "scenarioDescription": "Provider-neutral explanation task against the real Excalidraw repo",
   "model": null,
-  "source": "live-capture",
-  "capturedAt": 1774495848479,
-  "completedAt": 1774496383840,
   "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "workspacePath": "$EXCALIDRAW_REPO",
   "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
   "envWorkspacePath": "$EXCALIDRAW_REPO",
-  "outputDir": "$FIXTURE_ROOT/excalidraw/codex/ttd-explanation",
-  "threadId": "provider-audit-thread",
-  "projectId": "provider-audit",
-  "turns": [
-    "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.",
-    "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?"
-  ],
-  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "runtimeWorkspaceGitStart": {
     "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
     "isClean": true,

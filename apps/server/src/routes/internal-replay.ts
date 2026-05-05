@@ -16,6 +16,7 @@ import {
   type ReplayCaptureHostSummary,
 } from "@bb/server-contract";
 import {
+  getReplayCaptureInitialTurn,
   isReplayCaptureId,
   type ReplayCaptureManifest,
 } from "@bb/replay-capture";
@@ -288,6 +289,7 @@ export function registerDevelopmentOnlyReplayRoutes(
     async (context, payload) => {
       const manifest = await findCapture(deps, context.req.param("id"));
       const resolved = resolveManifestReplayTarget(manifest);
+      const replayTurn = getReplayCaptureInitialTurn(manifest);
       const environment = getEnvironment(deps.db, resolved.environmentId);
       if (!environment) {
         throw new ApiError(
@@ -325,7 +327,7 @@ export function registerDevelopmentOnlyReplayRoutes(
           threadId: replayThread.id,
           environmentId: resolved.environmentId,
           type: "client/turn/requested",
-          input: manifest.userInput,
+          input: replayTurn.userInput,
           execution: manifest.execution,
           initiator: "user",
           requestMethod:

@@ -1,39 +1,36 @@
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { importFixtureCorpus } from "../src/fixtures.js";
+import { importDevReplayFixtures } from "../src/fixtures.js";
 
 function createTempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-describe("importFixtureCorpus", () => {
-  it("rejects corpus ids that escape the fixture root", () => {
-    const fixtureRoot = createTempDir("provider-audit-fixtures-");
-    const sourceRoot = createTempDir("provider-audit-source-");
+function writeSentinelFile(fixtureRoot: string): string {
+  const sentinelPath = join(fixtureRoot, "sentinel.txt");
+  writeFileSync(sentinelPath, "do not delete");
+  return sentinelPath;
+}
 
-    expect(() =>
-      importFixtureCorpus({
-        fixtureRoot,
-        sourceRoot,
-        corpusId: "../escape",
-      }),
-    ).toThrow("Invalid corpus id");
-  });
+describe("importDevReplayFixtures", () => {
+  it.each(["", ".", "../x"])(
+    "rejects invalid corpus id %j without deleting the fixture root",
+    async (corpusId) => {
+      const fixtureRoot = createTempDir("provider-audit-fixtures-");
+      const replayRoot = createTempDir("provider-audit-replays-");
+      const sentinelPath = writeSentinelFile(fixtureRoot);
 
-  it("allows corpus ids inside the fixture root", () => {
-    const fixtureRoot = createTempDir("provider-audit-fixtures-");
-    const sourceRoot = createTempDir("provider-audit-source-");
-    const bundleDir = join(sourceRoot, "bundle");
-    mkdirSync(bundleDir, { recursive: true });
-
-    expect(() =>
-      importFixtureCorpus({
-        fixtureRoot,
-        sourceRoot,
-        corpusId: "excalidraw",
-      }),
-    ).not.toThrow();
-  });
+      await expect(
+        importDevReplayFixtures({
+          fixtureRoot,
+          replayRoot,
+          corpusId,
+          captureIds: [],
+        }),
+      ).rejects.toThrow("Invalid corpus id");
+      expect(existsSync(sentinelPath)).toBe(true);
+    },
+  );
 });

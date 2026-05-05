@@ -7,9 +7,7 @@ import {
 } from "./build-artifacts.js";
 import {
   importDevReplayFixtures,
-  importFixtureCorpus,
   parseImportDevReplaysArgs,
-  parseImportFixturesArgs,
 } from "./fixtures.js";
 import {
   parseReplayFixturesArgs,
@@ -39,25 +37,9 @@ async function main(): Promise<void> {
     );
     return;
   }
-  if (argv[0] === "import-fixtures") {
-    const { args } = parseImportFixturesArgs(argv.slice(1));
-    const result = importFixtureCorpus(args);
-    console.log(
-      JSON.stringify(
-        {
-          corpusId: result.corpusId,
-          fixtureCount: result.fixtures.length,
-          fixtureRoot: result.fixtureRoot,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
   if (argv[0] === "import-dev-replays") {
     const { args } = parseImportDevReplaysArgs(argv.slice(1));
-    const result = importDevReplayFixtures(args);
+    const result = await importDevReplayFixtures(args);
     console.log(
       JSON.stringify(
         {

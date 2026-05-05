@@ -260,7 +260,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     const timelinePath = join(replay.outputDir, "timeline.txt");
     const rawProviderEventsPath = join(
       replay.outputDir,
-      "raw-provider-events.json",
+      "raw-provider-events.ndjson",
     );
 
     expect(existsSync(timelinePath)).toBe(true);

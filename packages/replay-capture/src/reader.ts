@@ -1,7 +1,9 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
+import { z } from "zod";
 import {
+  REPLAY_CAPTURE_SCHEMA_VERSION,
   isReplayCaptureId,
   replayCaptureDir,
   replayCaptureManifestPath,
@@ -33,10 +35,47 @@ export interface ReplayCaptureReadArgs {
   dataDir: string;
 }
 
-interface StreamNdjsonRecordsArgs<TRecord extends { relativeMs: number }> {
+export interface ReplayManifestReadArgs<TManifest> {
+  manifestPath: string;
+  schema: z.ZodType<TManifest>;
+}
+
+export interface ReplayRawProviderRecordsFileReadArgs {
+  filePath: string;
+}
+
+interface ParseManifestArgs<TManifest> {
+  label: string;
+  schema: z.ZodType<TManifest>;
+  value: unknown;
+}
+
+interface StreamNdjsonRecordsArgs<
+  TRecord extends { ordinal: number; relativeMs: number },
+> {
   filePath: string;
   parse: (value: unknown) => TRecord;
 }
+
+interface NdjsonRecordValidationState {
+  expectedOrdinal: number;
+  previousRelativeMs: number;
+}
+
+interface ParseNdjsonRecordLineArgs<
+  TRecord extends { ordinal: number; relativeMs: number },
+> {
+  line: string;
+  lineNumber: number;
+  parse: (value: unknown) => TRecord;
+  state: NdjsonRecordValidationState;
+}
+
+const replayManifestVersionSchema = z
+  .object({
+    schemaVersion: z.number().int().optional(),
+  })
+  .passthrough();
 
 function isNodeError(error: unknown): error is Error & { code: string } {
   return (
@@ -56,6 +95,17 @@ function requireCaptureId(captureId: string): void {
 async function readText(filePath: string): Promise<string> {
   try {
     return await readFile(filePath, "utf8");
+  } catch {
+    throw new ReplayCaptureReadError(
+      "replay_capture_not_found",
+      `Replay capture file not found: ${filePath}`,
+    );
+  }
+}
+
+function readTextSync(filePath: string): string {
+  try {
+    return readFileSync(filePath, "utf8");
   } catch {
     throw new ReplayCaptureReadError(
       "replay_capture_not_found",
@@ -107,7 +157,42 @@ function parseJsonLine(line: string, lineNumber: number): unknown {
   }
 }
 
-async function* streamNdjsonRecords<TRecord extends { relativeMs: number }>(
+function createNdjsonRecordValidationState(): NdjsonRecordValidationState {
+  return {
+    expectedOrdinal: 1,
+    previousRelativeMs: 0,
+  };
+}
+
+function parseNdjsonRecordLine<
+  TRecord extends { ordinal: number; relativeMs: number },
+>(args: ParseNdjsonRecordLineArgs<TRecord>): TRecord | null {
+  if (args.line.trim().length === 0) {
+    return null;
+  }
+
+  const record = args.parse(parseJsonLine(args.line, args.lineNumber));
+  if (record.ordinal !== args.state.expectedOrdinal) {
+    throw new ReplayCaptureReadError(
+      "invalid_replay_capture",
+      `Replay capture ordinal ${record.ordinal} did not match expected ordinal ${args.state.expectedOrdinal}`,
+    );
+  }
+  if (record.relativeMs < args.state.previousRelativeMs) {
+    throw new ReplayCaptureReadError(
+      "invalid_replay_capture",
+      `Replay capture relativeMs decreased at record ${args.lineNumber}`,
+    );
+  }
+
+  args.state.expectedOrdinal += 1;
+  args.state.previousRelativeMs = record.relativeMs;
+  return record;
+}
+
+async function* streamNdjsonRecords<
+  TRecord extends { ordinal: number; relativeMs: number },
+>(
   args: StreamNdjsonRecordsArgs<TRecord>,
 ): AsyncGenerator<TRecord> {
   const lines = createInterface({
@@ -115,22 +200,18 @@ async function* streamNdjsonRecords<TRecord extends { relativeMs: number }>(
     crlfDelay: Infinity,
   });
   let lineNumber = 0;
-  let previousRelativeMs = 0;
+  const state = createNdjsonRecordValidationState();
 
   try {
     for await (const line of lines) {
       lineNumber += 1;
-      if (line.trim().length === 0) {
-        continue;
-      }
-      const record = args.parse(parseJsonLine(line, lineNumber));
-      if (record.relativeMs < previousRelativeMs) {
-        throw new ReplayCaptureReadError(
-          "invalid_replay_capture",
-          `Replay capture relativeMs decreased at record ${lineNumber}`,
-        );
-      }
-      previousRelativeMs = record.relativeMs;
+      const record = parseNdjsonRecordLine({
+        line,
+        lineNumber,
+        parse: args.parse,
+        state,
+      });
+      if (!record) continue;
       yield record;
     }
   } catch (error) {
@@ -147,12 +228,56 @@ async function* streamNdjsonRecords<TRecord extends { relativeMs: number }>(
   }
 }
 
-function parseManifest(value: unknown): ReplayCaptureManifest {
-  const result = replayCaptureManifestSchema.safeParse(value);
+function readNdjsonRecords<TRecord extends { ordinal: number; relativeMs: number }>(
+  args: StreamNdjsonRecordsArgs<TRecord>,
+): TRecord[] {
+  const content = readTextSync(args.filePath);
+  const state = createNdjsonRecordValidationState();
+  const records: TRecord[] = [];
+
+  for (const [index, line] of content.split(/\r?\n/u).entries()) {
+    const lineNumber = index + 1;
+    const record = parseNdjsonRecordLine({
+      line,
+      lineNumber,
+      parse: args.parse,
+      state,
+    });
+    if (!record) continue;
+    records.push(record);
+  }
+
+  return records;
+}
+
+function manifestVersion(value: unknown): number | null {
+  const result = replayManifestVersionSchema.safeParse(value);
+  if (!result.success) {
+    return null;
+  }
+  return result.data.schemaVersion ?? null;
+}
+
+function unsupportedManifestVersionMessage(version: number): string {
+  if (version === 2) {
+    return `Replay capture schema version 2 is no longer supported. Delete ~/.bb-dev/replays/ or re-capture with schema version ${REPLAY_CAPTURE_SCHEMA_VERSION}.`;
+  }
+  return `Replay capture schema version ${version} is not supported. Replay captures must use schema version ${REPLAY_CAPTURE_SCHEMA_VERSION}.`;
+}
+
+function parseManifest<TManifest>(args: ParseManifestArgs<TManifest>): TManifest {
+  const version = manifestVersion(args.value);
+  if (version !== null && version !== REPLAY_CAPTURE_SCHEMA_VERSION) {
+    throw new ReplayCaptureReadError(
+      "invalid_replay_capture",
+      unsupportedManifestVersionMessage(version),
+    );
+  }
+  const result = args.schema.safeParse(args.value);
   if (!result.success) {
     throw new ReplayCaptureReadError(
       "invalid_replay_capture",
-      "Replay capture manifest is invalid",
+      `Replay capture manifest is invalid: ${args.label}`,
     );
   }
   return result.data;
@@ -174,8 +299,43 @@ export async function readReplayCaptureManifest(
 ): Promise<ReplayCaptureManifest> {
   requireCaptureId(args.captureId);
   const manifestPath = replayCaptureManifestPath(args.dataDir, args.captureId);
-  const content = await readText(manifestPath);
-  return parseManifest(parseJsonText(content, manifestPath));
+  return readManifest({
+    manifestPath,
+    schema: replayCaptureManifestSchema,
+  });
+}
+
+export function readReplayCaptureManifestSync(
+  args: ReplayCaptureReadArgs,
+): ReplayCaptureManifest {
+  requireCaptureId(args.captureId);
+  const manifestPath = replayCaptureManifestPath(args.dataDir, args.captureId);
+  return readManifestSync({
+    manifestPath,
+    schema: replayCaptureManifestSchema,
+  });
+}
+
+export async function readManifest<TManifest>(
+  args: ReplayManifestReadArgs<TManifest>,
+): Promise<TManifest> {
+  const content = await readText(args.manifestPath);
+  return parseManifest({
+    label: args.manifestPath,
+    schema: args.schema,
+    value: parseJsonText(content, args.manifestPath),
+  });
+}
+
+export function readManifestSync<TManifest>(
+  args: ReplayManifestReadArgs<TManifest>,
+): TManifest {
+  const content = readTextSync(args.manifestPath);
+  return parseManifest({
+    label: args.manifestPath,
+    schema: args.schema,
+    value: parseJsonText(content, args.manifestPath),
+  });
 }
 
 function toSummary(manifest: ReplayCaptureManifest): ReplayCaptureSummary {
@@ -237,6 +397,24 @@ export async function* streamRawProviderRecords(
   requireCaptureId(args.captureId);
   yield* streamNdjsonRecords({
     filePath: replayRawProviderEventsPath(args.dataDir, args.captureId),
+    parse: parseRawProviderRecord,
+  });
+}
+
+export function readRawProviderRecords(
+  args: ReplayCaptureReadArgs,
+): ReplayRawProviderEventRecord[] {
+  requireCaptureId(args.captureId);
+  return readRawProviderRecordsFile({
+    filePath: replayRawProviderEventsPath(args.dataDir, args.captureId),
+  });
+}
+
+export function readRawProviderRecordsFile(
+  args: ReplayRawProviderRecordsFileReadArgs,
+): ReplayRawProviderEventRecord[] {
+  return readNdjsonRecords({
+    filePath: args.filePath,
     parse: parseRawProviderRecord,
   });
 }

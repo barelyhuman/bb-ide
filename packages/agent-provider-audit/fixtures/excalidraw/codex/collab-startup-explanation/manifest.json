@@ -1,23 +1,60 @@
 {
+  "schemaVersion": 3,
+  "captureId": "cap_mn8ka3i8_167ptenr",
+  "capturedAt": 1774595396672,
+  "completedAt": 1774596146760,
+  "source": "corpus-fixture",
   "providerId": "codex",
+  "projectId": "provider-audit-probe-47808",
+  "environmentId": "fixture-excalidraw-codex-excalidraw-collab-startup-explanation",
+  "threadId": "provider-audit-codex-collab-startup-probe-20260327T070956Z-47808",
+  "providerThreadId": null,
+  "title": "Provider-neutral collaboration startup explanation task against the real Excalidraw repo",
+  "kind": "thread-start",
+  "turns": [
+    {
+      "turnId": "turn_0_cap_mn8ka3i8_167ptenr",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references."
+        }
+      ],
+      "createdAt": 1774595396803
+    },
+    {
+      "turnId": "turn_1_cap_mn8ka3i8_167ptenr",
+      "userInput": [
+        {
+          "type": "text",
+          "text": "What's the safest extension point if I want to instrument room startup without changing behavior?"
+        }
+      ],
+      "createdAt": 1774596073424
+    }
+  ],
+  "userInputPreview": "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the…",
+  "execution": {
+    "model": "provider-default",
+    "serviceTier": "fast",
+    "reasoningLevel": "medium",
+    "permissionMode": "full",
+    "source": "client/turn/requested"
+  },
+  "eventCounts": {
+    "rawProviderEvents": 3522,
+    "droppedRecords": 0
+  },
+  "errorMessage": null,
+  "corpusId": "excalidraw",
   "scenarioId": "excalidraw-collab-startup-explanation",
   "scenarioDescription": "Provider-neutral collaboration startup explanation task against the real Excalidraw repo",
   "model": null,
-  "source": "live-capture",
-  "capturedAt": 1774595396672,
-  "completedAt": 1774596146760,
   "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "workspacePath": "$EXCALIDRAW_REPO",
   "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
   "envWorkspacePath": "$EXCALIDRAW_REPO",
-  "outputDir": "$FIXTURE_ROOT/excalidraw/codex/collab-startup-explanation",
-  "threadId": "provider-audit-codex-collab-startup-probe-20260327T070956Z-47808",
-  "projectId": "provider-audit-probe-47808",
-  "turns": [
-    "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references.",
-    "What's the safest extension point if I want to instrument room startup without changing behavior?"
-  ],
-  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
   "runtimeWorkspaceGitStart": {
     "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
     "isClean": true,

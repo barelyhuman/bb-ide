@@ -1,78 +1,25 @@
-import {
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { mkdirSync, rmSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
-  promptInputSchema,
-  threadExecutionOptionsSchema,
-  type PromptInput,
-} from "@bb/domain";
-import { z } from "zod";
-import {
-  providerAuditClientRequestSchema,
-  providerAuditManifestSchema,
-  providerAuditRawProviderEventCaptureEntrySchema,
-  readJsonFile,
-} from "./json-file.js";
+  getReplayCaptureInitialTurn,
+  type ReplayCaptureManifest,
+} from "@bb/replay-capture";
+import { readReplayCaptureManifestSync } from "@bb/replay-capture/reader";
+import { promoteCaptureToFixture } from "./fixture-bundle.js";
 import type {
-  ProviderAuditClientRequest,
   ProviderAuditImportDevReplaysArgs,
   ProviderAuditImportFixtureResult,
-  ProviderAuditImportFixturesArgs,
   ProviderAuditImportFixturesResult,
-  ProviderAuditManifest,
 } from "./types.js";
-import { buildProviderAuditClientRequestId } from "./types.js";
 
-const DEFAULT_CORPUS_ID = "excalidraw";
 const DEFAULT_DEV_REPLAY_CORPUS_ID = "dev-replays";
 const DEFAULT_FIXTURE_ROOT = resolve(
   fileURLToPath(new URL("../fixtures", import.meta.url)),
 );
 const BB_DEV_WORKSPACE_PLACEHOLDER = "$BB_DEV_WORKSPACE";
-const EXCALIDRAW_REPO_PLACEHOLDER = "$EXCALIDRAW_REPO";
-const FIXTURE_ROOT_PLACEHOLDER = "$FIXTURE_ROOT";
-const CAPTURE_OUTPUT_PLACEHOLDER = "$CAPTURE_OUTPUT";
-
-const FIXTURE_FILE_NAMES = [
-  "manifest.json",
-  "client-requests.json",
-  "raw-provider-events.json",
-] as const;
-
-interface ProviderAuditFixtureCliParseResult {
-  args: ProviderAuditImportFixturesArgs;
-}
-
 interface ProviderAuditDevReplayCliParseResult {
   args: ProviderAuditImportDevReplaysArgs;
-}
-
-interface ProviderAuditFixtureBundlePaths {
-  bundleDir: string;
-  manifestPath: string;
-  clientRequestsPath: string;
-  rawProviderEventsPath: string;
-}
-
-interface ProviderAuditFixturePathSanitization {
-  homeDir: string | null;
-  workspacePath: string;
-  workspacePlaceholder: string;
-  outputDir: string;
-}
-
-interface ProviderAuditFixtureImportBundleArgs {
-  bundlePaths: ProviderAuditFixtureBundlePaths;
-  corpusId: string;
-  fixtureCorpusRoot: string;
 }
 
 interface ResolveFixtureCorpusRootArgs {
@@ -80,41 +27,12 @@ interface ResolveFixtureCorpusRootArgs {
   fixtureRoot: string;
 }
 
-interface BuildDevReplayScenarioDescriptionArgs {
-  manifest: ProviderAuditDevReplayManifest;
-  turnText: string;
-}
-
 interface ProviderAuditImportDevReplayFixtureArgs {
-  replayRoot: string;
-  fixtureCorpusRoot: string;
-  corpusId: string;
   captureId: string;
+  corpusId: string;
+  fixtureCorpusRoot: string;
+  replayRoot: string;
 }
-
-const devReplayManifestSchema = z
-  .object({
-    schemaVersion: z.literal(2),
-    captureId: z.string(),
-    capturedAt: z.number(),
-    completedAt: z.number(),
-    environmentId: z.string(),
-    execution: threadExecutionOptionsSchema.optional(),
-    projectId: z.string(),
-    providerId: z.string(),
-    threadId: z.string(),
-    userInput: z.array(promptInputSchema),
-    userInputPreview: z.string().nullable().optional(),
-  })
-  .passthrough();
-type ProviderAuditDevReplayManifest = z.infer<typeof devReplayManifestSchema>;
-
-const devReplayRawProviderEventLineSchema = z
-  .object({
-    entry: providerAuditRawProviderEventCaptureEntrySchema,
-    ordinal: z.number().int(),
-  })
-  .passthrough();
 
 function getHomeDir(): string | null {
   const homeDir = process.env.HOME;
@@ -129,335 +47,41 @@ function getDefaultDevReplayRoot(): string {
   return resolve(".bb-dev", "replays");
 }
 
-function writeJsonFile(filePath: string, value: object): void {
-  writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
-}
-
 function resolveFixtureCorpusRoot(args: ResolveFixtureCorpusRootArgs): string {
+  if (
+    args.corpusId.length === 0 ||
+    args.corpusId === "." ||
+    args.corpusId === ".." ||
+    args.corpusId.includes("/") ||
+    args.corpusId.includes("\\")
+  ) {
+    throw new Error(`Invalid corpus id: ${args.corpusId}`);
+  }
+
   const fixtureRoot = resolve(args.fixtureRoot);
   const candidate = resolve(fixtureRoot, args.corpusId);
   const relativePath = relative(fixtureRoot, candidate);
   const escapesFixtureRoot =
-    relativePath === ".." || relativePath.startsWith(`..${sep}`);
+    relativePath === "" ||
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`) ||
+    relativePath.includes(sep);
   if (escapesFixtureRoot) {
     throw new Error(`Invalid corpus id: ${args.corpusId}`);
   }
   return candidate;
 }
 
-function normalizeTaskId(args: {
-  corpusId: string;
-  scenarioId: string;
-}): string {
-  const prefix = `${args.corpusId}-`;
-  if (args.scenarioId.startsWith(prefix)) {
-    return args.scenarioId.slice(prefix.length);
-  }
-  return args.scenarioId;
+function replayDataDir(replayRoot: string): string {
+  return dirname(resolve(replayRoot));
 }
 
-function sanitizeTextContent(
-  content: string,
-  sanitization: ProviderAuditFixturePathSanitization,
-): string {
-  const replacements: Array<{ from: string; to: string }> = [
-    {
-      from: sanitization.workspacePath,
-      to: sanitization.workspacePlaceholder,
-    },
-    {
-      from: sanitization.outputDir,
-      to: CAPTURE_OUTPUT_PLACEHOLDER,
-    },
-  ];
-
-  if (sanitization.workspacePath.startsWith("/tmp/")) {
-    replacements.push({
-      from: `/private${sanitization.workspacePath}`,
-      to: sanitization.workspacePlaceholder,
-    });
-  }
-  if (sanitization.outputDir.startsWith("/tmp/")) {
-    replacements.push({
-      from: `/private${sanitization.outputDir}`,
-      to: CAPTURE_OUTPUT_PLACEHOLDER,
-    });
-  }
-  if (sanitization.homeDir) {
-    replacements.push({
-      from: sanitization.homeDir,
-      to: "$HOME",
-    });
-  }
-
-  let nextContent = content;
-  for (const replacement of replacements.sort(
-    (left, right) => right.from.length - left.from.length,
-  )) {
-    nextContent = nextContent.split(replacement.from).join(replacement.to);
-  }
-  return nextContent;
-}
-
-function fileExists(filePath: string): boolean {
-  try {
-    statSync(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-function readDirNames(path: string): string[] {
-  return Array.from(new Set(readdirSync(path)));
-}
-
-function findBundlePaths(
-  sourceRoot: string,
-): ProviderAuditFixtureBundlePaths[] {
-  const entries = readDirNames(sourceRoot);
-  return entries
-    .map((entryName) => resolve(sourceRoot, entryName))
-    .filter((entryPath) => isDirectory(entryPath))
-    .filter((entryPath) => basename(entryPath).endsWith(".log") === false)
-    .map((bundleDir) => ({
-      bundleDir,
-      manifestPath: join(bundleDir, "manifest.json"),
-      clientRequestsPath: join(bundleDir, "client-requests.json"),
-      rawProviderEventsPath: join(bundleDir, "raw-provider-events.json"),
-    }))
-    .filter(
-      (entry) =>
-        fileExists(entry.manifestPath) &&
-        fileExists(entry.clientRequestsPath) &&
-        fileExists(entry.rawProviderEventsPath),
-    );
-}
-
-function normalizeManifest(args: {
-  manifest: ProviderAuditManifest;
-  corpusId: string;
-  taskId: string;
-}): ProviderAuditManifest {
-  return {
-    ...args.manifest,
-    workspacePath: EXCALIDRAW_REPO_PLACEHOLDER,
-    runtimeWorkspacePath: EXCALIDRAW_REPO_PLACEHOLDER,
-    envWorkspacePath: EXCALIDRAW_REPO_PLACEHOLDER,
-    outputDir: `${FIXTURE_ROOT_PLACEHOLDER}/${args.corpusId}/${args.manifest.providerId}/${args.taskId}`,
-  };
-}
-
-function formatPromptInput(input: PromptInput): string {
-  switch (input.type) {
-    case "text":
-      return input.text;
-    case "image":
-      return `[image: ${input.url}]`;
-    case "localImage":
-      return `[local image: ${input.path}]`;
-    case "localFile":
-      return `[local file: ${input.name ?? input.path}]`;
-  }
-}
-
-function formatPromptInputs(input: PromptInput[]): string {
-  return input.map(formatPromptInput).join("\n\n");
-}
-
-function buildScenarioDescription(
-  args: BuildDevReplayScenarioDescriptionArgs,
-): string {
-  const preview = args.manifest.userInputPreview?.trim();
-  if (preview && preview.length > 0) {
+function buildScenarioDescription(manifest: ReplayCaptureManifest): string {
+  const preview = manifest.userInputPreview.trim();
+  if (preview.length > 0) {
     return preview;
   }
-
-  const collapsedText = args.turnText.trim().replace(/\s+/g, " ");
-  if (collapsedText.length > 0) {
-    return collapsedText.slice(0, 160);
-  }
-
-  return args.manifest.captureId;
-}
-
-function buildDevReplayWorkspacePath(
-  manifest: ProviderAuditDevReplayManifest,
-): string {
-  const homeDir = getHomeDir();
-  if (!homeDir) {
-    return BB_DEV_WORKSPACE_PLACEHOLDER;
-  }
-  return join(homeDir, ".bb-dev", "worktrees", manifest.environmentId, "bb");
-}
-
-function readDevReplayRawProviderEvents(
-  rawProviderEventsPath: string,
-): Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>[] {
-  const content = readFileSync(rawProviderEventsPath, "utf8");
-  return content
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const parsedLine = devReplayRawProviderEventLineSchema.parse(
-        JSON.parse(line),
-      );
-      return parsedLine.entry;
-    });
-}
-
-function normalizeRawProviderEvents(
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[],
-): Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>[] {
-  return rawProviderEvents.map((entry) => structuredClone(entry));
-}
-
-function normalizeClientRequests(
-  clientRequests: ProviderAuditClientRequest[],
-): ProviderAuditClientRequest[] {
-  return clientRequests.map((request) => ({ ...request }));
-}
-
-function writeFixtureBundle(args: {
-  destinationBundleDir: string;
-  manifest: ProviderAuditManifest;
-  clientRequests: ProviderAuditClientRequest[];
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[];
-  sanitization: ProviderAuditFixturePathSanitization;
-}): void {
-  mkdirSync(args.destinationBundleDir, { recursive: true });
-
-  writeJsonFile(
-    join(args.destinationBundleDir, "manifest.json"),
-    args.manifest,
-  );
-
-  const clientRequestsContent = sanitizeTextContent(
-    JSON.stringify(args.clientRequests, null, 2) + "\n",
-    args.sanitization,
-  );
-  writeFileSync(
-    join(args.destinationBundleDir, "client-requests.json"),
-    clientRequestsContent,
-  );
-
-  const rawProviderEventsContent = sanitizeTextContent(
-    JSON.stringify(args.rawProviderEvents, null, 2) + "\n",
-    args.sanitization,
-  );
-  writeFileSync(
-    join(args.destinationBundleDir, "raw-provider-events.json"),
-    rawProviderEventsContent,
-  );
-}
-
-function importFixtureBundle(
-  args: ProviderAuditFixtureImportBundleArgs,
-): ProviderAuditImportFixtureResult {
-  const manifest = readJsonFile({
-    filePath: args.bundlePaths.manifestPath,
-    schema: providerAuditManifestSchema,
-  });
-  const clientRequests = normalizeClientRequests(
-    readJsonFile({
-      filePath: args.bundlePaths.clientRequestsPath,
-      schema: z.array(providerAuditClientRequestSchema),
-    }),
-  );
-  const rawProviderEvents = normalizeRawProviderEvents(
-    readJsonFile({
-      filePath: args.bundlePaths.rawProviderEventsPath,
-      schema: z.array(providerAuditRawProviderEventCaptureEntrySchema),
-    }),
-  );
-  const taskId = normalizeTaskId({
-    corpusId: args.corpusId,
-    scenarioId: manifest.scenarioId,
-  });
-  const destinationBundleDir = join(
-    args.fixtureCorpusRoot,
-    manifest.providerId,
-    taskId,
-  );
-  const normalizedManifest = normalizeManifest({
-    manifest,
-    corpusId: args.corpusId,
-    taskId,
-  });
-
-  writeFixtureBundle({
-    destinationBundleDir,
-    manifest: normalizedManifest,
-    clientRequests,
-    rawProviderEvents,
-    sanitization: {
-      homeDir: getHomeDir(),
-      workspacePath: manifest.workspacePath,
-      workspacePlaceholder: EXCALIDRAW_REPO_PLACEHOLDER,
-      outputDir: manifest.outputDir,
-    },
-  });
-
-  return {
-    corpusId: args.corpusId,
-    providerId: normalizedManifest.providerId,
-    taskId,
-    fixturePath: join(args.corpusId, normalizedManifest.providerId, taskId),
-  };
-}
-
-export function parseImportFixturesArgs(
-  argv: string[],
-): ProviderAuditFixtureCliParseResult {
-  const args: ProviderAuditImportFixturesArgs = {
-    sourceRoot: "",
-    fixtureRoot: DEFAULT_FIXTURE_ROOT,
-    corpusId: DEFAULT_CORPUS_ID,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    const next = argv[index + 1];
-
-    if (token === "--") {
-      continue;
-    }
-    if (token === "--source-root" && next) {
-      args.sourceRoot = resolve(next);
-      index += 1;
-      continue;
-    }
-    if (token === "--fixture-root" && next) {
-      args.fixtureRoot = resolve(next);
-      index += 1;
-      continue;
-    }
-    if (token === "--corpus-id" && next) {
-      args.corpusId = next;
-      index += 1;
-      continue;
-    }
-  }
-
-  if (args.sourceRoot.length === 0) {
-    throw new Error("--source-root is required for import-fixtures");
-  }
-
-  return { args };
+  return getReplayCaptureInitialTurn(manifest).turnId;
 }
 
 export function parseImportDevReplaysArgs(
@@ -512,90 +136,49 @@ export function parseImportDevReplaysArgs(
   return { args };
 }
 
-function importDevReplayFixture(
+async function importDevReplayFixture(
   args: ProviderAuditImportDevReplayFixtureArgs,
-): ProviderAuditImportFixtureResult {
-  const replayDir = resolve(args.replayRoot, args.captureId);
-  const manifest = readJsonFile({
-    filePath: join(replayDir, "manifest.json"),
-    schema: devReplayManifestSchema,
+): Promise<ProviderAuditImportFixtureResult> {
+  const dataDir = replayDataDir(args.replayRoot);
+  const manifest = readReplayCaptureManifestSync({
+    dataDir,
+    captureId: args.captureId,
   });
-
-  if (manifest.captureId !== args.captureId) {
-    throw new Error(
-      `Replay manifest captureId ${manifest.captureId} does not match requested ${args.captureId}`,
-    );
-  }
-
-  const turnText = formatPromptInputs(manifest.userInput);
   const taskId = manifest.captureId;
-  const destinationBundleDir = join(
+  const destinationDir = join(
     args.fixtureCorpusRoot,
     manifest.providerId,
     taskId,
   );
-  const rawProviderEvents = normalizeRawProviderEvents(
-    readDevReplayRawProviderEvents(
-      join(replayDir, "raw-provider-events.ndjson"),
-    ),
-  );
-  const fixtureOutputDir = `${FIXTURE_ROOT_PLACEHOLDER}/${args.corpusId}/${manifest.providerId}/${taskId}`;
-  const normalizedManifest: ProviderAuditManifest = {
-    providerId: manifest.providerId,
+
+  await promoteCaptureToFixture({
+    dataDir,
+    captureId: args.captureId,
+    destinationDir,
+    corpusId: args.corpusId,
     scenarioId: manifest.captureId,
-    scenarioDescription: buildScenarioDescription({ manifest, turnText }),
-    model: manifest.execution?.model ?? null,
-    source: "live-capture",
-    capturedAt: manifest.capturedAt,
-    completedAt: manifest.completedAt,
+    scenarioDescription: buildScenarioDescription(manifest),
+    model: manifest.execution.model,
     gitSha: null,
+    gitResetRef: null,
     workspacePath: BB_DEV_WORKSPACE_PLACEHOLDER,
     runtimeWorkspacePath: BB_DEV_WORKSPACE_PLACEHOLDER,
     envWorkspacePath: BB_DEV_WORKSPACE_PLACEHOLDER,
-    outputDir: fixtureOutputDir,
-    threadId: manifest.threadId,
-    projectId: manifest.projectId,
-    turns: [turnText],
-    gitResetRef: null,
     runtimeWorkspaceGitStart: null,
     runtimeWorkspaceGitEnd: null,
-  };
-
-  writeFixtureBundle({
-    destinationBundleDir,
-    manifest: normalizedManifest,
-    clientRequests: [
-      {
-        id: `${manifest.captureId}:turn-0`,
-        requestId: buildProviderAuditClientRequestId(0),
-        turnIndex: 0,
-        type: "client/turn/requested",
-        target: { kind: "thread-start" },
-        requestMethod: "thread/start",
-        text: turnText,
-        createdAt: manifest.capturedAt,
-      },
-    ],
-    rawProviderEvents,
-    sanitization: {
-      homeDir: getHomeDir(),
-      workspacePath: buildDevReplayWorkspacePath(manifest),
-      workspacePlaceholder: BB_DEV_WORKSPACE_PLACEHOLDER,
-      outputDir: replayDir,
-    },
   });
 
   return {
     corpusId: args.corpusId,
-    providerId: normalizedManifest.providerId,
+    providerId: manifest.providerId,
     taskId,
-    fixturePath: join(args.corpusId, normalizedManifest.providerId, taskId),
+    fixturePath: join(args.corpusId, manifest.providerId, taskId),
   };
 }
 
-export function importDevReplayFixtures(
+export async function importDevReplayFixtures(
   args: ProviderAuditImportDevReplaysArgs,
-): ProviderAuditImportFixturesResult {
+): Promise<ProviderAuditImportFixturesResult> {
   const fixtureCorpusRoot = resolveFixtureCorpusRoot({
     fixtureRoot: args.fixtureRoot,
     corpusId: args.corpusId,
@@ -603,13 +186,15 @@ export function importDevReplayFixtures(
   rmSync(fixtureCorpusRoot, { recursive: true, force: true });
   mkdirSync(fixtureCorpusRoot, { recursive: true });
 
-  const fixtures = args.captureIds.map((captureId) =>
-    importDevReplayFixture({
-      replayRoot: args.replayRoot,
-      fixtureCorpusRoot,
-      corpusId: args.corpusId,
-      captureId,
-    }),
+  const fixtures = await Promise.all(
+    args.captureIds.map((captureId) =>
+      importDevReplayFixture({
+        replayRoot: args.replayRoot,
+        fixtureCorpusRoot,
+        corpusId: args.corpusId,
+        captureId,
+      }),
+    ),
   );
 
   return {
@@ -622,39 +207,4 @@ export function importDevReplayFixtures(
       return left.taskId.localeCompare(right.taskId);
     }),
   };
-}
-
-export function importFixtureCorpus(
-  args: ProviderAuditImportFixturesArgs,
-): ProviderAuditImportFixturesResult {
-  const fixtureCorpusRoot = resolveFixtureCorpusRoot({
-    fixtureRoot: args.fixtureRoot,
-    corpusId: args.corpusId,
-  });
-  rmSync(fixtureCorpusRoot, { recursive: true, force: true });
-  mkdirSync(fixtureCorpusRoot, { recursive: true });
-
-  const bundlePaths = findBundlePaths(args.sourceRoot);
-  const fixtures = bundlePaths.map((bundlePath) =>
-    importFixtureBundle({
-      bundlePaths: bundlePath,
-      corpusId: args.corpusId,
-      fixtureCorpusRoot,
-    }),
-  );
-
-  return {
-    corpusId: args.corpusId,
-    fixtureRoot: fixtureCorpusRoot,
-    fixtures: fixtures.sort((left, right) => {
-      if (left.providerId !== right.providerId) {
-        return left.providerId.localeCompare(right.providerId);
-      }
-      return left.taskId.localeCompare(right.taskId);
-    }),
-  };
-}
-
-export function getFixtureFileNames(): readonly string[] {
-  return FIXTURE_FILE_NAMES;
 }

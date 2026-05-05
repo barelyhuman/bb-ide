@@ -1,8 +1,9 @@
 import type { ThreadEvent } from "@bb/domain";
-import type {
-  ReplayCaptureManifest,
-  ReplayRawProviderCaptureEntry,
-  ReplayRawProviderEventRecord,
+import {
+  getReplayCaptureTerminalTurnId,
+  type ReplayCaptureManifest,
+  type ReplayRawProviderCaptureEntry,
+  type ReplayRawProviderEventRecord,
 } from "./index.js";
 import { ReplayCaptureReadError } from "./reader.js";
 
@@ -110,7 +111,7 @@ export function replayTerminalIdentifiers(
 ): ReplayTerminalIdentifiers {
   return {
     providerThreadId: `replay:${manifest.captureId}`,
-    turnId: manifest.turnIds.at(-1) ?? `replay:${manifest.captureId}`,
+    turnId: getReplayCaptureTerminalTurnId(manifest),
   };
 }
 

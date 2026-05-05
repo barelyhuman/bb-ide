@@ -1,7 +1,5 @@
 import type {
-  ClientTurnRequestId,
   DynamicTool,
-  TurnRequestTarget,
   ThreadExecutionOptions,
   ThreadEvent,
   ThreadEventRow,
@@ -16,13 +14,12 @@ import type {
   ProviderRawEventCoverage,
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
-import { encodeClientTurnRequestIdNumber } from "@bb/domain";
-
-export function buildProviderAuditClientRequestId(
-  turnIndex: number,
-): ClientTurnRequestId {
-  return encodeClientTurnRequestIdNumber({ value: turnIndex + 1 });
-}
+import type {
+  GitSnapshot,
+  ReplayRawProviderCaptureEntry,
+  ReplayRawProviderEventRecord,
+} from "@bb/replay-capture";
+import type { FixtureManifest } from "./fixture-schema.js";
 
 export interface ProviderAuditScenarioExecutionOptions {
   permissionMode?: ThreadExecutionOptions["permissionMode"];
@@ -72,12 +69,6 @@ export interface ProviderAuditCliArgs {
   timeoutMs: number;
 }
 
-export interface ProviderAuditImportFixturesArgs {
-  sourceRoot: string;
-  fixtureRoot: string;
-  corpusId: string;
-}
-
 export interface ProviderAuditImportDevReplaysArgs {
   replayRoot: string;
   fixtureRoot: string;
@@ -93,43 +84,8 @@ export interface ProviderAuditReplayFixturesArgs {
   outputRoot?: string;
 }
 
-export interface ProviderAuditGitSnapshot {
-  headSha: string | null;
-  isClean: boolean;
-  statusLines: string[];
-}
-
-export interface ProviderAuditManifest {
-  providerId: string;
-  scenarioId: string;
-  scenarioDescription: string;
-  model: string | null;
-  source: "live-capture";
-  capturedAt: number;
-  completedAt: number;
-  gitSha: string | null;
-  workspacePath: string;
-  runtimeWorkspacePath: string;
-  envWorkspacePath: string;
-  outputDir: string;
-  threadId: string;
-  projectId: string;
-  turns: string[];
-  gitResetRef: string | null;
-  runtimeWorkspaceGitStart: ProviderAuditGitSnapshot | null;
-  runtimeWorkspaceGitEnd: ProviderAuditGitSnapshot | null;
-}
-
-export interface ProviderAuditClientRequest {
-  id: string;
-  requestId: ClientTurnRequestId;
-  turnIndex: number;
-  type: "client/turn/requested";
-  target: TurnRequestTarget;
-  requestMethod: "thread/start" | "turn/start";
-  text: string;
-  createdAt: number;
-}
+export type ProviderAuditGitSnapshot = GitSnapshot;
+export type ProviderAuditManifest = FixtureManifest;
 
 export interface ProviderAuditUntranslatedRawEvent {
   captureId: string;
@@ -213,11 +169,8 @@ export interface ProviderAuditReport {
 export interface ProviderAuditBundle {
   manifest: ProviderAuditManifest;
   captures: AgentRuntimeCaptureEntry[];
-  clientRequests: ProviderAuditClientRequest[];
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[];
+  outputDir: string | null;
+  rawProviderEvents: ReplayRawProviderCaptureEntry[];
   translatedCaptures: Extract<
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
@@ -257,11 +210,9 @@ export interface ProviderAuditFixtureBundle {
   fixturePath: string;
   manifestPath: string;
   manifest: ProviderAuditManifest;
-  clientRequests: ProviderAuditClientRequest[];
-  rawProviderEvents: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "raw-provider-event" }
-  >[];
+  rawProviderEventsPath: string;
+  rawProviderEventRecords: ReplayRawProviderEventRecord[];
+  rawProviderEvents: ReplayRawProviderCaptureEntry[];
 }
 
 export interface ProviderAuditRunResult {
@@ -280,6 +231,28 @@ export interface ProviderAuditImportFixturesResult {
   corpusId: string;
   fixtureRoot: string;
   fixtures: ProviderAuditImportFixtureResult[];
+}
+
+export interface ProviderAuditPromoteCaptureToFixtureArgs {
+  captureId: string;
+  corpusId: string;
+  destinationDir: string;
+  dataDir: string;
+  envWorkspacePath: string;
+  gitResetRef: string | null;
+  gitSha: string | null;
+  model: string | null;
+  runtimeWorkspaceGitEnd: ProviderAuditGitSnapshot | null;
+  runtimeWorkspaceGitStart: ProviderAuditGitSnapshot | null;
+  runtimeWorkspacePath: string;
+  scenarioDescription: string;
+  scenarioId: string;
+  workspacePath: string;
+}
+
+export interface ProviderAuditPromoteCaptureToFixtureResult {
+  destinationDir: string;
+  manifest: ProviderAuditManifest;
 }
 
 export interface ProviderAuditReplayFixtureResult {

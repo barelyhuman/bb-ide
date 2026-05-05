@@ -429,6 +429,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/replay-capture':
+        specifier: workspace:*
+        version: link:../replay-capture
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../server-contract
