@@ -62,12 +62,10 @@ export function ProjectRow({
     threadListState.status === "ready"
       ? threadListState.threads
       : EMPTY_PROJECT_THREADS;
-  const {
-    managerThreads,
-    managerThreadIds,
-    managerThreadStatsByManagerId,
-    standardThreads,
-  } = useMemo(() => buildProjectThreadGroups(projectThreads), [projectThreads]);
+  const { managerThreadGroups, unmanagedStandardThreads } = useMemo(
+    () => buildProjectThreadGroups(projectThreads),
+    [projectThreads],
+  );
   const isThreadPromoted = (thread: ThreadListEntry) =>
     localHostId !== null &&
     promotedBranchName !== null &&
@@ -175,59 +173,58 @@ export function ProjectRow({
           </div>
         ) : projectThreads.length > 0 ? (
           <div className="space-y-0.5 group-data-[collapsible=icon]:hidden">
-            {managerThreads.map((thread) => {
-              const managerThreadStats = managerThreadStatsByManagerId.get(
-                thread.id,
+            {managerThreadGroups.map((managerThreadGroup) => {
+              const { managerThread, managedThreads, stats } =
+                managerThreadGroup;
+              const managedChildCount = stats.managedChildCount;
+              const managedChildBusyCount = stats.managedChildBusyCount;
+              const isManagerCollapsed = collapsedManagerIds.has(
+                managerThread.id,
               );
-              const managedChildCount =
-                managerThreadStats?.managedChildCount ?? 0;
-              const managedChildBusyCount =
-                managerThreadStats?.managedChildBusyCount ?? 0;
-              const isManagerCollapsed = collapsedManagerIds.has(thread.id);
 
               return (
-                <ThreadRow
-                  key={thread.id}
-                  projectId={project.id}
-                  thread={thread}
-                  isActive={selectedThreadId === thread.id}
-                  isPromoted={isThreadPromoted(thread)}
-                  onProjectSelect={onProjectSelect}
-                  options={{
-                    kind: "manager",
-                    isCollapsed: isManagerCollapsed,
-                    managedChildCount,
-                    managedChildBusyCount,
-                    onToggleCollapsed: onToggleManagerCollapsed,
-                  }}
-                />
+                <div key={managerThread.id} className="space-y-0.5">
+                  <ThreadRow
+                    projectId={project.id}
+                    thread={managerThread}
+                    isActive={selectedThreadId === managerThread.id}
+                    isPromoted={isThreadPromoted(managerThread)}
+                    onProjectSelect={onProjectSelect}
+                    options={{
+                      kind: "manager",
+                      isCollapsed: isManagerCollapsed,
+                      managedChildCount,
+                      managedChildBusyCount,
+                      onToggleCollapsed: onToggleManagerCollapsed,
+                    }}
+                  />
+                  {!isManagerCollapsed
+                    ? managedThreads.map((managedThread) => (
+                        <ThreadRow
+                          key={managedThread.id}
+                          projectId={project.id}
+                          thread={managedThread}
+                          isActive={selectedThreadId === managedThread.id}
+                          isPromoted={isThreadPromoted(managedThread)}
+                          onProjectSelect={onProjectSelect}
+                          options={{ kind: "managed-child" }}
+                        />
+                      ))
+                    : null}
+                </div>
               );
             })}
-            {standardThreads.map((thread) => {
-              const parentThreadId = thread.parentThreadId;
-              const managerParentThreadId =
-                parentThreadId !== null && managerThreadIds.has(parentThreadId)
-                  ? parentThreadId
-                  : null;
-              if (
-                managerParentThreadId !== null &&
-                collapsedManagerIds.has(managerParentThreadId)
-              ) {
-                return null;
-              }
-
-              return (
-                <ThreadRow
-                  key={thread.id}
-                  projectId={project.id}
-                  thread={thread}
-                  isActive={selectedThreadId === thread.id}
-                  isPromoted={isThreadPromoted(thread)}
-                  onProjectSelect={onProjectSelect}
-                  options={{ kind: "default" }}
-                />
-              );
-            })}
+            {unmanagedStandardThreads.map((thread) => (
+              <ThreadRow
+                key={thread.id}
+                projectId={project.id}
+                thread={thread}
+                isActive={selectedThreadId === thread.id}
+                isPromoted={isThreadPromoted(thread)}
+                onProjectSelect={onProjectSelect}
+                options={{ kind: "default" }}
+              />
+            ))}
           </div>
         ) : (
           <EmptyState

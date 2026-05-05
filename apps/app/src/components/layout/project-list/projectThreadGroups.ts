@@ -6,11 +6,15 @@ export interface ManagerThreadStats {
   managedChildBusyCount: number;
 }
 
+export interface ManagerThreadGroup {
+  managerThread: ThreadListEntry;
+  managedThreads: ThreadListEntry[];
+  stats: ManagerThreadStats;
+}
+
 export interface ProjectThreadGroups {
-  managerThreads: ThreadListEntry[];
-  managerThreadIds: Set<string>;
-  managerThreadStatsByManagerId: Map<string, ManagerThreadStats>;
-  standardThreads: ThreadListEntry[];
+  managerThreadGroups: ManagerThreadGroup[];
+  unmanagedStandardThreads: ThreadListEntry[];
 }
 
 interface KnownManagerParentArgs {
@@ -68,35 +72,47 @@ export function buildProjectThreadGroups(
     .filter((thread) => thread.type === "manager")
     .sort(compareByCreatedAtDescending);
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
-  const managerThreadStatsByManagerId = new Map<string, ManagerThreadStats>();
+  const managerThreadGroupsById = new Map<string, ManagerThreadGroup>();
+  const unmanagedStandardThreads: ThreadListEntry[] = [];
 
-  for (const thread of projectThreads) {
-    const managerId = getKnownManagerParentId({ managerThreadIds, thread });
-    if (managerId === null) continue;
-
-    const existing = managerThreadStatsByManagerId.get(managerId);
-    if (existing) {
-      existing.managedChildCount += 1;
-      if (isBusyThread(thread)) {
-        existing.managedChildBusyCount += 1;
-      }
-      continue;
-    }
-
-    managerThreadStatsByManagerId.set(managerId, {
-      managedChildCount: 1,
-      managedChildBusyCount: isBusyThread(thread) ? 1 : 0,
+  for (const managerThread of managerThreads) {
+    managerThreadGroupsById.set(managerThread.id, {
+      managerThread,
+      managedThreads: [],
+      stats: {
+        managedChildBusyCount: 0,
+        managedChildCount: 0,
+      },
     });
   }
 
-  const standardThreads = projectThreads
-    .filter((thread) => thread.type === "standard")
-    .sort(compareStandardThreads);
+  for (const thread of projectThreads) {
+    if (thread.type !== "standard") continue;
+
+    const managerId = getKnownManagerParentId({ managerThreadIds, thread });
+    if (managerId === null) {
+      unmanagedStandardThreads.push(thread);
+      continue;
+    }
+
+    const managerThreadGroup = managerThreadGroupsById.get(managerId);
+    if (!managerThreadGroup) continue;
+
+    managerThreadGroup.managedThreads.push(thread);
+    managerThreadGroup.stats.managedChildCount += 1;
+    if (isBusyThread(thread)) {
+      managerThreadGroup.stats.managedChildBusyCount += 1;
+    }
+  }
+
+  const managerThreadGroups = Array.from(managerThreadGroupsById.values());
+  for (const managerThreadGroup of managerThreadGroups) {
+    managerThreadGroup.managedThreads.sort(compareStandardThreads);
+  }
+  unmanagedStandardThreads.sort(compareStandardThreads);
 
   return {
-    managerThreads,
-    managerThreadIds,
-    managerThreadStatsByManagerId,
-    standardThreads,
+    managerThreadGroups,
+    unmanagedStandardThreads,
   };
 }

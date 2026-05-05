@@ -152,12 +152,10 @@ function isBefore(left: HTMLElement, right: HTMLElement): boolean {
 }
 
 function getThreadOpenLabels(): string[] {
-  return screen
-    .getAllByLabelText(/^Open /u)
-    .flatMap((link) => {
-      const label = link.getAttribute("aria-label")?.replace(/^Open /u, "");
-      return label === undefined ? [] : [label];
-    });
+  return screen.getAllByLabelText(/^Open /u).flatMap((link) => {
+    const label = link.getAttribute("aria-label")?.replace(/^Open /u, "");
+    return label === undefined ? [] : [label];
+  });
 }
 
 afterEach(() => {
@@ -226,6 +224,10 @@ describe("ProjectRow", () => {
     expect(regularRow.classList.contains("relative")).toBe(true);
     expect(managedRow.classList.contains("pl-2")).toBe(true);
     expect(managedRow.classList.contains("pl-6")).toBe(false);
+    expect(
+      managedRow.querySelector("[data-managed-child-marker]"),
+    ).not.toBeNull();
+    expect(regularRow.querySelector("[data-managed-child-marker]")).toBeNull();
 
     expect(projectRow.querySelector("[data-overflow-fade]")).toBeNull();
     expect(managerRow.querySelector("[data-overflow-fade]")).toBeNull();
@@ -340,7 +342,7 @@ describe("ProjectRow", () => {
     expect(managerRow.classList.contains("bg-sidebar-border/80")).toBe(false);
   });
 
-  it("renders managers first and sorts standard rows by effective activity time", async () => {
+  it("renders managers with grouped children before sorted unmanaged standard rows", async () => {
     const managerOlder = createThread({
       id: "thr_manager_older",
       type: "manager",
@@ -423,8 +425,8 @@ describe("ProjectRow", () => {
       expect(getThreadOpenLabels()).toEqual([
         "Manager newer",
         "Manager older",
-        "Active newer",
         "Managed recent",
+        "Active newer",
         "Idle recent",
         "Active older",
         "Idle older",
@@ -480,5 +482,11 @@ describe("ProjectRow", () => {
         "Unrelated standard",
       ]);
     });
+
+    const orphanRow = requireHTMLElement(
+      screen.getByLabelText("Open Orphan child").parentElement,
+      "Orphan child row was not rendered",
+    );
+    expect(orphanRow.querySelector("[data-managed-child-marker]")).toBeNull();
   });
 });

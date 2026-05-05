@@ -42,7 +42,7 @@ function threadIds(threads: readonly ThreadListEntry[]): string[] {
 }
 
 describe("buildProjectThreadGroups", () => {
-  it("classifies managers and managed child stats while sorting standard threads globally", () => {
+  it("groups managers with managed child stats while sorting unmanaged standards separately", () => {
     const groups = buildProjectThreadGroups([
       createThread({
         id: "root-old",
@@ -85,20 +85,24 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(threadIds(groups.managerThreads)).toEqual([
-      "manager-new",
-      "manager-old",
-    ]);
-    expect(groups.managerThreadStatsByManagerId.get("manager-old")).toEqual({
+    expect(
+      groups.managerThreadGroups.map((group) => group.managerThread.id),
+    ).toEqual(["manager-new", "manager-old"]);
+    expect(groups.managerThreadGroups[0]?.stats).toEqual({
+      managedChildBusyCount: 0,
+      managedChildCount: 0,
+    });
+    expect(
+      threadIds(groups.managerThreadGroups[0]?.managedThreads ?? []),
+    ).toEqual([]);
+    expect(groups.managerThreadGroups[1]?.stats).toEqual({
       managedChildBusyCount: 1,
       managedChildCount: 2,
     });
     expect(
-      groups.managerThreadStatsByManagerId.get("manager-new"),
-    ).toBeUndefined();
-    expect(threadIds(groups.standardThreads)).toEqual([
-      "child-idle",
-      "child-busy",
+      threadIds(groups.managerThreadGroups[1]?.managedThreads ?? []),
+    ).toEqual(["child-idle", "child-busy"]);
+    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
       "orphan-child",
       "root-old",
     ]);
@@ -133,10 +137,55 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(threadIds(groups.standardThreads)).toEqual([
+    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
       "active-new",
       "idle-recent",
       "active-old",
+    ]);
+  });
+
+  it("keeps managed children inside their manager group instead of globally interleaving them", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "manager-older",
+        type: "manager",
+        createdAt: 10,
+      }),
+      createThread({
+        id: "manager-newer",
+        type: "manager",
+        createdAt: 20,
+      }),
+      createThread({
+        id: "older-manager-recent-child",
+        parentThreadId: "manager-older",
+        createdAt: 30,
+        updatedAt: 1_000,
+      }),
+      createThread({
+        id: "newer-manager-older-child",
+        parentThreadId: "manager-newer",
+        createdAt: 40,
+        updatedAt: 100,
+      }),
+      createThread({
+        id: "unmanaged-standard",
+        createdAt: 50,
+        updatedAt: 900,
+      }),
+    ]);
+
+    expect(
+      groups.managerThreadGroups.map((group) => [
+        group.managerThread.id,
+        threadIds(group.managedThreads),
+      ]),
+    ).toEqual([
+      ["manager-newer", ["newer-manager-older-child"]],
+      ["manager-older", ["older-manager-recent-child"]],
+    ]);
+    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+      "unmanaged-standard",
     ]);
   });
 });

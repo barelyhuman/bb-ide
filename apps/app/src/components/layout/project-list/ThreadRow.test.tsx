@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -35,6 +41,12 @@ interface ThreadRowElementArgs {
 interface ThreadRenderProbeArgs {
   onRenderRead: () => void;
   thread: ThreadListEntry;
+}
+
+interface TitlePositionResult {
+  row: HTMLElement;
+  titleContainer: HTMLElement;
+  titleIndex: number;
 }
 
 type ManagerThreadRowOptions = Extract<ThreadRowOptions, { kind: "manager" }>;
@@ -142,6 +154,53 @@ function renderThreadRow(
   });
 }
 
+function requireHTMLElement(
+  value: Element | null,
+  message: string,
+): HTMLElement {
+  if (!(value instanceof HTMLElement)) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
+function getThreadRow(threadTitle: string): HTMLElement {
+  return requireHTMLElement(
+    screen.getByLabelText(`Open ${threadTitle}`).parentElement,
+    `${threadTitle} row was not rendered`,
+  );
+}
+
+function getThreadTitlePosition(threadTitle: string): TitlePositionResult {
+  const row = getThreadRow(threadTitle);
+  const titleContainer = requireHTMLElement(
+    screen.getByText(threadTitle).parentElement,
+    `${threadTitle} title container was not rendered`,
+  );
+  const titleIndex = Array.from(row.children).indexOf(titleContainer);
+
+  return { row, titleContainer, titleIndex };
+}
+
+function expectManagedChildTitlePosition(
+  threadTitle: string,
+): TitlePositionResult {
+  const position = getThreadTitlePosition(threadTitle);
+  const leadingBlankSlot = position.row.children[1];
+  const managedChildMarker = position.titleContainer.previousElementSibling;
+
+  expect(position.titleIndex).toBe(3);
+  expect(leadingBlankSlot?.getAttribute("aria-hidden")).toBe("true");
+  expect(leadingBlankSlot?.childElementCount).toBe(0);
+  expect(managedChildMarker?.getAttribute("aria-hidden")).toBe("true");
+  expect(managedChildMarker?.hasAttribute("data-managed-child-marker")).toBe(
+    true,
+  );
+
+  return position;
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -170,6 +229,103 @@ describe("ThreadRow", () => {
     expect(
       screen.getByLabelText("Pending interaction requires attention"),
     ).not.toBeNull();
+  });
+
+  it("renders idle managed child rows as blank slot, decorative chevron, and title", () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_child",
+        title: "Managed child",
+        titleFallback: "Managed child",
+        parentThreadId: "thr_parent",
+        status: "idle",
+        runtime: {
+          displayStatus: "idle",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      { rowOptions: { kind: "managed-child" } },
+    );
+
+    expectManagedChildTitlePosition("Managed child");
+    expect(screen.queryByLabelText("Managed thread")).toBeNull();
+    expect(screen.queryByLabelText("Thread working")).toBeNull();
+    expect(
+      screen.queryByLabelText("Pending interaction requires attention"),
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText("Unread thread requires attention"),
+    ).toBeNull();
+  });
+
+  it("keeps managed child title position stable and shows busy status in the trailing slot", () => {
+    const rowOptions: RenderThreadRowOptions = {
+      rowOptions: { kind: "managed-child" },
+    };
+    const result = renderThreadRow(
+      createThread({
+        id: "thr_child",
+        title: "Managed child",
+        titleFallback: "Managed child",
+        parentThreadId: "thr_parent",
+        status: "idle",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        runtime: {
+          displayStatus: "idle",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      rowOptions,
+    );
+
+    const idlePosition = expectManagedChildTitlePosition("Managed child");
+    const environmentIcon = screen.getByLabelText(
+      "Managed worktree environment",
+    );
+    expect(idlePosition.row.children[4]?.contains(environmentIcon)).toBe(true);
+
+    result.rerender(
+      createThreadRowElement({
+        rowOptions,
+        thread: createThread({
+          id: "thr_child",
+          title: "Managed child",
+          titleFallback: "Managed child",
+          parentThreadId: "thr_parent",
+          status: "active",
+          environmentWorkspaceDisplayKind: "managed-worktree",
+          runtime: {
+            displayStatus: "active",
+            hostReconnectGraceExpiresAt: null,
+          },
+        }),
+      }),
+    );
+
+    const busyPosition = expectManagedChildTitlePosition("Managed child");
+    const busyIcon = screen.getByLabelText("Thread working");
+    expect(busyPosition.titleIndex).toBe(idlePosition.titleIndex);
+    expect(busyPosition.row.children[4]?.contains(busyIcon)).toBe(true);
+    expect(screen.queryByLabelText("Managed worktree environment")).toBeNull();
+  });
+
+  it("keeps pending managed child status in the trailing slot", () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_child",
+        title: "Managed child",
+        titleFallback: "Managed child",
+        parentThreadId: "thr_parent",
+        hasPendingInteraction: true,
+      }),
+      { rowOptions: { kind: "managed-child" } },
+    );
+
+    const position = expectManagedChildTitlePosition("Managed child");
+    const pendingIcon = screen.getByLabelText(
+      "Pending interaction requires attention",
+    );
+    expect(position.row.children[4]?.contains(pendingIcon)).toBe(true);
   });
 
   it("shows a managed worktree environment icon", () => {
@@ -204,13 +360,13 @@ describe("ThreadRow", () => {
     expect(screen.getByText("promoted")).not.toBeNull();
   });
 
-  it("shows a working spinner for busy rows with a manager parent", () => {
+  it("shows unmanaged busy status in the leading slot and preserves the trailing environment icon", () => {
     renderThreadRow(
       createThread({
-        id: "thr_managed_child",
-        title: "Managed child",
-        titleFallback: "Managed child",
-        parentThreadId: "thr_manager",
+        id: "thr_busy",
+        title: "Busy thread",
+        titleFallback: "Busy thread",
+        environmentWorkspaceDisplayKind: "managed-worktree",
         runtime: {
           displayStatus: "active",
           hostReconnectGraceExpiresAt: null,
@@ -218,8 +374,14 @@ describe("ThreadRow", () => {
       }),
     );
 
-    expect(screen.getByLabelText("Open Managed child")).not.toBeNull();
-    expect(screen.getByLabelText("Thread working")).not.toBeNull();
+    const position = getThreadTitlePosition("Busy thread");
+    const busyIcon = screen.getByLabelText("Thread working");
+    const environmentIcon = screen.getByLabelText(
+      "Managed worktree environment",
+    );
+    expect(position.titleIndex).toBe(2);
+    expect(position.row.children[1]?.contains(busyIcon)).toBe(true);
+    expect(position.row.children[3]?.contains(environmentIcon)).toBe(true);
   });
 
   it("rerenders when promoted state changes", () => {
@@ -312,7 +474,38 @@ describe("ThreadRow", () => {
     expect(renderCount).toBe(initialRenderCount);
   });
 
-  it("shows the manager pill and places the working spinner over the manager icon", () => {
+  it("shows the idle manager chevron and trailing manager icon", () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_manager",
+        type: "manager",
+        title: "Manager thread",
+        titleFallback: "Manager thread",
+        status: "idle",
+        runtime: {
+          displayStatus: "idle",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      {
+        rowOptions: createManagerRowOptions({
+          isCollapsed: false,
+          managedChildCount: 1,
+          managedChildBusyCount: 0,
+        }),
+      },
+    );
+
+    const managerChevron = screen.getByRole("button", {
+      name: "Collapse Manager thread threads",
+    });
+
+    expect(screen.getByText("manager")).not.toBeNull();
+    expect(screen.getByLabelText("Manager")).not.toBeNull();
+    expect(managerChevron.querySelector(".animate-spin")).toBeNull();
+  });
+
+  it("shows manager busy status in the leading chevron slot without covering the trailing manager icon", () => {
     renderThreadRow(
       createThread({
         id: "thr_manager",
@@ -330,13 +523,41 @@ describe("ThreadRow", () => {
     );
 
     const managerIcon = screen.getByLabelText("Manager");
-    const managerSpinner = screen.getByLabelText("Manager working");
     const managerChevron = screen.getByRole("button", {
       name: "Expand Manager thread threads",
     });
+    const managerSpinner = managerChevron.querySelector(".animate-spin");
 
     expect(screen.getByText("manager")).not.toBeNull();
-    expect(managerSpinner.parentElement).toBe(managerIcon.parentElement);
-    expect(managerChevron.querySelector(".animate-spin")).toBeNull();
+    expect(managerSpinner).not.toBeNull();
+    expect(managerIcon.parentElement).not.toBe(managerSpinner?.parentElement);
+    expect(getThreadRow("Manager thread").contains(managerIcon)).toBe(true);
+  });
+
+  it("toggles manager child visibility from the manager chevron", () => {
+    const onToggleCollapsed = vi.fn();
+
+    renderThreadRow(
+      createThread({
+        id: "thr_manager",
+        type: "manager",
+        title: "Manager thread",
+        titleFallback: "Manager thread",
+      }),
+      {
+        rowOptions: createManagerRowOptions({
+          isCollapsed: false,
+          onToggleCollapsed,
+        }),
+      },
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Collapse Manager thread threads",
+      }),
+    );
+
+    expect(onToggleCollapsed).toHaveBeenCalledWith("thr_manager");
   });
 });
