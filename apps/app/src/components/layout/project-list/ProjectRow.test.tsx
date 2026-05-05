@@ -222,18 +222,23 @@ describe("ProjectRow", () => {
     expect(regularRow.hasAttribute("data-sidebar-sticky-tier")).toBe(false);
     expect(managedRow.classList.contains("relative")).toBe(true);
     expect(regularRow.classList.contains("relative")).toBe(true);
-    expect(managedRow.classList.contains("pl-6")).toBe(true);
+    expect(managedRow.classList.contains("pl-0")).toBe(true);
+    expect(managedRow.classList.contains("pl-6")).toBe(false);
     expect(managedRow.classList.contains("pl-2")).toBe(false);
     expect(managedRow.classList.contains("h-7")).toBe(true);
     expect(
       managedRow.classList.contains("h-[var(--bb-sidebar-row-height)]"),
     ).toBe(false);
     expect(managedRow.classList.contains("text-sidebar-foreground/60")).toBe(
-      true,
-    );
-    expect(managedRow.classList.contains("text-sidebar-foreground/80")).toBe(
       false,
     );
+    expect(managedRow.classList.contains("text-sidebar-foreground/80")).toBe(
+      true,
+    );
+    expect(managedRow.classList.contains("hover:bg-sidebar-accent")).toBe(true);
+    expect(
+      managedRow.classList.contains("hover:text-sidebar-accent-foreground"),
+    ).toBe(true);
     expect(
       managedRow.querySelector("[data-managed-child-marker]"),
     ).not.toBeNull();
@@ -379,7 +384,7 @@ describe("ProjectRow", () => {
         hostReconnectGraceExpiresAt: null,
       },
       createdAt: 700,
-      updatedAt: 5,
+      updatedAt: 650,
     });
     const managedRecent = createThread({
       id: "thr_managed_recent",
@@ -394,7 +399,7 @@ describe("ProjectRow", () => {
       title: "Idle recent",
       titleFallback: "Idle recent",
       createdAt: 40,
-      updatedAt: 600,
+      updatedAt: 5_000,
     });
     const activeOlder = createThread({
       id: "thr_active_older",
@@ -406,7 +411,7 @@ describe("ProjectRow", () => {
         hostReconnectGraceExpiresAt: null,
       },
       createdAt: 500,
-      updatedAt: 5_000,
+      updatedAt: 100,
     });
     const idleOlder = createThread({
       id: "thr_idle_older",
@@ -437,8 +442,8 @@ describe("ProjectRow", () => {
         "Manager older",
         "Managed recent",
         "Active newer",
-        "Idle recent",
         "Active older",
+        "Idle recent",
         "Idle older",
       ]);
     });

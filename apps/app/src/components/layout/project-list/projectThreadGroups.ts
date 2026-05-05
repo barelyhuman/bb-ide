@@ -34,24 +34,37 @@ function compareByCreatedAtDescending(
   return left.id.localeCompare(right.id);
 }
 
-function getStandardThreadSortTimestamp(thread: ThreadListEntry): number {
-  // Active threads receive frequent updates while work is streaming, so keep
-  // their row position tied to the thread start time instead.
-  return thread.status === "active" ? thread.createdAt : thread.updatedAt;
+function compareByUpdatedAtDescending(
+  left: ThreadListEntry,
+  right: ThreadListEntry,
+): number {
+  const updatedAtDelta = right.updatedAt - left.updatedAt;
+  if (updatedAtDelta !== 0) {
+    return updatedAtDelta;
+  }
+
+  return compareByCreatedAtDescending(left, right);
 }
 
 function compareStandardThreads(
   left: ThreadListEntry,
   right: ThreadListEntry,
 ): number {
-  const timestampDelta =
-    getStandardThreadSortTimestamp(right) -
-    getStandardThreadSortTimestamp(left);
-  if (timestampDelta !== 0) {
-    return timestampDelta;
+  // Use durable thread.status for the active bucket, not ephemeral runtime
+  // display state. Active rows stream frequent updates, so pin their position
+  // to createdAt; inactive rows use updatedAt recency.
+  const leftIsActive = left.status === "active";
+  const rightIsActive = right.status === "active";
+
+  if (leftIsActive !== rightIsActive) {
+    return leftIsActive ? -1 : 1;
   }
 
-  return compareByCreatedAtDescending(left, right);
+  if (leftIsActive) {
+    return compareByCreatedAtDescending(left, right);
+  }
+
+  return compareByUpdatedAtDescending(left, right);
 }
 
 function getKnownManagerParentId({

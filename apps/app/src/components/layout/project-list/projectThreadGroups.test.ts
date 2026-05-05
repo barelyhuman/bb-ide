@@ -108,10 +108,10 @@ describe("buildProjectThreadGroups", () => {
     ]);
   });
 
-  it("sorts active standard threads by creation time instead of update time", () => {
+  it("sorts unmanaged standard threads with active rows before inactive recency", () => {
     const groups = buildProjectThreadGroups([
       createThread({
-        id: "active-old",
+        id: "active-older-created",
         status: "active",
         createdAt: 10,
         updatedAt: 1_000,
@@ -121,37 +121,97 @@ describe("buildProjectThreadGroups", () => {
         },
       }),
       createThread({
-        id: "idle-recent",
-        createdAt: 20,
-        updatedAt: 900,
-      }),
-      createThread({
-        id: "active-new",
+        id: "active-newer-created",
         status: "active",
-        createdAt: 950,
-        updatedAt: 30,
+        createdAt: 20,
+        updatedAt: 500,
         runtime: {
           displayStatus: "active",
           hostReconnectGraceExpiresAt: null,
         },
       }),
+      createThread({
+        id: "idle-newer-update",
+        createdAt: 40,
+        updatedAt: 900,
+      }),
+      createThread({
+        id: "idle-older-update",
+        createdAt: 30,
+        updatedAt: 750,
+      }),
     ]);
 
     expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
-      "active-new",
-      "idle-recent",
-      "active-old",
+      "active-newer-created",
+      "active-older-created",
+      "idle-newer-update",
+      "idle-older-update",
     ]);
   });
 
-  it("sorts managed children with the regular standard-thread rule", () => {
+  it("applies deterministic tiebreaks inside standard thread buckets", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "active-b",
+        status: "active",
+        createdAt: 100,
+        updatedAt: 1_000,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      createThread({
+        id: "active-a",
+        status: "active",
+        createdAt: 100,
+        updatedAt: 500,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      createThread({
+        id: "idle-created-a",
+        createdAt: 10,
+        updatedAt: 400,
+      }),
+      createThread({
+        id: "idle-created-b",
+        createdAt: 20,
+        updatedAt: 400,
+      }),
+      createThread({
+        id: "idle-id-b",
+        createdAt: 5,
+        updatedAt: 300,
+      }),
+      createThread({
+        id: "idle-id-a",
+        createdAt: 5,
+        updatedAt: 300,
+      }),
+    ]);
+
+    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+      "active-a",
+      "active-b",
+      "idle-created-b",
+      "idle-created-a",
+      "idle-id-a",
+      "idle-id-b",
+    ]);
+  });
+
+  it("sorts managed children with active rows before inactive recency", () => {
     const groups = buildProjectThreadGroups([
       createThread({
         id: "manager",
         type: "manager",
       }),
       createThread({
-        id: "active-old-child",
+        id: "active-older-created-child",
         parentThreadId: "manager",
         status: "active",
         createdAt: 10,
@@ -162,37 +222,38 @@ describe("buildProjectThreadGroups", () => {
         },
       }),
       createThread({
-        id: "idle-recent-child",
-        parentThreadId: "manager",
-        createdAt: 20,
-        updatedAt: 900,
-      }),
-      createThread({
-        id: "active-new-child",
+        id: "active-newer-created-child",
         parentThreadId: "manager",
         status: "active",
-        createdAt: 950,
-        updatedAt: 30,
+        createdAt: 20,
+        updatedAt: 500,
         runtime: {
           displayStatus: "active",
           hostReconnectGraceExpiresAt: null,
         },
       }),
       createThread({
-        id: "idle-newest-child",
+        id: "idle-newer-update-child",
         parentThreadId: "manager",
         createdAt: 40,
-        updatedAt: 1_000,
+        updatedAt: 900,
+      }),
+      createThread({
+        id: "idle-older-update-child",
+        parentThreadId: "manager",
+        createdAt: 30,
+        updatedAt: 750,
       }),
     ]);
 
-    expect(threadIds(groups.managerThreadGroups[0]?.managedThreads ?? []))
-      .toEqual([
-        "idle-newest-child",
-        "active-new-child",
-        "idle-recent-child",
-        "active-old-child",
-      ]);
+    expect(
+      threadIds(groups.managerThreadGroups[0]?.managedThreads ?? []),
+    ).toEqual([
+      "active-newer-created-child",
+      "active-older-created-child",
+      "idle-newer-update-child",
+      "idle-older-update-child",
+    ]);
   });
 
   it("keeps managed children inside their manager group instead of globally interleaving them", () => {

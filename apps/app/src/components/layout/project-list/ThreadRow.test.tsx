@@ -248,18 +248,25 @@ describe("ThreadRow", () => {
     );
 
     const position = expectManagedChildTitlePosition("Managed child");
-    expect(position.row.classList.contains("pl-6")).toBe(true);
+    expect(position.row.classList.contains("pl-0")).toBe(true);
+    expect(position.row.classList.contains("pl-6")).toBe(false);
     expect(position.row.classList.contains("pl-2")).toBe(false);
     expect(position.row.classList.contains("h-7")).toBe(true);
     expect(
       position.row.classList.contains("h-[var(--bb-sidebar-row-height)]"),
     ).toBe(false);
+    expect(position.row.classList.contains("text-sidebar-foreground/60")).toBe(
+      false,
+    );
+    expect(position.row.classList.contains("text-sidebar-foreground/80")).toBe(
+      true,
+    );
+    expect(position.row.classList.contains("hover:bg-sidebar-accent")).toBe(
+      true,
+    );
     expect(
-      position.row.classList.contains("text-sidebar-foreground/60"),
+      position.row.classList.contains("hover:text-sidebar-accent-foreground"),
     ).toBe(true);
-    expect(
-      position.row.classList.contains("text-sidebar-foreground/80"),
-    ).toBe(false);
     expect(screen.queryByLabelText("Managed thread")).toBeNull();
     expect(screen.queryByLabelText("Thread working")).toBeNull();
     expect(

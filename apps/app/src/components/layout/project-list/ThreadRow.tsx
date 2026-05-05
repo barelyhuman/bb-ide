@@ -302,12 +302,10 @@ function ThreadRowComponent({
     isManagedChild
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    isManagedChild ? "pl-6" : "pl-2",
+    isManagedChild ? "pl-0" : "pl-2",
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
-      : isManagedChild
-        ? "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
   );
   const rowContent = (
     <>
