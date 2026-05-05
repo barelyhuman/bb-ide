@@ -16,6 +16,7 @@ import {
   buildThreadTimeline as buildThreadTimelineWithResolvedMode,
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
   resolveThreadTimelineServiceViewMode,
+  STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT,
 } from "../../src/services/threads/timeline.js";
 
 interface TimelineServiceTestOptions {
@@ -34,6 +35,32 @@ type TimelineSourceTestRow = Extract<
   TimelineRow,
   { kind: "conversation" | "system" | "work" }
 >;
+
+interface SeedTimelineThreadResult {
+  environmentId: string;
+  thread: Thread;
+}
+
+interface SeedTimelineThreadArgs {
+  status?: Thread["status"];
+  type: Thread["type"];
+}
+
+interface SeedOperationRowsArgs {
+  count: number;
+  environmentId: string;
+  sequenceStart: number;
+  status: string;
+  thread: Thread;
+  titlePrefix: string;
+}
+
+interface SeedFileChangeSiblingRowsArgs {
+  environmentId: string;
+  sequence: number;
+  thread: Thread;
+  turnId: string;
+}
 
 function flattenTimelineSourceRows(
   rows: TimelineRow[],
@@ -104,6 +131,96 @@ function buildManagerConversationTurnSummaryDetails(
   return buildTimelineTurnSummaryDetailsWithResolvedMode(db, thread, {
     ...options,
     timelineViewMode: "manager-conversation",
+  });
+}
+
+function seedTimelineThread(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  args: SeedTimelineThreadArgs,
+): SeedTimelineThreadResult {
+  const host = seedHost(harness.deps);
+  const { project } = seedProjectWithSource(harness.deps, {
+    hostId: host.id,
+  });
+  const environment = seedEnvironment(harness.deps, {
+    hostId: host.id,
+    projectId: project.id,
+  });
+  const thread = seedThread(harness.deps, {
+    projectId: project.id,
+    environmentId: environment.id,
+    status: args.status,
+    type: args.type,
+  });
+
+  return {
+    environmentId: environment.id,
+    thread,
+  };
+}
+
+function seedOperationRows(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  args: SeedOperationRowsArgs,
+): void {
+  for (let offset = 0; offset < args.count; offset += 1) {
+    const sequence = args.sequenceStart + offset;
+    seedEvent(harness.deps, {
+      threadId: args.thread.id,
+      environmentId: args.environmentId,
+      sequence,
+      type: "system/operation",
+      scope: threadScope(),
+      data: {
+        operation: "timeline_test",
+        operationId: `${args.titlePrefix}-${sequence}`,
+        status: args.status,
+        message: `${args.titlePrefix} ${sequence}`,
+      },
+    });
+  }
+}
+
+function seedFileChangeSiblingRows(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  args: SeedFileChangeSiblingRowsArgs,
+): void {
+  seedEvent(harness.deps, {
+    threadId: args.thread.id,
+    environmentId: args.environmentId,
+    providerThreadId: "provider-thread-1",
+    scope: turnScope(args.turnId),
+    sequence: args.sequence,
+    type: "turn/started",
+    data: {},
+  });
+  seedEvent(harness.deps, {
+    threadId: args.thread.id,
+    environmentId: args.environmentId,
+    providerThreadId: "provider-thread-1",
+    scope: turnScope(args.turnId),
+    sequence: args.sequence + 1,
+    type: "item/completed",
+    data: {
+      providerThreadId: "provider-thread-1",
+      turnId: args.turnId,
+      item: {
+        type: "fileChange",
+        id: `file-change-${args.sequence}`,
+        changes: [
+          {
+            kind: "update",
+            path: "first.txt",
+          },
+          {
+            kind: "update",
+            path: "second.txt",
+          },
+        ],
+        status: "completed",
+        approvalStatus: null,
+      },
+    },
   });
 }
 
@@ -2333,6 +2450,180 @@ describe("buildThreadTimeline", () => {
         role: "user",
         text: "system-pending-steer",
       }),
+    );
+  });
+
+  it("caps manager standard latest timelines to the last 100 older top-level rows", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "manager",
+    });
+
+    seedOperationRows(harness, {
+      count: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "completed operation",
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+
+    expect(timeline.rows).toHaveLength(
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT,
+    );
+    expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
+    expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
+  });
+
+  it("keeps the active tail outside the manager standard older-row cap", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      status: "active",
+      type: "manager",
+    });
+
+    seedOperationRows(harness, {
+      count: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "before active operation",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 106,
+      status: "running",
+      thread,
+      titlePrefix: "active operation",
+    });
+    seedOperationRows(harness, {
+      count: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 20,
+      environmentId,
+      sequenceStart: 107,
+      status: "completed",
+      thread,
+      titlePrefix: "after active operation",
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+    const activeRow = timeline.rows.find(
+      (row) => row.kind === "system" && row.status === "pending",
+    );
+
+    expect(timeline.rows).toHaveLength(
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 1 + 120,
+    );
+    expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
+    expect(activeRow).toMatchObject({
+      sourceSeqStart: 106,
+      status: "pending",
+      title: "Timeline test running",
+    });
+    expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(226);
+  });
+
+  it("preserves duplicate-sequence top-level siblings at the manager standard cap boundary", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "manager",
+    });
+
+    seedOperationRows(harness, {
+      count: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT - 1,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "completed operation",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT,
+      thread,
+      turnId: "turn-file-change",
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+    const fileChangeRows = timeline.rows.filter(
+      (row) => row.kind === "work" && row.workKind === "file-change",
+    );
+
+    expect(timeline.rows).toHaveLength(
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT,
+    );
+    expect(timeline.rows[0]?.sourceSeqStart).toBe(2);
+    expect(fileChangeRows).toHaveLength(2);
+    expect(fileChangeRows.map((row) => row.sourceSeqStart)).toEqual([
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 1,
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 1,
+    ]);
+    expect(fileChangeRows.map((row) => row.change.path)).toEqual([
+      "first.txt",
+      "second.txt",
+    ]);
+    expect(new Set(fileChangeRows.map((row) => row.id)).size).toBe(2);
+  });
+
+  it("leaves non-manager standard and manager conversation timelines uncapped", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const managerThreadResult = seedTimelineThread(harness, {
+      type: "manager",
+    });
+    const standardThreadResult = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedOperationRows(harness, {
+      count: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId: managerThreadResult.environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread: managerThreadResult.thread,
+      titlePrefix: "manager operation",
+    });
+    seedOperationRows(harness, {
+      count: STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId: standardThreadResult.environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread: standardThreadResult.thread,
+      titlePrefix: "standard operation",
+    });
+
+    const standardTimeline = buildThreadTimeline(
+      harness.db,
+      standardThreadResult.thread,
+      {
+        isDevelopment: false,
+      },
+    );
+    const managerConversationTimeline = buildManagerConversationTimeline(
+      harness.db,
+      managerThreadResult.thread,
+      {
+        isDevelopment: false,
+      },
+    );
+
+    expect(standardTimeline.rows).toHaveLength(
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 5,
+    );
+    expect(managerConversationTimeline.rows).toHaveLength(
+      STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT + 5,
     );
   });
 

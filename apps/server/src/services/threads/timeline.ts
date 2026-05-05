@@ -10,6 +10,7 @@ import type { Thread } from "@bb/domain";
 import type {
   ManagerTimelineView,
   ThreadTimelineResponse,
+  TimelineRow,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import {
@@ -42,6 +43,8 @@ interface BuildTimelineTurnSummaryDetailsOptions
 }
 
 export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
+
+export const STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT = 100;
 
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
@@ -100,6 +103,50 @@ export function compactSummaryStoredEventRows(
   return rows.filter((row) => retainedEventIds.has(row.id));
 }
 
+function isActiveTopLevelTimelineRow(row: TimelineRow): boolean {
+  switch (row.kind) {
+    case "conversation":
+      return (
+        row.role === "user" &&
+        row.userRequest.kind === "steer" &&
+        row.userRequest.status === "pending"
+      );
+    case "system":
+      return row.status === "pending";
+    case "turn":
+    case "work":
+      return row.status === "pending";
+  }
+}
+
+function capLatestStandardManagerTimelineRows(
+  rows: readonly TimelineRow[],
+): TimelineRow[] {
+  const activeTailStartIndex = rows.findIndex(isActiveTopLevelTimelineRow);
+  if (activeTailStartIndex === -1) {
+    return rows.slice(-STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT);
+  }
+
+  const olderRows = rows.slice(0, activeTailStartIndex);
+  const activeTailRows = rows.slice(activeTailStartIndex);
+  return [
+    ...olderRows.slice(-STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT),
+    ...activeTailRows,
+  ];
+}
+
+function resolveLatestTimelineRows(
+  thread: Thread,
+  options: BuildThreadTimelineOptions,
+  rows: TimelineRow[],
+): TimelineRow[] {
+  if (thread.type !== "manager" || options.timelineViewMode !== "standard") {
+    return rows;
+  }
+
+  return capLatestStandardManagerTimelineRows(rows);
+}
+
 export function buildThreadTimeline(
   db: DbConnection,
   thread: Thread,
@@ -150,7 +197,7 @@ export function buildThreadTimeline(
   });
 
   return {
-    rows: timeline.rows,
+    rows: resolveLatestTimelineRows(thread, options, timeline.rows),
     activeThinking: timeline.activeThinking,
     contextWindowUsage: timeline.contextWindowUsage ?? undefined,
   };
