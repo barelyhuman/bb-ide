@@ -1,5 +1,9 @@
 import type { KeyboardEvent, MouseEvent } from "react";
-import type { TimelineTitle, TimelineTitleAction } from "@bb/thread-view";
+import {
+  assertNever,
+  type TimelineTitle,
+  type TimelineTitleAction,
+} from "@bb/thread-view";
 import { cn } from "../primitives/cn.js";
 
 /**
@@ -26,8 +30,7 @@ function titleToneClass(title: TimelineTitle): string {
     case "summary":
       return "text-muted-foreground/60";
   }
-  const exhaustiveTone: never = title.tone;
-  return exhaustiveTone;
+  return assertNever(title.tone);
 }
 
 function contentToneClass(title: TimelineTitle): string {
@@ -51,8 +54,7 @@ function suffixToneClass(title: TimelineTitle): string {
     case "summary":
       return "text-muted-foreground/60";
   }
-  const exhaustiveTone: never = title.tone;
-  return exhaustiveTone;
+  return assertNever(title.tone);
 }
 
 function renderDiffStatsSuffix(

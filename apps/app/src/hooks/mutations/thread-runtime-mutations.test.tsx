@@ -350,6 +350,54 @@ describe("thread runtime mutations", () => {
     });
   });
 
+  it("skips optimistic pending steer timeline writes when thread data is missing", async () => {
+    let resolveSend: (() => void) | null = null;
+    vi.mocked(api.sendThreadMessage).mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSend = () => resolve(undefined);
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", undefined),
+      { rows: [], activeThinking: null },
+    );
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", "standard"),
+      { rows: [], activeThinking: null },
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    let mutationPromise: Promise<void> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Keep this in mind" }],
+        mode: "steer",
+      });
+    });
+
+    await waitFor(() => {
+      expect(api.sendThreadMessage).toHaveBeenCalled();
+    });
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1", undefined),
+      )?.rows,
+    ).toEqual([]);
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1", "standard"),
+      )?.rows,
+    ).toEqual([]);
+
+    await act(async () => {
+      resolveSend?.();
+      await mutationPromise;
+    });
+  });
+
   it("rolls back the optimistic timeline row when send fails", async () => {
     vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
     const { queryClient, wrapper } = createQueryClientTestHarness();

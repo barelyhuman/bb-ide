@@ -1,5 +1,6 @@
 import type {
   JsonObject,
+  OwnershipChangeOperationMetadata,
   Thread,
   ThreadEventRow,
   ThreadEventScope,
@@ -218,14 +219,27 @@ export const eventProjectionThreadOperationStatusValues = [
 export type EventProjectionThreadOperationStatus =
   (typeof eventProjectionThreadOperationStatusValues)[number];
 
-export interface EventProjectionThreadOperationMetadata {
-  operation: EventProjectionThreadOperationKind;
+export interface EventProjectionOwnershipChangeThreadOperationMetadata {
+  operation: "ownership_change";
   rawOperation: string;
   status: EventProjectionThreadOperationStatus;
   rawStatus: string;
   operationId: string;
-  metadata?: Record<string, unknown>;
+  metadata: OwnershipChangeOperationMetadata | null;
 }
+
+export interface EventProjectionOtherThreadOperationMetadata {
+  operation: "other";
+  rawOperation: string;
+  status: EventProjectionThreadOperationStatus;
+  rawStatus: string;
+  operationId: string;
+  metadata?: JsonObject;
+}
+
+export type EventProjectionThreadOperationMetadata =
+  | EventProjectionOwnershipChangeThreadOperationMetadata
+  | EventProjectionOtherThreadOperationMetadata;
 
 export interface EventProjectionProvisioningTranscriptEntry {
   type: "step" | "output";

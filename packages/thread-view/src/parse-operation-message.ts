@@ -4,6 +4,7 @@ import type {
   SystemThreadInterruptedReason,
   PendingInteractionStatus,
 } from "@bb/domain";
+import { ownershipChangeOperationMetadataSchema } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getCompactionKey } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
@@ -14,6 +15,7 @@ import type {
   BuildEventProjectionMessagesOptions,
   EventProjectionPermissionGrantLifecycleMessage,
   EventProjectionOperationMessage,
+  EventProjectionOwnershipChangeThreadOperationMetadata,
   EventProjectionThreadOperationMetadata,
   EventProjectionThreadOperationKind,
   EventProjectionThreadOperationStatus,
@@ -23,8 +25,6 @@ type ParseOperationMessageOptions = Pick<
   BuildEventProjectionMessagesOptions,
   "includeOptionalOperations" | "includeProviderUnhandledOperations"
 >;
-
-type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
 
 function providerDisplayName(providerId: string): string {
   switch (providerId) {
@@ -66,28 +66,28 @@ function normalizeThreadOperationStatus(
 function createThreadOperationMetadata(
   decoded: Extract<ThreadEvent, { type: "system/operation" }>,
 ): EventProjectionThreadOperationMetadata {
-  return {
-    operation: normalizeThreadOperationKind(decoded.operation),
+  const operation = normalizeThreadOperationKind(decoded.operation);
+  const base = {
     rawOperation: decoded.operation,
     status: normalizeThreadOperationStatus(decoded.status),
     rawStatus: decoded.status,
     operationId: decoded.operationId,
+  };
+  if (operation === "ownership_change") {
+    const parsedMetadata = decoded.metadata
+      ? ownershipChangeOperationMetadataSchema.safeParse(decoded.metadata)
+      : null;
+    return {
+      ...base,
+      operation,
+      metadata: parsedMetadata?.success ? parsedMetadata.data : null,
+    };
+  }
+  return {
+    ...base,
+    operation,
     ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
   };
-}
-
-function parseThreadOwnershipChangeAction(
-  metadata: EventProjectionThreadOperationMetadata["metadata"],
-): ThreadOwnershipChangeAction | null {
-  const action = metadata?.action;
-  if (
-    action === "assign" ||
-    action === "release" ||
-    action === "transfer"
-  ) {
-    return action;
-  }
-  return null;
 }
 
 function threadInterruptedTitle(reason: SystemThreadInterruptedReason): string {
@@ -101,38 +101,46 @@ function threadInterruptedTitle(reason: SystemThreadInterruptedReason): string {
   }
 }
 
+function ownershipChangeOperationTitle(
+  meta: EventProjectionOwnershipChangeThreadOperationMetadata,
+): string {
+  switch (meta.status) {
+    case "completed": {
+      const action = meta.metadata?.action;
+      switch (action) {
+        case "assign":
+          return "Thread assigned to manager";
+        case "release":
+          return "Thread released from manager";
+        case "transfer":
+          return "Thread transferred to new manager";
+        case undefined:
+          return "Ownership change completed";
+        default:
+          return assertNever(action);
+      }
+    }
+    case "failed":
+      return "Ownership change failed";
+    default:
+      return `Ownership change ${meta.rawStatus}`;
+  }
+}
+
 export function threadOperationTitle(
   meta: EventProjectionThreadOperationMetadata | null,
 ): string {
   if (!meta) return "Operation update";
 
-  const { operation, rawOperation, status, rawStatus, metadata } = meta;
-
-  switch (operation) {
-    case "ownership_change": {
-      const action = parseThreadOwnershipChangeAction(metadata);
-      switch (status) {
-        case "completed":
-          switch (action) {
-            case "assign":
-              return "Thread assigned to manager";
-            case "release":
-              return "Thread released from manager";
-            case "transfer":
-              return "Thread transferred to new manager";
-            case null:
-              return "Ownership changed";
-            default:
-              return assertNever(action);
-          }
-        case "failed":
-          return "Ownership change failed";
-        default:
-          return `Ownership change ${rawStatus}`;
-      }
-    }
+  switch (meta.operation) {
+    case "ownership_change":
+      return ownershipChangeOperationTitle(meta);
     case "other":
-      return `${capitalize(rawOperation.replace(/_/g, " "))} ${rawStatus}`;
+      return `${capitalize(meta.rawOperation.replace(/_/g, " "))} ${
+        meta.rawStatus
+      }`;
+    default:
+      return assertNever(meta);
   }
 }
 

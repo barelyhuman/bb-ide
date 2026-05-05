@@ -31,19 +31,20 @@ export function useTurnSummaryRowLoader({
   threadId,
 }: UseTurnSummaryRowLoaderParams) {
   const loadGenerationRef = useRef(0);
-  const [loadingTurnSummaryIds, setLoadingTurnSummaryIds] = useState<
-    Set<string>
-  >(new Set());
-  const loadingTurnSummaryIdsRef = useRef(loadingTurnSummaryIds);
-  const [erroredTurnSummaryIds, setErroredTurnSummaryIds] = useState<
-    Set<string>
-  >(new Set());
-  const erroredTurnSummaryIdsRef = useRef(erroredTurnSummaryIds);
-  const [turnSummaryRowsById, setTurnSummaryRowsById] =
-    useState<TurnSummaryRowsById>({});
-  const turnSummaryRowsByIdRef = useRef(turnSummaryRowsById);
   const loadTurnSummaryRowsRef = useRef(loadTurnSummaryRows);
   const threadIdRef = useRef(threadId);
+  const requestedTurnSummaryRowIdsRef = useRef(new Set<string>());
+  const loadingTurnSummaryIdsRef = useRef(new Set<string>());
+  const erroredTurnSummaryIdsRef = useRef(new Set<string>());
+  const turnSummaryRowsByIdRef = useRef<TurnSummaryRowsById>({});
+  const [loadingTurnSummaryIds, setLoadingTurnSummaryIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [erroredTurnSummaryIds, setErroredTurnSummaryIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [turnSummaryRowsById, setTurnSummaryRowsById] =
+    useState<TurnSummaryRowsById>({});
 
   useLayoutEffect(() => {
     loadTurnSummaryRowsRef.current = loadTurnSummaryRows;
@@ -56,8 +57,10 @@ export function useTurnSummaryRowLoader({
   const handleLoadTurnSummaryRows = useCallback((entry: TimelineTurnRow) => {
     const currentThreadId = threadIdRef.current;
     const loadGeneration = loadGenerationRef.current;
+    const requestedTurnSummaryRowIds = requestedTurnSummaryRowIdsRef.current;
 
     if (
+      requestedTurnSummaryRowIds.has(entry.id) ||
       !shouldLoadNestedRows({
         cachedRowCount:
           turnSummaryRowsByIdRef.current[entry.id]?.length ?? 0,
@@ -72,6 +75,7 @@ export function useTurnSummaryRowLoader({
       return;
     }
 
+    requestedTurnSummaryRowIds.add(entry.id);
     const nextLoadingTurnSummaryIds = new Set(
       loadingTurnSummaryIdsRef.current,
     ).add(entry.id);
@@ -109,6 +113,7 @@ export function useTurnSummaryRowLoader({
         if (loadGenerationRef.current !== loadGeneration) {
           return;
         }
+        requestedTurnSummaryRowIdsRef.current.delete(entry.id);
         const nextErroredTurnSummaryIds = new Set(
           erroredTurnSummaryIdsRef.current,
         ).add(entry.id);
@@ -130,6 +135,7 @@ export function useTurnSummaryRowLoader({
 
   useLayoutEffect(() => {
     loadGenerationRef.current += 1;
+    requestedTurnSummaryRowIdsRef.current = new Set();
     const nextLoadingTurnSummaryIds = new Set<string>();
     const nextErroredTurnSummaryIds = new Set<string>();
     const nextTurnSummaryRowsById: TurnSummaryRowsById = {};

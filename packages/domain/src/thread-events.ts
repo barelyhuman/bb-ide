@@ -7,6 +7,7 @@ import {
   promptInputSchema,
   resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
+import { jsonValueSchema } from "./json-value.js";
 
 export const systemEventTypeValues = [
   "client/thread/start",
@@ -128,12 +129,33 @@ export const systemErrorEventDataSchema = z.object({
 });
 export type SystemErrorEventData = z.infer<typeof systemErrorEventDataSchema>;
 
+export const ownershipChangeOperationActionValues = [
+  "assign",
+  "release",
+  "transfer",
+] as const;
+export const ownershipChangeOperationActionSchema = z.enum(
+  ownershipChangeOperationActionValues,
+);
+export type OwnershipChangeOperationAction = z.infer<
+  typeof ownershipChangeOperationActionSchema
+>;
+
+export const ownershipChangeOperationMetadataSchema = z.object({
+  action: ownershipChangeOperationActionSchema,
+  nextParentThreadId: z.string().nullable(),
+  previousParentThreadId: z.string().nullable(),
+});
+export type OwnershipChangeOperationMetadata = z.infer<
+  typeof ownershipChangeOperationMetadataSchema
+>;
+
 export const systemOperationEventDataSchema = z.object({
   operation: z.string(),
   status: z.string(),
   message: z.string(),
   operationId: z.string(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), jsonValueSchema).optional(),
 });
 export type SystemOperationEventData = z.infer<
   typeof systemOperationEventDataSchema

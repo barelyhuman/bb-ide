@@ -29,6 +29,26 @@ export interface FormatTimelineActivityIntentDetailArgs {
   pending: boolean;
 }
 
+export interface TimelineActivityIntentTextParts {
+  prefix: string | null;
+  content: string;
+}
+
+export interface FormatTimelineActivityIntentDetailPartsArgs {
+  intent: TimelineActivityIntent;
+  pathMode: TimelinePathDisplayMode;
+  pending: boolean;
+}
+
+type TimelineActivityIntentTextRole = "detail" | "title";
+
+interface FormatTimelineActivityIntentTextArgs {
+  intent: TimelineActivityIntent;
+  pathMode: TimelinePathDisplayMode;
+  pending: boolean;
+  role: TimelineActivityIntentTextRole;
+}
+
 export function primaryTimelineActivityIntent(
   row: TimelineExplorationWorkRow,
 ): TimelineActivityIntent | null {
@@ -59,24 +79,14 @@ export function formatTimelineActivityIntentTitle({
   pathMode,
   pending,
 }: FormatTimelineActivityIntentTitleArgs): string {
-  switch (intent.type) {
-    case "read":
-      return `${pending ? "Reading" : "Read"} ${formatReadTarget(
-        intent,
-        pathMode,
-      )}`;
-    case "list_files":
-      return `${pending ? "Listing" : "Listed"} ${intent.path ?? "files"}`;
-    case "search":
-      if (intent.path) {
-        return `${pending ? "Searching" : "Searched"} ${intent.path}`;
-      }
-      return `${pending ? "Searching" : "Searched"} ${intent.query ?? "files"}`;
-    case "unknown":
-      return intent.command;
-    default:
-      return assertNever(intent);
-  }
+  return joinTimelineActivityIntentTextParts(
+    formatTimelineActivityIntentText({
+      intent,
+      pathMode,
+      pending,
+      role: "title",
+    }),
+  );
 }
 
 export function formatTimelineActivityIntentDetail({
@@ -84,32 +94,99 @@ export function formatTimelineActivityIntentDetail({
   pathMode,
   pending,
 }: FormatTimelineActivityIntentDetailArgs): string {
+  return joinTimelineActivityIntentTextParts(
+    formatTimelineActivityIntentDetailParts({ intent, pathMode, pending }),
+  );
+}
+
+export function formatTimelineActivityIntentDetailParts({
+  intent,
+  pathMode,
+  pending,
+}: FormatTimelineActivityIntentDetailPartsArgs): TimelineActivityIntentTextParts {
+  return formatTimelineActivityIntentText({
+    intent,
+    pathMode,
+    pending,
+    role: "detail",
+  });
+}
+
+function joinTimelineActivityIntentTextParts({
+  content,
+  prefix,
+}: TimelineActivityIntentTextParts): string {
+  return prefix ? `${prefix} ${content}` : content;
+}
+
+function formatTimelineActivityIntentText({
+  intent,
+  pathMode,
+  pending,
+  role,
+}: FormatTimelineActivityIntentTextArgs): TimelineActivityIntentTextParts {
   switch (intent.type) {
     case "read": {
-      const verb = pending ? "Reading" : "Read";
-      return `${verb} ${formatReadTarget(intent, pathMode)}`;
+      return {
+        prefix: pending ? "Reading" : "Read",
+        content: formatReadTarget(intent, pathMode),
+      };
     }
     case "list_files": {
       const verb = pending ? "Listing" : "Listed";
-      return intent.path
-        ? `${verb} files in ${intent.path}`
-        : `${verb} files`;
+      if (role === "title") {
+        return {
+          prefix: verb,
+          content: intent.path ?? "files",
+        };
+      }
+      return {
+        prefix: verb,
+        content: intent.path ? `files in ${intent.path}` : "files",
+      };
     }
     case "search": {
       const verb = pending ? "Searching" : "Searched";
+      if (role === "title") {
+        if (intent.path) {
+          return {
+            prefix: verb,
+            content: intent.path,
+          };
+        }
+        return {
+          prefix: verb,
+          content: intent.query ?? "files",
+        };
+      }
       if (intent.query && intent.path) {
-        return `${verb} for ${intent.query} in ${intent.path}`;
+        return {
+          prefix: verb,
+          content: `for ${intent.query} in ${intent.path}`,
+        };
       }
       if (intent.path) {
-        return `${verb} in ${intent.path}`;
+        return {
+          prefix: verb,
+          content: `in ${intent.path}`,
+        };
       }
       if (intent.query) {
-        return `${verb} for ${intent.query}`;
+        return {
+          prefix: verb,
+          content: `for ${intent.query}`,
+        };
       }
-      return `${verb} files`;
+      return {
+        prefix: verb,
+        content: "files",
+      };
     }
     case "unknown":
-      return intent.command;
+      return {
+        prefix: null,
+        content: intent.command,
+      };
     default:
       return assertNever(intent);
   }

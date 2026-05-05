@@ -13,6 +13,7 @@ import {
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
   THREAD_QUERY_KEY,
   THREAD_TIMELINE_QUERY_KEY,
+  managerTimelineViewFromThreadTimelineQueryKey,
 } from "./query-keys";
 
 type ThreadScopedQueryKeyPrefix =
@@ -49,24 +50,6 @@ function resolveThreadScopedPlaceholder<TData>(
   ) === nextThreadId
     ? previousData
     : undefined;
-}
-
-export function extractManagerTimelineViewFromThreadTimelineQueryKey(
-  queryKey: QueryKey | undefined,
-): ManagerTimelineView | undefined {
-  if (!queryKey || queryKey[0] !== THREAD_TIMELINE_QUERY_KEY) {
-    return undefined;
-  }
-
-  const managerTimelineView = queryKey[2];
-  if (
-    managerTimelineView === "conversation" ||
-    managerTimelineView === "standard"
-  ) {
-    return managerTimelineView;
-  }
-
-  return undefined;
 }
 
 export function resolveEnvironmentWorkStatusPlaceholder(
@@ -123,7 +106,7 @@ export function resolveThreadTimelinePlaceholder(
     THREAD_TIMELINE_QUERY_KEY,
   );
   const previousManagerTimelineView =
-    extractManagerTimelineViewFromThreadTimelineQueryKey(previousQueryKey);
+    managerTimelineViewFromThreadTimelineQueryKey(previousQueryKey);
 
   return previousThreadId === nextThreadId &&
     previousManagerTimelineView === nextManagerTimelineView

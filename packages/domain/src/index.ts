@@ -266,6 +266,9 @@ export type {
 } from "./thread-git-diff.js";
 
 export {
+  ownershipChangeOperationActionSchema,
+  ownershipChangeOperationActionValues,
+  ownershipChangeOperationMetadataSchema,
   provisioningTranscriptEntrySchema,
   systemPermissionGrantLifecycleEventDataSchema,
   systemErrorEventDataSchema,
@@ -292,6 +295,8 @@ export {
   turnLifecycleEventDataSchema,
 } from "./thread-events.js";
 export type {
+  OwnershipChangeOperationAction,
+  OwnershipChangeOperationMetadata,
   ProvisioningTranscriptEntry,
   SystemPermissionGrantLifecycleEventData,
   SystemErrorEventData,

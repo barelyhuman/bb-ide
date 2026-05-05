@@ -1,3 +1,4 @@
+import type { QueryKey } from "@tanstack/react-query";
 import type { ThreadListFilters } from "@/lib/api";
 import type { ManagerTimelineView } from "@bb/server-contract";
 
@@ -36,6 +37,10 @@ export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
 export const STATUS_QUERY_KEY = "status";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
+export const CONVERSATION_MANAGER_TIMELINE_VIEW =
+  "conversation" satisfies ManagerTimelineView;
+export const STANDARD_MANAGER_TIMELINE_VIEW =
+  "standard" satisfies ManagerTimelineView;
 
 export interface ThreadListQueryFilters {
   projectId?: string;
@@ -453,6 +458,35 @@ export function threadTimelineQueryKey(
   managerTimelineView: ManagerTimelineView | undefined,
 ): ThreadTimelineQueryKey {
   return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView];
+}
+
+export function managerTimelineViewFromThreadTimelineQueryKey(
+  queryKey: QueryKey | undefined,
+): ManagerTimelineView | undefined {
+  if (!queryKey || queryKey[0] !== THREAD_TIMELINE_QUERY_KEY) {
+    return undefined;
+  }
+
+  const managerTimelineView = queryKey[2];
+  if (
+    managerTimelineView === CONVERSATION_MANAGER_TIMELINE_VIEW ||
+    managerTimelineView === STANDARD_MANAGER_TIMELINE_VIEW
+  ) {
+    return managerTimelineView;
+  }
+
+  return undefined;
+}
+
+export function isStandardManagerThreadTimelineQueryKey(
+  queryKey: QueryKey,
+): queryKey is ThreadTimelineQueryKey {
+  return (
+    queryKey[0] === THREAD_TIMELINE_QUERY_KEY &&
+    typeof queryKey[1] === "string" &&
+    managerTimelineViewFromThreadTimelineQueryKey(queryKey) ===
+      STANDARD_MANAGER_TIMELINE_VIEW
+  );
 }
 
 export function threadTimelineQueryKeyPrefix(

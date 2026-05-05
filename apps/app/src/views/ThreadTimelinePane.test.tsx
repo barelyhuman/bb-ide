@@ -1,28 +1,18 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  type RenderResult,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineCommandWorkRow, TimelineRow } from "@bb/server-contract";
 import {
   LOADING_INDICATOR_REVEAL_DELAY_MS,
   ThreadTimelinePane,
 } from "./ThreadTimelinePane";
-
-function installMatchMedia(): void {
-  Object.defineProperty(window, "matchMedia", {
-    writable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  });
-}
 
 function commandRow(): TimelineCommandWorkRow {
   return {
@@ -49,7 +39,6 @@ function commandRow(): TimelineCommandWorkRow {
 }
 
 function renderTimelinePane(rows: TimelineRow[]): HTMLElement {
-  installMatchMedia();
   const view = render(
     <ThreadTimelinePane
       activeThinking={null}
@@ -72,9 +61,8 @@ function renderTimelinePane(rows: TimelineRow[]): HTMLElement {
   return view.container;
 }
 
-function renderLoadingTimelinePane(): void {
-  installMatchMedia();
-  render(
+function renderLoadingTimelinePane(): RenderResult {
+  return render(
     <ThreadTimelinePane
       activeThinking={null}
       footer={<div>Composer</div>}
@@ -124,5 +112,36 @@ describe("ThreadTimelinePane", () => {
     expect(screen.queryByText("Loading thread...")).toBeNull();
     act(() => vi.advanceTimersByTime(LOADING_INDICATOR_REVEAL_DELAY_MS));
     expect(screen.getByText("Loading thread...")).toBeTruthy();
+  });
+
+  it("suppresses the initial loading placeholder when loading finishes before the reveal delay", () => {
+    vi.useFakeTimers();
+
+    const view = renderLoadingTimelinePane();
+
+    act(() => vi.advanceTimersByTime(LOADING_INDICATOR_REVEAL_DELAY_MS - 1));
+    expect(screen.queryByText("Loading thread...")).toBeNull();
+
+    view.rerender(
+      <ThreadTimelinePane
+        activeThinking={null}
+        footer={<div>Composer</div>}
+        header={<div>Header</div>}
+        hostConnectionNotice={null}
+        isThreadTimelinePending={false}
+        timelineError={false}
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        showOngoingIndicator={false}
+        timelineRows={[]}
+        threadId="thread-1"
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsIdentity="thread-1:default"
+        turnSummaryRowsById={{}}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByText("Loading thread...")).toBeNull();
   });
 });

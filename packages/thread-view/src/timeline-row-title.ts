@@ -18,7 +18,7 @@ import {
 } from "./file-change-summary.js";
 import { durationToCompactString } from "./format-helpers.js";
 import {
-  formatTimelineActivityIntentDetail,
+  formatTimelineActivityIntentDetailParts,
   getTimelineActivityIntentDetailDedupeKey,
   hasTimelineExplorationIntent,
   type TimelineExplorationWorkRow,
@@ -96,6 +96,11 @@ interface TitlePartsArgs {
   prefix?: string | null;
   suffix?: TimelineTitleSuffix | null;
   tone?: TimelineTitleTone;
+}
+
+interface BuildTimelineActivityIntentTitleArgs {
+  intent: TimelineActivityIntent;
+  pending: boolean;
 }
 
 interface DisplayStatusArgs {
@@ -431,39 +436,26 @@ function buildApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
   });
 }
 
-function buildTimelineActivityIntentTitle(
-  intent: TimelineActivityIntent,
-  pending: boolean,
-): TimelineTitle {
-  const detail = formatTimelineActivityIntentDetail({
+function buildTimelineActivityIntentTitle({
+  intent,
+  pending,
+}: BuildTimelineActivityIntentTitleArgs): TimelineTitle {
+  const detail = formatTimelineActivityIntentDetailParts({
     intent,
     pathMode: "compact",
     pending,
   });
-  const plainDetail = formatTimelineActivityIntentDetail({
+  const plainDetail = formatTimelineActivityIntentDetailParts({
     intent,
     pathMode: "full",
     pending,
   });
-  const spaceIndex = detail.indexOf(" ");
-  if (spaceIndex === -1) {
-    return titleFromParts({
-      content: detail,
-      contentTone: "muted",
-      motion: pendingMotion(pending),
-      plainContent: plainDetail,
-    });
-  }
-  const plainSpaceIndex = plainDetail.indexOf(" ");
   return titleFromParts({
-    prefix: detail.slice(0, spaceIndex),
-    content: detail.slice(spaceIndex + 1),
+    prefix: detail.prefix,
+    content: detail.content,
     contentTone: "muted",
     motion: pendingMotion(pending),
-    plainContent:
-      plainSpaceIndex === -1
-        ? plainDetail
-        : plainDetail.slice(plainSpaceIndex + 1),
+    plainContent: plainDetail.content,
   });
 }
 
@@ -606,7 +598,10 @@ export function buildTimelineActivityIntentTitles(
     }
     titles.push({
       id: `${row.id}:activity-intent:${index}`,
-      title: buildTimelineActivityIntentTitle(intent, row.status === "pending"),
+      title: buildTimelineActivityIntentTitle({
+        intent,
+        pending: row.status === "pending",
+      }),
     });
   });
 

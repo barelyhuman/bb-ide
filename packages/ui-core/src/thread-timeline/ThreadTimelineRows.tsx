@@ -7,7 +7,7 @@ import {
   useMemo,
   useRef,
 } from "react";
-import type { MutableRefObject, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type {
@@ -49,6 +49,11 @@ import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
 import { Button } from "../primitives/ui/button.js";
 
 export interface ThreadTimelineRowsProps {
+  /**
+   * Starts every expandable row open for story/test visual audit surfaces.
+   * Product timeline views should rely on runtime-driven auto expansion.
+   */
+  defaultExpandAllRows?: boolean;
   erroredTurnSummaryIds: ReadonlySet<string>;
   loadingTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
@@ -66,7 +71,6 @@ export interface ThreadTimelineRowsProps {
 interface TimelineRendererContextValue {
   autoExpandedRowIds: ReadonlySet<string>;
   getViewRows: GetTimelineViewRows;
-  requestedTurnSummaryRowIdsRef: MutableRefObject<Set<string>>;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
@@ -122,11 +126,11 @@ interface TimelineSystemDetailBlockProps {
 
 interface RequestLazyTurnRowsArgs {
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
-  requestedTurnSummaryRowIdsRef: MutableRefObject<Set<string>>;
   row: TimelineViewTurnRow;
 }
 
 interface CollectTimelineAutoExpandedRowIdsArgs {
+  defaultExpandAllRows: boolean;
   getViewRows: GetTimelineViewRows;
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
@@ -136,6 +140,10 @@ interface CollectTimelineAutoExpandedRowIdsArgs {
 interface ActiveSummaryTreatmentArgs {
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
+}
+
+interface AutoExpandRowArgs extends ActiveSummaryTreatmentArgs {
+  defaultExpandAllRows: boolean;
 }
 
 interface TimelineRowTitleRenderStateArgs extends ActiveSummaryTreatmentArgs {
@@ -511,13 +519,8 @@ function toLazyTurnRequest(row: TimelineViewTurnRow): TimelineTurnRow {
 
 function requestLazyTurnRows({
   onLoadTurnSummaryRows,
-  requestedTurnSummaryRowIdsRef,
   row,
 }: RequestLazyTurnRowsArgs): void {
-  if (requestedTurnSummaryRowIdsRef.current.has(row.id)) {
-    return;
-  }
-  requestedTurnSummaryRowIdsRef.current.add(row.id);
   onLoadTurnSummaryRows(toLazyTurnRequest(row));
 }
 
@@ -618,11 +621,15 @@ function buildExpandableStructuredToolTitle(
 }
 
 function shouldAutoExpandRow({
+  defaultExpandAllRows,
   row,
   scopeActive,
-}: ActiveSummaryTreatmentArgs): boolean {
+}: AutoExpandRowArgs): boolean {
   if (!isRowExpandable(row)) {
     return false;
+  }
+  if (defaultExpandAllRows) {
+    return true;
   }
   if (!scopeActive) {
     return false;
@@ -648,6 +655,7 @@ function shouldUseActiveSummaryTreatment({
 }
 
 function collectTimelineAutoExpandedRowIds({
+  defaultExpandAllRows,
   getViewRows,
   rows,
   scopeActive,
@@ -659,19 +667,31 @@ function collectTimelineAutoExpandedRowIds({
     currentRows: readonly ThreadTimelineViewRow[],
     currentScopeActive: boolean,
   ): void => {
-    if (!currentScopeActive) {
+    if (!defaultExpandAllRows && !currentScopeActive) {
       return;
     }
 
     currentRows.forEach((row) => {
-      if (shouldAutoExpandRow({ row, scopeActive: currentScopeActive })) {
+      if (
+        shouldAutoExpandRow({
+          defaultExpandAllRows,
+          row,
+          scopeActive: currentScopeActive,
+        })
+      ) {
         autoExpandedRowIds.add(row.id);
       }
 
       if (row.kind === "bundle-summary" || row.kind === "step-summary") {
-        visitRows(row.children, rowHasPendingStatus(row));
+        visitRows(
+          row.children,
+          defaultExpandAllRows || rowHasPendingStatus(row),
+        );
       } else if (row.kind === "work" && row.workKind === "delegation") {
-        visitRows(row.childRows, row.status === "pending");
+        visitRows(
+          row.childRows,
+          defaultExpandAllRows || row.status === "pending",
+        );
       } else if (row.kind === "turn") {
         const turnChildRows =
           row.children ??
@@ -679,7 +699,10 @@ function collectTimelineAutoExpandedRowIds({
             ? getViewRows(turnSummaryRowsById[row.id] ?? [])
             : null);
         if (turnChildRows) {
-          visitRows(turnChildRows, row.status === "pending");
+          visitRows(
+            turnChildRows,
+            defaultExpandAllRows || row.status === "pending",
+          );
         }
       }
     });
@@ -891,7 +914,6 @@ function TurnRowBody({
 }: TurnRowBodyProps) {
   const {
     getViewRows,
-    requestedTurnSummaryRowIdsRef,
     loadingTurnSummaryIds,
     erroredTurnSummaryIds,
     onLoadTurnSummaryRows,
@@ -908,13 +930,11 @@ function TurnRowBody({
   const isLoading = loadingTurnSummaryIds.has(row.id);
   const isError = erroredTurnSummaryIds.has(row.id);
   const handleRetry = useCallback((): void => {
-    requestedTurnSummaryRowIdsRef.current.delete(row.id);
     requestLazyTurnRows({
       onLoadTurnSummaryRows,
-      requestedTurnSummaryRowIdsRef,
       row,
     });
-  }, [onLoadTurnSummaryRows, requestedTurnSummaryRowIdsRef, row]);
+  }, [onLoadTurnSummaryRows, row]);
 
   useEffect(() => {
     if (hasInlineChildren || hasLoadedRows || isLoading || isError) {
@@ -922,7 +942,6 @@ function TurnRowBody({
     }
     requestLazyTurnRows({
       onLoadTurnSummaryRows,
-      requestedTurnSummaryRowIdsRef,
       row,
     });
   }, [
@@ -931,7 +950,6 @@ function TurnRowBody({
     isError,
     isLoading,
     onLoadTurnSummaryRows,
-    requestedTurnSummaryRowIdsRef,
     row,
   ]);
 
@@ -1037,7 +1055,6 @@ function TimelineExpandableRowView({
 }: TimelineExpandableRowViewProps) {
   const {
     autoExpandedRowIds,
-    requestedTurnSummaryRowIdsRef,
     loadingTurnSummaryIds,
     erroredTurnSummaryIds,
     onLoadTurnSummaryRows,
@@ -1055,7 +1072,6 @@ function TimelineExpandableRowView({
     ) {
       requestLazyTurnRows({
         onLoadTurnSummaryRows,
-        requestedTurnSummaryRowIdsRef,
         row,
       });
     }
@@ -1063,7 +1079,6 @@ function TimelineExpandableRowView({
     erroredTurnSummaryIds,
     loadingTurnSummaryIds,
     onLoadTurnSummaryRows,
-    requestedTurnSummaryRowIdsRef,
     row,
     turnSummaryRowsById,
   ]);
@@ -1145,12 +1160,19 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
   const computedAutoExpandedRowIds = useMemo(
     () =>
       collectTimelineAutoExpandedRowIds({
+        defaultExpandAllRows: props.defaultExpandAllRows ?? false,
         getViewRows,
         rows,
         scopeActive,
         turnSummaryRowsById: props.turnSummaryRowsById,
       }),
-    [getViewRows, rows, scopeActive, props.turnSummaryRowsById],
+    [
+      getViewRows,
+      props.defaultExpandAllRows,
+      props.turnSummaryRowsById,
+      rows,
+      scopeActive,
+    ],
   );
   const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
   const loadingTurnSummaryIds = useStableReadonlySet(
@@ -1165,14 +1187,23 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       requestedTurnSummaryRowIdsRef.current.delete(rowId);
     }
   }, [erroredTurnSummaryIds]);
+  const handleLoadTurnSummaryRows = useCallback(
+    (entry: TimelineTurnRow): void => {
+      if (requestedTurnSummaryRowIdsRef.current.has(entry.id)) {
+        return;
+      }
+      requestedTurnSummaryRowIdsRef.current.add(entry.id);
+      props.onLoadTurnSummaryRows(entry);
+    },
+    [props.onLoadTurnSummaryRows],
+  );
   const rendererContextValue = useMemo<TimelineRendererContextValue>(
     () => ({
       autoExpandedRowIds,
       getViewRows,
-      requestedTurnSummaryRowIdsRef,
       loadingTurnSummaryIds,
       erroredTurnSummaryIds,
-      onLoadTurnSummaryRows: props.onLoadTurnSummaryRows,
+      onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
       projectId: props.projectId,
@@ -1184,8 +1215,8 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       autoExpandedRowIds,
       erroredTurnSummaryIds,
       getViewRows,
+      handleLoadTurnSummaryRows,
       loadingTurnSummaryIds,
-      props.onLoadTurnSummaryRows,
       props.onOpenLocalFileLink,
       props.onTitleAction,
       props.projectId,

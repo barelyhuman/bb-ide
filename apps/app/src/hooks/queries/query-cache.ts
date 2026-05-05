@@ -19,6 +19,7 @@ import {
   environmentQueryKey,
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
+  isStandardManagerThreadTimelineQueryKey,
   projectSourceWorkspaceStatusQueryKeyPrefix,
   THREADS_QUERY_KEY,
   threadQueryKey,
@@ -28,7 +29,6 @@ import {
   type EnvironmentWorkStatusQueryKey,
   type ThreadListQueryFilters,
 } from "./query-keys";
-import { extractManagerTimelineViewFromThreadTimelineQueryKey } from "./query-placeholders";
 
 type TimelineRowsUpdater = (
   rows: readonly TimelineRow[],
@@ -315,6 +315,7 @@ export function optimisticallyInsertThread(
 }
 
 const updateEveryTimelineQuery: TimelineRowsUpdatePredicate = () => true;
+const updateNoTimelineQueries: TimelineRowsUpdatePredicate = () => false;
 
 function updateCachedTimelineRows({
   queryClient,
@@ -346,7 +347,9 @@ function updateCachedTimelineRows({
   }
 }
 
-function isPendingSteerRow(row: TimelineRow): row is TimelineUserConversationRow {
+function isPendingSteerRow(
+  row: TimelineRow,
+): row is TimelineUserConversationRow {
   return (
     row.kind === "conversation" &&
     row.role === "user" &&
@@ -358,12 +361,13 @@ function isPendingSteerRow(row: TimelineRow): row is TimelineUserConversationRow
 function buildPendingSteerTimelineQueryPredicate(
   thread: ThreadWithRuntime | undefined,
 ): TimelineRowsUpdatePredicate {
-  if (thread?.type !== "manager") {
+  if (!thread) {
+    return updateNoTimelineQueries;
+  }
+  if (thread.type !== "manager") {
     return updateEveryTimelineQuery;
   }
-  return (queryKey) =>
-    extractManagerTimelineViewFromThreadTimelineQueryKey(queryKey) ===
-    "standard";
+  return isStandardManagerThreadTimelineQueryKey;
 }
 
 export function insertOptimisticTimelineRow(

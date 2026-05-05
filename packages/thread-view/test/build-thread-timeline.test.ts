@@ -1,6 +1,7 @@
 import { threadScope, turnScope } from "@bb/domain";
 import type {
   JsonObject,
+  OwnershipChangeOperationAction,
   ThreadEventFileChange,
   ThreadEventItemStatus,
 } from "@bb/domain";
@@ -16,6 +17,7 @@ import {
   buildThreadTimelineFromEvents,
   type ThreadEventWithMeta,
 } from "../src/index.js";
+import { parseOperationMessage } from "../src/parse-operation-message.js";
 
 interface ContextWindowUsageEventArgs {
   estimated: boolean;
@@ -56,7 +58,7 @@ interface SystemOperationEventArgs {
 }
 
 interface OwnershipOperationCase {
-  action: string;
+  action: OwnershipChangeOperationAction;
   message: string;
   nextParentThreadId: string | null;
   previousParentThreadId: string | null;
@@ -325,6 +327,43 @@ function fileChangeRowIdByPath(
 
 describe("buildThreadTimelineFromEvents", () => {
   it.each(ownershipOperationCases)(
+    "uses $action ownership metadata rather than event message for operation titles",
+    ({ action, message, nextParentThreadId, previousParentThreadId }) => {
+      const event = systemOperationEvent({
+        message: "Ownership operation completed",
+        metadata: {
+          action,
+          nextParentThreadId,
+          previousParentThreadId,
+        },
+        seq: 1,
+      });
+
+      expect(parseOperationMessage(event.event, event.meta)).toMatchObject({
+        kind: "operation",
+        title: message,
+      });
+    },
+  );
+
+  it("uses a neutral completed ownership title for legacy metadata", () => {
+    const event = systemOperationEvent({
+      message: "Ownership operation completed",
+      metadata: {
+        action: "unknown-action",
+        nextParentThreadId: null,
+        previousParentThreadId: null,
+      },
+      seq: 1,
+    });
+
+    expect(parseOperationMessage(event.event, event.meta)).toMatchObject({
+      kind: "operation",
+      title: "Ownership change completed",
+    });
+  });
+
+  it.each(ownershipOperationCases)(
     "does not duplicate $action ownership operation titles as row detail",
     ({ action, message, nextParentThreadId, previousParentThreadId }) => {
       const rows = buildTimelineRows([
@@ -349,7 +388,7 @@ describe("buildThreadTimelineFromEvents", () => {
     },
   );
 
-  it("uses neutral ownership title for unknown ownership actions", () => {
+  it("uses a neutral completed ownership title for invalid ownership actions", () => {
     const rows = buildTimelineRows([
       systemOperationEvent({
         message: "Thread ownership updated by migration",
@@ -366,7 +405,7 @@ describe("buildThreadTimelineFromEvents", () => {
       expect.objectContaining({
         detail: "Thread ownership updated by migration",
         systemKind: "operation",
-        title: "Ownership changed",
+        title: "Ownership change completed",
       }),
     ]);
   });

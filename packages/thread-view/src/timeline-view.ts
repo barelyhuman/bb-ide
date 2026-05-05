@@ -604,6 +604,11 @@ export function isCompletedNonDeniedWorkRow(
   );
 }
 
+/**
+ * Completed single work rows stay as leaf rows so users can scan the exact
+ * action. Pending, approval-gated, denied, and multi-row runs summarize to keep
+ * active work and terminal bundles visually stable as more events append.
+ */
 function shouldSummarizeRun(rows: readonly TimelineViewWorkRow[]): boolean {
   if (rows.length === 0) {
     return false;

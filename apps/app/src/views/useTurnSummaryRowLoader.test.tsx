@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   TimelineRow,
   TimelineTurnRow,
@@ -75,8 +75,11 @@ afterEach(() => {
 
 describe("useTurnSummaryRowLoader", () => {
   it("resets cached turn details when manager timeline view changes", async () => {
-    const loadTurnSummaryRows: LoadTurnSummaryRows = () =>
-      Promise.resolve({ rows: [detailRow("conversation detail")] });
+    const requests: LoadTurnSummaryRowsArgs[] = [];
+    const loadTurnSummaryRows: LoadTurnSummaryRows = (args) => {
+      requests.push(args);
+      return Promise.resolve({ rows: [detailRow("conversation detail")] });
+    };
 
     const { result, rerender } = renderHook(
       (props: HookProps) => useTurnSummaryRowLoader(props),
@@ -109,6 +112,14 @@ describe("useTurnSummaryRowLoader", () => {
       expect(result.current.turnSummaryRowsById).toEqual({});
       expect(result.current.loadingTurnSummaryIds.size).toBe(0);
       expect(result.current.erroredTurnSummaryIds.size).toBe(0);
+    });
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(turnSummaryRow());
+    });
+
+    await waitFor(() => {
+      expect(requests).toHaveLength(2);
     });
   });
 
@@ -169,9 +180,11 @@ describe("useTurnSummaryRowLoader", () => {
     expect(result.current.loadingTurnSummaryIds.size).toBe(0);
   });
 
-  it("keeps the load callback stable when cached and loading state changes", async () => {
+  it("deduplicates repeated load requests while keeping the load callback stable", async () => {
     const deferred = createDeferred<TimelineTurnSummaryDetailsResponse>();
-    const loadTurnSummaryRows: LoadTurnSummaryRows = () => deferred.promise;
+    const loadTurnSummaryRows = vi.fn<LoadTurnSummaryRows>(() => {
+      return deferred.promise;
+    });
 
     const { result, rerender } = renderHook(
       (props: HookProps) => useTurnSummaryRowLoader(props),
@@ -187,8 +200,10 @@ describe("useTurnSummaryRowLoader", () => {
 
     act(() => {
       result.current.handleLoadTurnSummaryRows(turnSummaryRow());
+      result.current.handleLoadTurnSummaryRows(turnSummaryRow());
     });
 
+    expect(loadTurnSummaryRows).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(result.current.loadingTurnSummaryIds.has("turn-summary-1")).toBe(
         true,
