@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalizeEventSpoolPayload,
   canonicalizeProducerEventPayload,
   threadScope,
   turnScope,
+  type ThreadEvent,
 } from "../src/index.js";
 
 describe("canonicalizeProducerEventPayload", () => {
@@ -108,5 +110,30 @@ describe("canonicalizeProducerEventPayload", () => {
         },
       }),
     ).not.toBe(base);
+  });
+
+  it("keeps event spool canonicalization independent of protocol version", () => {
+    const event: ThreadEvent = {
+      type: "turn/started",
+      threadId: "thr_123",
+      providerThreadId: "provider-thread",
+      scope: turnScope("turn_123"),
+    };
+    const spoolPayload = canonicalizeEventSpoolPayload({
+      threadId: "thr_123",
+      event,
+    });
+
+    expect(spoolPayload).toBe(
+      '{"event":{"providerThreadId":"provider-thread","scope":{"kind":"turn","turnId":"turn_123"},"threadId":"thr_123","type":"turn/started"},"eventType":"turn/started","threadId":"thr_123"}',
+    );
+    expect(spoolPayload).not.toContain("protocolVersion");
+    expect(
+      canonicalizeProducerEventPayload({
+        protocolVersion: 15,
+        threadId: "thr_123",
+        event,
+      }),
+    ).not.toBe(spoolPayload);
   });
 });

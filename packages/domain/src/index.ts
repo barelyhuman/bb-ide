@@ -161,8 +161,14 @@ export type {
   HostDaemonProducerEventId,
 } from "./protocol-ids.js";
 
-export { canonicalizeProducerEventPayload } from "./producer-event-payload.js";
-export type { CanonicalizeProducerEventPayloadArgs } from "./producer-event-payload.js";
+export {
+  canonicalizeEventSpoolPayload,
+  canonicalizeProducerEventPayload,
+} from "./producer-event-payload.js";
+export type {
+  CanonicalizeEventSpoolPayloadArgs,
+  CanonicalizeProducerEventPayloadArgs,
+} from "./producer-event-payload.js";
 
 export {
   activeLifecycleOperationStates,

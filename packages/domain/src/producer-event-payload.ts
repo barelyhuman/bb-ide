@@ -7,6 +7,11 @@ export interface CanonicalizeProducerEventPayloadArgs {
   threadId: string;
 }
 
+export interface CanonicalizeEventSpoolPayloadArgs {
+  event: ThreadEvent;
+  threadId: string;
+}
+
 function canonicalizeJsonValue(value: JsonValue): JsonValue {
   if (Array.isArray(value)) {
     return value.map((entry) => canonicalizeJsonValue(entry));
@@ -29,6 +34,10 @@ function parseJsonValue(value: string): JsonValue {
   return jsonValueSchema.parse(JSON.parse(value));
 }
 
+function canonicalizeJsonString(value: string): string {
+  return JSON.stringify(canonicalizeJsonValue(parseJsonValue(value)));
+}
+
 export function canonicalizeProducerEventPayload(
   args: CanonicalizeProducerEventPayloadArgs,
 ): string {
@@ -39,5 +48,17 @@ export function canonicalizeProducerEventPayload(
     protocolVersion: args.protocolVersion,
     threadId: args.threadId,
   });
-  return JSON.stringify(canonicalizeJsonValue(parseJsonValue(json)));
+  return canonicalizeJsonString(json);
+}
+
+export function canonicalizeEventSpoolPayload(
+  args: CanonicalizeEventSpoolPayloadArgs,
+): string {
+  const event = threadEventSchema.parse(args.event);
+  const json = JSON.stringify({
+    event,
+    eventType: event.type,
+    threadId: args.threadId,
+  });
+  return canonicalizeJsonString(json);
 }

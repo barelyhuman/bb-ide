@@ -1,5 +1,7 @@
 import Database from "better-sqlite3";
 import {
+  canonicalizeEventSpoolPayload,
+  canonicalizeProducerEventPayload,
   hostDaemonProducerEventIdSchema,
   threadScope,
   turnScope,
@@ -7,6 +9,7 @@ import {
   type ThreadEvent,
 } from "@bb/domain";
 import type { HostDaemonEventEnvelope } from "@bb/host-daemon-contract";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,8 +22,31 @@ import {
 } from "./event-buffer.js";
 import { ServerResponseError } from "./server-client.js";
 
+const FIRST_PROTOCOL_VERSION_WITH_DURABLE_EVENT_SPOOL = 13;
+const LAST_PROTOCOL_VERSION_WITH_PROTOCOL_VERSIONED_SPOOL_HASH = 14;
+
 interface OutboundCountRow {
   count: number;
+}
+
+interface OutboundPayloadHashRow {
+  payloadHash: string;
+}
+
+interface CreateProtocolVersionedPayloadHashArgs {
+  event: ThreadEvent;
+  protocolVersion: number;
+  threadId: string;
+}
+
+interface CreateCurrentSpoolPayloadHashArgs {
+  event: ThreadEvent;
+  threadId: string;
+}
+
+interface ReadOutboundPayloadHashByProducerEventIdArgs {
+  dataDir: string;
+  producerEventId: HostDaemonProducerEventId;
 }
 
 function createLogger() {
@@ -75,6 +101,44 @@ function countOutboundRows(dataDir: string): number {
   }
 }
 
+function readOutboundPayloadHash(dataDir: string): string {
+  const db = openSpoolDatabase(dataDir);
+  try {
+    const row = db
+      .prepare<
+        [],
+        OutboundPayloadHashRow
+      >("SELECT payloadHash FROM outbound_events")
+      .get();
+    if (row === undefined) {
+      throw new Error("Missing outbound payload hash row");
+    }
+    return row.payloadHash;
+  } finally {
+    db.close();
+  }
+}
+
+function readOutboundPayloadHashByProducerEventId(
+  args: ReadOutboundPayloadHashByProducerEventIdArgs,
+): string {
+  const db = openSpoolDatabase(args.dataDir);
+  try {
+    const row = db
+      .prepare<
+        [HostDaemonProducerEventId],
+        OutboundPayloadHashRow
+      >("SELECT payloadHash FROM outbound_events WHERE producerEventId = ?")
+      .get(args.producerEventId);
+    if (row === undefined) {
+      throw new Error("Missing outbound payload hash row");
+    }
+    return row.payloadHash;
+  } finally {
+    db.close();
+  }
+}
+
 function acceptedPostResult(
   events: readonly HostDaemonEventEnvelope[],
 ): EventPostResult {
@@ -87,6 +151,33 @@ function acceptedPostResult(
     kind: "accepted",
     rejectedEvents: [],
   };
+}
+
+function createProtocolVersionedPayloadHash(
+  args: CreateProtocolVersionedPayloadHashArgs,
+): string {
+  return createHash("sha256")
+    .update(
+      canonicalizeProducerEventPayload({
+        event: args.event,
+        protocolVersion: args.protocolVersion,
+        threadId: args.threadId,
+      }),
+    )
+    .digest("hex");
+}
+
+function createCurrentSpoolPayloadHash(
+  args: CreateCurrentSpoolPayloadHashArgs,
+): string {
+  return createHash("sha256")
+    .update(
+      canonicalizeEventSpoolPayload({
+        event: args.event,
+        threadId: args.threadId,
+      }),
+    )
+    .digest("hex");
 }
 
 function createNonRetryablePostError(): ServerResponseError {
@@ -295,6 +386,103 @@ describe("event buffer", () => {
         event: event.event,
       },
     ]);
+    expect(secondBuffer.depth()).toBe(0);
+    await secondBuffer.dispose();
+  });
+
+  it("migrates protocol-versioned stored hashes before flushing after upgrade", async () => {
+    const dataDir = nextDataDir();
+    const producerEventId = "hdevt_23456789abcdefghijkm";
+    const event = createThreadIdentityEvent("threadA");
+    const firstBuffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([producerEventId]),
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    firstBuffer.push({
+      threadId: "threadA",
+      event,
+    });
+    await firstBuffer.dispose();
+
+    const legacyProtocolVersion =
+      LAST_PROTOCOL_VERSION_WITH_PROTOCOL_VERSIONED_SPOOL_HASH;
+    const legacyPayloadHash = createProtocolVersionedPayloadHash({
+      event,
+      protocolVersion: legacyProtocolVersion,
+      threadId: "threadA",
+    });
+    const db = openSpoolDatabase(dataDir);
+    try {
+      db.prepare("UPDATE outbound_events SET payloadHash = ?").run(
+        legacyPayloadHash,
+      );
+    } finally {
+      db.close();
+    }
+
+    const logger = createLogger();
+    let postCalls = 0;
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        postCalls++;
+        if (postCalls === 1) {
+          throw new Error("temporary outage");
+        }
+        return acceptedPostResult(events);
+      },
+    );
+    const secondBuffer = createEventBuffer({
+      dataDir,
+      debounceMs: 60_000,
+      logger,
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    const snapshot = secondBuffer.snapshot();
+    const snapshotEvent = snapshot[0];
+    if (snapshotEvent === undefined) {
+      throw new Error("Missing snapshot event");
+    }
+    expect(snapshotEvent.payloadHash).toBe(
+      createCurrentSpoolPayloadHash({
+        event,
+        threadId: "threadA",
+      }),
+    );
+    expect(readOutboundPayloadHash(dataDir)).toBe(legacyPayloadHash);
+    expect(logger.warn).not.toHaveBeenCalled();
+
+    await secondBuffer.flush();
+    const migratedPayloadHash = readOutboundPayloadHash(dataDir);
+    expect(migratedPayloadHash).toBe(
+      createCurrentSpoolPayloadHash({
+        event,
+        threadId: "threadA",
+      }),
+    );
+    expect(secondBuffer.depth()).toBe(1);
+    await secondBuffer.flush();
+
+    expect(postEvents).toHaveBeenCalledWith([
+      {
+        producerEventId,
+        threadId: "threadA",
+        event,
+      },
+    ]);
+    expect(postEvents).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        legacyProtocolVersion,
+        localOrder: 1,
+        producerEventId,
+        threadId: "threadA",
+      }),
+      "event spool migrated protocol-versioned payload hash",
+    );
     expect(secondBuffer.depth()).toBe(0);
     await secondBuffer.dispose();
   });
@@ -709,6 +897,72 @@ describe("event buffer", () => {
       postEvents: async (events) => acceptedPostResult(events),
     });
     expect(() => reopenedBuffer.snapshot()).toThrow(/payload hash mismatch/u);
+    await reopenedBuffer.dispose();
+  });
+
+  it("keeps snapshot read-only when a later row is corrupt", async () => {
+    const dataDir = nextDataDir();
+    const firstProducerEventId = createProducerEventId(
+      "hdevt_23456789abcdefghijkm",
+    );
+    const secondProducerEventId = createProducerEventId(
+      "hdevt_23456789abcdefghijkn",
+    );
+    const firstEvent = createThreadIdentityEvent("threadA");
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        firstProducerEventId,
+        secondProducerEventId,
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    buffer.push({
+      threadId: "threadA",
+      event: firstEvent,
+    });
+    buffer.push({
+      threadId: "threadB",
+      event: createThreadIdentityEvent("threadB"),
+    });
+    await buffer.dispose();
+
+    const legacyPayloadHash = createProtocolVersionedPayloadHash({
+      event: firstEvent,
+      protocolVersion: FIRST_PROTOCOL_VERSION_WITH_DURABLE_EVENT_SPOOL,
+      threadId: "threadA",
+    });
+    const db = openSpoolDatabase(dataDir);
+    try {
+      db.prepare(
+        "UPDATE outbound_events SET payloadHash = ? WHERE producerEventId = ?",
+      ).run(legacyPayloadHash, firstProducerEventId);
+      db.prepare(
+        "UPDATE outbound_events SET payloadHash = ? WHERE producerEventId = ?",
+      ).run("bad-hash", secondProducerEventId);
+    } finally {
+      db.close();
+    }
+
+    const reopenedBuffer = createEventBuffer({
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    expect(() => reopenedBuffer.snapshot()).toThrow(/payload hash mismatch/u);
+    expect(
+      readOutboundPayloadHashByProducerEventId({
+        dataDir,
+        producerEventId: firstProducerEventId,
+      }),
+    ).toBe(legacyPayloadHash);
+    expect(
+      readOutboundPayloadHashByProducerEventId({
+        dataDir,
+        producerEventId: secondProducerEventId,
+      }),
+    ).toBe("bad-hash");
     await reopenedBuffer.dispose();
   });
 

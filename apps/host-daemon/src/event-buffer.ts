@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import {
   createDebouncedCallbackScheduler,
+  canonicalizeEventSpoolPayload,
   canonicalizeProducerEventPayload,
   hostDaemonProducerEventIdSchema,
   threadEventSchema,
@@ -8,7 +9,6 @@ import {
   type ThreadEvent,
 } from "@bb/domain";
 import {
-  HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonEventBatchResponse,
   type HostDaemonEventEnvelope,
   type HostDaemonRejectedEvent,
@@ -26,6 +26,17 @@ const EVENT_SPOOL_FILE_NAME = "event-spool.sqlite";
 const MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES = 3;
 const MAX_NON_RETRYABLE_POST_FAILURES = 3;
 const PRODUCER_EVENT_ID_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz";
+const FIRST_PROTOCOL_VERSION_WITH_DURABLE_EVENT_SPOOL = 13;
+const LAST_PROTOCOL_VERSION_WITH_PROTOCOL_VERSIONED_SPOOL_HASH = 14;
+// Durable SQLite event spool hashes were introduced while protocol 13 was
+// current, and the protocol-versioned hash bug was fixed while protocol 14 was
+// current. Future protocol versions write protocol-independent spool hashes, so
+// legacy migration only needs to recognize rows written by these releases.
+const LATEST_FIRST_PROTOCOL_VERSIONED_SPOOL_HASH_PROTOCOL_VERSIONS: readonly number[] =
+  [
+    LAST_PROTOCOL_VERSION_WITH_PROTOCOL_VERSIONED_SPOOL_HASH,
+    FIRST_PROTOCOL_VERSION_WITH_DURABLE_EVENT_SPOOL,
+  ];
 
 interface EventSpoolRow {
   localOrder: number;
@@ -94,6 +105,46 @@ interface RejectedEventLogSummary {
   producerEventId: HostDaemonProducerEventId;
   reason: HostDaemonRejectedEvent["reason"];
   threadId: string;
+}
+
+interface HashPayloadArgs {
+  event: ThreadEvent;
+  threadId: string;
+}
+
+interface HashLegacyProtocolPayloadArgs extends HashPayloadArgs {
+  protocolVersion: number;
+}
+
+interface FindLegacyProtocolPayloadHashArgs extends HashPayloadArgs {
+  payloadHash: string;
+}
+
+interface CurrentPayloadHashFormat {
+  kind: "current";
+}
+
+interface LegacyPayloadHashFormat {
+  kind: "legacy";
+  protocolVersion: number;
+}
+
+type PayloadHashFormat = CurrentPayloadHashFormat | LegacyPayloadHashFormat;
+
+interface PayloadHashValidationResult {
+  hashFormat: PayloadHashFormat;
+  payloadHash: string;
+}
+
+interface ParsedBufferedEvent {
+  event: BufferedEvent;
+  hashFormat: PayloadHashFormat;
+}
+
+interface MigrateLegacyPayloadHashArgs {
+  event: BufferedEvent;
+  protocolVersion: number;
+  row: EventSpoolRow;
 }
 
 export interface BufferedEventInput {
@@ -261,16 +312,75 @@ function formatTimestamp(value: number): string {
   return new Date(value).toISOString();
 }
 
-function hashPayload(args: { event: ThreadEvent; threadId: string }): string {
-  return createHash("sha256")
-    .update(
-      canonicalizeProducerEventPayload({
-        event: args.event,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        threadId: args.threadId,
-      }),
-    )
-    .digest("hex");
+function hashCanonicalPayload(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function hashPayload(args: HashPayloadArgs): string {
+  return hashCanonicalPayload(canonicalizeEventSpoolPayload(args));
+}
+
+function hashLegacyProtocolPayload(
+  args: HashLegacyProtocolPayloadArgs,
+): string {
+  return hashCanonicalPayload(
+    canonicalizeProducerEventPayload({
+      event: args.event,
+      protocolVersion: args.protocolVersion,
+      threadId: args.threadId,
+    }),
+  );
+}
+
+function findLegacyProtocolPayloadHash(
+  args: FindLegacyProtocolPayloadHashArgs,
+): number | null {
+  for (const protocolVersion of LATEST_FIRST_PROTOCOL_VERSIONED_SPOOL_HASH_PROTOCOL_VERSIONS) {
+    const legacyHash = hashLegacyProtocolPayload({
+      event: args.event,
+      protocolVersion,
+      threadId: args.threadId,
+    });
+    if (args.payloadHash === legacyHash) {
+      return protocolVersion;
+    }
+  }
+  return null;
+}
+
+function validatePayloadHash(
+  row: EventSpoolRow,
+  event: ThreadEvent,
+): PayloadHashValidationResult {
+  const payloadHash = hashPayload({
+    event,
+    threadId: row.threadId,
+  });
+  if (row.payloadHash === payloadHash) {
+    return {
+      hashFormat: {
+        kind: "current",
+      },
+      payloadHash,
+    };
+  }
+
+  const legacyProtocolVersion = findLegacyProtocolPayloadHash({
+    event,
+    payloadHash: row.payloadHash,
+    threadId: row.threadId,
+  });
+  if (legacyProtocolVersion !== null) {
+    return {
+      hashFormat: {
+        kind: "legacy",
+        protocolVersion: legacyProtocolVersion,
+      },
+      payloadHash,
+    };
+  }
+
+  throw new Error("Event spool payload hash mismatch");
 }
 
 function toPostEvent(event: BufferedEvent): HostDaemonEventEnvelope {
@@ -411,7 +521,7 @@ function openSpoolDatabase(dataDir: string): Database.Database {
   }
 }
 
-function toBufferedEvent(row: EventSpoolRow): BufferedEvent {
+function parseBufferedEvent(row: EventSpoolRow): ParsedBufferedEvent {
   const producerEventId = hostDaemonProducerEventIdSchema.parse(
     row.producerEventId,
   );
@@ -422,21 +532,30 @@ function toBufferedEvent(row: EventSpoolRow): BufferedEvent {
   if (event.threadId !== row.threadId) {
     throw new Error("Event spool payload threadId does not match row threadId");
   }
-  const expectedHash = hashPayload({
-    event,
-    threadId: row.threadId,
-  });
-  if (row.payloadHash !== expectedHash) {
-    throw new Error("Event spool payload hash mismatch");
-  }
+  const payloadHashValidation = validatePayloadHash(row, event);
   return {
-    createdAt: row.createdAt,
-    event,
-    localOrder: row.localOrder,
-    payloadHash: row.payloadHash,
-    producerEventId,
-    threadId: row.threadId,
+    event: {
+      createdAt: row.createdAt,
+      event,
+      localOrder: row.localOrder,
+      payloadHash: payloadHashValidation.payloadHash,
+      producerEventId,
+      threadId: row.threadId,
+    },
+    hashFormat: payloadHashValidation.hashFormat,
   };
+}
+
+function readCurrentBufferedEvent(row: EventSpoolRow): BufferedEvent {
+  const parsedEvent = parseBufferedEvent(row);
+  if (parsedEvent.hashFormat.kind !== "current") {
+    throw new Error("Event spool inserted row used legacy payload hash format");
+  }
+  return parsedEvent.event;
+}
+
+function readSnapshotBufferedEvent(row: EventSpoolRow): BufferedEvent {
+  return parseBufferedEvent(row).event;
 }
 
 function summarizeBufferedEvents(
@@ -533,6 +652,11 @@ export function createEventBuffer(
       postAttemptCount = postAttemptCount + 1
     WHERE localOrder = ?
   `);
+  const updatePayloadHash = db.prepare<[string, number, string], never>(`
+    UPDATE outbound_events
+    SET payloadHash = ?
+    WHERE localOrder = ? AND payloadHash = ?
+  `);
   const deleteByProducerEventId = db.prepare<
     [HostDaemonProducerEventId],
     never
@@ -559,6 +683,41 @@ export function createEventBuffer(
     },
   });
 
+  function migrateLegacyPayloadHash(args: MigrateLegacyPayloadHashArgs): void {
+    const result = updatePayloadHash.run(
+      args.event.payloadHash,
+      args.row.localOrder,
+      args.row.payloadHash,
+    );
+    if (result.changes !== 1) {
+      throw new Error("Event spool legacy payload hash migration failed");
+    }
+    options.logger.warn(
+      {
+        eventType: args.event.event.type,
+        legacyPayloadHash: args.row.payloadHash,
+        legacyProtocolVersion: args.protocolVersion,
+        localOrder: args.row.localOrder,
+        payloadHash: args.event.payloadHash,
+        producerEventId: args.event.producerEventId,
+        threadId: args.event.threadId,
+      },
+      "event spool migrated protocol-versioned payload hash",
+    );
+  }
+
+  function readBufferedEvent(row: EventSpoolRow): BufferedEvent {
+    const parsedEvent = parseBufferedEvent(row);
+    if (parsedEvent.hashFormat.kind === "legacy") {
+      migrateLegacyPayloadHash({
+        event: parsedEvent.event,
+        protocolVersion: parsedEvent.hashFormat.protocolVersion,
+        row,
+      });
+    }
+    return parsedEvent.event;
+  }
+
   const insertEventTransaction = db.transaction(
     (args: CreateBufferedEventRecordArgs): BufferedEvent => {
       const event = threadEventSchema.parse(args.input.event);
@@ -584,7 +743,7 @@ export function createEventBuffer(
       if (row === undefined) {
         throw new Error("Event spool insert did not create a readable row");
       }
-      return toBufferedEvent(row);
+      return readCurrentBufferedEvent(row);
     },
   );
 
@@ -597,14 +756,12 @@ export function createEventBuffer(
       const events: BufferedEvent[] = [];
       const producerEventIds: HostDaemonProducerEventId[] = [];
       for (const row of rows) {
-        updatePostAttempt.run(attemptedAt, row.localOrder);
-        const event = toBufferedEvent({
-          ...row,
-          lastPostAttemptAt: attemptedAt,
-          postAttemptCount: row.postAttemptCount + 1,
-        });
+        const event = readBufferedEvent(row);
         events.push(event);
         producerEventIds.push(event.producerEventId);
+      }
+      for (const row of rows) {
+        updatePostAttempt.run(attemptedAt, row.localOrder);
       }
       return {
         events,
@@ -612,6 +769,12 @@ export function createEventBuffer(
       };
     },
   );
+
+  const snapshotTransaction = db.transaction((): BufferedEvent[] => {
+    // Snapshot parsing is read-only and transactional; fail closed rather than
+    // returning a partial view of a locally corrupted durable spool.
+    return selectPendingRows.all().map(readSnapshotBufferedEvent);
+  });
 
   const settlePostedBatchTransaction = db.transaction(
     (args: SettlePostedBatchArgs): SettlePostedBatchResult => {
@@ -811,9 +974,7 @@ export function createEventBuffer(
   }
 
   function snapshot(): BufferedEvent[] {
-    // Snapshot parsing is intentionally all-or-nothing; fail closed rather than
-    // posting a partial view of a locally corrupted durable spool.
-    return selectPendingRows.all().map(toBufferedEvent);
+    return snapshotTransaction();
   }
 
   async function dispose(): Promise<void> {
