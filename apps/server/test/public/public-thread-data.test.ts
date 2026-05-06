@@ -201,9 +201,10 @@ describe("public thread data routes", () => {
 
       expect(toolDetails.rows.map((row) => row.kind)).toEqual(["work"]);
       expect(toolDetails.rows[0]?.kind).toBe("work");
-      if (toolDetails.rows[0]?.kind === "work") {
-        expect(toolDetails.rows[0].workKind).toBe("tool");
-        expect(toolDetails.rows[0].callId).toBe("tool-1");
+      const detailRow = toolDetails.rows[0];
+      if (detailRow?.kind === "work" && detailRow.workKind === "tool") {
+        expect(detailRow.workKind).toBe("tool");
+        expect(detailRow.callId).toBe("tool-1");
       }
     } finally {
       await harness.cleanup();

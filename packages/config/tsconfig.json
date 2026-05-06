@@ -1,11 +1,7 @@
 {
-  "extends": "@bb/tsconfig/base.json",
+  "extends": ["./tsconfig.build.json", "@bb/tsconfig/typecheck-overrides.json"],
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "types": ["node"]
+    "rootDir": "."
   },
-  "include": ["src"]
+  "include": ["src", "test", "tests", "fixtures", "stories"]
 }

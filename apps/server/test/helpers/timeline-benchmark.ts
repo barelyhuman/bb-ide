@@ -44,7 +44,7 @@ export interface TimelineBenchmarkScenario {
   buildAndSerializeSummary: () => string;
   loadSummaryStoredRows: () => StoredEventRow[];
   loadContextWindowUsageRows: () => StoredEventRow[];
-  compactSummaryStoredRows: () => StoredEventRow[];
+  compactSummaryStoredRows: () => readonly StoredEventRow[];
   decodeSummaryEvents: () => ThreadEventWithMeta[];
   buildSummaryRowsOnly: () => ReturnType<typeof buildThreadTimeline>["rows"];
 }
@@ -136,7 +136,10 @@ function createTimelineBenchmarkScenario(
       threadId: thread.id,
       environmentId: environment.id,
       scope: row.scope,
-      providerThreadId: row.providerThreadId ?? null,
+      providerThreadId:
+        "providerThreadId" in row && typeof row.providerThreadId === "string"
+          ? row.providerThreadId
+          : null,
       sequence: row.seq,
       type: row.type,
       ...deriveStoredEventItemFields(buildThreadEvent(row)),

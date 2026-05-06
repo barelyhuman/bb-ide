@@ -84,14 +84,17 @@ function buildCommandApprovalInteractiveRequest(
   };
 }
 
-function postInteractiveRequest(
+async function postInteractiveRequest(
   args: RegisterInteractiveRequestArgs,
 ): Promise<Response> {
-  return args.harness.app.request("/internal/session/interactive-request", {
-    method: "POST",
-    headers: internalAuthHeaders(args.harness),
-    body: JSON.stringify(args.body),
-  });
+  return await args.harness.app.request(
+    "/internal/session/interactive-request",
+    {
+      method: "POST",
+      headers: internalAuthHeaders(args.harness),
+      body: JSON.stringify(args.body),
+    },
+  );
 }
 
 function registerInteractiveRequest(

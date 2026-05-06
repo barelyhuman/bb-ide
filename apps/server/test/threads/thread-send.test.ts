@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { hostDaemonCommands, listEvents } from "@bb/db";
-import { ApiError } from "../../src/errors.js";
 import { sendThreadMessage } from "../../src/services/threads/thread-send.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import {
@@ -67,7 +66,7 @@ describe("sendThreadMessage", () => {
           thread,
           trigger: "user",
         }),
-      ).rejects.toMatchObject<ApiError>({
+      ).rejects.toMatchObject({
         status: 409,
         body: {
           code: "awaiting_user_interaction",
@@ -176,7 +175,7 @@ describe("sendThreadMessage", () => {
           thread,
           trigger: "user",
         }),
-      ).rejects.toMatchObject<ApiError>({
+      ).rejects.toMatchObject({
         status: 502,
         body: {
           code: "host_disconnected",

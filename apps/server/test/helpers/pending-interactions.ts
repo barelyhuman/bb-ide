@@ -2,11 +2,12 @@ import type {
   ApprovalPendingInteractionResolution,
   PendingInteractionApprovalDecision,
   PendingInteractionCommandAction,
-  PendingInteractionFileChangeWriteScope,
   PendingInteractionCreate,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
 } from "@bb/domain";
+
+type PendingInteractionFileChangeWriteScope = string;
 
 type ApprovalPayload = PendingInteractionCreate["payload"];
 

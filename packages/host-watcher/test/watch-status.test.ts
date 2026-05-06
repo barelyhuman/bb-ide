@@ -14,7 +14,14 @@ type WatchWorkspaceStatusArgs = Parameters<WatchWorkspaceStatus>[1];
 type WorkspaceStatusChangeEvent = Parameters<
   WatchWorkspaceStatusArgs["onChange"]
 >[0];
-type ParcelWatcherModule = typeof import("@parcel/watcher");
+// `@parcel/watcher` ships with `export =`, so the runtime module after Node's
+// ESM interop exposes a `default` field alongside the named callable. The TS
+// type for `typeof import("@parcel/watcher")` doesn't include `default`, so
+// intersect it in here for the mock plumbing.
+type ParcelWatcherActual = typeof import("@parcel/watcher");
+type ParcelWatcherModule = ParcelWatcherActual & {
+  default: ParcelWatcherActual;
+};
 type ParcelWatcherDefault = ParcelWatcherModule["default"];
 type ParcelWatcherCallback = Parameters<ParcelWatcherDefault["subscribe"]>[1];
 type ParcelWatcherSubscribe = ParcelWatcherDefault["subscribe"];

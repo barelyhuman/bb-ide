@@ -324,7 +324,6 @@ describe("thread event pruning", () => {
         type: "turn/completed",
         threadId: thread.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
         scope: turnScope("turn-1"),
         status: "completed",
       });
@@ -494,7 +493,6 @@ describe("thread event pruning", () => {
                 type: "thread/tokenUsage/updated",
                 threadId: thread.id,
                 providerThreadId: "provider-thread-1",
-                turnId: "turn-1",
                 scope: turnScope("turn-1"),
                 tokenUsage: {
                   total: {

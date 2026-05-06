@@ -9,7 +9,6 @@ import {
   hostDaemonCommands,
   listEnvironments,
   listThreads,
-  threads,
   updateHost,
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";
@@ -287,6 +286,9 @@ describe("public thread creation routes", () => {
         hostId: secondaryHost.id,
         path: "/tmp/secondary-managed-source",
       });
+      if (secondarySource.type !== "local_path") {
+        throw new Error("Expected local_path project source");
+      }
 
       const response = await harness.app.request("/api/v1/threads", {
         method: "POST",
@@ -324,6 +326,12 @@ describe("public thread creation routes", () => {
           command.type === "environment.provision" &&
           command.environmentId === environment.id,
       );
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected managed environment.provision command");
+      }
       expect(queued.command).toMatchObject({
         branchName: `bb/secondary-host-thread-${createdThread.id}`,
         sourcePath: secondarySource.path,

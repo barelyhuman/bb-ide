@@ -30,7 +30,7 @@ interface PostEventBatchArgs {
 }
 
 interface MockSandboxHost extends SandboxHost {
-  extendTimeout: ReturnType<typeof vi.fn>;
+  extendTimeout: ReturnType<typeof vi.fn<(timeoutMs: number) => Promise<void>>>;
 }
 
 async function postEventBatch(args: PostEventBatchArgs): Promise<Response> {

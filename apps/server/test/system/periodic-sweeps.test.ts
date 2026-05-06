@@ -83,12 +83,12 @@ interface UnmanagedProvisionCommandArgs {
 }
 
 interface MockSandboxHost {
-  destroy: ReturnType<typeof vi.fn>;
-  extendTimeout: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  extendTimeout: ReturnType<typeof vi.fn<(timeoutMs: number) => Promise<void>>>;
   externalId: string;
   hostId: string;
-  resume: ReturnType<typeof vi.fn>;
-  suspend: ReturnType<typeof vi.fn>;
+  resume: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  suspend: ReturnType<typeof vi.fn<() => Promise<void>>>;
 }
 
 interface ProvisionHostMockArgs {
@@ -505,7 +505,6 @@ describe("periodic sweeps", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             permissionMode: "full",
-            permissionEscalation: null,
             source: "client/turn/requested",
           },
           input: [{ type: "text", text: "short" }],

@@ -14,7 +14,6 @@ import {
   listHosts,
   getThread,
   hostDaemonCommands,
-  threads,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import {
@@ -272,7 +271,7 @@ describe("public thread sandbox-host routes", () => {
         },
       );
 
-      const { host } = seedHostSession(harness.deps);
+      seedHostSession(harness.deps);
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
@@ -396,26 +395,25 @@ describe("public thread sandbox-host routes", () => {
     try {
       let sandboxHostId: string | undefined;
       let sandboxHostName: string | undefined;
-      let resolveProvisionHost:
-        | ((value: {
-            destroy: ReturnType<typeof vi.fn>;
-            extendTimeout: ReturnType<typeof vi.fn>;
-            externalId: string;
-            hostId: string;
-            resume: ReturnType<typeof vi.fn>;
-            suspend: ReturnType<typeof vi.fn>;
-          }) => void)
-        | null = null;
-      const provisionHostResult = new Promise<{
+      type ProvisionHostValue = {
         destroy: ReturnType<typeof vi.fn>;
         extendTimeout: ReturnType<typeof vi.fn>;
         externalId: string;
         hostId: string;
         resume: ReturnType<typeof vi.fn>;
         suspend: ReturnType<typeof vi.fn>;
-      }>((resolve) => {
-        resolveProvisionHost = resolve;
-      });
+      };
+      const provisionHostDeferred: {
+        promise: Promise<ProvisionHostValue>;
+        resolve: (value: ProvisionHostValue) => void;
+      } = (() => {
+        let resolve!: (value: ProvisionHostValue) => void;
+        const promise = new Promise<ProvisionHostValue>((r) => {
+          resolve = r;
+        });
+        return { promise, resolve };
+      })();
+      const provisionHostResult = provisionHostDeferred.promise;
       provisionHostMock.mockImplementation(
         async (options: SandboxProvisionCall) => {
           sandboxHostId = options.hostId;
@@ -483,10 +481,7 @@ describe("public thread sandbox-host routes", () => {
         externalId: null,
       });
 
-      if (!resolveProvisionHost) {
-        throw new Error("Expected sandbox host provisioning to start");
-      }
-      resolveProvisionHost({
+      provisionHostDeferred.resolve({
         destroy: vi.fn().mockResolvedValue(undefined),
         extendTimeout: vi.fn().mockResolvedValue(undefined),
         externalId: "sandbox-external-connecting",
@@ -528,26 +523,25 @@ describe("public thread sandbox-host routes", () => {
     try {
       let sandboxHostId: string | undefined;
       let sandboxHostName: string | undefined;
-      let resolveProvisionHost:
-        | ((value: {
-            destroy: ReturnType<typeof vi.fn>;
-            extendTimeout: ReturnType<typeof vi.fn>;
-            externalId: string;
-            hostId: string;
-            resume: ReturnType<typeof vi.fn>;
-            suspend: ReturnType<typeof vi.fn>;
-          }) => void)
-        | null = null;
-      const provisionHostResult = new Promise<{
+      type ProvisionHostValue = {
         destroy: ReturnType<typeof vi.fn>;
         extendTimeout: ReturnType<typeof vi.fn>;
         externalId: string;
         hostId: string;
         resume: ReturnType<typeof vi.fn>;
         suspend: ReturnType<typeof vi.fn>;
-      }>((resolve) => {
-        resolveProvisionHost = resolve;
-      });
+      };
+      const provisionHostDeferred: {
+        promise: Promise<ProvisionHostValue>;
+        resolve: (value: ProvisionHostValue) => void;
+      } = (() => {
+        let resolve!: (value: ProvisionHostValue) => void;
+        const promise = new Promise<ProvisionHostValue>((r) => {
+          resolve = r;
+        });
+        return { promise, resolve };
+      })();
+      const provisionHostResult = provisionHostDeferred.promise;
       provisionHostMock.mockImplementation(
         async (options: SandboxProvisionCall) => {
           sandboxHostId = options.hostId;
@@ -615,14 +609,12 @@ describe("public thread sandbox-host routes", () => {
       expect(reusedThread.status).toBe("provisioning");
 
       await waitForAssertion(() => {
-        expect(resolveProvisionHost).not.toBeNull();
         expect(sandboxHostId).toBeDefined();
       });
-
-      if (!resolveProvisionHost || !sandboxHostId) {
+      if (!sandboxHostId) {
         throw new Error("Expected sandbox host provisioning to start");
       }
-      resolveProvisionHost({
+      provisionHostDeferred.resolve({
         destroy: vi.fn().mockResolvedValue(undefined),
         extendTimeout: vi.fn().mockResolvedValue(undefined),
         externalId: "sandbox-external-reuse",
@@ -670,7 +662,7 @@ describe("public thread sandbox-host routes", () => {
         },
       );
 
-      const { host } = seedHostSession(harness.deps);
+      seedHostSession(harness.deps);
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
@@ -738,17 +730,25 @@ describe("public thread sandbox-host routes", () => {
     });
     try {
       let sandboxHostId: string | undefined;
-      let rejectProvisionHost: ((reason?: unknown) => void) | null = null;
-      const provisionHostResult = new Promise<{
+      type ProvisionHostValue = {
         destroy: ReturnType<typeof vi.fn>;
         extendTimeout: ReturnType<typeof vi.fn>;
         externalId: string;
         hostId: string;
         resume: ReturnType<typeof vi.fn>;
         suspend: ReturnType<typeof vi.fn>;
-      }>((_resolve, reject) => {
-        rejectProvisionHost = reject;
-      });
+      };
+      const provisionHostDeferred: {
+        promise: Promise<ProvisionHostValue>;
+        reject: (reason?: unknown) => void;
+      } = (() => {
+        let reject!: (reason?: unknown) => void;
+        const promise = new Promise<ProvisionHostValue>((_resolve, r) => {
+          reject = r;
+        });
+        return { promise, reject };
+      })();
+      const provisionHostResult = provisionHostDeferred.promise;
       void provisionHostResult.catch(() => undefined);
       provisionHostMock.mockImplementation(
         async (options: SandboxProvisionCall) => {
@@ -808,10 +808,7 @@ describe("public thread sandbox-host routes", () => {
         status: "provisioning",
       });
 
-      if (!rejectProvisionHost) {
-        throw new Error("Expected sandbox host provisioning to start");
-      }
-      rejectProvisionHost(new Error("sandbox bootstrap failed"));
+      provisionHostDeferred.reject(new Error("sandbox bootstrap failed"));
 
       await waitForAssertion(() => {
         expect(getEnvironment(harness.db, environment.id)).toMatchObject({
@@ -852,7 +849,7 @@ describe("public thread sandbox-host routes", () => {
       externalUrl,
     });
     try {
-      const { host } = seedHostSession(harness.deps);
+      seedHostSession(harness.deps);
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
@@ -943,7 +940,7 @@ describe("public thread sandbox-host routes", () => {
       githubPat: "test-github-pat",
     });
     try {
-      const { host } = seedHostSession(harness.deps);
+      seedHostSession(harness.deps);
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
@@ -987,7 +984,7 @@ describe("public thread sandbox-host routes", () => {
       githubPat: "",
     });
     try {
-      const { host } = seedHostSession(harness.deps);
+      seedHostSession(harness.deps);
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {

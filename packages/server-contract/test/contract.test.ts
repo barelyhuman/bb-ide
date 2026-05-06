@@ -1,8 +1,6 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { collectOptionalFieldPaths } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
+import publicApiSource from "../src/public-api.ts?raw";
 import * as contract from "../src/index.js";
 import {
   PROJECT_CHANGE_KINDS,
@@ -733,15 +731,9 @@ describe("server-contract clients", () => {
   });
 
   it("keeps route inputs in shared named types instead of inline objects", () => {
-    const contractPath = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "../src/public-api.ts",
-    );
-    const contractSource = readFileSync(contractPath, "utf8");
-
-    expect(contractSource).not.toMatch(/json:\s*\{/);
-    expect(contractSource).not.toMatch(/query:\s*\{/);
-    expect(contractSource).not.toMatch(/form:\s*Record</);
+    expect(publicApiSource).not.toMatch(/json:\s*\{/);
+    expect(publicApiSource).not.toMatch(/query:\s*\{/);
+    expect(publicApiSource).not.toMatch(/form:\s*Record</);
   });
 
   it("bounds public file list search queries", () => {

@@ -185,7 +185,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: false,
             state: "clean",
-            changedFiles: 0,
             insertions: 0,
             deletions: 0,
             files: [],
@@ -210,7 +209,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: false,
             state: "clean",
-            changedFiles: 0,
             insertions: 0,
             deletions: 0,
             files: [],

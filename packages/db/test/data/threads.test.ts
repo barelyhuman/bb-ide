@@ -28,7 +28,6 @@ import {
 import { createProject } from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createEnvironment } from "../../src/data/environments.js";
-import type { ThreadStatus } from "@bb/domain";
 
 function setup() {
   const db = createConnection(":memory:");

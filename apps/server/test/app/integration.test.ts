@@ -78,15 +78,18 @@ async function waitForThreadSubscription(
     id?: string;
   }>(
     socket,
-    (message): message is { changes: string[]; entity: string; id?: string } =>
-      message != null &&
-      typeof message === "object" &&
-      "entity" in message &&
-      "changes" in message &&
-      message.entity === "thread" &&
-      message.id === threadId &&
-      Array.isArray(message.changes) &&
-      message.changes.includes("status-changed"),
+    (message): message is { changes: string[]; entity: string; id?: string } => {
+      if (message == null || typeof message !== "object") {
+        return false;
+      }
+      const record = message as Record<string, unknown>;
+      return (
+        record.entity === "thread" &&
+        record.id === threadId &&
+        Array.isArray(record.changes) &&
+        record.changes.includes("status-changed")
+      );
+    },
     2_000,
   );
   const interval = setInterval(() => {
@@ -115,6 +118,9 @@ async function fetchSingleCommand(
   });
   expect(response.status).toBe(200);
   const body = await response.json();
+  if (!body) {
+    throw new Error("Expected response body");
+  }
   const commands =
     afterCursor == null
       ? body.commands
@@ -231,6 +237,9 @@ describe("server integration", () => {
       });
       const updatedThread = await threadGetResponse.json();
       expect(updatedThread.status).toBe("provisioning");
+      if (!updatedThread.environmentId) {
+        throw new Error("Expected updated thread environmentId");
+      }
 
       const environmentGetResponse = await publicClient.environments[
         ":id"
@@ -238,6 +247,9 @@ describe("server integration", () => {
         param: { id: updatedThread.environmentId },
       });
       const environment = await environmentGetResponse.json();
+      if (!("status" in environment)) {
+        throw new Error("Expected environment payload with status");
+      }
       expect(environment.status).toBe("ready");
 
       const threadStartCommand = await fetchSingleCommand(
@@ -356,15 +368,18 @@ describe("server integration", () => {
         ws,
         (
           message,
-        ): message is { changes: string[]; entity: string; id?: string } =>
-          message != null &&
-          typeof message === "object" &&
-          "entity" in message &&
-          "changes" in message &&
-          message.entity === "thread" &&
-          message.id === thread.id &&
-          Array.isArray(message.changes) &&
-          message.changes.includes("events-appended"),
+        ): message is { changes: string[]; entity: string; id?: string } => {
+          if (message == null || typeof message !== "object") {
+            return false;
+          }
+          const record = message as Record<string, unknown>;
+          return (
+            record.entity === "thread" &&
+            record.id === thread.id &&
+            Array.isArray(record.changes) &&
+            record.changes.includes("events-appended")
+          );
+        },
       );
       const eventResponse = await daemonClient.session.events.$post({
         json: {
@@ -376,7 +391,6 @@ describe("server integration", () => {
                 type: "turn/started",
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
-                turnId: "turn-1",
                 scope: turnScope("turn-1"),
               },
             }),
@@ -497,7 +511,6 @@ describe("server integration", () => {
                 type: "turn/started",
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
-                turnId: "turn-initial",
                 scope: turnScope("turn-initial"),
               },
             }),
@@ -507,7 +520,6 @@ describe("server integration", () => {
                 type: "turn/completed",
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
-                turnId: "turn-initial",
                 scope: turnScope("turn-initial"),
                 status: "completed",
               },
@@ -559,7 +571,6 @@ describe("server integration", () => {
                 type: "turn/started",
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
-                turnId: "turn-1",
                 scope: turnScope("turn-1"),
               },
             }),
@@ -569,7 +580,6 @@ describe("server integration", () => {
                 type: "turn/completed",
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
-                turnId: "turn-1",
                 scope: turnScope("turn-1"),
                 status: "completed",
               },

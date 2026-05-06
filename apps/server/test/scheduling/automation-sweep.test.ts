@@ -236,6 +236,9 @@ describe("automation sweep", () => {
           command.type === "thread.start" &&
           command.threadId === createdThread.id,
       );
+      if (queued.command.type !== "thread.start") {
+        throw new Error("Expected thread.start command");
+      }
       expect(queued.command.options).toMatchObject({
         model: "gpt-5",
         permissionMode: "readonly",

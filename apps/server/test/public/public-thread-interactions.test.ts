@@ -733,6 +733,9 @@ describe("public thread interaction routes", () => {
         ({ command }) =>
           command.type === "turn.submit" && command.threadId === thread.id,
       );
+      if (queued.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
       expect(queued.command.options).toMatchObject({
         permissionMode: "full",
         permissionEscalation: null,
@@ -826,11 +829,9 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
         type: "turn/started",
         providerThreadId: "provider-thread-timeline",
-        turnId: "turn-timeline",
         scope: turnScope("turn-timeline"),
         data: {
           providerThreadId: "provider-thread-timeline",
-          turnId: "turn-timeline",
         },
       });
 
@@ -923,11 +924,9 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
         type: "turn/started",
         providerThreadId: "provider-thread-denied-timeline",
-        turnId: "turn-denied-timeline",
         scope: turnScope("turn-denied-timeline"),
         data: {
           providerThreadId: "provider-thread-denied-timeline",
-          turnId: "turn-denied-timeline",
         },
       });
 
@@ -1020,11 +1019,9 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
         type: "turn/started",
         providerThreadId: "provider-thread-file-timeline",
-        turnId: "turn-file-timeline",
         scope: turnScope("turn-file-timeline"),
         data: {
           providerThreadId: "provider-thread-file-timeline",
-          turnId: "turn-file-timeline",
         },
       });
 
@@ -1095,11 +1092,9 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
         type: "turn/started",
         providerThreadId: "provider-thread-permission-timeline",
-        turnId: "turn-permission-timeline",
         scope: turnScope("turn-permission-timeline"),
         data: {
           providerThreadId: "provider-thread-permission-timeline",
-          turnId: "turn-permission-timeline",
         },
       });
 

@@ -1,16 +1,7 @@
 {
-  "extends": "@bb/tsconfig/base.json",
+  "extends": ["./tsconfig.build.json", "@bb/tsconfig/typecheck-overrides.json"],
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "outDir": "dist",
-    "rootDir": "src",
-    "noEmit": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "rootDir": "."
   },
-  "include": ["src"]
+  "include": ["src", "test", "tests", "fixtures", "stories"]
 }

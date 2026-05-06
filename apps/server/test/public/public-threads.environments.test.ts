@@ -9,7 +9,6 @@ import {
   getEnvironment,
   getThread,
   hostDaemonCommands,
-  threads,
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { threadListResponseSchema } from "@bb/server-contract";

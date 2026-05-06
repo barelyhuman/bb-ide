@@ -107,7 +107,9 @@ describe("dev-env status API", () => {
     expect(response.status).toBe(200);
     expect(state.restartTargets).toEqual(["server"]);
     expect(runtime.baselineFingerprints.get("server")).toBe("server-changed");
-    const status = await response.json();
+    const status = (await response.json()) as {
+      services: Array<{ serviceName: string; changed: boolean }>;
+    };
     expect(
       status.services.find((service) => service.serviceName === "server"),
     ).toMatchObject({

@@ -218,15 +218,19 @@ export async function reportNextRuntimeMaterialSyncSuccess(
       command.type === "host.sync_runtime_material",
     args.timeoutMs,
   );
-  if (queued.command.type !== "host.sync_runtime_material") {
+  const command = queued.command;
+  if (command.type !== "host.sync_runtime_material") {
     throw new Error("Expected a host.sync_runtime_material command");
   }
+  const narrowed: QueuedCommand<
+    Extract<HostDaemonCommand, { type: "host.sync_runtime_material" }>
+  > = { command, row: queued.row };
 
   const response = await reportQueuedCommandSuccess(
     harness,
-    queued,
+    narrowed,
     {
-      appliedVersion: queued.command.version,
+      appliedVersion: command.version,
     },
     {
       hostId: args.hostId,
@@ -239,5 +243,5 @@ export async function reportNextRuntimeMaterialSyncSuccess(
     );
   }
 
-  return queued;
+  return narrowed;
 }

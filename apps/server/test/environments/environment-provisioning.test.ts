@@ -75,8 +75,11 @@ describe("environment reprovisioning", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (queued.command.type !== "environment.provision") {
-        throw new Error("Expected environment.provision command");
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected managed environment.provision command");
       }
       expect(queued.command.branchName).toBe(`bb/${thread.id}`);
       expect(
@@ -127,8 +130,11 @@ describe("environment reprovisioning", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (queued.command.type !== "environment.provision") {
-        throw new Error("Expected environment.provision command");
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected managed environment.provision command");
       }
       expect(queued.command.branchName).toBe("bb/existing-readable-branch");
     } finally {

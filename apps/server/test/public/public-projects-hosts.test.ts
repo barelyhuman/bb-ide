@@ -37,8 +37,7 @@ function cleanWorkspaceStatus() {
   return {
     workingTree: {
       hasUncommittedChanges: false,
-      state: "clean",
-      changedFiles: 0,
+      state: "clean" as const,
       insertions: 0,
       deletions: 0,
       files: [],

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { threadScope, turnScope } from "@bb/domain";
 import { deriveStoredEventItemFields } from "../src/stored-event-item-fields.js";
 
 describe("deriveStoredEventItemFields", () => {
@@ -8,12 +9,12 @@ describe("deriveStoredEventItemFields", () => {
         type: "item/started",
         threadId: "thread-1",
         providerThreadId: "provider-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         item: {
           id: "tool-1",
           type: "toolCall",
           tool: "read_file",
-          status: "in_progress",
+          status: "pending",
         },
       }),
     ).toEqual({
@@ -28,7 +29,7 @@ describe("deriveStoredEventItemFields", () => {
         type: "item/completed",
         threadId: "thread-1",
         providerThreadId: "provider-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         item: {
           id: "msg-1",
           type: "agentMessage",
@@ -47,7 +48,7 @@ describe("deriveStoredEventItemFields", () => {
         type: "item/toolCall/progress",
         threadId: "thread-1",
         providerThreadId: "provider-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         itemId: "tool-1",
         message: "still running",
       }),
@@ -63,7 +64,7 @@ describe("deriveStoredEventItemFields", () => {
         type: "item/agentMessage/delta",
         threadId: "thread-1",
         providerThreadId: "provider-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         itemId: "msg-1",
         delta: "hel",
       }),
@@ -78,6 +79,7 @@ describe("deriveStoredEventItemFields", () => {
       deriveStoredEventItemFields({
         type: "system/error",
         threadId: "thread-1",
+        scope: threadScope(),
         code: "tool_failed",
         message: "Something failed",
       }),

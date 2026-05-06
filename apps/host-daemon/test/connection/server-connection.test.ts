@@ -11,10 +11,8 @@ import {
   createServerClient,
   type CommandResultRetryOptions,
 } from "../../src/server-client.js";
-import {
-  ServerConnection,
-  type ReconnectingWebSocketLike,
-} from "../../src/server-connection.js";
+import { ServerConnection } from "../../src/server-connection.js";
+import type { ReconnectingWebSocketLike } from "../../src/server-connection-support.js";
 import { createTestServer, type TestServer } from "../helpers/test-server.js";
 import { createHarness } from "../command/dispatch-helpers.js";
 

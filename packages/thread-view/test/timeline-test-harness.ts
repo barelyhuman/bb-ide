@@ -1,3 +1,4 @@
+import { expect } from "vitest";
 import {
   encodeClientTurnRequestIdNumber,
   threadScope,
@@ -131,7 +132,7 @@ type ToolCallStartedArgs = ToolCallCompletedArgs;
 
 interface CommandCompletedArgs extends ProviderTurnEventOptions {
   aggregatedOutput?: string;
-  approvalStatus?: "waiting_for_approval" | "approved" | "denied" | null;
+  approvalStatus?: "waiting_for_approval" | "denied" | null;
   command: string;
   cwd?: string;
   exitCode?: number;
@@ -166,10 +167,10 @@ interface WebFetchCompletedArgs extends ProviderTurnEventOptions {
 type WebFetchStartedArgs = WebFetchCompletedArgs;
 
 interface FileChangeCompletedArgs extends ProviderTurnEventOptions {
-  approvalStatus?: "waiting_for_approval" | "approved" | "denied" | null;
+  approvalStatus?: "waiting_for_approval" | "denied" | null;
   changes: Array<{
     diff?: string;
-    kind?: "add" | "delete" | "update";
+    kind: "add" | "delete" | "update";
     path: string;
   }>;
   itemId?: string;
@@ -227,7 +228,7 @@ interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   message?: string;
   providerId?: string;
   providerRequestId?: string;
-  status?: "pending" | "completed" | "denied" | "failed" | "expired";
+  status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
   toolName?: string;
 }
 

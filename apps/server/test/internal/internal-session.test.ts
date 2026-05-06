@@ -24,6 +24,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandSchema,
   hostDaemonCommandResultResponseSchema,
+  hostDaemonEventBatchResponseSchema,
   hostDaemonSessionOpenResponseSchema,
   hostRuntimeMaterialSnapshotSchema,
 } from "@bb/host-daemon-contract";
@@ -240,6 +241,10 @@ describe("internal session routes", () => {
           row.hostId === host.id &&
           command.type === "host.sync_runtime_material",
       );
+      const runtimeSyncCommand = queuedRuntimeSync.command;
+      if (runtimeSyncCommand.type !== "host.sync_runtime_material") {
+        throw new Error("Expected host.sync_runtime_material command");
+      }
       const response = await Promise.race([
         responsePromise,
         sleep(500).then(() => null),
@@ -260,9 +265,9 @@ describe("internal session routes", () => {
 
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
-        queuedRuntimeSync,
+        { command: runtimeSyncCommand, row: queuedRuntimeSync.row },
         {
-          appliedVersion: queuedRuntimeSync.command.version,
+          appliedVersion: runtimeSyncCommand.version,
         },
         {
           hostId: host.id,
@@ -454,7 +459,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
@@ -478,7 +482,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         permissionEscalation: "deny",
@@ -676,7 +679,9 @@ describe("internal session routes", () => {
       );
 
       expect(daemonEventResponse.status).toBe(200);
-      const daemonEventBody = await readJson(daemonEventResponse);
+      const daemonEventBody = hostDaemonEventBatchResponseSchema.parse(
+        await readJson(daemonEventResponse),
+      );
       expect(daemonEventBody).toMatchObject({
         acceptedEvents: [
           {
@@ -686,7 +691,10 @@ describe("internal session routes", () => {
           },
         ],
       });
-      const daemonEventSequence = daemonEventBody.acceptedEvents[0].sequence;
+      const daemonEventSequence = daemonEventBody.acceptedEvents[0]?.sequence;
+      if (daemonEventSequence === undefined) {
+        throw new Error("Expected daemon event sequence");
+      }
       expect(daemonEventSequence).toBeGreaterThan(reuserSequenceAfterResult);
       expect(
         harness.db
@@ -838,7 +846,7 @@ describe("internal session routes", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const initialSession = openSession(harness.db, harness.hub, {
+      openSession(harness.db, harness.hub, {
         heartbeatIntervalMs: 5_000,
         hostId: host.id,
         hostName: host.name,
@@ -1039,7 +1047,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         titleProvided: true,
@@ -1589,7 +1596,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
@@ -1678,7 +1684,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
@@ -1748,7 +1753,8 @@ describe("internal session routes", () => {
       const queuedRestart = await waitForQueuedCommandAfter(
         harness,
         provisionCommand.cursor,
-        ({ command }) => command.threadId === thread.id,
+        ({ command }) =>
+          "threadId" in command && command.threadId === thread.id,
       );
       if (queuedRestart.command.type !== "thread.start") {
         throw new Error("Expected reprovisioning to queue thread.start");
@@ -1872,7 +1878,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
@@ -2005,7 +2010,6 @@ describe("internal session routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
@@ -3173,6 +3177,9 @@ describe("internal session routes", () => {
         managed: true,
         status: "destroying",
       });
+      if (!environment.path) {
+        throw new Error("Expected environment path");
+      }
       const destroyCommand = queueEnvironmentDestroyLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
@@ -3338,6 +3345,9 @@ describe("internal session routes", () => {
         managed: true,
         status: "destroying",
       });
+      if (!environment.path) {
+        throw new Error("Expected environment path");
+      }
       const destroyCommand = queueEnvironmentDestroyLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,

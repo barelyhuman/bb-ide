@@ -1162,6 +1162,7 @@ describe("events", () => {
         direction: "outbound",
         source: "spawn",
         initiator: "user",
+        requestId: "creq_runtime",
         input: [{ type: "text", text: "start" }],
         target: { kind: "thread-start" },
         request: { method: "thread/start", params: {} },
@@ -1170,7 +1171,7 @@ describe("events", () => {
           reasoningLevel: "medium",
           permissionMode: "workspace-write",
           source: "client/turn/requested",
-          serviceTier: "auto",
+          serviceTier: "default",
         },
       },
     });
@@ -1184,7 +1185,6 @@ describe("events", () => {
           type: "turn/started",
           data: {
             providerThreadId: "provider_thr_1",
-            turnId: "turn_1",
           },
         }),
       { behavior: "immediate" },
@@ -1209,7 +1209,6 @@ describe("events", () => {
       data: {
         providerThreadId: "provider_thr_1",
         status: "completed",
-        turnId: "turn_1",
       },
     });
     expect(getActiveStoredTurnId(db, thread.id)).toBeNull();
@@ -1220,7 +1219,6 @@ describe("events", () => {
       type: "turn/started",
       data: {
         providerThreadId: "provider_thr_1",
-        turnId: "turn_1",
       },
     });
     expect(getActiveStoredTurnId(db, thread.id)).toBeNull();
@@ -1243,7 +1241,6 @@ describe("events", () => {
             type: "turn/started",
             data: {
               providerThreadId: "provider_thr_1",
-              turnId: "turn_1",
             },
           },
           {
@@ -1254,7 +1251,6 @@ describe("events", () => {
             data: {
               providerThreadId: "provider_thr_1",
               status: "interrupted",
-              turnId: "turn_1",
             },
           },
           {

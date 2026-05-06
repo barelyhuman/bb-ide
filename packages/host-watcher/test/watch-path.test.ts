@@ -6,7 +6,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 type WatchPathModule = typeof import("../src/watch-path.js");
 type WatchPathChanges = WatchPathModule["watchPathChanges"];
-type ParcelWatcherModule = typeof import("@parcel/watcher");
+// `@parcel/watcher` ships with `export =`, so the runtime module after Node's
+// ESM interop exposes a `default` field alongside the named callable. The TS
+// type for `typeof import("@parcel/watcher")` doesn't include `default`, so
+// intersect it in here for the mock plumbing.
+type ParcelWatcherActual = typeof import("@parcel/watcher");
+type ParcelWatcherModule = ParcelWatcherActual & {
+  default: ParcelWatcherActual;
+};
 type ParcelWatcherDefault = ParcelWatcherModule["default"];
 type ParcelWatcherSubscribe = ParcelWatcherDefault["subscribe"];
 type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
@@ -18,7 +25,7 @@ interface MockWatchPathImport {
   callbacks: ParcelWatcherCallback[];
   rootPaths: string[];
   subscribeCallCount: () => number;
-  unsubscribe: ReturnType<typeof vi.fn>;
+  unsubscribe: ReturnType<typeof vi.fn<() => Promise<void>>>;
   watchPathChanges: WatchPathChanges;
 }
 
@@ -69,7 +76,7 @@ async function importWatchPathWithMockedWatcher(
   const callbacks: ParcelWatcherCallback[] = [];
   const rootPaths: string[] = [];
   let subscribeCallCount = 0;
-  const unsubscribe = vi.fn(async () => undefined);
+  const unsubscribe = vi.fn<() => Promise<void>>(async () => undefined);
 
   vi.resetModules();
   if (options.pathExistsImplementation) {

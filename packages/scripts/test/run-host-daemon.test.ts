@@ -10,6 +10,7 @@ import {
   maybeAddAutoJoinEnv,
   resolveDefaultDataDirName,
 } from "../src/commands/run-host-daemon.js";
+import type { HostDaemonRuntimeEnvironment } from "../src/lib/host-daemon-runtime.js";
 
 const tempDirs: string[] = [];
 
@@ -59,7 +60,8 @@ describe("run-host-daemon auto join", () => {
       {
         BB_DATA_DIR: dataDir,
         BB_SERVER_URL: "http://127.0.0.1:3334",
-      },
+        NODE_ENV: "development",
+      } as HostDaemonRuntimeEnvironment,
       true,
     );
 
@@ -115,7 +117,8 @@ describe("run-host-daemon auto join", () => {
       {
         BB_DATA_DIR: dataDir,
         BB_SERVER_URL: "http://127.0.0.1:3334",
-      },
+        NODE_ENV: "development",
+      } as HostDaemonRuntimeEnvironment,
       true,
     );
 
@@ -174,7 +177,8 @@ describe("run-host-daemon auto join", () => {
       {
         BB_DATA_DIR: dataDir,
         BB_SERVER_URL: "http://127.0.0.1:3334",
-      },
+        NODE_ENV: "development",
+      } as HostDaemonRuntimeEnvironment,
       true,
     );
 
@@ -209,7 +213,8 @@ describe("run-host-daemon auto join", () => {
         {
           BB_DATA_DIR: dataDir,
           BB_SERVER_URL: "http://127.0.0.1:3334",
-        },
+        NODE_ENV: "development",
+        } as HostDaemonRuntimeEnvironment,
         true,
       ),
     ).rejects.toThrow(

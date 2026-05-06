@@ -254,10 +254,14 @@ describe("sandbox runtime material", () => {
           row.hostId === host.id &&
           command.type === "host.sync_runtime_material",
       );
+      const runtimeSyncCommand = queuedRuntimeSync.command;
+      if (runtimeSyncCommand.type !== "host.sync_runtime_material") {
+        throw new Error("Expected host.sync_runtime_material command");
+      }
       const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(
         harness.deps,
       );
-      expect(queuedRuntimeSync.command).toMatchObject({
+      expect(runtimeSyncCommand).toMatchObject({
         type: "host.sync_runtime_material",
         version: desiredSnapshot.version,
       });
@@ -266,9 +270,9 @@ describe("sandbox runtime material", () => {
 
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
-        queuedRuntimeSync,
+        { command: runtimeSyncCommand, row: queuedRuntimeSync.row },
         {
-          appliedVersion: queuedRuntimeSync.command.version,
+          appliedVersion: runtimeSyncCommand.version,
         },
         {
           hostId: host.id,

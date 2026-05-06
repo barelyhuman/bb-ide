@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Workspace } from "../src/workspace.js";
 import { createWorktree } from "../src/provisioning.js";
 import { promoteWorkspace, demoteWorkspace } from "../src/promote.js";
-import { runGit, WorkspaceError } from "../src/git.js";
+import { runGit } from "../src/git.js";
 
 const tempDirs: string[] = [];
 

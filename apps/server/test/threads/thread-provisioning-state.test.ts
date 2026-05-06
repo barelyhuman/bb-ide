@@ -63,7 +63,6 @@ describe("thread provisioning operation state", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: null,
           source: "client/turn/requested",
         },
         titleProvided: true,

@@ -1,17 +1,12 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
+import THEME_CSS from "../src/primitives/theme.css?raw";
 import {
   SidebarStickyStack,
   SidebarStickyTier,
 } from "../src/primitives/ui/sidebar.js";
-
-const THEME_CSS = readFileSync(
-  "src/primitives/theme.css",
-  "utf8",
-);
 
 interface CssRuleLookupArgs {
   cssText: string;

@@ -12,7 +12,6 @@ import {
   getThread,
   hostDaemonCommands,
   listThreads,
-  threads,
 } from "@bb/db";
 import { threadSchema, turnScope, type Thread } from "@bb/domain";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
@@ -76,7 +75,9 @@ function listQueuedThreadCommands(
     .where(eq(hostDaemonCommands.type, type))
     .all()
     .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)))
-    .filter((command) => command.threadId === threadId);
+    .filter(
+      (command) => "threadId" in command && command.threadId === threadId,
+    );
 }
 
 describe("public thread archive delete cleanup routes", () => {

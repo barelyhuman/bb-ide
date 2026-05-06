@@ -3,16 +3,18 @@ import path from "node:path";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import {
   encodeClientTurnRequestIdNumber,
+  turnScope,
   type ClientTurnRequestId,
 } from "@bb/domain";
 import { afterEach, describe, expect, it } from "vitest";
-import { dispatchCommand, noopEventSink } from "../../src/command-dispatch.js";
+import { dispatchCommand } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 import {
   cleanupTempDirs,
   createFakeRuntime,
   createFakeWorkspace,
   createHarness,
+  makeDispatchOptions,
   makeTempDir,
 } from "./dispatch-helpers.js";
 
@@ -274,14 +276,16 @@ describe("thread command dispatch", () => {
     let runtimeOptions: AgentRuntimeOptions | undefined;
     let completedTurns = 0;
     runtime.runTurn = async (args) => {
-      state.ranTurnText = args.input[0]?.text;
+      const firstInput = args.input[0];
+      state.ranTurnText =
+        firstInput?.type === "text" ? firstInput.text : undefined;
       completedTurns += 1;
       if (completedTurns === 1) {
         runtimeOptions?.onEvent?.({
           type: "turn/completed",
           threadId: "thread-1",
           providerThreadId: "provider-1",
-          turnId: `turn-${completedTurns}`,
+          scope: turnScope(`turn-${completedTurns}`),
           status: "completed",
         });
       }
@@ -328,12 +332,7 @@ describe("thread command dispatch", () => {
         },
         target: { mode: "start" },
       },
-      {
-        dataDir: "/tmp/bb-test-data",
-        eventSink: noopEventSink,
-        runtimeManager: manager,
-        threadStorageRootPath: "/tmp/bb-test-thread-storage",
-      },
+      makeDispatchOptions({ runtimeManager: manager }),
     );
 
     expect(manager.listActiveThreads()).toEqual([]);
@@ -366,12 +365,7 @@ describe("thread command dispatch", () => {
         },
         target: { mode: "start" },
       },
-      {
-        dataDir: "/tmp/bb-test-data",
-        eventSink: noopEventSink,
-        runtimeManager: manager,
-        threadStorageRootPath: "/tmp/bb-test-thread-storage",
-      },
+      makeDispatchOptions({ runtimeManager: manager }),
     );
 
     expect(result).toEqual({ appliedAs: "new-turn" });
@@ -688,12 +682,7 @@ describe("thread command dispatch", () => {
         },
         target: { mode: "start" },
       },
-      {
-        dataDir: "/tmp/bb-test-data",
-        eventSink: noopEventSink,
-        runtimeManager: manager,
-        threadStorageRootPath: "/tmp/bb-test-thread-storage",
-      },
+      makeDispatchOptions({ runtimeManager: manager }),
     );
 
     expect(result).toEqual({ appliedAs: "new-turn" });

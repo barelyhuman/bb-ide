@@ -25,7 +25,13 @@ async function importFreshLogger() {
 async function importFreshLoggerWithPinoTransportSpy() {
   vi.resetModules();
 
-  const actual = await vi.importActual<typeof import("pino")>("pino");
+  // pino uses `export = pino` (CJS), but the runtime module after Node's
+  // ESM interop exposes `default` alongside the named callable. The TS type
+  // for `typeof import("pino")` is the function itself, so type the actual
+  // module shape explicitly to access `default`.
+  const actual = await vi.importActual<{ default: typeof import("pino") }>(
+    "pino",
+  );
   const transportSpy = vi.fn(actual.default.transport);
   const mockedPino = Object.assign(
     ((...args: Parameters<typeof actual.default>) =>
@@ -68,7 +74,10 @@ async function runLoggerInSubprocess(args: {
     setTimeout(() => process.exit(0), 250);
   `;
 
-  const childEnv = { ...process.env, BB_DATA_DIR: args.dataDir };
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    BB_DATA_DIR: args.dataDir,
+  };
   // The logger skips pino-pretty under VITEST; clear it so the spawned
   // process exercises the real stdout transport like production does.
   delete childEnv.VITEST;

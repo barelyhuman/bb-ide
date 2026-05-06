@@ -312,6 +312,9 @@ describe("public thread manager and ownership routes", () => {
           command.type === "thread.start" &&
           command.threadId === managerThread.id,
       );
+      if (managerStartCommand.command.type !== "thread.start") {
+        throw new Error("Expected thread.start command");
+      }
       expect(managerStartCommand.command.options).toMatchObject({
         model: "gpt-5",
         serviceTier: "default",
@@ -630,6 +633,9 @@ describe("public thread manager and ownership routes", () => {
           command.type === "thread.start" &&
           command.threadId === reuseChild.id,
       );
+      if (reuseThreadStart.command.type !== "thread.start") {
+        throw new Error("Expected thread.start command");
+      }
       expect(reuseThreadStart.command.environmentId).toBe(reuseEnvironment.id);
     } finally {
       await harness.cleanup();

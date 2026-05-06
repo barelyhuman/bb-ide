@@ -8,7 +8,6 @@ import {
   getDraft,
   getThread,
   hostDaemonCommands,
-  threads,
 } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,

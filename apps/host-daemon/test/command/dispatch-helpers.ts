@@ -1,18 +1,21 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentRuntime } from "@bb/agent-runtime";
+import type {
+  AgentRuntime,
+  AgentRuntimeExecutionOptions,
+} from "@bb/agent-runtime";
 import type {
   ClientTurnRequestId,
   AvailableModel,
   DynamicTool,
-  ThreadExecutionOptions,
 } from "@bb/domain";
 import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import type { HostWorkspace, ProvisionWorkspaceArgs } from "@bb/host-workspace";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 import { listFilesRecursively } from "../../src/command-handlers/file-list.js";
 import { noopEventSink } from "../../src/command-dispatch-support.js";
+import type { CommandDispatchOptions } from "../../src/command-dispatch-support.js";
 
 const tempDirs: string[] = [];
 
@@ -41,13 +44,13 @@ interface FakeRuntimeState {
   listedModelsProviderId: string | undefined;
   ranTurnClientRequestId: ClientTurnRequestId | undefined;
   ranTurnInstructions: string | undefined;
-  ranTurnOptions: ThreadExecutionOptions | undefined;
+  ranTurnOptions: AgentRuntimeExecutionOptions | undefined;
   ranTurnText: string | undefined;
   renamedTitle: string | undefined;
   resumedDynamicTools: DynamicTool[] | undefined;
   resumedEnvironmentId: string | undefined;
   resumedInstructions: string | undefined;
-  resumedOptions: ThreadExecutionOptions | undefined;
+  resumedOptions: AgentRuntimeExecutionOptions | undefined;
   resumedProviderThreadId: string | undefined;
   resumedThreadId: string | undefined;
   runningProviders: string[];
@@ -55,17 +58,24 @@ interface FakeRuntimeState {
   startedDynamicTools: DynamicTool[] | undefined;
   startedEnvironmentId: string | undefined;
   startedInstructions: string | undefined;
-  startedOptions: ThreadExecutionOptions | undefined;
+  startedOptions: AgentRuntimeExecutionOptions | undefined;
   startedThreadId: string | undefined;
   steeredClientRequestId: ClientTurnRequestId | undefined;
   steeredTurnId: string | undefined;
   steeredTurnInstructions: string | undefined;
-  steeredTurnOptions: ThreadExecutionOptions | undefined;
+  steeredTurnOptions: AgentRuntimeExecutionOptions | undefined;
   stoppedThreadId: string | undefined;
   unarchivedProviderId: string | undefined;
   unarchivedProviderThreadId: string | undefined;
   unarchivedThreadId: string | undefined;
 }
+
+// Tests reassign workspace fields (e.g. isWorktree, getCurrentBranch) on the
+// fake to vary behavior per test, so the fake exposes mutable equivalents of
+// HostWorkspace's otherwise-readonly fields.
+type FakeHostWorkspace = {
+  -readonly [K in keyof HostWorkspace]: HostWorkspace[K];
+};
 
 export function createFakeWorkspace(pathname: string) {
   const state: FakeWorkspaceState = {
@@ -79,7 +89,7 @@ export function createFakeWorkspace(pathname: string) {
     destroyed: false,
     listedModelsProviderId: undefined,
   };
-  const workspace = {
+  const workspace: FakeHostWorkspace = {
     path: pathname,
     managed: false,
     isGitRepo: true,
@@ -180,52 +190,47 @@ export function createFakeWorkspace(pathname: string) {
     async destroy() {
       state.destroyed = true;
     },
-  } satisfies HostWorkspace;
+  };
 
   return { workspace, state };
 }
 
 export function createFakeRuntime() {
   const state: FakeRuntimeState = {
-    resumedEnvironmentId: undefined,
-    startedThreadId: undefined,
-    startedEnvironmentId: undefined,
-    startedDynamicTools: undefined,
-    startedOptions: undefined,
-    startedInstructions: undefined,
-    resumedThreadId: undefined,
-    resumedDynamicTools: undefined,
-    resumedOptions: undefined,
-    resumedInstructions: undefined,
-    resumedProviderThreadId: undefined,
-    ranTurnText: undefined,
-    ranTurnClientRequestId: undefined,
-    ranTurnOptions: undefined,
-    ranTurnInstructions: undefined,
-    steeredTurnId: undefined,
-    steeredClientRequestId: undefined,
-    steeredTurnOptions: undefined,
-    steeredTurnInstructions: undefined,
-    stoppedThreadId: undefined,
-    renamedTitle: undefined,
-    archivedThreadId: undefined,
     archivedProviderId: undefined,
     archivedProviderThreadId: undefined,
-    unarchivedThreadId: undefined,
-    unarchivedProviderId: undefined,
-    unarchivedProviderThreadId: undefined,
+    archivedThreadId: undefined,
+    listedModelsProviderId: undefined,
+    ranTurnClientRequestId: undefined,
+    ranTurnInstructions: undefined,
+    ranTurnOptions: undefined,
+    ranTurnText: undefined,
+    renamedTitle: undefined,
+    resumedDynamicTools: undefined,
+    resumedEnvironmentId: undefined,
+    resumedInstructions: undefined,
+    resumedOptions: undefined,
+    resumedProviderThreadId: undefined,
+    resumedThreadId: undefined,
     runningProviders: [],
     shutdownCount: 0,
+    startedDynamicTools: undefined,
+    startedEnvironmentId: undefined,
+    startedInstructions: undefined,
+    startedOptions: undefined,
+    startedThreadId: undefined,
+    steeredClientRequestId: undefined,
+    steeredTurnId: undefined,
+    steeredTurnInstructions: undefined,
+    steeredTurnOptions: undefined,
+    stoppedThreadId: undefined,
+    unarchivedProviderId: undefined,
+    unarchivedProviderThreadId: undefined,
+    unarchivedThreadId: undefined,
   };
-  const runtime = {
+  const runtime: AgentRuntime = {
     async ensureProvider() {},
-    async startThread(args: {
-      dynamicTools?: DynamicTool[];
-      environmentId: string;
-      instructions?: string;
-      options?: ThreadExecutionOptions;
-      threadId: string;
-    }) {
+    async startThread(args) {
       state.startedEnvironmentId = args.environmentId;
       state.startedThreadId = args.threadId;
       state.startedDynamicTools = args.dynamicTools;
@@ -233,14 +238,7 @@ export function createFakeRuntime() {
       state.startedInstructions = args.instructions;
       return { providerThreadId: `provider-${args.threadId}` };
     },
-    async resumeThread(args: {
-      dynamicTools?: DynamicTool[];
-      environmentId: string;
-      instructions?: string;
-      options?: ThreadExecutionOptions;
-      providerThreadId?: string;
-      threadId: string;
-    }) {
+    async resumeThread(args) {
       state.resumedEnvironmentId = args.environmentId;
       state.resumedThreadId = args.threadId;
       state.resumedDynamicTools = args.dynamicTools;
@@ -251,52 +249,33 @@ export function createFakeRuntime() {
         providerThreadId: args.providerThreadId ?? `provider-${args.threadId}`,
       };
     },
-    async runTurn(args: {
-      clientRequestId?: ClientTurnRequestId;
-      input: Array<{ text?: string; type: string }>;
-      instructions?: string;
-      options?: ThreadExecutionOptions;
-      threadId: string;
-    }) {
-      state.ranTurnText = args.input[0]?.text;
+    async runTurn(args) {
+      const firstInput = args.input[0];
+      state.ranTurnText =
+        firstInput?.type === "text" ? firstInput.text : undefined;
       state.ranTurnClientRequestId = args.clientRequestId;
       state.ranTurnOptions = args.options;
       state.ranTurnInstructions = args.instructions;
     },
-    async steerTurn(args: {
-      clientRequestId?: ClientTurnRequestId;
-      expectedTurnId: string;
-      input: Array<{ text?: string; type: string }>;
-      instructions?: string;
-      options?: ThreadExecutionOptions;
-      threadId: string;
-    }) {
+    async steerTurn(args) {
       state.steeredTurnId = args.expectedTurnId;
       state.steeredClientRequestId = args.clientRequestId;
       state.steeredTurnOptions = args.options;
       state.steeredTurnInstructions = args.instructions;
-      return { status: "steered" as const };
+      return { status: "steered" };
     },
-    async stopThread(args: { threadId: string }) {
+    async stopThread(args) {
       state.stoppedThreadId = args.threadId;
     },
-    async renameThread(args: { title: string }) {
+    async renameThread(args) {
       state.renamedTitle = args.title;
     },
-    async archiveThread(args: {
-      providerId: string;
-      providerThreadId: string;
-      threadId: string;
-    }) {
+    async archiveThread(args) {
       state.archivedThreadId = args.threadId;
       state.archivedProviderId = args.providerId;
       state.archivedProviderThreadId = args.providerThreadId;
     },
-    async unarchiveThread(args: {
-      providerId: string;
-      providerThreadId: string;
-      threadId: string;
-    }) {
+    async unarchiveThread(args) {
       state.unarchivedThreadId = args.threadId;
       state.unarchivedProviderId = args.providerId;
       state.unarchivedProviderThreadId = args.providerThreadId;
@@ -304,7 +283,7 @@ export function createFakeRuntime() {
     listRunningProviders() {
       return state.runningProviders;
     },
-    async listModels(args: { providerId: string }) {
+    async listModels(args) {
       state.listedModelsProviderId = args.providerId;
       return [] satisfies AvailableModel[];
     },
@@ -314,7 +293,7 @@ export function createFakeRuntime() {
   };
 
   return {
-    runtime: runtime satisfies AgentRuntime,
+    runtime,
     state,
   };
 }
@@ -354,15 +333,42 @@ export function createHarness(
     /** Default dispatch options with threadStorageRootPath for tests. */
     dispatchOptions(
       overrides: { dataDir?: string; threadStorageRootPath?: string } = {},
-    ) {
+    ): CommandDispatchOptions {
       return {
         dataDir: overrides.dataDir ?? "/tmp/bb-test-data",
         eventSink: noopEventSink,
+        fetchRuntimeMaterial: async () => ({
+          env: {},
+          files: [],
+          version: "test-runtime-version",
+        }),
+        readPersistedRuntimeMaterial: async () => null,
+        persistRuntimeMaterial: async () => undefined,
         runtimeManager: manager,
         threadStorageRootPath:
           overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",
       };
     },
+  };
+}
+
+/** Build a complete CommandDispatchOptions using an already-created RuntimeManager. */
+export function makeDispatchOptions(
+  overrides: Partial<CommandDispatchOptions> &
+    Pick<CommandDispatchOptions, "runtimeManager">,
+): CommandDispatchOptions {
+  return {
+    dataDir: "/tmp/bb-test-data",
+    eventSink: noopEventSink,
+    fetchRuntimeMaterial: async () => ({
+      env: {},
+      files: [],
+      version: "test-runtime-version",
+    }),
+    readPersistedRuntimeMaterial: async () => null,
+    persistRuntimeMaterial: async () => undefined,
+    threadStorageRootPath: "/tmp/bb-test-thread-storage",
+    ...overrides,
   };
 }
 

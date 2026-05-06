@@ -355,6 +355,7 @@ export type {
   StoredThreadEventDataForType,
   ThreadEventOfType,
   ThreadEventRow,
+  ThreadEventRowOfType,
 } from "./stored-thread-event.js";
 
 export { jsonValueSchema } from "./json-value.js";

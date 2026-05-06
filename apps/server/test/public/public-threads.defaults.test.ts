@@ -6,7 +6,6 @@ import {
 import {
   getProjectExecutionDefaults,
   listThreads,
-  threads,
   upsertProjectExecutionDefaults,
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";

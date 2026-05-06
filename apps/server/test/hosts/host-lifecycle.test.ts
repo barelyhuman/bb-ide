@@ -17,6 +17,7 @@ import {
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
 import {
+  reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
@@ -38,12 +39,12 @@ vi.mock("@bb/sandbox-host", () => ({
 }));
 
 interface MockSandboxHost {
-  destroy: ReturnType<typeof vi.fn>;
-  extendTimeout: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  extendTimeout: ReturnType<typeof vi.fn<(timeoutMs: number) => Promise<void>>>;
   externalId: string;
   hostId: string;
-  resume: ReturnType<typeof vi.fn>;
-  suspend: ReturnType<typeof vi.fn>;
+  resume: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  suspend: ReturnType<typeof vi.fn<() => Promise<void>>>;
 }
 
 interface ProvisionHostMockArgs {
@@ -335,10 +336,17 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      let resolveKill: (() => void) | null = null;
-      const killPromise = new Promise<void>((resolve) => {
-        resolveKill = resolve;
-      });
+      const killDeferred: {
+        promise: Promise<void>;
+        resolve: () => void;
+      } = (() => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((r) => {
+          resolve = r;
+        });
+        return { promise, resolve };
+      })();
+      const killPromise = killDeferred.promise;
       const resumedSandbox = {
         kill: vi.fn().mockImplementation(async () => killPromise),
       };
@@ -351,10 +359,7 @@ describe("host lifecycle", () => {
         expect(resumedSandbox.kill).toHaveBeenCalledTimes(1);
       });
 
-      if (!resolveKill) {
-        throw new Error("Expected destroy to start kill");
-      }
-      resolveKill();
+      killDeferred.resolve();
 
       await Promise.all([firstDestroy, secondDestroy]);
       expect(getHost(harness.db, host.id)).toMatchObject({
@@ -450,24 +455,10 @@ describe("host lifecycle", () => {
       });
 
       await vi.advanceTimersByTimeAsync(100);
-      const queuedRuntimeSync = await waitForQueuedCommand(
-        harness,
-        ({ command, row }) =>
-          row.hostId === host.id &&
-          command.type === "host.sync_runtime_material",
-      );
-      const reportResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedRuntimeSync,
-        {
-          appliedVersion: queuedRuntimeSync.command.version,
-        },
-        {
-          hostId: host.id,
-          hostType: "ephemeral",
-        },
-      );
-      expect(reportResponse.status).toBe(200);
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: host.id,
+        hostType: "ephemeral",
+      });
       await Promise.all([firstReady, secondReady]);
 
       expect(provisionHostMock).toHaveBeenCalledTimes(1);
@@ -619,24 +610,10 @@ describe("host lifecycle", () => {
         hostId: host.id,
       });
       await vi.advanceTimersByTimeAsync(20);
-      const queuedRuntimeSync = await waitForQueuedCommand(
-        harness,
-        ({ command, row }) =>
-          row.hostId === host.id &&
-          command.type === "host.sync_runtime_material",
-      );
-      const reportResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedRuntimeSync,
-        {
-          appliedVersion: queuedRuntimeSync.command.version,
-        },
-        {
-          hostId: host.id,
-          hostType: "ephemeral",
-        },
-      );
-      expect(reportResponse.status).toBe(200);
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: host.id,
+        hostType: "ephemeral",
+      });
 
       await readyPromise;
 
@@ -820,8 +797,12 @@ describe("host lifecycle", () => {
           row.hostId === host.id &&
           command.type === "host.sync_runtime_material",
       );
+      const runtimeSyncCommand = queuedRuntimeSync.command;
+      if (runtimeSyncCommand.type !== "host.sync_runtime_material") {
+        throw new Error("Expected host.sync_runtime_material command");
+      }
 
-      expect(queuedRuntimeSync.command).toMatchObject({
+      expect(runtimeSyncCommand).toMatchObject({
         type: "host.sync_runtime_material",
         version: expect.any(String),
       });
@@ -829,9 +810,9 @@ describe("host lifecycle", () => {
 
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
-        queuedRuntimeSync,
+        { command: runtimeSyncCommand, row: queuedRuntimeSync.row },
         {
-          appliedVersion: queuedRuntimeSync.command.version,
+          appliedVersion: runtimeSyncCommand.version,
         },
         {
           hostId: host.id,

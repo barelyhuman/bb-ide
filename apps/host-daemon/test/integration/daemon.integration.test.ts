@@ -593,7 +593,8 @@ describe("host daemon integration", () => {
       harness.server.sendWebSocketMessage({ type: "commands-available" });
       await waitFor(() => harness.server.commandResults.length === 1);
       const startResult = harness.server.commandResults.find(
-        (result) => result.type === "thread.start",
+        (result): result is typeof result & { type: "thread.start" } =>
+          result.type === "thread.start",
       );
       if (!startResult || !startResult.ok) {
         throw new Error("Expected thread.start to succeed");

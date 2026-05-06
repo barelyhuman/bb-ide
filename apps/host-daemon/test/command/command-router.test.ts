@@ -6,11 +6,19 @@ import {
   readRuntimeMaterialState,
   writeRuntimeMaterialState,
 } from "@bb/host-runtime-material";
+import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
 import {
   encodeClientTurnRequestIdNumber,
   type ClientTurnRequestId,
 } from "@bb/domain";
-import type { HostWorkspace } from "@bb/host-workspace";
+import type {
+  CommitOptions,
+  CommitResult,
+  HostWorkspace,
+  ProvisionWorkspaceArgs,
+  SquashMergeOptions,
+  SquashMergeResult,
+} from "@bb/host-workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
 import { noopEventSink } from "../../src/command-dispatch-support.js";
@@ -20,13 +28,19 @@ const tempDirs: string[] = [];
 let nextClientRequestIdValue = 1;
 
 type StartThreadArgs = Parameters<AgentRuntime["startThread"]>[0];
+type StartThreadResult = Awaited<ReturnType<AgentRuntime["startThread"]>>;
 type ResumeThreadArgs = Parameters<AgentRuntime["resumeThread"]>[0];
+type ResumeThreadResult = Awaited<ReturnType<AgentRuntime["resumeThread"]>>;
 type RunTurnArgs = Parameters<AgentRuntime["runTurn"]>[0];
 type SteerTurnArgs = Parameters<AgentRuntime["steerTurn"]>[0];
+type SteerTurnResult = Awaited<ReturnType<AgentRuntime["steerTurn"]>>;
 type StopThreadArgs = Parameters<AgentRuntime["stopThread"]>[0];
 type RenameThreadArgs = Parameters<AgentRuntime["renameThread"]>[0];
 type ArchiveThreadArgs = Parameters<AgentRuntime["archiveThread"]>[0];
 type UnarchiveThreadArgs = Parameters<AgentRuntime["unarchiveThread"]>[0];
+type EnsureProviderArgs = Parameters<AgentRuntime["ensureProvider"]>[0];
+type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
+type ListModelsResult = Awaited<ReturnType<AgentRuntime["listModels"]>>;
 
 async function makeTempDir(prefix: string): Promise<string> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -52,34 +66,73 @@ function nextClientRequestId(): ClientTurnRequestId {
   return requestId;
 }
 
-interface FakeWorkspace extends HostWorkspace {
-  commit: ReturnType<typeof vi.fn>;
-  destroy: ReturnType<typeof vi.fn>;
-  reset: ReturnType<typeof vi.fn>;
+// HostWorkspace exposes its scalar fields as readonly. The fake workspace lets
+// tests reassign them where useful, so use the mutable equivalents and type
+// each method as a vitest mock with the production signature.
+interface FakeWorkspace {
+  path: HostWorkspace["path"];
+  managed: HostWorkspace["managed"];
+  isGitRepo: HostWorkspace["isGitRepo"];
+  isWorktree: HostWorkspace["isWorktree"];
+  getCurrentBranch: ReturnType<
+    typeof vi.fn<HostWorkspace["getCurrentBranch"]>
+  >;
+  getHeadSha: ReturnType<typeof vi.fn<HostWorkspace["getHeadSha"]>>;
+  getLocalStateFingerprint: ReturnType<
+    typeof vi.fn<HostWorkspace["getLocalStateFingerprint"]>
+  >;
+  getSharedGitRefsFingerprint: ReturnType<
+    typeof vi.fn<HostWorkspace["getSharedGitRefsFingerprint"]>
+  >;
+  getAdditionalWorkspaceWriteRoots: ReturnType<
+    typeof vi.fn<HostWorkspace["getAdditionalWorkspaceWriteRoots"]>
+  >;
+  getStatus: ReturnType<typeof vi.fn<HostWorkspace["getStatus"]>>;
+  getDiff: ReturnType<typeof vi.fn<HostWorkspace["getDiff"]>>;
+  listBranches: ReturnType<typeof vi.fn<HostWorkspace["listBranches"]>>;
+  listFiles: ReturnType<typeof vi.fn<HostWorkspace["listFiles"]>>;
+  commit: ReturnType<
+    typeof vi.fn<(options: CommitOptions) => Promise<CommitResult>>
+  >;
+  reset: ReturnType<typeof vi.fn<HostWorkspace["reset"]>>;
+  fetch: ReturnType<typeof vi.fn<HostWorkspace["fetch"]>>;
+  squashMerge: ReturnType<
+    typeof vi.fn<(options: SquashMergeOptions) => Promise<SquashMergeResult>>
+  >;
+  promote: ReturnType<typeof vi.fn<HostWorkspace["promote"]>>;
+  demote: ReturnType<typeof vi.fn<HostWorkspace["demote"]>>;
+  destroy: ReturnType<typeof vi.fn<HostWorkspace["destroy"]>>;
 }
 
 function createFakeWorkspace(path: string): FakeWorkspace {
-  const workspace = {
+  return {
     path,
     managed: false,
     isGitRepo: true,
     isWorktree: false,
-    getCurrentBranch: vi.fn(async () => "main"),
-    getHeadSha: vi.fn(async () => "commit-1"),
-    getLocalStateFingerprint: vi.fn(async () =>
-      JSON.stringify({ currentBranch: "main", headSha: "commit-1" }),
+    getCurrentBranch: vi.fn<HostWorkspace["getCurrentBranch"]>(
+      async () => "main",
     ),
-    getSharedGitRefsFingerprint: vi.fn(async () =>
+    getHeadSha: vi.fn<HostWorkspace["getHeadSha"]>(async () => "commit-1"),
+    getLocalStateFingerprint: vi.fn<HostWorkspace["getLocalStateFingerprint"]>(
+      async () =>
+        JSON.stringify({ currentBranch: "main", headSha: "commit-1" }),
+    ),
+    getSharedGitRefsFingerprint: vi.fn<
+      HostWorkspace["getSharedGitRefsFingerprint"]
+    >(async () =>
       JSON.stringify({
         refs: [["refs/heads/main", "commit-1"]],
         remoteHead: null,
       }),
     ),
-    getAdditionalWorkspaceWriteRoots: vi.fn(async () => []),
-    getStatus: vi.fn(async () => ({
+    getAdditionalWorkspaceWriteRoots: vi.fn<
+      HostWorkspace["getAdditionalWorkspaceWriteRoots"]
+    >(async () => []),
+    getStatus: vi.fn<HostWorkspace["getStatus"]>(async () => ({
       workingTree: {
         hasUncommittedChanges: false,
-        state: "clean" as const,
+        state: "clean",
         insertions: 0,
         deletions: 0,
         files: [],
@@ -90,55 +143,106 @@ function createFakeWorkspace(path: string): FakeWorkspace {
       },
       mergeBase: null,
     })),
-    getDiff: vi.fn(async () => ({
+    getDiff: vi.fn<HostWorkspace["getDiff"]>(async () => ({
       diff: "",
       truncated: false,
       shortstat: "",
       files: "",
     })),
-    listBranches: vi.fn(async () => ["main"]),
-    listFiles: vi.fn(async () => []),
-    commit: vi.fn(async () => ({
-      commitSha: "commit-1",
-      commitSubject: "subject",
-    })),
-    reset: vi.fn(async () => undefined),
-    fetch: vi.fn(async () => undefined),
-    squashMerge: vi.fn(async () => ({
+    listBranches: vi.fn<HostWorkspace["listBranches"]>(async () => ["main"]),
+    listFiles: vi.fn<HostWorkspace["listFiles"]>(async () => []),
+    commit: vi.fn<(options: CommitOptions) => Promise<CommitResult>>(
+      async () => ({
+        commitSha: "commit-1",
+        commitSubject: "subject",
+      }),
+    ),
+    reset: vi.fn<HostWorkspace["reset"]>(async () => undefined),
+    fetch: vi.fn<HostWorkspace["fetch"]>(async () => undefined),
+    squashMerge: vi.fn<
+      (options: SquashMergeOptions) => Promise<SquashMergeResult>
+    >(async () => ({
       merged: true,
       commitSha: "commit-3",
       commitSubject: "squash subject",
       targetBranch: "main",
     })),
-    promote: vi.fn(async () => undefined),
-    demote: vi.fn(async () => undefined),
-    destroy: vi.fn(async () => undefined),
-  } satisfies FakeWorkspace;
-
-  return workspace;
+    promote: vi.fn<HostWorkspace["promote"]>(async () => undefined),
+    demote: vi.fn<HostWorkspace["demote"]>(async () => undefined),
+    destroy: vi.fn<HostWorkspace["destroy"]>(async () => undefined),
+  };
 }
 
-function createFakeRuntime(): AgentRuntime {
+interface FakeRuntime {
+  ensureProvider: ReturnType<
+    typeof vi.fn<(args: EnsureProviderArgs) => Promise<void>>
+  >;
+  startThread: ReturnType<
+    typeof vi.fn<(args: StartThreadArgs) => Promise<StartThreadResult>>
+  >;
+  resumeThread: ReturnType<
+    typeof vi.fn<(args: ResumeThreadArgs) => Promise<ResumeThreadResult>>
+  >;
+  runTurn: ReturnType<typeof vi.fn<(args: RunTurnArgs) => Promise<void>>>;
+  steerTurn: ReturnType<
+    typeof vi.fn<(args: SteerTurnArgs) => Promise<SteerTurnResult>>
+  >;
+  stopThread: ReturnType<typeof vi.fn<(args: StopThreadArgs) => Promise<void>>>;
+  renameThread: ReturnType<
+    typeof vi.fn<(args: RenameThreadArgs) => Promise<void>>
+  >;
+  archiveThread: ReturnType<
+    typeof vi.fn<(args: ArchiveThreadArgs) => Promise<void>>
+  >;
+  unarchiveThread: ReturnType<
+    typeof vi.fn<(args: UnarchiveThreadArgs) => Promise<void>>
+  >;
+  listModels: ReturnType<
+    typeof vi.fn<(args: ListModelsArgs) => Promise<ListModelsResult>>
+  >;
+  listRunningProviders: ReturnType<typeof vi.fn<() => string[]>>;
+  shutdown: ReturnType<typeof vi.fn<() => Promise<void>>>;
+}
+
+function createFakeRuntime(): FakeRuntime {
   return {
-    ensureProvider: vi.fn(async () => undefined),
-    startThread: vi.fn(async ({ threadId }: StartThreadArgs) => ({
+    ensureProvider: vi.fn<(args: EnsureProviderArgs) => Promise<void>>(
+      async () => undefined,
+    ),
+    startThread: vi.fn<
+      (args: StartThreadArgs) => Promise<StartThreadResult>
+    >(async ({ threadId }) => ({
       providerThreadId: `provider-${threadId}`,
     })),
-    resumeThread: vi.fn(async ({ providerThreadId }: ResumeThreadArgs) => ({
+    resumeThread: vi.fn<
+      (args: ResumeThreadArgs) => Promise<ResumeThreadResult>
+    >(async ({ providerThreadId }) => ({
       providerThreadId: providerThreadId ?? "provider-resumed",
     })),
-    runTurn: vi.fn(async (_args: RunTurnArgs) => undefined),
-    steerTurn: vi.fn(async (_args: SteerTurnArgs) => ({
-      status: "steered" as const,
-    })),
-    stopThread: vi.fn(async (_args: StopThreadArgs) => undefined),
-    renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
-    archiveThread: vi.fn(async (_args: ArchiveThreadArgs) => undefined),
-    unarchiveThread: vi.fn(async (_args: UnarchiveThreadArgs) => undefined),
-    listModels: vi.fn(async () => []),
-    listRunningProviders: vi.fn(() => []),
-    shutdown: vi.fn(async () => undefined),
-  } satisfies AgentRuntime;
+    runTurn: vi.fn<(args: RunTurnArgs) => Promise<void>>(
+      async () => undefined,
+    ),
+    steerTurn: vi.fn<(args: SteerTurnArgs) => Promise<SteerTurnResult>>(
+      async () => ({ status: "steered" }),
+    ),
+    stopThread: vi.fn<(args: StopThreadArgs) => Promise<void>>(
+      async () => undefined,
+    ),
+    renameThread: vi.fn<(args: RenameThreadArgs) => Promise<void>>(
+      async () => undefined,
+    ),
+    archiveThread: vi.fn<(args: ArchiveThreadArgs) => Promise<void>>(
+      async () => undefined,
+    ),
+    unarchiveThread: vi.fn<(args: UnarchiveThreadArgs) => Promise<void>>(
+      async () => undefined,
+    ),
+    listModels: vi.fn<
+      (args: ListModelsArgs) => Promise<ListModelsResult>
+    >(async () => []),
+    listRunningProviders: vi.fn<() => string[]>(() => []),
+    shutdown: vi.fn<() => Promise<void>>(async () => undefined),
+  };
 }
 
 function createLogger() {
@@ -192,15 +296,15 @@ describe("CommandRouter", () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(() => runtime),
+      provisionWorkspace: async () => workspace,
+      createRuntime: () => runtime,
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
 
-    const snapshot = {
+    const snapshot: HostRuntimeMaterialSnapshot = {
       env: {
         PI_CODING_AGENT_DIR: "~/.pi/agent",
       },
@@ -213,11 +317,11 @@ describe("CommandRouter", () => {
         },
       ],
       version: "runtime-version-1",
-    } as const;
+    };
     const reportResult = vi.fn(async () => undefined);
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
-      fetchRuntimeMaterial: vi.fn(async () => snapshot),
+      fetchRuntimeMaterial: async () => snapshot,
       readPersistedRuntimeMaterial: async () =>
         readRuntimeMaterialState(dataDir),
       persistRuntimeMaterial: async (nextSnapshot) =>
@@ -225,6 +329,7 @@ describe("CommandRouter", () => {
       reportResult,
       runtimeManager: manager,
       eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
 
@@ -277,7 +382,7 @@ describe("CommandRouter", () => {
       calls.push("report");
     });
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -292,6 +397,7 @@ describe("CommandRouter", () => {
       reportResult,
       runtimeManager: manager,
       eventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
 
@@ -333,10 +439,8 @@ describe("CommandRouter", () => {
       persistRuntimeMaterial: async () => undefined,
       reportResult,
       runtimeManager: new RuntimeManager({
-        provisionWorkspace: vi.fn(async () =>
-          createFakeWorkspace("/tmp/env-1"),
-        ),
-        createRuntime: vi.fn(() => createFakeRuntime()),
+        provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+        createRuntime: () => createFakeRuntime(),
       }),
       eventSink,
       logger: createLogger(),
@@ -366,8 +470,8 @@ describe("CommandRouter", () => {
 
   it("serializes host runtime material commands", async () => {
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => createFakeRuntime()),
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => createFakeRuntime(),
     });
     const firstFetch = createDeferred<{
       env: Record<string, string>;
@@ -394,6 +498,7 @@ describe("CommandRouter", () => {
       persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
 
@@ -443,8 +548,8 @@ describe("CommandRouter", () => {
     workspace.commit.mockReturnValueOnce(commitDeferred.promise);
 
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(() => createFakeRuntime()),
+      provisionWorkspace: async () => workspace,
+      createRuntime: () => createFakeRuntime(),
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -455,6 +560,7 @@ describe("CommandRouter", () => {
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -526,8 +632,8 @@ describe("CommandRouter", () => {
     });
 
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(() => runtime),
+      provisionWorkspace: async () => workspace,
+      createRuntime: () => runtime,
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -538,6 +644,7 @@ describe("CommandRouter", () => {
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -602,8 +709,8 @@ describe("CommandRouter", () => {
     });
 
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime),
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -616,6 +723,7 @@ describe("CommandRouter", () => {
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -706,14 +814,15 @@ describe("CommandRouter", () => {
       .mockReturnValueOnce(threadThree.promise);
 
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime),
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
     });
     const reported: string[] = [];
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -795,8 +904,8 @@ describe("CommandRouter", () => {
       });
 
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime),
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
     });
     let nowValue = 100;
     const results: Array<{
@@ -808,6 +917,7 @@ describe("CommandRouter", () => {
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -877,10 +987,10 @@ describe("CommandRouter", () => {
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
       provisionWorkspace: vi
-        .fn()
+        .fn<(options: ProvisionWorkspaceArgs) => Promise<HostWorkspace>>()
         .mockResolvedValueOnce(destroyedWorkspace)
         .mockResolvedValueOnce(recreatedWorkspace),
-      createRuntime: vi.fn(() => runtime),
+      createRuntime: () => runtime,
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -891,6 +1001,7 @@ describe("CommandRouter", () => {
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -903,8 +1014,10 @@ describe("CommandRouter", () => {
         command: {
           type: "environment.destroy",
           environmentId: "env-1",
-          path: "/tmp/env-1",
-          workspaceProvisionType: "managed-worktree",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "managed-worktree",
+          },
         },
       },
     ]);
@@ -936,8 +1049,8 @@ describe("CommandRouter", () => {
 
   it("recovers result reporting after a transient report failure", async () => {
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => createFakeRuntime()),
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => createFakeRuntime(),
     });
     const logger = createLogger();
     let shouldFail = true;
@@ -946,6 +1059,7 @@ describe("CommandRouter", () => {
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",

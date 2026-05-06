@@ -48,6 +48,9 @@ describe("project-sources", () => {
 
     expect(source.id).toMatch(/^src_/);
     expect(source.projectId).toBe(project.id);
+    if (source.type !== "local_path") {
+      throw new Error(`Expected local_path source, got ${source.type}`);
+    }
     expect(source.path).toBe("/tmp/code");
     expect(source.isDefault).toBe(false);
   });
@@ -229,7 +232,12 @@ describe("project-sources", () => {
     const updated = updateProjectSource(db, noopNotifier, source.id, {
       path: "/tmp/renamed",
     });
-    expect(updated?.path).toBe("/tmp/renamed");
+    if (!updated || updated.type !== "local_path") {
+      throw new Error(
+        `Expected local_path source, got ${updated?.type ?? "none"}`,
+      );
+    }
+    expect(updated.path).toBe("/tmp/renamed");
   });
 
   it("deletes a project source", () => {

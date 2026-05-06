@@ -198,11 +198,12 @@ export async function startTestServer(
   while (!addressInfo) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
+  const resolvedAddress: AddressInfo = addressInfo;
 
   return {
     ...harness,
     app,
-    baseUrl: `http://${TEST_SERVER_HOST}:${addressInfo.port}`,
+    baseUrl: `http://${TEST_SERVER_HOST}:${resolvedAddress.port}`,
     async close(): Promise<void> {
       const closeServer = new Promise<void>((resolve, reject) => {
         server.close((error) => {

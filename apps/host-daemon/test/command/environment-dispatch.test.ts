@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkspaceError } from "@bb/host-workspace";
 import { dispatchCommand } from "../../src/command-dispatch.js";
+import type { BufferedEventInput } from "../../src/event-buffer.js";
 import {
   cleanupTempDirs,
   createFakeRuntime,
   createFakeWorkspace,
   createHarness,
+  makeDispatchOptions,
   makeTempDir,
 } from "./dispatch-helpers.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -126,7 +128,7 @@ describe("environment command dispatch", () => {
         branchName: "bb/clone",
         setupTimeoutMs: 900000,
       },
-      { runtimeManager: harness.manager },
+      makeDispatchOptions({ runtimeManager: harness.manager }),
     );
 
     expect(result).toMatchObject({
@@ -163,10 +165,7 @@ describe("environment command dispatch", () => {
   it("streams live events and flushes when initiator is provided", async () => {
     const harness = createHarness({ workspacePath: "/tmp/live-stream" });
     const sourcePath = await makeTempDir("bb-dispatch-stream-");
-    const emittedEvents: Array<{
-      event: { environmentId: string };
-      threadId: string;
-    }> = [];
+    const emittedEvents: BufferedEventInput[] = [];
     let flushCount = 0;
 
     const result = await dispatchCommand(
@@ -180,7 +179,7 @@ describe("environment command dispatch", () => {
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
-      {
+      makeDispatchOptions({
         runtimeManager: harness.manager,
         eventSink: {
           emit: (event) => {
@@ -190,13 +189,18 @@ describe("environment command dispatch", () => {
             flushCount += 1;
           },
         },
-      },
+      }),
     );
 
     expect(flushCount).toBe(1);
     expect(emittedEvents.length).toBeGreaterThan(0);
-    expect(emittedEvents[0]?.threadId).toBe("thr-initiator");
-    expect(emittedEvents[0]?.event.environmentId).toBe("env-stream");
+    const firstEvent = emittedEvents[0];
+    expect(firstEvent?.threadId).toBe("thr-initiator");
+    expect(
+      firstEvent && "environmentId" in firstEvent.event
+        ? firstEvent.event.environmentId
+        : undefined,
+    ).toBe("env-stream");
     expect(result.transcript.length).toBeGreaterThan(0);
     expect(result.transcript).toEqual(
       expect.arrayContaining([
@@ -207,8 +211,7 @@ describe("environment command dispatch", () => {
   });
 
   it("flushes live events before surfacing provisioning failures", async () => {
-    const emittedEvents: Array<{ environmentId: string; threadId: string }> =
-      [];
+    const emittedEvents: BufferedEventInput[] = [];
     let flushCount = 0;
     const manager = new RuntimeManager({
       provisionWorkspace: async (options) => {
@@ -242,7 +245,7 @@ describe("environment command dispatch", () => {
           branchName: "bb/failure",
           setupTimeoutMs: 900000,
         },
-        {
+        makeDispatchOptions({
           runtimeManager: manager,
           eventSink: {
             emit: (event) => {
@@ -252,7 +255,7 @@ describe("environment command dispatch", () => {
               flushCount += 1;
             },
           },
-        },
+        }),
       ),
     ).rejects.toThrow("git worktree add failed");
 
@@ -315,7 +318,7 @@ describe("environment command dispatch", () => {
           workspaceProvisionType: "managed-worktree",
         },
       },
-      { runtimeManager: harness.manager },
+      makeDispatchOptions({ runtimeManager: harness.manager }),
     );
 
     expect(result).toEqual({});
@@ -336,7 +339,7 @@ describe("environment command dispatch", () => {
           workspaceProvisionType: "managed-worktree",
         },
       },
-      { runtimeManager: harness.manager },
+      makeDispatchOptions({ runtimeManager: harness.manager }),
     );
 
     expect(result).toEqual({});
@@ -380,7 +383,7 @@ describe("environment command dispatch", () => {
           workspaceProvisionType: "managed-worktree",
         },
       },
-      { runtimeManager: manager },
+      makeDispatchOptions({ runtimeManager: manager }),
     );
 
     // Second destroy (retry): workspace path is gone, should succeed (idempotent)
@@ -393,7 +396,7 @@ describe("environment command dispatch", () => {
           workspaceProvisionType: "managed-worktree",
         },
       },
-      { runtimeManager: manager },
+      makeDispatchOptions({ runtimeManager: manager }),
     );
 
     expect(retryResult).toEqual({});

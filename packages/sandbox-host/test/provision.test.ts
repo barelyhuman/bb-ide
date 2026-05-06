@@ -483,7 +483,6 @@ describe("sandbox host provisioning", () => {
       testSandboxTemplate,
       expect.objectContaining({
         envs: {
-          BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
           ...expectedProvisionDaemonEnv,
           GITHUB_TOKEN: "github-token",
         },

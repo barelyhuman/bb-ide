@@ -19,9 +19,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
+    "build": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
-    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {

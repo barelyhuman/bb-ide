@@ -508,10 +508,15 @@ describe("timeline CLI rendering snapshots", () => {
       ),
     ).toBe(true);
     const pendingSteerRow = timeline.rows.find(
-      (row) =>
+      (
+        row,
+      ): row is Extract<
+        TimelineRow,
+        { kind: "conversation"; role: "user" }
+      > =>
         row.kind === "conversation" &&
         row.role === "user" &&
-        row.userRequest.status === "pending",
+        row.userRequest?.status === "pending",
     );
     expect(pendingSteerRow?.sourceSeqStart).toBe(3);
     expect(pendingSteerRow?.userRequest).toEqual({

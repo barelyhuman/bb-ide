@@ -58,22 +58,25 @@ describe("sandbox host registry", () => {
     vi.useFakeTimers();
     const registry = createSandboxHostRegistry();
     const host = createMockSandboxHost("host-concurrent");
-    let resolveLoad: ((value: SandboxHost) => void) | null = null;
-    const loadHost = vi.fn(
-      () =>
-        new Promise<SandboxHost>((resolve) => {
-          resolveLoad = resolve;
-        }),
+    const loadDeferred: {
+      promise: Promise<SandboxHost>;
+      resolve: (value: SandboxHost) => void;
+    } = (() => {
+      let resolve!: (value: SandboxHost) => void;
+      const promise = new Promise<SandboxHost>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    })();
+    const loadHost = vi.fn<() => Promise<SandboxHost>>(
+      () => loadDeferred.promise,
     );
 
     const firstLoad = registry.getOrCreate(host.hostId, loadHost);
     const secondLoad = registry.getOrCreate(host.hostId, loadHost);
 
     expect(loadHost).toHaveBeenCalledTimes(1);
-    if (!resolveLoad) {
-      throw new Error("Expected concurrent load to be pending");
-    }
-    resolveLoad(host);
+    loadDeferred.resolve(host);
 
     const [firstHost, secondHost] = await Promise.all([firstLoad, secondLoad]);
     expect(firstHost).toBe(host);
@@ -86,12 +89,18 @@ describe("sandbox host registry", () => {
     const registry = createSandboxHostRegistry();
     const staleHost = createMockSandboxHost("host-refresh");
     const refreshedHost = createMockSandboxHost("host-refresh");
-    let resolveLoad: ((value: SandboxHost) => void) | null = null;
-    const loadHost = vi.fn(
-      () =>
-        new Promise<SandboxHost>((resolve) => {
-          resolveLoad = resolve;
-        }),
+    const loadDeferred: {
+      promise: Promise<SandboxHost>;
+      resolve: (value: SandboxHost) => void;
+    } = (() => {
+      let resolve!: (value: SandboxHost) => void;
+      const promise = new Promise<SandboxHost>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    })();
+    const loadHost = vi.fn<() => Promise<SandboxHost>>(
+      () => loadDeferred.promise,
     );
 
     registry.set(staleHost.hostId, staleHost);
@@ -100,10 +109,7 @@ describe("sandbox host registry", () => {
     const secondRefresh = registry.refresh(staleHost.hostId, loadHost);
 
     expect(loadHost).toHaveBeenCalledTimes(1);
-    if (!resolveLoad) {
-      throw new Error("Expected refresh load to be pending");
-    }
-    resolveLoad(refreshedHost);
+    loadDeferred.resolve(refreshedHost);
 
     const [firstHost, secondHost] = await Promise.all([
       firstRefresh,

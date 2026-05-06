@@ -54,7 +54,6 @@ function cleanWorkspaceStatusOnBranch(
     workingTree: {
       hasUncommittedChanges: false,
       state: "clean",
-      changedFiles: 0,
       insertions: 0,
       deletions: 0,
       files: [],
@@ -202,6 +201,14 @@ describe("public thread lifecycle regressions", () => {
       ) {
         throw new Error("Thread creation response shape was invalid");
       }
+      if (
+        firstProvision.command.type !== "environment.provision" ||
+        firstProvision.command.workspaceProvisionType === "unmanaged" ||
+        secondProvision.command.type !== "environment.provision" ||
+        secondProvision.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected managed environment.provision commands");
+      }
 
       expect(firstProvision.command.branchName).toBe(
         `bb/worker-thread-${firstThread.id}`,
@@ -236,6 +243,9 @@ describe("public thread lifecycle regressions", () => {
         hostId: secondaryHost.id,
         path: "/tmp/promote-secondary-source",
       });
+      if (secondarySource.type !== "local_path") {
+        throw new Error("Expected local_path project source");
+      }
       const environment = seedEnvironment(harness.deps, {
         hostId: secondaryHost.id,
         projectId: project.id,
@@ -300,6 +310,9 @@ describe("public thread lifecycle regressions", () => {
         hostId: secondaryHost.id,
         path: "/tmp/demote-secondary-source",
       });
+      if (secondarySource.type !== "local_path") {
+        throw new Error("Expected local_path project source");
+      }
       const environment = seedEnvironment(harness.deps, {
         hostId: secondaryHost.id,
         projectId: project.id,

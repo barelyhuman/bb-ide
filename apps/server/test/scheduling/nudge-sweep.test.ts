@@ -44,12 +44,12 @@ vi.mock("@bb/sandbox-host", () => ({
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
 interface MockSandboxHost {
-  destroy: ReturnType<typeof vi.fn>;
-  extendTimeout: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  extendTimeout: ReturnType<typeof vi.fn<(timeoutMs: number) => Promise<void>>>;
   externalId: string;
   hostId: string;
-  resume: ReturnType<typeof vi.fn>;
-  suspend: ReturnType<typeof vi.fn>;
+  resume: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  suspend: ReturnType<typeof vi.fn<() => Promise<void>>>;
 }
 
 function createMockSandboxHost(
@@ -167,6 +167,9 @@ describe("nudge sweep", () => {
         ({ command }) =>
           command.type === "turn.submit" && command.threadId === thread.id,
       );
+      if (queuedTurnSubmit.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
       expect(queuedTurnSubmit.command.input).toEqual([
         {
           type: "text",
@@ -279,6 +282,9 @@ describe("nudge sweep", () => {
         ({ command }) =>
           command.type === "turn.submit" && command.threadId === thread.id,
       );
+      if (queuedTurnSubmit.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
       expect(queuedTurnSubmit.command.input).toEqual([
         {
           type: "text",
