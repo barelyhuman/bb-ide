@@ -24,6 +24,11 @@ export interface UseStickyBottomScrollArgs {
 
 const STICKY_BOTTOM_THRESHOLD_PX = 4;
 const USER_SCROLL_INTENT_MS = 350;
+// Updates that arrive within this window of the previous scroll snap to the
+// bottom instantly. Animating each one would start a fresh smooth scroll from a
+// stale position before the prior one settled, producing a trailing lag. Slow
+// streams (one event per second-ish) clear the gate and animate naturally.
+const SMOOTH_SCROLL_MIN_GAP_MS = 250;
 
 function getMaxScrollOffset(element: HTMLElement): number {
   return Math.max(0, element.scrollHeight - element.clientHeight);
@@ -36,8 +41,13 @@ function isNearBottom(element: HTMLElement): boolean {
   );
 }
 
-function scrollToBottom(element: HTMLElement): void {
-  element.scrollTop = getMaxScrollOffset(element);
+function scrollToBottom(element: HTMLElement, smooth: boolean): void {
+  const top = getMaxScrollOffset(element);
+  if (smooth) {
+    element.scrollTo({ top, behavior: "smooth" });
+  } else {
+    element.scrollTop = top;
+  }
 }
 
 export function useStickyBottomScroll<TElement extends HTMLElement>({
@@ -47,13 +57,21 @@ export function useStickyBottomScroll<TElement extends HTMLElement>({
   const shouldStickToBottomRef = useRef(true);
   const pointerScrollIntentRef = useRef(false);
   const userScrollIntentUntilRef = useRef(0);
+  const lastScrollAtRef = useRef(0);
+  const isFirstScrollRef = useRef(true);
 
   useEffect(() => {
     const element = scrollRef.current;
     if (!element || !shouldStickToBottomRef.current) {
       return;
     }
-    scrollToBottom(element);
+    const now = window.performance.now();
+    const smooth =
+      !isFirstScrollRef.current &&
+      now - lastScrollAtRef.current >= SMOOTH_SCROLL_MIN_GAP_MS;
+    scrollToBottom(element, smooth);
+    lastScrollAtRef.current = now;
+    isFirstScrollRef.current = false;
   }, [contentKey]);
 
   const markUserScrollIntent = useCallback(() => {

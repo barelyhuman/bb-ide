@@ -110,10 +110,12 @@ interface TimelineRowViewProps {
 }
 
 interface TimelineExpandableRowViewProps {
+  activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
   title: TimelineTitle;
   horizontalPadding: TimelineRowHorizontalPadding;
   row: Exclude<ThreadTimelineViewRow, { kind: "conversation" }>;
+  scopeActive: boolean;
 }
 
 interface TimelineStaticRowProps {
@@ -123,8 +125,10 @@ interface TimelineStaticRowProps {
 }
 
 interface TimelineExpandableBodyProps {
+  activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
   row: ThreadTimelineViewRow;
+  scopeActive: boolean;
 }
 
 interface TimelineSystemDetailBlockProps {
@@ -289,7 +293,9 @@ function areTimelineExpandableRowViewPropsEqual(
   next: TimelineExpandableRowViewProps,
 ): boolean {
   return (
+    previous.activeLatestBundleId === next.activeLatestBundleId &&
     previous.compactActivityIntents === next.compactActivityIntents &&
+    previous.scopeActive === next.scopeActive &&
     previous.title === next.title &&
     previous.horizontalPadding === next.horizontalPadding &&
     // The view-row cache keys by the raw rows array, so unchanged query data
@@ -633,8 +639,10 @@ function TimelineSystemDetailBlock({
 }
 
 function TimelineExpandableBody({
+  activeLatestBundleId,
   compactActivityIntents,
   row,
+  scopeActive,
 }: TimelineExpandableBodyProps) {
   const {
     onOpenLocalFileLink,
@@ -664,10 +672,19 @@ function TimelineExpandableBody({
       if (!isNonExpandableSummary(row.children)) {
         return list;
       }
+      // Streaming follows the agent's frontier rather than the bundle's
+      // reduced child status. A bundle that's still being appended to may
+      // momentarily look "completed" between events (replays compress this
+      // window to zero), so deriving sticky-bottom from `row.status` would
+      // miss most updates.
+      const isFrontier =
+        scopeActive &&
+        row.kind === "bundle-summary" &&
+        row.id === activeLatestBundleId;
       return (
         <TimelineDetailScroll
           size="summary"
-          streaming={row.status === "pending"}
+          streaming={isFrontier}
           contentKey={timelineRowsSignature(row.children)}
         >
           {list}
@@ -686,7 +703,7 @@ function TimelineExpandableBody({
         return (
           <TimelineDetailScroll
             size="delegation"
-            streaming={row.status === "pending"}
+            streaming={scopeActive}
             contentKey={`${timelineRowsSignature(row.childRows)}|${row.output.length}`}
             className="rounded-md border border-border/60 bg-background/40"
           >
@@ -694,7 +711,7 @@ function TimelineExpandableBody({
               <div className="px-1 py-1">
                 <TimelineRowsList
                   rows={row.childRows}
-                  scopeActive={row.status === "pending"}
+                  scopeActive={scopeActive}
                   compactActivityIntents={false}
                   spacing="nested"
                 />
@@ -867,10 +884,12 @@ function TimelineRowView({
 
   return (
     <MemoizedTimelineExpandableRowView
+      activeLatestBundleId={activeLatestBundleId}
       row={row}
       title={titleState.title}
       horizontalPadding={horizontalPadding}
       compactActivityIntents={compactActivityIntents}
+      scopeActive={scopeActive}
     />
   );
 }
@@ -881,10 +900,12 @@ const MemoizedTimelineRowView = memo(
 );
 
 function TimelineExpandableRowView({
+  activeLatestBundleId,
   compactActivityIntents,
   title,
   horizontalPadding,
   row,
+  scopeActive,
 }: TimelineExpandableRowViewProps) {
   const {
     autoExpandedRowIds,
@@ -918,11 +939,13 @@ function TimelineExpandableRowView({
   const renderBody = useCallback(
     () => (
       <TimelineExpandableBody
+        activeLatestBundleId={activeLatestBundleId}
         row={row}
         compactActivityIntents={compactActivityIntents}
+        scopeActive={scopeActive}
       />
     ),
-    [compactActivityIntents, row],
+    [activeLatestBundleId, compactActivityIntents, row, scopeActive],
   );
 
   return (
