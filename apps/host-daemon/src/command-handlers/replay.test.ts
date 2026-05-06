@@ -3,10 +3,14 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { encodeClientTurnRequestIdNumber } from "@bb/domain";
+import {
+  encodeClientTurnRequestIdNumber,
+  requireThreadEventScopeTurnId,
+} from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import {
   createReplayCaptureId,
+  createReplayCapturePlaceholderTurnId,
   replayCaptureDir,
   replayCaptureManifestPath,
   replayCaptureRoot,
@@ -120,7 +124,39 @@ async function writeRawProviderCapture(
   );
 }
 
+function manifestWithPlaceholderTurnId(args: {
+  captureId: string;
+  rawProviderEvents: number;
+}): ReplayCaptureManifest {
+  const manifest = baseManifest(args.captureId);
+  const firstTurn = manifest.turns[0];
+  if (!firstTurn) {
+    throw new Error("Expected base replay manifest to include a turn");
+  }
+  return {
+    ...manifest,
+    eventCounts: {
+      rawProviderEvents: args.rawProviderEvents,
+      droppedRecords: 0,
+    },
+    turns: [
+      {
+        ...firstTurn,
+        turnId: createReplayCapturePlaceholderTurnId(args.captureId),
+      },
+    ],
+  };
+}
+
 type RawProviderReplayMethod = "turn/started" | "turn/completed";
+
+interface RawProviderAgentMessageDeltaRecordArgs {
+  captureId: string;
+  delta: string;
+  itemId: string;
+  ordinal: number;
+  relativeMs: number;
+}
 
 function rawProviderRecord(args: {
   captureId: string;
@@ -149,6 +185,33 @@ function rawProviderRecord(args: {
             status,
             error: null,
           },
+        },
+      },
+      sourceThreadId: "provider-thread-1",
+    },
+  };
+}
+
+function rawProviderAgentMessageDeltaRecord(
+  args: RawProviderAgentMessageDeltaRecordArgs,
+): ReplayRawProviderEventRecord {
+  return {
+    ordinal: args.ordinal,
+    relativeMs: args.relativeMs,
+    entry: {
+      kind: "raw-provider-event",
+      capturedAt: 1_000 + args.relativeMs,
+      providerId: "codex",
+      captureId: args.captureId,
+      rawLine: "{}",
+      rawEvent: {
+        jsonrpc: "2.0",
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+          itemId: args.itemId,
+          delta: args.delta,
         },
       },
       sourceThreadId: "provider-thread-1",
@@ -467,6 +530,182 @@ describe("runReplay", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("uses the replayed turn id when aborting after turn start", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-run-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    await mkdir(threadStorageRoot(dataDir), { recursive: true });
+    await writeRawProviderCapture({
+      captureId,
+      dataDir,
+      records: [
+        rawProviderRecord({
+          captureId: "raw-1",
+          method: "turn/started",
+          ordinal: 1,
+          relativeMs: 0,
+        }),
+        rawProviderRecord({
+          captureId: "raw-2",
+          method: "turn/completed",
+          ordinal: 2,
+          relativeMs: 10,
+        }),
+      ],
+    });
+    await writeCaptureManifest({
+      dataDir,
+      manifest: manifestWithPlaceholderTurnId({
+        captureId,
+        rawProviderEvents: 2,
+      }),
+    });
+
+    const emitted: BufferedEventInput[] = [];
+    const replayTasks: ReplayTaskRegistry = new Map();
+    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
+      type: "replay.run",
+      captureId,
+      environmentId: "env-1",
+      threadId: "thr-replay",
+      requestId: replayRequestId(5),
+      speed: 1,
+    };
+    const eventSink: EventSink = {
+      emit: (event) => {
+        emitted.push(event);
+        if (event.event.type === "turn/started") {
+          replayTasks.get("thr-replay")?.abort.abort();
+        }
+      },
+      flush: async () => undefined,
+    };
+
+    await expect(
+      runReplay(command, {
+        dataDir,
+        eventSink,
+        replayTasks,
+      }),
+    ).resolves.toEqual({});
+    const replayTask = replayTasks.get("thr-replay");
+    expect(replayTask).toBeDefined();
+    if (!replayTask) {
+      throw new Error("Expected replay task to be tracked");
+    }
+    await replayTask.done;
+
+    expect(emitted.map((input) => input.event.type)).toEqual([
+      "turn/started",
+      "turn/input/accepted",
+      "turn/completed",
+    ]);
+    const interruptedEvent = emitted[2]?.event;
+    expect(interruptedEvent?.type).toBe("turn/completed");
+    if (interruptedEvent?.type !== "turn/completed") {
+      throw new Error("Expected interrupted replay terminal");
+    }
+    expect(interruptedEvent.status).toBe("interrupted");
+    expect(
+      requireThreadEventScopeTurnId({
+        type: interruptedEvent.type,
+        scope: interruptedEvent.scope,
+      }),
+    ).toBe("turn-1");
+    expect(replayTasks.has("thr-replay")).toBe(false);
+  });
+
+  it("uses the replayed turn id when aborting after an in-turn event", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-run-"));
+    const captureId = createReplayCaptureId(1_000, "abc123zz");
+    await mkdir(threadStorageRoot(dataDir), { recursive: true });
+    await writeRawProviderCapture({
+      captureId,
+      dataDir,
+      records: [
+        rawProviderRecord({
+          captureId: "raw-1",
+          method: "turn/started",
+          ordinal: 1,
+          relativeMs: 0,
+        }),
+        rawProviderAgentMessageDeltaRecord({
+          captureId: "raw-delta",
+          delta: "hello replay",
+          itemId: "item-1",
+          ordinal: 2,
+          relativeMs: 10,
+        }),
+        rawProviderRecord({
+          captureId: "raw-2",
+          method: "turn/completed",
+          ordinal: 3,
+          relativeMs: 20,
+        }),
+      ],
+    });
+    await writeCaptureManifest({
+      dataDir,
+      manifest: manifestWithPlaceholderTurnId({
+        captureId,
+        rawProviderEvents: 3,
+      }),
+    });
+
+    const emitted: BufferedEventInput[] = [];
+    const replayTasks: ReplayTaskRegistry = new Map();
+    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
+      type: "replay.run",
+      captureId,
+      environmentId: "env-1",
+      threadId: "thr-replay",
+      requestId: replayRequestId(6),
+      speed: 1,
+    };
+    const eventSink: EventSink = {
+      emit: (event) => {
+        emitted.push(event);
+        if (event.event.type === "item/agentMessage/delta") {
+          replayTasks.get("thr-replay")?.abort.abort();
+        }
+      },
+      flush: async () => undefined,
+    };
+
+    await expect(
+      runReplay(command, {
+        dataDir,
+        eventSink,
+        replayTasks,
+      }),
+    ).resolves.toEqual({});
+    const replayTask = replayTasks.get("thr-replay");
+    expect(replayTask).toBeDefined();
+    if (!replayTask) {
+      throw new Error("Expected replay task to be tracked");
+    }
+    await replayTask.done;
+
+    expect(emitted.map((input) => input.event.type)).toEqual([
+      "turn/started",
+      "turn/input/accepted",
+      "item/agentMessage/delta",
+      "turn/completed",
+    ]);
+    const interruptedEvent = emitted[3]?.event;
+    expect(interruptedEvent?.type).toBe("turn/completed");
+    if (interruptedEvent?.type !== "turn/completed") {
+      throw new Error("Expected interrupted replay terminal");
+    }
+    expect(interruptedEvent.status).toBe("interrupted");
+    expect(
+      requireThreadEventScopeTurnId({
+        type: interruptedEvent.type,
+        scope: interruptedEvent.scope,
+      }),
+    ).toBe("turn-1");
+    expect(replayTasks.has("thr-replay")).toBe(false);
   });
 
   it("rejects non-monotonic replay timing", async () => {

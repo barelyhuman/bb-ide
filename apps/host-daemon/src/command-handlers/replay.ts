@@ -1,5 +1,6 @@
 import { createReplayRawProviderEventTranslator } from "@bb/agent-runtime";
 import {
+  getThreadEventScopeTurnId,
   requireThreadEventScopeTurnId,
   threadScope,
   turnScope,
@@ -19,7 +20,6 @@ import {
 import {
   ReplayPlaybackAbortError,
   remapReplayThreadEvent,
-  replayEventTurnId,
   replayTerminalIdentifiers,
   streamRawProviderReplayEvents,
   waitForReplayTime,
@@ -148,7 +148,7 @@ async function replayTranslatedEvents(
       threadId: args.command.threadId,
     });
     args.terminal.turnId =
-      replayEventTurnId(remappedEvent) ?? args.terminal.turnId;
+      getThreadEventScopeTurnId(remappedEvent.scope) ?? args.terminal.turnId;
     args.eventSink.emit({
       threadId: args.command.threadId,
       event: remappedEvent,

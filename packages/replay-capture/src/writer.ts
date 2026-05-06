@@ -12,10 +12,11 @@ import type {
   AgentRuntimeCaptureEntry,
   AgentRuntimeTranslatedThreadEventCaptureEntry,
 } from "@bb/agent-runtime/capture";
-import type {
-  PromptInput,
-  ResolvedThreadExecutionOptions,
-  ThreadEvent,
+import {
+  getThreadEventScopeTurnId,
+  type PromptInput,
+  type ResolvedThreadExecutionOptions,
+  type ThreadEvent,
 } from "@bb/domain";
 import {
   DEFAULT_REPLAY_CAPTURE_MAX_CAPTURES,
@@ -166,10 +167,6 @@ function createRandomSuffix(): string {
 
 const DEFAULT_REPLAY_CAPTURE_MAX_FILE_BYTES = 100 * 1024 * 1024;
 const DEFAULT_FINALIZED_CAPTURE_GRACE_MS = 5_000;
-
-function getTurnId(event: ThreadEvent): string | null {
-  return "turnId" in event ? (event.turnId ?? null) : null;
-}
 
 function getProviderThreadId(event: ThreadEvent): string | null {
   return "providerThreadId" in event ? (event.providerThreadId ?? null) : null;
@@ -558,7 +555,7 @@ export function createReplayCaptureService(
   }
 
   function updateTurnId(capture: ActiveCapture, event: ThreadEvent): void {
-    const turnId = getTurnId(event);
+    const turnId = getThreadEventScopeTurnId(event.scope);
     if (!turnId) {
       return;
     }

@@ -100,12 +100,6 @@ export function remapReplayThreadEvent(
   return { ...args.event, threadId: args.threadId };
 }
 
-export function replayEventTurnId(event: ThreadEvent): string | null {
-  return "turnId" in event && typeof event.turnId === "string"
-    ? event.turnId
-    : null;
-}
-
 export function replayTerminalIdentifiers(
   manifest: ReplayCaptureManifest,
 ): ReplayTerminalIdentifiers {

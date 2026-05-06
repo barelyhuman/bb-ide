@@ -14,7 +14,11 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
-import type { ResolvedThreadExecutionOptions, ThreadEvent } from "@bb/domain";
+import {
+  turnScope,
+  type ResolvedThreadExecutionOptions,
+  type ThreadEvent,
+} from "@bb/domain";
 
 const DEFAULT_TEST_EXECUTION: ResolvedThreadExecutionOptions = {
   model: "gpt-5",
@@ -52,7 +56,7 @@ function turnStartedEvent(threadId: string): ThreadEvent {
     type: "turn/started",
     threadId,
     providerThreadId: "provider-thread-1",
-    turnId: "turn-1",
+    scope: turnScope("turn-1"),
   };
 }
 
@@ -61,7 +65,7 @@ function turnCompletedEvent(threadId: string): ThreadEvent {
     type: "turn/completed",
     threadId,
     providerThreadId: "provider-thread-1",
-    turnId: "turn-1",
+    scope: turnScope("turn-1"),
     status: "completed",
   };
 }
@@ -71,7 +75,7 @@ function agentMessageDeltaEvent(threadId: string): ThreadEvent {
     type: "item/agentMessage/delta",
     threadId,
     providerThreadId: "provider-thread-1",
-    turnId: "turn-1",
+    scope: turnScope("turn-1"),
     itemId: "item-1",
     delta: "late usage",
   };
