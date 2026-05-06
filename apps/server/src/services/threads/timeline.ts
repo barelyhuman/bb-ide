@@ -39,6 +39,37 @@ interface TimelineTurnSummarySelection {
   turnId: string;
 }
 
+interface PartitionAcceptedInputRowsByRequestedTurnArgs {
+  acceptedInputRows: readonly StoredEventRow[];
+  turnId: string;
+}
+
+interface PartitionAcceptedInputRowsByRequestedTurnResult {
+  acceptedClientRequestIdsForOtherTurns: ReadonlySet<ClientTurnRequestId>;
+  requestedTurnRows: StoredEventRow[];
+}
+
+interface ClientRequestAcceptedByOtherTurnArgs {
+  acceptedClientRequestIdsForOtherTurns: ReadonlySet<ClientTurnRequestId>;
+  row: StoredEventRow;
+}
+
+interface FilterExactEventRowsForRequestedTurnArgs {
+  acceptedClientRequestIdsForOtherTurns: ReadonlySet<ClientTurnRequestId>;
+  exactEventRows: readonly StoredEventRow[];
+}
+
+interface FilterExactEventRowsForRequestedTurnResult {
+  removedRows: boolean;
+  rows: readonly StoredEventRow[];
+}
+
+interface ResolveTurnSummaryDetailsSourceRangeArgs {
+  exactEventRows: readonly StoredEventRow[];
+  fallbackRange: TimelineTurnSummarySelection;
+  useExactEventRowBounds: boolean;
+}
+
 interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
   includeNestedRows?: boolean;
@@ -185,6 +216,116 @@ export function toThreadEventWithMeta(
       seq: row.sequence,
       createdAt: row.createdAt,
     },
+  };
+}
+
+function parseAcceptedInputClientRequestId(
+  row: StoredEventRow,
+): ClientTurnRequestId {
+  const event = parseStoredEvent(row);
+  switch (event.type) {
+    case "turn/input/accepted":
+      return event.clientRequestId;
+    default:
+      throw new Error(`Expected turn/input/accepted row ${row.id}`);
+  }
+}
+
+function tryReadClientTurnRequestedRequestId(
+  row: StoredEventRow,
+): ClientTurnRequestId | null {
+  const event = parseStoredEvent(row);
+  if (event.type !== "client/turn/requested") {
+    return null;
+  }
+  return event.requestId;
+}
+
+function partitionAcceptedInputRowsByRequestedTurn(
+  args: PartitionAcceptedInputRowsByRequestedTurnArgs,
+): PartitionAcceptedInputRowsByRequestedTurnResult {
+  const acceptedClientRequestIdsForOtherTurns =
+    new Set<ClientTurnRequestId>();
+  const requestedTurnRows: StoredEventRow[] = [];
+  for (const row of args.acceptedInputRows) {
+    if (row.scopeKind !== "turn" || row.turnId === null) {
+      throw new Error(`Expected turn-scoped turn/input/accepted row ${row.id}`);
+    }
+    if (row.turnId === args.turnId) {
+      requestedTurnRows.push(row);
+      continue;
+    }
+    acceptedClientRequestIdsForOtherTurns.add(
+      parseAcceptedInputClientRequestId(row),
+    );
+  }
+
+  return {
+    acceptedClientRequestIdsForOtherTurns,
+    requestedTurnRows,
+  };
+}
+
+function isClientRequestAcceptedByOtherTurn(
+  args: ClientRequestAcceptedByOtherTurnArgs,
+): boolean {
+  const requestId = tryReadClientTurnRequestedRequestId(args.row);
+  return (
+    requestId !== null &&
+    args.acceptedClientRequestIdsForOtherTurns.has(requestId)
+  );
+}
+
+function filterExactEventRowsForRequestedTurn(
+  args: FilterExactEventRowsForRequestedTurnArgs,
+): FilterExactEventRowsForRequestedTurnResult {
+  if (args.acceptedClientRequestIdsForOtherTurns.size === 0) {
+    return {
+      removedRows: false,
+      rows: args.exactEventRows,
+    };
+  }
+
+  const rows: StoredEventRow[] = [];
+  let removedRows = false;
+  for (const row of args.exactEventRows) {
+    if (
+      isClientRequestAcceptedByOtherTurn({
+        acceptedClientRequestIdsForOtherTurns:
+          args.acceptedClientRequestIdsForOtherTurns,
+        row,
+      })
+    ) {
+      removedRows = true;
+      continue;
+    }
+    rows.push(row);
+  }
+
+  return {
+    removedRows,
+    rows,
+  };
+}
+
+function resolveTurnSummaryDetailsSourceRange(
+  args: ResolveTurnSummaryDetailsSourceRangeArgs,
+): TimelineTurnSummarySelection {
+  const fallbackRange = args.fallbackRange;
+  if (!args.useExactEventRowBounds) {
+    return fallbackRange;
+  }
+
+  const firstRow = args.exactEventRows[0];
+  const lastRow = args.exactEventRows.at(-1);
+  if (!firstRow || !lastRow) {
+    return fallbackRange;
+  }
+
+  return {
+    sourceSeqEnd: lastRow.sequence,
+    sourceSeqStart: firstRow.sequence,
+    turnId: fallbackRange.turnId,
   };
 }
 
@@ -637,7 +778,19 @@ export function buildTimelineTurnSummaryDetails(
       clientRequestIds,
     },
   );
-  const eventRows = [...exactEventRows, ...acceptedInputRows];
+  const acceptedInputRowsByTurn = partitionAcceptedInputRowsByRequestedTurn({
+    acceptedInputRows,
+    turnId: options.turnId,
+  });
+  const exactEventRowsForRequestedTurn = filterExactEventRowsForRequestedTurn({
+    acceptedClientRequestIdsForOtherTurns:
+      acceptedInputRowsByTurn.acceptedClientRequestIdsForOtherTurns,
+    exactEventRows,
+  });
+  const eventRows = [
+    ...exactEventRowsForRequestedTurn.rows,
+    ...acceptedInputRowsByTurn.requestedTurnRows,
+  ];
   const mismatchedTurnRow = eventRows.find(
     (row) => row.scopeKind === "turn" && row.turnId !== options.turnId,
   );
@@ -670,8 +823,7 @@ export function buildTimelineTurnSummaryDetails(
   // Summary rows can cover a segment inside a turn. Once the selected rows are
   // validated against the requested turn, that turn's start must be at or
   // before the latest selected turn row. Accepted input rows may sit after
-  // sourceSeqEnd, so the lifecycle lookup uses the widened context cutoff while
-  // sourceSeqStart/sourceSeqEnd still constrain the returned detail rows.
+  // sourceSeqEnd, so the lifecycle lookup uses the widened context cutoff.
   const turnStartedRows = hasCurrentStartedRow
     ? []
     : listStoredTurnStartedRowsByTurnIdsUpToSequence(db, {
@@ -691,6 +843,15 @@ export function buildTimelineTurnSummaryDetails(
     thread,
     timelineViewMode: viewMode,
   });
+  const sourceRange = resolveTurnSummaryDetailsSourceRange({
+    exactEventRows: exactEventRowsForRequestedTurn.rows,
+    fallbackRange: {
+      sourceSeqEnd: options.sourceSeqEnd,
+      sourceSeqStart: options.sourceSeqStart,
+      turnId: options.turnId,
+    },
+    useExactEventRowBounds: exactEventRowsForRequestedTurn.removedRows,
+  });
   const children = buildThreadTimelineTurnDetailsFromEvents({
     events: [...turnStartedRows, ...eventRows].map((row) =>
       toThreadEventWithMeta(row),
@@ -699,8 +860,8 @@ export function buildTimelineTurnSummaryDetails(
       includeOptionalOperations: false,
       includeProviderUnhandledOperations,
       systemClientRequestVisibility,
-      sourceSeqEnd: options.sourceSeqEnd,
-      sourceSeqStart: options.sourceSeqStart,
+      sourceSeqEnd: sourceRange.sourceSeqEnd,
+      sourceSeqStart: sourceRange.sourceSeqStart,
       threadStatus: thread.status,
       viewMode,
     },

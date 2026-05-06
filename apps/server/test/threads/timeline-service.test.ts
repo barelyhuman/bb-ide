@@ -1804,6 +1804,321 @@ describe("buildThreadTimeline", () => {
     });
   });
 
+  it("loads details for stale turn-summary ranges whose queued draft is accepted by the next turn", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-1",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 5,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789ad",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Queued follow-up" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 6,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 7,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789ad",
+      },
+    });
+
+    const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: true,
+      turnId: "turn-1",
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
+    const detailRows = flattenTimelineSourceRows(details.rows);
+    expect(
+      detailRows.map(({ sourceSeqEnd, sourceSeqStart }) => ({
+        sourceSeqEnd,
+        sourceSeqStart,
+      })),
+    ).toEqual([{ sourceSeqEnd: 2, sourceSeqStart: 2 }]);
+    expect(
+      detailRows.some(
+        (row) => row.sourceSeqStart <= 5 && row.sourceSeqEnd >= 5,
+      ),
+    ).toBe(false);
+    expect(
+      detailRows.some(
+        (row) => row.kind === "conversation" && row.text === "Queued follow-up",
+      ),
+    ).toBe(false);
+    const toolRows = detailRows.filter(
+      (row): row is Extract<TimelineRow, { kind: "work"; workKind: "tool" }> =>
+        row.kind === "work" && row.workKind === "tool",
+    );
+
+    expect(toolRows).toEqual([
+      expect.objectContaining({
+        kind: "work",
+        workKind: "tool",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+      }),
+    ]);
+  });
+
+  it("keeps requested-turn accepted drafts while filtering drafts accepted by later turns", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-1",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 5,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789ae",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Requested-turn follow-up" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 6,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789af",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Later-turn follow-up" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 7,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789ae",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 8,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 9,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789af",
+      },
+    });
+
+    const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: true,
+      turnId: "turn-1",
+      sourceSeqStart: 1,
+      sourceSeqEnd: 6,
+    });
+    const detailRows = flattenTimelineSourceRows(details.rows);
+
+    expect(detailRows).toEqual([
+      expect.objectContaining({
+        kind: "work",
+        workKind: "tool",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+      }),
+    ]);
+    expect(
+      detailRows.map(({ sourceSeqEnd, sourceSeqStart }) => ({
+        sourceSeqEnd,
+        sourceSeqStart,
+      })),
+    ).toEqual([{ sourceSeqEnd: 2, sourceSeqStart: 2 }]);
+    expect(
+      detailRows.some(
+        (row) => row.sourceSeqStart <= 6 && row.sourceSeqEnd >= 6,
+      ),
+    ).toBe(false);
+    expect(
+      detailRows.some(
+        (row) =>
+          row.kind === "conversation" && row.text === "Later-turn follow-up",
+      ),
+    ).toBe(false);
+  });
+
   it("finds matching input-accepted events without a widening lookahead cap", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
