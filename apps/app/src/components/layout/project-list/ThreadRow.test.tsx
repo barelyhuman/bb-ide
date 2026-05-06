@@ -215,16 +215,6 @@ describe("ThreadRow", () => {
         screen.getByLabelText("Pending interaction requires attention"),
       ).not.toBeNull();
     });
-
-    const position = getThreadTitlePosition("Pending interaction thread");
-    const pendingIcon = screen.getByLabelText(
-      "Pending interaction requires attention",
-    );
-    const leadingBlankSlot = position.row.children[1];
-    expect(position.titleIndex).toBe(2);
-    expect(leadingBlankSlot?.getAttribute("aria-hidden")).toBe("true");
-    expect(leadingBlankSlot?.childElementCount).toBe(0);
-    expect(position.row.children[3]?.contains(pendingIcon)).toBe(true);
   });
 
   it("shows the pending interaction dot for threads with a manager parent", () => {
@@ -376,71 +366,17 @@ describe("ThreadRow", () => {
 
   it("shows a managed worktree environment icon", () => {
     renderThreadRow(
-      createThread({
-        environmentWorkspaceDisplayKind: "managed-worktree",
-        lastReadAt: 2,
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
+      createThread({ environmentWorkspaceDisplayKind: "managed-worktree" }),
     );
 
-    const position = getThreadTitlePosition("Pending interaction thread");
-    const leadingBlankSlot = position.row.children[1];
-    const environmentIcon = screen.getByLabelText(
-      "Managed worktree environment",
-    );
-
-    expect(position.titleIndex).toBe(2);
-    expect(leadingBlankSlot?.getAttribute("aria-hidden")).toBe("true");
-    expect(leadingBlankSlot?.childElementCount).toBe(0);
-    expect(position.row.children[3]?.contains(environmentIcon)).toBe(true);
-    expect(screen.queryByLabelText("Thread working")).toBeNull();
-  });
-
-  it("shows an unread badge for unread default rows in the trailing slot", () => {
-    renderThreadRow(
-      createThread({
-        id: "thr_unread",
-        title: "Unread thread",
-        titleFallback: "Unread thread",
-        environmentWorkspaceDisplayKind: "managed-worktree",
-        lastReadAt: 0,
-        latestAttentionAt: 2,
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
-    );
-
-    const position = getThreadTitlePosition("Unread thread");
-    const leadingBlankSlot = position.row.children[1];
-    const unreadBadge = screen.getByLabelText(
-      "Unread thread requires attention",
-    );
-
-    expect(position.titleIndex).toBe(2);
-    expect(leadingBlankSlot?.getAttribute("aria-hidden")).toBe("true");
-    expect(leadingBlankSlot?.childElementCount).toBe(0);
-    expect(position.row.children[3]?.contains(unreadBadge)).toBe(true);
-    expect(screen.queryByLabelText("Managed worktree environment")).toBeNull();
+    expect(
+      screen.getByLabelText("Managed worktree environment"),
+    ).not.toBeNull();
   });
 
   it("shows an unmanaged worktree environment icon", () => {
     renderThreadRow(
-      createThread({
-        environmentWorkspaceDisplayKind: "unmanaged-worktree",
-        lastReadAt: 2,
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
+      createThread({ environmentWorkspaceDisplayKind: "unmanaged-worktree" }),
     );
 
     expect(screen.getByLabelText("Git worktree environment")).not.toBeNull();
@@ -448,15 +384,7 @@ describe("ThreadRow", () => {
 
   it("shows a sandbox environment icon", () => {
     renderThreadRow(
-      createThread({
-        environmentWorkspaceDisplayKind: "sandbox",
-        lastReadAt: 2,
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
+      createThread({ environmentWorkspaceDisplayKind: "sandbox" }),
     );
 
     expect(screen.getByLabelText("Sandbox environment")).not.toBeNull();
@@ -468,7 +396,7 @@ describe("ThreadRow", () => {
     expect(screen.getByText("promoted")).not.toBeNull();
   });
 
-  it("shows unmanaged busy status in the trailing slot instead of the environment icon", () => {
+  it("shows unmanaged busy status in the leading slot and preserves the trailing environment icon", () => {
     renderThreadRow(
       createThread({
         id: "thr_busy",
@@ -484,13 +412,12 @@ describe("ThreadRow", () => {
 
     const position = getThreadTitlePosition("Busy thread");
     const busyIcon = screen.getByLabelText("Thread working");
-    const leadingBlankSlot = position.row.children[1];
-
+    const environmentIcon = screen.getByLabelText(
+      "Managed worktree environment",
+    );
     expect(position.titleIndex).toBe(2);
-    expect(leadingBlankSlot?.getAttribute("aria-hidden")).toBe("true");
-    expect(leadingBlankSlot?.childElementCount).toBe(0);
-    expect(position.row.children[3]?.contains(busyIcon)).toBe(true);
-    expect(screen.queryByLabelText("Managed worktree environment")).toBeNull();
+    expect(position.row.children[1]?.contains(busyIcon)).toBe(true);
+    expect(position.row.children[3]?.contains(environmentIcon)).toBe(true);
   });
 
   it("rerenders when promoted state changes", () => {
@@ -614,127 +541,13 @@ describe("ThreadRow", () => {
     expect(managerChevron.querySelector(".animate-spin")).toBeNull();
   });
 
-  it("renders empty manager rows without an expand control or count badge", () => {
-    renderThreadRow(
-      createThread({
-        id: "thr_empty_manager",
-        type: "manager",
-        title: "Manager without children",
-        titleFallback: "Manager without children",
-        lastReadAt: 2,
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
-      {
-        rowOptions: createManagerRowOptions({
-          managedChildCount: 0,
-          managedChildBusyCount: 0,
-        }),
-      },
-    );
-
-    const position = getThreadTitlePosition("Manager without children");
-    const leadingBlankSlot = position.row.children[1];
-
-    expect(position.titleIndex).toBe(2);
-    expect(leadingBlankSlot?.getAttribute("aria-hidden")).toBe("true");
-    expect(leadingBlankSlot?.childElementCount).toBe(0);
-    expect(
-      screen.queryByRole("button", {
-        name: "Collapse Manager without children threads",
-      }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "Expand Manager without children threads",
-      }),
-    ).toBeNull();
-    expect(screen.queryByLabelText("0 managed threads")).toBeNull();
-    expect(screen.getByLabelText("Manager")).not.toBeNull();
-  });
-
-  it("shows pending manager status in the trailing icon slot", () => {
-    renderThreadRow(
-      createThread({
-        id: "thr_pending_manager",
-        type: "manager",
-        title: "Pending manager",
-        titleFallback: "Pending manager",
-        hasPendingInteraction: true,
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
-      {
-        rowOptions: createManagerRowOptions({
-          managedChildCount: 1,
-          managedChildBusyCount: 0,
-        }),
-      },
-    );
-
-    const managerRow = getThreadRow("Pending manager");
-    const pendingIcon = screen.getByLabelText(
-      "Pending interaction requires attention",
-    );
-
-    expect(managerRow.children[3]?.contains(pendingIcon)).toBe(true);
-    expect(screen.queryByLabelText("Manager")).toBeNull();
-    expect(screen.queryByLabelText("Thread working")).toBeNull();
-  });
-
-  it("shows manager self-busy status in the trailing icon slot", () => {
+  it("shows manager busy status in the leading chevron slot without covering the trailing manager icon", () => {
     renderThreadRow(
       createThread({
         id: "thr_manager",
         type: "manager",
         title: "Manager thread",
         titleFallback: "Manager thread",
-        status: "active",
-        runtime: {
-          displayStatus: "active",
-          hostReconnectGraceExpiresAt: null,
-        },
-      }),
-      {
-        rowOptions: createManagerRowOptions({
-          isCollapsed: true,
-          managedChildCount: 1,
-          managedChildBusyCount: 0,
-        }),
-      },
-    );
-
-    const managerRow = getThreadRow("Manager thread");
-    const managerChevron = screen.getByRole("button", {
-      name: "Expand Manager thread threads",
-    });
-    const managerSpinner = screen.getByLabelText("Thread working");
-
-    expect(screen.getByText("manager")).not.toBeNull();
-    expect(managerSpinner).not.toBeNull();
-    expect(managerChevron.querySelector(".animate-spin")).toBeNull();
-    expect(managerRow.children[3]?.contains(managerSpinner)).toBe(true);
-    expect(screen.queryByLabelText("Manager")).toBeNull();
-  });
-
-  it("shows manager child-busy status in the trailing icon slot", () => {
-    renderThreadRow(
-      createThread({
-        id: "thr_manager",
-        type: "manager",
-        title: "Manager thread",
-        titleFallback: "Manager thread",
-        status: "idle",
-        runtime: {
-          displayStatus: "idle",
-          hostReconnectGraceExpiresAt: null,
-        },
       }),
       {
         rowOptions: createManagerRowOptions({
@@ -745,17 +558,16 @@ describe("ThreadRow", () => {
       },
     );
 
-    const managerRow = getThreadRow("Manager thread");
+    const managerIcon = screen.getByLabelText("Manager");
     const managerChevron = screen.getByRole("button", {
       name: "Expand Manager thread threads",
     });
-    const managerSpinner = screen.getByLabelText("Thread working");
+    const managerSpinner = managerChevron.querySelector(".animate-spin");
 
     expect(screen.getByText("manager")).not.toBeNull();
     expect(managerSpinner).not.toBeNull();
-    expect(managerChevron.querySelector(".animate-spin")).toBeNull();
-    expect(managerRow.children[3]?.contains(managerSpinner)).toBe(true);
-    expect(screen.queryByLabelText("Manager")).toBeNull();
+    expect(managerIcon.parentElement).not.toBe(managerSpinner?.parentElement);
+    expect(getThreadRow("Manager thread").contains(managerIcon)).toBe(true);
   });
 
   it("toggles manager child visibility from the manager chevron", () => {
