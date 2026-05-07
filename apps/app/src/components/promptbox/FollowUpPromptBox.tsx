@@ -81,9 +81,7 @@ export interface ComposerCoreProps {
   onChangeMessage: (value: string) => void;
   onStop?: () => void;
   onSubmit: () => void;
-  processingQueuedMessageId: string | null;
   promptPlaceholder: string;
-  threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
 }
 
@@ -131,6 +129,7 @@ export interface ComposerQueueProps {
   onDeleteQueuedMessage: (messageId: string) => void;
   onEditQueuedMessage: (messageId: string) => void;
   onSendQueuedImmediately: (messageId: string) => void;
+  processingQueuedMessageId: string | null;
   queuedMessages: readonly ThreadQueuedMessage[];
 }
 
@@ -142,6 +141,8 @@ export interface FollowUpPromptBoxProps {
   execution: ComposerExecutionProps;
   mentions: ComposerMentionsProps;
   queue: ComposerQueueProps;
+  /** zenMode resetKey — typically the active thread id, so zen-mode collapses on thread change. */
+  zenModeResetKey: string | number | undefined;
 }
 
 export function FollowUpPromptBox({
@@ -152,6 +153,7 @@ export function FollowUpPromptBox({
   execution,
   mentions,
   queue,
+  zenModeResetKey,
 }: FollowUpPromptBoxProps) {
   const promptBannerMergeBaseCandidates = getMergeBaseBranchCandidates({
     mergeBaseBranch: banner.promptBannerMergeBaseBranch,
@@ -276,7 +278,7 @@ export function FollowUpPromptBox({
           actionDisabled={
             composer.isFollowUpSubmitting || queue.isQueueMutationPending
           }
-          processingMessageId={composer.processingQueuedMessageId}
+          processingMessageId={queue.processingQueuedMessageId}
           onSendImmediately={queue.onSendQueuedImmediately}
           onEdit={queue.onEditQueuedMessage}
           onDelete={queue.onDeleteQueuedMessage}
@@ -316,7 +318,7 @@ export function FollowUpPromptBox({
           zenMode={{
             layout: "thread",
             storageKey: null,
-            resetKey: composer.threadId,
+            resetKey: zenModeResetKey,
             resetOnSubmit: true,
           }}
           footerStart={

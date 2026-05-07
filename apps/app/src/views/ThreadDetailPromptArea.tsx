@@ -509,11 +509,10 @@ export function ThreadDetailPromptArea({
         onChangeMessage: promptDraft.setText,
         onStop: () => stopThread.mutate(thread.id),
         onSubmit: handleSend,
-        processingQueuedMessageId,
         promptPlaceholder,
-        threadId: thread.id,
         threadRuntimeDisplayStatus: runtimeDisplayStatus,
       }}
+      zenModeResetKey={thread.id}
       environment={{
         contextWindowUsage,
         environmentBranchName,
@@ -553,6 +552,7 @@ export function ThreadDetailPromptArea({
         onDeleteQueuedMessage: handleDeleteQueuedMessage,
         onEditQueuedMessage: handleEditQueuedMessage,
         onSendQueuedImmediately: handleSendQueuedImmediately,
+        processingQueuedMessageId,
         queuedMessages,
       }}
     />
