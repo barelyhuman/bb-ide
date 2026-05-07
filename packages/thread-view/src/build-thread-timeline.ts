@@ -678,10 +678,6 @@ function buildCompletedTurnSummaryRows({
     const sourceRows = item.sourceMessages.flatMap((message) =>
       convertMessage(message, { includeNestedRows, rowIdPrefix }),
     );
-    if (item.segmentIndex !== null) {
-      rows.push(...sourceRows);
-      continue;
-    }
     const turnRow = buildTurnSummaryRow({
       completedAt: item.completedAt,
       includeNestedRows,

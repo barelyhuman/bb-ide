@@ -98,7 +98,7 @@ function getOnlyTimelineWebWorkRow(
 }
 
 describe("timeline CLI rendering snapshots", () => {
-  it("keeps accepted steer segments out of turn summaries", () => {
+  it("keeps accepted steer rows outside summaries while preserving summary segments", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const events: TimelineFixtureEvent[] = [
       event.turnStarted({ createdAt: 0 }),
@@ -143,18 +143,28 @@ describe("timeline CLI rendering snapshots", () => {
     );
     const timeline = renderIdleTimeline(events);
 
-    expect(timeline.turnRows).toHaveLength(0);
-    expect(timeline.text).not.toContain("Worked for");
+    expect(timeline.turnRows).toHaveLength(2);
+    expect(
+      timeline.turnRows.map(({ sourceSeqEnd, sourceSeqStart }) => ({
+        sourceSeqEnd,
+        sourceSeqStart,
+      })),
+    ).toEqual([
+      { sourceSeqEnd: 3, sourceSeqStart: 2 },
+      { sourceSeqEnd: 7, sourceSeqStart: 6 },
+    ]);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran pnpm test (5s) ──────────────────────────────────────
-        $ pnpm test
+      "── Worked for (5s) ─────────────────────────────────────────
+        ── Ran pnpm test (5s)
+          $ pnpm test
 
       ── User ────────────────────────────────────────────────────
       Please keep going
       steer
 
-      ── Ran pnpm lint (6s) ──────────────────────────────────────
-        $ pnpm lint"
+      ── Worked for (6s) ─────────────────────────────────────────
+        ── Ran pnpm lint (6s)
+          $ pnpm lint"
     `);
   });
 
@@ -594,16 +604,19 @@ describe("timeline CLI rendering snapshots", () => {
       kind: "steer",
       status: "accepted",
     });
+    expect(timeline.turnRows).toHaveLength(2);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran pnpm test ───────────────────────────────────────────
-        $ pnpm test
+      "── Worked ──────────────────────────────────────────────────
+        ── Ran pnpm test
+          $ pnpm test
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
       steer
 
-      ── Ran sqlite3 ~/.bb-dev/bb.db '.tables' ───────────────────
-        $ sqlite3 ~/.bb-dev/bb.db '.tables'
+      ── Worked ──────────────────────────────────────────────────
+        ── Ran sqlite3 ~/.bb-dev/bb.db '.tables'
+          $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -674,6 +687,7 @@ describe("timeline CLI rendering snapshots", () => {
       "First task",
       "Follow-up task",
     ]);
+    expect(timeline.turnRows).toHaveLength(1);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── User ────────────────────────────────────────────────────
       First task
@@ -684,8 +698,9 @@ describe("timeline CLI rendering snapshots", () => {
       ── User ────────────────────────────────────────────────────
       Follow-up task
 
-      ── Ran pnpm test ───────────────────────────────────────────
-        $ pnpm test
+      ── Worked ──────────────────────────────────────────────────
+        ── Ran pnpm test
+          $ pnpm test
 
       ── Assistant ───────────────────────────────────────────────
       Follow-up done."
