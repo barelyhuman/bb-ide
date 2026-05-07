@@ -361,7 +361,8 @@ export function ThreadFollowUpComposer({
                       onOpenChange={
                         banner.onPromptBannerBranchPickerOpenChange
                       }
-                      className="max-w-[10rem] text-muted-foreground/90"
+                      className="max-w-[10rem]"
+                      muted
                     />
                   </div>
                 ) : (
@@ -504,6 +505,7 @@ export function ThreadFollowUpComposer({
                     }
                     icon={environment.environmentIcon}
                     className="h-6 min-w-[80px]"
+                    muted
                   />
                 ) : environment.environmentHostConnected !== undefined ? (
                   <HostStatusBadge

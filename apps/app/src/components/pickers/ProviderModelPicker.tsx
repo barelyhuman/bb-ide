@@ -16,6 +16,7 @@ import {
   OPTION_BASE_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
   OPTION_CONTENT_CLASS_NAME,
+  OPTION_MUTED_CLASS_NAME,
   type PickerOption,
 } from "./OptionPicker";
 
@@ -37,6 +38,8 @@ interface ProviderModelPickerProps {
   showFastModeToggle: boolean;
   serviceTierSupportByProvider?: Record<string, boolean>;
   className?: string;
+  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
+  muted?: boolean;
 }
 
 export function ProviderModelPicker({
@@ -54,6 +57,7 @@ export function ProviderModelPicker({
   showFastModeToggle,
   serviceTierSupportByProvider,
   className,
+  muted,
 }: ProviderModelPickerProps) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -144,6 +148,7 @@ export function ProviderModelPicker({
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
+            muted && OPTION_MUTED_CLASS_NAME,
             className,
           )}
         >

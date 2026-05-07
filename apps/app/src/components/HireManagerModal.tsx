@@ -341,7 +341,6 @@ export function HireManagerModal({
                         fastModeEnabled={false}
                         onFastModeChange={() => {}}
                         showFastModeToggle={false}
-                        className="text-foreground"
                       />
                       {reasoningOptions.length > 0 ? (
                         <OptionPicker
@@ -352,7 +351,6 @@ export function HireManagerModal({
                           }
                           options={reasoningOptions}
                           onChange={handleReasoningLevelChange}
-                          className="text-foreground"
                         />
                       ) : null}
                     </>

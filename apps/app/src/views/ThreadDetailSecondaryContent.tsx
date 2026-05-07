@@ -307,7 +307,7 @@ function ThreadMetadataContent({
               variant="minimal"
               loading={isLoadingMergeBaseBranchOptions}
               onChange={onMergeBaseBranchChange}
-              className="max-w-full text-foreground"
+              className="max-w-full"
             />
           ) : (
             mergeBaseBranch

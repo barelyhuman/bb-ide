@@ -12,11 +12,13 @@ import {
 import { cn } from "@/lib/utils";
 
 export const OPTION_BASE_CLASS_NAME =
-  "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight text-muted-foreground/75";
+  "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight";
 export const OPTION_INTERACTIVE_CLASS_NAME =
-  "border-none bg-transparent shadow-none hover:bg-transparent hover:text-foreground";
+  "border-none bg-transparent shadow-none hover:bg-transparent";
 export const OPTION_CONTENT_CLASS_NAME =
   "flex min-w-0 items-center gap-1.5";
+export const OPTION_MUTED_CLASS_NAME =
+  "text-muted-foreground/75 hover:text-foreground";
 const OPTION_WARNING_TEXT_CLASS_NAME = "text-warning";
 const OPTION_WARNING_INTERACTIVE_CLASS_NAME = "hover:text-warning/80";
 const OPTION_WARNING_ICON_CLASS_NAME = "text-warning/90";
@@ -36,6 +38,8 @@ interface OptionDisplayProps {
   icon?: ComponentType<{ className?: string }>;
   className?: string;
   title?: string;
+  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
+  muted?: boolean;
 }
 
 interface OptionPickerProps<T extends string> {
@@ -45,6 +49,8 @@ interface OptionPickerProps<T extends string> {
   onChange: (value: T) => void;
   className?: string;
   contentClassName?: string;
+  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
+  muted?: boolean;
 }
 
 export function OptionDisplay({
@@ -54,6 +60,7 @@ export function OptionDisplay({
   icon: Icon,
   className,
   title,
+  muted,
 }: OptionDisplayProps) {
   const defaultTitle =
     typeof value === "string" ? `${label}: ${value}` : undefined;
@@ -64,6 +71,7 @@ export function OptionDisplay({
       className={cn(
         "inline-flex",
         OPTION_BASE_CLASS_NAME,
+        muted && OPTION_MUTED_CLASS_NAME,
         tone === "warning" && OPTION_WARNING_TEXT_CLASS_NAME,
         className,
       )}
@@ -84,6 +92,7 @@ export function OptionPicker<T extends string>({
   onChange,
   className,
   contentClassName,
+  muted,
 }: OptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedIsWarning = selectedOption?.tone === "warning";
@@ -105,6 +114,7 @@ export function OptionPicker<T extends string>({
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
+            muted && OPTION_MUTED_CLASS_NAME,
             selectedIsWarning && OPTION_WARNING_TEXT_CLASS_NAME,
             selectedIsWarning && OPTION_WARNING_INTERACTIVE_CLASS_NAME,
             className,

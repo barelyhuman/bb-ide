@@ -73,6 +73,7 @@ export function PromptPermissionModePicker({
       onChange={onChange}
       className={className}
       contentClassName="max-w-72"
+      muted
     />
   );
 }
@@ -107,6 +108,7 @@ export function PromptExecutionControls({
               (candidate) => candidate.value === provider.selectedId,
             )?.icon
           }
+          muted
         />
       ) : null}
       {showModelPicker ? (
@@ -126,6 +128,7 @@ export function PromptExecutionControls({
           }
           showFastModeToggle={serviceTier?.supported ?? false}
           serviceTierSupportByProvider={serviceTier?.supportByProvider}
+          muted
         />
       ) : null}
       {reasoning.options.length > 0 ? (
@@ -134,6 +137,7 @@ export function PromptExecutionControls({
           value={reasoning.value}
           options={reasoning.options}
           onChange={reasoning.onChange}
+          muted
         />
       ) : null}
     </>

@@ -37,6 +37,7 @@ import {
   OPTION_BASE_CLASS_NAME,
   OPTION_CONTENT_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
+  OPTION_MUTED_CLASS_NAME,
 } from "./OptionPicker";
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,8 @@ interface EnvironmentPickerProps {
   onChange: (value: string) => void;
   projectId: string | null;
   sources: readonly ProjectSource[];
+  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
+  muted?: boolean;
 }
 
 export function EnvironmentPicker({
@@ -143,6 +146,7 @@ export function EnvironmentPicker({
   onChange,
   projectId,
   sources,
+  muted,
 }: EnvironmentPickerProps) {
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useEffectiveHosts();
@@ -194,6 +198,7 @@ export function EnvironmentPicker({
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
+            muted && OPTION_MUTED_CLASS_NAME,
           )}
         >
           <span className={OPTION_CONTENT_CLASS_NAME}>

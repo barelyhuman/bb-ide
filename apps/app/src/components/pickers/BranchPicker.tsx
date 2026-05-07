@@ -29,6 +29,7 @@ export function BranchPicker({
   onOpenChange,
   className,
   variant = "default",
+  muted,
 }: {
   value: string;
   options: readonly string[];
@@ -38,6 +39,8 @@ export function BranchPicker({
   onOpenChange?: (open: boolean) => void;
   className?: string;
   variant?: "default" | "minimal";
+  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. Only meaningful with variant="minimal". */
+  muted?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -87,8 +90,11 @@ export function BranchPicker({
           disabled={disabled}
           className={cn(
             variant === "minimal"
-              ? "h-5 w-auto min-w-0 justify-between gap-1 rounded-sm px-0 text-xs font-normal text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+              ? "h-5 w-auto min-w-0 justify-between gap-1 rounded-sm px-0 text-xs font-normal shadow-none hover:bg-transparent"
               : "h-8 w-full min-w-0 justify-between rounded-md border-border/60 bg-background px-2.5 text-sm font-normal shadow-none hover:bg-muted/35",
+            variant === "minimal" &&
+              muted &&
+              "text-muted-foreground hover:text-foreground",
             className,
           )}
           role="combobox"

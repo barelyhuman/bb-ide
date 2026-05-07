@@ -112,7 +112,7 @@ export function Overview() {
               options={mockMergeBaseOptions}
               variant="minimal"
               onChange={noop}
-              className="max-w-full text-foreground"
+              className="max-w-full"
             />
           </DetailRow>
           <DetailRow label="Git status" align="start" valueClassName="min-w-0">

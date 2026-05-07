@@ -272,7 +272,7 @@ export function ProjectMainView() {
                 value={projectId}
                 options={projectOptions}
                 onChange={handleProjectChange}
-                className="h-8 px-0 text-sm text-foreground/90 hover:text-foreground"
+                className="h-8 px-0 text-sm"
               />
             </div>
           ) : null}
@@ -348,6 +348,7 @@ export function ProjectMainView() {
             onChange={setEnvironmentSelectionValue}
             projectId={projectId}
             sources={projectSources}
+            muted
           />
           <PromptPermissionModePicker
             value={permissionMode}
