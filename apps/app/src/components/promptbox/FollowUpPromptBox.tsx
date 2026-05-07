@@ -76,15 +76,38 @@ export interface ComposerBannerProps {
   workspaceStatus?: WorkspaceStatus | null;
 }
 
+/**
+ * Discriminated state for the composer's submit affordances. Replaces the
+ * previous canSendFollowUp / canQueueFollowUp / canStopRuntime / onStop
+ * boolean soup. The caller computes one of these from runtimeDisplayStatus +
+ * pending-interaction state and passes it down; the composer reads .kind to
+ * render submit/queue/stop affordances.
+ */
+export type ComposerBlockedReason =
+  | "pending-interaction"
+  | "provisioning"
+  | "stopping";
+
+export type ComposerSubmitMode =
+  /** Idle thread — submit creates a new turn; no stop affordance. */
+  | { kind: "ready" }
+  /** Runtime is active or host-reconnecting — submit queues the message; stop the runtime. */
+  | { kind: "queue"; onStop: () => void }
+  /** Runtime is waiting on the host — can't send/queue, but can stop. */
+  | { kind: "stop-only"; onStop: () => void }
+  /** Can't submit and can't stop — show why. */
+  | { kind: "blocked"; reason: ComposerBlockedReason };
+
 export interface ComposerCoreProps {
-  canSendFollowUp: boolean;
   history: HistoryConfig;
+  /** True while the send/queue mutation is in flight. Orthogonal to submitMode. */
   isFollowUpSubmitting: boolean;
   message: string;
   onChangeMessage: (value: string) => void;
-  onStop?: () => void;
   onSubmit: () => void;
   promptPlaceholder: string;
+  submitMode: ComposerSubmitMode;
+  /** Used by the scroll-to-bottom button to know whether the runtime is actively streaming. */
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
 }
 
@@ -166,12 +189,15 @@ export function FollowUpPromptBox({
     banner.onPromptBannerMergeBaseBranchChange &&
     promptBannerMergeBaseCandidates.length > 0,
   );
-  const canQueueFollowUp =
-    composer.threadRuntimeDisplayStatus === "active" ||
-    composer.threadRuntimeDisplayStatus === "host-reconnecting";
-  const canStopRuntime =
-    canQueueFollowUp ||
-    composer.threadRuntimeDisplayStatus === "waiting-for-host";
+  const submitMode = composer.submitMode;
+  const canQueueFollowUp = submitMode.kind === "queue";
+  const canSubmit =
+    submitMode.kind === "ready" || submitMode.kind === "queue";
+  const onStopRuntime =
+    submitMode.kind === "queue" || submitMode.kind === "stop-only"
+      ? submitMode.onStop
+      : undefined;
+  const canStopRuntime = onStopRuntime !== undefined;
 
   return (
     <>
@@ -272,7 +298,7 @@ export function FollowUpPromptBox({
         <QueuedMessagesList
           queuedMessages={queue.queuedMessages}
           sendDisabled={
-            !composer.canSendFollowUp ||
+            !canSubmit ||
             composer.isFollowUpSubmitting ||
             queue.isQueueMutationPending
           }
@@ -292,10 +318,9 @@ export function FollowUpPromptBox({
           placeholder={composer.promptPlaceholder}
           autoFocus
           submission={{
-            onStop: canStopRuntime ? composer.onStop : undefined,
+            onStop: onStopRuntime,
             isSubmitting: composer.isFollowUpSubmitting,
-            disabled:
-              !composer.canSendFollowUp || composer.isFollowUpSubmitting,
+            disabled: !canSubmit || composer.isFollowUpSubmitting,
             title: canQueueFollowUp
               ? "Queue follow-up (Enter)"
               : "Submit (Enter)",

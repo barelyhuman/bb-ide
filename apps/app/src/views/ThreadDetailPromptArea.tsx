@@ -40,7 +40,10 @@ import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
-import { FollowUpPromptBox } from "@/components/promptbox/FollowUpPromptBox";
+import {
+  FollowUpPromptBox,
+  type ComposerSubmitMode,
+} from "@/components/promptbox/FollowUpPromptBox";
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 
@@ -216,11 +219,24 @@ export function ThreadDetailPromptArea({
     sendMessage.isPending ||
     isEnvironmentActionPending ||
     createDraft.isPending;
-  const canSendFollowUp =
-    !isCreated &&
-    !isProvisioning &&
-    !hasPendingInteraction &&
-    !isWaitingForHost;
+  const submitMode: ComposerSubmitMode = (() => {
+    if (hasPendingInteraction) {
+      return { kind: "blocked", reason: "pending-interaction" };
+    }
+    if (isCreated || isProvisioning) {
+      return { kind: "blocked", reason: "provisioning" };
+    }
+    if (isWaitingForHost) {
+      return { kind: "stop-only", onStop: () => stopThread.mutate(thread.id) };
+    }
+    if (
+      runtimeDisplayStatus === "active" ||
+      runtimeDisplayStatus === "host-reconnecting"
+    ) {
+      return { kind: "queue", onStop: () => stopThread.mutate(thread.id) };
+    }
+    return { kind: "ready" };
+  })();
   const promptPlaceholder = getPromptPlaceholder(
     runtimeDisplayStatus,
     hasPendingInteraction,
@@ -494,7 +510,6 @@ export function ThreadDetailPromptArea({
         workspaceStatus,
       }}
       composer={{
-        canSendFollowUp,
         history: {
           currentDraft: {
             text: promptDraft.text,
@@ -507,9 +522,9 @@ export function ThreadDetailPromptArea({
         isFollowUpSubmitting,
         message: promptDraft.text,
         onChangeMessage: promptDraft.setText,
-        onStop: () => stopThread.mutate(thread.id),
         onSubmit: handleSend,
         promptPlaceholder,
+        submitMode,
         threadRuntimeDisplayStatus: runtimeDisplayStatus,
       }}
       zenModeResetKey={thread.id}
