@@ -31,7 +31,7 @@ interface ToolDescriptor {
   intentKind?: ToolIntentKind;
 }
 
-const SHELL_SEGMENT_BREAK_TOKENS = new Set(["&&", "||", "|", ";"]);
+const SHELL_SEGMENT_BREAK_TOKENS = new Set(["&&", "||", "|", ";", "\n"]);
 
 function unwrapQuotedShellArg(value: string): string {
   if (value.length < 2) return value;
@@ -414,6 +414,12 @@ export function tokenizeShellWords(command: string): ShellToken[] {
 
     if (character === "'" || character === '"') {
       quote = character;
+      continue;
+    }
+
+    if (character === "\n") {
+      flushCurrent();
+      tokens.push({ value: "\n", quoted: false });
       continue;
     }
 

@@ -45,4 +45,22 @@ describe("tool-call shell parsing", () => {
       },
     ]);
   });
+
+  it("treats unquoted newlines as shell segment boundaries", () => {
+    const command =
+      "git ls-tree -d main packages/ | head -30\n" +
+      'echo "==="\n' +
+      "git show main:.gitignore 2>/dev/null | grep -E 'agent-provider-audit|agent-fixtures' || echo \"(no matches)\"";
+
+    expect(
+      parseShellCommandIntents(command),
+    ).toEqual([
+      {
+        type: "search",
+        cmd: command,
+        query: "agent-provider-audit|agent-fixtures",
+        path: null,
+      },
+    ]);
+  });
 });
