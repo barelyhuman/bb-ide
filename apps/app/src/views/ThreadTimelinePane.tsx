@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronUp } from "lucide-react";
-import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
+import type {
+  ActiveThinking,
+  ThreadRuntimeDisplayStatus,
+} from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
   ConversationTimeline,
@@ -9,7 +11,6 @@ import {
   type TimelineTitleActionResolver,
 } from "@bb/ui-core";
 import { PageShell } from "@bb/ui-core";
-import { Button } from "@bb/ui-core";
 import { ConversationStatusIndicator } from "@bb/ui-core";
 import { ConversationWorkingIndicator } from "@bb/ui-core";
 import { usePreferredTheme } from "@/hooks/useTheme";
@@ -18,15 +19,12 @@ import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 interface ThreadTimelinePaneProps {
   activeThinking: ActiveThinking | null;
   footer: ReactNode;
-  hasOlderTimelineRows: boolean;
   header: ReactNode;
   hostConnectionNotice?: HostConnectionNotice | null;
-  isLoadingOlderTimelineRows: boolean;
   isThreadTimelinePending: boolean;
   timelineError: boolean;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
-  onLoadOlderRows: () => void;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -48,15 +46,12 @@ export interface HostConnectionNotice {
 export function ThreadTimelinePane({
   activeThinking,
   footer,
-  hasOlderTimelineRows,
   header,
   hostConnectionNotice,
-  isLoadingOlderTimelineRows,
   isThreadTimelinePending,
   timelineError,
   loadingTurnSummaryIds,
   erroredTurnSummaryIds,
-  onLoadOlderRows,
   onLoadTurnSummaryRows,
   onOpenLocalFileLink,
   onTitleAction,
@@ -94,24 +89,6 @@ export function ThreadTimelinePane({
         footer={footer}
       >
         <ConversationTimeline className="flex-1">
-          {hasOlderTimelineRows &&
-          !isThreadTimelinePending &&
-          !timelineError ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onLoadOlderRows}
-                disabled={isLoadingOlderTimelineRows}
-              >
-                <ChevronUp aria-hidden="true" />
-                {isLoadingOlderTimelineRows
-                  ? "Loading older rows..."
-                  : "Load older rows"}
-              </Button>
-            </div>
-          ) : null}
           {isThreadTimelinePending ? (
             <DelayedThreadLoadingIndicator />
           ) : timelineError ? (

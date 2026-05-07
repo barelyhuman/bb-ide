@@ -4,10 +4,7 @@ import {
   DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
   type ThreadStorageFileListOptions,
 } from "@/lib/thread-storage-files";
-import type {
-  ManagerTimelineView,
-  TimelinePaginationCursor,
-} from "@bb/server-contract";
+import type { ManagerTimelineView } from "@bb/server-contract";
 
 export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
@@ -48,19 +45,6 @@ export const CONVERSATION_MANAGER_TIMELINE_VIEW =
   "conversation" satisfies ManagerTimelineView;
 export const STANDARD_MANAGER_TIMELINE_VIEW =
   "standard" satisfies ManagerTimelineView;
-
-export interface LatestThreadTimelineQueryPage {
-  kind: "latest";
-}
-
-export interface OlderThreadTimelineQueryPage {
-  beforeCursor: TimelinePaginationCursor;
-  kind: "older";
-}
-
-export type ThreadTimelineQueryPage =
-  | LatestThreadTimelineQueryPage
-  | OlderThreadTimelineQueryPage;
 
 export interface ThreadListQueryFilters {
   projectId?: string;
@@ -209,7 +193,6 @@ export type ThreadTimelineQueryKey = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
   string,
   ManagerTimelineView | undefined,
-  ThreadTimelineQueryPage,
 ];
 export type ThreadTimelineQueryKeyPrefix = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
@@ -489,31 +472,8 @@ export function environmentMergeBaseBranchesQueryKeyPrefix(
 export function threadTimelineQueryKey(
   threadId: string,
   managerTimelineView: ManagerTimelineView | undefined,
-  page: ThreadTimelineQueryPage = {
-    kind: "latest",
-  },
 ): ThreadTimelineQueryKey {
-  return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView, page];
-}
-
-export function threadTimelineLatestQueryKey(
-  threadId: string,
-  managerTimelineView: ManagerTimelineView | undefined,
-): ThreadTimelineQueryKey {
-  return threadTimelineQueryKey(threadId, managerTimelineView, {
-    kind: "latest",
-  });
-}
-
-export function threadTimelineOlderQueryKey(
-  threadId: string,
-  managerTimelineView: ManagerTimelineView | undefined,
-  beforeCursor: TimelinePaginationCursor,
-): ThreadTimelineQueryKey {
-  return threadTimelineQueryKey(threadId, managerTimelineView, {
-    beforeCursor,
-    kind: "older",
-  });
+  return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView];
 }
 
 export function managerTimelineViewFromThreadTimelineQueryKey(
@@ -542,19 +502,6 @@ export function isStandardManagerThreadTimelineQueryKey(
     typeof queryKey[1] === "string" &&
     managerTimelineViewFromThreadTimelineQueryKey(queryKey) ===
       STANDARD_MANAGER_TIMELINE_VIEW
-  );
-}
-
-export function isLatestThreadTimelineQueryKey(
-  queryKey: QueryKey,
-): queryKey is ThreadTimelineQueryKey {
-  return (
-    queryKey[0] === THREAD_TIMELINE_QUERY_KEY &&
-    typeof queryKey[1] === "string" &&
-    typeof queryKey[3] === "object" &&
-    queryKey[3] !== null &&
-    "kind" in queryKey[3] &&
-    queryKey[3].kind === "latest"
   );
 }
 

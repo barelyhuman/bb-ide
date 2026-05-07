@@ -33,7 +33,7 @@ import {
   threadQueryKey,
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
-  threadTimelineLatestQueryKey,
+  threadTimelineQueryKey,
 } from "./query-keys";
 
 interface QueryOptions {
@@ -70,7 +70,9 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
   const queryKey =
     enabled && projectId
       ? threadListQueryKey({ ...rest, projectId })
-      : disabledThreadListQueryKey(projectId ? { ...rest, projectId } : rest);
+      : disabledThreadListQueryKey(
+          projectId ? { ...rest, projectId } : rest,
+        );
 
   return useQuery<ThreadListResponse>({
     queryKey,
@@ -202,12 +204,13 @@ export function useThreadTimeline(
   const managerTimelineView = options?.managerTimelineView;
 
   return useQuery<ThreadTimelineResponse>({
-    queryKey: threadTimelineLatestQueryKey(id, managerTimelineView),
+    queryKey: threadTimelineQueryKey(id, managerTimelineView),
     queryFn: () =>
-      api.getThreadTimeline({
-        id: requireThreadId(id, "useThreadTimeline"),
+      api.getThreadTimeline(
+        requireThreadId(id, "useThreadTimeline"),
+        false,
         managerTimelineView,
-      }),
+      ),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     placeholderData: (previousData, previousQuery) =>

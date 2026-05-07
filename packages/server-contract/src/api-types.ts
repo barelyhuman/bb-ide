@@ -523,49 +523,12 @@ export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 export const managerTimelineViewSchema = z.enum(["conversation", "standard"]);
 export type ManagerTimelineView = z.infer<typeof managerTimelineViewSchema>;
 
-export const timelinePaginationCursorSchema = z
-  .object({
-    seq: z.number().int().nonnegative(),
-    id: z.string().min(1),
-  })
-  .strict();
-export type TimelinePaginationCursor = z.infer<
-  typeof timelinePaginationCursorSchema
->;
-
-export const timelinePageMetadataSchema = z
-  .object({
-    kind: z.enum(["latest", "older"]),
-    turnLimit: z.number().int().positive(),
-    returnedTopLevelRowCount: z.number().int().nonnegative(),
-    hasOlderRows: z.boolean(),
-    olderCursor: timelinePaginationCursorSchema.nullable(),
-  })
-  .strict();
-export type TimelinePageMetadata = z.infer<typeof timelinePageMetadataSchema>;
-
 export const threadTimelineQuerySchema = z
   .object({
     managerTimelineView: managerTimelineViewSchema,
     includeNestedRows: z.enum(["true", "false"]),
-    turnLimit: z.string().regex(/^\d+$/),
-    beforeSeq: z.string().regex(/^\d+$/),
-    beforeId: z.string().min(1),
   })
-  .partial()
-  .superRefine((query, context) => {
-    const hasBeforeSeq = query.beforeSeq !== undefined;
-    const hasBeforeId = query.beforeId !== undefined;
-
-    if (hasBeforeSeq === hasBeforeId) {
-      return;
-    }
-
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "beforeSeq and beforeId must be provided together",
-    });
-  });
+  .partial();
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
 export const timelineTurnSummaryDetailsQuerySchema = z.object({
@@ -981,7 +944,6 @@ export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
   activeThinking: activeThinkingSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
-  timelinePage: timelinePageMetadataSchema,
 });
 export type ThreadTimelineResponse = z.infer<
   typeof threadTimelineResponseSchema

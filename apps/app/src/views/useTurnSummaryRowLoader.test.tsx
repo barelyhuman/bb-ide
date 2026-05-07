@@ -251,7 +251,7 @@ describe("useTurnSummaryRowLoader", () => {
     expect(result.current.handleLoadTurnSummaryRows).toBe(initialLoadCallback);
   });
 
-  it("drops cached details when a capped timeline removes the parent row", async () => {
+  it("drops cached details when refreshed timeline rows remove the parent row", async () => {
     const requests: LoadTurnSummaryRowsArgs[] = [];
     const loadTurnSummaryRows: LoadTurnSummaryRows = (args) => {
       requests.push(args);
@@ -263,7 +263,7 @@ describe("useTurnSummaryRowLoader", () => {
       {
         initialProps: {
           loadTurnSummaryRows,
-          managerTimelineView: undefined,
+          managerTimelineView: "standard",
           timelineRows: [turnSummaryRow()],
           threadId: "thread-1",
         },
@@ -282,7 +282,7 @@ describe("useTurnSummaryRowLoader", () => {
 
     rerender({
       loadTurnSummaryRows,
-      managerTimelineView: undefined,
+      managerTimelineView: "standard",
       timelineRows: [],
       threadId: "thread-1",
     });
@@ -295,7 +295,7 @@ describe("useTurnSummaryRowLoader", () => {
 
     rerender({
       loadTurnSummaryRows,
-      managerTimelineView: undefined,
+      managerTimelineView: "standard",
       timelineRows: [turnSummaryRow()],
       threadId: "thread-1",
     });
