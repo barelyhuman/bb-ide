@@ -540,25 +540,35 @@ export function ThreadDetailPromptArea({
       }
       contextWindowUsage={contextWindowUsage}
       execution={{
-        activeModel,
-        hasMultipleProviders,
-        modelOptions,
-        onReasoningLevelChange: setReasoningLevel,
-        onPermissionModeChange: setPermissionMode,
-        onSelectedModelChange: setSelectedModel,
-        onServiceTierChange: setServiceTier,
-        providerDisplayName: selectedProviderDisplayName,
-        providerOptions,
-        reasoningLevel,
-        reasoningOptions,
-        permissionMode,
-        permissionModeOptions,
-        supportsPermissionModeSelection,
-        selectedModel,
-        selectedProviderId,
-        serviceTier,
-        supportsServiceTier,
-        serviceTierSupportByProvider,
+        provider: {
+          options: providerOptions,
+          selectedId: selectedProviderId,
+          hasMultiple: hasMultipleProviders,
+          displayName: selectedProviderDisplayName,
+        },
+        model: {
+          active: activeModel,
+          selected: selectedModel,
+          options: modelOptions,
+          onChange: setSelectedModel,
+        },
+        serviceTier: {
+          value: serviceTier,
+          onChange: setServiceTier,
+          supported: supportsServiceTier,
+          supportByProvider: serviceTierSupportByProvider,
+        },
+        reasoning: {
+          value: reasoningLevel,
+          options: reasoningOptions,
+          onChange: setReasoningLevel,
+        },
+      }}
+      permission={{
+        value: permissionMode,
+        options: permissionModeOptions,
+        onChange: setPermissionMode,
+        supported: supportsPermissionModeSelection,
       }}
       mentions={{
         mentionError: promptMentions.isError,

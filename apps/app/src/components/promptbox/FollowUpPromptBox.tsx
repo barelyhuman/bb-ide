@@ -1,9 +1,6 @@
 import { type ComponentProps, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import {
-  type PermissionMode,
-  type ReasoningLevel,
-  type ServiceTier,
   type ThreadQueuedMessage,
   type ThreadRuntimeDisplayStatus,
   type WorkspaceFileStatus,
@@ -15,9 +12,12 @@ import {
   type HistoryConfig,
   type MentionsConfig,
 } from "@/components/promptbox/PromptBoxInternal";
-import { type PickerOption } from "@/components/pickers/OptionPicker";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
-import { ExecutionControls } from "@/components/promptbox/ExecutionControls";
+import {
+  ExecutionControls,
+  type ExecutionControlsProps,
+  type ExecutionPermissionConfig,
+} from "@/components/promptbox/ExecutionControls";
 import { useBottomAnchoredScroll } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "@/views/ThreadTimelineScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
@@ -115,27 +115,6 @@ type ContextWindowUsage = ComponentProps<
   typeof ThreadContextWindowIndicator
 >["usage"];
 
-export interface ComposerExecutionProps {
-  activeModel?: { model: string } | null;
-  hasMultipleProviders?: boolean;
-  modelOptions: readonly PickerOption<string>[];
-  onPermissionModeChange: (value: PermissionMode) => void;
-  onReasoningLevelChange: (value: ReasoningLevel) => void;
-  onSelectedModelChange: (value: string) => void;
-  onServiceTierChange: (value: ServiceTier | undefined) => void;
-  permissionMode?: PermissionMode;
-  permissionModeOptions: readonly PickerOption<PermissionMode>[];
-  providerDisplayName?: string;
-  providerOptions?: readonly PickerOption<string>[];
-  reasoningLevel: ReasoningLevel;
-  reasoningOptions: readonly PickerOption<ReasoningLevel>[];
-  selectedModel: string;
-  selectedProviderId?: string;
-  serviceTier?: ServiceTier;
-  supportsPermissionModeSelection: boolean;
-  supportsServiceTier: boolean;
-  serviceTierSupportByProvider?: Record<string, boolean>;
-}
 
 export interface ComposerMentionsProps {
   mentionError: boolean;
@@ -161,7 +140,14 @@ export interface FollowUpPromptBoxProps {
   environmentSummary: ThreadEnvironmentSummaryProps | null;
   /** Token usage indicator shown to the right of the permission picker. */
   contextWindowUsage?: ContextWindowUsage;
-  execution: ComposerExecutionProps;
+  /**
+   * Execution controls (provider + model + service tier + reasoning) rendered
+   * in PromptBox's footer slot. The composer forces provider.readOnly because
+   * follow-ups can't change provider — the thread is already committed.
+   */
+  execution: ExecutionControlsProps;
+  /** Permission mode picker rendered in the bottom row. */
+  permission: ExecutionPermissionConfig;
   mentions: ComposerMentionsProps;
   queue: ComposerQueueProps;
   /** zenMode resetKey — typically the active thread id, so zen-mode collapses on thread change. */
@@ -175,6 +161,7 @@ export function FollowUpPromptBox({
   environmentSummary,
   contextWindowUsage,
   execution,
+  permission,
   mentions,
   queue,
   zenModeResetKey,
@@ -349,30 +336,8 @@ export function FollowUpPromptBox({
           }}
           footerStart={
             <ExecutionControls
-              provider={{
-                hasMultiple: execution.hasMultipleProviders,
-                options: execution.providerOptions,
-                selectedId: execution.selectedProviderId,
-                displayName: execution.providerDisplayName,
-                readOnly: true,
-              }}
-              model={{
-                active: execution.activeModel,
-                selected: execution.selectedModel,
-                options: execution.modelOptions,
-                onChange: execution.onSelectedModelChange,
-              }}
-              serviceTier={{
-                value: execution.serviceTier,
-                onChange: execution.onServiceTierChange,
-                supported: execution.supportsServiceTier,
-                supportByProvider: execution.serviceTierSupportByProvider,
-              }}
-              reasoning={{
-                value: execution.reasoningLevel,
-                options: execution.reasoningOptions,
-                onChange: execution.onReasoningLevelChange,
-              }}
+              {...execution}
+              provider={{ ...execution.provider, readOnly: true }}
             />
           }
         />
@@ -384,10 +349,10 @@ export function FollowUpPromptBox({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PermissionModePicker
-              value={execution.permissionMode}
-              options={execution.permissionModeOptions}
-              onChange={execution.onPermissionModeChange}
-              supported={execution.supportsPermissionModeSelection}
+              value={permission.value}
+              options={permission.options}
+              onChange={permission.onChange}
+              supported={permission.supported}
               className="h-6"
             />
             {contextWindowUsage ? (
