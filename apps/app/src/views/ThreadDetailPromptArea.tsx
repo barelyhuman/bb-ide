@@ -15,12 +15,14 @@ import type {
   ServiceTier,
   ThreadRuntimeDisplayStatus,
   ThreadWithRuntime,
-  WorkspaceFileStatus,
-  WorkspaceStatus,
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { ThreadPendingInteractionBanner } from "@/components/thread/ThreadPendingInteractionBanner";
-import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
+import {
+  ContextBanner,
+  type ContextBannerMergeBaseConfig,
+} from "@/components/promptbox/banner/ContextBanner";
+import type { WorkspaceChangedFilesSection } from "@/lib/workspace-change-summary";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
@@ -64,7 +66,6 @@ interface SendFollowUpInputParams {
 }
 
 interface ThreadDetailPromptAreaProps {
-  canExpandPromptChangeList: boolean;
   canUseGitUi: boolean;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
@@ -72,21 +73,24 @@ interface ThreadDetailPromptAreaProps {
   environmentIcon?: ComponentType<{ className?: string }>;
   environmentLabel?: ReactNode;
   isEnvironmentActionPending: boolean;
-  isLoadingMergeBaseBranchOptions: boolean;
-  mergeBaseBranchOptions?: readonly string[];
-  onMergeBaseBranchChange?: (branch: string) => void;
   pendingInteractions: readonly PendingInteraction[];
   openDiffFile: (path: string) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
-  promptBannerFiles?: WorkspaceFileStatus[];
-  promptBannerMergeBaseBranch?: string;
-  promptBannerSummary: ReactNode;
+  /**
+   * Resolved changed-files section for the thread's workspace. Null hides the
+   * banner. Production passes null when the thread is a manager
+   * (canUseGitUi === false) or the workspace has no changes; otherwise the
+   * value is selectWorkspaceChangedFilesSection(workspaceStatus).
+   */
+  workspaceChangedFilesSection: WorkspaceChangedFilesSection | null;
+  /**
+   * Merge-base picker config for the prompt context banner. Null hides the
+   * picker (e.g. thread is on default branch — no merge base to compare).
+   */
+  contextBannerMergeBase: ContextBannerMergeBaseConfig | null;
   sendMessage: SendMessageMutationLike;
-  showBranchComparisonUi: boolean;
-  showPromptGitStatsBanner: boolean;
   thread: ThreadWithRuntime;
-  workspaceStatus?: WorkspaceStatus;
 }
 
 function getPromptPlaceholder(
@@ -126,7 +130,6 @@ function shouldQueueFollowUpDraft(
 }
 
 export function ThreadDetailPromptArea({
-  canExpandPromptChangeList,
   canUseGitUi,
   contextWindowUsage,
   environmentBranchName,
@@ -134,21 +137,14 @@ export function ThreadDetailPromptArea({
   environmentIcon,
   environmentLabel,
   isEnvironmentActionPending,
-  isLoadingMergeBaseBranchOptions,
-  mergeBaseBranchOptions,
-  onMergeBaseBranchChange,
   pendingInteractions,
   openDiffFile,
   openThreadDiffPanel,
   projectId,
-  promptBannerFiles,
-  promptBannerMergeBaseBranch,
-  promptBannerSummary,
+  workspaceChangedFilesSection,
+  contextBannerMergeBase,
   sendMessage,
-  showBranchComparisonUi,
-  showPromptGitStatsBanner,
   thread,
-  workspaceStatus,
 }: ThreadDetailPromptAreaProps) {
   const isDiffPanelActive = useActiveSecondaryPanel() === "git-diff";
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -489,18 +485,14 @@ export function ThreadDetailPromptArea({
       }}
       stack={
         <>
-          {showPromptGitStatsBanner ? (
+          {workspaceChangedFilesSection ? (
             <ContextBanner
-              canExpandPromptChangeList={canExpandPromptChangeList}
+              section={workspaceChangedFilesSection}
               isChangeListExpanded={isChangeListExpanded}
               isDiffPanelActive={canUseGitUi && isDiffPanelActive}
-              mergeBaseBranchOptions={mergeBaseBranchOptions}
-              mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
+              mergeBase={contextBannerMergeBase}
               onPromptBannerFileClick={
                 canUseGitUi ? handlePromptBannerFileClick : () => {}
-              }
-              onPromptBannerMergeBaseBranchChange={
-                showBranchComparisonUi ? onMergeBaseBranchChange : undefined
               }
               onPromptGitStatsBannerClick={
                 canUseGitUi ? openThreadDiffPanel : () => {}
@@ -508,11 +500,6 @@ export function ThreadDetailPromptArea({
               onToggleChangeListExpanded={() => {
                 setIsChangeListExpanded((previousValue) => !previousValue);
               }}
-              promptBannerFiles={promptBannerFiles}
-              promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
-              promptBannerSummary={promptBannerSummary}
-              showBranchComparisonUi={showBranchComparisonUi}
-              workspaceStatus={workspaceStatus}
             />
           ) : null}
           <QueuedMessagesList

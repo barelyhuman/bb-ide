@@ -1,6 +1,10 @@
 import { useState } from "react";
-import type { WorkspaceFileStatus } from "@bb/domain";
+import type { WorkspaceFileStatus, WorkspaceStatus } from "@bb/domain";
 import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
+import {
+  selectWorkspaceChangedFilesSection,
+  type WorkspaceChangedFilesSection,
+} from "@/lib/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
@@ -17,7 +21,10 @@ function PromptStage({ children }: { children: React.ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
-// Realistic file fixtures — branch we're working on right now.
+// Realistic WorkspaceStatus fixtures. Rows pass these through the same
+// selectWorkspaceChangedFilesSection production uses, so the rendered
+// summary text + DiffStatsTally come from the production formatter — no
+// hand-rolled "5 files changed · +X -Y" spans here.
 // ---------------------------------------------------------------------------
 
 const promptboxBannerFiles: WorkspaceFileStatus[] = [
@@ -43,54 +50,108 @@ const promptboxBannerFiles: WorkspaceFileStatus[] = [
   },
 ];
 
-const dirtyUntrackedFiles: WorkspaceFileStatus[] = [
-  { path: "apps/app/notes/triage.md", status: "??" },
-  { path: "apps/app/scripts/dev-bb-sandbox.sh", status: "??" },
-];
+const dirtyUncommittedStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "dirty_uncommitted",
+    hasUncommittedChanges: true,
+    files: promptboxBannerFiles,
+    insertions: 312,
+    deletions: 47,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: null,
+};
 
-const branchOptions = ["main", "develop", "release/2026-05"] as const;
+const untrackedOnlyStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "untracked",
+    hasUncommittedChanges: false,
+    files: [
+      { path: "apps/app/notes/triage.md", status: "??" },
+      { path: "apps/app/scripts/dev-bb-sandbox.sh", status: "??" },
+    ],
+    insertions: 0,
+    deletions: 0,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: null,
+};
+
+const committedUnmergedStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "clean",
+    hasUncommittedChanges: false,
+    files: [],
+    insertions: 0,
+    deletions: 0,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: {
+    mergeBaseBranch: "main",
+    baseRef: "abc123",
+    aheadCount: 4,
+    behindCount: 0,
+    hasCommittedUnmergedChanges: true,
+    commits: [],
+    files: promptboxBannerFiles.slice(0, 3),
+    insertions: 128,
+    deletions: 24,
+  },
+};
+
+function sectionFor(status: WorkspaceStatus): WorkspaceChangedFilesSection {
+  const section = selectWorkspaceChangedFilesSection(status);
+  if (!section) throw new Error("fixture should produce a section");
+  return section;
+}
+
+const uncommittedSection = sectionFor(dirtyUncommittedStatus);
+const untrackedSection = sectionFor(untrackedOnlyStatus);
+const committedSection = sectionFor(committedUnmergedStatus);
+
+// Default merge-base config used in feature-branch rows (production passes a
+// non-null bundle whenever the thread is NOT on the default branch).
+const featureBranchMergeBase = {
+  branch: "main",
+  options: ["main", "develop", "release/2026-05"] as const,
+  onChange: noop,
+};
 
 // ---------------------------------------------------------------------------
 // Per-row helper — controls expansion state locally so the toggle works.
 // ---------------------------------------------------------------------------
 
 interface RowConfig {
-  promptBannerSummary: React.ReactNode;
-  promptBannerFiles?: WorkspaceFileStatus[];
-  canExpandPromptChangeList?: boolean;
-  showBranchComparisonUi?: boolean;
-  promptBannerMergeBaseBranch?: string;
-  mergeBaseBranchOptions?: readonly string[];
+  section: WorkspaceChangedFilesSection;
+  mergeBase?: typeof featureBranchMergeBase | null;
   initiallyExpanded?: boolean;
 }
 
 function Row({
-  promptBannerSummary,
-  promptBannerFiles,
-  canExpandPromptChangeList = false,
-  showBranchComparisonUi = false,
-  promptBannerMergeBaseBranch,
-  mergeBaseBranchOptions,
+  section,
+  mergeBase = featureBranchMergeBase,
   initiallyExpanded = false,
 }: RowConfig) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   return (
     <PromptStage>
       <ContextBanner
-        canExpandPromptChangeList={canExpandPromptChangeList}
+        section={section}
         isChangeListExpanded={expanded}
         isDiffPanelActive={false}
-        mergeBaseBranchOptions={mergeBaseBranchOptions}
+        mergeBase={mergeBase}
         onPromptBannerFileClick={noop}
-        onPromptBannerMergeBaseBranchChange={
-          showBranchComparisonUi ? noop : undefined
-        }
         onPromptGitStatsBannerClick={noop}
         onToggleChangeListExpanded={() => setExpanded((value) => !value)}
-        promptBannerFiles={promptBannerFiles}
-        promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
-        promptBannerSummary={promptBannerSummary}
-        showBranchComparisonUi={showBranchComparisonUi}
       />
     </PromptStage>
   );
@@ -100,74 +161,34 @@ export function Overview() {
   return (
     <StoryCard>
       <StoryRow
-        label="summary only"
-        hint="non-expandable banner; e.g. clean ahead/behind text without files"
+        label="uncommitted (collapsed)"
+        hint="working tree has 5 modified/added files; chevron toggles WorkspaceChangesList"
       >
-        <Row promptBannerSummary={<span>Ahead 3 · behind 1</span>} />
+        <Row section={uncommittedSection} />
       </StoryRow>
       <StoryRow
-        label="dirty + collapsed"
-        hint="expandable; chevron toggles WorkspaceChangesList"
-      >
-        <Row
-          promptBannerSummary={<span>5 files changed · +312 −47</span>}
-          promptBannerFiles={promptboxBannerFiles}
-          canExpandPromptChangeList
-        />
-      </StoryRow>
-      <StoryRow
-        label="dirty + expanded"
+        label="uncommitted (expanded)"
         hint="expanded change list visible inside the same card"
       >
-        <Row
-          promptBannerSummary={<span>5 files changed · +312 −47</span>}
-          promptBannerFiles={promptboxBannerFiles}
-          canExpandPromptChangeList
-          initiallyExpanded
-        />
+        <Row section={uncommittedSection} initiallyExpanded />
       </StoryRow>
       <StoryRow
-        label="untracked files"
-        hint="working-tree state: untracked"
+        label="untracked only"
+        hint='workingTree.state = "untracked" — no insertions/deletions tally'
       >
-        <Row
-          promptBannerSummary={<span>2 untracked files</span>}
-          promptBannerFiles={dirtyUntrackedFiles}
-          canExpandPromptChangeList
-        />
+        <Row section={untrackedSection} initiallyExpanded />
       </StoryRow>
       <StoryRow
-        label="branch comparison + picker"
-        hint="merge-base selectable from a branch list"
+        label="committed unmerged"
+        hint="working tree clean; mergeBase has committed files"
       >
-        <Row
-          promptBannerSummary={<span>2 commits ahead of merge base</span>}
-          promptBannerFiles={promptboxBannerFiles.slice(0, 2)}
-          canExpandPromptChangeList
-          showBranchComparisonUi
-          promptBannerMergeBaseBranch="main"
-          mergeBaseBranchOptions={branchOptions}
-        />
+        <Row section={committedSection} />
       </StoryRow>
       <StoryRow
-        label="branch comparison, no picker"
-        hint="no candidates → readonly merge-base label"
+        label="on default branch"
+        hint="mergeBase=null hides the picker (no comparison to make)"
       >
-        <Row
-          promptBannerSummary={<span>Ahead 1, behind 0</span>}
-          showBranchComparisonUi
-          promptBannerMergeBaseBranch="main"
-        />
-      </StoryRow>
-      <StoryRow
-        label="no branch comparison"
-        hint='shows "Includes all threads in this working directory"'
-      >
-        <Row
-          promptBannerSummary={<span>3 files changed · +42 −12</span>}
-          promptBannerFiles={promptboxBannerFiles.slice(0, 3)}
-          canExpandPromptChangeList
-        />
+        <Row section={uncommittedSection} mergeBase={null} />
       </StoryRow>
     </StoryCard>
   );

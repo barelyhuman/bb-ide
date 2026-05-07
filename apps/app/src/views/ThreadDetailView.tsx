@@ -40,11 +40,7 @@ import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
-import {
-  renderChangeSummary,
-  selectWorkspaceChangedFilesSection,
-  toChangeTally,
-} from "@/lib/workspace-change-summary";
+import { selectWorkspaceChangedFilesSection } from "@/lib/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadDetailTurnSummaryRows } from "./useThreadDetailTurnSummaryRows";
@@ -69,11 +65,6 @@ import {
   isUnassignedStandardThread,
 } from "./threadManagerSelectorOptions";
 
-const PROMPT_BANNER_KIND_PREFIX = {
-  uncommitted: "Uncommitted",
-  untracked: "Untracked",
-  committed: "Committed",
-} as const;
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 
 function buildHostConnectionNotice(
@@ -435,16 +426,6 @@ export function ThreadDetailView() {
         threadEnvironmentDisplay.workspaceDisplayKind,
       )
     : null;
-  const promptBannerSummary: ReactNode = workspaceChangedFilesSection ? (
-    <>
-      {PROMPT_BANNER_KIND_PREFIX[workspaceChangedFilesSection.kind]} ·{" "}
-      {renderChangeSummary(toChangeTally(workspaceChangedFilesSection.stats))}
-    </>
-  ) : null;
-  const showPromptGitStatsBanner =
-    canUseGitUi && workspaceChangedFilesSection !== null;
-  const canExpandPromptChangeList =
-    canUseGitUi && (workspaceChangedFilesSection?.files.length ?? 0) > 0;
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentDisplay?.modeLabel ??
@@ -566,7 +547,6 @@ export function ThreadDetailView() {
   );
   const composerFooter = (
     <ThreadDetailPromptArea
-      canExpandPromptChangeList={canExpandPromptChangeList}
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
       environmentBranchName={threadBranchName}
@@ -576,23 +556,25 @@ export function ThreadDetailView() {
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentValue}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
-      isLoadingMergeBaseBranchOptions={isLoadingMergeBaseBranchOptions}
-      mergeBaseBranchOptions={mergeBaseBranchOptions}
-      onMergeBaseBranchChange={
-        showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
-      }
       openDiffFile={openDiffFile}
       openThreadDiffPanel={openThreadDiffPanel}
       projectId={projectId}
-      promptBannerFiles={workspaceChangedFilesSection?.files}
-      promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
-      promptBannerSummary={promptBannerSummary}
+      workspaceChangedFilesSection={
+        canUseGitUi ? workspaceChangedFilesSection : null
+      }
+      contextBannerMergeBase={
+        canUseGitUi && showMergeBase && promptBannerMergeBaseBranch
+          ? {
+              branch: promptBannerMergeBaseBranch,
+              options: mergeBaseBranchOptions,
+              optionsLoading: isLoadingMergeBaseBranchOptions,
+              onChange: handleMergeBaseBranchChange,
+            }
+          : null
+      }
       sendMessage={sendMessage}
-      showBranchComparisonUi={showBranchComparisonUi}
-      showPromptGitStatsBanner={showPromptGitStatsBanner}
       pendingInteractions={pendingInteractions}
       thread={thread}
-      workspaceStatus={workspaceStatus}
     />
   );
   const threadStorage =

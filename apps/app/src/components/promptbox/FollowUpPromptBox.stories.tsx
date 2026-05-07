@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from "react";
-import type { PermissionMode, ThreadQueuedMessage } from "@bb/domain";
+import type {
+  PermissionMode,
+  ThreadQueuedMessage,
+  WorkspaceStatus,
+} from "@bb/domain";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
 import { Monitor } from "lucide-react";
 import {
@@ -17,6 +21,7 @@ import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionCon
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
+import { selectWorkspaceChangedFilesSection } from "@/lib/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
@@ -132,16 +137,11 @@ const historyEntries = [
 // the prompt input. The caller composes them as a single ReactNode.
 // ---------------------------------------------------------------------------
 
-const contextBannerElement: ReactNode = (
-  <ContextBanner
-    canExpandPromptChangeList
-    isChangeListExpanded={false}
-    isDiffPanelActive={false}
-    onPromptBannerFileClick={noop}
-    onPromptGitStatsBannerClick={noop}
-    onToggleChangeListExpanded={noop}
-    promptBannerSummary={<span>3 files changed · +128 −24</span>}
-    promptBannerFiles={[
+const dirtyWorkspaceStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "dirty_uncommitted",
+    hasUncommittedChanges: true,
+    files: [
       {
         path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx",
         status: "M",
@@ -154,13 +154,36 @@ const contextBannerElement: ReactNode = (
         path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx",
         status: "A",
       },
-    ]}
-    showBranchComparisonUi
-    promptBannerMergeBaseBranch="main"
-    mergeBaseBranchOptions={["main", "develop", "release/2026-05"]}
-    onPromptBannerMergeBaseBranchChange={noop}
-  />
+    ],
+    insertions: 128,
+    deletions: 24,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: null,
+};
+
+const dirtyContextBannerSection = selectWorkspaceChangedFilesSection(
+  dirtyWorkspaceStatus,
 );
+
+const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
+  <ContextBanner
+    section={dirtyContextBannerSection}
+    isChangeListExpanded={false}
+    isDiffPanelActive={false}
+    mergeBase={{
+      branch: "main",
+      options: ["main", "develop", "release/2026-05"],
+      onChange: noop,
+    }}
+    onPromptBannerFileClick={noop}
+    onPromptGitStatsBannerClick={noop}
+    onToggleChangeListExpanded={noop}
+  />
+) : null;
 
 const queuedMessages: readonly ThreadQueuedMessage[] = [
   {
