@@ -7,9 +7,9 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
   type TimelineTitleActionResolver,
-} from "@/components/thread-timeline";
-import { ConversationStatusIndicator } from "@/components/thread-timeline";
-import { ConversationWorkingIndicator } from "@/components/thread-timeline";
+} from "@/components/thread/timeline";
+import { ConversationStatusIndicator } from "@/components/thread/timeline";
+import { ConversationWorkingIndicator } from "@/components/thread/timeline";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 

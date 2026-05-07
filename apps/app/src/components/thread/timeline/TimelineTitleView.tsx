@@ -10,7 +10,7 @@ import {
   type TimelineTitleSegment,
   type TimelineTitleTone,
 } from "@bb/thread-view";
-import { cn } from "../ui/cn.js";
+import { cn } from "../../ui/cn.js";
 
 /**
  * Resolves a title's declared action to a click callback. Return `null` to

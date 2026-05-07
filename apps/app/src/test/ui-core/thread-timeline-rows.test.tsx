@@ -26,11 +26,11 @@ import {
 import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
-} from "@/components/thread-timeline/ThreadTimelineRows";
+} from "@/components/thread/timeline/ThreadTimelineRows";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   UserAttachmentImageSrcResolver,
-} from "@/components/thread-timeline/types";
+} from "@/components/thread/timeline/types";
 
 type ElementScrollMetricName = "clientHeight" | "scrollHeight";
 type ThreadTimelineRowsPropsOverrides = Partial<

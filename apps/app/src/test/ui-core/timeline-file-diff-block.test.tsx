@@ -6,7 +6,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata, ParsedPatch } from "@pierre/diffs";
 import type { BaseDiffOptions } from "@pierre/diffs/react";
 import type { TimelineFileChange } from "@bb/server-contract";
-import { TimelineFileDiffBlock } from "@/components/thread-timeline/TimelineFileDiffBlock";
+import { TimelineFileDiffBlock } from "@/components/thread/timeline/TimelineFileDiffBlock";
 
 interface MockFileDiffProps {
   fileDiff: FileDiffMetadata;

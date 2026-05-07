@@ -28,7 +28,7 @@ import {
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
 } from "@bb/thread-view";
-import { cn } from "../ui/cn.js";
+import { cn } from "../../ui/cn.js";
 import { isRunningThreadRuntimeDisplayStatus } from "./thread-runtime-status.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
@@ -47,7 +47,7 @@ import {
 } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
-import { Button } from "../ui/button.js";
+import { Button } from "../../ui/button.js";
 import {
   joinSignatureParts,
   timelineRowRenderSignature,

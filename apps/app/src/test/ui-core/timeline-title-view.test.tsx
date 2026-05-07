@@ -10,7 +10,7 @@ import type {
   TimelineTitleDecoration,
   TimelineTitleSegment,
 } from "@bb/thread-view";
-import { TimelineTitleView } from "@/components/thread-timeline/TimelineTitleView";
+import { TimelineTitleView } from "@/components/thread/timeline/TimelineTitleView";
 
 interface TitleArgs {
   segments: TimelineTitleSegment[];

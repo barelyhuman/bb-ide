@@ -31,7 +31,7 @@ components are still pure presentation:
 - Drivable from fixture data.
 - Used by at least two consumers, or clearly on the path to be shared.
 
-Example: `components/thread-timeline`.
+Example: `components/thread/timeline`.
 
 ## App Code
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "../ui/cn.js";
+import { cn } from "../../ui/cn.js";
 
 export interface ConversationStatusIndicatorProps {
   label: ReactNode;

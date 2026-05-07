@@ -1,8 +1,8 @@
 import { useMemo, type CSSProperties } from "react";
 import Convert from "ansi-to-html";
-import { cn } from "../ui/cn.js";
-import { getDetailScrollMaxHeightClass } from "../ui/detail-scroll-size.js";
-import { ExpandableLine } from "../ui/expandable-line.js";
+import { cn } from "../../ui/cn.js";
+import { getDetailScrollMaxHeightClass } from "../../ui/detail-scroll-size.js";
+import { ExpandableLine } from "../../ui/expandable-line.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 
 export interface TerminalOutputBlockProps {

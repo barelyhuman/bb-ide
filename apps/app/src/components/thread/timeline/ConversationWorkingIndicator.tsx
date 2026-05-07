@@ -2,8 +2,8 @@ import { useState } from "react";
 import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
-} from "../ui/disclosure.js";
-import { cn } from "../ui/cn.js";
+} from "../../ui/disclosure.js";
+import { cn } from "../../ui/cn.js";
 import { ConversationStatusIndicator } from "./ConversationStatusIndicator.js";
 
 export interface ConversationWorkingIndicatorProps {

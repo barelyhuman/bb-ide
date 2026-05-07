@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { CornerDownRight } from "lucide-react";
 import type {
   TimelineConversationAttachments,
   TimelineConversationRow,
   TimelineConversationUserRequest,
 } from "@bb/server-contract";
 import { fileNameFromPath } from "@bb/thread-view";
-import { ImageLightbox, getWrappedImageIndex } from "../ui/image-lightbox.js";
-import { CopyButton } from "../ui/copy-button.js";
-import { cn } from "../ui/cn.js";
-import { MarkdownPreview } from "../ui/markdown-preview.js";
+import { ImageLightbox, getWrappedImageIndex } from "../../ui/image-lightbox.js";
+import { CopyButton } from "../../ui/copy-button.js";
+import { cn } from "../../ui/cn.js";
+import { MarkdownPreview } from "../../ui/markdown-preview.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   UserAttachmentImageSrcResolver,
@@ -314,9 +315,12 @@ function UserConversationMessage({
 }: UserConversationMessageProps) {
   const messageText = text.trim();
   const requestLabel = userRequestLabel(userRequest);
+  const isPendingSteer =
+    userRequest?.kind === "steer" && userRequest.status === "pending";
+  const showToolbar = requestLabel !== null || messageText.length > 0;
 
   return (
-    <div className="group w-full">
+    <div className="w-full">
       <div className="ml-auto w-fit max-w-[80%]">
         <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
           {messageText ? (
@@ -331,16 +335,22 @@ function UserConversationMessage({
             onOpenLocalFileLink={onOpenLocalFileLink}
           />
         </div>
-        {requestLabel ? (
-          <div className="mt-1 flex justify-end">
-            <span className="text-xs leading-none text-muted-foreground">
-              {requestLabel}
-            </span>
-          </div>
-        ) : null}
-        {messageText ? (
-          <div className="mt-1 flex justify-end opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-            <CopyButton text={messageText} label="Copy message" />
+        {showToolbar ? (
+          <div className="mt-1 flex items-center justify-end gap-2">
+            {requestLabel ? (
+              <span
+                className={cn(
+                  "shrink-0 whitespace-nowrap text-xs leading-none text-muted-foreground/80",
+                  isPendingSteer && "animate-shine",
+                )}
+              >
+                <CornerDownRight className="mr-1 inline-block size-3 align-middle" />
+                {requestLabel}
+              </span>
+            ) : null}
+            {messageText ? (
+              <CopyButton text={messageText} label="Copy message" />
+            ) : null}
           </div>
         ) : null}
       </div>

@@ -16,7 +16,7 @@ import {
 } from "@/components/promptbox/ExecutionControls";
 import { useBottomAnchoredScroll } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "@/views/ThreadTimelineScrollToBottomButton";
-import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
+import { ThreadContextWindowIndicator } from "@/components/thread/timeline";
 
 type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 

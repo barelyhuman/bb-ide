@@ -38,9 +38,6 @@ importers:
 
   apps/app:
     dependencies:
-      '@bb/agent-fixtures':
-        specifier: workspace:*
-        version: link:../../packages/agent-fixtures
       '@bb/agent-providers':
         specifier: workspace:*
         version: link:../../packages/agent-providers

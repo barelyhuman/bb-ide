@@ -1,4 +1,4 @@
-import type { ThreadTimelineLocalFileLink } from "@/components/thread-timeline";
+import type { ThreadTimelineLocalFileLink } from "@/components/thread/timeline";
 import { matchPath } from "react-router-dom";
 import { APP_ROUTE_PATTERNS } from "./app-route-paths";
 

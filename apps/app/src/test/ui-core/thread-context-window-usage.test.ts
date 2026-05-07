@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateContextWindowUsagePercent,
   formatCompactTokenCount,
-} from "@/components/thread-timeline/thread-context-window-usage";
+} from "@/components/thread/timeline/thread-context-window-usage";
 
 describe("thread context window usage display helpers", () => {
   it("formats compact token labels and usage percentages", () => {

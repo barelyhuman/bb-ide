@@ -3,8 +3,8 @@ import type { TimelineTitle } from "@bb/thread-view";
 import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
-} from "../ui/disclosure.js";
-import { cn } from "../ui/cn.js";
+} from "../../ui/disclosure.js";
+import { cn } from "../../ui/cn.js";
 import {
   TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME,
   timelineRowHeaderClassName,

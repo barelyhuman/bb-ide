@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@bb/agent-providers": "workspace:*",
-    "@bb/agent-fixtures": "workspace:*",
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",

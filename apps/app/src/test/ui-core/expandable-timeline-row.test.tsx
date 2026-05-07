@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineTitle } from "@bb/thread-view";
-import { ExpandableTimelineRow } from "@/components/thread-timeline/ExpandableTimelineRow";
+import { ExpandableTimelineRow } from "@/components/thread/timeline/ExpandableTimelineRow";
 
 const TITLE: TimelineTitle = {
   action: null,

@@ -1,10 +1,10 @@
 import { useCallback, type ReactNode, type UIEvent } from "react";
 import { useComposedRefs } from "@radix-ui/react-compose-refs";
-import { cn } from "../ui/cn.js";
+import { cn } from "../../ui/cn.js";
 import {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,
-} from "../ui/detail-scroll-size.js";
+} from "../../ui/detail-scroll-size.js";
 import {
   useStickyBottomScroll,
   type StickyBottomScrollBinding,

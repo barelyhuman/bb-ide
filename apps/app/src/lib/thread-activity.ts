@@ -1,6 +1,6 @@
 import { assertNever } from "@bb/core-ui";
 import type { Thread, ThreadWithRuntime } from "@bb/domain";
-import { isRunningThreadRuntimeDisplayStatus } from "@/components/thread-timeline";
+import { isRunningThreadRuntimeDisplayStatus } from "@/components/thread/timeline";
 import { isThreadRead } from "@/lib/thread-read-state";
 
 type ThreadStatusShape = Pick<

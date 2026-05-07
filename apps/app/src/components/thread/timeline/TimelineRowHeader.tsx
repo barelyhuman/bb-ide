@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import {
   COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
   CollapsibleHeader,
-} from "../ui/disclosure.js";
-import { cn } from "../ui/cn.js";
+} from "../../ui/disclosure.js";
+import { cn } from "../../ui/cn.js";
 
 export type TimelineRowHorizontalPadding = "default" | "flush";
 

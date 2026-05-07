@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
   TimelineTitleActionResolver,
-} from "@/components/thread-timeline";
+} from "@/components/thread/timeline";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
