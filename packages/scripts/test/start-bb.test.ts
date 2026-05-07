@@ -20,8 +20,8 @@ describe("start-bb", () => {
 
     const context = resolveStartBbContext();
 
-    expect(context.serverUrl).toBe("http://127.0.0.1:3000");
-    expect(context.daemonPort).toBe(3001);
+    expect(context.serverUrl).toBe("http://127.0.0.1:38886");
+    expect(context.daemonPort).toBe(38887);
     expect(context.dataDir).toBe(path.join(os.homedir(), ".bb"));
     expect(context.sharedEnv.NODE_ENV).toBe("production");
   });

@@ -43,9 +43,9 @@
 
   | -           | Dev            | Prod           |
   | ----------- | -------------- | -------------- |
-  | Frontend    | `:5173`        | `:3000`        |
-  | Server API  | `:3334`        | `:3000`        |
-  | Host daemon | `:3002`        | `:3001`        |
+  | Frontend    | `:5173`        | `:38886`       |
+  | Server API  | `:3334`        | `:38886`       |
+  | Host daemon | `:3002`        | `:38887`       |
   | Data dir    | `~/.bb-dev/`   | `~/.bb/`       |
   | Database    | `<data>/bb.db` | `<data>/bb.db` |
   | Logs        | `<data>/logs/` | `<data>/logs/` |

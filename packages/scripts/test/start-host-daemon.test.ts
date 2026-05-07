@@ -21,8 +21,8 @@ describe("start-host-daemon", () => {
 
     const context = resolveStartHostDaemonContext();
 
-    expect(context.serverUrl).toBe("http://localhost:3000");
-    expect(context.daemonPort).toBe(3001);
+    expect(context.serverUrl).toBe("http://localhost:38886");
+    expect(context.daemonPort).toBe(38887);
     expect(context.dataDir).toBe(path.join(os.homedir(), ".bb"));
   });
 

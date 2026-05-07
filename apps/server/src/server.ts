@@ -74,10 +74,10 @@ interface CreateAppOptions {
 }
 
 const LOCAL_APP_ORIGINS = [
-  "http://127.0.0.1:3000",
+  "http://127.0.0.1:38886",
   "http://127.0.0.1:3334",
   "http://127.0.0.1:5173",
-  "http://localhost:3000",
+  "http://localhost:38886",
   "http://localhost:3334",
   "http://localhost:5173",
 ] as const;
