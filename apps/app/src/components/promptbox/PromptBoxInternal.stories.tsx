@@ -192,6 +192,7 @@ function DefaultRow() {
       onSubmit={noop}
       placeholder="What do you want to build?"
       mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
       history={baseHistory}
       submission={makeSubmission()}
@@ -211,6 +212,7 @@ function WithAttachmentsRow() {
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
       attachments={makeAttachments({ items: mockAttachments })}
       history={baseHistory}
       submission={makeSubmission()}
@@ -228,6 +230,7 @@ function SubmittingRow() {
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
       history={baseHistory}
       submission={makeSubmission({
@@ -250,6 +253,7 @@ function RunningWithStopRow() {
       onSubmit={noop}
       placeholder="Queue a follow-up while the agent runs..."
       mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
       history={baseHistory}
       submission={makeSubmission({
@@ -271,6 +275,7 @@ function RecordingActiveRow() {
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
       history={baseHistory}
       submission={makeSubmission()}
@@ -288,6 +293,7 @@ function RecordingProcessingRow() {
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
       history={baseHistory}
       submission={makeSubmission()}

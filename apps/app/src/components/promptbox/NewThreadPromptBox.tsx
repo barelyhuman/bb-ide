@@ -89,6 +89,7 @@ export function NewThreadPromptBoxUI({
         onSubmit={onSubmit}
         history={history}
         mentions={mentions}
+        mentionMenuPlacement="bottom"
         attachments={attachments}
         voice={voice}
         submission={{

@@ -143,6 +143,7 @@ export function FollowUpPromptBox({
           onSubmit={composer.onSubmit}
           history={composer.history}
           placeholder={composer.promptPlaceholder}
+          mentionMenuPlacement="top"
           autoFocus
           submission={{
             onStop: onStopRuntime,

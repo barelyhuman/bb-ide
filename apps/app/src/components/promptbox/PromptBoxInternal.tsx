@@ -133,6 +133,8 @@ export interface PromptBoxHandle {
   getTextBeforeCursor: () => string | undefined;
 }
 
+export type MentionMenuPlacement = "top" | "bottom";
+
 export interface PromptBoxInternalProps {
   id?: string;
   value: string;
@@ -144,6 +146,13 @@ export interface PromptBoxInternalProps {
   autoFocus?: boolean;
   submission?: PromptBoxSubmissionConfig;
   mentions: MentionsConfig;
+  /**
+   * Where the @-mention menu floats relative to the prompt box.
+   * "top" floats it above (used by FollowUp where the prompt sits at the
+   * bottom of the thread), "bottom" floats it below (used by NewThread
+   * where the prompt sits at the top of the project view).
+   */
+  mentionMenuPlacement: MentionMenuPlacement;
   attachments?: AttachmentsConfig;
   zenMode?: PromptBoxZenModeConfig;
   history?: HistoryConfig;
@@ -188,6 +197,7 @@ export function PromptBoxInternal({
   autoFocus = false,
   submission = {},
   mentions,
+  mentionMenuPlacement,
   attachments: attachmentConfig = {},
   zenMode = {},
   history,
@@ -914,11 +924,30 @@ export function PromptBoxInternal({
       />
 
       {showMentionMenu ? (
-        <MentionMenu
-          state={mentionMenuState}
-          selectedIndex={selectedMentionIndex}
-          onApply={applyMention}
-        />
+        <div
+          className={cn(
+            // Zen mode: menu floats inside the form, anchored just above
+            // the action footer so it stays visible. The form's pb-3 +
+            // ~36px button row sets the bottom offset.
+            // Normal mode: menu floats outside the form (above or below).
+            // -left-px / -right-px aligns the menu with the form's outer
+            // edge (form has a 1px border; left-0/right-0 would otherwise
+            // sit inside it, leaving the banner above peeking out 1px on
+            // each side).
+            "absolute -left-px -right-px z-20",
+            isZenMode
+              ? "bottom-14 px-3"
+              : mentionMenuPlacement === "top"
+                ? "bottom-full mb-2"
+                : "top-full mt-2",
+          )}
+        >
+          <MentionMenu
+            state={mentionMenuState}
+            selectedIndex={selectedMentionIndex}
+            onApply={applyMention}
+          />
+        </div>
       ) : null}
 
       <AttachmentPreview

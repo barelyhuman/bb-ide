@@ -76,8 +76,11 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
       }}
       mentions={{
         suggestions: args.mentionSuggestions ?? [],
+        isLoading: false,
+        isError: false,
         onQueryChange: () => {},
       }}
+      mentionMenuPlacement="bottom"
       history={{
         currentDraft: draft,
         entries: args.historyEntries,

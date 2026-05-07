@@ -49,7 +49,7 @@ export function MentionMenu({
   }, [resultsLength, selectedIndex, state.kind, state]);
 
   return (
-    <div className="mx-3 mb-1 mt-1 overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground shadow-sm">
+    <div className="overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground">
       <div className="max-h-48 overflow-y-auto p-1">
         {state.kind === "hint" ? (
           <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
