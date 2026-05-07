@@ -295,6 +295,38 @@ describe("createLogger", () => {
     });
   });
 
+  it("uses an explicit data directory when provided", async () => {
+    const envDataDir = createTempDir();
+    const explicitDataDir = createTempDir();
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_DATA_DIR", envDataDir);
+
+    const { createLogger } = await importFreshLogger();
+    const logger = createLogger({
+      component: "host-daemon",
+      dataDir: explicitDataDir,
+      transportMode: "stream",
+    });
+
+    logger.info({ requestId: "req_explicit" }, "explicit data dir");
+
+    const explicitLogDir = path.join(explicitDataDir, "logs");
+    await waitFor(
+      () => readComponentLogLines(explicitLogDir, "host-daemon").length === 1,
+    );
+
+    expect(
+      readComponentLogLines(path.join(envDataDir, "logs"), "host-daemon"),
+    ).toHaveLength(0);
+    expect(
+      readComponentLogLines(explicitLogDir, "host-daemon")[0],
+    ).toMatchObject({
+      component: "host-daemon",
+      msg: "explicit data dir",
+      requestId: "req_explicit",
+    });
+  });
+
   it("serializes nested error causes", async () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");

@@ -1,4 +1,9 @@
-import type { ChildProcess, SpawnOptions } from "node:child_process";
+import type {
+  ChildProcess,
+  ExecFileException,
+  ExecFileOptionsWithStringEncoding,
+  SpawnOptions,
+} from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,8 +15,26 @@ interface SpawnInvocation {
   options: SpawnOptions;
 }
 
+interface ExecFileInvocation {
+  args: readonly string[] | null;
+  command: string;
+}
+
+type ExecFileCallback = (
+  error: ExecFileException | null,
+  stdout: string,
+  stderr: string,
+) => void;
+
+type ExecFileOptions = ExecFileOptionsWithStringEncoding;
+type ExecFileSecondArg = readonly string[] | ExecFileOptions | null;
+type ExecFileThirdArg = ExecFileOptions | ExecFileCallback | null;
+type ProcessScanErrorCode = string | number;
+
 interface SpawnMockState {
   children: ChildProcess[];
+  execFileInvocations: ExecFileInvocation[];
+  processScanErrorCode: ProcessScanErrorCode | null;
   invocations: SpawnInvocation[];
   tempDirs: string[];
 }
@@ -19,6 +42,8 @@ interface SpawnMockState {
 function createSpawnMockState(): SpawnMockState {
   return {
     children: [],
+    execFileInvocations: [],
+    processScanErrorCode: null,
     invocations: [],
     tempDirs: [],
   };
@@ -52,19 +77,60 @@ vi.mock("node:child_process", async (importOriginal) => {
       spawnMockState.children.push(child);
       return child;
     },
+    execFile(
+      command: string,
+      args?: ExecFileSecondArg,
+      options?: ExecFileThirdArg,
+      callback?: ExecFileCallback,
+    ): ChildProcess {
+      const callbackArg = typeof options === "function" ? options : callback;
+      const commandArgs = Array.isArray(args) ? args : null;
+
+      spawnMockState.execFileInvocations.push({
+        args: commandArgs,
+        command,
+      });
+
+      const child = actual.spawn(process.execPath, ["-e", ""], {
+        stdio: "ignore",
+      });
+      spawnMockState.children.push(child);
+
+      const processScanErrorCode = spawnMockState.processScanErrorCode;
+      if (command === "ps" && processScanErrorCode) {
+        const error = Object.assign(
+          new Error(`spawn ${String(processScanErrorCode)}`),
+          {
+            code: processScanErrorCode,
+          },
+        );
+        queueMicrotask(() => callbackArg?.(error, "", ""));
+        return child;
+      }
+
+      queueMicrotask(() => callbackArg?.(null, "", ""));
+      return child;
+    },
   };
 });
 
-import { spawnLoggedProcess, startQaServer } from "../src/shared.js";
+import {
+  cleanupStandaloneOrphans,
+  spawnLoggedProcess,
+  startQaServer,
+} from "../src/shared.js";
 
 afterEach(() => {
   for (const child of spawnMockState.children) {
     child.kill();
   }
   spawnMockState.children.length = 0;
+  spawnMockState.execFileInvocations.length = 0;
+  spawnMockState.processScanErrorCode = null;
   spawnMockState.invocations.length = 0;
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 
   for (const tempDir of spawnMockState.tempDirs) {
     rmSync(tempDir, { force: true, recursive: true });
@@ -123,4 +189,28 @@ describe("spawnLoggedProcess", () => {
       OPENAI_API_KEY: "test-openai-key",
     });
   });
+});
+
+describe("cleanupStandaloneOrphans", () => {
+  it.each(["EPERM", "EACCES", 1] as const)(
+    "warns and continues when process enumeration is blocked with %s",
+    async (errorCode) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      spawnMockState.processScanErrorCode = errorCode;
+
+      await expect(cleanupStandaloneOrphans()).resolves.toMatchObject({
+        killedPids: [],
+        removedRoots: [],
+      });
+      expect(spawnMockState.execFileInvocations).toContainEqual({
+        args: ["eww", "-Ao", "pid=,command="],
+        command: "ps",
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `skipped standalone QA process enumeration (code ${String(errorCode)})`,
+        ),
+      );
+    },
+  );
 });

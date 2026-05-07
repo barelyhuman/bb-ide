@@ -21,6 +21,7 @@ import {
   createTestServer,
   type CreateTestServerOptions,
 } from "../helpers/test-server.js";
+import type { HostDaemonLogger } from "../../src/logger.js";
 
 const tempDirs: string[] = [];
 const INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS = 15_000;
@@ -144,6 +145,14 @@ function eventSpoolHasEvent(args: EventSpoolHasEventArgs): boolean {
   } finally {
     db?.close();
   }
+}
+
+function createTestLogger(): HostDaemonLogger {
+  return {
+    error: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+  };
 }
 
 async function writeInteractiveProviderScript(
@@ -548,6 +557,7 @@ async function setupDaemonHarness(
     enrollKey: server.enrollKey,
     serverUrl: server.baseUrl,
     enableLocalApi: false,
+    logger: createTestLogger(),
     createInstanceId: () => "instance-1",
     createRuntime: (options) =>
       createAgentRuntimeWithAdapters({

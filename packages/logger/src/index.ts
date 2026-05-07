@@ -6,14 +6,12 @@ import { commonConfig } from "@bb/config/common";
 
 export type { Logger };
 
-const LOG_DIR = join(commonConfig.BB_DATA_DIR, "logs");
-mkdirSync(LOG_DIR, { recursive: true });
-
 export type LoggerTransportMode = "stream" | "worker";
 
 export interface CreateLoggerOptions {
   component: string;
   base?: Record<string, unknown>;
+  dataDir?: string;
   transportMode?: LoggerTransportMode;
 }
 
@@ -28,6 +26,8 @@ function sanitizeComponentName(component: string): string {
 
 export function createLogger(options: CreateLoggerOptions): Logger {
   const component = sanitizeComponentName(options.component);
+  const logDir = join(options.dataDir ?? commonConfig.BB_DATA_DIR, "logs");
+  mkdirSync(logDir, { recursive: true });
   const loggerOptions = {
     level: commonConfig.BB_LOG_LEVEL,
     base: {
@@ -44,7 +44,7 @@ export function createLogger(options: CreateLoggerOptions): Logger {
   if (transportMode === "stream") {
     // Sandboxed single-file bundles cannot resolve pino worker transports
     // from disk, so use a direct file destination instead.
-    const destination = pino.destination(join(LOG_DIR, `${component}.log`));
+    const destination = pino.destination(join(logDir, `${component}.log`));
     return pino(loggerOptions, destination);
   }
 
@@ -58,7 +58,7 @@ export function createLogger(options: CreateLoggerOptions): Logger {
     {
       target: "pino-roll",
       options: {
-        file: join(LOG_DIR, `${component}.log`),
+        file: join(logDir, `${component}.log`),
         frequency: "daily",
         limit: { count: 5 },
         size: "10m",

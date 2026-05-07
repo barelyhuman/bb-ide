@@ -21,6 +21,7 @@ import {
   prepareRuntimeShellEnv,
   resolveLocalBbExecutableDirectory,
 } from "./runtime-shell-env.js";
+import type { HostDaemonLogger } from "./logger.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
@@ -34,6 +35,7 @@ export interface StartHostDaemonOptions {
   hostType?: HostType;
   enableLocalApi?: boolean;
   localApi?: HostDaemonLocalApiOverrides;
+  logger?: HostDaemonLogger;
   createInstanceId?: () => string;
   acquireLock?: typeof acquireDaemonLock;
   loadIdentity?: typeof loadHostIdentity;
@@ -144,11 +146,14 @@ export async function startHostDaemon(
       hostId: identity.hostId,
       hostName: identity.hostName,
       instanceId,
-      logger: createLogger({
-        component: "host-daemon",
-        base: { serverUrl },
-        transportMode: hostType === "ephemeral" ? "stream" : "worker",
-      }),
+      logger:
+        options.logger ??
+        createLogger({
+          component: "host-daemon",
+          base: { serverUrl },
+          dataDir,
+          transportMode: hostType === "ephemeral" ? "stream" : "worker",
+        }),
       releaseLock,
       localApiConfig,
       createRuntime: options.createRuntime,

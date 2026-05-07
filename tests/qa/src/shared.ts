@@ -147,6 +147,18 @@ function isNodeError(error: unknown): error is ExecFileException {
   return error instanceof Error;
 }
 
+function isRestrictedProcessScanError(error: ExecFileException): boolean {
+  return error.code === "EACCES" || error.code === "EPERM" || error.code === 1;
+}
+
+function warnProcessEnumerationSkipped(error: ExecFileException): void {
+  const reason =
+    error.code == null ? error.message : `code ${String(error.code)}`;
+  console.warn(
+    `Warning: skipped standalone QA process enumeration (${reason}); orphaned QA processes may remain.`,
+  );
+}
+
 export function shellQuote(value: string): string {
   return `'${String(value).replaceAll("'", `'\\''`)}'`;
 }
@@ -643,10 +655,21 @@ function readStandaloneEnvValue(
 }
 
 async function listStandaloneProcesses(): Promise<StandaloneProcessInfo[]> {
-  const { stdout } = await execFile("ps", ["eww", "-Ao", "pid=,command="], {
-    encoding: "utf8",
-    maxBuffer: PROCESS_SCAN_MAX_BUFFER,
-  });
+  let stdout: string;
+  try {
+    const result = await execFile("ps", ["eww", "-Ao", "pid=,command="], {
+      encoding: "utf8",
+      maxBuffer: PROCESS_SCAN_MAX_BUFFER,
+    });
+    stdout = result.stdout;
+  } catch (error) {
+    if (isNodeError(error) && isRestrictedProcessScanError(error)) {
+      warnProcessEnumerationSkipped(error);
+      return [];
+    }
+    throw error;
+  }
+
   return stdout
     .split("\n")
     .map((line) => line.trim())
