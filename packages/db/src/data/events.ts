@@ -6,12 +6,14 @@ import {
   gte,
   inArray,
   isNotNull,
+  lt,
   lte,
   max,
   notInArray,
   or,
   sql,
 } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type {
   HostDaemonProducerEventId,
   ClientTurnRequestId,
@@ -693,6 +695,29 @@ export interface ListRecentStoredEventRowsArgs {
   threadId: string;
 }
 
+export interface ListStandardTimelineSegmentAnchorRowsArgs {
+  includeSystemClientRequests: boolean;
+  threadId: string;
+}
+
+export interface StoredEventRowTypeFilter {
+  eventTypes: readonly ThreadEventType[];
+  itemEventTypes: readonly ThreadEventType[];
+  itemKinds: readonly ThreadEventItemType[];
+}
+
+export interface ListFilteredStoredEventRowsArgs {
+  filter: StoredEventRowTypeFilter;
+  threadId: string;
+}
+
+export interface ListStoredTimelineWindowEventRowsArgs {
+  beforeSequence?: number;
+  excludedTypes?: readonly ThreadEventType[];
+  sequenceStart: number;
+  threadId: string;
+}
+
 export interface ListContextWindowUsageRowsArgs {
   threadId: string;
 }
@@ -1062,6 +1087,122 @@ export function listRecentStoredEventRows(
     .select(storedEventRowFields)
     .from(events)
     .where(condition)
+    .orderBy(events.sequence)
+    .all();
+}
+
+export interface StandardTimelineSegmentAnchorRow {
+  rowId: string;
+  sequence: number;
+}
+
+export function listStandardTimelineSegmentAnchorRows(
+  db: DbConnection,
+  args: ListStandardTimelineSegmentAnchorRowsArgs,
+): StandardTimelineSegmentAnchorRow[] {
+  const initiatorCondition = args.includeSystemClientRequests
+    ? sql`1 = 1`
+    : sql`COALESCE(json_extract(${events.data}, '$.initiator'), 'user') <> 'system'`;
+
+  return db
+    .select({
+      rowId: sql<string>`${events.threadId} || ':user-seed:' || ${events.sequence}`,
+      sequence: events.sequence,
+    })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "client/turn/requested"),
+        initiatorCondition,
+        sql`(
+          COALESCE(json_extract(${events.data}, '$.target.kind'), 'new-turn')
+            IN ('thread-start', 'new-turn')
+          OR (
+            json_extract(${events.data}, '$.target.kind') = 'auto'
+            AND json_extract(${events.data}, '$.target.expectedTurnId') IS NULL
+          )
+        )`,
+        sql`EXISTS (
+          SELECT 1
+          FROM json_each(${events.data}, '$.input') AS input_part
+          WHERE (
+            json_extract(input_part.value, '$.type') = 'text'
+            AND COALESCE(json_extract(input_part.value, '$.text'), '') <> ''
+          )
+          OR json_extract(input_part.value, '$.type')
+            IN ('image', 'localImage', 'localFile')
+        )`,
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listStoredTimelineWindowEventRows(
+  db: DbConnection,
+  args: ListStoredTimelineWindowEventRowsArgs,
+): StoredEventRow[] {
+  const conditions: SQL[] = [
+    eq(events.threadId, args.threadId),
+    gte(events.sequence, args.sequenceStart),
+  ];
+  if (args.beforeSequence !== undefined) {
+    conditions.push(lt(events.sequence, args.beforeSequence));
+  }
+  if (args.excludedTypes && args.excludedTypes.length > 0) {
+    conditions.push(notInArray(events.type, [...args.excludedTypes]));
+  }
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(and(...conditions))
+    .orderBy(events.sequence)
+    .all();
+}
+
+function buildStoredEventRowTypeFilterCondition(
+  filter: StoredEventRowTypeFilter,
+): SQL {
+  const conditions: SQL[] = [];
+  if (filter.eventTypes.length > 0) {
+    conditions.push(inArray(events.type, [...filter.eventTypes]));
+  }
+
+  if (filter.itemEventTypes.length > 0 && filter.itemKinds.length > 0) {
+    const itemCondition = and(
+      inArray(events.type, [...filter.itemEventTypes]),
+      inArray(events.itemKind, [...filter.itemKinds]),
+    );
+    if (itemCondition) {
+      conditions.push(itemCondition);
+    }
+  }
+
+  const firstCondition = conditions[0];
+  if (!firstCondition) {
+    return sql`0 = 1`;
+  }
+  if (conditions.length === 1) {
+    return firstCondition;
+  }
+  return or(...conditions) ?? sql`0 = 1`;
+}
+
+export function listFilteredStoredEventRows(
+  db: DbConnection,
+  args: ListFilteredStoredEventRowsArgs,
+): StoredEventRow[] {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        buildStoredEventRowTypeFilterCondition(args.filter),
+      ),
+    )
     .orderBy(events.sequence)
     .all();
 }

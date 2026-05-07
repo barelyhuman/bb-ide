@@ -9,7 +9,12 @@ import type {
   TimelineTurnRow,
   TimelineUserConversationRow,
 } from "@bb/server-contract";
-import type { ActiveThinking, Thread } from "@bb/domain";
+import type {
+  ActiveThinking,
+  Thread,
+  ThreadEventItemType,
+  ThreadEventType,
+} from "@bb/domain";
 import type {
   EventProjectionFileEditChange,
   EventProjectionMessage,
@@ -48,6 +53,32 @@ import { extractThreadContextWindowUsage } from "./thread-context-window-usage.j
 export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
 export type ThreadTimelineViewMode = "standard" | "manager-conversation";
+
+export interface ThreadTimelineEventSelection {
+  eventTypes: readonly ThreadEventType[];
+  itemEventTypes: readonly ThreadEventType[];
+  itemKinds: readonly ThreadEventItemType[];
+}
+
+export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
+  eventTypes: [
+    "client/turn/requested",
+    "provider/error",
+    "provider/unhandled",
+    "provider/warning",
+    "system/manager/user_message",
+    "system/operation",
+    "system/permissionGrant/lifecycle",
+    "system/thread/interrupted",
+    "system/thread-provisioning",
+    "thread/compacted",
+    "turn/completed",
+    "turn/input/accepted",
+    "turn/started",
+  ],
+  itemEventTypes: ["item/completed", "item/started"],
+  itemKinds: ["contextCompaction"],
+} as const satisfies ThreadTimelineEventSelection;
 
 interface ThreadTimelineFromEventsBaseOptions {
   includeDebugRawEvents: boolean;
@@ -675,9 +706,11 @@ function buildCompletedTurnSummaryRows({
       continue;
     }
 
-    const sourceRows = item.sourceMessages.flatMap((message) =>
-      convertMessage(message, { includeNestedRows, rowIdPrefix }),
-    );
+    const sourceRows = includeNestedRows
+      ? item.sourceMessages.flatMap((message) =>
+          convertMessage(message, { includeNestedRows, rowIdPrefix }),
+        )
+      : [];
     const turnRow = buildTurnSummaryRow({
       completedAt: item.completedAt,
       includeNestedRows,

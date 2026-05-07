@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
 import type { StoredThreadEventDataForType, Thread } from "@bb/domain";
-import type { DbConnection } from "@bb/db";
+import { listStandardTimelineSegmentAnchorRows } from "@bb/db";
+import type { DbConnection, StandardTimelineSegmentAnchorRow } from "@bb/db";
 import type { TimelineRow } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
@@ -67,6 +68,11 @@ interface SeedTimelineClientTurnRequestedArgs {
   threadId: string;
 }
 
+interface ProjectedTimelineSegmentAnchorRow {
+  rowId: string;
+  sequence: number;
+}
+
 function flattenTimelineSourceRows(
   rows: TimelineRow[],
 ): TimelineSourceTestRow[] {
@@ -93,6 +99,33 @@ function flattenTimelineSourceRows(
   }
 
   return sourceRows;
+}
+
+function extractProjectedTimelineSegmentAnchorRows(
+  rows: readonly TimelineRow[],
+): ProjectedTimelineSegmentAnchorRow[] {
+  const anchors: ProjectedTimelineSegmentAnchorRow[] = [];
+  for (const row of rows) {
+    if (
+      row.kind !== "conversation" ||
+      row.role !== "user" ||
+      row.userRequest.kind !== "message"
+    ) {
+      continue;
+    }
+    anchors.push({
+      rowId: row.id,
+      sequence: row.sourceSeqStart,
+    });
+  }
+  return anchors;
+}
+
+function expectSqlAnchorsMatchProjectedAnchors(
+  projectedAnchors: readonly ProjectedTimelineSegmentAnchorRow[],
+  sqlAnchors: readonly StandardTimelineSegmentAnchorRow[],
+): void {
+  expect(sqlAnchors).toEqual(projectedAnchors);
 }
 
 function buildThreadTimeline(
@@ -774,6 +807,92 @@ describe("buildThreadTimeline", () => {
         message: "Timeline pagination cursor is no longer available",
       },
     });
+  });
+
+  it("keeps SQL standard timeline anchors aligned with projected pagination anchors", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const standardThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "standard",
+    });
+    const managerThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+
+    for (const thread of [standardThread, managerThread]) {
+      seedTimelineClientTurnRequested(harness, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        requestId: "creq_23456789ab",
+        text: "User message",
+        target: { kind: "new-turn" },
+      });
+      seedTimelineClientTurnRequested(harness, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        initiator: "system",
+        sequence: 2,
+        requestId: "creq_3456789abc",
+        text: "System message",
+        target: { kind: "new-turn" },
+      });
+      seedTimelineClientTurnRequested(harness, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 3,
+        requestId: "creq_456789abcd",
+        text: "Auto new turn",
+        target: { kind: "auto", expectedTurnId: null },
+      });
+      seedTimelineClientTurnRequested(harness, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 4,
+        requestId: "creq_56789abcde",
+        text: "Pending steer",
+        target: { kind: "auto", expectedTurnId: "turn-1" },
+      });
+    }
+
+    const standardTimeline = buildThreadTimeline(harness.db, standardThread, {
+      isDevelopment: false,
+    });
+    expectSqlAnchorsMatchProjectedAnchors(
+      extractProjectedTimelineSegmentAnchorRows(standardTimeline.rows),
+      listStandardTimelineSegmentAnchorRows(harness.db, {
+        includeSystemClientRequests: false,
+        threadId: standardThread.id,
+      }),
+    );
+
+    const managerStandardTimeline = buildThreadTimeline(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+      },
+    );
+    expectSqlAnchorsMatchProjectedAnchors(
+      extractProjectedTimelineSegmentAnchorRows(managerStandardTimeline.rows),
+      listStandardTimelineSegmentAnchorRows(harness.db, {
+        includeSystemClientRequests: true,
+        threadId: managerThread.id,
+      }),
+    );
   });
 
   it("preserves completed assistant content and excludes summary-noise rows after compaction", async () => {

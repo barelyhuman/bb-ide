@@ -31,7 +31,9 @@ export type { FileChangeAction } from "./file-change-summary.js";
 export {
   buildThreadTimelineFromEvents,
   buildThreadTimelineTurnDetailsFromEvents,
+  MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
 } from "./build-thread-timeline.js";
+export type { ThreadTimelineEventSelection } from "./build-thread-timeline.js";
 export type { SystemClientRequestVisibility } from "./event-projection-message.js";
 export {
   buildTimelineViewRows,

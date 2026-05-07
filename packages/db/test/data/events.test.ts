@@ -21,12 +21,15 @@ import {
   listContextWindowUsageRows,
   listCompletedTurnsByThreadIds,
   listEvents,
+  listFilteredStoredEventRows,
   listRecentStoredEventRows,
+  listStandardTimelineSegmentAnchorRows,
   listStoredClientTurnRequestIdsInRange,
   listStoredEventRows,
   listStoredEventRowsInRange,
   listStoredEventRowsByThreadSequences,
   listStoredThreadProvisioningRowsByProvisioningId,
+  listStoredTimelineWindowEventRows,
   listStoredTurnInputAcceptedRowsByClientRequestIds,
   MissingStoredTurnStartedError,
   listThreadTurnInterruptionEventStates,
@@ -35,6 +38,7 @@ import {
   pruneResolvedItemDeltas,
   pruneThreadEventsBeforeSequence,
   ProducerEventPayloadMismatchError,
+  type StoredEventRowTypeFilter,
 } from "../../src/data/events.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
@@ -67,6 +71,26 @@ const threadEventFields = {
   ...emptyItemFields,
   scope: threadScope(),
 };
+
+const managerConversationTimelineTestFilter = {
+  eventTypes: [
+    "client/turn/requested",
+    "provider/error",
+    "provider/unhandled",
+    "provider/warning",
+    "system/manager/user_message",
+    "system/operation",
+    "system/permissionGrant/lifecycle",
+    "system/thread/interrupted",
+    "system/thread-provisioning",
+    "thread/compacted",
+    "turn/completed",
+    "turn/input/accepted",
+    "turn/started",
+  ],
+  itemEventTypes: ["item/completed", "item/started"],
+  itemKinds: ["contextCompaction"],
+} as const satisfies StoredEventRowTypeFilter;
 
 const daemonThreadEventFields = {
   ...threadEventFields,
@@ -911,6 +935,364 @@ describe("events", () => {
 
     expect(
       listContextWindowUsageRows(db, {
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([2, 3]);
+  });
+
+  it("lists only rows needed by manager conversation timelines", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({ input: [{ type: "text", text: "request" }] }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "turn/started",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({}),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "item/started",
+        scope: turnScope("turn-1"),
+        itemId: "compaction-1",
+        itemKind: "contextCompaction",
+        data: JSON.stringify({
+          item: { id: "compaction-1", type: "contextCompaction" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "item/completed",
+        scope: turnScope("turn-1"),
+        itemId: "cmd-1",
+        itemKind: "commandExecution",
+        data: JSON.stringify({
+          item: { id: "cmd-1", type: "commandExecution" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "item/completed",
+        scope: turnScope("turn-1"),
+        itemId: "msg-1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({
+          item: { id: "msg-1", type: "agentMessage", text: "internal" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 6,
+        type: "item/completed",
+        scope: turnScope("turn-1"),
+        itemId: "compaction-1",
+        itemKind: "contextCompaction",
+        data: JSON.stringify({
+          item: { id: "compaction-1", type: "contextCompaction" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 7,
+        type: "system/manager/user_message",
+        ...threadEventFields,
+        data: JSON.stringify({ text: "manager-visible" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 8,
+        type: "system/operation",
+        ...threadEventFields,
+        data: JSON.stringify({ title: "operation" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 9,
+        type: "provider/warning",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({ message: "warning" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 10,
+        type: "provider/error",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({ message: "provider error" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 11,
+        type: "provider/unhandled",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({ message: "provider unhandled" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 12,
+        type: "system/permissionGrant/lifecycle",
+        ...threadEventFields,
+        data: JSON.stringify({ status: "pending" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 13,
+        type: "system/thread/interrupted",
+        ...threadEventFields,
+        data: JSON.stringify({ reason: "user-requested" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 14,
+        type: "system/thread-provisioning",
+        ...threadEventFields,
+        data: JSON.stringify({ stage: "started" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 15,
+        type: "thread/compacted",
+        ...threadEventFields,
+        data: JSON.stringify({}),
+      },
+      {
+        threadId: thread.id,
+        sequence: 16,
+        type: "turn/input/accepted",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({ clientRequestId: "creq_23456789ab" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 17,
+        type: "turn/completed",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({ status: "completed" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 18,
+        type: "thread/contextWindowUsage/updated",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: createContextWindowUsageData({
+          modelContextWindow: 16_000,
+          usedTokens: 100,
+        }),
+      },
+    ]);
+
+    expect(
+      listFilteredStoredEventRows(db, {
+        filter: managerConversationTimelineTestFilter,
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+  });
+
+  it("lists standard timeline segment anchors with SQL-visible request rules", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "text", text: "user message" }],
+          target: { kind: "new-turn" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "system",
+          input: [{ type: "text", text: "system message" }],
+          target: { kind: "new-turn" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "text", text: "accepted steer" }],
+          target: { kind: "auto", expectedTurnId: "turn-1" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "text", text: "auto new turn" }],
+          target: { kind: "auto", expectedTurnId: null },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "text", text: "explicit steer" }],
+          target: { kind: "steer", expectedTurnId: "turn-1" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 6,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "text", text: "" }],
+          target: { kind: "new-turn" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 7,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "localImage", path: "/tmp/image.png" }],
+          target: { kind: "thread-start" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 8,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "text", text: "legacy target" }],
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 9,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "image", url: "https://example.com/image.png" }],
+          target: { kind: "new-turn" },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 10,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "user",
+          input: [{ type: "localFile", path: "/tmp/input.txt" }],
+          target: { kind: "new-turn" },
+        }),
+      },
+    ]);
+
+    const userVisibleAnchors = listStandardTimelineSegmentAnchorRows(db, {
+      includeSystemClientRequests: false,
+      threadId: thread.id,
+    });
+    expect(userVisibleAnchors).toEqual([
+      { rowId: `${thread.id}:user-seed:1`, sequence: 1 },
+      { rowId: `${thread.id}:user-seed:4`, sequence: 4 },
+      { rowId: `${thread.id}:user-seed:7`, sequence: 7 },
+      { rowId: `${thread.id}:user-seed:8`, sequence: 8 },
+      { rowId: `${thread.id}:user-seed:9`, sequence: 9 },
+      { rowId: `${thread.id}:user-seed:10`, sequence: 10 },
+    ]);
+
+    expect(
+      listStandardTimelineSegmentAnchorRows(db, {
+        includeSystemClientRequests: true,
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([1, 2, 4, 7, 8, 9, 10]);
+  });
+
+  it("loads timeline event windows with sequence bounds and exclusions", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "before" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "thread/contextWindowUsage/updated",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: createContextWindowUsageData({
+          modelContextWindow: 16_000,
+          usedTokens: 100,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "inside" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "after" }),
+      },
+    ]);
+
+    expect(
+      listStoredTimelineWindowEventRows(db, {
+        beforeSequence: 4,
+        excludedTypes: ["thread/contextWindowUsage/updated"],
+        sequenceStart: 2,
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([3]);
+
+    expect(
+      listStoredTimelineWindowEventRows(db, {
+        excludedTypes: [],
+        sequenceStart: 2,
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([2, 3, 4]);
+
+    expect(
+      listStoredTimelineWindowEventRows(db, {
+        beforeSequence: 4,
+        sequenceStart: 2,
         threadId: thread.id,
       }).map((row) => row.sequence),
     ).toEqual([2, 3]);
