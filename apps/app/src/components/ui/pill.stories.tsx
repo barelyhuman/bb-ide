@@ -13,26 +13,31 @@ const variants: readonly PillVariant[] = [
   "emphasis",
 ];
 
+const VARIANT_CONTENT: Record<PillVariant, string> = {
+  default: "v1.2",
+  secondary: "managed",
+  destructive: "Failed",
+  outline: "manager",
+  emphasis: "promoted",
+};
+
 export function Overview() {
   return (
     <>
       <StoryCard>
         {variants.map((variant) => (
           <StoryRow key={variant} label={variant}>
-            <Pill variant={variant}>{variant}</Pill>
+            <Pill variant={variant}>{VARIANT_CONTENT[variant]}</Pill>
           </StoryRow>
         ))}
       </StoryCard>
       <StoryCard>
-        <StoryRow label="single character">
-          <Pill variant="secondary">A</Pill>
-        </StoryRow>
         <StoryRow label="standard">
-          <Pill variant="outline">manager-thread</Pill>
+          <Pill variant="outline">feat/promotion-flow</Pill>
         </StoryRow>
         <StoryRow label="truncated" hint="max-w-40">
-          <Pill variant="emphasis" className="max-w-40">
-            very-long-status-label-that-truncates
+          <Pill variant="outline" className="max-w-40">
+            feat/very-long-branch-name-that-truncates
           </Pill>
         </StoryRow>
       </StoryCard>

@@ -20,6 +20,15 @@ const variants: readonly ButtonVariant[] = [
 
 const sizes: readonly ButtonSize[] = ["sm", "default", "lg", "icon"];
 
+const VARIANT_LABEL: Record<ButtonVariant, string> = {
+  default: "Save changes",
+  secondary: "Cancel",
+  outline: "Connect repo",
+  ghost: "Settings",
+  destructive: "Delete project",
+  link: "View docs",
+};
+
 export function Overview() {
   return (
     <>
@@ -31,9 +40,9 @@ export function Overview() {
                 key={size}
                 variant={variant}
                 size={size}
-                aria-label={size === "icon" ? "Add" : undefined}
+                aria-label={size === "icon" ? VARIANT_LABEL[variant] : undefined}
               >
-                {size === "icon" ? <Plus /> : size}
+                {size === "icon" ? <Plus /> : VARIANT_LABEL[variant]}
               </Button>
             ))}
           </StoryRow>
@@ -43,15 +52,10 @@ export function Overview() {
         <StoryRow label="with icons">
           <Button>
             <Check />
-            Save
+            Save changes
           </Button>
-          <Button>
-            Open
-            <ArrowRight />
-          </Button>
-          <Button>
-            <Check />
-            Save
+          <Button variant="outline" size="sm">
+            Connect GitHub repo
             <ArrowRight />
           </Button>
         </StoryRow>

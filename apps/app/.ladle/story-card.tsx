@@ -94,10 +94,12 @@ export function StoryRow({
   const { inGrid } = useContext(StoryCardContext);
 
   const labelEl = (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-sm text-muted-foreground">{label}</span>
       {hint ? (
-        <span className="text-xs text-muted-foreground">{hint}</span>
+        <span className="text-xs break-words text-muted-foreground">
+          {hint}
+        </span>
       ) : null}
     </div>
   );
@@ -111,7 +113,7 @@ export function StoryRow({
     );
   }
   return (
-    <div className={cn(ROW_GRID, "items-center px-4 py-3", className)}>
+    <div className={cn(ROW_GRID, "items-start px-4 py-3", className)}>
       {labelEl}
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         {children}

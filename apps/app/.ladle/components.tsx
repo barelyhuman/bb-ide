@@ -14,6 +14,29 @@ import {
 import { createAppQueryClient } from "../src/lib/query-client";
 import "./ladle.css";
 
+// Ladle drops `?theme` from the URL during sidebar navigation when stories have
+// no controls (modifyParams early-exits on `!controlInitialized`). Without this,
+// a refresh after navigation falls back to ladle's defaultState. Restore the
+// remembered theme into the URL at module load so ladle's globalState picks it
+// up before React mounts.
+if (typeof window !== "undefined") {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("theme")) {
+    let stored: string | null = null;
+    try {
+      const raw = window.localStorage.getItem("bb.theme");
+      stored = raw ? JSON.parse(raw) : null;
+    } catch {
+      stored = null;
+    }
+    if (stored === "light" || stored === "dark") {
+      params.set("theme", stored);
+      const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+      window.history.replaceState(null, "", next);
+    }
+  }
+}
+
 export const Provider: GlobalProvider = ({ globalState, children }) => {
   const isDark = globalState.theme === ThemeState.Dark;
   useEffect(() => {
