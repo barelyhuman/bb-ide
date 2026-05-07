@@ -11,6 +11,7 @@ import {
   getThread,
   getThreadOperation,
   hostDaemonCommands,
+  pruneCompletedCommandPayloads,
   reportCommandResult,
   sweepExpiredCommands,
 } from "@bb/db";
@@ -94,7 +95,7 @@ function buildReuseThreadProvisionOperation(
 }
 
 describe("internal command result idempotency", () => {
-  it("does not replay side effects when the same command result is reported twice", async () => {
+  it("does not replay side effects when the same command result is reported after terminal blobs are pruned", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -183,6 +184,17 @@ describe("internal command result idempotency", () => {
       expect(threadStartCommand.command).toMatchObject({
         environmentId: environment.id,
         threadId: thread.id,
+      });
+
+      expect(
+        pruneCompletedCommandPayloads(harness.db, {
+          completedBefore: Date.now() + 1,
+        }),
+      ).toEqual({ pruned: 1 });
+      expect(getCommand(harness.db, command.id)).toMatchObject({
+        payload: "{}",
+        resultPayload: null,
+        state: "success",
       });
 
       const secondResponse = await reportQueuedCommandSuccess(harness, queued, {

@@ -1,4 +1,5 @@
 import {
+  COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
   getActiveSession,
   getEnvironment,
   getThread,
@@ -6,6 +7,7 @@ import {
   listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
+  pruneCompletedCommandPayloads,
   sweepEphemeralHostsPendingCleanup,
   sweepIdleEphemeralHostsEligibleForSuspend,
   sweepDestroyingEnvironments,
@@ -337,6 +339,9 @@ export async function runPeriodicSweeps(
         commandIds: expired.erroredCommandIds,
       });
     }
+    pruneCompletedCommandPayloads(deps.db, {
+      completedBefore: Date.now() - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+    });
     const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
     if (expiredLeases.expiredSessionIds.length > 0) {
       for (const sessionId of expiredLeases.expiredSessionIds) {

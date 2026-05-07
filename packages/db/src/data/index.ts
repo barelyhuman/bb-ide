@@ -406,10 +406,17 @@ export type {
 } from "./drafts.js";
 
 export {
+  COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+  pruneCompletedCommandPayloads,
   sweepEphemeralHostsPendingCleanup,
   sweepIdleEphemeralHostsEligibleForSuspend,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepDestroyingEnvironments,
   sweepManagedEnvironments,
+} from "./sweeps.js";
+export type {
+  PruneCompletedCommandPayloadsArgs,
+  PruneCompletedCommandPayloadsResult,
+  SweepExpiredLeasesResult,
 } from "./sweeps.js";

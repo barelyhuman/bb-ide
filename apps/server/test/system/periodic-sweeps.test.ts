@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { eq } from "drizzle-orm";
 import {
+  COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
   claimDraft,
   getActiveSession,
   archiveThread,
@@ -16,7 +17,9 @@ import {
   hostDaemonSessions,
   markEphemeralHostActivity,
   openSession,
+  queueCommand,
   queuedThreadMessages,
+  reportCommandResult,
   transitionThreadStatus,
   upsertHost,
 } from "@bb/db";
@@ -182,6 +185,70 @@ describe("periodic sweeps", () => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
     resumeSandboxMock.mockReset();
+  });
+
+  it("prunes old completed daemon command blobs", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-command-prune",
+      });
+      const oldCompletedAt =
+        Date.now() - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS - 1_000;
+      const freshCompletedAt = Date.now();
+      const oldCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        type: "workspace.status",
+        payload: JSON.stringify({ old: true }),
+      });
+      const freshCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        type: "workspace.diff",
+        payload: JSON.stringify({ fresh: true }),
+      });
+
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: oldCommand.id,
+        state: "success",
+        completedAt: oldCompletedAt,
+        resultPayload: JSON.stringify({ status: "clean" }),
+      });
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: freshCommand.id,
+        state: "success",
+        completedAt: freshCompletedAt,
+        resultPayload: JSON.stringify({ diff: "fresh" }),
+      });
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, oldCommand.id))
+          .get(),
+      ).toMatchObject({
+        completedAt: oldCompletedAt,
+        cursor: oldCommand.cursor,
+        payload: "{}",
+        resultPayload: null,
+        state: "success",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, freshCommand.id))
+          .get(),
+      ).toMatchObject({
+        payload: JSON.stringify({ fresh: true }),
+        resultPayload: JSON.stringify({ diff: "fresh" }),
+        state: "success",
+      });
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("logs and continues when managed environment archive cleanup rejects", async () => {

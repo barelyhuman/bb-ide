@@ -1,4 +1,14 @@
-import { eq, and, isNull, sql, lt, ne, inArray, or } from "drizzle-orm";
+import {
+  eq,
+  and,
+  isNotNull,
+  isNull,
+  sql,
+  lt,
+  ne,
+  inArray,
+  or,
+} from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
@@ -23,10 +33,47 @@ const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
+/** Completed daemon commands keep result payloads briefly for result retries. */
+export const COMPLETED_COMMAND_PAYLOAD_RETENTION_MS = 24 * 60 * 60_000;
+
+export interface PruneCompletedCommandPayloadsArgs {
+  completedBefore: number;
+}
+
+export interface PruneCompletedCommandPayloadsResult {
+  pruned: number;
+}
+
 export interface SweepExpiredLeasesResult {
   expiredHostIds: string[];
   expiredSessionIds: string[];
   sessionsClosed: number;
+}
+
+export function pruneCompletedCommandPayloads(
+  db: DbConnection,
+  args: PruneCompletedCommandPayloadsArgs,
+): PruneCompletedCommandPayloadsResult {
+  const result = db
+    .update(hostDaemonCommands)
+    .set({
+      payload: "{}",
+      resultPayload: null,
+    })
+    .where(
+      and(
+        inArray(hostDaemonCommands.state, ["success", "error"]),
+        isNotNull(hostDaemonCommands.completedAt),
+        lt(hostDaemonCommands.completedAt, args.completedBefore),
+        or(
+          ne(hostDaemonCommands.payload, "{}"),
+          isNotNull(hostDaemonCommands.resultPayload),
+        ),
+      ),
+    )
+    .run();
+
+  return { pruned: result.changes };
 }
 
 /**

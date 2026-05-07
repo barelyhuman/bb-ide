@@ -5,6 +5,7 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
+  pruneCompletedCommandPayloads,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
@@ -23,7 +24,11 @@ import {
   recordEnvironmentCleanupRequest,
 } from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
-import { queueCommand, fetchCommands } from "../../src/data/commands.js";
+import {
+  queueCommand,
+  fetchCommands,
+  reportCommandResult,
+} from "../../src/data/commands.js";
 import {
   environments,
   hostDaemonCommands,
@@ -221,6 +226,153 @@ describe("sweepExpiredCommands", () => {
         .where(eq(threads.id, stopPendingThread.id))
         .get()?.status,
     ).toBe("active");
+  });
+});
+
+describe("pruneCompletedCommandPayloads", () => {
+  it("clears terminal command blobs before the retention cutoff", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const staleCompletedAt = now - 10_000;
+    const freshCompletedAt = now;
+    const completedBefore = now - 5_000;
+
+    const staleSuccess = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({ stale: "success" }),
+    });
+    const staleError = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.diff",
+      payload: JSON.stringify({ stale: "error" }),
+    });
+    const freshSuccess = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "host.list_files",
+      payload: JSON.stringify({ fresh: true }),
+    });
+    const fetchedCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "host.read_file",
+      payload: JSON.stringify({ fetched: true }),
+    });
+
+    reportCommandResult(db, noopNotifier, {
+      commandId: staleSuccess.id,
+      state: "success",
+      completedAt: staleCompletedAt,
+      resultPayload: JSON.stringify({ ok: true }),
+    });
+    reportCommandResult(db, noopNotifier, {
+      commandId: staleError.id,
+      state: "error",
+      completedAt: staleCompletedAt,
+      resultPayload: JSON.stringify({
+        errorCode: "failed",
+        errorMessage: "failed",
+      }),
+    });
+    reportCommandResult(db, noopNotifier, {
+      commandId: freshSuccess.id,
+      state: "success",
+      completedAt: freshCompletedAt,
+      resultPayload: JSON.stringify({ ok: true }),
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id });
+    const pendingCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "provider.list",
+      payload: JSON.stringify({ pending: true }),
+    });
+
+    const result = pruneCompletedCommandPayloads(db, { completedBefore });
+
+    expect(result).toEqual({ pruned: 2 });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, staleSuccess.id))
+        .get(),
+    ).toMatchObject({
+      completedAt: staleCompletedAt,
+      cursor: staleSuccess.cursor,
+      payload: "{}",
+      resultPayload: null,
+      state: "success",
+    });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, staleError.id))
+        .get(),
+    ).toMatchObject({
+      completedAt: staleCompletedAt,
+      cursor: staleError.cursor,
+      payload: "{}",
+      resultPayload: null,
+      state: "error",
+    });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, freshSuccess.id))
+        .get(),
+    ).toMatchObject({
+      payload: JSON.stringify({ fresh: true }),
+      resultPayload: JSON.stringify({ ok: true }),
+      state: "success",
+    });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, fetchedCommand.id))
+        .get(),
+    ).toMatchObject({
+      payload: JSON.stringify({ fetched: true }),
+      resultPayload: null,
+      state: "fetched",
+    });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, pendingCommand.id))
+        .get(),
+    ).toMatchObject({
+      payload: JSON.stringify({ pending: true }),
+      resultPayload: null,
+      state: "pending",
+    });
+  });
+
+  it("does not count already-pruned terminal commands on later sweeps", () => {
+    const { db, host } = setup();
+    const completedAt = Date.now() - 10_000;
+    const completedBefore = Date.now();
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({ prunable: true }),
+    });
+
+    reportCommandResult(db, noopNotifier, {
+      commandId: command.id,
+      state: "success",
+      completedAt,
+      resultPayload: JSON.stringify({ ok: true }),
+    });
+
+    expect(pruneCompletedCommandPayloads(db, { completedBefore })).toEqual({
+      pruned: 1,
+    });
+    expect(pruneCompletedCommandPayloads(db, { completedBefore })).toEqual({
+      pruned: 0,
+    });
   });
 });
 
