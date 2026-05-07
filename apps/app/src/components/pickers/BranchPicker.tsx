@@ -30,6 +30,8 @@ export function BranchPicker({
   className,
   variant = "default",
   muted,
+  defaultOpen = false,
+  modal = true,
 }: {
   value: string;
   options: readonly string[];
@@ -41,8 +43,12 @@ export function BranchPicker({
   variant?: "default" | "minimal";
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. Only meaningful with variant="minimal". */
   muted?: boolean;
+  /** Render with the popover open on mount. Story-only escape hatch. */
+  defaultOpen?: boolean;
+  /** Whether the popover blocks page interaction. Defaults to true; pass false in stories. */
+  modal?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +81,7 @@ export function BranchPicker({
 
   return (
     <Popover
-      modal
+      modal={modal}
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);

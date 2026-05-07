@@ -40,6 +40,10 @@ interface ProviderModelPickerProps {
   className?: string;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
+  /** Render with the popover open on mount. Story-only escape hatch. */
+  defaultOpen?: boolean;
+  /** Whether the popover blocks page interaction. Defaults to true; pass false in stories. */
+  modal?: boolean;
 }
 
 export function ProviderModelPicker({
@@ -58,9 +62,11 @@ export function ProviderModelPicker({
   serviceTierSupportByProvider,
   className,
   muted,
+  defaultOpen = false,
+  modal = true,
 }: ProviderModelPickerProps) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   // While the popover is open, the user can browse other providers without
   // committing. previewProviderId tracks which provider tab is active.
   // null means "showing the committed provider".
@@ -137,7 +143,7 @@ export function ProviderModelPicker({
   const TriggerIcon = ProviderIcon;
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange} modal>
+    <Popover open={open} onOpenChange={handleOpenChange} modal={modal}>
       <PopoverTrigger asChild>
         <Button
           type="button"

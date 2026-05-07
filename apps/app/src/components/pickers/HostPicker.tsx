@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Monitor } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import type { Host } from "@bb/domain";
 import { LocalhostBadge } from "@/components/ui";
 import { Button } from "@/components/ui";
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
+import { getHostIcon } from "@/lib/host-display";
 import { cn } from "@/lib/utils";
 import {
   OPTION_BASE_CLASS_NAME,
@@ -23,6 +24,10 @@ interface HostPickerProps {
   selectedHostId: string;
   onChange: (hostId: string) => void;
   isLocalHost: (hostId: string | null | undefined) => boolean;
+  /** Render with the menu open on mount. Story-only escape hatch. */
+  defaultOpen?: boolean;
+  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
+  modal?: boolean;
 }
 
 export function HostPicker({
@@ -31,14 +36,17 @@ export function HostPicker({
   selectedHostId,
   onChange,
   isLocalHost,
+  defaultOpen,
+  modal,
 }: HostPickerProps) {
   const selectedHost = hosts.find((h) => h.id === selectedHostId);
   const isLocal = selectedHost ? isLocalHost(selectedHost.id) : false;
   const label = selectedHost?.name ?? "Select host";
   const isConnected = selectedHost?.status === "connected";
+  const SelectedHostIcon = getHostIcon(selectedHost);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -49,7 +57,7 @@ export function HostPicker({
           className={cn(OPTION_BASE_CLASS_NAME, OPTION_INTERACTIVE_CLASS_NAME)}
         >
           <span className={OPTION_CONTENT_CLASS_NAME}>
-            <Monitor className="size-3.5 shrink-0" />
+            <SelectedHostIcon className="size-3.5 shrink-0" />
             <span className="truncate">{label}</span>
             {isLocal ? <LocalhostBadge /> : null}
             {selectedHost ? <HostStatusBadge connected={isConnected} /> : null}
@@ -59,14 +67,16 @@ export function HostPicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-44 max-w-80">
         {eligibleHosts.length > 0 ? (
-          eligibleHosts.map((host) => (
+          eligibleHosts.map((host) => {
+            const HostIcon = getHostIcon(host);
+            return (
             <DropdownMenuItem
               key={host.id}
               onSelect={() => onChange(host.id)}
               className="flex items-center justify-between gap-3"
             >
               <span className="flex min-w-0 items-center gap-2 text-xs">
-                <Monitor className="size-3.5 shrink-0" />
+                <HostIcon className="size-3.5 shrink-0" />
                 <span className="truncate">{host.name}</span>
                 {isLocalHost(host.id) ? <LocalhostBadge /> : null}
                 <HostStatusBadge connected={host.status === "connected"} />
@@ -78,7 +88,8 @@ export function HostPicker({
                 )}
               />
             </DropdownMenuItem>
-          ))
+            );
+          })
         ) : (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground">
             No hosts available for this project

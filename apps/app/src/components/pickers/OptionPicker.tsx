@@ -51,6 +51,10 @@ interface OptionPickerProps<T extends string> {
   contentClassName?: string;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
+  /** Render with the menu open on mount. Story-only escape hatch. */
+  defaultOpen?: boolean;
+  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
+  modal?: boolean;
 }
 
 export function OptionDisplay({
@@ -93,6 +97,8 @@ export function OptionPicker<T extends string>({
   className,
   contentClassName,
   muted,
+  defaultOpen,
+  modal,
 }: OptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedIsWarning = selectedOption?.tone === "warning";
@@ -103,7 +109,7 @@ export function OptionPicker<T extends string>({
     : `${label}: ${selectedLabel}`;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"

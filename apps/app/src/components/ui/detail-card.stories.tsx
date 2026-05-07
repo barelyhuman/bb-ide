@@ -23,7 +23,7 @@ const noop = () => {};
 const mockHosts: Host[] = [
   {
     id: "local",
-    name: "localhost",
+    name: "Michael’s MacBook Pro",
     type: "persistent",
     status: "connected",
     lastSeenAt: 0,
@@ -31,8 +31,8 @@ const mockHosts: Host[] = [
     updatedAt: 0,
   },
   {
-    id: "e2b-1",
-    name: "fronted-sandbox",
+    id: "e2b-bb",
+    name: "bb-sandbox-thr_qfk8ksbxkk",
     type: "ephemeral",
     status: "connected",
     provider: "e2b",
@@ -84,7 +84,7 @@ export function Overview() {
           </DetailRow>
           <DetailRow label="Host" valueClassName="min-w-0 truncate">
             <span className="flex items-center gap-1.5">
-              <span className="truncate">localhost</span>
+              <span className="truncate">Michael’s MacBook Pro</span>
               <LocalhostBadge />
               <HostStatusBadge connected />
             </span>
