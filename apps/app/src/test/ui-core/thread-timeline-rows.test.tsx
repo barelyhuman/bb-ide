@@ -633,7 +633,6 @@ describe("ThreadTimelineRows", () => {
       timelineRows: [
         toolRow({
           id: "tool-detail-1",
-          label: "LookupTool select:TodoWrite",
           output: "Matched tools: TodoWrite",
           toolArgs: { query: "select:TodoWrite" },
           toolName: "LookupTool",

@@ -94,7 +94,6 @@ function toolRow(): TimelineToolWorkRow {
     toolArgs: {
       file_path: "/repo/src/app.ts",
     },
-    label: "Read /repo/src/app.ts",
     output: "",
     completedAt: 2_101,
     approvalStatus: null,
@@ -403,7 +402,6 @@ describe("buildTimelineRowTitle", () => {
       {
         ...toolRow(),
         activityIntents: [],
-        label: "LookupTool select:TodoWrite",
         status: "interrupted",
         toolArgs: { query: "select:TodoWrite" },
         toolName: "LookupTool",
@@ -1139,8 +1137,8 @@ describe("buildTimelineRowTitle", () => {
           {
             ...toolRow(),
             activityIntents: [],
-            label: "UnknownTool",
             toolName: "UnknownTool",
+            toolArgs: null,
             status: "pending",
           },
         ],

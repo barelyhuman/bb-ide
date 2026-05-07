@@ -12,7 +12,6 @@ export interface WorkRowBodyProps {
 }
 
 type DetailLine = string | null;
-type TimelineToolViewRow = Extract<TimelineViewWorkRow, { workKind: "tool" }>;
 
 function compactDetailLines(lines: readonly DetailLine[]): string[] {
   const compactedLines: string[] = [];
@@ -22,10 +21,6 @@ function compactDetailLines(lines: readonly DetailLine[]): string[] {
     }
   }
   return compactedLines;
-}
-
-function formatToolArgs(row: TimelineToolViewRow): string {
-  return row.toolArgs ? JSON.stringify(row.toolArgs, null, 2) : "";
 }
 
 export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
@@ -42,17 +37,15 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
           streaming={row.status === "pending"}
         />
       );
-    case "tool": {
-      const toolArgs = formatToolArgs(row);
+    case "tool":
       return (
         <ToolCallDetailBlock
-          argsText={toolArgs}
-          output={row.output}
           toolName={row.toolName}
+          args={row.toolArgs}
+          output={row.output}
           streaming={row.status === "pending"}
         />
       );
-    }
     case "file-change":
       return (
         <div className="space-y-2">

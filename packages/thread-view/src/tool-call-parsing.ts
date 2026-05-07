@@ -1,6 +1,4 @@
 import type { EventProjectionToolParsedIntent } from "./event-projection-types.js";
-import { getFirstStringField } from "./format-helpers.js";
-import { toRecord } from "./unknown-helpers.js";
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
 const DELEGATION_TOOL_NAMES = new Set([
@@ -9,27 +7,9 @@ const DELEGATION_TOOL_NAMES = new Set([
   "spawnAgent",
   "resumeAgent",
 ]);
-
-type ToolArguments = Record<string, unknown>;
-type ToolIntentKind = EventProjectionToolParsedIntent["type"];
-
-type ToolCommandFormatter = (toolName: string, args: ToolArguments) => string;
-
-type ToolOutputFormatter = (output: string) => string;
-
-interface TodoWriteTodo {
-  content?: string;
-  status?: string;
-  activeForm?: string;
-}
-
-interface ToolDescriptor {
-  argKeys: readonly string[];
-  secondaryArgKeys?: readonly string[];
-  formatCommand?: ToolCommandFormatter;
-  formatOutput?: ToolOutputFormatter;
-  intentKind?: ToolIntentKind;
-}
+const STRUCTURED_READ_TOOL_NAMES = new Set(["Read"]);
+const STRUCTURED_SEARCH_TOOL_NAMES = new Set(["Grep"]);
+const STRUCTURED_LIST_TOOL_NAMES = new Set(["Glob"]);
 
 const SHELL_SEGMENT_BREAK_TOKENS = new Set(["&&", "||", "|", ";", "\n"]);
 
@@ -98,178 +78,20 @@ export function baseToolName(toolName: string): string {
   return segments[segments.length - 1] ?? toolName;
 }
 
-const TOOL_TABLE: Record<string, ToolDescriptor> = {
-  Read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
-  read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
-  Glob: { argKeys: ["pattern", "path"], intentKind: "list_files" },
-  glob: { argKeys: ["pattern", "path"], intentKind: "list_files" },
-  Grep: {
-    argKeys: ["pattern", "query"],
-    secondaryArgKeys: ["path"],
-    intentKind: "search",
-  },
-  grep: {
-    argKeys: ["pattern", "query"],
-    secondaryArgKeys: ["path"],
-    intentKind: "search",
-  },
-  Edit: { argKeys: ["file_path", "path"] },
-  edit: { argKeys: ["file_path", "path"] },
-  Write: { argKeys: ["file_path", "path"] },
-  write: { argKeys: ["file_path", "path"] },
-  ToolSearch: {
-    argKeys: ["query"],
-    formatCommand: formatToolSearchCommand,
-  },
-  TodoWrite: {
-    argKeys: [],
-    formatCommand: formatTodoWriteCommand,
-    formatOutput: formatTodoWriteOutput,
-  },
-  Agent: {
-    argKeys: ["description", "prompt"],
-    formatCommand: formatAgentCommand,
-    formatOutput: formatAgentOutput,
-  },
-  Task: {
-    argKeys: ["description", "prompt"],
-    formatCommand: formatAgentCommand,
-    formatOutput: formatAgentOutput,
-  },
-  spawnAgent: {
-    argKeys: ["prompt"],
-    formatCommand: formatCollabAgentCommand,
-  },
-  sendInput: {
-    argKeys: ["prompt"],
-    formatCommand: formatCollabAgentCommand,
-  },
-  resumeAgent: { argKeys: [], formatCommand: formatCollabAgentCommand },
-  wait: { argKeys: [], formatCommand: formatCollabAgentCommand },
-  closeAgent: { argKeys: [], formatCommand: formatCollabAgentCommand },
-};
-
-function getToolDescriptor(toolName: string): ToolDescriptor | undefined {
-  return TOOL_TABLE[baseToolName(toolName)];
-}
-
 export function isStructuredReadToolName(toolName: string): boolean {
-  return getToolDescriptor(toolName)?.intentKind === "read";
+  return STRUCTURED_READ_TOOL_NAMES.has(baseToolName(toolName));
 }
 
 export function isStructuredSearchToolName(toolName: string): boolean {
-  return getToolDescriptor(toolName)?.intentKind === "search";
+  return STRUCTURED_SEARCH_TOOL_NAMES.has(baseToolName(toolName));
 }
 
 export function isStructuredListToolName(toolName: string): boolean {
-  return getToolDescriptor(toolName)?.intentKind === "list_files";
+  return STRUCTURED_LIST_TOOL_NAMES.has(baseToolName(toolName));
 }
 
 export function isDelegationToolName(toolName: string): boolean {
   return DELEGATION_TOOL_NAMES.has(baseToolName(toolName));
-}
-
-function truncateForDisplay(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 3)}...`;
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0
-    ? value
-    : undefined;
-}
-
-function asTodoWriteTodos(value: unknown): TodoWriteTodo[] {
-  if (!Array.isArray(value)) return [];
-
-  const todos: TodoWriteTodo[] = [];
-  for (const entry of value) {
-    const record = toRecord(entry);
-    if (!record) continue;
-    todos.push({
-      content: asString(record.content),
-      status: asString(record.status),
-      activeForm: asString(record.activeForm),
-    });
-  }
-  return todos;
-}
-
-function summarizeTodoCounts(todos: TodoWriteTodo[]): string {
-  let pending = 0;
-  let inProgress = 0;
-  let completed = 0;
-
-  for (const todo of todos) {
-    switch (todo.status) {
-      case "in_progress":
-        inProgress += 1;
-        break;
-      case "completed":
-        completed += 1;
-        break;
-      default:
-        pending += 1;
-        break;
-    }
-  }
-
-  const parts: string[] = [];
-  if (inProgress > 0) parts.push(`${inProgress} in progress`);
-  if (pending > 0) parts.push(`${pending} pending`);
-  if (completed > 0) parts.push(`${completed} completed`);
-  return parts.join(", ");
-}
-
-function formatTodoWriteCommand(
-  _toolName: string,
-  args: ToolArguments,
-): string {
-  const todos = asTodoWriteTodos(args.todos);
-  if (todos.length === 0) return "TodoWrite";
-
-  const activeTodo = todos.find((todo) => todo.status === "in_progress");
-  const headline =
-    activeTodo?.activeForm ?? activeTodo?.content ?? todos[0]?.content;
-  const countSummary = summarizeTodoCounts(todos);
-  const summaryParts = [`${todos.length} todo${todos.length === 1 ? "" : "s"}`];
-
-  if (countSummary.length > 0) {
-    summaryParts.push(countSummary);
-  }
-
-  const header = `TodoWrite ${summaryParts.join(" - ")}`;
-  if (!headline) return header;
-  return `${header}: ${truncateForDisplay(headline, 80)}`;
-}
-
-function formatTodoWriteOutput(output: string): string {
-  if (output.startsWith("Todos have been modified successfully.")) {
-    return "Todo list updated";
-  }
-  return output;
-}
-
-function formatToolSearchCommand(
-  _toolName: string,
-  args: ToolArguments,
-): string {
-  const query = getFirstStringField(args, ["query"]);
-  if (!query) return "ToolSearch";
-  return `ToolSearch ${query}`;
-}
-
-function formatAgentCommand(_toolName: string, args: ToolArguments): string {
-  const description = getFirstStringField(args, ["description"]);
-  const prompt = getFirstStringField(args, ["prompt"]);
-  const subagentType = getFirstStringField(args, ["subagent_type"]);
-  const label = description ?? prompt;
-  if (!label && !subagentType) return "Agent";
-  if (!subagentType)
-    return `Agent ${truncateForDisplay(label ?? "", 90)}`.trim();
-  if (!label) return `Agent [${subagentType}]`;
-  return `Agent [${subagentType}] ${truncateForDisplay(label, 90)}`;
 }
 
 export function stripAgentOutputMetadata(output: string): string {
@@ -280,48 +102,6 @@ export function stripAgentOutputMetadata(output: string): string {
       (line) => !line.startsWith("agentId:") && !line.startsWith("<usage>"),
     );
   return lines.join("\n").trim();
-}
-
-function formatAgentOutput(output: string): string {
-  return stripAgentOutputMetadata(output);
-}
-
-function countReceiverThreadIds(args: ToolArguments): number {
-  const receiverThreadIds = args["receiverThreadIds"];
-  return Array.isArray(receiverThreadIds) ? receiverThreadIds.length : 0;
-}
-
-function formatCollabAgentCommand(
-  toolName: string,
-  args: ToolArguments,
-): string {
-  const receiverCount = countReceiverThreadIds(args);
-  const prompt = getFirstStringField(args, ["prompt"]);
-
-  if (toolName === "wait") {
-    return receiverCount > 0
-      ? `wait for ${receiverCount} agent${receiverCount === 1 ? "" : "s"}`
-      : "wait";
-  }
-
-  if (toolName === "resumeAgent") {
-    return receiverCount > 0
-      ? `resumeAgent ${receiverCount} agent${receiverCount === 1 ? "" : "s"}`
-      : "resumeAgent";
-  }
-
-  if (toolName === "closeAgent") {
-    return receiverCount > 0
-      ? `closeAgent ${receiverCount} agent${receiverCount === 1 ? "" : "s"}`
-      : "closeAgent";
-  }
-
-  const action =
-    receiverCount > 0
-      ? `${toolName} ${receiverCount} agent${receiverCount === 1 ? "" : "s"}`
-      : toolName;
-  if (!prompt) return action;
-  return `${action}: ${truncateForDisplay(prompt, 90)}`;
 }
 
 // Characters that a backslash may escape inside double quotes, per POSIX shell
@@ -911,37 +691,6 @@ export function formatToolCallCommand(
   args: Record<string, unknown> | null,
 ): string {
   if (!args) return toolName;
-
-  const desc = TOOL_TABLE[toolName];
-  if (!desc) return formatUnknownToolCommand(toolName, args);
-
-  if (desc.formatCommand) {
-    return desc.formatCommand(toolName, args);
-  }
-
-  const primary = getFirstStringField(args, desc.argKeys) ?? "";
-
-  // Grep is special: include query + path
-  if (desc.secondaryArgKeys) {
-    const secondary = getFirstStringField(args, desc.secondaryArgKeys);
-    return `${toolName} '${primary}'${secondary ? ` in ${secondary}` : ""}`;
-  }
-
-  return `${toolName} ${primary}`.trim();
-}
-
-export function formatToolCallOutput(toolName: string, output: string): string {
-  const desc = TOOL_TABLE[toolName];
-  if (!desc?.formatOutput) {
-    return output;
-  }
-  return desc.formatOutput(output);
-}
-
-function formatUnknownToolCommand(
-  toolName: string,
-  args: Record<string, unknown>,
-): string {
   const entries = Object.entries(args).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return toolName;
   const compact = entries

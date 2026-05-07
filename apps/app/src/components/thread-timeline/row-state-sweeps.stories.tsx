@@ -494,8 +494,10 @@ const toolLeafCases: TimelineStoryCase[] = [
       toolRow({
         id: "tool-running",
         toolName: "Read",
-        label:
-          "Read apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx",
+        toolArgs: {
+          file_path:
+            "apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx",
+        },
         output: "streaming file contents",
         status: "pending",
         seq: 50,
@@ -510,7 +512,6 @@ const toolLeafCases: TimelineStoryCase[] = [
       toolRow({
         id: "tool-completed",
         toolName: "LookupTool",
-        label: "LookupTool select:TodoWrite",
         toolArgs: { query: "select:TodoWrite" },
         output: "Matched tools: TodoWrite",
         seq: 51,
@@ -525,7 +526,7 @@ const toolLeafCases: TimelineStoryCase[] = [
       toolRow({
         id: "tool-error",
         toolName: "Read",
-        label: "Read /workspace/bb/missing-file.ts",
+        toolArgs: { file_path: "/workspace/bb/missing-file.ts" },
         output: "ENOENT: no such file or directory",
         status: "error",
         seq: 52,
@@ -540,7 +541,7 @@ const toolLeafCases: TimelineStoryCase[] = [
       toolRow({
         id: "tool-interrupted",
         toolName: "Grep",
-        label: "Grep timeline renderer",
+        toolArgs: { pattern: "timeline renderer" },
         output: "search interrupted by stop request",
         status: "interrupted",
         seq: 53,
@@ -554,8 +555,10 @@ const toolLeafCases: TimelineStoryCase[] = [
       toolRow({
         id: "tool-waiting",
         toolName: "Write",
-        label:
-          "Write apps/app/src/components/thread-timeline/row-state-sweeps.stories.tsx",
+        toolArgs: {
+          file_path:
+            "apps/app/src/components/thread-timeline/row-state-sweeps.stories.tsx",
+        },
         approvalStatus: "waiting_for_approval",
         status: "pending",
         output: "",

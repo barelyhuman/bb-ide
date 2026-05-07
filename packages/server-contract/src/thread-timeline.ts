@@ -267,7 +267,6 @@ export const timelineToolWorkRowSchema = timelineWorkRowBaseSchema.extend({
   callId: z.string(),
   toolName: z.string(),
   toolArgs: z.record(z.string(), jsonValueSchema).nullable(),
-  label: z.string(),
   output: z.string(),
   completedAt: z.number().nullable(),
   approvalStatus: timelineApprovalStatusSchema,

@@ -33,8 +33,6 @@ const workRows: readonly WorkRowStoryCase[] = [
     row: toolRow({
       id: "detail-tool-1",
       toolName: "Read",
-      label:
-        "Read apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx",
       toolArgs: {
         file_path:
           "apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx",

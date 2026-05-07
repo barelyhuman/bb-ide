@@ -17,7 +17,6 @@ import {
   baseToolName,
   extractShellCommandFromString,
   formatToolCallCommand,
-  formatToolCallOutput,
   isDelegationToolName,
   isStructuredListToolName,
   isStructuredReadToolName,
@@ -248,7 +247,7 @@ function formatToolCallResultOutput(toolName: string, output: string): string {
   if (baseToolName(toolName) === "Agent") {
     return stripAgentOutputMetadata(output);
   }
-  return formatToolCallOutput(toolName, output);
+  return output;
 }
 
 export function parseExecLifecycleEvent(

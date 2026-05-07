@@ -302,8 +302,6 @@ const activeLeafCases: TimelineStoryCase[] = [
       toolRow({
         id: "active-tool-leaf",
         toolName: "Read",
-        label:
-          "Read apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx",
         toolArgs: {
           file_path:
             "apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx",
@@ -673,7 +671,6 @@ const toolAndWebCases: TimelineStoryCase[] = [
       toolRow({
         id: "generic-tool",
         toolName: "LookupTool",
-        label: "LookupTool select:TodoWrite",
         toolArgs: {
           query: "select:TodoWrite",
         },
@@ -690,7 +687,6 @@ const toolAndWebCases: TimelineStoryCase[] = [
       toolRow({
         id: "unknown-tool-intent",
         toolName: "Shell",
-        label: "Shell git rev-parse --show-toplevel",
         toolArgs: {
           command: "git rev-parse --show-toplevel",
         },
@@ -710,7 +706,6 @@ const toolAndWebCases: TimelineStoryCase[] = [
       toolRow({
         id: "errored-tool",
         toolName: "Read",
-        label: "Read apps/app/src/components/thread-timeline/Missing.tsx",
         toolArgs: {
           file_path: "apps/app/src/components/thread-timeline/Missing.tsx",
         },
@@ -733,7 +728,6 @@ const toolAndWebCases: TimelineStoryCase[] = [
       toolRow({
         id: "interrupted-tool",
         toolName: "Shell",
-        label: "Shell pnpm exec turbo run test --filter=@bb/app",
         toolArgs: {
           command: "pnpm exec turbo run test --filter=@bb/app",
         },

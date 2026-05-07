@@ -36,7 +36,6 @@ import {
 } from "./format-helpers.js";
 import { getFileChangeDiffStats } from "./file-change-summary.js";
 import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
-import { formatToolCallCommand } from "./tool-call-parsing.js";
 import { flattenEventProjectionMessagesDeep } from "./event-projection-flatten.js";
 import {
   buildEventProjection,
@@ -491,7 +490,6 @@ function convertMessage(
           callId: message.callId,
           toolName: message.toolName,
           toolArgs: message.toolArgs,
-          label: formatToolCallCommand(message.toolName, message.toolArgs),
           output: message.output,
           completedAt: message.completedAt,
           approvalStatus: message.approvalStatus,

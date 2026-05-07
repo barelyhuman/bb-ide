@@ -20,6 +20,7 @@ import {
   getFileChangeActionPresentTense,
 } from "./file-change-summary.js";
 import { durationToCompactString } from "./format-helpers.js";
+import { formatToolCallCommand } from "./tool-call-parsing.js";
 import {
   formatTimelineActivityIntentDetailParts,
   getTimelineActivityIntentDetailDedupeKey,
@@ -359,7 +360,9 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
     status: row.status,
   });
   const isCommand = row.workKind === "command";
-  const content = isCommand ? row.command : row.label;
+  const content = isCommand
+    ? row.command
+    : formatToolCallCommand(row.toolName, row.toolArgs);
   switch (status) {
     case "waiting":
       return makeTitle({

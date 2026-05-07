@@ -113,7 +113,6 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         ...baseParts,
         row.callId,
         row.toolName,
-        row.label,
         row.completedAt,
         row.approvalStatus,
         activityIntentsSignature(row.activityIntents),

@@ -65,7 +65,6 @@ export interface ToolRowArgs {
   approvalStatus?: TimelineApprovalStatus;
   durationMs?: number | null;
   id?: string;
-  label?: string;
   output?: string;
   seq?: number;
   sourceSeqEnd?: number;
@@ -403,7 +402,6 @@ export function toolRow({
   approvalStatus = null,
   durationMs = 2_300,
   id = DEFAULT_TOOL_ID,
-  label = "Read /workspace/bb/src/app.ts",
   output = "",
   seq,
   sourceSeqEnd,
@@ -422,7 +420,6 @@ export function toolRow({
     callId: id,
     toolName,
     toolArgs,
-    label,
     output,
     completedAt: completedAtFromDuration(base.startedAt, durationMs),
     approvalStatus,
