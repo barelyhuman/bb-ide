@@ -8,8 +8,8 @@
     "build": "tsc -b tsconfig.build.json && vite build",
     "preview": "vite preview",
     "clean": "rimraf dist",
-    "ladle": "ladle serve",
-    "ladle:build": "ladle build",
+    "storybook": "ladle serve",
+    "storybook:build": "ladle build",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"

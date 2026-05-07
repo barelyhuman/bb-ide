@@ -29,6 +29,12 @@
       "persistent": true,
       "passThroughEnv": ["*"]
     },
+    "storybook": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
     "@bb/server#dev": {
       "dependsOn": ["build", "^build"],
       "cache": false,
