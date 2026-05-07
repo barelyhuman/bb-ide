@@ -31,10 +31,60 @@ const COMMAND_LINE_CLAMP_STYLE: CSSProperties = {
   WebkitLineClamp: 2,
 };
 
+// Map ansi-to-html's 16-color palette onto the theme tokens defined in
+// theme.css (--ansi-0 … --ansi-15). Lets terminal output coordinate with
+// the rest of the app instead of bleeding the library's hardcoded hex.
+const ANSI_THEME_COLORS: Record<number, string> = {
+  0: "var(--ansi-0)",
+  1: "var(--ansi-1)",
+  2: "var(--ansi-2)",
+  3: "var(--ansi-3)",
+  4: "var(--ansi-4)",
+  5: "var(--ansi-5)",
+  6: "var(--ansi-6)",
+  7: "var(--ansi-7)",
+  8: "var(--ansi-8)",
+  9: "var(--ansi-9)",
+  10: "var(--ansi-10)",
+  11: "var(--ansi-11)",
+  12: "var(--ansi-12)",
+  13: "var(--ansi-13)",
+  14: "var(--ansi-14)",
+  15: "var(--ansi-15)",
+};
+const ANSI_COLOR_INDEXES = Object.keys(ANSI_THEME_COLORS).map(Number);
+const BACKGROUND_RESET_STYLE = "background-color:var(--background)";
+const BACKGROUND_RESET_CONTRAST_STYLE = `${BACKGROUND_RESET_STYLE};color:var(--foreground)`;
+
+// When ansi-to-html emits a background color, also force a readable text
+// color on top of it (--ansi-bg-fg-N). Without this the foreground hex
+// from the library can clash with the themed background.
+function addBackgroundContrastColors(html: string): string {
+  let out = html;
+  for (const colorIndex of ANSI_COLOR_INDEXES) {
+    const backgroundStyle = `background-color:var(--ansi-${colorIndex})`;
+    out = out.replaceAll(
+      backgroundStyle,
+      `${backgroundStyle};color:var(--ansi-bg-fg-${colorIndex})`,
+    );
+  }
+  return out.replaceAll(
+    BACKGROUND_RESET_STYLE,
+    BACKGROUND_RESET_CONTRAST_STYLE,
+  );
+}
+
 const ANSI_TO_HTML = new Convert({
   escapeXML: true,
   newline: false,
   stream: false,
+  // fg/bg are the defaults applied to every emitted span — without them
+  // ansi-to-html uses hardcoded hex defaults that fight the theme. Pointing
+  // them at the theme tokens keeps non-ANSI text in step with the rest of
+  // the app whether the user is on light or dark.
+  fg: "var(--foreground)",
+  bg: "var(--background)",
+  colors: ANSI_THEME_COLORS,
 });
 
 function stringLengthSum(values: readonly string[]): number {
@@ -67,7 +117,10 @@ export function TerminalOutputBlock({
   streaming = false,
 }: TerminalOutputBlockProps) {
   const renderedOutputHtml = useMemo(
-    () => (output.length > 0 ? ANSI_TO_HTML.toHtml(output) : null),
+    () =>
+      output.length > 0
+        ? addBackgroundContrastColors(ANSI_TO_HTML.toHtml(output))
+        : null,
     [output],
   );
 

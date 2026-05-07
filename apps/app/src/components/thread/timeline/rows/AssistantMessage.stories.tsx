@@ -5,9 +5,18 @@ export default {
   title: "thread/timeline/rows/Assistant Message",
 };
 
-// Match production: ThreadTimelinePane caps content at 760px.
+// Match production: ThreadTimelinePane caps content at 760px AND lives
+// inside PageShell's @container/page scope. The container scope matters
+// because MarkdownPreview tables use a 100cqw breakout that resolves
+// against the nearest container-query ancestor — without it, narrow
+// windows make tables overflow against the viewport instead of the
+// 760px content area.
 function TimelineStage({ children }: { children: React.ReactNode }) {
-  return <div className="w-full max-w-[760px]">{children}</div>;
+  return (
+    <div className="@container/page mx-auto w-full max-w-[760px]">
+      {children}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

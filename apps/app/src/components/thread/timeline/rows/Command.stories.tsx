@@ -118,6 +118,17 @@ const gitStatusCommand: TimelineRow = {
 export function Overview() {
   return (
     <StoryCard>
+      <StoryRow
+        label="collapsed (default)"
+        hint="production-default — header only, click to expand"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows
+            {...baseProps}
+            timelineRows={[buildCommand]}
+          />
+        </TimelineStage>
+      </StoryRow>
       <StoryRow label="git status" hint="short clean output, exit 0">
         <TimelineStage>
           <ThreadTimelineRows
@@ -160,17 +171,6 @@ export function Overview() {
             {...baseProps}
             defaultExpandAllRows
             timelineRows={[failedTestCommand]}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="collapsed (default)"
-        hint="without defaultExpandAllRows the row stays in its production-default state"
-      >
-        <TimelineStage>
-          <ThreadTimelineRows
-            {...baseProps}
-            timelineRows={[buildCommand]}
           />
         </TimelineStage>
       </StoryRow>
