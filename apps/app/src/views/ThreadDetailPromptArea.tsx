@@ -513,13 +513,17 @@ export function ThreadDetailPromptArea({
         threadRuntimeDisplayStatus: runtimeDisplayStatus,
       }}
       zenModeResetKey={thread.id}
-      environment={{
-        contextWindowUsage,
-        environmentBranchName,
-        environmentHostConnected,
-        environmentIcon,
-        environmentLabel,
-      }}
+      environmentSummary={
+        environmentLabel || environmentHostConnected !== undefined
+          ? {
+              environmentLabel,
+              environmentHostConnected,
+              environmentIcon,
+              environmentBranchName,
+            }
+          : null
+      }
+      contextWindowUsage={contextWindowUsage}
       execution={{
         activeModel,
         hasMultipleProviders,

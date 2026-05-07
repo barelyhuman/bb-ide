@@ -1,4 +1,4 @@
-import { type ComponentProps, type ComponentType, type ReactNode } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   type PermissionMode,
@@ -28,7 +28,10 @@ import {
 import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
 import { cn } from "@/lib/utils";
 import { QueuedMessagesList } from "@/components/promptbox/QueuedMessagesList";
-import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
+import {
+  ThreadEnvironmentSummary,
+  type ThreadEnvironmentSummaryProps,
+} from "@/components/promptbox/ThreadEnvironmentSummary";
 
 type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 
@@ -85,15 +88,9 @@ export interface ComposerCoreProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
 }
 
-export interface ComposerEnvironmentProps {
-  contextWindowUsage?: ComponentProps<
-    typeof ThreadContextWindowIndicator
-  >["usage"];
-  environmentBranchName?: string;
-  environmentHostConnected?: boolean;
-  environmentIcon?: ComponentType<{ className?: string }>;
-  environmentLabel?: ReactNode;
-}
+type ContextWindowUsage = ComponentProps<
+  typeof ThreadContextWindowIndicator
+>["usage"];
 
 export interface ComposerExecutionProps {
   activeModel?: { model: string } | null;
@@ -137,7 +134,10 @@ export interface FollowUpPromptBoxProps {
   attachments: ComposerAttachmentsProps;
   banner: ComposerBannerProps;
   composer: ComposerCoreProps;
-  environment: ComposerEnvironmentProps;
+  /** Read-only environment strip rendered in the bottom row. Pass null to hide. */
+  environmentSummary: ThreadEnvironmentSummaryProps | null;
+  /** Token usage indicator shown to the right of the permission picker. */
+  contextWindowUsage?: ContextWindowUsage;
   execution: ComposerExecutionProps;
   mentions: ComposerMentionsProps;
   queue: ComposerQueueProps;
@@ -149,7 +149,8 @@ export function FollowUpPromptBox({
   attachments,
   banner,
   composer,
-  environment,
+  environmentSummary,
+  contextWindowUsage,
   execution,
   mentions,
   queue,
@@ -352,12 +353,9 @@ export function FollowUpPromptBox({
         />
         <div className="mt-1 flex min-h-6 items-center justify-between gap-2 pl-[15px] pr-3.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            <ThreadEnvironmentSummary
-              environmentLabel={environment.environmentLabel}
-              environmentHostConnected={environment.environmentHostConnected}
-              environmentIcon={environment.environmentIcon}
-              environmentBranchName={environment.environmentBranchName}
-            />
+            {environmentSummary ? (
+              <ThreadEnvironmentSummary {...environmentSummary} />
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PermissionModePicker
@@ -367,10 +365,8 @@ export function FollowUpPromptBox({
               supported={execution.supportsPermissionModeSelection}
               className="h-6"
             />
-            {environment.contextWindowUsage ? (
-              <ThreadContextWindowIndicator
-                usage={environment.contextWindowUsage}
-              />
+            {contextWindowUsage ? (
+              <ThreadContextWindowIndicator usage={contextWindowUsage} />
             ) : null}
           </div>
         </div>
