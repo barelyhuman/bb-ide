@@ -16,7 +16,15 @@ function labelWidthStyle(
   return { "--story-label-width": labelWidth } as CSSProperties;
 }
 
-const StoryCardContext = createContext({ inGrid: false });
+type ValueAlign = "start" | "end";
+
+const StoryCardContext = createContext<{
+  inGrid: boolean;
+  valueAlign: ValueAlign;
+}>({
+  inGrid: false,
+  valueAlign: "start",
+});
 
 export interface StoryCardProps {
   children: ReactNode;
@@ -27,6 +35,8 @@ export interface StoryCardProps {
    * child fills one column and the labels render as a header row.
    */
   columns?: readonly string[];
+  /** Where StoryRow value content sits horizontally. Defaults to "start". */
+  valueAlign?: ValueAlign;
 }
 
 export function StoryCard({
@@ -34,6 +44,7 @@ export function StoryCard({
   className,
   labelWidth,
   columns,
+  valueAlign = "start",
 }: StoryCardProps) {
   if (columns && columns.length > 0) {
     const style: CSSProperties = {
@@ -41,10 +52,11 @@ export function StoryCard({
       gridTemplateColumns: `var(--story-label-width) repeat(${columns.length}, minmax(0, 1fr))`,
     } as CSSProperties;
     return (
-      <StoryCardContext.Provider value={{ inGrid: true }}>
+      <StoryCardContext.Provider value={{ inGrid: true, valueAlign }}>
         <div
           className={cn(
-            "m-6 grid items-center justify-items-start gap-x-4 gap-y-3 rounded-md px-4 py-3",
+            "m-6 grid items-center gap-x-4 gap-y-3 rounded-md px-4 py-3",
+            valueAlign === "end" ? "justify-items-end" : "justify-items-start",
             className,
           )}
           style={style}
@@ -64,7 +76,7 @@ export function StoryCard({
     );
   }
   return (
-    <StoryCardContext.Provider value={{ inGrid: false }}>
+    <StoryCardContext.Provider value={{ inGrid: false, valueAlign }}>
       <div
         className={cn(
           "m-6 flex flex-col rounded-md",
@@ -91,7 +103,7 @@ export function StoryRow({
   children,
   className,
 }: StoryRowProps) {
-  const { inGrid } = useContext(StoryCardContext);
+  const { inGrid, valueAlign } = useContext(StoryCardContext);
 
   const labelEl = (
     <div className="flex min-w-0 flex-col gap-0.5">
@@ -115,7 +127,12 @@ export function StoryRow({
   return (
     <div className={cn(ROW_GRID, "items-start px-4 py-3", className)}>
       {labelEl}
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <div
+        className={cn(
+          "flex min-w-0 flex-wrap items-center gap-3",
+          valueAlign === "end" && "justify-end",
+        )}
+      >
         {children}
       </div>
     </div>

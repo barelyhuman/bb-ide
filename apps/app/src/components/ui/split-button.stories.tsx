@@ -1,91 +1,142 @@
-import { Archive, Copy, FolderOpen, Play, RotateCcw } from "lucide-react";
+import cursorIcon from "@/assets/workspace-open-target-icons/cursor.png";
+import finderIcon from "@/assets/workspace-open-target-icons/finder.png";
+import terminalIcon from "@/assets/workspace-open-target-icons/terminal.png";
+import vscodeIcon from "@/assets/workspace-open-target-icons/vscode.png";
+import zedIcon from "@/assets/workspace-open-target-icons/zed.png";
 import { SplitButton, type SplitButtonAction } from "./split-button";
+import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "Primitives/SplitButton",
+  title: "ui/Split Button",
 };
 
-const primaryAction: SplitButtonAction = {
-  label: "Run",
-  onSelect: ignoreSelect,
-  content: (
-    <>
-      <Play />
-      Run
-    </>
-  ),
+const noop = () => {};
+
+function EditorIcon({ src, alt }: { src: string; alt: string }) {
+  return (
+    <img
+      alt={alt}
+      src={src}
+      draggable={false}
+      className="size-5 shrink-0 rounded-[3px]"
+    />
+  );
+}
+
+// Mirrors ThreadDetailHeader (useThreadGitActions): "Commit" primary, "Squash
+// merge" secondary. Plain text actions, no grouping in the real app.
+const commitAction: SplitButtonAction = {
+  label: "Commit",
+  onSelect: noop,
 };
 
-const secondaryActions: SplitButtonAction[] = [
+const gitSecondaries: SplitButtonAction[] = [
+  { label: "Squash merge", onSelect: noop },
+];
+
+// Mirrors ThreadWorkspaceOpenButton: icon-only primary (the preferred editor)
+// + icon+label secondaries listing other workspace open targets.
+const openInVSCodeAction: SplitButtonAction = {
+  label: "Open workspace in VS Code",
+  onSelect: noop,
+  content: <EditorIcon src={vscodeIcon} alt="VS Code" />,
+};
+
+const editorSecondaries: SplitButtonAction[] = [
   {
-    groupLabel: "Thread",
-    label: "Copy ID",
-    onSelect: ignoreSelect,
+    label: "VS Code",
+    onSelect: noop,
     content: (
       <>
-        <Copy />
-        Copy ID
+        <EditorIcon src={vscodeIcon} alt="" />
+        <span className="min-w-0 flex-1">VS Code</span>
       </>
     ),
   },
   {
-    groupLabel: "Thread",
-    label: "Open workspace",
-    onSelect: ignoreSelect,
+    label: "Cursor",
+    onSelect: noop,
     content: (
       <>
-        <FolderOpen />
-        Open workspace
+        <EditorIcon src={cursorIcon} alt="" />
+        <span className="min-w-0 flex-1">Cursor</span>
       </>
     ),
   },
   {
-    groupLabel: "Lifecycle",
-    label: "Restart",
-    onSelect: ignoreSelect,
+    label: "Zed",
+    onSelect: noop,
     content: (
       <>
-        <RotateCcw />
-        Restart
+        <EditorIcon src={zedIcon} alt="" />
+        <span className="min-w-0 flex-1">Zed</span>
       </>
     ),
   },
   {
-    groupLabel: "Lifecycle",
-    label: "Archive",
-    onSelect: ignoreSelect,
+    label: "Finder",
+    onSelect: noop,
     content: (
       <>
-        <Archive />
-        Archive
+        <EditorIcon src={finderIcon} alt="" />
+        <span className="min-w-0 flex-1">Finder</span>
+      </>
+    ),
+  },
+  {
+    label: "Terminal",
+    onSelect: noop,
+    content: (
+      <>
+        <EditorIcon src={terminalIcon} alt="" />
+        <span className="min-w-0 flex-1">Terminal</span>
       </>
     ),
   },
 ];
 
-export function Default() {
+export function Overview() {
   return (
-    <div className="flex max-w-xl items-center gap-4 p-6">
-      <SplitButton
-        primaryAction={primaryAction}
-        secondaryActions={secondaryActions}
-        mobileTitle="Thread actions"
-      />
-    </div>
+    <StoryCard
+      labelWidth="420px"
+      valueAlign="end"
+      className="max-w-2xl"
+    >
+      <StoryRow label="text primary" hint="ThreadDetailHeader git actions">
+        <SplitButton
+          primaryAction={commitAction}
+          secondaryActions={gitSecondaries}
+          mobileTitle="Thread actions"
+        />
+      </StoryRow>
+      <StoryRow label="icon primary" hint="ThreadWorkspaceOpenButton">
+        <SplitButton
+          primaryAction={openInVSCodeAction}
+          secondaryActions={editorSecondaries}
+          className="px-1"
+          triggerLabel="Choose workspace open target"
+          mobileTitle="Open Workspace"
+        />
+      </StoryRow>
+      <StoryRow label="disabled">
+        <SplitButton
+          primaryAction={commitAction}
+          secondaryActions={gitSecondaries}
+          disabled
+          mobileTitle="Thread actions"
+        />
+      </StoryRow>
+      <StoryRow label="open menu" hint="defaultOpen + modal=false">
+        <SplitButton
+          primaryAction={openInVSCodeAction}
+          secondaryActions={editorSecondaries}
+          className="px-1"
+          triggerLabel="Choose workspace open target"
+          mobileTitle="Open Workspace"
+          defaultOpen
+          modal={false}
+        />
+      </StoryRow>
+    </StoryCard>
   );
 }
-
-export function Disabled() {
-  return (
-    <div className="flex max-w-xl items-center gap-4 p-6">
-      <SplitButton
-        primaryAction={primaryAction}
-        secondaryActions={secondaryActions}
-        disabled
-        triggerLabel="More disabled actions"
-      />
-    </div>
-  );
-}
-
-function ignoreSelect(): void {}

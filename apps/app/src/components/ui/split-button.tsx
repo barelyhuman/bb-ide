@@ -29,6 +29,10 @@ interface SplitButtonProps {
   className?: string;
   triggerLabel?: string;
   mobileTitle?: string;
+  /** Render with the secondary menu open on mount. Story-only escape hatch. */
+  defaultOpen?: boolean;
+  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
+  modal?: boolean;
 }
 
 function SplitButton({
@@ -38,6 +42,8 @@ function SplitButton({
   className,
   triggerLabel = "More actions",
   mobileTitle,
+  defaultOpen,
+  modal,
 }: SplitButtonProps) {
   const base = cn(
     buttonVariants({ variant: "outline", size: "sm" }),
@@ -60,7 +66,7 @@ function SplitButton({
       >
         {primaryAction.content ?? primaryAction.label}
       </button>
-      <DropdownMenu>
+      <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
