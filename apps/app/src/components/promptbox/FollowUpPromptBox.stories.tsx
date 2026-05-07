@@ -1,16 +1,12 @@
-import { useState } from "react";
-import type {
-  PermissionMode,
-  ThreadQueuedMessage,
-  WorkspaceFileStatus,
-  WorkspaceStatus,
-} from "@bb/domain";
+import { useState, type ReactNode } from "react";
+import type { PermissionMode, ThreadQueuedMessage } from "@bb/domain";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
-import { Container, Monitor } from "lucide-react";
+import { Monitor } from "lucide-react";
 import {
   FollowUpPromptBox,
   type ComposerSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
+import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
 import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
@@ -91,13 +87,6 @@ const localEnvironmentSummary = {
   environmentBranchName: "bb/promptbox-stories",
 };
 
-const sandboxEnvironmentSummary = {
-  environmentLabel: "Sandbox",
-  environmentHostConnected: true,
-  environmentIcon: Container,
-  environmentBranchName: undefined,
-};
-
 const usage: ThreadContextWindowUsage = {
   usedTokens: 32_400,
   modelContextWindow: 128_000,
@@ -134,37 +123,40 @@ const historyEntries = [
 ];
 
 // ---------------------------------------------------------------------------
-// Banner — kept hidden in most stories. The merge-base banner is being
-// replaced by ThreadPromptContextBanner; we mock the minimum to keep the
-// composer happy.
+// Banner — passed as a ReactNode slot. Most rows pass null. The "with banner"
+// row passes a fixture <ContextBanner> element so FollowUpPromptBox
+// stays decoupled from the banner's data shape.
 // ---------------------------------------------------------------------------
 
-const bannerHidden = {
-  canExpandPromptChangeList: false,
-  isChangeListExpanded: false,
-  isDiffPanelActive: false,
-  onPromptBannerFileClick: noop,
-  onPromptGitStatsBannerClick: noop,
-  onToggleChangeListExpanded: noop,
-  promptBannerSummary: null,
-  showBranchComparisonUi: false,
-  showPromptGitStatsBanner: false,
-};
-
-const bannerWithChanges = {
-  ...bannerHidden,
-  canExpandPromptChangeList: true,
-  promptBannerSummary: (
-    <span>3 files changed · +128 −24</span>
-  ) as React.ReactNode,
-  promptBannerFiles: [
-    { path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx", status: "M" },
-    { path: "apps/app/src/views/ThreadDetailPromptArea.tsx", status: "M" },
-    { path: "apps/app/src/components/promptbox/QueuedMessagesList.tsx", status: "A" },
-  ] satisfies WorkspaceFileStatus[],
-  showPromptGitStatsBanner: true,
-  workspaceStatus: null as WorkspaceStatus | null,
-};
+const bannerWithChanges: ReactNode = (
+  <ContextBanner
+    canExpandPromptChangeList
+    isChangeListExpanded={false}
+    isDiffPanelActive={false}
+    onPromptBannerFileClick={noop}
+    onPromptGitStatsBannerClick={noop}
+    onToggleChangeListExpanded={noop}
+    promptBannerSummary={<span>3 files changed · +128 −24</span>}
+    promptBannerFiles={[
+      {
+        path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx",
+        status: "M",
+      },
+      {
+        path: "apps/app/src/views/ThreadDetailPromptArea.tsx",
+        status: "M",
+      },
+      {
+        path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx",
+        status: "A",
+      },
+    ]}
+    showBranchComparisonUi
+    promptBannerMergeBaseBranch="main"
+    mergeBaseBranchOptions={["main", "develop", "release/2026-05"]}
+    onPromptBannerMergeBaseBranchChange={noop}
+  />
+);
 
 // ---------------------------------------------------------------------------
 // Queue
@@ -221,7 +213,7 @@ interface RowConfig {
   promptPlaceholder?: string;
   environmentSummary?: typeof localEnvironmentSummary | null;
   contextWindowUsage?: ThreadContextWindowUsage;
-  banner?: typeof bannerHidden;
+  banner?: ReactNode | null;
   queue?: typeof emptyQueue;
   zenModeResetKey?: string;
 }
@@ -244,7 +236,7 @@ function Row({
   promptPlaceholder = "Ask a follow-up...",
   environmentSummary = localEnvironmentSummary,
   contextWindowUsage,
-  banner = bannerHidden,
+  banner = null,
   queue = emptyQueue,
   zenModeResetKey = "thr_demo",
 }: RowConfig) {
@@ -354,21 +346,15 @@ export function Overview() {
         />
       </StoryRow>
       <StoryRow
-        label="sandbox environment"
-        hint="environment summary uses Container icon, no branch"
+        label="stacked cards"
+        hint="banner + queued messages share the PromptStackCard chrome"
       >
         <Row
-          submitMode={{ kind: "ready" }}
-          environmentSummary={sandboxEnvironmentSummary}
-        />
-      </StoryRow>
-      <StoryRow
-        label="no environment summary"
-        hint="environmentSummary={null} hides the strip"
-      >
-        <Row
-          submitMode={{ kind: "ready" }}
-          environmentSummary={null}
+          submitMode={{ kind: "queue", onStop: noop }}
+          threadRuntimeDisplayStatus="active"
+          banner={bannerWithChanges}
+          queue={{ ...emptyQueue, queuedMessages }}
+          contextWindowUsage={usage}
         />
       </StoryRow>
     </StoryCard>

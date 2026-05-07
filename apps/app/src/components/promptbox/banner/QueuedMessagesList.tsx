@@ -1,6 +1,7 @@
 import { CornerDownRight, Pencil, Trash2 } from "lucide-react";
 import type { ThreadQueuedMessage } from "@bb/domain";
 import { Button } from "@/components/ui";
+import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
@@ -28,9 +29,9 @@ export function QueuedMessagesList({
   if (queuedMessages.length === 0) return null;
 
   return (
-    <section
-      aria-label="Queued follow-up messages"
-      className="mb-2 overflow-hidden rounded-md border border-border/60 bg-muted/25"
+    <PromptStackCard
+      ariaLabel="Queued follow-up messages"
+      className="overflow-hidden"
     >
       <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
         <p className="text-xs text-muted-foreground">
@@ -123,6 +124,6 @@ export function QueuedMessagesList({
           );
         })}
       </ul>
-    </section>
+    </PromptStackCard>
   );
 }

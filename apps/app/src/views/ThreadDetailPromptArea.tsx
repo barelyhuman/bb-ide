@@ -20,6 +20,7 @@ import type {
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { ThreadPendingInteractionBanner } from "@/components/thread/ThreadPendingInteractionBanner";
+import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
@@ -484,31 +485,34 @@ export function ThreadDetailPromptArea({
         onRemoveAttachment: promptDraft.removeAttachment,
         projectId,
       }}
-      banner={{
-        canExpandPromptChangeList,
-        isChangeListExpanded,
-        isDiffPanelActive: canUseGitUi && isDiffPanelActive,
-        mergeBaseBranchOptions,
-        mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
-        onPromptBannerFileClick: canUseGitUi
-          ? handlePromptBannerFileClick
-          : () => {},
-        onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
-          ? onMergeBaseBranchChange
-          : undefined,
-        onPromptGitStatsBannerClick: canUseGitUi
-          ? openThreadDiffPanel
-          : () => {},
-        onToggleChangeListExpanded: () => {
-          setIsChangeListExpanded((previousValue) => !previousValue);
-        },
-        promptBannerFiles,
-        promptBannerMergeBaseBranch,
-        promptBannerSummary,
-        showBranchComparisonUi,
-        showPromptGitStatsBanner,
-        workspaceStatus,
-      }}
+      banner={
+        showPromptGitStatsBanner ? (
+          <ContextBanner
+            canExpandPromptChangeList={canExpandPromptChangeList}
+            isChangeListExpanded={isChangeListExpanded}
+            isDiffPanelActive={canUseGitUi && isDiffPanelActive}
+            mergeBaseBranchOptions={mergeBaseBranchOptions}
+            mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
+            onPromptBannerFileClick={
+              canUseGitUi ? handlePromptBannerFileClick : () => {}
+            }
+            onPromptBannerMergeBaseBranchChange={
+              showBranchComparisonUi ? onMergeBaseBranchChange : undefined
+            }
+            onPromptGitStatsBannerClick={
+              canUseGitUi ? openThreadDiffPanel : () => {}
+            }
+            onToggleChangeListExpanded={() => {
+              setIsChangeListExpanded((previousValue) => !previousValue);
+            }}
+            promptBannerFiles={promptBannerFiles}
+            promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
+            promptBannerSummary={promptBannerSummary}
+            showBranchComparisonUi={showBranchComparisonUi}
+            workspaceStatus={workspaceStatus}
+          />
+        ) : null
+      }
       composer={{
         history: {
           currentDraft: {

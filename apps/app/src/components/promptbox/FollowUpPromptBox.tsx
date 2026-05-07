@@ -1,10 +1,7 @@
 import { useRef, type ComponentProps, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
 import {
   type ThreadQueuedMessage,
   type ThreadRuntimeDisplayStatus,
-  type WorkspaceFileStatus,
-  type WorkspaceStatus,
 } from "@bb/domain";
 import {
   PromptBoxInternal,
@@ -22,14 +19,8 @@ import {
 } from "@/components/promptbox/ExecutionControls";
 import { useBottomAnchoredScroll } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "@/views/ThreadTimelineScrollToBottomButton";
-import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
-import {
-  getMergeBaseBranchCandidates,
-  BranchPicker,
-} from "@/components/pickers/BranchPicker";
 import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
-import { cn } from "@/lib/utils";
-import { QueuedMessagesList } from "@/components/promptbox/QueuedMessagesList";
+import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import {
   ThreadEnvironmentSummary,
   type ThreadEnvironmentSummaryProps,
@@ -57,25 +48,6 @@ export interface ComposerAttachmentsProps {
   onAttachFiles: (files: File[]) => void | Promise<void>;
   onRemoveAttachment: (path: string) => void;
   projectId: string;
-}
-
-export interface ComposerBannerProps {
-  canExpandPromptChangeList: boolean;
-  isChangeListExpanded: boolean;
-  isDiffPanelActive: boolean;
-  mergeBaseBranchOptions?: readonly string[];
-  mergeBaseBranchOptionsLoading?: boolean;
-  onPromptBannerFileClick: (file: { path: string }) => void;
-  onPromptBannerMergeBaseBranchChange?: (branch: string) => void;
-  onPromptBannerBranchPickerOpenChange?: (open: boolean) => void;
-  onPromptGitStatsBannerClick: () => void;
-  onToggleChangeListExpanded: () => void;
-  promptBannerFiles?: WorkspaceFileStatus[];
-  promptBannerMergeBaseBranch?: string;
-  promptBannerSummary: ReactNode;
-  showBranchComparisonUi: boolean;
-  showPromptGitStatsBanner: boolean;
-  workspaceStatus?: WorkspaceStatus | null;
 }
 
 /**
@@ -136,7 +108,12 @@ export interface ComposerQueueProps {
 
 export interface FollowUpPromptBoxProps {
   attachments: ComposerAttachmentsProps;
-  banner: ComposerBannerProps;
+  /**
+   * Slot for the prompt context banner above the composer. Pass null to hide.
+   * Today this is rendered as a ContextBanner element by the
+   * caller; FollowUpPromptBox no longer knows the banner's data shape.
+   */
+  banner: ReactNode | null;
   composer: ComposerCoreProps;
   /** Read-only environment strip rendered in the bottom row. Pass null to hide. */
   environmentSummary: ThreadEnvironmentSummaryProps | null;
@@ -168,16 +145,6 @@ export function FollowUpPromptBox({
   queue,
   zenModeResetKey,
 }: FollowUpPromptBoxProps) {
-  const promptBannerMergeBaseCandidates = getMergeBaseBranchCandidates({
-    mergeBaseBranch: banner.promptBannerMergeBaseBranch,
-    mergeBaseBranchOptions: banner.mergeBaseBranchOptions,
-  });
-  const canSelectPromptBannerMergeBase = Boolean(
-    banner.showBranchComparisonUi &&
-    banner.promptBannerMergeBaseBranch &&
-    banner.onPromptBannerMergeBaseBranchChange &&
-    promptBannerMergeBaseCandidates.length > 0,
-  );
   const submitMode = composer.submitMode;
   const canQueueFollowUp = submitMode.kind === "queue";
   const canSubmit =
@@ -196,96 +163,7 @@ export function FollowUpPromptBox({
         active={composer.threadRuntimeDisplayStatus === "active"}
       />
       <div className="space-y-2">
-        {banner.showPromptGitStatsBanner ? (
-          <div
-            className={cn(
-              "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
-              !banner.isDiffPanelActive &&
-                "cursor-pointer transition-colors hover:bg-muted/55",
-            )}
-            onClick={banner.onPromptGitStatsBannerClick}
-          >
-            <div className="flex items-center justify-between gap-3">
-              {banner.canExpandPromptChangeList ? (
-                <button
-                  type="button"
-                  className="flex min-w-0 items-center gap-2 truncate text-left"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    banner.onToggleChangeListExpanded();
-                  }}
-                >
-                  <span className="truncate">{banner.promptBannerSummary}</span>
-                  <ChevronDown
-                    className={cn(
-                      "size-3.5 shrink-0 transition-transform duration-200",
-                      banner.isChangeListExpanded && "rotate-180",
-                    )}
-                  />
-                </button>
-              ) : (
-                <span className="truncate">{banner.promptBannerSummary}</span>
-              )}
-              {banner.showBranchComparisonUi ? (
-                canSelectPromptBannerMergeBase &&
-                banner.promptBannerMergeBaseBranch ? (
-                  <div
-                    className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/90"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                    }}
-                  >
-                    <span className="shrink-0">Merge base:</span>
-                    <BranchPicker
-                      value={banner.promptBannerMergeBaseBranch}
-                      options={promptBannerMergeBaseCandidates}
-                      variant="minimal"
-                      loading={banner.mergeBaseBranchOptionsLoading}
-                      onChange={(branch) => {
-                        banner.onPromptBannerMergeBaseBranchChange?.(branch);
-                      }}
-                      onOpenChange={
-                        banner.onPromptBannerBranchPickerOpenChange
-                      }
-                      className="max-w-[10rem]"
-                      muted
-                    />
-                  </div>
-                ) : (
-                  <span className="shrink-0 text-xs text-muted-foreground/90">
-                    {banner.promptBannerMergeBaseBranch
-                      ? `Merge base: ${banner.promptBannerMergeBaseBranch}`
-                      : "Merge base comparison"}
-                  </span>
-                )
-              ) : (
-                <span className="shrink-0 text-xs text-muted-foreground/90">
-                  Includes all threads in this working directory
-                </span>
-              )}
-            </div>
-            {banner.canExpandPromptChangeList && banner.promptBannerFiles ? (
-              <div
-                className={cn(
-                  "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
-                  banner.isChangeListExpanded
-                    ? "mt-2 grid-rows-[1fr] border-t border-border/50 pt-1 opacity-100"
-                    : "grid-rows-[0fr] border-t border-transparent pt-0 opacity-0",
-                )}
-                onClick={(event) => {
-                  event.stopPropagation();
-                }}
-              >
-                <div className="overflow-hidden">
-                  <WorkspaceChangesList
-                    files={banner.promptBannerFiles}
-                    onFileClick={banner.onPromptBannerFileClick}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {banner}
         <QueuedMessagesList
           queuedMessages={queue.queuedMessages}
           sendDisabled={
@@ -293,9 +171,7 @@ export function FollowUpPromptBox({
             composer.isFollowUpSubmitting ||
             queue.isQueueMutationPending
           }
-          actionDisabled={
-            composer.isFollowUpSubmitting || queue.isQueueMutationPending
-          }
+          actionDisabled={queue.isQueueMutationPending}
           processingMessageId={queue.processingQueuedMessageId}
           onSendImmediately={queue.onSendQueuedImmediately}
           onEdit={queue.onEditQueuedMessage}
