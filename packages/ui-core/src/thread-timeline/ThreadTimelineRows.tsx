@@ -110,7 +110,6 @@ interface TimelineExpandableRowViewProps {
   title: TimelineTitle;
   horizontalPadding: TimelineRowHorizontalPadding;
   row: Exclude<ThreadTimelineViewRow, { kind: "conversation" }>;
-  scopeActive: boolean;
 }
 
 interface TimelineStaticRowProps {
@@ -123,7 +122,6 @@ interface TimelineExpandableBodyProps {
   activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
   row: ThreadTimelineViewRow;
-  scopeActive: boolean;
 }
 
 interface TimelineSystemDetailBlockProps {
@@ -290,7 +288,6 @@ function areTimelineExpandableRowViewPropsEqual(
   return (
     previous.activeLatestBundleId === next.activeLatestBundleId &&
     previous.compactActivityIntents === next.compactActivityIntents &&
-    previous.scopeActive === next.scopeActive &&
     previous.title === next.title &&
     previous.horizontalPadding === next.horizontalPadding &&
     // The view-row cache keys by the raw rows array, so unchanged query data
@@ -625,7 +622,6 @@ function TimelineExpandableBody({
   activeLatestBundleId,
   compactActivityIntents,
   row,
-  scopeActive,
 }: TimelineExpandableBodyProps) {
   const {
     onOpenLocalFileLink,
@@ -659,11 +655,10 @@ function TimelineExpandableBody({
       // reduced child status. A bundle that's still being appended to may
       // momentarily look "completed" between events (replays compress this
       // window to zero), so deriving sticky-bottom from `row.status` would
-      // miss most updates.
+      // miss most updates. `activeLatestBundleId` is null once the timeline
+      // settles past a non-bundle frontier, so streaming naturally shuts off.
       const isFrontier =
-        scopeActive &&
-        row.kind === "bundle-summary" &&
-        row.id === activeLatestBundleId;
+        row.kind === "bundle-summary" && row.id === activeLatestBundleId;
       return (
         <TimelineDetailScroll
           size="summary"
@@ -683,10 +678,11 @@ function TimelineExpandableBody({
       );
     case "work":
       if (row.workKind === "delegation") {
+        const delegationActive = row.status === "pending";
         return (
           <TimelineDetailScroll
             size="delegation"
-            streaming={scopeActive}
+            streaming={delegationActive}
             contentKey={`${timelineRowsSignature(row.childRows)}|${row.output.length}`}
             className="border-l-1 border-border/60 my-1 px-2"
           >
@@ -694,7 +690,7 @@ function TimelineExpandableBody({
               {row.childRows.length > 0 ? (
                 <TimelineRowsList
                   rows={row.childRows}
-                  scopeActive={scopeActive}
+                  scopeActive={delegationActive}
                   compactActivityIntents={false}
                   spacing="nested"
                 />
@@ -868,7 +864,6 @@ function TimelineRowView({
       title={titleState.title}
       horizontalPadding={horizontalPadding}
       compactActivityIntents={compactActivityIntents}
-      scopeActive={scopeActive}
     />
   );
 }
@@ -884,7 +879,6 @@ function TimelineExpandableRowView({
   title,
   horizontalPadding,
   row,
-  scopeActive,
 }: TimelineExpandableRowViewProps) {
   const {
     autoExpandedRowIds,
@@ -921,10 +915,9 @@ function TimelineExpandableRowView({
         activeLatestBundleId={activeLatestBundleId}
         row={row}
         compactActivityIntents={compactActivityIntents}
-        scopeActive={scopeActive}
       />
     ),
-    [activeLatestBundleId, compactActivityIntents, row, scopeActive],
+    [activeLatestBundleId, compactActivityIntents, row],
   );
 
   return (

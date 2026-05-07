@@ -20,6 +20,11 @@ export interface StickyBottomScrollBinding<TElement extends HTMLElement> {
 
 export interface UseStickyBottomScrollArgs {
   contentKey: string;
+  // When false, the hook is dormant: the scroll-to-bottom effect doesn't fire
+  // on contentKey changes and the window pointer-tracking listeners aren't
+  // attached. Refs and the on-element handlers (onScroll, onWheel, etc.) are
+  // still wired so user-intent state stays accurate across streaming toggles.
+  streaming: boolean;
 }
 
 const STICKY_BOTTOM_THRESHOLD_PX = 4;
@@ -52,6 +57,7 @@ function scrollToBottom(element: HTMLElement, smooth: boolean): void {
 
 export function useStickyBottomScroll<TElement extends HTMLElement>({
   contentKey,
+  streaming,
 }: UseStickyBottomScrollArgs): StickyBottomScrollBinding<TElement> {
   const scrollRef = useRef<TElement>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -61,6 +67,9 @@ export function useStickyBottomScroll<TElement extends HTMLElement>({
   const isFirstScrollRef = useRef(true);
 
   useEffect(() => {
+    if (!streaming) {
+      return;
+    }
     const element = scrollRef.current;
     if (!element || !shouldStickToBottomRef.current) {
       return;
@@ -72,7 +81,7 @@ export function useStickyBottomScroll<TElement extends HTMLElement>({
     scrollToBottom(element, smooth);
     lastScrollAtRef.current = now;
     isFirstScrollRef.current = false;
-  }, [contentKey]);
+  }, [contentKey, streaming]);
 
   const markUserScrollIntent = useCallback(() => {
     userScrollIntentUntilRef.current =
@@ -102,13 +111,16 @@ export function useStickyBottomScroll<TElement extends HTMLElement>({
   }, []);
 
   useEffect(() => {
+    if (!streaming) {
+      return;
+    }
     window.addEventListener("pointerup", onPointerEnd);
     window.addEventListener("pointercancel", onPointerEnd);
     return () => {
       window.removeEventListener("pointerup", onPointerEnd);
       window.removeEventListener("pointercancel", onPointerEnd);
     };
-  }, [onPointerEnd]);
+  }, [onPointerEnd, streaming]);
 
   return {
     onPointerDown,
