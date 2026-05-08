@@ -469,6 +469,10 @@ export interface ThreadListFilters {
   parentThreadId?: string;
   /** App callers must choose active or archived; server omission intentionally means both. */
   archived: boolean;
+  /** When set, restrict to managed (true) or unmanaged (false) threads. */
+  managed?: boolean;
+  limit?: number;
+  offset?: number;
 }
 
 function toBooleanQueryValue(value: boolean): "true" | "false" {
@@ -489,6 +493,15 @@ export async function listThreads(
             ? { parentThreadId: filters.parentThreadId }
             : {}),
           archived: toBooleanQueryValue(filters.archived),
+          ...(filters.managed !== undefined
+            ? { managed: toBooleanQueryValue(filters.managed) }
+            : {}),
+          ...(filters.limit !== undefined
+            ? { limit: String(filters.limit) }
+            : {}),
+          ...(filters.offset !== undefined
+            ? { offset: String(filters.offset) }
+            : {}),
         },
       },
       requestOptions(signal),

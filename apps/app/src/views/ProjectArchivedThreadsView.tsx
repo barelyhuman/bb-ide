@@ -1,10 +1,24 @@
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
-import { PageShell, Pill } from "@/components/ui";
+import { Button, OverflowFade, PageShell, Pill } from "@/components/ui";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
-import { useThreads } from "@/hooks/queries/thread-queries";
+import { useArchivedThreads } from "@/hooks/queries/thread-queries";
+import type { ArchivedThreadsManagedFilter } from "@/hooks/queries/query-keys";
+import { cn } from "@/lib/utils";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+
+interface FilterOption {
+  value: ArchivedThreadsManagedFilter;
+  label: string;
+}
+
+const FILTER_OPTIONS: readonly FilterOption[] = [
+  { value: "all", label: "All threads" },
+  { value: "unmanaged", label: "Unmanaged" },
+  { value: "managed", label: "Managed" },
+];
 
 function isManagedThread(thread: ThreadListEntry): boolean {
   return thread.parentThreadId !== null;
@@ -12,11 +26,20 @@ function isManagedThread(thread: ThreadListEntry): boolean {
 
 export function ProjectArchivedThreadsView() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { data: threads, isLoading } = useThreads({
+  const [managedFilter, setManagedFilter] =
+    useState<ArchivedThreadsManagedFilter>("all");
+  const archivedThreadsQuery = useArchivedThreads({
     projectId,
-    archived: true,
+    managed: managedFilter,
   });
   const unarchiveThread = useUnarchiveThread();
+
+  const archivedThreads = useMemo(() => {
+    const pages = archivedThreadsQuery.data?.pages ?? [];
+    // Hide threads optimistically updated to archivedAt: null while the
+    // archived list refetches.
+    return pages.flat().filter((thread) => thread.archivedAt != null);
+  }, [archivedThreadsQuery.data]);
 
   if (!projectId) {
     return (
@@ -28,59 +51,110 @@ export function ProjectArchivedThreadsView() {
     );
   }
 
-  const archivedThreads =
-    threads
-      // Keep optimistic unarchive updates hidden while the archived list refetches.
-      ?.filter((thread) => thread.archivedAt != null)
-      .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)) ?? [];
+  const isInitialLoading = archivedThreadsQuery.isPending;
+  const showEmptyState = !isInitialLoading && archivedThreads.length === 0;
 
   return (
-    <PageShell contentClassName="pt-4 md:pt-5">
-      <div className="mx-auto w-full max-w-3xl space-y-2">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">
-            Loading archived threads…
-          </p>
-        ) : archivedThreads.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-            No archived threads yet.
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {archivedThreads.map((thread) => (
-              <div
-                key={thread.id}
-                className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-accent"
-              >
-                <Link
-                  to={`/projects/${projectId}/threads/${thread.id}`}
-                  className="min-w-0 flex-1"
+    <PageShell contentClassName="pt-0">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="sticky top-0 z-10 -mx-4 bg-background px-4 pt-4 md:-mx-5 md:px-5 md:pt-5">
+          <OverflowFade placement="below" tone="background" />
+          <div
+            className="inline-flex items-center gap-1 rounded-lg border border-border/70 p-0.5"
+            role="tablist"
+            aria-label="Filter archived threads"
+          >
+            {FILTER_OPTIONS.map((option) => {
+              const isActive = managedFilter === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "h-7 rounded-md px-3 text-xs font-medium",
+                    isActive
+                      ? "bg-accent text-accent-foreground hover:bg-accent"
+                      : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                  )}
+                  onClick={() => setManagedFilter(option.value)}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">
-                      {getThreadDisplayTitle(thread)}
-                    </span>
-                    {isManagedThread(thread) ? (
-                      <Pill variant="secondary" className="shrink-0">
-                        managed
-                      </Pill>
-                    ) : null}
-                  </span>
-                </Link>
-                <ThreadUnarchiveButton
-                  isPending={
-                    unarchiveThread.isPending &&
-                    unarchiveThread.variables?.id === thread.id
-                  }
-                  onUnarchive={() => {
-                    unarchiveThread.mutate({ id: thread.id });
-                  }}
-                  threadType={thread.type}
-                />
-              </div>
-            ))}
+                  {option.label}
+                </Button>
+              );
+            })}
           </div>
-        )}
+        </div>
+
+        <div className="space-y-3 pt-3">
+          {isInitialLoading ? (
+            <p className="text-sm text-muted-foreground">
+              Loading archived threads…
+            </p>
+          ) : showEmptyState ? (
+            <p className="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+              No archived threads yet.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {archivedThreads.map((thread) => (
+                <div
+                  key={thread.id}
+                  className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-accent"
+                >
+                  <Link
+                    to={`/projects/${projectId}/threads/${thread.id}`}
+                    className="min-w-0 flex-1"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">
+                        {getThreadDisplayTitle(thread)}
+                      </span>
+                      {isManagedThread(thread) ? (
+                        <Pill variant="secondary" className="shrink-0">
+                          managed
+                        </Pill>
+                      ) : null}
+                    </span>
+                  </Link>
+                  <ThreadUnarchiveButton
+                    isPending={
+                      unarchiveThread.isPending &&
+                      unarchiveThread.variables?.id === thread.id
+                    }
+                    onUnarchive={() => {
+                      unarchiveThread.mutate({ id: thread.id });
+                    }}
+                    threadType={thread.type}
+                    className="hover:bg-accent-foreground/15"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {archivedThreadsQuery.hasNextPage ? (
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  archivedThreadsQuery.fetchNextPage();
+                }}
+                disabled={archivedThreadsQuery.isFetchingNextPage}
+              >
+                {archivedThreadsQuery.isFetchingNextPage
+                  ? "Loading…"
+                  : "Load more"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </PageShell>
   );

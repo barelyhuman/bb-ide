@@ -126,6 +126,79 @@ describe("threads", () => {
     ).toHaveLength(2);
   });
 
+  it("filters threads by managed state", () => {
+    const { db, project } = setup();
+    const parent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const child = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      parentThreadId: parent.id,
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    const managed = listThreads(db, {
+      projectId: project.id,
+      managed: true,
+    });
+    expect(managed).toHaveLength(1);
+    expect(managed[0]?.id).toBe(child.id);
+
+    const unmanaged = listThreads(db, {
+      projectId: project.id,
+      managed: false,
+    });
+    expect(unmanaged).toHaveLength(2);
+    expect(unmanaged.map((thread) => thread.id)).toContain(parent.id);
+  });
+
+  it("paginates archived threads ordered by archive recency", async () => {
+    const { db, project } = setup();
+    const created: { id: string }[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const thread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+      created.push(thread);
+    }
+    // Archive in a specific order so the most recently archived is "thr_4".
+    for (const thread of created) {
+      archiveThread(db, noopNotifier, thread.id);
+      // Sqlite Date.now() resolution can collapse archives within a tick;
+      // use a tiny delay to keep archivedAt strictly increasing.
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+
+    const archivedFirstPage = listThreads(db, {
+      projectId: project.id,
+      archived: true,
+      limit: 3,
+    });
+    expect(archivedFirstPage.map((thread) => thread.id)).toEqual([
+      created[4]?.id,
+      created[3]?.id,
+      created[2]?.id,
+    ]);
+
+    const archivedSecondPage = listThreads(db, {
+      projectId: project.id,
+      archived: true,
+      limit: 3,
+      offset: 3,
+    });
+    expect(archivedSecondPage.map((thread) => thread.id)).toEqual([
+      created[1]?.id,
+      created[0]?.id,
+    ]);
+  });
+
   it("counts active assigned child threads", () => {
     const { db, project } = setup();
     const parent = createThread(db, noopNotifier, {

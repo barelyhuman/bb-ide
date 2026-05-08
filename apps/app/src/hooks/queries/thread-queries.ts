@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   PendingInteraction,
   ResolvedThreadExecutionOptions,
@@ -24,6 +29,7 @@ import {
   resolveThreadTimelinePlaceholder,
 } from "./query-placeholders";
 import {
+  archivedThreadsListQueryKey,
   disabledThreadListQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
@@ -34,6 +40,7 @@ import {
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
   threadTimelineQueryKey,
+  type ArchivedThreadsManagedFilter,
 } from "./query-keys";
 
 interface QueryOptions {
@@ -62,6 +69,63 @@ function requireThreadId(id: string, hookName: string): string {
   }
 
   return id;
+}
+
+export const ARCHIVED_THREADS_PAGE_SIZE = 100;
+
+export interface UseArchivedThreadsFilters {
+  projectId: string | undefined;
+  managed: ArchivedThreadsManagedFilter;
+}
+
+function archivedThreadsManagedToBoolean(
+  managed: ArchivedThreadsManagedFilter,
+): boolean | undefined {
+  if (managed === "managed") return true;
+  if (managed === "unmanaged") return false;
+  return undefined;
+}
+
+export function useArchivedThreads(
+  filters: UseArchivedThreadsFilters,
+  options?: QueryOptions,
+) {
+  const { projectId, managed } = filters;
+  const enabled = (options?.enabled ?? true) && Boolean(projectId);
+  const managedBoolean = archivedThreadsManagedToBoolean(managed);
+
+  return useInfiniteQuery<
+    ThreadListResponse,
+    Error,
+    { pageParams: number[]; pages: ThreadListResponse[] },
+    ReturnType<typeof archivedThreadsListQueryKey>,
+    number
+  >({
+    queryKey: archivedThreadsListQueryKey({
+      projectId: projectId ?? "",
+      managed,
+    }),
+    queryFn: ({ pageParam, signal }) =>
+      api.listThreads(
+        {
+          projectId: requireThreadId(projectId ?? "", "useArchivedThreads"),
+          archived: true,
+          ...(managedBoolean !== undefined ? { managed: managedBoolean } : {}),
+          limit: ARCHIVED_THREADS_PAGE_SIZE,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.length < ARCHIVED_THREADS_PAGE_SIZE) {
+        return undefined;
+      }
+      return allPages.reduce((sum, page) => sum + page.length, 0);
+    },
+    enabled,
+    staleTime: 10_000,
+  });
 }
 
 export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {

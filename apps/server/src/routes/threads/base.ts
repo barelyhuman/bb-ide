@@ -21,6 +21,7 @@ import type {
   LoggedPendingInteractionWorkSessionDeps,
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
+import { parseOptionalInteger } from "../../services/lib/validation.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
@@ -86,12 +87,28 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/threads", threadListQuerySchema, (context, query) => {
+    const limit = parseOptionalInteger(query.limit, "limit");
+    if (limit !== undefined && limit <= 0) {
+      throw new ApiError(400, "invalid_request", "limit must be positive");
+    }
+    const offset = parseOptionalInteger(query.offset, "offset");
+    if (offset !== undefined && offset < 0) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "offset must be non-negative",
+      );
+    }
     const threads = listThreadsWithPendingInteractionState(deps.db, {
       projectId: query.projectId,
       ...(query.type ? { type: query.type } : {}),
       ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
       archived:
         query.archived === undefined ? undefined : query.archived === "true",
+      managed:
+        query.managed === undefined ? undefined : query.managed === "true",
+      ...(limit !== undefined ? { limit } : {}),
+      ...(offset !== undefined ? { offset } : {}),
     });
     return context.json(
       toThreadListEntryResponses(deps, { threads }) satisfies ThreadListEntry[],

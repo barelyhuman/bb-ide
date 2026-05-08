@@ -4,11 +4,14 @@ import {
   createDebouncedCallbackScheduler,
   type ChangedMessage,
   type EnvironmentChangeKind,
-  type ThreadListEntry,
   type ThreadChangeKind,
   type ThreadWithRuntime,
 } from "@bb/domain";
 import { updateCachedThreadListPendingInteractionState } from "./queries/query-cache";
+import {
+  getCachedThreadLists,
+  iterateThreadListCacheEntries,
+} from "./queries/thread-list-cache-data";
 import {
   allThreadDraftsQueryKeyPrefix,
   allThreadPendingInteractionsQueryKeyPrefix,
@@ -199,10 +202,10 @@ function collectCachedThreadIdsForEnvironment({
       threadIds.add(thread.id);
     }
   }
-  for (const [, threads] of queryClient.getQueriesData<ThreadListEntry[]>({
+  for (const { data } of getCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
   })) {
-    for (const thread of threads ?? []) {
+    for (const thread of iterateThreadListCacheEntries(data)) {
       if (thread.environmentId === environmentId) {
         threadIds.add(thread.id);
       }

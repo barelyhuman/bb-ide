@@ -517,6 +517,10 @@ export const threadListQuerySchema = z.object({
   type: threadTypeSchema.optional(),
   parentThreadId: z.string().min(1).optional(),
   archived: z.enum(["true", "false"]).optional(),
+  /** Filter by parent thread presence: "true" → managed (has parent), "false" → unmanaged. */
+  managed: z.enum(["true", "false"]).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+  offset: z.string().regex(/^\d+$/).optional(),
 });
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 

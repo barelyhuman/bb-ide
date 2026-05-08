@@ -53,6 +53,15 @@ export interface ThreadListQueryFilters {
   archived: boolean;
 }
 
+export type ArchivedThreadsManagedFilter = "all" | "managed" | "unmanaged";
+
+export interface ArchivedThreadsListFilters {
+  projectId: string;
+  managed: ArchivedThreadsManagedFilter;
+}
+
+export const ARCHIVED_THREADS_LIST_KIND = "archivedList";
+
 export type HostsQueryKey = readonly [typeof HOSTS_QUERY_KEY];
 export type HostQueryId = string | null | undefined;
 export type HostQueryKey = readonly [typeof HOST_QUERY_KEY, HostQueryId];
@@ -91,6 +100,11 @@ export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [
   typeof THREADS_QUERY_KEY,
   ThreadListQueryFilters,
+];
+export type ArchivedThreadsListQueryKey = readonly [
+  typeof THREADS_QUERY_KEY,
+  typeof ARCHIVED_THREADS_LIST_KIND,
+  ArchivedThreadsListFilters,
 ];
 export type DisabledThreadListQueryKey = readonly [
   typeof THREADS_DISABLED_QUERY_KEY,
@@ -320,6 +334,21 @@ export function threadListQueryKey(
   filters: ThreadListQueryFilters,
 ): ThreadListQueryKey {
   return [THREADS_QUERY_KEY, filters];
+}
+
+export function archivedThreadsListQueryKey(
+  filters: ArchivedThreadsListFilters,
+): ArchivedThreadsListQueryKey {
+  return [THREADS_QUERY_KEY, ARCHIVED_THREADS_LIST_KIND, filters];
+}
+
+export function isArchivedThreadsListQueryKey(
+  queryKey: QueryKey,
+): queryKey is ArchivedThreadsListQueryKey {
+  return (
+    queryKey[0] === THREADS_QUERY_KEY &&
+    queryKey[1] === ARCHIVED_THREADS_LIST_KIND
+  );
 }
 
 export function disabledThreadListQueryKey(

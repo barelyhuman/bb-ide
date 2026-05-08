@@ -1,9 +1,10 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import type {
-  Thread,
-  ThreadListEntry,
-  ThreadWithRuntime,
-} from "@bb/domain";
+import type { Thread, ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import {
+  applyToCachedThreadLists,
+  getCachedThreadLists,
+  iterateThreadListCacheEntries,
+} from "./thread-list-cache-data";
 import type {
   ThreadTimelineResponse,
   TimelineRow,
@@ -220,13 +221,13 @@ export function getCachedThreadListPlaceholder(
     return undefined;
   }
 
-  const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
+  for (const { data } of getCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
-  });
-  for (const [, threads] of threadLists) {
-    const match = threads?.find((thread) => thread.id === threadId);
-    if (match) {
-      return match;
+  })) {
+    for (const thread of iterateThreadListCacheEntries(data)) {
+      if (thread.id === threadId) {
+        return thread;
+      }
     }
   }
 
@@ -283,12 +284,13 @@ export function optimisticallyInsertThread(
   queryClient: QueryClient,
   thread: ThreadWithRuntime,
 ): void {
-  const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
+  // Only inserts into flat-array list caches (`useThreads`). The paginated
+  // archived view uses `InfiniteData` and only displays threads with an
+  // archivedAt — newly created threads can't belong to it.
+  for (const { queryKey, data } of getCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
-  });
-
-  for (const [queryKey, list] of threadLists) {
-    if (!list) {
+  })) {
+    if (!Array.isArray(data)) {
       continue;
     }
 
@@ -296,7 +298,7 @@ export function optimisticallyInsertThread(
     if (!threadMatchesListFilters(thread, filters)) {
       continue;
     }
-    if (list.some((candidate) => candidate.id === thread.id)) {
+    if (data.some((candidate) => candidate.id === thread.id)) {
       continue;
     }
 
@@ -309,7 +311,7 @@ export function optimisticallyInsertThread(
         hasPendingInteraction: false,
         environmentWorkspaceDisplayKind: "other",
       },
-      ...list,
+      ...data,
     ]);
   }
 }
@@ -409,20 +411,15 @@ export function updateCachedThreadListPendingInteractionState(
   threadId: string,
   hasPendingInteraction: boolean,
 ): void {
-  const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
+  applyToCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
-  });
-
-  for (const [queryKey, list] of threadLists) {
-    if (!list?.some((thread) => thread.id === threadId)) {
-      continue;
-    }
-
-    queryClient.setQueryData<ThreadListEntry[]>(
-      queryKey,
-      list.map((thread) =>
+    mapper: (list) => {
+      if (!list.some((thread) => thread.id === threadId)) {
+        return list;
+      }
+      return list.map((thread) =>
         thread.id === threadId ? { ...thread, hasPendingInteraction } : thread,
-      ),
-    );
-  }
+      );
+    },
+  });
 }

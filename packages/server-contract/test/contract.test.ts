@@ -137,6 +137,12 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Thread event listing may omit limit to use the server-side default page size.",
   "threadListQuerySchema.archived":
     "Thread listing may omit archived to include both archived and unarchived threads.",
+  "threadListQuerySchema.limit":
+    "Thread listing may omit limit to return all matching threads without pagination.",
+  "threadListQuerySchema.managed":
+    "Thread listing may omit managed to include both managed and unmanaged threads.",
+  "threadListQuerySchema.offset":
+    "Thread listing may omit offset to start from the first row.",
   "threadListQuerySchema.parentThreadId":
     "Thread listing may omit parentThreadId when not filtering by parent.",
   "threadListQuerySchema.type":

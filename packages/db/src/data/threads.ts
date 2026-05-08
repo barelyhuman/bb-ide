@@ -93,6 +93,10 @@ export interface ListThreadsOptions {
   archived?: boolean;
   parentThreadId?: string;
   type?: ThreadType;
+  /** When true, restrict to threads that have a parent (managed). When false, restrict to threads without a parent (unmanaged). */
+  managed?: boolean;
+  limit?: number;
+  offset?: number;
 }
 
 type ThreadRow = typeof threads.$inferSelect;
@@ -217,23 +221,44 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
       : options.archived === false
         ? isNull(threads.archivedAt)
         : undefined,
+    options.managed === true
+      ? isNotNull(threads.parentThreadId)
+      : options.managed === false
+        ? isNull(threads.parentThreadId)
+        : undefined,
   ].filter((value) => value !== undefined);
 }
 
+// Order archived listings by archive recency so paginated pages show the
+// most recently archived rows first.
+function buildListThreadsOrderBy(options: ListThreadsOptions) {
+  if (options.archived === true) {
+    return [desc(threads.archivedAt), desc(threads.id)];
+  }
+  return [desc(threads.createdAt)];
+}
+
 export function listThreads(db: DbConnection, options: ListThreadsOptions) {
-  return db
+  let query = db
     .select()
     .from(threads)
     .where(and(...buildListThreadsFilters(options)))
-    .orderBy(desc(threads.createdAt))
-    .all();
+    .orderBy(...buildListThreadsOrderBy(options))
+    .$dynamic();
+  if (options.limit !== undefined) {
+    query = query.limit(options.limit);
+  }
+  if (options.offset !== undefined) {
+    query = query.offset(options.offset);
+  }
+  return query.all();
 }
 
 export function listThreadsWithPendingInteractionState(
   db: DbConnection,
   options: ListThreadsOptions,
 ): ThreadWithPendingInteractionState[] {
-  const rows = db
+  let query = db
     .select({
       ...getTableColumns(threads),
       environmentBranchName: environments.branchName,
@@ -255,8 +280,15 @@ export function listThreadsWithPendingInteractionState(
     )
     .where(and(...buildListThreadsFilters(options)))
     .groupBy(threads.id)
-    .orderBy(desc(threads.createdAt))
-    .all();
+    .orderBy(...buildListThreadsOrderBy(options))
+    .$dynamic();
+  if (options.limit !== undefined) {
+    query = query.limit(options.limit);
+  }
+  if (options.offset !== undefined) {
+    query = query.offset(options.offset);
+  }
+  const rows = query.all();
 
   return rows.map(
     ({

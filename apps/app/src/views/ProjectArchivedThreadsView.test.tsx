@@ -24,10 +24,23 @@ interface ArchivedThreadsWrapperProps {
   children: ReactNode;
 }
 
+interface ArchivedThreadListRequest {
+  archived: string | null;
+  limit: string | null;
+  managed: string | null;
+  offset: string | null;
+}
+
 interface RenderProjectArchivedThreadsViewArgs {
-  onThreadListRequest?: () => void;
+  onThreadListRequest?: (request: ArchivedThreadListRequest) => void;
   routes?: FetchRoute[];
-  threads: ThreadListEntry[];
+  /**
+   * Either a fixed list of threads (returned regardless of paging) or a
+   * function that resolves the list given the requested offset/limit/managed.
+   */
+  threads:
+    | ThreadListEntry[]
+    | ((request: ArchivedThreadListRequest) => ThreadListEntry[]);
 }
 
 interface DeferredResponse {
@@ -68,10 +81,17 @@ function createThread(
   };
 }
 
-function assertArchivedThreadListRequest(request: Request): void {
+function readArchivedThreadListRequest(
+  request: Request,
+): ArchivedThreadListRequest {
   const url = new URL(request.url);
   expect(url.searchParams.get("projectId")).toBe("proj_1");
-  expect(url.searchParams.get("archived")).toBe("true");
+  return {
+    archived: url.searchParams.get("archived"),
+    limit: url.searchParams.get("limit"),
+    managed: url.searchParams.get("managed"),
+    offset: url.searchParams.get("offset"),
+  };
 }
 
 function createArchivedThreadsWrapper() {
@@ -115,9 +135,15 @@ async function renderProjectArchivedThreadsView(
     {
       pathname: "/api/v1/threads",
       handler: (request) => {
-        assertArchivedThreadListRequest(request);
-        args.onThreadListRequest?.();
-        return jsonResponse(args.threads);
+        const parsedRequest = readArchivedThreadListRequest(request);
+        expect(parsedRequest.archived).toBe("true");
+        expect(parsedRequest.limit).toBe("100");
+        args.onThreadListRequest?.(parsedRequest);
+        const threads =
+          typeof args.threads === "function"
+            ? args.threads(parsedRequest)
+            : args.threads;
+        return jsonResponse(threads);
       },
     },
     ...(args.routes ?? []),
@@ -138,9 +164,7 @@ async function renderLoadedArchivedThreads(
 }
 
 function getThreadLinkText(): string[] {
-  return screen
-    .getAllByRole("link")
-    .map((link) => link.textContent ?? "");
+  return screen.getAllByRole("link").map((link) => link.textContent ?? "");
 }
 
 afterEach(() => {
@@ -180,39 +204,6 @@ describe("ProjectArchivedThreadsView", () => {
     expect(await screen.findByText("No archived threads yet.")).toBeTruthy();
   });
 
-  it("sorts archived threads by newest archived timestamp first", async () => {
-    await renderProjectArchivedThreadsView({
-      threads: [
-        createThread({
-          archivedAt: 10,
-          id: "thr_oldest",
-          title: "Oldest archived thread",
-          titleFallback: "Oldest archived thread",
-        }),
-        createThread({
-          archivedAt: 30,
-          id: "thr_newest",
-          title: "Newest archived thread",
-          titleFallback: "Newest archived thread",
-        }),
-        createThread({
-          archivedAt: 20,
-          id: "thr_middle",
-          title: "Middle archived thread",
-          titleFallback: "Middle archived thread",
-        }),
-      ],
-    });
-
-    await screen.findByText("Newest archived thread");
-
-    expect(getThreadLinkText()).toEqual([
-      "Newest archived thread",
-      "Middle archived thread",
-      "Oldest archived thread",
-    ]);
-  });
-
   it("filters threads with null archivedAt from the response", async () => {
     await renderProjectArchivedThreadsView({
       threads: [
@@ -236,8 +227,119 @@ describe("ProjectArchivedThreadsView", () => {
     expect(screen.queryByText("Live managed thread")).toBeNull();
   });
 
+  it("requests the next page when Load more is clicked", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) =>
+      createThread({
+        archivedAt: 1000 - index,
+        id: `thr_page1_${index}`,
+        title: `Page1 thread ${index}`,
+        titleFallback: `Page1 thread ${index}`,
+      }),
+    );
+    const secondPage = [
+      createThread({
+        archivedAt: 5,
+        id: "thr_page2",
+        title: "Page2 thread",
+        titleFallback: "Page2 thread",
+      }),
+    ];
+    const requestedOffsets: string[] = [];
+
+    await renderProjectArchivedThreadsView({
+      onThreadListRequest: (request) => {
+        requestedOffsets.push(request.offset ?? "");
+      },
+      threads: (request) => {
+        if (request.offset === null || request.offset === "0") {
+          return firstPage;
+        }
+        if (request.offset === "100") {
+          return secondPage;
+        }
+        return [];
+      },
+    });
+
+    await screen.findByText("Page1 thread 0");
+    expect(screen.queryByText("Page2 thread")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await screen.findByText("Page2 thread");
+    expect(requestedOffsets).toContain("100");
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it("does not show Load more when fewer than a full page are returned", async () => {
+    await renderProjectArchivedThreadsView({
+      threads: [
+        createThread({
+          archivedAt: 20,
+          id: "thr_root",
+          title: "Root archived thread",
+          titleFallback: "Root archived thread",
+        }),
+      ],
+    });
+
+    await screen.findByText("Root archived thread");
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it("refetches with managed filter when the selector changes", async () => {
+    const requestedManaged: Array<string | null> = [];
+
+    await renderProjectArchivedThreadsView({
+      onThreadListRequest: (request) => {
+        requestedManaged.push(request.managed);
+      },
+      threads: (request) => {
+        if (request.managed === "true") {
+          return [
+            createThread({
+              archivedAt: 40,
+              id: "thr_managed_only",
+              parentThreadId: "thr_parent",
+              title: "Managed archived thread",
+              titleFallback: "Managed archived thread",
+            }),
+          ];
+        }
+        if (request.managed === "false") {
+          return [
+            createThread({
+              archivedAt: 30,
+              id: "thr_unmanaged_only",
+              title: "Unmanaged archived thread",
+              titleFallback: "Unmanaged archived thread",
+            }),
+          ];
+        }
+        return [
+          createThread({
+            archivedAt: 20,
+            id: "thr_root",
+            title: "Root archived thread",
+            titleFallback: "Root archived thread",
+          }),
+        ];
+      },
+    });
+
+    await screen.findByText("Root archived thread");
+    expect(requestedManaged).toEqual([null]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Managed" }));
+    await screen.findByText("Managed archived thread");
+    expect(requestedManaged).toContain("true");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Unmanaged" }));
+    await screen.findByText("Unmanaged archived thread");
+    expect(requestedManaged).toContain("false");
+  });
+
   it("unarchives a thread and removes it optimistically", async () => {
-    let threadListRequestCount = 0;
     let unarchiveRequestCount = 0;
     const unarchiveResponse = createDeferredResponse();
     const archivedThreads = [
@@ -250,9 +352,6 @@ describe("ProjectArchivedThreadsView", () => {
     ];
 
     await renderLoadedArchivedThreads({
-      onThreadListRequest: () => {
-        threadListRequestCount += 1;
-      },
       threads: archivedThreads,
       routes: [
         {
@@ -266,7 +365,6 @@ describe("ProjectArchivedThreadsView", () => {
         },
       ],
     });
-    const initialThreadListRequestCount = threadListRequestCount;
 
     fireEvent.click(screen.getByRole("button", { name: "Unarchive thread" }));
 
@@ -279,11 +377,6 @@ describe("ProjectArchivedThreadsView", () => {
       unarchiveResponse.resolve(new Response(null, { status: 204 }));
     });
 
-    await waitFor(() => {
-      expect(threadListRequestCount).toBeGreaterThan(
-        initialThreadListRequestCount,
-      );
-    });
     expect(screen.queryByText("Root archived thread")).toBeNull();
   });
 });
