@@ -277,6 +277,9 @@ export function createFakeAdapter(
    * - `delay:<ms>` delays turn completion by the requested duration.
    * - `call_tool:<name>` emits a provider-scoped tool call with required
    *   `providerThreadId` and no BB `threadId` hint.
+   * - `call_tool_unresolved:<name>` emits the same tool call with a null
+   *   `turnId`, matching the canonical bridge wire form for providers that
+   *   cannot resolve the BB turn id.
    * - remaining text is echoed back as `Response to: ...`.
    */
   return {

@@ -47,6 +47,7 @@ export interface RuntimeProviderRequestArgs {
 export interface HandleRuntimeProviderRequestArgs extends RuntimeProviderRequestArgs {
   createCaptureId: () => string;
   emitCapture: (entry: AgentRuntimeCaptureEntry) => void;
+  getActiveTurnId: (threadId: string) => string | undefined;
   getThreadExecutionOptions: (
     threadId: string,
   ) => AgentRuntimeExecutionOptions | undefined;
@@ -56,6 +57,32 @@ export interface HandleRuntimeProviderRequestArgs extends RuntimeProviderRequest
     args: ResolveRuntimeProviderRequestThreadIdArgs,
   ) => string | null;
 }
+
+interface ResolveRuntimeProviderRequestTurnIdArgs
+  extends HandleRuntimeProviderRequestArgs {
+  requestKind: RuntimeProviderRequestKind;
+  resolvedThreadId: string;
+  turnId: string | null;
+}
+
+interface ExplicitProviderRequestTurnId {
+  kind: "explicit";
+  turnId: string;
+}
+
+interface UnresolvedProviderRequestTurnId {
+  kind: "unresolved";
+}
+
+interface InvalidProviderRequestTurnId {
+  kind: "invalid";
+  message: string;
+}
+
+type ProviderRequestTurnIdWireValue =
+  | ExplicitProviderRequestTurnId
+  | UnresolvedProviderRequestTurnId
+  | InvalidProviderRequestTurnId;
 
 function scopeProviderRequestId(
   scope: string,
@@ -75,6 +102,51 @@ function buildDeniedInteractiveResolution(
   return {
     decision: "deny",
   };
+}
+
+function classifyProviderRequestTurnIdWireValue(
+  turnId: string | null,
+): ProviderRequestTurnIdWireValue {
+  if (turnId === null) {
+    return { kind: "unresolved" };
+  }
+  if (turnId.length === 0) {
+    return {
+      kind: "invalid",
+      message:
+        "Provider request turnId must be a non-empty string when known; use null when unresolved",
+    };
+  }
+  return { kind: "explicit", turnId };
+}
+
+function resolveRuntimeProviderRequestTurnId(
+  args: ResolveRuntimeProviderRequestTurnIdArgs,
+): string | null {
+  const providerTurnId = classifyProviderRequestTurnIdWireValue(args.turnId);
+  if (providerTurnId.kind === "invalid") {
+    sendJsonRpcError({
+      child: args.providerProcess.child,
+      id: args.parsedId,
+      message: providerTurnId.message,
+    });
+    return null;
+  }
+  if (providerTurnId.kind === "explicit") {
+    return providerTurnId.turnId;
+  }
+
+  const activeTurnId = args.getActiveTurnId(args.resolvedThreadId);
+  if (activeTurnId !== undefined) {
+    return activeTurnId;
+  }
+
+  sendJsonRpcError({
+    child: args.providerProcess.child,
+    id: args.parsedId,
+    message: `Cannot route provider ${args.requestKind} for thread "${args.resolvedThreadId}" without a turn id because no active turn is known`,
+  });
+  return null;
 }
 
 function handleToolCallProviderRequest(
@@ -111,12 +183,21 @@ function handleToolCallProviderRequest(
   if (!resolvedThreadId) {
     return true;
   }
+  const resolvedTurnId = resolveRuntimeProviderRequestTurnId({
+    ...args,
+    requestKind: "tool call",
+    resolvedThreadId,
+    turnId: toolCallReq.turnId,
+  });
+  if (resolvedTurnId === null) {
+    return true;
+  }
 
   const scopedToolCallReq: ToolCallRequest = {
     requestId: toolCallReq.requestId,
     threadId: resolvedThreadId,
     providerThreadId: toolCallReq.providerThreadId,
-    turnId: toolCallReq.turnId,
+    turnId: resolvedTurnId,
     callId: toolCallReq.callId,
     tool: toolCallReq.tool,
     ...(toolCallReq.arguments !== undefined
@@ -218,10 +299,23 @@ function handleInteractiveProviderRequest(
   }
   const buildInteractiveResponse =
     args.providerProcess.adapter.buildInteractiveResponse;
+  const resolvedTurnId = resolveRuntimeProviderRequestTurnId({
+    ...args,
+    requestKind: "interactive request",
+    resolvedThreadId,
+    turnId: interactiveReq.turnId,
+  });
+  if (resolvedTurnId === null) {
+    return true;
+  }
+  const resolvedInteractiveReq = {
+    ...interactiveReq,
+    turnId: resolvedTurnId,
+  };
 
   const scopedInteractiveReq: PendingInteractionCreate = {
     threadId: resolvedThreadId,
-    turnId: interactiveReq.turnId,
+    turnId: resolvedTurnId,
     providerId,
     providerThreadId: interactiveReq.providerThreadId,
     providerRequestId: scopeProviderRequestId(
@@ -253,7 +347,7 @@ function handleInteractiveProviderRequest(
         interactiveReq.payload,
       );
       const result = buildInteractiveResponse({
-        request: interactiveReq,
+        request: resolvedInteractiveReq,
         resolution,
       });
       args.emitCapture({
@@ -311,7 +405,7 @@ function handleInteractiveProviderRequest(
         resolution,
       });
       const result = buildInteractiveResponse({
-        request: interactiveReq,
+        request: resolvedInteractiveReq,
         resolution,
       });
       sendJsonRpcResult({

@@ -2,17 +2,21 @@ import { z } from "zod";
 import type { DecodedToolCallRequest } from "../provider-adapter.js";
 
 const normalizedToolCallRequestSchema = z.object({
-  providerThreadId: z.string(),
-  threadId: z.string().optional(),
-  turnId: z.string(),
+  providerThreadId: z.string().min(1),
+  threadId: z.string().min(1).optional(),
+  // Canonical bridge wire form: required string when known, required null when
+  // the provider cannot resolve the BB turn id itself.
+  turnId: z.union([z.string().min(1), z.null()]),
   callId: z.string().min(1),
   tool: z.string().min(1),
   arguments: z.unknown(),
 });
 
 const providerNativeToolCallRequestSchema = z.object({
-  threadId: z.string(),
-  turnId: z.string(),
+  threadId: z.string().min(1),
+  // Native provider tool calls use the same required turn id shape as bridge
+  // tool calls: null means unresolved and must be resolved by the runtime.
+  turnId: z.union([z.string().min(1), z.null()]),
   callId: z.string().min(1),
   tool: z.string().min(1),
   arguments: z.unknown(),

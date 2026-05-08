@@ -45,6 +45,46 @@ describe("provider-tool-call-contract", () => {
     });
   });
 
+  it("normalizes canonical unresolved bridge tool call turn ids to null", () => {
+    expect(
+      decodeNormalizedProviderToolCallRequest("req-3", "item/tool/call", {
+        providerThreadId: "provider-abc",
+        turnId: null,
+        callId: "call-1",
+        tool: "message_user",
+        arguments: { text: "hello" },
+      }),
+    ).toEqual({
+      requestId: "req-3",
+      providerThreadId: "provider-abc",
+      turnId: null,
+      callId: "call-1",
+      tool: "message_user",
+      arguments: { text: "hello" },
+    });
+  });
+
+  it("rejects noncanonical unresolved bridge tool call turn ids", () => {
+    expect(
+      decodeNormalizedProviderToolCallRequest("req-4", "item/tool/call", {
+        providerThreadId: "provider-abc",
+        turnId: "",
+        callId: "call-1",
+        tool: "message_user",
+        arguments: { text: "hello" },
+      }),
+    ).toBeNull();
+
+    expect(
+      decodeNormalizedProviderToolCallRequest("req-5", "item/tool/call", {
+        providerThreadId: "provider-abc",
+        callId: "call-1",
+        tool: "message_user",
+        arguments: { text: "hello" },
+      }),
+    ).toBeNull();
+  });
+
   it("treats native provider tool calls as provider-scoped requests", () => {
     expect(
       decodeNativeProviderToolCallRequest("req-2", "item/tool/call", {

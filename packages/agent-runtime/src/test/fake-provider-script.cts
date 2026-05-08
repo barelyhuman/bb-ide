@@ -14,6 +14,8 @@ interface PendingToolCall {
   threadId: string;
 }
 
+type ToolTurnIdMode = "active" | "unresolved";
+
 interface ThreadState {
   activeTurn: ActiveTurn | null;
   providerThreadId: string;
@@ -25,6 +27,7 @@ interface TurnPlan {
   delayMs: number;
   responseText: string;
   toolName: string | null;
+  toolTurnIdMode: ToolTurnIdMode;
 }
 
 const rl = createInterface({ input: process.stdin });
@@ -121,10 +124,15 @@ function parseUserContent(input: unknown): JsonRecord[] {
 
 function parseTurnPlan(inputText: string): TurnPlan {
   const delayMatch = /(?:^|\s)delay:(\d+)(?:\s|$)/.exec(inputText);
-  const toolMatch = /(?:^|\s)call_tool:([^\s]+)(?:\s|$)/.exec(inputText);
+  const unresolvedToolMatch =
+    /(?:^|\s)call_tool_unresolved:([^\s]+)(?:\s|$)/.exec(inputText);
+  const toolMatch =
+    unresolvedToolMatch ??
+    /(?:^|\s)call_tool:([^\s]+)(?:\s|$)/.exec(inputText);
 
   let delayMs = delayMatch ? Number(delayMatch[1]) : 0;
   let toolName = toolMatch ? toolMatch[1] : null;
+  const toolTurnIdMode = unresolvedToolMatch ? "unresolved" : "active";
 
   if (toolName && /^delay:\d+$/u.test(toolName)) {
     delayMs = Number(toolName.slice("delay:".length));
@@ -135,7 +143,15 @@ function parseTurnPlan(inputText: string): TurnPlan {
     delayMs,
     responseText: inputText ? `Response to: ${inputText}` : "Response complete",
     toolName,
+    toolTurnIdMode,
   };
+}
+
+function buildToolArguments(toolName: string): JsonRecord {
+  if (toolName === "message_user") {
+    return { text: "Fake provider message" };
+  }
+  return {};
 }
 
 function clearActiveTurn(thread: ThreadState): void {
@@ -265,6 +281,13 @@ function beginTurn(threadId: string, input: unknown): void {
 
   if (plan.toolName) {
     const toolCallId = nextToolCallId++;
+    const params: JsonRecord = {
+      providerThreadId: thread.providerThreadId,
+      callId: `call-${toolCallId}`,
+      tool: plan.toolName,
+      arguments: buildToolArguments(plan.toolName),
+    };
+    params.turnId = plan.toolTurnIdMode === "active" ? turnId : null;
     pendingToolCalls.set(toolCallId, {
       delayMs: plan.delayMs,
       responseText: `Tool called: ${plan.toolName}`,
@@ -274,13 +297,7 @@ function beginTurn(threadId: string, input: unknown): void {
       jsonrpc: "2.0",
       id: toolCallId,
       method: "item/tool/call",
-      params: {
-        providerThreadId: thread.providerThreadId,
-        turnId,
-        callId: `call-${toolCallId}`,
-        tool: plan.toolName,
-        arguments: {},
-      },
+      params,
     });
     return;
   }

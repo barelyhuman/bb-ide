@@ -1,9 +1,21 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ThreadEvent } from "@bb/domain";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  PendingInteractionResolution,
+  ThreadEvent,
+  ToolCallResponse,
+} from "@bb/domain";
+import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
+import { handleRuntimeProviderRequest } from "./runtime-provider-requests.js";
+import {
+  parseJsonRpcLine,
+  type JsonRpcMessage,
+  type ProviderInboundRequest,
+} from "./runtime-json-rpc.js";
 import {
   createInteractiveRequestAdapter,
   createInvalidInteractiveRequestAdapter,
@@ -11,6 +23,20 @@ import {
   waitForRuntimeState,
   waitForThreadAgentMessageText,
 } from "./test/runtime-test-harness.js";
+
+type ChildStdoutChunk = Buffer | string;
+
+function readChildStdoutLine(child: ChildProcess): Promise<string> {
+  if (!child.stdout) {
+    throw new Error("Expected child stdout to be readable");
+  }
+  const stdout = child.stdout;
+  return new Promise((resolve) => {
+    stdout.once("data", (chunk: ChildStdoutChunk) => {
+      resolve(String(chunk));
+    });
+  });
+}
 
 describe("createAgentRuntime interactive requests", () => {
   let tmpDir: string;
@@ -130,7 +156,11 @@ rl.on("line", (line) => {
       "utf8",
     );
 
-    const requests: Array<{ threadId: string; providerThreadId: string }> = [];
+    const requests: Array<{
+      threadId: string;
+      providerThreadId: string;
+      turnId: string;
+    }> = [];
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
@@ -143,14 +173,23 @@ rl.on("line", (line) => {
         requests.push({
           threadId: request.threadId,
           providerThreadId: request.providerThreadId,
+          turnId: request.turnId,
         });
         return {
           decision: "allow_for_session",
           grantedPermissions: null,
         };
       },
-      adapterFactory: () =>
-        createInteractiveRequestAdapter(interactiveScriptPath),
+      adapterFactory: () => {
+        const adapter = createInteractiveRequestAdapter(interactiveScriptPath);
+        return {
+          ...adapter,
+          decodeInteractiveRequest(request) {
+            const decoded = adapter.decodeInteractiveRequest?.(request);
+            return decoded ? { ...decoded, turnId: null } : null;
+          },
+        };
+      },
     });
 
     await runtime.startThread({
@@ -186,6 +225,7 @@ rl.on("line", (line) => {
       {
         threadId: "t1",
         providerThreadId: "prov-1",
+        turnId: "turn-1",
       },
     ]);
     expect(events).toContainEqual(
@@ -198,6 +238,90 @@ rl.on("line", (line) => {
       }),
     );
     await runtime.shutdown();
+  });
+
+  it("drops unresolved interactive requests when no active turn is known", async () => {
+    const child = spawn(process.execPath, [
+      "-e",
+      "process.stdin.pipe(process.stdout)",
+    ]);
+    const baseAdapter = createInteractiveRequestAdapter(
+      join(tmpDir, "unused-interactive-provider.cjs"),
+    );
+    const adapter = {
+      ...baseAdapter,
+      decodeInteractiveRequest(request: ProviderInboundRequest) {
+        const decoded = baseAdapter.decodeInteractiveRequest?.(request);
+        return decoded ? { ...decoded, turnId: null } : null;
+      },
+    };
+    const captures: AgentRuntimeCaptureEntry[] = [];
+    const interactionResolution = {
+      decision: "deny",
+    } satisfies PendingInteractionResolution;
+    const toolCallResponse = {
+      contentItems: [{ type: "inputText", text: "tool result" }],
+      success: true,
+    } satisfies ToolCallResponse;
+    const onInteractiveRequest = vi.fn(async () => interactionResolution);
+    const rawRequest = {
+      jsonrpc: "2.0",
+      id: 77,
+      method: "request_interaction",
+      params: {
+        threadId: "prov-1",
+        turnId: "provider-turn-1",
+        itemId: "item-1",
+        kind: "command_approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        reason: "Needs approval",
+      },
+    } satisfies JsonRpcMessage;
+
+    try {
+      handleRuntimeProviderRequest({
+        createCaptureId: () => "cap-1",
+        emitCapture: (entry) => captures.push(entry),
+        getActiveTurnId: () => undefined,
+        getThreadExecutionOptions: () => undefined,
+        line: JSON.stringify(rawRequest),
+        onInteractiveRequest,
+        onToolCall: async () => toolCallResponse,
+        parsedId: rawRequest.id,
+        parsedMethod: rawRequest.method,
+        providerProcess: {
+          adapter,
+          child,
+          interactiveRequestScope: "scope-1",
+        },
+        rawRequest,
+        resolveThreadId: () => "t1",
+      });
+
+      const parsed = parseJsonRpcLine((await readChildStdoutLine(child)).trim());
+      if (parsed.kind !== "response") {
+        throw new Error(`Expected JSON-RPC response, got ${parsed.kind}`);
+      }
+      expect(parsed.parsed).toMatchObject({
+        jsonrpc: "2.0",
+        id: 77,
+        error: {
+          code: -32000,
+          message: expect.stringContaining("without a turn id"),
+        },
+      });
+      expect(onInteractiveRequest).not.toHaveBeenCalled();
+      expect(
+        captures.filter(
+          (entry) =>
+            entry.kind === "interactive-request" ||
+            entry.kind === "interactive-result",
+        ),
+      ).toHaveLength(0);
+    } finally {
+      child.kill();
+    }
   });
 
   it("denies interactive requests when permission escalation is deny", async () => {

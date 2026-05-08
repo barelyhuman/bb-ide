@@ -47,12 +47,12 @@ export const toolCallOutputItemSchema = z.discriminatedUnion("type", [
 export type ToolCallOutputItem = z.infer<typeof toolCallOutputItemSchema>;
 
 export const toolCallRequestSchema = z.object({
-  requestId: z.union([z.string(), z.number()]),
-  threadId: z.string(),
-  providerThreadId: z.string(),
-  turnId: z.string(),
-  callId: z.string(),
-  tool: z.string(),
+  requestId: z.union([z.string().min(1), z.number()]),
+  threadId: z.string().min(1),
+  providerThreadId: z.string().min(1),
+  turnId: z.string().min(1),
+  callId: z.string().min(1),
+  tool: z.string().min(1),
   arguments: z.unknown().optional(),
 });
 export type ToolCallRequest = z.infer<typeof toolCallRequestSchema>;

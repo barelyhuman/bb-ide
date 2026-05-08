@@ -405,7 +405,7 @@ function createForwardToolCall(threadIdRef: ThreadIdRef): ToolCallForwarder {
           threadId: threadIdRef.current,
           providerThreadId:
             threadSession.providerThreadId ?? threadIdRef.current,
-          turnId: "",
+          turnId: null,
           callId: `call-${requestId}`,
           tool: toolName,
           arguments: args,

@@ -325,6 +325,12 @@ export async function createHostDaemonApp(
     await eventBuffer.flushRequired();
   }
 
+  async function flushThreadEventsBeforeToolCall(): Promise<void> {
+    // Dynamic tool calls can append server-owned turn-scoped events, so the
+    // server must first observe any provider turn/started already in the spool.
+    await eventBuffer.flushRequired();
+  }
+
   const serverClient = createServerClient({
     serverUrl: options.serverUrl,
     hostKey: options.hostKey,
@@ -532,6 +538,7 @@ export async function createHostDaemonApp(
       options.onToolCall ??
       (async (request) => {
         try {
+          await flushThreadEventsBeforeToolCall();
           return await serverClient.callTool(request);
         } catch (error) {
           options.logger.error(

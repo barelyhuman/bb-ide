@@ -989,6 +989,83 @@ describe("host daemon integration", () => {
   );
 
   it(
+    "settles turn-start events before dynamic tool call forwarding after transient event post failure",
+    async () => {
+      const harness = await setupDaemonHarness({
+        serverOptions: {
+          requireTurnStartedForToolCalls: true,
+        },
+      });
+
+      try {
+        harness.server.queueCommand({
+          ...createStandardThreadStartCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            requestId: "creq_23456789ab",
+            input: [{ type: "text", text: "start" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+        await waitFor(() => harness.server.commandResults.length === 1);
+
+        const eventPostAttemptCountBeforeTurn =
+          harness.server.eventPostAttemptCount;
+        harness.server.failNextEventPosts(1);
+        harness.server.queueCommand({
+          ...createTurnSubmitCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "prov-1",
+            requestId: "creq_23456789ac",
+            input: [{ type: "text", text: "call_tool:message_user" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+        await waitFor(
+          () =>
+            harness.server.toolCalls.length === 1 &&
+            harness.server.commandResults.some(
+              (result) => result.type === "turn.submit" && result.ok,
+            ),
+        );
+        expect(harness.server.eventPostAttemptCount).toBeGreaterThanOrEqual(
+          eventPostAttemptCountBeforeTurn + 2,
+        );
+        const toolCallLogIndex = harness.server.requestLog.findIndex(
+          (entry) => entry.kind === "tool-call",
+        );
+        expect(toolCallLogIndex).toBeGreaterThan(0);
+        const eventsBeforeToolCall = harness.server.requestLog
+          .slice(0, toolCallLogIndex)
+          .flatMap((entry) => (entry.kind === "events" ? entry.events : []));
+        expect(eventsBeforeToolCall).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              threadId: "thread-a",
+              event: expect.objectContaining({
+                type: "turn/started",
+                scope: { kind: "turn", turnId: "turn-2" },
+              }),
+            }),
+          ]),
+        );
+      } finally {
+        await harness.daemon.shutdown("test");
+        await harness.server.close();
+      }
+    },
+    INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS,
+  );
+
+  it(
     "retries interactive registration after retryable turn-start precondition responses",
     async () => {
       const dataDir = await makeTempDir("bb-host-daemon-interactive-provider-");

@@ -26,6 +26,7 @@ import {
   type HostDaemonInteractiveRequest,
   type HostDaemonServerWsMessage,
   type HostDaemonSessionOpenRequest,
+  type HostDaemonToolCallRequest,
   type HostDaemonTrackedThreadTarget,
 } from "@bb/host-daemon-contract";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
@@ -92,7 +93,13 @@ export interface CreateTestServerOptions {
   interactiveRequestFailures?: number;
   leaseTimeoutMs?: number;
   requireTurnStartedForInteractiveRequests?: boolean;
+  requireTurnStartedForToolCalls?: boolean;
   trackedThreadTargets?: HostDaemonTrackedThreadTarget[];
+}
+
+interface TurnStartedLookup {
+  threadId: string;
+  turnId: string;
 }
 
 export type TestServerRequestLogEntry =
@@ -103,6 +110,10 @@ export type TestServerRequestLogEntry =
   | {
       kind: "interactive-request";
       request: HostDaemonInteractiveRequest;
+    }
+  | {
+      kind: "tool-call";
+      request: HostDaemonToolCallRequest;
     };
 
 export interface TestServer {
@@ -205,15 +216,13 @@ export async function createTestServer(
     );
   }
 
-  function hasPostedTurnStarted(
-    request: HostDaemonInteractiveRequest,
-  ): boolean {
+  function hasPostedTurnStarted(args: TurnStartedLookup): boolean {
     return events.some(
       (event) =>
-        event.threadId === request.interaction.threadId &&
+        event.threadId === args.threadId &&
         event.event.type === "turn/started" &&
         event.event.scope.kind === "turn" &&
-        event.event.scope.turnId === request.interaction.turnId,
+        event.event.scope.turnId === args.turnId,
     );
   }
 
@@ -396,6 +405,30 @@ export async function createTestServer(
     if (rejectedResponse) {
       return rejectedResponse;
     }
+    requestLog.push({
+      kind: "tool-call",
+      request: payload,
+    });
+    if (
+      options.requireTurnStartedForToolCalls === true &&
+      !hasPostedTurnStarted({
+        threadId: payload.threadId,
+        turnId: payload.turnId,
+      })
+    ) {
+      return new Response(
+        JSON.stringify({
+          code: "turn_start_not_ready",
+          message:
+            "Turn start has not been stored yet; tool call was forwarded too early",
+          retryable: false,
+        }),
+        {
+          headers: { "content-type": "application/json" },
+          status: 503,
+        },
+      );
+    }
     toolCalls.push({
       sessionId: payload.sessionId,
       tool: payload.tool,
@@ -423,7 +456,10 @@ export async function createTestServer(
     });
     if (
       options.requireTurnStartedForInteractiveRequests === true &&
-      !hasPostedTurnStarted(payload)
+      !hasPostedTurnStarted({
+        threadId: payload.interaction.threadId,
+        turnId: payload.interaction.turnId,
+      })
     ) {
       return new Response(
         JSON.stringify({

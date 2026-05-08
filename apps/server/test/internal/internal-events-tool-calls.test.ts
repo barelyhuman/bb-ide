@@ -534,6 +534,58 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
+  it("rejects empty tool call turn ids at the internal contract boundary", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      const response = await harness.app.request(
+        "/internal/session/tool-call",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            threadId: managerThread.id,
+            providerThreadId: "provider-manager-empty-turn",
+            turnId: "",
+            callId: "call-empty-turn",
+            tool: "message_user",
+            arguments: {
+              text: "Need input from the user",
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, managerThread.id))
+          .all(),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("accepts message_user tool calls after the turn start is stored", async () => {
     const harness = await createTestAppHarness();
     try {

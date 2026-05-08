@@ -69,7 +69,12 @@ export type ProviderInteractiveResponse =
 export interface DecodedToolCallRequest {
   requestId: string | number;
   providerThreadId: string;
-  turnId: string;
+  /**
+   * Non-empty BB turn id when known. Use null as the canonical unresolved
+   * value so the runtime can resolve from the active turn; empty strings are
+   * malformed adapter output.
+   */
+  turnId: string | null;
   callId: string;
   tool: string;
   arguments?: unknown;
@@ -80,7 +85,12 @@ export interface DecodedInteractiveRequest {
   requestId: string | number;
   method: string;
   providerThreadId: string;
-  turnId: string;
+  /**
+   * Non-empty BB turn id when known. Use null as the canonical unresolved
+   * value so the runtime can resolve from the active turn; empty strings are
+   * malformed adapter output.
+   */
+  turnId: string | null;
   payload: PendingInteractionPayload;
   threadId?: string;
 }

@@ -386,7 +386,7 @@ function createForwardToolCall(threadId: string): ToolCallForwarder {
         params: {
           threadId,
           providerThreadId: threadId,
-          turnId: "",
+          turnId: null,
           callId: `call-${requestId}`,
           tool: toolName,
           arguments: args,

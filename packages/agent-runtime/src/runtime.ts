@@ -547,6 +547,7 @@ function createAgentRuntimeInternal(
       handleRuntimeProviderRequest({
         createCaptureId,
         emitCapture,
+        getActiveTurnId: (threadId) => turnState.getActiveTurnId(threadId),
         getThreadExecutionOptions: (threadId) =>
           threadRuntimeConfigs.get(threadId)?.options,
         line,

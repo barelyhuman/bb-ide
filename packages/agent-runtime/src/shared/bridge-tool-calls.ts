@@ -22,7 +22,7 @@ export interface BridgeToolCallRequest {
   params: {
     providerThreadId: string;
     threadId?: string;
-    turnId: string;
+    turnId: string | null;
     callId: string;
     tool: string;
     arguments: Record<string, unknown>;
