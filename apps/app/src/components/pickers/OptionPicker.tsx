@@ -55,6 +55,8 @@ interface OptionPickerProps<T extends string> {
   defaultOpen?: boolean;
   /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
   modal?: boolean;
+  /** How the menu aligns to the trigger. Defaults to "start". */
+  align?: "start" | "end" | "center";
 }
 
 export function OptionDisplay({
@@ -99,6 +101,7 @@ export function OptionPicker<T extends string>({
   muted,
   defaultOpen,
   modal,
+  align = "start",
 }: OptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedIsWarning = selectedOption?.tone === "warning";
@@ -143,7 +146,7 @@ export function OptionPicker<T extends string>({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="start"
+        align={align}
         className={cn("min-w-52 max-w-96", contentClassName)}
         mobileTitle={label}
       >

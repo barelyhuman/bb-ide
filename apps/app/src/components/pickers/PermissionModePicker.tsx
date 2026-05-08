@@ -44,6 +44,7 @@ export function PermissionModePicker({
       muted={muted}
       defaultOpen={defaultOpen}
       modal={modal}
+      align="end"
     />
   );
 }
