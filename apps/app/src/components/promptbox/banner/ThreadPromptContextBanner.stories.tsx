@@ -1,0 +1,369 @@
+import { useState } from "react";
+import type {
+  ThreadTimelinePendingTodos,
+  WorkspaceFileStatus,
+  WorkspaceStatus,
+} from "@bb/domain";
+import {
+  ThreadPromptContextBanner,
+  type ContextBannerMergeBaseConfig,
+  type ThreadPromptContextBannerExpandedSection,
+  type ThreadPromptManagedBySection,
+  type ThreadPromptManagerChildrenSection,
+} from "@/components/promptbox/banner/ThreadPromptContextBanner";
+import {
+  selectWorkspaceChangedFilesSection,
+  type WorkspaceChangedFilesSection,
+} from "@/components/workspace/workspace-change-summary";
+import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
+
+export default {
+  title: "promptbox/banner/Context Banner",
+};
+
+const noop = () => {};
+
+// Production max width matches PageShell's footer cap (760px). Without it the
+// banner stretches the full row width and the merge-base picker drifts far
+// right of the summary, which doesn't reflect production layout.
+function PromptStage({ children }: { children: React.ReactNode }) {
+  return <div className="w-full max-w-[760px]">{children}</div>;
+}
+
+const promptboxBannerFiles: WorkspaceFileStatus[] = [
+  {
+    path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx",
+    status: "M",
+  },
+  {
+    path: "apps/app/src/components/promptbox/banner/PromptStackCard.tsx",
+    status: "A",
+  },
+  {
+    path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx",
+    status: "A",
+  },
+  {
+    path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx",
+    status: "A",
+  },
+  {
+    path: "apps/app/src/views/ThreadDetailPromptArea.tsx",
+    status: "M",
+  },
+];
+
+const dirtyUncommittedStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "dirty_uncommitted",
+    hasUncommittedChanges: true,
+    files: promptboxBannerFiles,
+    insertions: 312,
+    deletions: 47,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: null,
+};
+
+const untrackedOnlyStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "untracked",
+    hasUncommittedChanges: false,
+    files: [
+      { path: "apps/app/notes/triage.md", status: "??" },
+      { path: "apps/app/scripts/dev-bb-sandbox.sh", status: "??" },
+    ],
+    insertions: 0,
+    deletions: 0,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: null,
+};
+
+const committedUnmergedStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "clean",
+    hasUncommittedChanges: false,
+    files: [],
+    insertions: 0,
+    deletions: 0,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: {
+    mergeBaseBranch: "main",
+    baseRef: "abc123",
+    aheadCount: 4,
+    behindCount: 0,
+    hasCommittedUnmergedChanges: true,
+    commits: [],
+    files: promptboxBannerFiles.slice(0, 3),
+    insertions: 128,
+    deletions: 24,
+  },
+};
+
+function sectionFor(status: WorkspaceStatus): WorkspaceChangedFilesSection {
+  const section = selectWorkspaceChangedFilesSection(status);
+  if (!section) throw new Error("fixture should produce a section");
+  return section;
+}
+
+const uncommittedSection = sectionFor(dirtyUncommittedStatus);
+const untrackedSection = sectionFor(untrackedOnlyStatus);
+const committedSection = sectionFor(committedUnmergedStatus);
+
+const featureBranchMergeBase: ContextBannerMergeBaseConfig = {
+  branch: "main",
+  options: ["main", "develop", "release/2026-05"] as const,
+  onChange: noop,
+};
+
+const pendingTodosFixture: ThreadTimelinePendingTodos = {
+  sourceSeq: 0,
+  updatedAt: 0,
+  items: [
+    {
+      id: "todo:1",
+      text: "Read the planning doc",
+      status: "completed",
+    },
+    {
+      id: "todo:2",
+      text: "Build initial banner shell",
+      status: "completed",
+    },
+    {
+      id: "todo:3",
+      text: "Wire pendingTodos from the timeline projection",
+      status: "in_progress",
+    },
+    {
+      id: "todo:4",
+      text: "Surface pendingTodos in `bb thread show` and `bb status`",
+      status: "pending",
+    },
+    {
+      id: "todo:5",
+      text: "Tighten GET /threads/:id with requirePublicProject",
+      status: "pending",
+    },
+  ],
+};
+
+const managedByFixture: ThreadPromptManagedBySection = {
+  managerName: "Manager",
+  href: "/projects/proj-1/threads/thr_mgr_demo",
+};
+
+const managerChildrenFixture: ThreadPromptManagerChildrenSection = {
+  items: [
+    {
+      id: "thr_a",
+      title: "Investigate Safari auth flake on staging",
+      href: "/projects/proj-1/threads/thr_a",
+    },
+    {
+      id: "thr_b",
+      title: "Review PR #4521 reviewer comments",
+      href: "/projects/proj-1/threads/thr_b",
+    },
+    {
+      id: "thr_c",
+      title: "Refactor email pipeline retry logic",
+      href: "/projects/proj-1/threads/thr_c",
+    },
+    {
+      id: "thr_d",
+      title: "Backfill workspace-status invalidation cache",
+      href: "/projects/proj-1/threads/thr_d",
+    },
+  ],
+};
+
+const managerChildrenLargeFixture: ThreadPromptManagerChildrenSection = {
+  items: Array.from({ length: 12 }, (_, i) => ({
+    id: `thr_large_${i}`,
+    title: `Managed work item ${i + 1} that is busy doing thing-${i}`,
+    href: `/projects/proj-1/threads/thr_large_${i}`,
+  })),
+};
+
+interface RowConfig {
+  section?: WorkspaceChangedFilesSection;
+  mergeBase?: ContextBannerMergeBaseConfig | null;
+  pendingTodos?: ThreadTimelinePendingTodos | null;
+  managedBy?: ThreadPromptManagedBySection | null;
+  managerChildren?: ThreadPromptManagerChildrenSection | null;
+  initiallyExpandedSection?: ThreadPromptContextBannerExpandedSection | null;
+}
+
+function Row({
+  section,
+  mergeBase = featureBranchMergeBase,
+  pendingTodos = null,
+  managedBy = null,
+  managerChildren = null,
+  initiallyExpandedSection = null,
+}: RowConfig) {
+  const [expandedSection, setExpandedSection] = useState<
+    ThreadPromptContextBannerExpandedSection | null
+  >(initiallyExpandedSection);
+  return (
+    <PromptStage>
+      <ThreadPromptContextBanner
+        todoSection={pendingTodos ? { pendingTodos } : null}
+        gitSection={
+          section
+            ? {
+                changedFiles: section,
+                mergeBase,
+                onPromptBannerFileClick: noop,
+              }
+            : null
+        }
+        managedBySection={managedBy}
+        managerChildrenSection={managerChildren}
+        expandedSection={expandedSection}
+        onToggleSection={(next) =>
+          setExpandedSection((previous) =>
+            previous === next ? null : next,
+          )
+        }
+      />
+    </PromptStage>
+  );
+}
+
+export function Overview() {
+  return (
+    <StoryCard>
+      <StoryRow
+        label="managed thread (collapsed)"
+        hint="icon-only segment; click to expand the explainer"
+      >
+        <Row managedBy={managedByFixture} mergeBase={null} />
+      </StoryRow>
+      <StoryRow
+        label="managed thread (expanded)"
+        hint="explainer text with the manager name as a link"
+      >
+        <Row
+          managedBy={managedByFixture}
+          mergeBase={null}
+          initiallyExpandedSection="managedBy"
+        />
+      </StoryRow>
+      <StoryRow
+        label="manager thread with active children (collapsed)"
+        hint="users-icon segment shows active count"
+      >
+        <Row managerChildren={managerChildrenFixture} mergeBase={null} />
+      </StoryRow>
+      <StoryRow
+        label="manager thread with active children (expanded)"
+        hint="list of children with status + pending-approval marker on item 2"
+      >
+        <Row
+          managerChildren={managerChildrenFixture}
+          mergeBase={null}
+          initiallyExpandedSection="managerChildren"
+        />
+      </StoryRow>
+      <StoryRow
+        label="manager thread with many children (scrollable)"
+        hint="max-h-40 caps the list; rest scrolls"
+      >
+        <Row
+          managerChildren={managerChildrenLargeFixture}
+          mergeBase={null}
+          initiallyExpandedSection="managerChildren"
+        />
+      </StoryRow>
+      <StoryRow
+        label="managed thread + todos + uncommitted"
+        hint="managed thread can have todos and a workspace; manager threads cannot"
+      >
+        <Row
+          section={uncommittedSection}
+          pendingTodos={pendingTodosFixture}
+          managedBy={managedByFixture}
+        />
+      </StoryRow>
+      <StoryRow
+        label="todos + uncommitted"
+        hint="both sections share one row; click either summary to expand its body"
+      >
+        <Row section={uncommittedSection} pendingTodos={pendingTodosFixture} />
+      </StoryRow>
+      <StoryRow
+        label="todos only (all 3 states, expanded)"
+        hint="completed / in-progress / pending shown checked, dotted, and outline"
+      >
+        <Row
+          pendingTodos={pendingTodosFixture}
+          mergeBase={null}
+          initiallyExpandedSection="todos"
+        />
+      </StoryRow>
+      <StoryRow
+        label="todos + uncommitted (todos expanded)"
+        hint="only one section can be expanded at a time"
+      >
+        <Row
+          section={uncommittedSection}
+          pendingTodos={pendingTodosFixture}
+          initiallyExpandedSection="todos"
+        />
+      </StoryRow>
+      <StoryRow
+        label="todos + uncommitted (git expanded)"
+        hint="clicking the git summary closes todos and opens the file list"
+      >
+        <Row
+          section={uncommittedSection}
+          pendingTodos={pendingTodosFixture}
+          initiallyExpandedSection="git"
+        />
+      </StoryRow>
+      <StoryRow
+        label="uncommitted (collapsed)"
+        hint="working tree has 5 modified/added files; chevron toggles WorkspaceChangesList"
+      >
+        <Row section={uncommittedSection} />
+      </StoryRow>
+      <StoryRow
+        label="uncommitted (expanded)"
+        hint="expanded change list visible inside the same card"
+      >
+        <Row section={uncommittedSection} initiallyExpandedSection="git" />
+      </StoryRow>
+      <StoryRow
+        label="untracked only"
+        hint='workingTree.state = "untracked" — no insertions/deletions tally'
+      >
+        <Row section={untrackedSection} initiallyExpandedSection="git" />
+      </StoryRow>
+      <StoryRow
+        label="committed unmerged"
+        hint="working tree clean; mergeBase has committed files"
+      >
+        <Row section={committedSection} />
+      </StoryRow>
+      <StoryRow
+        label="on default branch"
+        hint="mergeBase=null hides the picker (no comparison to make)"
+      >
+        <Row section={uncommittedSection} mergeBase={null} />
+      </StoryRow>
+    </StoryCard>
+  );
+}

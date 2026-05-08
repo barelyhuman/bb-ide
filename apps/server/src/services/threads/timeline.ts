@@ -76,6 +76,13 @@ interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
   includeNestedRows?: boolean;
   page: ThreadTimelinePageRequest;
+  /**
+   * When true, the response is built without rows (rows: []). The tail-only
+   * fields (`activeThinking`, `pendingTodos`, `contextWindowUsage`) are still
+   * populated. Saves the row-generation work + serialization bytes for
+   * consumers that only need tail state (e.g. `bb status` / `bb thread show`).
+   */
+  summaryOnly?: boolean;
   timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
@@ -763,6 +770,7 @@ function buildThreadTimelineInternal(
   const commonProjectionOptions = {
     includeDebugRawEvents: false,
     includeProviderUnhandledOperations,
+    isLatestPage: options.page.kind === "latest",
     systemClientRequestVisibility,
     threadStatus: thread.status,
   };
@@ -806,9 +814,13 @@ function buildThreadTimelineInternal(
   }
 
   const response: ThreadTimelineResponse = {
-    rows: paginatedTimeline.rows,
+    rows: options.summaryOnly ? [] : paginatedTimeline.rows,
     activeThinking:
       options.page.kind === "latest" ? timeline.activeThinking : null,
+    // pendingTodos is gated inside the projection via `isLatestPage` so the
+    // extraction work is skipped on older-page requests entirely; no
+    // post-hoc null-out needed here.
+    pendingTodos: timeline.pendingTodos,
     contextWindowUsage:
       options.page.kind === "latest"
         ? (timeline.contextWindowUsage ?? undefined)

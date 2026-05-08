@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@bb/domain": "workspace:*",
-    "@bb/server-contract": "workspace:*"
+    "@bb/server-contract": "workspace:*",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

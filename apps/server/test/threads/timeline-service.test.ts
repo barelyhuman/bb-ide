@@ -1686,6 +1686,133 @@ describe("buildThreadTimeline", () => {
     expect(timeline.activeThinking).toBeNull();
   });
 
+  it("forwards pendingTodos from latest TodoWrite for active threads, hides on manager-conversation view", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "todo-call-1",
+          tool: "TodoWrite",
+          arguments: {
+            todos: [
+              { content: "Investigate bug", status: "in_progress" },
+              { content: "Write fix", status: "pending" },
+            ],
+          },
+          status: "completed",
+        },
+      },
+    });
+
+    const latestTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    expect(latestTimeline.pendingTodos).toMatchObject({
+      sourceSeq: 2,
+      items: [
+        { text: "Investigate bug", status: "in_progress" },
+        { text: "Write fix", status: "pending" },
+      ],
+    });
+
+    const managerConversationTimeline = buildManagerConversationTimeline(
+      harness.db,
+      thread,
+      { isDevelopment: true },
+    );
+    expect(managerConversationTimeline.pendingTodos).toBeNull();
+  });
+
+  // older-page nulling of `pendingTodos` is a single ternary in timeline.ts
+  // and the equivalent activeThinking branch is already covered indirectly by
+  // the existing pagination tests. The projection-level "active turn only"
+  // gate is unit-tested in @bb/thread-view's todo-snapshot-extraction.test.ts.
+
+  it("hides pendingTodos when the thread is not active", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "todo-call-1",
+          tool: "TodoWrite",
+          arguments: {
+            todos: [{ content: "stale", status: "in_progress" }],
+          },
+          status: "completed",
+        },
+      },
+    });
+
+    const idleTimeline = buildThreadTimeline(
+      harness.db,
+      { ...thread, status: "idle" },
+      { isDevelopment: true },
+    );
+    expect(idleTimeline.pendingTodos).toBeNull();
+
+    const errorTimeline = buildThreadTimeline(
+      harness.db,
+      { ...thread, status: "error" },
+      { isDevelopment: true },
+    );
+    expect(errorTimeline.pendingTodos).toBeNull();
+  });
+
   it("does not attach visible reasoning details from a different open reasoning item", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

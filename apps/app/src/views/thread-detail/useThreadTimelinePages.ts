@@ -19,6 +19,7 @@ interface UseThreadTimelinePagesResult {
   hasOlderTimelineRows: boolean;
   isLoadingOlderTimelineRows: boolean;
   loadOlderTimelineRows: () => Promise<void>;
+  pendingTodos: ThreadTimelineResponse["pendingTodos"];
   timelineError: Error | null;
   timelineLoading: boolean;
   timelineRows: TimelineRow[];
@@ -340,6 +341,7 @@ export function useThreadTimelinePages({
     hasOlderTimelineRows,
     isLoadingOlderTimelineRows,
     loadOlderTimelineRows,
+    pendingTodos: latestTimeline?.pendingTodos ?? null,
     timelineError: latestTimelineQuery.error,
     timelineLoading: latestTimelineQuery.isLoading,
     timelineRows:

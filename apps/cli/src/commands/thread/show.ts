@@ -8,6 +8,7 @@ import {
   type Thread,
   type ThreadEventRow,
   type ThreadGitDiffResponse,
+  type ThreadTimelinePendingTodos,
   type WorkspaceStatus,
 } from "@bb/domain";
 import type {
@@ -27,6 +28,10 @@ import {
   printEnvironmentInfo,
 } from "../environment-helpers.js";
 import { statusText } from "./helpers.js";
+import {
+  fetchThreadPendingTodos,
+  printPendingTodos,
+} from "./pending-todos.js";
 
 interface ThreadShowCommandOptions {
   self?: boolean;
@@ -57,6 +62,7 @@ interface ThreadStatusPayload {
 
 interface ThreadShowJsonPayload extends ThreadStatusPayload {
   environment: Environment | null;
+  pendingTodos: ThreadTimelinePendingTodos | null;
   workStatus?: WorkspaceStatus | null;
   gitDiff?: ThreadGitDiffResponse;
   mergeBaseBranches?: string[];
@@ -225,10 +231,16 @@ export function registerShowCommand(
             })
           : null;
 
+        const pendingTodos = await fetchThreadPendingTodos({
+          client,
+          threadId,
+        });
+
         if (opts.json) {
           const jsonPayload: ThreadShowJsonPayload = {
             ...statusPayload,
             environment: await getEnvironment(),
+            pendingTodos,
           };
           if (fetchedWorkStatus !== undefined) {
             jsonPayload.workStatus = fetchedWorkStatus.available
@@ -246,6 +258,8 @@ export function registerShowCommand(
         }
 
         printThreadStatus(statusPayload, environmentInfo);
+
+        printPendingTodos(pendingTodos);
 
         if (fetchedWorkStatus !== undefined) {
           if (fetchedWorkStatus.available) {

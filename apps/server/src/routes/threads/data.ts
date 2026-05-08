@@ -183,6 +183,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         }),
         includeNestedRows: query.includeNestedRows === "true",
         page: parseThreadTimelinePage(query, thread),
+        summaryOnly: query.summaryOnly === "true",
       }),
     );
   });

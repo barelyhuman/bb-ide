@@ -479,8 +479,6 @@ export function ThreadDetailPromptArea({
     [openDiffFile],
   );
 
-
-
   if (activePendingInteraction) {
     return (
       <ThreadPendingInteractionBanner

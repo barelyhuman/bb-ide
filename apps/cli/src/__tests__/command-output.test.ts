@@ -70,6 +70,16 @@ function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
   };
 }
 
+/**
+ * Mock for the `GET /threads/:id/timeline` endpoint used by `bb thread show`
+ * and `bb status` to read `pendingTodos`. Tests should add this alongside
+ * their `:id.$get` mock so contract drift on the timeline lane fails loudly
+ * instead of silently degrading to `pendingTodos: null`.
+ */
+function makeEmptyTimelineGetMock() {
+  return vi.fn(async () => makeTimelineResponse([]));
+}
+
 function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
   return {
     rows,
@@ -2341,6 +2351,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     });
     const get = vi.fn(async () => thread);
+    const timelineGet = makeEmptyTimelineGetMock();
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -2348,6 +2359,7 @@ describe("CLI command output contracts", () => {
             threads: {
               ":id": {
                 $get: get,
+                timeline: { $get: timelineGet },
               },
             },
           },
@@ -2361,6 +2373,10 @@ describe("CLI command output contracts", () => {
 
     expect(get).toHaveBeenCalledWith({
       param: { id: "thread-archived-1" },
+    });
+    expect(timelineGet).toHaveBeenCalledWith({
+      param: { id: "thread-archived-1" },
+      query: { summaryOnly: "true" },
     });
     const lines = collectLogLines(vi.mocked(console.log));
     expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
@@ -2378,6 +2394,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     });
     const get = vi.fn(async () => thread);
+    const timelineGet = makeEmptyTimelineGetMock();
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -2385,6 +2402,7 @@ describe("CLI command output contracts", () => {
             threads: {
               ":id": {
                 $get: get,
+                timeline: { $get: timelineGet },
               },
             },
           },
@@ -2457,6 +2475,7 @@ describe("CLI JSON output contracts", () => {
       updatedAt: 2,
     });
     const get = vi.fn(async () => thread);
+    const timelineGet = makeEmptyTimelineGetMock();
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -2464,6 +2483,7 @@ describe("CLI JSON output contracts", () => {
             threads: {
               ":id": {
                 $get: get,
+                timeline: { $get: timelineGet },
               },
             },
           },

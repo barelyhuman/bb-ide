@@ -604,6 +604,14 @@ export const threadTimelineQuerySchema = z
     segmentLimit: z.string().regex(/^\d+$/),
     beforeAnchorSeq: z.string().regex(/^[1-9]\d*$/),
     beforeAnchorId: z.string().min(1),
+    /**
+     * When `"true"`, the response omits row generation and returns
+     * `rows: []` with the tail-only fields (`activeThinking`, `pendingTodos`,
+     * `contextWindowUsage`) populated normally. Used by the CLI to read
+     * tail state without paying for the full row payload on every
+     * `bb status` invocation. Implies `latest` page semantics.
+     */
+    summaryOnly: z.enum(["true", "false"]),
   })
   .partial()
   .superRefine((query, context) => {

@@ -1068,6 +1068,7 @@ export function renderTimelineFixture(
       args.projectionOptions.includeDebugRawEvents ?? false,
     includeProviderUnhandledOperations:
       args.projectionOptions.includeProviderUnhandledOperations ?? false,
+    isLatestPage: true,
     systemClientRequestVisibility:
       args.projectionOptions.systemClientRequestVisibility,
     threadStatus: args.projectionOptions.threadStatus ?? "idle",

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { Thread } from "@bb/domain";
+import type { Thread, ThreadTimelinePendingTodos } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { action } from "../action.js";
 import { resolveContextSnapshot } from "../context-env.js";
@@ -10,6 +10,10 @@ import {
   fetchEnvironmentInfo,
   printEnvironmentInfo,
 } from "./environment-helpers.js";
+import {
+  fetchThreadPendingTodos,
+  printPendingTodos,
+} from "./thread/pending-todos.js";
 
 interface StatusPayload {
   project: { id: string; name: string } | null;
@@ -26,6 +30,7 @@ interface StatusPayload {
     status: string;
     title: string | null;
   }> | null;
+  pendingTodos: ThreadTimelinePendingTodos | null;
 }
 
 interface StatusCommandOptions {
@@ -99,6 +104,7 @@ export function registerStatusCommand(
           project: null,
           thread: null,
           managedThreads: null,
+          pendingTodos: null,
         };
 
         let serverAvailable = false;
@@ -132,6 +138,11 @@ export function registerStatusCommand(
                 environmentId: threadResult.environmentId,
               });
             }
+
+            payload.pendingTodos = await fetchThreadPendingTodos({
+              client,
+              threadId: threadResult.id,
+            });
 
             payload.thread = {
               id: threadResult.id,
@@ -199,6 +210,8 @@ export function registerStatusCommand(
               console.log(`  ${mt.id}  ${mt.status}  ${title}`);
             }
           }
+
+          printPendingTodos(payload.pendingTodos);
         } else if (context.threadId) {
           console.log(`Thread: ${context.threadId}`);
         } else {

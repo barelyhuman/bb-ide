@@ -18,6 +18,7 @@ import type {
   Thread,
   ThreadEventItemType,
   ThreadEventType,
+  ThreadTimelinePendingTodos,
 } from "@bb/domain";
 import type {
   EventProjectionFileEditChange,
@@ -52,6 +53,7 @@ import {
   type CompletedTurnSummaryItem,
 } from "./completed-turn-grouping.js";
 import { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
+import { extractThreadTimelinePendingTodos } from "./todo-snapshot-extraction.js";
 
 export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
@@ -86,6 +88,13 @@ export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
 interface ThreadTimelineFromEventsBaseOptions {
   includeDebugRawEvents: boolean;
   includeProviderUnhandledOperations: boolean;
+  /**
+   * Tail-only state (`pendingTodos`) is only meaningful on the latest page —
+   * the snapshot describes current head state, not historical state. Caller
+   * passes false on older-page requests so the projection can skip the
+   * extraction work entirely instead of computing it and discarding.
+   */
+  isLatestPage: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
 }
@@ -113,6 +122,7 @@ export interface BuildThreadTimelineFromEventsArgs {
 export interface ThreadTimelineFromEventsResult {
   activeThinking: ActiveThinking | null;
   contextWindowUsage: ThreadContextWindowUsage | null;
+  pendingTodos: ThreadTimelinePendingTodos | null;
   rows: TimelineRow[];
 }
 
@@ -1009,6 +1019,14 @@ export function buildThreadTimelineFromEvents(
     contextWindowUsage: extractThreadContextWindowUsage(
       args.contextWindowEvents,
     ),
+    pendingTodos:
+      args.options.viewMode === "manager-conversation" ||
+      !args.options.isLatestPage
+        ? null
+        : extractThreadTimelinePendingTodos(
+            args.options.threadStatus,
+            args.events,
+          ),
     rows,
   };
 }

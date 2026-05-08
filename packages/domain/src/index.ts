@@ -452,6 +452,17 @@ export { activeThinkingSchema } from "./active-thinking.js";
 export type { ActiveThinking } from "./active-thinking.js";
 
 export {
+  threadTimelinePendingTodoItemSchema,
+  threadTimelinePendingTodoItemStatusSchema,
+  threadTimelinePendingTodosSchema,
+} from "./thread-timeline-pending-todos.js";
+export type {
+  ThreadTimelinePendingTodoItem,
+  ThreadTimelinePendingTodoItemStatus,
+  ThreadTimelinePendingTodos,
+} from "./thread-timeline-pending-todos.js";
+
+export {
   REALTIME_ENTITIES,
   THREAD_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,

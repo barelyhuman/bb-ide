@@ -1,6 +1,36 @@
 # Thread Prompt Context Banner Plan
 
-Status: revised draft for Michael review. Do not implement UI or code changes until sign-off.
+Status: TODO lane shipped (UI + projection + server + CLI). Manager / managed-by / bulk-stop slices still pending. See "Shipped" section below.
+
+## Shipped
+
+- TODO lane end-to-end:
+  - Domain types in `packages/domain/src/thread-timeline-pending-todos.ts`.
+  - Parser + projection in `packages/thread-view/src/todo-snapshot-extraction.ts` — gates on `threadStatus === "active"`, like activeThinking.
+  - Timeline projection extension in `packages/thread-view/src/build-thread-timeline.ts`.
+  - Server contract field on `threadTimelineResponseSchema` in `packages/server-contract/src/api-types.ts`.
+  - Server route forwarding in `apps/server/src/services/threads/timeline.ts` (latest page only).
+  - Banner UI in `apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx` (replaces the old `ContextBanner`).
+  - `bb thread show` and `bb status` render a TODOs section.
+  - Projection tests in `packages/thread-view/test/todo-snapshot-extraction.test.ts`. Validated against 280 real TodoWrite arg payloads + 671 turn/plan/updated events from the dev DB — 100% parse rate.
+- Managed-by + manager-children banner sections (read-only):
+  - Banner-local types `ThreadPromptManagedBySection` and `ThreadPromptManagerChildrenSection` (banner view-model; not domain contracts).
+  - Managed-by segment: icon-only `[UserRound]` toggle (matches sidebar manager icon). Expanded body reads "This thread is managed by &lt;managerName&gt;." with the manager name as a NavLink to the manager thread.
+  - Manager-children segment: L-shape leading icon (`ChevronDown` rotated 45°, mirrors sidebar `ManagedChildChevron`) + `N active` label. Expanded body is a list of children rendered as NavLinks with hover-underline (matching `WorkspaceChangesList`/`FilePathLink` style). Per-row status text and pending-interaction marker were trimmed from the first cut.
+  - Mutex expansion extended: `ThreadPromptContextBannerExpandedSection` now includes `"managedBy"` and `"managerChildren"`.
+  - Wiring: `ThreadDetailView` derives both sections — managed-by from the existing `useThread(parentThreadId)` query, manager-children from `useThreads({ projectId, archived: false, parentThreadId: thread.id })` with `enabled: isManagerThread`. Active predicate filters `runtime.displayStatus ∈ {active, host-reconnecting, waiting-for-host}` and `archivedAt === null`. The predicate is inlined for now; promote to a published constant (`THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES`) when the bulk-stop slice lands.
+  - `ThreadDetailPromptArea` is enforced to never render TODO or git for manager threads (`thread.type === "manager"` short-circuits `todoSection`; `gitSection` was already gated on `canUseGitUi`).
+- Banner architecture:
+  - Single `PromptStackCard` with inline TODO + git toggles; merge-base picker pinned right via `ml-auto`.
+  - Mutual exclusion: only one section expanded at a time, `expandedSection` state lifted to the banner caller.
+  - Animated body via grid-rows transition; both bodies stay in DOM, only the expanded one is interactive.
+- Decisions signed off (TODO lane only):
+  - Decision 3 — failed plan steps dropped; failed not in TodoWrite at all; item status is `pending | in_progress | completed`.
+  - Decision 4 — ephemeral expansion state.
+  - Decision 6 — CLI surfaces in both `bb thread show` and `bb status`.
+  - Decision 9 — step text only; no plan explanation.
+
+Open: manager work section, managed-by section, bulk-stop route, project thread-list invalidation parity, lifecycle-gating tightening on `GET /threads/:id`, exit criteria coverage for non-TODO scenarios.
 
 ## Goal
 
@@ -15,34 +45,39 @@ The banner should adapt by thread context:
 
 ## Product Decisions For Michael
 
-Implementation should not start until Michael signs off on these first-pass product choices. The recommendations below are treated as planning assumptions in the rest of this document.
+TODO-related decisions are signed off (3, 4, 6, 9). The rest are still open and apply to the manager / managed-by slices.
 
 1. Should clean up-to-date regular threads show a banner?
    - Recommendation: no. Keep the surface high-signal.
+   - **Open**.
 
 2. Should errored managed child threads appear in the banner's managed-work section?
    - Recommendation: no. The banner answers "what is the manager waiting on?" An errored child has already finished waiting, and mixing non-stoppable error states with stoppable active work makes `Stop all` ambiguous. Surface errored work elsewhere if needed.
+   - **Open**.
 
 3. Should failed plan steps appear in the TODO section?
-   - Recommendation: no for the first pass. Treat failed work as a separate future signal if needed.
+   - **Signed off: no.** TodoWrite has no `failed` status (only `pending|in_progress|completed`); plan-step `failed` is dropped at the parser boundary. Item status on the public contract is `pending | in_progress | completed`.
 
 4. Should TODO expansion persist across visits?
-   - Recommendation: no. Start with local per-thread state that resets on thread change.
+   - **Signed off: no.** Local component state, ephemeral.
 
 5. Should manager threads with no active children show `No active managed threads`?
    - Recommendation: no. Hide the section unless it has signal.
+   - **Open**.
 
 6. Should the CLI adopt the new banner data sources (timeline `pendingTodos` and managed-children derivation) now?
-   - Recommendation: no. Keep this first pass app-focused and avoid widening the scope.
+   - **Signed off: yes for TODO.** Surfaced in both `bb thread show` and `bb status`. Managed-children CLI surfacing is still scoped to the manager slice.
 
 7. If merge-base ahead/behind counts exist but committed file stats are missing or empty, should the banner still show branch divergence?
    - Recommendation: yes. Show textual branch divergence and omit expansion.
+   - **Open**.
 
 8. If the cached project thread list is unavailable, should the banner show a general error?
    - Recommendation: no by default. Preserve managed-by fallback when `thread.parentThreadId` is known, omit uncertain manager-work sections, and keep the composer usable. TODO failures piggyback on the existing timeline query and follow timeline error semantics.
+   - **Open**.
 
 9. Should a `turn/plan/updated` explanation or plan-level label appear in the TODO banner?
-   - Recommendation: no for the first pass. Show step text only unless the explanation is short and clearly useful; revisit after seeing real provider plan snapshots.
+   - **Signed off: no.** Step text only.
 
 ## Existing Locations And Data Sources
 
@@ -143,21 +178,25 @@ type ThreadTimelineFromEventsResult = {
 };
 
 type ThreadTimelinePendingTodos =
-  | { kind: "unparseable"; latestCandidateSeq: number; latestCandidateSource: "todoWrite" | "turnPlan" }
+  | { kind: "unparseable"; latestCandidateSeq: number }
   | {
       kind: "observed";
-      source: "todoWrite" | "turnPlan";
       sourceSeq: number;
       updatedAt: number;
       items: ThreadTimelinePendingTodoItem[];
     };
 
 type ThreadTimelinePendingTodoItem = {
-  id: string;
+  id: string; // `seq:<seq>:<index>` — sourceSeq is unique per thread, so no source prefix needed
   text: string;
-  status: "pending" | "in_progress";
+  status: "pending" | "in_progress" | "completed";
 };
 ```
+
+Notes on the shipped contract:
+
+- The provider-source field (`todoWrite` / `turnPlan`) is intentionally not exposed. Snapshot consumers should not branch on which provider tool emitted the snapshot. The extractor tracks source internally only.
+- Item status carries `completed` so the expanded UI can render the full TODO list (with completed items shown checked off and de-emphasized). The summary count and the visibility predicate both filter to active items only — completed-only snapshots hide the section.
 
 Proposed bulk-stop contract:
 
@@ -200,10 +239,12 @@ Notes:
 
 - Use zod schemas as the source of truth, exported from shared packages.
 - The banner-visible managed-children set and the bulk-stop targets are the same set, derived from `runtime.displayStatus` (combined with `archivedAt === null`). There is no `stoppableCount` field; the count is `items.length` on the client.
-- `pendingTodos: null` mirrors `activeThinking: null` semantics: it is the response shape for older timeline pages or for a thread where no TODO/plan candidate was observed by the projection. The UI hides the TODO section in either case.
+- `pendingTodos: null` mirrors `activeThinking: null` semantics. The projection emits `null` when (a) the timeline page is not `latest`, (b) no TODO/plan candidate was observed, or (c) **the thread is not currently running an active turn** (`threadStatus !== "active"`). The TODO snapshot is treated like activeThinking — only meaningful while a turn is in flight, so an idle/errored/provisioning thread shows no banner regardless of what the last TodoWrite said.
 - `pendingTodos.kind === "unparseable"` means one or more TODO/plan candidates were observed by the projection but none could be converted into a valid snapshot. The server should log or meter this.
-- `pendingTodos.kind === "observed"` with `items: []` means the latest valid snapshot exists and has no pending or in-progress items.
+- `pendingTodos.kind === "observed"` with `items: []` means the latest valid snapshot exists and has no items at all.
+- An all-completed snapshot during an active turn is still rendered. The banner does not collapse the moment the last item flips to completed; it stays visible until the turn ends (which then triggers the active-status gate above and removes the section).
 - Do not expose `unknown` to the app. Parse `TodoWrite` arguments at the projection boundary with a zod-backed helper exported from `@bb/thread-view`.
+- `@bb/thread-view` now depends on `zod` directly to back this parser.
 
 ## Data Semantics
 
@@ -296,9 +337,11 @@ Ownership:
 - The projection produces a typed `ThreadTimelinePendingTodos | null` result; the server timeline route forwards it on `latest` page requests.
 - The app receives only the typed contract on the existing timeline response.
 
-Tail-only semantics:
+Tail-only + active-turn semantics:
 
 - `pendingTodos` is returned only when the timeline page is `latest`, mirroring `activeThinking`. Older pages return `pendingTodos: null` because the snapshot describes the current head state, not historical state.
+- The projection also returns `null` when `threadStatus !== "active"`. A TODO snapshot only describes work-in-flight; once the turn ends the snapshot is stale, so we don't surface it. This mirrors how activeThinking disappears the moment the turn finishes.
+- The projection function signature is `extractThreadTimelinePendingTodos(threadStatus, events)` — threadStatus comes first because it's the primary gate.
 - The projection already bounds work via existing timeline construction and pagination; no new candidate-row constant is needed.
 
 Suppression and projection:
@@ -312,16 +355,16 @@ Parser introduction:
 - Back that helper with zod schemas such as `todoWriteArgsSchema` and `todoWriteTodoSchema`.
 - Do not reintroduce defensive parsing helpers like `toRecord`/`asString` for TodoWrite arguments — the zod schema must own that boundary.
 - Keep the helper tolerant at the provider boundary, but return a strongly typed internal result. Invalid entries and invalid statuses should be dropped from the snapshot rather than passed through.
-- Keep `ParsedTodoWriteArgs` and `ParsedTodoWriteTodo` internal to `@bb/thread-view`; the app-facing and server-contract shape remains `ThreadTimelinePendingTodos`, which hides completed/failed entries and provider-specific parser details.
-- Define a text cap such as `THREAD_TIMELINE_PENDING_TODO_TEXT_MAX_LENGTH = 240`.
+- Keep `ParsedTodoWriteArgs` and `ParsedTodoWriteTodo` internal to `@bb/thread-view`; the app-facing and server-contract shape remains `ThreadTimelinePendingTodos`, which hides provider-source details. Completed items are kept on the public contract; only the summary/visibility predicates filter to active items.
+- Define a text cap of 240 characters.
 - At the parser boundary, trim TODO content and plan-step text, drop items whose text is empty after trim, and truncate accepted text to the cap before returning typed projection data.
 
-Proposed parser shape:
+Shipped parser shape:
 
 ```ts
 type ParsedTodoWriteTodo = {
-  content: string | null;
-  status: "pending" | "in_progress" | "completed" | "failed";
+  content: string;
+  status: "pending" | "in_progress" | "completed";
   activeForm: string | null;
 };
 
@@ -329,6 +372,8 @@ type ParsedTodoWriteArgs = {
   todos: ParsedTodoWriteTodo[];
 };
 ```
+
+`failed` is intentionally not in the parser status set — TodoWrite never emits it. The plan-step parser handles `turn/plan/updated` separately and drops `failed` plan steps before they reach the snapshot.
 
 Snapshot selection within the projection:
 
@@ -345,14 +390,14 @@ Snapshot selection within the projection:
 
 Mapping:
 
-- `TodoWrite.status === "in_progress"` maps to `in_progress`.
-- `TodoWrite.status === "pending"` or missing status maps to `pending`.
-- Invalid explicit `TodoWrite.status` values are parser-boundary failures for that item and must not surface as `unknown`.
+- `TodoWrite.status` ∈ `{pending, in_progress, completed}` maps through unchanged.
+- Unknown / invalid `TodoWrite.status` values cause the whole arg parse to fail at the zod boundary; the candidate is recorded as unparseable rather than coerced.
 - For `turn/plan/updated`, iterate `event.plan` and map each step independently.
 - `step.status === "active"` maps to `in_progress`.
 - `step.status === "pending"` or missing status maps to `pending`.
-- Completed items are excluded from the banner.
-- Failed plan steps should not be included in this first pass unless Michael wants failed work treated as a separate high-signal state.
+- `step.status === "completed"` maps to `completed`.
+- `step.status === "failed"` causes the step to be dropped (not included in the snapshot).
+- Empty step text (after trim) is dropped.
 
 Empty snapshot semantics:
 
@@ -362,7 +407,7 @@ Empty snapshot semantics:
 
 Stable IDs:
 
-- Since provider TODO items do not carry stable IDs, use a projection-generated ID derived from source kind, source sequence, and item index, such as `seq:<source>:<sourceSeq>:<index>`.
+- Provider TODO items don't carry stable IDs. Shipped format is `seq:<sourceSeq>:<index>` (no source prefix — `sourceSeq` is unique per thread, so the prefix was redundant).
 
 ## UI Structure
 
@@ -389,38 +434,47 @@ UI consistency constraints:
 - Whichever disclosure primitive is chosen must satisfy the accessibility contract below (real button, `aria-expanded`, `aria-controls`, named region). Do not ship a banner-local disclosure primitive that diverges from the rest of the app.
 - Do not nest UI cards inside the banner.
 
-Banner layout:
+Banner layout (shipped):
 
-- Single rounded strip above queued follow-ups and the prompt box.
-- Sections render as compact rows within the same strip:
-  - Managed ownership or manager work summary.
-  - Git/workspace summary.
-  - TODO summary.
-- Expanded content appears inside the same strip below its summary row.
-- Preserve the current changed-file expansion behavior, but route it through the new banner model.
+- Single rounded `PromptStackCard` above queued follow-ups and the prompt box.
+- One inline row of compact section toggles. Each toggle: `[icon] [count/summary] [chevron]`.
+- The merge-base picker is pinned to the right via `ml-auto`, separated from the toggles by flexible whitespace.
+- Only one section can be expanded at a time. Caller owns `expandedSection: "todos" | "git" | null` state and a single `onToggleSection(section)` callback.
+- The expanded body renders below the summary row and animates in/out via a grid-rows transition (~200ms, opacity + border-color also transition).
+- Both bodies stay in DOM; the inactive one is `aria-hidden`, has `pointer-events-none`, and grid-rows: 0fr.
 
-Recommended section order:
+Collapsed TODO toggle (shipped):
 
-1. Management context: shown managed work or managed-by notice.
-2. Git context: workspace or branch state.
-3. TODO context: pending work from the latest TODO snapshot.
+- Icon: `ListTodo` (lucide).
+- Summary (no "TODOs" word — the icon labels the section):
+  - `N` when nothing is completed yet (where N = active count).
+  - `M/N` when some are completed (M = completed, N = total).
+- Section is hidden entirely when no snapshot is in scope — i.e. when the thread is idle/errored/etc. (the projection returned null) or when no candidate has ever been observed. While the turn is active and at least one item exists, the section stays visible even if every item is completed (renders as `M/M`).
+- Expansion state is component-local; do not persist.
 
-Collapsed TODO behavior:
+Expanded TODO body (shipped):
 
-- Default collapsed on thread load.
-- Summary examples:
-  - `3 TODOs - 1 in progress, 2 pending`
-  - `TODO in progress: Update prompt banner model`
-- Expanded list shows each pending or in-progress item with a small status pill.
-- Expansion state should be local component state keyed by `thread.id`; do not persist until there is evidence users need persistence.
-- Expanded TODO list max height should be quantified, for example `max-h-32`, then scroll.
+- Items sorted: `in_progress` → `pending` → `completed`.
+- Per-item leading icon (lucide):
+  - `in_progress`: `Square` with translucent fill (`fill="currentColor"`, color `text-muted-foreground/30`).
+  - `pending`: `Square` outline at `text-muted-foreground/45`.
+  - `completed`: `Check` at `text-muted-foreground/60` plus `line-through` on the text.
+- `max-h-40 overflow-y-auto` on the list.
+- The `Doing` / `Todo` pills from earlier drafts are dropped — bullets carry the state.
 
-Git expanded behavior:
+Collapsed git toggle (shipped):
 
-- Keep file list collapsed by default when a file list exists.
-- Clean ahead/behind/diverged states have no file-list expansion unless `mergeBase.files.length > 0`.
-- Git summary remains clickable to open the diff panel when `canUseGitUi` is true.
-- The merge-base picker stays in the git row when branch comparison is available.
+- Icon: `FileDiff` (lucide).
+- Summary text:
+  - When TODO is also rendering: `5 files · +312 -47` (kind prefix dropped to keep the row compact).
+  - When TODO is not rendering: `Uncommitted · 5 files · +312 -47` (kind prefix retained).
+- The "click summary → diff panel" implicit shortcut from the old banner was removed — the toggle is just a toggle. If the diff panel needs a banner-level affordance, add an explicit button rather than overloading the click target.
+- Git toggle has no chevron when `changedFiles.files.length === 0` (clean ahead/behind only).
+- Merge-base picker stays in the row, right-aligned via `ml-auto`.
+
+Toggle expanded-state coloring:
+
+- When a toggle is expanded, its text + icon switch from `text-muted-foreground` to `text-foreground/90`. Icons inherit currentColor — do not hardcode icon colors on toggle icons.
 
 Managed work expanded behavior:
 
@@ -560,20 +614,23 @@ API:
 - Tighten existing `GET /api/v1/threads/:id` in the same backend slice to require `requirePublicProject(thread.projectId)` after `requirePublicThread`. Today the route returns threads whose project is pending-delete; matching the bulk-stop route's lifecycle gating closes that inconsistency.
 - No new GET route is added for the banner. Manager and managed-child data come from the existing project thread list and parent-thread queries.
 
-CLI:
+CLI (shipped for TODO lane):
 
-- No required CLI change for the first implementation.
-- Existing `bb status` and `bb manager` commands already show basic parent/managed thread information.
-- Future CLI enhancement could use the timeline route's `pendingTodos` field, but that is a separate product decision.
+- `bb thread show` fetches the latest timeline page and renders a `TODOs (M/N done):` section with `[>]` / `[ ]` / `[x]` bullets. JSON output includes `pendingTodos` on the payload.
+- `bb status` does the same for the resolved thread.
+- The fetch is best-effort: a timeline error returns null and the section is silently omitted, so the rest of the command output stays useful.
+- Shared helper at `apps/cli/src/commands/thread/pending-todos.ts` is reused by both commands.
+- Manager / managed-children CLI surfacing is out of scope for this slice.
 
 ## Implementation Slices After Sign-Off
 
-1. Timeline projection: pending TODOs
-   - Add `ThreadTimelinePendingTodos` and `ThreadTimelinePendingTodoItem` domain schemas/types.
-   - Add a canonical exported zod-backed `parseTodoWriteTodos` helper in `@bb/thread-view` (no prior parser to replace; introduce fresh).
-   - Extend the timeline projection (`@bb/thread-view`) to track the latest valid TODO snapshot and emit `pendingTodos` on `ThreadTimelineFromEventsResult`.
-   - Extend `threadTimelineResponseSchema` in `packages/server-contract/src/api-types.ts` and the server timeline service to forward `pendingTodos` on `latest` page requests; older pages return `null`.
-   - Add projection tests for: no candidate observed (`null`), only `TodoWrite` snapshots (newest wins), only `turn/plan/updated` snapshots (newest wins), mixed `TodoWrite` and `turn/plan/updated` (newest by sequence wins), unparseable candidates, observed-empty snapshots, interrupted-turn snapshots, orphaned `TodoWrite` snapshots, completed-only items, suppressed tool-call rows still observed by projection.
+1. ✅ Timeline projection: pending TODOs (shipped)
+   - Domain schemas/types in `packages/domain/src/thread-timeline-pending-todos.ts`.
+   - Zod-backed `parseTodoWriteTodos` + plan-step parser in `packages/thread-view/src/todo-snapshot-extraction.ts`.
+   - Projection extension in `packages/thread-view/src/build-thread-timeline.ts`, emits `pendingTodos` on `ThreadTimelineFromEventsResult` (null for manager-conversation view).
+   - `threadTimelineResponseSchema.pendingTodos` shipped in `packages/server-contract/src/api-types.ts`.
+   - Server route forwarding in `apps/server/src/services/threads/timeline.ts` — `latest` only, `null` on older pages.
+   - Tests in `packages/thread-view/test/todo-snapshot-extraction.test.ts`. Bonus: also surfaced in `bb thread show` and `bb status`.
 
 2. Bulk-stop action route
    - Add `ThreadManagerBulkStopResponse`, `ThreadManagerBulkStopChildResult`, and their outcome/reason enums to domain/server-contract schemas in new files `packages/domain/src/thread-manager-bulk-stop.ts` and the corresponding `packages/server-contract/src/api-types.ts` exports.
@@ -590,24 +647,17 @@ CLI:
    - Add tests for: child status change refreshing manager banner, manager title change refreshing managed-child banner, child reparenting refreshing both old and new parent banners, child deletion refreshing manager banner.
 
 4. Banner view model and component
-   - Add `ThreadPromptContextBannerModel` and `ThreadPromptContextBanner` (next to today's `ContextBanner` under `apps/app/src/components/promptbox/banner/`).
-   - Define published view-model constants: `THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES`, `THREAD_BANNER_ACTIVE_MANAGED_LIMIT`.
-   - Derive manager ref from cached parent thread and managed children from cached project thread list.
-   - Pick or introduce a single shared disclosure primitive that gives banner sections `aria-controls`, named regions, and `aria-labelledby` without duplicating today's `ContextBanner` grid-rows class bundle. Either add one to `@bb/ui-core` / `@/components/ui/` or extract from the existing pattern.
-   - Move current git banner behavior into the new component first.
-   - Add collapsed TODO and managed-work expansion states.
-   - Add the manager `Stop all` affordance near the managed-thread summary, gated by `items.length > 0`.
-   - Add confirmation for multiple stop targets.
-   - Add UI behavior for bulk-stop partial failure/retry states without directly mutating child status.
-   - Preserve diff-panel and merge-base picker behavior.
-   - Add view-model and component tests for all numbered scenarios in the exit criteria.
+   - **TODO + git sections shipped** in `apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx`. Old `ContextBanner.tsx` deleted; story renamed to `ThreadPromptContextBanner.stories.tsx`. Stack-card pattern preserved; layout is a single inline row of compact toggles plus merge-base picker pinned right.
+   - Mutual exclusion expansion: caller owns `expandedSection` and a single `onToggleSection(section)` callback. Both bodies stay in DOM with grid-rows transition.
+   - **Managed-by section shipped:** icon-only `[UserRound]` toggle, expanded body links the manager name to the manager thread. `ThreadPromptManagedBySection = { managerName, href }`.
+   - **Manager-children section shipped:** L-icon toggle (`ChevronDown` rotated 45°) labelled `N active`. Expanded body lists children as NavLinks. `ThreadPromptManagerChildItem = { id, title, href }` (no status field — caller filters before passing items in).
+   - Existing `disclosure.tsx` `CollapsibleHeader` / `ExpandablePanel` primitives were sufficient for an earlier draft but the shipped layout uses a custom inline button + `AnimatedBody` helper because the per-section header has no chevron-on-hover behavior (always-visible chevrons match the row aesthetic) and the merge-base picker needs to live outside any single section's header.
+   - **Still pending:** `THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES` / `THREAD_BANNER_ACTIVE_MANAGED_LIMIT` published constants, `Stop all` affordance + confirmation, bulk-stop partial-failure UI, soft cap + `Showing X of N` truncation note.
 
 5. Thread detail integration
-   - Replace the existing prop shape in `apps/app/src/views/thread-detail/ThreadDetailView.tsx`, `apps/app/src/views/thread-detail/ThreadDetailPromptArea.tsx`, and `apps/app/src/components/promptbox/FollowUpPromptBox.tsx`. Today `ThreadDetailPromptArea` takes `workspaceChangedFilesSection` and `contextBannerMergeBase` and renders `ContextBanner`; the new code passes a single `promptContextBanner` view-model prop and renders `ThreadPromptContextBanner`.
-   - Wire `pendingTodos` from the existing timeline query, cached parent thread, and cached project thread list into the banner view model.
-   - Replace `isChangeListExpanded` with section expansion state.
-   - Keep queued follow-ups and `FollowUpPromptBox` behavior unchanged.
-   - Delete `ContextBanner.tsx` and its stories once the new path covers git parity and the new context sections, and update the existing `ThreadDetailPromptArea.test.tsx` to drive the new prop shape.
+   - **TODO + managed-by + manager-children portions shipped:** `ThreadDetailView` reads `pendingTodos`, `parentThread`, and `useThreads({ parentThreadId })` and threads them through to `ThreadDetailPromptArea` as typed view-model props. `isChangeListExpanded` was replaced with `expandedBannerSection: ThreadPromptContextBannerExpandedSection | null`. `useActiveSecondaryPanel` import dropped from `ThreadDetailPromptArea` (the diff-panel click shortcut was removed from the banner).
+   - `ThreadDetailPromptArea` short-circuits TODO/git for manager threads (`thread.type === "manager" → todoSection: null`; `canUseGitUi` already gates git).
+   - **Still pending:** publishing the active-runtime predicate as a constant, soft-cap rendering, `Stop all` mutation + confirmation flow, bulk-stop UI.
 
 6. Verification and polish
    - Run Turbo validation.
