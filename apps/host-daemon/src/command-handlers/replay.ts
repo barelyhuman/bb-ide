@@ -33,6 +33,7 @@ import type {
   ReplayTaskHandle,
 } from "../command-dispatch-support.js";
 import { CommandDispatchError } from "../command-dispatch-support.js";
+import { normalizeCaughtError } from "../error-utils.js";
 
 export interface ReplayCommandOptions {
   dataDir: string;
@@ -220,7 +221,7 @@ export async function runReplay(
   try {
     plan = await buildReplayPlan(command, readArgs);
   } catch (error) {
-    const failure = error instanceof Error ? error : new Error(String(error));
+    const failure = normalizeCaughtError(error);
     await emitReplayFailure({
       command,
       eventSink,
@@ -307,7 +308,7 @@ async function runReplayTask(args: {
       return;
     }
 
-    const failure = error instanceof Error ? error : new Error(String(error));
+    const failure = normalizeCaughtError(error);
     await emitReplayFailure({
       command: args.command,
       eventSink: args.eventSink,

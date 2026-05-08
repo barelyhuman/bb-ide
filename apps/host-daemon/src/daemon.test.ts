@@ -6,6 +6,27 @@ import { createDaemon } from "./daemon.js";
 import { acquireDaemonLock } from "./lock.js";
 
 const tempDirs: string[] = [];
+type SignalListener = () => void;
+
+class FakeSignalSource {
+  private readonly listeners = new Map<NodeJS.Signals, Set<SignalListener>>();
+
+  on(signal: NodeJS.Signals, listener: SignalListener): void {
+    const listenersForSignal = this.listeners.get(signal) ?? new Set();
+    listenersForSignal.add(listener);
+    this.listeners.set(signal, listenersForSignal);
+  }
+
+  off(signal: NodeJS.Signals, listener: SignalListener): void {
+    this.listeners.get(signal)?.delete(listener);
+  }
+
+  emit(signal: NodeJS.Signals): void {
+    for (const listener of this.listeners.get(signal) ?? []) {
+      listener();
+    }
+  }
+}
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -62,5 +83,66 @@ describe("daemon lifecycle", () => {
 
     expect(logger.info).toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("rejects direct shutdown and waitUntilStopped when shutdown cleanup fails", async () => {
+    const logger = createLogger();
+    const shutdownFailure = new Error("release failed");
+    const daemon = createDaemon({
+      identity: {
+        hostId: "host-1",
+        hostName: "test-host",
+        instanceId: "instance-1",
+      },
+      logger,
+      releaseLock: async () => {
+        throw shutdownFailure;
+      },
+    });
+
+    await daemon.start();
+
+    await expect(daemon.shutdown("test")).rejects.toThrow("release failed");
+    await expect(daemon.waitUntilStopped()).rejects.toThrow("release failed");
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: shutdownFailure,
+        step: "releaseLock",
+      }),
+      "Shutdown step failed",
+    );
+  });
+
+  it("logs and exposes signal-triggered shutdown failure through waitUntilStopped", async () => {
+    const logger = createLogger();
+    const signalSource = new FakeSignalSource();
+    const shutdownFailure = new Error("release failed");
+    const daemon = createDaemon({
+      identity: {
+        hostId: "host-1",
+        hostName: "test-host",
+        instanceId: "instance-1",
+      },
+      logger,
+      releaseLock: async () => {
+        throw shutdownFailure;
+      },
+      signalSource,
+    });
+
+    await daemon.start();
+    signalSource.emit("SIGTERM");
+    await expect(daemon.waitUntilStopped()).rejects.toThrow("release failed");
+    // The signal listener logs through stop(...).catch(...), which can run
+    // after waitUntilStopped observes the shutdown failure.
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          err: shutdownFailure,
+          signal: "SIGTERM",
+        }),
+        "Signal-triggered host daemon shutdown failed",
+      );
+    });
   });
 });

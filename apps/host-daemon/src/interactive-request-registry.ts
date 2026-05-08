@@ -3,6 +3,7 @@ import type {
   PendingInteractionResolution,
 } from "@bb/domain";
 import type { HostDaemonInteractiveRequestResponse } from "@bb/host-daemon-contract";
+import { normalizeCaughtError } from "./error-utils.js";
 
 const DELIVERED_INTERACTIVE_REQUEST_TOMBSTONE_TTL_MS = 5 * 60 * 1000;
 
@@ -149,8 +150,7 @@ export class InteractiveRequestRegistry {
       }
     } catch (error) {
       this.pendingEntries.delete(key);
-      const registrationError =
-        error instanceof Error ? error : new Error(String(error));
+      const registrationError = normalizeCaughtError(error);
       this.options.onRegistrationFailure?.({
         error: registrationError,
         request,

@@ -23,11 +23,38 @@ import {
   type ServerConnectionOptions,
   type TimeoutHandle,
 } from "./server-connection-support.js";
+import { normalizeCaughtError } from "./error-utils.js";
 
 export type {
   CreateReconnectingWebSocket,
   ServerConnectionOptions,
 } from "./server-connection-support.js";
+
+interface InvalidServerMessageArgs {
+  data: unknown;
+  error: Error;
+}
+
+interface ServerMessagePayloadSummary {
+  payloadLength: number;
+  payloadPreview: string;
+  payloadTruncated: boolean;
+}
+
+const SERVER_MESSAGE_PAYLOAD_PREVIEW_CHARS = 512;
+
+function summarizeServerMessagePayload(
+  data: unknown,
+): ServerMessagePayloadSummary {
+  // Authenticated server-protocol payloads are useful diagnostics; keep the
+  // preview bounded so malformed messages cannot flood logs.
+  const text = decodeWebSocketMessageData(data);
+  return {
+    payloadLength: text.length,
+    payloadPreview: text.slice(0, SERVER_MESSAGE_PAYLOAD_PREVIEW_CHARS),
+    payloadTruncated: text.length > SERVER_MESSAGE_PAYLOAD_PREVIEW_CHARS,
+  };
+}
 
 export class ServerConnection {
   private readonly createWebSocket: CreateReconnectingWebSocket;
@@ -91,8 +118,12 @@ export class ServerConnection {
     this.clearSession();
 
     if (this.websocket) {
-      this.websocket.close();
+      const websocket = this.websocket;
       this.websocket = null;
+      // Suppress handlers so an intentional close cannot start fallback polling.
+      websocket.onmessage = null;
+      websocket.onclose = null;
+      websocket.close();
     }
   }
 
@@ -176,7 +207,7 @@ export class ServerConnection {
         settled = true;
         this.clearTimeoutFn(startupTimer);
         void this.shutdown();
-        reject(error instanceof Error ? error : new Error(String(error)));
+        reject(normalizeCaughtError(error));
       };
 
       websocket.onopen = () => {
@@ -254,19 +285,64 @@ export class ServerConnection {
 
   private handleWebSocketMessage(data: unknown): void {
     const text = decodeWebSocketMessageData(data);
-    const message = hostDaemonServerWsMessageSchema.parse(JSON.parse(text));
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(text);
+    } catch (error) {
+      this.handleInvalidServerMessage({
+        data,
+        error: normalizeCaughtError(error),
+      });
+      return;
+    }
 
-    if (message.type === "commands-available") {
+    const message = hostDaemonServerWsMessageSchema.safeParse(decoded);
+    if (!message.success) {
+      this.handleInvalidServerMessage({ data, error: message.error });
+      return;
+    }
+
+    if (message.data.type === "commands-available") {
       void Promise.resolve(this.options.onCommandsAvailable?.()).catch(
         () => undefined,
       );
       return;
     }
 
-    void Promise.resolve(this.sessionCloseHandler?.(message.reason)).catch(
+    void Promise.resolve(this.sessionCloseHandler?.(message.data.reason)).catch(
       () => undefined,
     );
-    void this.shutdown();
+    this.shutdownAfterServerMessage(
+      "Failed to close server-requested websocket connection",
+    );
+  }
+
+  private handleInvalidServerMessage(args: InvalidServerMessageArgs): void {
+    this.options.logger.error(
+      {
+        err: args.error,
+        ...summarizeServerMessagePayload(args.data),
+      },
+      "Invalid server websocket message; closing connection",
+    );
+
+    void Promise.resolve(this.sessionCloseHandler?.("daemon-disconnect")).catch(
+      (error) => {
+        this.options.logger.error(
+          { err: error },
+          "Failed to handle invalid server message shutdown",
+        );
+      },
+    );
+    this.shutdownAfterServerMessage(
+      "Failed to close invalid server websocket connection",
+    );
+  }
+
+  private shutdownAfterServerMessage(logMessage: string): void {
+    void this.shutdown().catch((error) => {
+      this.options.logger.error({ err: error }, logMessage);
+    });
   }
 
   private resetHeartbeat(): void {

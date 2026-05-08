@@ -1,4 +1,5 @@
 import type { HostDaemonLogger } from "./logger.js";
+import { normalizeCaughtError } from "./error-utils.js";
 
 export interface HostDaemonIdentity {
   hostId: string;
@@ -7,8 +8,8 @@ export interface HostDaemonIdentity {
 }
 
 export interface SignalSource {
-  on(event: NodeJS.Signals, listener: () => void): unknown;
-  off(event: NodeJS.Signals, listener: () => void): unknown;
+  on(event: NodeJS.Signals, listener: () => void): void;
+  off(event: NodeJS.Signals, listener: () => void): void;
 }
 
 export interface CreateDaemonOptions {
@@ -33,6 +34,7 @@ const TERMINATION_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
 export function createDaemon(options: CreateDaemonOptions): HostDaemon {
   let started = false;
   let stopPromise: Promise<void> | null = null;
+  let stopFailure: Error | null = null;
 
   let resolveStopped: (() => void) | undefined;
   const stopped = new Promise<void>((resolve) => {
@@ -61,7 +63,7 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
         "Shutting down host daemon",
       );
 
-      let failure: unknown;
+      let failure: Error | null = null;
       const steps = [
         {
           name: "flushEventBuffer",
@@ -85,19 +87,22 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
         try {
           await step.run();
         } catch (error) {
-          failure ??= error;
+          const stepError = normalizeCaughtError(error);
+          failure ??= stepError;
           options.logger.error(
-            { err: error, step: step.name },
+            { err: stepError, step: step.name },
             "Shutdown step failed",
           );
         }
       }
 
-      resolveStopped?.();
-
       if (failure) {
+        stopFailure = failure;
+        resolveStopped?.();
         throw failure;
       }
+
+      resolveStopped?.();
     })();
 
     return stopPromise;
@@ -116,7 +121,12 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
 
       for (const signal of TERMINATION_SIGNALS) {
         const listener = () => {
-          void stop(signal);
+          void stop(signal).catch((error) => {
+            options.logger.error(
+              { err: error, signal },
+              "Signal-triggered host daemon shutdown failed",
+            );
+          });
         };
         listeners.set(signal, listener);
         signalSource.on(signal, listener);
@@ -135,8 +145,11 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
       }
     },
     shutdown,
-    waitUntilStopped(): Promise<void> {
-      return stopped;
+    async waitUntilStopped(): Promise<void> {
+      await stopped;
+      if (stopFailure) {
+        throw stopFailure;
+      }
     },
   };
 }

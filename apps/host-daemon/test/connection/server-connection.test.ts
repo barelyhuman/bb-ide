@@ -99,6 +99,10 @@ class FakeReconnectingWebSocket implements ReconnectingWebSocketLike {
     this.onclose?.({});
   }
 
+  receive(data: unknown): void {
+    this.onmessage?.({ data });
+  }
+
   close(): void {
     this.disconnect();
   }
@@ -217,6 +221,97 @@ describe("ServerConnection", () => {
     await waitFor(() => onCommandsAvailable.mock.calls.length === 1);
 
     expect(onCommandsAvailable).toHaveBeenCalledTimes(1);
+    await connection.shutdown();
+  });
+
+  it("logs and closes the connection on malformed websocket messages from the server", async () => {
+    testServer = await createTestServer();
+    const onCommandsAvailable = vi.fn();
+    const onSessionClose = vi.fn();
+    const sockets: FakeReconnectingWebSocket[] = [];
+    const { connection, logger } = createConnection(testServer, {
+      connectionOverrides: {
+        onCommandsAvailable,
+        onSessionClose,
+        createWebSocket: (urlProvider) => {
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          sockets.push(socket);
+          queueMicrotask(() => {
+            void socket.open();
+          });
+          return socket;
+        },
+      },
+    });
+
+    await connection.start();
+    const socket = sockets[0];
+    if (!socket) {
+      throw new Error("Expected fake websocket instance");
+    }
+
+    expect(() => socket.receive("{")).not.toThrow();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: expect.any(Error),
+        payloadLength: 1,
+        payloadPreview: "{",
+        payloadTruncated: false,
+      }),
+      "Invalid server websocket message; closing connection",
+    );
+    await waitFor(() => onSessionClose.mock.calls.length === 1);
+    expect(onSessionClose).toHaveBeenCalledWith("daemon-disconnect");
+    expect(connection.sessionId).toBeNull();
+    expect(socket.readyState).toBe(3);
+
+    socket.receive(JSON.stringify({ type: "commands-available" }));
+    expect(onCommandsAvailable).not.toHaveBeenCalled();
+  });
+
+  it("closes instead of ignoring unknown server protocol messages", async () => {
+    testServer = await createTestServer();
+    const onSessionClose = vi.fn();
+    const sockets: FakeReconnectingWebSocket[] = [];
+    const { connection, logger } = createConnection(testServer, {
+      connectionOverrides: {
+        onSessionClose,
+        createWebSocket: (urlProvider) => {
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          sockets.push(socket);
+          queueMicrotask(() => {
+            void socket.open();
+          });
+          return socket;
+        },
+      },
+    });
+
+    await connection.start();
+    const socket = sockets[0];
+    if (!socket) {
+      throw new Error("Expected fake websocket instance");
+    }
+
+    const payload = JSON.stringify({
+      type: "session-close",
+      reason: "new-server-reason",
+      detail: "x".repeat(600),
+    });
+    expect(() => socket.receive(payload)).not.toThrow();
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: expect.any(Error),
+        payloadLength: payload.length,
+        payloadPreview: payload.slice(0, 512),
+        payloadTruncated: true,
+      }),
+      "Invalid server websocket message; closing connection",
+    );
+    await waitFor(() => onSessionClose.mock.calls.length === 1);
+    expect(onSessionClose).toHaveBeenCalledWith("daemon-disconnect");
+
     await connection.shutdown();
   });
 

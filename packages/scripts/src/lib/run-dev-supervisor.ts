@@ -1,19 +1,19 @@
-import type { ChildProcess } from "node:child_process";
 import { resolveSupervisorPidPath } from "./dev-restart-utils.js";
-import { removePidFileSync, writePidFile } from "./pid-file.js";
+import {
+  removePidFileSync,
+  writePidFile,
+  type WritePidFileRequest,
+} from "./pid-file.js";
 import {
   installTerminationSignalForwarding,
   killProcessIfRunning,
   spawnScriptProcess,
+  type ForwardedSignal,
+  type ProcessExitResult,
   waitForProcessExit,
 } from "./process-helpers.js";
 
-interface ChildExitResult {
-  code: number;
-  signal: NodeJS.Signals | null;
-}
-
-interface SpawnChildArgs {
+export interface DevSupervisorChildSpawnRequest {
   args: string[];
   command: string;
   cwd: string;
@@ -21,8 +21,9 @@ interface SpawnChildArgs {
 }
 
 interface ScheduleForcedKillArgs {
-  child: ChildProcess;
+  child: DevSupervisorChildProcess;
   forceKillAfterMs: number;
+  runtime: DevSupervisorRuntime;
   serviceName: string;
 }
 
@@ -31,10 +32,84 @@ export interface DevSupervisorOptions {
   childCommand: string;
   childCwd: string;
   childEnv?: NodeJS.ProcessEnv;
+  unexpectedRestartBackoff: DevSupervisorUnexpectedRestartBackoff;
   serviceName: string;
 }
 
+export interface DevSupervisorUnexpectedRestartBackoff {
+  initialDelayMs: number;
+  maxDelayMs: number;
+  stableChildRuntimeMs: number;
+}
+
+export interface CalculateUnexpectedRestartDelayArgs {
+  attempt: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+}
+
+export type DevSupervisorTimerCallback = () => void;
+export type DevSupervisorRestartSignalHandler = () => void;
+export type DevSupervisorSignalHandlerCleanup = () => void;
+export type DevSupervisorExitHandler = () => void;
+export type DevSupervisorTerminationSignalHandler = (
+  signal: ForwardedSignal,
+) => void;
+
+export interface DevSupervisorChildProcess {
+  readonly exitCode: number | null;
+  readonly signalCode: NodeJS.Signals | null;
+  kill(signal: NodeJS.Signals): void;
+  waitForExit(): Promise<ProcessExitResult>;
+}
+
+export interface DevSupervisorTimer {
+  clear(): void;
+  unref(): void;
+}
+
+export interface DevSupervisorRuntime {
+  readonly currentPid: number;
+  now(): number;
+  setTimeout(
+    callback: DevSupervisorTimerCallback,
+    delayMs: number,
+  ): DevSupervisorTimer;
+  spawnChildProcess(
+    request: DevSupervisorChildSpawnRequest,
+  ): DevSupervisorChildProcess;
+  installTerminationSignalForwarding(
+    handler: DevSupervisorTerminationSignalHandler,
+  ): DevSupervisorSignalHandlerCleanup;
+  installRestartSignalHandler(
+    handler: DevSupervisorRestartSignalHandler,
+  ): DevSupervisorSignalHandlerCleanup;
+  registerExitHandler(handler: DevSupervisorExitHandler): void;
+  resolvePidPath(serviceName: string): string;
+  writePidFile(request: WritePidFileRequest): Promise<void>;
+  removePidFileSync(pidPath: string): void;
+  writeStdout(message: string): void;
+  writeStderr(message: string): void;
+  setExitCode(code: number): void;
+}
+
+export interface RunDevSupervisorWithRuntimeArgs {
+  options: DevSupervisorOptions;
+  runtime: DevSupervisorRuntime;
+}
+
+interface InterruptibleDelay {
+  interrupt(): void;
+  wait(delayMs: number): Promise<void>;
+}
+
 const DEV_SUPERVISOR_FORCE_KILL_AFTER_MS = 5_000;
+export const DEFAULT_UNEXPECTED_RESTART_BACKOFF: DevSupervisorUnexpectedRestartBackoff =
+  {
+    initialDelayMs: 1_000,
+    maxDelayMs: 10_000,
+    stableChildRuntimeMs: 30_000,
+  };
 
 function formatExit(code: number, signal: NodeJS.Signals | null): string {
   if (signal) {
@@ -44,66 +119,196 @@ function formatExit(code: number, signal: NodeJS.Signals | null): string {
   return `exit code ${code}`;
 }
 
-function isChildRunning(child: ChildProcess): boolean {
+function isChildRunning(child: DevSupervisorChildProcess): boolean {
   return child.exitCode === null && child.signalCode === null;
 }
 
-function scheduleForcedKill(
-  args: ScheduleForcedKillArgs,
-): ReturnType<typeof setTimeout> {
-  const timeout = setTimeout(() => {
+export function calculateUnexpectedRestartDelay(
+  args: CalculateUnexpectedRestartDelayArgs,
+): number {
+  return Math.min(
+    args.initialDelayMs * 2 ** Math.max(args.attempt - 1, 0),
+    args.maxDelayMs,
+  );
+}
+
+function formatDurationMs(delayMs: number): string {
+  if (delayMs % 1_000 === 0) {
+    return `${delayMs / 1_000}s`;
+  }
+
+  return `${delayMs}ms`;
+}
+
+function scheduleForcedKill(args: ScheduleForcedKillArgs): DevSupervisorTimer {
+  const timeout = args.runtime.setTimeout(() => {
     if (!isChildRunning(args.child)) {
       return;
     }
 
-    process.stderr.write(
+    args.runtime.writeStderr(
       `[dev-supervisor:${args.serviceName}] Child did not exit after ${args.forceKillAfterMs}ms. Forcing shutdown.\n`,
     );
-    killProcessIfRunning(args.child, "SIGKILL");
+    args.child.kill("SIGKILL");
   }, args.forceKillAfterMs);
   timeout.unref();
   return timeout;
 }
 
-function spawnChildProcess(args: SpawnChildArgs): ChildProcess {
-  return spawnScriptProcess({
-    args: args.args,
-    command: args.command,
-    cwd: args.cwd,
+function createInterruptibleDelay(
+  runtime: DevSupervisorRuntime,
+): InterruptibleDelay {
+  let activeController: AbortController | null = null;
+
+  return {
+    interrupt(): void {
+      activeController?.abort();
+    },
+    async wait(delayMs: number): Promise<void> {
+      const controller = new AbortController();
+      activeController = controller;
+
+      await new Promise<void>((resolvePromise) => {
+        let settled = false;
+        let timeout: DevSupervisorTimer | null = null;
+        const finish = () => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          timeout?.clear();
+          controller.signal.removeEventListener("abort", finish);
+          if (activeController === controller) {
+            activeController = null;
+          }
+          resolvePromise();
+        };
+
+        timeout = runtime.setTimeout(finish, delayMs);
+        controller.signal.addEventListener("abort", finish, { once: true });
+      });
+    },
+  };
+}
+
+function createNodeTimer(
+  callback: DevSupervisorTimerCallback,
+  delayMs: number,
+): DevSupervisorTimer {
+  const timeout = setTimeout(callback, delayMs);
+  return {
+    clear(): void {
+      clearTimeout(timeout);
+    },
+    unref(): void {
+      timeout.unref();
+    },
+  };
+}
+
+function spawnNodeChildProcess(
+  request: DevSupervisorChildSpawnRequest,
+): DevSupervisorChildProcess {
+  const child = spawnScriptProcess({
+    args: request.args,
+    command: request.command,
+    cwd: request.cwd,
     env: {
       ...process.env,
-      ...args.env,
+      ...request.env,
     },
     stdio: "inherit",
   });
+
+  return {
+    get exitCode(): number | null {
+      return child.exitCode;
+    },
+    get signalCode(): NodeJS.Signals | null {
+      return child.signalCode;
+    },
+    kill(signal: NodeJS.Signals): void {
+      killProcessIfRunning(child, signal);
+    },
+    waitForExit(): Promise<ProcessExitResult> {
+      return waitForProcessExit(child);
+    },
+  };
 }
 
-function waitForChildExit(child: ChildProcess): Promise<ChildExitResult> {
-  return waitForProcessExit(child);
+function createNodeDevSupervisorRuntime(): DevSupervisorRuntime {
+  return {
+    currentPid: process.pid,
+    now: () => Date.now(),
+    setTimeout: createNodeTimer,
+    spawnChildProcess: spawnNodeChildProcess,
+    installTerminationSignalForwarding,
+    installRestartSignalHandler(
+      handler: DevSupervisorRestartSignalHandler,
+    ): DevSupervisorSignalHandlerCleanup {
+      process.on("SIGUSR1", handler);
+      return () => {
+        process.off("SIGUSR1", handler);
+      };
+    },
+    registerExitHandler(handler: DevSupervisorExitHandler): void {
+      process.on("exit", handler);
+    },
+    resolvePidPath: resolveSupervisorPidPath,
+    writePidFile,
+    removePidFileSync,
+    writeStdout(message: string): void {
+      process.stdout.write(message);
+    },
+    writeStderr(message: string): void {
+      process.stderr.write(message);
+    },
+    setExitCode(code: number): void {
+      process.exitCode = code;
+    },
+  };
 }
 
 export async function runDevSupervisor(
   options: DevSupervisorOptions,
 ): Promise<void> {
-  const pidPath = resolveSupervisorPidPath(options.serviceName);
-  let activeChild: ChildProcess | null = null;
-  let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
+  await runDevSupervisorWithRuntime({
+    options,
+    runtime: createNodeDevSupervisorRuntime(),
+  });
+}
+
+export async function runDevSupervisorWithRuntime(
+  args: RunDevSupervisorWithRuntimeArgs,
+): Promise<void> {
+  const { options, runtime } = args;
+  const pidPath = runtime.resolvePidPath(options.serviceName);
+  const unexpectedRestartBackoff = options.unexpectedRestartBackoff;
+  const restartDelay = createInterruptibleDelay(runtime);
+  let activeChild: DevSupervisorChildProcess | null = null;
+  let forceKillTimeout: DevSupervisorTimer | null = null;
+  let unexpectedRestartAttempt = 0;
   let stopRequested = false;
   let restartRequested = false;
 
   const cleanupPidFile = () => {
-    removePidFileSync(pidPath);
+    runtime.removePidFileSync(pidPath);
   };
 
-  process.on("exit", cleanupPidFile);
+  runtime.registerExitHandler(cleanupPidFile);
 
   const clearForceKillTimeout = () => {
     if (!forceKillTimeout) {
       return;
     }
 
-    clearTimeout(forceKillTimeout);
+    forceKillTimeout.clear();
     forceKillTimeout = null;
+  };
+
+  const interruptPendingRestartDelay = () => {
+    restartDelay.interrupt();
   };
 
   const terminateActiveChild = (signal: NodeJS.Signals) => {
@@ -111,11 +316,12 @@ export async function runDevSupervisor(
       return;
     }
 
-    killProcessIfRunning(activeChild, signal);
+    activeChild.kill(signal);
     clearForceKillTimeout();
     forceKillTimeout = scheduleForcedKill({
       child: activeChild,
       forceKillAfterMs: DEV_SUPERVISOR_FORCE_KILL_AFTER_MS,
+      runtime,
       serviceName: options.serviceName,
     });
   };
@@ -123,56 +329,86 @@ export async function runDevSupervisor(
   const requestStop = (signal: NodeJS.Signals) => {
     stopRequested = true;
     terminateActiveChild(signal);
+    interruptPendingRestartDelay();
   };
 
   const removeSignalForwarding =
-    installTerminationSignalForwarding(requestStop);
-  process.on("SIGUSR1", () => {
+    runtime.installTerminationSignalForwarding(requestStop);
+  const handleRestartSignal = () => {
     if (stopRequested || restartRequested) {
       return;
     }
 
     restartRequested = true;
-    process.stdout.write(
+    runtime.writeStdout(
       `[dev-supervisor:${options.serviceName}] Restart requested.\n`,
     );
 
     terminateActiveChild("SIGTERM");
-  });
+    interruptPendingRestartDelay();
+  };
+  const removeRestartSignalHandler =
+    runtime.installRestartSignalHandler(handleRestartSignal);
+  const removeSignalHandlers = () => {
+    removeSignalForwarding();
+    removeRestartSignalHandler();
+  };
 
-  await writePidFile({
-    pid: process.pid,
+  await runtime.writePidFile({
+    pid: runtime.currentPid,
     pidPath,
   });
 
   while (true) {
-    activeChild = spawnChildProcess({
+    const childStartedAt = runtime.now();
+    activeChild = runtime.spawnChildProcess({
       args: options.childArgs,
       command: options.childCommand,
       cwd: options.childCwd,
       env: options.childEnv,
     });
 
-    const { code, signal } = await waitForChildExit(activeChild);
+    const { code, signal } = await activeChild.waitForExit();
     clearForceKillTimeout();
     activeChild = null;
 
     if (stopRequested) {
-      process.exitCode = 0;
-      removeSignalForwarding();
+      runtime.setExitCode(0);
+      removeSignalHandlers();
       return;
     }
 
     if (restartRequested) {
       restartRequested = false;
+      unexpectedRestartAttempt = 0;
       continue;
     }
 
-    process.stderr.write(
-      `[dev-supervisor:${options.serviceName}] Child exited unexpectedly with ${formatExit(code, signal)}.\n`,
+    const childRuntimeMs = runtime.now() - childStartedAt;
+    unexpectedRestartAttempt =
+      childRuntimeMs >= unexpectedRestartBackoff.stableChildRuntimeMs
+        ? 1
+        : unexpectedRestartAttempt + 1;
+    const restartDelayMs = calculateUnexpectedRestartDelay({
+      attempt: unexpectedRestartAttempt,
+      initialDelayMs: unexpectedRestartBackoff.initialDelayMs,
+      maxDelayMs: unexpectedRestartBackoff.maxDelayMs,
+    });
+    runtime.writeStderr(
+      `[dev-supervisor:${options.serviceName}] Child exited unexpectedly with ${formatExit(code, signal)}. Restarting in ${formatDurationMs(restartDelayMs)}.\n`,
     );
-    process.exitCode = code !== 0 ? code : 1;
-    removeSignalForwarding();
-    return;
+    await restartDelay.wait(restartDelayMs);
+    if (stopRequested) {
+      runtime.setExitCode(0);
+      removeSignalHandlers();
+      return;
+    }
+
+    if (restartRequested) {
+      // Manual restarts represent fresh operator intent, even if they arrive
+      // while we are already backing off after a crash.
+      restartRequested = false;
+      unexpectedRestartAttempt = 0;
+    }
   }
 }
