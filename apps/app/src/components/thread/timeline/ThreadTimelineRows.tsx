@@ -1003,7 +1003,6 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       requestedTurnSummaryRowIdsRef.current.delete(rowId);
     }
   }, [erroredTurnSummaryIds]);
-  const onLoadTurnSummaryRows = props.onLoadTurnSummaryRows;
   const handleLoadTurnSummaryRows = useCallback(
     (entry: TimelineTurnRow): void => {
       if (requestedTurnSummaryRowIdsRef.current.has(entry.id)) {
