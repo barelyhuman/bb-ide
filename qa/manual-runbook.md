@@ -54,13 +54,17 @@ Resolve current provider models before spawning real-provider threads:
 CODEX_MODEL=$(bb provider models codex --json | jq -er '([.[] | select(.isDefault)][0].model // .[0].model)')
 CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.model == "claude-haiku-4-5")][0].model // [.[] | select(.isDefault)][0].model // .[0].model)')
 PI_MODELS_JSON=$(bb provider models pi --json)
+# Keep Pi preference order in sync with packages/test-helpers/src/provider-models.ts.
 PI_MODEL=$(printf '%s\n' "$PI_MODELS_JSON" | jq -er '
-  [.[] | select(.model == "anthropic/claude-haiku-4-5")][0].model
-  // [.[] | select(.model == "openai-codex/gpt-5.5")][0].model
+  [.[] | select(.model == "openai-codex/gpt-5.5")][0].model
+  // [.[] | select(.model == "openai-codex/gpt-5.4")][0].model
+  // [.[] | select(.model == "openai-codex/gpt-5.4-mini")][0].model
+  // [.[] | select(.model == "openai-codex/gpt-5.3-codex")][0].model
+  // [.[] | select(.model == "anthropic/claude-haiku-4-5")][0].model
   // [.[] | select(.model | startswith("anthropic/")) | select(.isDefault)][0].model
   // [.[] | select(.model | startswith("openai-codex/")) | select(.isDefault)][0].model
-  // [.[] | select(.model | startswith("anthropic/"))][0].model
   // [.[] | select(.model | startswith("openai-codex/"))][0].model
+  // [.[] | select(.model | startswith("anthropic/"))][0].model
   // [.[] | select(.isDefault)][0].model
   // .[0].model
 ')
@@ -72,10 +76,9 @@ For exact-output checks, use prompts in the form `Say exactly: <EXPECTED TEXT>`.
 Avoid phrasing like "reply only in chat with..." because providers can interpret that
 as a behavioral constraint rather than the expected response text.
 
-For Pi checks, prefer subscription-backed models (`anthropic/...` from Claude
-subscription auth, specifically `anthropic/claude-haiku-4-5` first, then
-`openai-codex/gpt-5.5` from Codex subscription auth) over generic `openai/...`
-API-key models.
+For Pi checks, prefer subscription-backed `openai-codex/...` models from Codex
+subscription auth first, then `anthropic/...` models from Claude/Anthropic auth,
+over generic `openai/...` API-key models.
 
 Teardown:
 

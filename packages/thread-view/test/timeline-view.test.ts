@@ -175,7 +175,6 @@ interface ToolRowOverrides extends WorkRowOverrides {
   activityIntents?: TimelineActivityIntent[];
   callId?: string;
   durationMs?: number | null;
-  label?: string;
   output?: string;
   toolArgs?: TimelineToolWorkRow["toolArgs"];
   toolName?: string;
@@ -186,7 +185,6 @@ function toolRow({
   callId = "tool-call-1",
   durationMs = 200,
   id = "tool-1",
-  label = "LookupTool select:TodoWrite",
   output = "",
   status = "completed",
   toolArgs = { query: "select:TodoWrite" },
@@ -201,7 +199,6 @@ function toolRow({
     callId,
     toolName,
     toolArgs,
-    label,
     output,
     completedAt: durationMs === null
       ? null

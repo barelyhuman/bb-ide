@@ -1002,15 +1002,16 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       requestedTurnSummaryRowIdsRef.current.delete(rowId);
     }
   }, [erroredTurnSummaryIds]);
+  const onLoadTurnSummaryRows = props.onLoadTurnSummaryRows;
   const handleLoadTurnSummaryRows = useCallback(
     (entry: TimelineTurnRow): void => {
       if (requestedTurnSummaryRowIdsRef.current.has(entry.id)) {
         return;
       }
       requestedTurnSummaryRowIdsRef.current.add(entry.id);
-      props.onLoadTurnSummaryRows(entry);
+      onLoadTurnSummaryRows(entry);
     },
-    [props.onLoadTurnSummaryRows],
+    [onLoadTurnSummaryRows],
   );
   const projectId = props.projectId;
   const resolveSegmentLinkHref = useMemo<

@@ -30,8 +30,8 @@ interface SystemConfigRouteState {
 
 interface AtomModules {
   FakeReconnectingWebSocket: typeof import("@/test/fake-reconnecting-websocket").FakeReconnectingWebSocket;
-  localHostIdAtom: typeof import("./atoms").localHostIdAtom;
-  systemConfigAtom: typeof import("./atoms").systemConfigAtom;
+  localHostIdAtom: typeof import("./system-config-atoms").localHostIdAtom;
+  systemConfigAtom: typeof import("./system-config-atoms").systemConfigAtom;
   wsManager: typeof import("./ws").wsManager;
 }
 
@@ -76,7 +76,7 @@ async function importFreshAtomModules(): Promise<AtomModules> {
     { wsManager },
     { FakeReconnectingWebSocket },
   ] = await Promise.all([
-    import("./atoms"),
+    import("./system-config-atoms"),
     import("./ws"),
     import("@/test/fake-reconnecting-websocket"),
   ]);

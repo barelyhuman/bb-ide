@@ -5,7 +5,7 @@ import {
   makeWorkspaceStatus,
   makeWorkspaceWorkingTree,
 } from "@bb/test-helpers";
-import { HttpError } from "./api";
+import { HttpError } from "@/lib/api";
 import {
   getGitStatusDisplay,
   workspaceStatusDescription,

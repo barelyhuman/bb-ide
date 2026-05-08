@@ -4,10 +4,12 @@ const PREFERRED_TEST_MODELS_BY_PROVIDER: Record<string, readonly string[]> = {
   codex: ["gpt-5.4"],
   "claude-code": ["claude-haiku-4-5"],
   pi: [
+    "openai-codex/gpt-5.5",
+    "openai-codex/gpt-5.4",
+    "openai-codex/gpt-5.4-mini",
+    "openai-codex/gpt-5.3-codex",
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-opus-4-7",
-    "openai-codex/gpt-5.5",
-    "openai-codex/gpt-5.4-mini",
   ],
 };
 
