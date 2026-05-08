@@ -7,7 +7,7 @@ import {
 import {
   useThreadStorageFilePreview,
   useThreadStorageFiles,
-} from "../hooks/queries/thread-queries";
+} from "../../hooks/queries/thread-queries";
 
 interface UseThreadStorageViewerParams {
   fileListOptions?: ThreadStorageFileListOptions;

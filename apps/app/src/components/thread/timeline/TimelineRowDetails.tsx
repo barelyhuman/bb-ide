@@ -1,5 +1,5 @@
 import { assertNever, type TimelineViewWorkRow } from "@bb/thread-view";
-import { EventCodeBlock } from "../../ui/event-content.js";
+import { EventCodeBlock } from "../../ui/event-code-block.js";
 import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { TimelineFileDiffBlock } from "./TimelineFileDiffBlock.js";

@@ -19,7 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/dialogs/ThreadGitActionDialog";
 import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/dialogs/ThreadEnvironmentPromotionDialog";
-import type { ThreadEnvironmentPromotionHeaderAction } from "@/views/threadEnvironmentPromotionActions";
+import type { ThreadEnvironmentPromotionHeaderAction } from "@/views/thread-detail/threadEnvironmentPromotionActions";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
   COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS;

@@ -6,7 +6,7 @@ import {
   formatChangeSummary,
   renderChangeSummary,
   toChangeTally,
-} from "@/lib/workspace-change-summary";
+} from "@/components/workspace/workspace-change-summary";
 
 export interface ThreadGitStatusDisplay {
   label:

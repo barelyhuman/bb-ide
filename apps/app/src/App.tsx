@@ -6,7 +6,7 @@ import { ProjectMainView } from "./views/ProjectMainView";
 import { ProjectArchivedThreadsView } from "./views/ProjectArchivedThreadsView";
 import { AppSettingsView } from "./views/AppSettingsView";
 import { ProjectSettingsView } from "./views/ProjectSettingsView";
-import { ThreadDetailView } from "./views/ThreadDetailView";
+import { ThreadDetailView } from "./views/thread-detail/ThreadDetailView";
 import { InternalReplayListView } from "./views/InternalReplayListView";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { useWebSocket } from "./hooks/useWebSocket";

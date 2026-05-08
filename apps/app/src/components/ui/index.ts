@@ -187,7 +187,7 @@ export { EmptyState, type EmptyStateProps } from "./empty-state.js";
 export {
   EventCodeBlock,
   type EventCodeBlockProps,
-} from "./event-content.js";
+} from "./event-code-block.js";
 export { FormError, type FormErrorProps } from "./form-error.js";
 export {
   ImageLightbox,

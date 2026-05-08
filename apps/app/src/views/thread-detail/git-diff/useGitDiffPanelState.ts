@@ -4,12 +4,12 @@ import { useAtomCallback } from "jotai/utils";
 import {
   useEnvironmentGitDiff,
   useEnvironmentWorkStatus,
-} from "../hooks/queries/environment-queries";
+} from "../../../hooks/queries/environment-queries";
 import {
   gitDiffCollapsedFileKeysAtom,
   pendingGitDiffScrollPathAtom,
   selectedMergeBaseBranchAtom,
-} from "./threadSecondaryPanelAtoms";
+} from "../threadSecondaryPanelAtoms";
 import {
   doesGitDiffFileMatchPath,
   getParsedGitDiffFileKey,
@@ -17,8 +17,8 @@ import {
   parseGitDiffPatchChunks,
   summarizeGitDiff,
   type ParsedGitDiffFile,
-} from "./threadDetailGitDiff";
-import { type GitDiffSelectionOption } from "./ThreadSecondaryPanel";
+} from "./git-diff-parsing";
+import { type GitDiffSelectionOption } from "../ThreadSecondaryPanel";
 import {
   buildGitDiffParsePlan,
   buildGitDiffSelectionOptions,

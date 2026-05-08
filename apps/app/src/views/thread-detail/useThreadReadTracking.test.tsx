@@ -6,7 +6,7 @@ import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import { useMarkThreadRead } from "../hooks/mutations/thread-state-mutations";
+import { useMarkThreadRead } from "../../hooks/mutations/thread-state-mutations";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 
 vi.mock("@/lib/api", async (importOriginal) => {

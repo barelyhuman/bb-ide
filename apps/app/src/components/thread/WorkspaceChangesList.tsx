@@ -1,7 +1,7 @@
 import type { WorkspaceStatus } from "@bb/domain";
 import { EmptyState, FilePathLink } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { formatWorkspaceFileStatus } from "@/lib/workspace-change-summary";
+import { formatWorkspaceFileStatus } from "@/components/workspace/workspace-change-summary";
 
 export type WorkspaceChangedFile =
   WorkspaceStatus["workingTree"]["files"][number];

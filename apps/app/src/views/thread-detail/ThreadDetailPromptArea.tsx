@@ -22,7 +22,7 @@ import {
   ContextBanner,
   type ContextBannerMergeBaseConfig,
 } from "@/components/promptbox/banner/ContextBanner";
-import type { WorkspaceChangedFilesSection } from "@/lib/workspace-change-summary";
+import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";

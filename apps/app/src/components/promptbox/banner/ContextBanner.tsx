@@ -9,7 +9,7 @@ import {
   renderChangeSummary,
   toChangeTally,
   type WorkspaceChangedFilesSection,
-} from "@/lib/workspace-change-summary";
+} from "@/components/workspace/workspace-change-summary";
 import { cn } from "@/lib/utils";
 
 const KIND_PREFIX: Record<WorkspaceChangedFilesSection["kind"], string> = {

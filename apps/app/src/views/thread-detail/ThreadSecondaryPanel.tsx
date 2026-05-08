@@ -23,7 +23,7 @@ import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
   formatChangeSummary,
   renderChangeSummary,
-} from "@/lib/workspace-change-summary";
+} from "@/components/workspace/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
 import {
   Button,
@@ -40,14 +40,14 @@ import {
   getOpenableGitDiffPath,
   summarizeGitDiffFile,
   type ParsedGitDiffFile,
-} from "./threadDetailGitDiff";
+} from "./git-diff/git-diff-parsing";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import {
   useActiveSecondaryPanel,
   useIsSecondaryPanelOpen,
 } from "@/lib/thread-secondary-panel";
-import { useGitDiffPanelState } from "./useGitDiffPanelState";
-import { useResponsiveGitDiffPanelDisplay } from "./useResponsiveGitDiffPanelDisplay";
+import { useGitDiffPanelState } from "./git-diff/useGitDiffPanelState";
+import { useResponsiveGitDiffPanelDisplay } from "./git-diff/useResponsiveGitDiffPanelDisplay";
 import {
   gitDiffCollapsedFileKeysAtom,
   gitDiffLoadingFileKeysAtom,

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
-} from "./threadWorkspaceOpenButton";
+} from "./threadWorkspaceOpenPath";
 
 function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   return {

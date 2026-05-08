@@ -5,7 +5,7 @@ import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
-} from "@/views/threadQueuedMessages";
+} from "@/views/thread-detail/threadQueuedMessages";
 
 export interface QueuedMessagesListProps {
   queuedMessages: readonly ThreadQueuedMessage[];

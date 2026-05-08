@@ -7,24 +7,24 @@ import type {
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
-import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
+import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
   useUnarchiveThread,
   useUpdateThread,
-} from "../hooks/mutations/thread-state-mutations";
-import { useSendThreadMessage } from "../hooks/mutations/thread-runtime-mutations";
-import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
+} from "../../hooks/mutations/thread-state-mutations";
+import { useSendThreadMessage } from "../../hooks/mutations/thread-runtime-mutations";
+import { useUpdateEnvironment } from "../../hooks/mutations/environment-mutations";
 import {
   useEnvironment,
   useEnvironmentWorkStatus,
-} from "../hooks/queries/environment-queries";
+} from "../../hooks/queries/environment-queries";
 import {
   getLatestPendingInteraction,
   useThread,
   useThreadPendingInteractions,
   useThreads,
-} from "../hooks/queries/thread-queries";
+} from "../../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/thread/dialogs/ThreadGitActionDialog";
 import { ThreadEnvironmentPromotionDialog } from "@/components/thread/dialogs/ThreadEnvironmentPromotionDialog";
 import { PageShell } from "@/components/ui";
@@ -39,17 +39,17 @@ import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-q
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
-import { getGitStatusDisplay } from "@/lib/workspace-status";
-import { selectWorkspaceChangedFilesSection } from "@/lib/workspace-change-summary";
+import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
+import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
-import { useGitDiffPanel } from "./useGitDiffPanel";
-import { useThreadDetailTurnSummaryRows } from "./useThreadDetailTurnSummaryRows";
+import { useGitDiffPanel } from "./git-diff/useGitDiffPanel";
+import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTurnSummaryRows";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
-import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
+import { useEnvironmentMergeBase } from "./git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
@@ -57,7 +57,7 @@ import { useThreadTimelinePages } from "./useThreadTimelinePages";
 import {
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
-} from "./threadWorkspaceOpenButton";
+} from "./threadWorkspaceOpenPath";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { resolveThreadLocalFileLink } from "@/lib/thread-local-file-links";
 import {

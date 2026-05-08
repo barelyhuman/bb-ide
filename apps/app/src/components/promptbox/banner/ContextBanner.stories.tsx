@@ -4,7 +4,7 @@ import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
 import {
   selectWorkspaceChangedFilesSection,
   type WorkspaceChangedFilesSection,
-} from "@/lib/workspace-change-summary";
+} from "@/components/workspace/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {

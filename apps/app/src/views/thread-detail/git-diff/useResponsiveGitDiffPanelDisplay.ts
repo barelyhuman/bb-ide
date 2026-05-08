@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSetAtom } from "jotai";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { useResizeObserver } from "usehooks-ts";
-import { threadSecondaryPanelResizingAtom } from "./threadSecondaryPanelAtoms";
+import { threadSecondaryPanelResizingAtom } from "../threadSecondaryPanelAtoms";
 
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;

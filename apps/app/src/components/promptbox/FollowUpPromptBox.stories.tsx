@@ -21,7 +21,7 @@ import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionCon
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
-import { selectWorkspaceChangedFilesSection } from "@/lib/workspace-change-summary";
+import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {

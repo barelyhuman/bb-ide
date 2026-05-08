@@ -7,7 +7,7 @@ import {
   parseGitDiffFiles,
   splitGitDiffIntoPatchChunks,
   summarizeGitDiff,
-} from "./threadDetailGitDiff";
+} from "./git-diff-parsing";
 
 const SAMPLE_DIFF = [
   "diff --git a/src/old.ts b/src/new.ts",

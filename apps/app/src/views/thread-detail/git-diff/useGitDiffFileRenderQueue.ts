@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useSetAtom } from "jotai";
 import { useAtomCallback } from "jotai/utils";
-import type { ParsedGitDiffFile } from "./threadDetailGitDiff";
+import type { ParsedGitDiffFile } from "./git-diff-parsing";
 import {
   gitDiffCollapsedFileKeysAtom,
   gitDiffLoadingFileKeysAtom,
-} from "./threadSecondaryPanelAtoms";
+} from "../threadSecondaryPanelAtoms";
 
 const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
 const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;

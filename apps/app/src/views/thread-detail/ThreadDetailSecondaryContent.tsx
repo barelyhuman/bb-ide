@@ -21,10 +21,10 @@ import {
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { BranchPicker } from "@/components/pickers/BranchPicker";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
-import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
+import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
-import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
+import { ManagerThreadStorageBrowser } from "../ManagerThreadStorageBrowser";
 import { DetailCard, DetailRow, LocalhostBadge } from "@/components/ui";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";

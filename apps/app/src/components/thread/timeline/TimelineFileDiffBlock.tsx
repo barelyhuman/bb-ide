@@ -7,7 +7,7 @@ import {
   isPatchMetadataLine,
   type FileChangeAction,
 } from "@bb/thread-view";
-import { EventCodeBlock } from "../../ui/event-content.js";
+import { EventCodeBlock } from "../../ui/event-code-block.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import type { ThreadTimelineTheme } from "./types.js";
 

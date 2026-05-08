@@ -2,8 +2,8 @@ import type { WorkspaceCommitSummary } from "@bb/domain";
 import {
   getGitDiffParseKey,
   splitGitDiffIntoPatchChunks,
-} from "./threadDetailGitDiff";
-import type { GitDiffSelectionOption } from "./ThreadSecondaryPanel";
+} from "./git-diff-parsing";
+import type { GitDiffSelectionOption } from "../ThreadSecondaryPanel";
 
 export const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;
 export const GIT_DIFF_PARSE_INITIAL_BATCH_SIZE = 6;

@@ -3,7 +3,7 @@ import type { Environment, Thread, WorkspaceStatus } from "@bb/domain";
 import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/pickers/BranchPicker";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
-import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
+import { useUpdateEnvironment } from "../../../hooks/mutations/environment-mutations";
 
 interface UseEnvironmentMergeBaseParams {
   environment?: Environment;
