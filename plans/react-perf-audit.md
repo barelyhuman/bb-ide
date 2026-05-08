@@ -1,132 +1,316 @@
-# React Performance Audit — `apps/app`
+# React Performance Audit - `apps/app`
 
-Findings from auditing `apps/app/src` for inline state that should be atoms, inline logic that should be hooks, and unnecessary re-renders / missing memos. Each phase is independent. Pick highest-leverage first (Phases 5 and 7).
+Refreshed against the current Vite React app on 2026-05-08. The previous plan
+referenced the old prompt/timeline layout; prompt composition now lives under
+`apps/app/src/components/promptbox/`, timeline rendering has its own memo/cache
+layer, and the diff panel already has batched parsing plus `content-visibility`.
 
 Conventions:
 
-- Line numbers are snapshots from the audit; verify before editing.
-- "Atom" means Jotai. New atoms live alongside existing UI atoms in `apps/app/src/lib/` (or the nearest existing atoms module).
-- Custom hooks live in `apps/app/src/hooks/`.
+- Line numbers are audit snapshots; verify before editing.
+- Prefer the current ownership boundaries: promptbox components own composer UI,
+  `ThreadDetailPromptArea` owns thread follow-up wiring, timeline components own
+  row rendering, and git-diff hooks own parsing/render queues.
+- Every phase has independent exit criteria. Do not combine phases unless the
+  same changed files would otherwise be touched twice.
 
-## Phase 1: Promote local UI state to atoms
+## Phase 0: Capture Baselines
 
-**Goal:** Eliminate prop-drilling and unnecessary parent re-renders for state that is logically global or shared across views.
+**Goal:** Avoid changing memo boundaries blindly. Get a before/after profile for
+the surfaces this plan touches.
 
-**Changes:**
+**Steps:**
 
-- `ThreadDetailPromptArea.tsx:125` — `isChangeListExpanded` is local `useState` consumed by a child composer. Promote to atom.
-- `ProjectMainView.tsx:38` and `ThreadDetailPromptArea.tsx:124–128` — `attachmentError` is duplicated. Centralize in a single atom (keyed per composer surface if both can be open simultaneously; otherwise a singleton).
-- `AppSettingsView.tsx:70–77` — Modal state cluster (`renameTarget`, `deleteTarget`, `activeCloudAuthAttempt`, `cloudAuthNotices`) lives in a 300+ line page component. Move to atoms so dialog open/close does not re-render the page.
-- `ProjectSettingsView.tsx:68–69` — `repoPickerOpen` + `repoSearch`. The picker has its own debounce + memo chain; an atom (or `atomFamily` keyed by project id) lets the filter recompute without re-rendering the surrounding form.
+- Record React DevTools Profiler traces for:
+  - typing 10 characters in `ProjectMainView`'s new-thread prompt
+  - typing 10 characters in `ThreadDetailPromptArea`'s follow-up prompt with
+    queued messages visible
+  - loading a long thread timeline and expanding one completed turn
+  - toggling one file in a multi-file git diff
+  - selecting a different thread in the sidebar
+- Run one production build and record chunk names/sizes:
+
+  ```sh
+  pnpm exec turbo run build --filter=@bb/app
+  ```
 
 **Exit criteria:**
 
-- The named `useState` hooks are removed; consumers read/write the new atoms directly.
-- No new prop drilling introduced for these values.
+- Save profiler notes in the implementation PR/commit message, not in this plan.
+- Identify the top 2 commit contributors for each interaction before starting
+  code changes.
+
+## Phase 1: Route And Heavy Dependency Splitting
+
+**Goal:** Reduce initial app load and dev/HMR module fanout by moving thread-only
+and settings-only code out of the eager root bundle.
+
+**Findings:**
+
+- `App.tsx:2-10` eagerly imports every route component, including thread detail,
+  settings, archived threads, and internal replay.
+- `main.tsx:4,23-29` mounts `WorkerPoolContextProvider` from
+  `@pierre/diffs/react` for the whole app, even though diff rendering is used in
+  `ThreadSecondaryPanel.tsx:19` and `TimelineFileDiffBlock.tsx:2-3`.
+- `components/ui/index.ts:198-203` re-exports `MarkdownPreview`, which imports
+  `react-markdown` and `remark-gfm`; many files import from the UI barrel even
+  when they only need a button or layout primitive.
+
+**Changes:**
+
+- Add module-scope `React.lazy` route components for at least:
+  - `ThreadDetailView`
+  - `ProjectSettingsView`
+  - `ProjectArchivedThreadsView`
+  - `AppSettingsView`
+  - `InternalReplayListView`
+- Keep the suspense fallback small and layout-stable; do not put it inside every
+  route.
+- Move `WorkerPoolContextProvider` into a thread/diff-specific boundary so the
+  root app does not import `@pierre/diffs/react` on project-list-only sessions.
+- Convert heavy UI barrel imports to direct imports where they pull in markdown,
+  dialog/drawer, or diff-adjacent modules through `@/components/ui`.
+
+**Exit criteria:**
+
+- `pnpm exec turbo run build --filter=@bb/app` produces route chunks separate
+  from the root app chunk.
+- A build artifact inspection shows `@pierre/diffs/react` is absent from the
+  initial non-thread route chunk.
+- Manual smoke test: root project list, project main, settings, archived view,
+  and thread detail all load and preserve existing behavior.
+
+## Phase 2: Stabilize Prompt Box Boundaries
+
+**Goal:** Typing in a prompt should not rerender execution controls, environment
+pickers, queued message rows, or surrounding thread metadata.
+
+**Findings:**
+
+- `ProjectMainView.tsx:215-248` defines `submitPrompt` inline and passes fresh
+  `history`, `mentions`, `attachments`, `execution`, `environment`, and
+  `permission` objects at `ProjectMainView.tsx:273-340`.
+- `ThreadDetailPromptArea.tsx:221-238` allocates a fresh `submitMode` object and
+  `onStop` closures on each render. The component also passes fresh
+  `attachments`, `stack`, `composer`, `execution`, `permission`, and `mentions`
+  objects at `ThreadDetailPromptArea.tsx:477-586`.
+- `NewThreadPromptBox.tsx:95-104` and `FollowUpPromptBox.tsx:148-167` create
+  fresh `submission`, `zenMode`, and `footerStart` props for
+  `PromptBoxInternal`.
+- `usePromptDraftStorage.ts:294-310` returns a fresh object. Callers then depend
+  on the whole object in callbacks (`ProjectMainView.tsx:202`,
+  `ThreadDetailPromptArea.tsx:302,349-361,432`), so stable callback deps are
+  defeated.
+- `useThreadCreationOptions.ts:660-662` filters `permissionModeOptions` in the
+  returned object, creating a new array each render.
+
+**Changes:**
+
+- Memoize object props at the caller boundary using existing shared prop types.
+  Do not inline new function-signature types.
+- Wrap `NewThreadPromptBoxUI`, `FollowUpPromptBox`, `ExecutionControls`, and
+  stable footer/summary subcomponents in `memo` where profiler output shows they
+  are rerendering with equivalent props.
+- Convert `submitPrompt`, `submitMode`, stop handlers, `history`, `mentions`,
+  `attachments`, `execution`, `environment`, and `permission` to stable
+  `useCallback`/`useMemo` values.
+- In prompt draft callers, destructure the specific stable methods/values needed
+  instead of depending on the whole `promptDraft` object. If the hook keeps
+  returning an object, memoize that returned object.
+- Memoize `permissionModeOptions` inside `useThreadCreationOptions`.
+
+**Exit criteria:**
+
+- React Profiler: typing in either prompt does not commit `ExecutionControls`,
+  `EnvironmentPickerUI`, `PermissionModePicker`, `ThreadEnvironmentSummary`, or
+  queued message rows unless their real inputs changed.
 - `pnpm exec turbo run typecheck --filter=@bb/app` passes.
-- Manually verify in the dev frontend that opening/closing each dialog and toggling the change-list does not visibly stutter a sibling area.
+- `pnpm exec turbo run test --filter=@bb/app` passes.
 
-## Phase 2: Extract reusable hooks from large component bodies
+## Phase 3: Memoize Queued Follow-Up Rows
 
-**Goal:** Reduce component body size and make domain logic testable in isolation.
+**Goal:** Queue actions should update only the affected queued message row.
 
-**Changes:**
+**Findings:**
 
-- `ThreadDetailPromptArea.tsx:184–217` — Extract the 65-line `sendFollowUpInput` callback into `useThreadFollowUp({ threadId, activeModel, selectedModel })` returning a stable submit function.
-- `ThreadDetailPromptArea.tsx:220–244` ↔ `ProjectMainView.tsx` — Attachment upload + error mapping is copy-pasted across both prompt surfaces. Extract `usePromptAttachmentHandler()` and use in both.
-- `ProjectMainView.tsx:40–95` — Twelve `useMemo` blocks for derived environment/execution state. Extract `useProjectExecutionState({ projectId, localHostId, … })` so deps are scoped together and the page body shrinks.
-- `AppLayout.tsx:343–399` — 57-line sidebar drag-resize with refs + RAF. Extract `useSidebarResize()`. Pure side-effect behavior; doesn't belong inline in the layout.
-- `ThreadTimelinePane.tsx:121–138` — `DelayedThreadLoadingIndicator` reimplements "show after delay." Lift to a generic `useDelayedVisible(ms)` in `hooks/`. Audit other call sites once the hook exists.
-- `ThreadDetailView.tsx:102–111` — `handleShowAllEventsChange` plus surrounding storage logic. Small but the file is 400+ lines; a `useShowAllEventsToggle()` lets the view shed state.
-
-**Exit criteria:**
-
-- Each new hook is in `apps/app/src/hooks/` with a unit test where the logic has branches worth verifying (uploads with retry, follow-up payload assembly, sidebar drag clamping).
-- `usePromptAttachmentHandler` has exactly two call sites; the duplicated implementations are deleted.
-- `pnpm exec turbo run typecheck --filter=@bb/app` and `pnpm exec turbo run test --filter=@bb/app` pass.
-
-## Phase 3: Stabilize prop object identities passed to memoized children
-
-**Goal:** Stop defeating downstream `React.memo` by passing fresh object/array literals each render.
+- `QueuedMessagesList.tsx:41-126` maps inline and recomputes preview text,
+  attachment count, processing state, and button handlers for every row.
+- `ThreadDetailPromptArea.tsx:363-432` finds queued messages with linear scans
+  inside action handlers.
 
 **Changes:**
 
-- `ThreadDetailPromptArea.tsx:418–512` — `ThreadFollowUpComposer` receives three inline object props. Wrap each in `useMemo`:
-  - `attachments` (lines 420–426)
-  - `banner` (lines 428–451)
-  - `composer` (lines 453–464)
-- `ProjectMainView.tsx:254–342` — `PromptBox` receives:
-  - `submission` inline (275–279) → `useMemo`
-  - `mentions` inline (280–285) → `useMemo`; ensure `promptMentions.setQuery` is stable
-  - `attachments` inline (286–293) → `useMemo`
-  - `footerStart` JSX inline (299–323) — extract to a memoized `<PromptFooterStart />` component or `useMemo` the element. This is the heaviest of the four; it contains `PromptExecutionControls`.
-- `AppLayout.tsx:273–289` — `project`, `projectName`, `projectLabel`, `threadDisplayTitle` are recomputed inline each render. Wrap with `useMemo` (or fold into the hook from Phase 2 if a layout-meta hook materializes).
+- Extract a memoized `QueuedMessageRow` component in
+  `components/promptbox/banner/QueuedMessagesList.tsx`.
+- Pass primitive row props where possible: `queuedMessage`, `index`,
+  `isProcessing`, `sendDisabled`, `actionDisabled`, and stable action handlers.
+- Build a `queuedMessagesById` map in `ThreadDetailPromptArea` when action
+  handlers need lookups.
+- Add tests for processing, edit, delete, attachment count display, and disabled
+  states if existing coverage does not already catch these behaviors.
 
 **Exit criteria:**
 
-- Every prop object passed to a `React.memo`'d child in the listed files is referentially stable across renders where its inputs are unchanged.
-- React DevTools Profiler: typing in the composer no longer re-renders `PromptExecutionControls` / `ThreadFollowUpComposer` siblings.
-- `pnpm exec turbo run typecheck --filter=@bb/app` passes.
+- React Profiler: sending/editing/deleting one queued follow-up commits only the
+  affected row plus expected parent bookkeeping.
+- `QueuedMessagesList` still renders nothing for an empty queue.
+- `pnpm exec turbo run test --filter=@bb/app` passes.
 
-## Phase 4: Memoize list rows
+## Phase 4: Split Timeline Context And Add Long-List Containment
 
-**Goal:** Avoid rebuilding all list items when a single ancestor re-renders.
+**Goal:** Timeline updates should not invalidate every row, and off-screen rows
+should not pay layout/paint cost.
+
+**Findings:**
+
+- `ThreadTimelineRows.tsx:1032-1061` puts static renderer configuration,
+  auto-expanded ids, loading ids, errored ids, callbacks, theme, and
+  `turnSummaryRowsById` into one context value.
+- `TimelineRowView` consumes context for title/link handlers at
+  `ThreadTimelineRows.tsx:801-802`, while `TimelineExpandableRowView` consumes
+  turn-summary state at `ThreadTimelineRows.tsx:869-877`. Any turn-summary load
+  state change can therefore invalidate unrelated rows.
+- The `TimelineRowsList` markup at `ThreadTimelineRows.tsx:940-958` renders
+  top-level and nested rows without `content-visibility`; only the git diff
+  panel currently uses containment (`ThreadSecondaryPanel.tsx:70-74`).
 
 **Changes:**
 
-- `ThreadFollowUpComposer.tsx:92–142` — `QueuedFollowUpList` maps `queuedMessages` and computes ~6 derived values per item inline. Extract `QueuedFollowUpItem` as a `React.memo`'d component that receives the message and computes derived values internally (or receives stable derived props).
+- Split timeline context into stable renderer configuration and row/turn state,
+  or pass row-specific booleans (`autoExpanded`, `isLoading`, `isError`,
+  `loadedRows`) through memoized row props.
+- Keep callbacks (`onTitleAction`, `onOpenLocalFileLink`,
+  `resolveSegmentLinkHref`) in a stable context that does not change when a
+  single turn summary loads.
+- Add a top-level row shell with `content-visibility: auto` and a conservative
+  `contain-intrinsic-size`. Apply it to large top-level timeline rows first;
+  avoid nested rows until scroll anchoring is verified.
+- Add or update tests around lazy turn loading so the context split cannot
+  double-request turn details.
 
 **Exit criteria:**
 
-- `QueuedFollowUpItem` exists as a memoized component; the list maps with a stable `key` and stable props.
-- Profiler: editing the composer text does not re-render queued list rows.
+- React Profiler: expanding/loading one completed turn does not commit unrelated
+  conversation/work rows.
+- Long timeline initial render and scroll remain visually stable; bottom-anchor
+  behavior still follows active output.
+- `pnpm exec turbo run test --filter=@bb/app` passes, including timeline tests.
 
-## Phase 5: Scope atom subscriptions to avoid whole-Set reads
+## Phase 5: Tighten Git Diff Panel Recalculation
 
-**Goal:** Stop reading entire `Set`s into every consumer of the diff panel.
+**Goal:** Collapse/render state for one file should not trigger expensive
+whole-panel recalculation or rerender other file diffs.
+
+**Findings:**
+
+- `ThreadSecondaryPanel.tsx:444-445` subscribes to whole collapsed/loading
+  `Set`s, then checks membership for each file at
+  `ThreadSecondaryPanel.tsx:663-668`.
+- `GitDiffFileCard` is already memoized (`ThreadSecondaryPanel.tsx:227`) and
+  file bodies already use `content-visibility`, so the old audit's "every row
+  rerenders" claim must be remeasured rather than assumed.
+- `useGitDiffPanelState.ts:284-292` rebuilds select options and recomputes
+  `summarizeGitDiff` on every hook render.
 
 **Changes:**
 
-- `ThreadSecondaryPanel.tsx:415–430, 635` — `collapsedGitDiffFileKeys` and `loadingGitDiffFileKeys` are pulled as whole `Set`s; `.has(key)` is called per file in the list map. Replace with one of:
-  - `selectAtom` keyed per file (factory or `atomFamily`) so each `GitDiffFileCard` subscribes only to its own collapsed/loading flag, or
-  - lift the membership check into a memoized child that takes `isCollapsed` / `isLoading` as boolean props derived once at the parent.
-- While here, verify `useGitDiffPanelState.ts:88–95` `parsedGitDiffFileEntries` and `queuedGitDiffFileRenderKeys` consumed alongside it have stable identities; if `queuedGitDiffFileRenderKeys` changes per render it defeats downstream memos.
+- First memoize `gitDiffSelectOptions`, `gitDiffStats`, and any other derived
+  values that walk all commits/files.
+- If profiling still shows Set membership work as material, introduce a
+  memoized `GitDiffFileCardContainer` or Jotai `selectAtom`/`atomFamily` so each
+  file subscribes only to its own collapsed/loading booleans.
+- Preserve the existing render queue behavior in
+  `useGitDiffFileRenderQueue.ts`; it already keeps `queuedGitDiffFileRenderKeys`
+  in a ref.
 
 **Exit criteria:**
 
-- Toggling collapse on one file in a multi-file diff re-renders only that row in the React Profiler.
-- No consumer reads the whole `Set` purely to call `.has(key)`.
+- React Profiler: toggling collapse on one file does not commit other
+  `GitDiffFileCard` bodies or `DiffView` instances.
+- Instrumentation or profiler notes show `summarizeGitDiff` is not called on
+  unrelated panel interactions.
+- `pnpm exec turbo run test --filter=@bb/app` passes.
 
-## Phase 6: Co-locate timeline derivations
+## Phase 6: Repair Sidebar Row Memo Boundaries
 
-**Goal:** Reduce render-phase noise from chains of single-value `useMemo`.
+**Goal:** Sidebar route changes and manager collapse toggles should update only
+the affected rows/projects.
+
+**Findings:**
+
+- `ThreadRow` is memoized (`ThreadRow.tsx:419`), but `ProjectRow.tsx:193-199`,
+  `ProjectRow.tsx:210`, and `ProjectRow.tsx:225` pass fresh `options` objects,
+  defeating the memo boundary whenever `ProjectRow` rerenders.
+- `ProjectRow` itself is not memoized, and `ProjectList.tsx:280-286` passes a
+  full `collapsedManagerIds` `Set` to every project row.
+- `ProjectList.tsx:363-397` computes row-local values inline while mapping every
+  project.
 
 **Changes:**
 
-- `ThreadDetailView.tsx:135–144` — `threadDetailRows` and `latestActivityRowId` are chained single-value memos. Co-locate into `useThreadTimelineState()` (can be the same hook produced by Phase 2's `useShowAllEventsToggle` work, or a sibling hook). Verify deps are tight afterward.
+- Memoize `ProjectRow` with a comparator that keys off project identity,
+  selected thread/project state, promoted branch, local path validity, and the
+  relevant thread list state.
+- Replace inline `ThreadRowOptions` objects with stable constants for
+  `default`/`managed-child` and memoized manager options.
+- Avoid passing a whole changed `collapsedManagerIds` `Set` through every
+  project if profiling shows broad rerenders. Prefer a shape that lets each
+  project receive only the collapse flags it renders.
 
 **Exit criteria:**
 
-- `ThreadDetailView` no longer hosts the per-render derivation chain; the hook returns a stable shape.
-- Typecheck passes.
+- React Profiler: selecting a thread commits the previous active row, the next
+  active row, and required route/header components, not every sidebar thread.
+- Collapsing one manager row does not commit unrelated projects.
+- `pnpm exec turbo run test --filter=@bb/app` passes.
 
-## Validation across all phases
+## Deferred Lower-Priority Cleanup
 
-Run after each phase:
+These are still real cleanup items, but they are not the first perf wins:
 
-```
+- `AppSettingsView.tsx:105-113` still owns modal/cloud-auth state in the full
+  settings page. Extracting dialog controllers or colocating state in dialog
+  components would reduce settings-page rerenders, but this is not a hot path.
+- `ProjectSettingsView.tsx:73-78` still owns delete/repo picker state plus
+  `repoSearch`. Extracting a repo-picker component would isolate debounced
+  search rerenders, but route-level splitting is higher leverage first.
+- `ThreadTimelinePane.tsx:163-180` still contains a local delayed loading
+  indicator. Extract only if a second call site appears.
+- `AppLayout.tsx:334-396` still owns sidebar drag-resize side effects inline.
+  It is acceptable for now because live mousemove updates write CSS variables
+  through refs; extract later for readability, not urgent perf.
+
+## Validation For Every Phase
+
+Run after each implementation phase:
+
+```sh
 pnpm exec turbo run typecheck --filter=@bb/app
 pnpm exec turbo run test --filter=@bb/app
 ```
 
-For perf-sensitive changes (Phases 3, 4, 5), also profile in the dev frontend (`:5173`) with React DevTools Profiler:
+For phases that affect loading or bundles, also run:
 
-1. Open a thread with an active composer and queued follow-ups.
-2. Record while typing 10 characters into the composer. Confirm queued rows, secondary panel rows, and `PromptExecutionControls` do not appear in the commit list.
-3. Open a multi-file git diff. Toggle collapse on one file. Confirm only that row commits.
+```sh
+pnpm exec turbo run build --filter=@bb/app
+```
+
+Manual profiler scenarios to repeat:
+
+1. Open a project main view and type 10 characters in the new-thread prompt.
+2. Open a thread with queued follow-ups and type 10 characters in the follow-up
+   prompt.
+3. Open a long thread timeline, expand one completed turn, and confirm unrelated
+   rows do not commit.
+4. Open a multi-file git diff, toggle one file, and confirm other file bodies do
+   not commit.
+5. Select a different thread from the sidebar and confirm only the affected rows
+   update.
 
 ## Notes
 
-- Audit-only — no code changes have been made.
-- Highest-leverage phases are 5 (per-file diff atom subscriptions) and 7 (prop-object stabilization in the prompt surfaces). Cleanest code-health win is Phase 2's `usePromptAttachmentHandler` deduplication.
-- Skipped nits: single-use callbacks, deeply-internal memoized components, and any case where the parent has only one consumer.
+- Audit-only plan; no React code changes are included here.
+- Highest leverage order: Phase 1, Phase 2, Phase 4, then Phase 5. Phase 3 is a
+  small contained win and can be done any time.
+- Do not add new state containers just to chase theoretical rerenders. Profile
+  first, then change the smallest boundary that removes measured work.
