@@ -1,8 +1,8 @@
-import { type CSSProperties, useMemo } from "react";
+import { type CSSProperties, useMemo, useState } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SupportedLanguages } from "@pierre/diffs";
 import { FileX2 } from "lucide-react";
-import { MarkdownPreview, Skeleton } from "@/components/ui";
+import { Button, MarkdownPreview, Skeleton } from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 export interface FilePreviewFile {
@@ -62,9 +62,83 @@ function FilePreviewBody({ state }: FilePreviewProps) {
     return <FilePreviewError />;
   }
   if (isMarkdownFile(state.file.name)) {
-    return <MarkdownPreview content={state.file.contents} />;
+    return <MarkdownFilePreview file={state.file} />;
   }
   return <FilePreviewCode file={state.file} />;
+}
+
+type MarkdownViewMode = "preview" | "raw";
+
+function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
+  const [mode, setMode] = useState<MarkdownViewMode>("preview");
+  const rawFile = useMemo<FilePreviewFile>(
+    () => ({ name: file.name, contents: file.contents, lang: "markdown" }),
+    [file.name, file.contents],
+  );
+  return (
+    <div className="flex flex-col">
+      <MarkdownViewModeToggle mode={mode} onModeChange={setMode} />
+      {mode === "preview" ? (
+        <MarkdownPreview content={file.contents} />
+      ) : (
+        <FilePreviewCode file={rawFile} />
+      )}
+    </div>
+  );
+}
+
+function MarkdownViewModeToggle({
+  mode,
+  onModeChange,
+}: {
+  mode: MarkdownViewMode;
+  onModeChange: (mode: MarkdownViewMode) => void;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-end">
+      <div
+        className="inline-flex items-center gap-0.5 rounded-md border border-border/70 p-0.5"
+        role="tablist"
+        aria-label="Markdown view mode"
+      >
+        <MarkdownViewModeButton
+          label="Preview"
+          isActive={mode === "preview"}
+          onClick={() => onModeChange("preview")}
+        />
+        <MarkdownViewModeButton
+          label="Raw"
+          isActive={mode === "raw"}
+          onClick={() => onModeChange("raw")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MarkdownViewModeButton({
+  label,
+  isActive,
+  onClick,
+}: {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      role="tab"
+      variant="ghost"
+      size="sm"
+      className="h-6 rounded-sm px-2 text-xs text-muted-foreground"
+      onClick={onClick}
+      aria-pressed={isActive}
+      aria-selected={isActive}
+    >
+      {label}
+    </Button>
+  );
 }
 
 function FilePreviewLoading() {
