@@ -7,6 +7,7 @@ import {
 
 function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   return {
+    baseBranch: null,
     branchName: "feature/test",
     cleanupMode: null,
     cleanupRequestedAt: null,

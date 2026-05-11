@@ -36,6 +36,13 @@
       "when": 1777910400000,
       "tag": "0004_event_producer_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1778269063000,
+      "tag": "0005_environment_base_branch",
+      "breakpoints": true
     }
   ]
 }

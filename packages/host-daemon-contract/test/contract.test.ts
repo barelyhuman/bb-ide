@@ -30,7 +30,7 @@ const CLIENT_REQUEST_ID = "creq_23456789ab";
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.checkout":
-    "Unmanaged provision may omit checkout when no pre-thread branch switch is needed.",
+    "environment.provision only includes checkout instructions for unmanaged workspaces that requested a branch mutation.",
   "hostDaemonCommandSchema.mergeBaseBranch":
     "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
   "hostDaemonCommandSchema.query":

@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import {
   isGitHubRepoProjectSource,
   type Host,
@@ -22,15 +22,11 @@ import { usePromptVoice } from "@/components/promptbox/usePromptVoice";
 import { BranchPicker } from "@/components/pickers/BranchPicker";
 import {
   EnvironmentPickerUI,
-  parseEnvironmentValue,
   type EnvironmentPickerUIProps,
 } from "@/components/pickers/EnvironmentPicker";
+import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
-import {
-  useProjectGithubBranches,
-  useProjectSourceBranches,
-} from "@/hooks/queries/project-queries";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
@@ -47,7 +43,7 @@ export interface NewThreadEnvironmentConfig {
 }
 
 export interface NewThreadBranchConfig {
-  value: string;
+  value: string | null;
   isNew: boolean;
   options: readonly string[];
   loading?: boolean;
@@ -180,22 +176,27 @@ export interface NewThreadConnectedEnvironmentConfig {
 }
 
 export interface NewThreadConnectedBranchConfig {
-  value: string;
+  current: string | null;
+  value: string | null;
   isNew: boolean;
+  options: readonly string[];
+  loading?: boolean;
   onChange: (value: string) => void;
   onCreate: () => void;
 }
 
-export interface NewThreadPromptBoxProps
-  extends Omit<NewThreadPromptBoxUIProps, "environment" | "branch"> {
+export interface NewThreadPromptBoxProps extends Omit<
+  NewThreadPromptBoxUIProps,
+  "environment" | "branch"
+> {
   environment: NewThreadConnectedEnvironmentConfig;
   branch: NewThreadConnectedBranchConfig;
 }
 
 /**
  * The composed prompt area for creating a new thread in a project — used by
- * ProjectMainView. Wires the host/sandbox queries that feed the environment
- * picker, then forwards everything to NewThreadPromptBoxUI.
+ * ProjectMainView. Wires the host/sandbox environment-picker queries, then
+ * forwards everything to NewThreadPromptBoxUI.
  */
 export function NewThreadPromptBox({
   environment,
@@ -210,52 +211,14 @@ export function NewThreadPromptBox({
 
   const parsedEnvironment = parseEnvironmentValue(environment.value);
   const isHostMode = parsedEnvironment?.type === "host";
-  const isSandboxMode = parsedEnvironment?.type === "sandbox";
-  const hostBranchesQuery = useProjectSourceBranches(
-    environment.projectId ?? undefined,
-    isHostMode ? parsedEnvironment.hostId : null,
-  );
-  const githubBranchesQuery = useProjectGithubBranches(
-    environment.projectId ?? undefined,
-    { enabled: isSandboxMode },
-  );
-  const activeBranchesQuery = isSandboxMode
-    ? githubBranchesQuery
-    : hostBranchesQuery;
-  // Source key the auto-default tracks. For host mode we re-sync when the
-  // user flips host; for sandbox mode the project pins it (one github source
-  // per project).
-  const branchSourceKey = isHostMode
-    ? `host|${parsedEnvironment.hostId}`
-    : isSandboxMode
-      ? "sandbox"
-      : null;
-
-  // Auto-default the picker to the source's current branch the first time we
-  // see a current for a given (project, source-key) pair. Tracking via ref
-  // means the user's manual pick survives subsequent flips back to a source
-  // we've already synced.
-  const lastSyncedBranchKeyRef = useRef<string | null>(null);
-  const onBranchChange = branch.onChange;
-  const branchesCurrent = activeBranchesQuery.data?.current ?? null;
-  useEffect(() => {
-    if (!environment.projectId || !branchSourceKey || !branchesCurrent) return;
-    const key = `${environment.projectId}|${branchSourceKey}`;
-    if (lastSyncedBranchKeyRef.current === key) return;
-    lastSyncedBranchKeyRef.current = key;
-    onBranchChange(branchesCurrent);
-  }, [
-    environment.projectId,
-    branchSourceKey,
-    branchesCurrent,
-    onBranchChange,
-  ]);
 
   // Create-new-branch is only meaningful for host:local (work locally /
   // remotely) — the server checks out a fresh branch in the primary checkout
   // before the thread starts. Worktree/sandbox env modes use the picked
   // branch as a merge base instead, so we omit onCreate there.
   const allowCreate = isHostMode && parsedEnvironment.mode === "local";
+  const branchPickerValue = branch.value ?? branch.current;
+  const canCreate = allowCreate && branchPickerValue !== null;
 
   return (
     <NewThreadPromptBoxUI
@@ -268,14 +231,14 @@ export function NewThreadPromptBox({
         isLocalHost,
       }}
       branch={{
-        value: branch.value,
+        value: branchPickerValue,
         // isNew is only meaningful when create-new is allowed; suppress
         // stale state when the user flips to a mode that uses baseBranch.
         isNew: allowCreate && branch.isNew,
-        options: activeBranchesQuery.data?.branches ?? [],
-        loading: activeBranchesQuery.isLoading,
+        options: branch.options,
+        loading: branch.loading,
         onChange: branch.onChange,
-        ...(allowCreate ? { onCreate: branch.onCreate } : {}),
+        ...(canCreate ? { onCreate: branch.onCreate } : {}),
       }}
     />
   );

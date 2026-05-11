@@ -25,6 +25,7 @@ export interface CreateEnvironmentInput {
   isGitRepo?: boolean;
   isWorktree?: boolean;
   branchName?: string | null;
+  baseBranch?: string | null;
   defaultBranch?: string | null;
   mergeBaseBranch?: string | null;
   status?: EnvironmentStatus;
@@ -48,6 +49,7 @@ export function createEnvironment(
       isGitRepo: input.isGitRepo ?? false,
       isWorktree: input.isWorktree ?? false,
       branchName: input.branchName ?? null,
+      baseBranch: input.baseBranch ?? null,
       defaultBranch: input.defaultBranch ?? null,
       mergeBaseBranch: input.mergeBaseBranch ?? null,
       cleanupRequestedAt: input.cleanupRequestedAt ?? null,

@@ -39,49 +39,11 @@ import {
   OPTION_INTERACTIVE_CLASS_NAME,
   OPTION_MUTED_CLASS_NAME,
 } from "./OptionPicker";
-
-// ---------------------------------------------------------------------------
-// Value encoding
-// ---------------------------------------------------------------------------
-
-function encodeHostValue(hostId: string, mode: "local" | "worktree"): string {
-  return `host:${hostId}:${mode}`;
-}
-
-function encodeSandboxValue(backendId: string): string {
-  return `sandbox:${backendId}`;
-}
-
-interface ParsedHostValue {
-  type: "host";
-  hostId: string;
-  mode: "local" | "worktree";
-}
-
-interface ParsedSandboxValue {
-  type: "sandbox";
-  backendId: string;
-}
-
-type ParsedEnvironmentValue = ParsedHostValue | ParsedSandboxValue | null;
-
-export function parseEnvironmentValue(value: string): ParsedEnvironmentValue {
-  if (value.startsWith("host:")) {
-    const parts = value.split(":");
-    const hostId = parts[1];
-    const mode = parts[2];
-    if (hostId && (mode === "local" || mode === "worktree")) {
-      return { type: "host", hostId, mode };
-    }
-  }
-  if (value.startsWith("sandbox:")) {
-    const backendId = value.slice("sandbox:".length);
-    if (backendId) {
-      return { type: "sandbox", backendId };
-    }
-  }
-  return null;
-}
+import {
+  encodeHostValue,
+  encodeSandboxValue,
+  parseEnvironmentValue,
+} from "./environment-picker-value";
 
 // ---------------------------------------------------------------------------
 // Host section data

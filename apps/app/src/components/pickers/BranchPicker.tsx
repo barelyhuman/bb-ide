@@ -53,7 +53,7 @@ export function BranchPicker({
   defaultOpen = false,
   modal = true,
 }: {
-  value: string;
+  value: string | null;
   options: readonly string[];
   loading?: boolean;
   disabled?: boolean;
@@ -95,6 +95,7 @@ export function BranchPicker({
     // always visible without scrolling. Only when not creating a new branch
     // (then no list option is "selected").
     if (isCreatingNew) return matches;
+    if (!value) return matches;
     const selectedIndex = matches.indexOf(value);
     if (selectedIndex <= 0) return matches;
     return [
@@ -103,11 +104,19 @@ export function BranchPicker({
       ...matches.slice(selectedIndex + 1),
     ];
   }, [normalizedQuery, options, value, isCreatingNew]);
-  const enterSelection =
-    filteredOptions.find((branch) => branch === value) ?? filteredOptions[0];
-  const triggerLabel = isCreatingNew ? CREATE_NEW_BRANCH_LABEL : value;
+  const enterSelection = value
+    ? (filteredOptions.find((branch) => branch === value) ??
+      filteredOptions[0])
+    : filteredOptions[0];
+  const unresolvedTriggerLabel = loading
+    ? "Loading branches..."
+    : "Select branch";
+  const triggerLabel = isCreatingNew
+    ? CREATE_NEW_BRANCH_LABEL
+    : (value ?? unresolvedTriggerLabel);
   const showCreateItem =
-    Boolean(onCreate) && CREATE_NEW_BRANCH_LABEL.toLowerCase().includes(normalizedQuery);
+    Boolean(onCreate) &&
+    CREATE_NEW_BRANCH_LABEL.toLowerCase().includes(normalizedQuery);
 
   useEffect(() => {
     if (!open) {
@@ -143,7 +152,9 @@ export function BranchPicker({
           title={
             isCreatingNew
               ? CREATE_NEW_BRANCH_LABEL
-              : `Branch: ${value}`
+              : value
+                ? `Branch: ${value}`
+                : unresolvedTriggerLabel
           }
           className={cn(
             variant === "default" &&

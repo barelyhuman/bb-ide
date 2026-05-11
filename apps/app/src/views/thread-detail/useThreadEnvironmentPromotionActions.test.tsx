@@ -54,6 +54,7 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
 
 function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   return {
+    baseBranch: null,
     branchName: "bb/thread",
     cleanupMode: null,
     cleanupRequestedAt: null,

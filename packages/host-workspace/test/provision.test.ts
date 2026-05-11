@@ -1,12 +1,33 @@
+import { rmSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
+import {
+  DEFAULT_ENV_SETUP_SCRIPT_NAME,
+  type ProvisioningTranscriptEntry,
+} from "@bb/domain";
 import { provisionWorkspace } from "../src/index.js";
 import { runGit } from "../src/git.js";
+import { withCheckoutMutationLock } from "../src/checkout-mutation-lock.js";
 
 const tempDirs: string[] = [];
+
+type Deferred = {
+  promise: Promise<void>;
+  resolve: () => void;
+};
+
+function createDeferred(): Deferred {
+  let resolveDeferred = (): void => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolveDeferred = resolve;
+  });
+  return {
+    promise,
+    resolve: resolveDeferred,
+  };
+}
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -68,6 +89,46 @@ describe("provisionWorkspace", () => {
       expect(ws.managed).toBe(false);
       expect(ws.isGitRepo).toBe(false);
       expect(ws.isWorktree).toBe(false);
+    });
+
+    it("switches unmanaged git repos to an existing checkout branch", async () => {
+      const repoPath = await initRepo();
+      await runGit(["branch", "feature-existing"], { cwd: repoPath });
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+        checkout: { kind: "existing", name: "feature-existing" },
+      });
+
+      expect(ws.isGitRepo).toBe(true);
+      expect(await ws.getCurrentBranch()).toBe("feature-existing");
+    });
+
+    it("creates unmanaged checkout branches when requested", async () => {
+      const repoPath = await initRepo();
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+        checkout: { kind: "new", name: "feature-new" },
+      });
+
+      expect(ws.isGitRepo).toBe(true);
+      expect(await ws.getCurrentBranch()).toBe("feature-new");
+      expect(await ws.listBranches()).toContain("feature-new");
+    });
+
+    it("rejects unmanaged checkouts for non-git directories", async () => {
+      const dirPath = await makeTempDir("bb-provision-nongit-checkout-");
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: dirPath,
+          checkout: { kind: "existing", name: "feature-existing" },
+        }),
+      ).rejects.toThrow(/Cannot checkout branch on non-git workspace/u);
     });
 
     it("detects a worktree as isWorktree=true", async () => {
@@ -136,6 +197,131 @@ describe("provisionWorkspace", () => {
 
       // Path still exists
       await expect(fs.stat(repoPath)).resolves.toBeDefined();
+    });
+
+    it("serializes concurrent unmanaged checkout provisioning for the same path", async () => {
+      const repoPath = await initRepo();
+      await runGit(["branch", "feature-a"], { cwd: repoPath });
+      await runGit(["branch", "feature-b"], { cwd: repoPath });
+
+      const lockEntered = createDeferred();
+      const releaseLock = createDeferred();
+      const heldLock = withCheckoutMutationLock(repoPath, async () => {
+        lockEntered.resolve();
+        await releaseLock.promise;
+      });
+      await lockEntered.promise;
+
+      const firstCheckoutWaiting = createDeferred();
+      const secondCheckoutWaiting = createDeferred();
+      let firstCompleted = false;
+      let secondCompleted = false;
+      let lockReleased = false;
+      let checkoutStartedBeforeRelease = false;
+      let checkoutStartedCount = 0;
+      const firstProvision = provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+        checkout: { kind: "existing", name: "feature-a" },
+        onProgress: (entry) => {
+          if (entry.key === "git-checkout-started") {
+            checkoutStartedCount += 1;
+            if (!lockReleased) {
+              checkoutStartedBeforeRelease = true;
+            }
+          }
+          if (entry.key === "git-checkout-waiting") {
+            firstCheckoutWaiting.resolve();
+          }
+        },
+      }).then(() => {
+        firstCompleted = true;
+      });
+      const secondProvision = provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+        checkout: { kind: "existing", name: "feature-b" },
+        onProgress: (entry) => {
+          if (entry.key === "git-checkout-started") {
+            checkoutStartedCount += 1;
+            if (!lockReleased) {
+              checkoutStartedBeforeRelease = true;
+            }
+          }
+          if (entry.key === "git-checkout-waiting") {
+            secondCheckoutWaiting.resolve();
+          }
+        },
+      }).then(() => {
+        secondCompleted = true;
+      });
+
+      await Promise.all([
+        firstCheckoutWaiting.promise,
+        secondCheckoutWaiting.promise,
+      ]);
+
+      expect(firstCompleted).toBe(false);
+      expect(secondCompleted).toBe(false);
+      expect(checkoutStartedBeforeRelease).toBe(false);
+      expect(checkoutStartedCount).toBe(0);
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("main\n");
+
+      lockReleased = true;
+      releaseLock.resolve();
+      await Promise.all([heldLock, firstProvision, secondProvision]);
+
+      expect(firstCompleted).toBe(true);
+      expect(secondCompleted).toBe(true);
+      expect(checkoutStartedBeforeRelease).toBe(false);
+      expect(checkoutStartedCount).toBe(2);
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("feature-b\n");
+    });
+
+    it("marks checkout waiting failed when lock acquisition fails", async () => {
+      const repoPath = await initRepo();
+      const entries: ProvisioningTranscriptEntry[] = [];
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: repoPath,
+          checkout: { kind: "existing", name: "main" },
+          onProgress: (entry) => {
+            entries.push(entry);
+            if (
+              entry.key === "git-checkout-waiting" &&
+              entry.status === "started"
+            ) {
+              rmSync(path.join(repoPath, ".git"), {
+                recursive: true,
+                force: true,
+              });
+            }
+          },
+        }),
+      ).rejects.toThrow(/git rev-parse --absolute-git-dir failed/u);
+
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: "git-checkout-waiting",
+            status: "started",
+          }),
+          expect.objectContaining({
+            key: "git-checkout-waiting",
+            status: "failed",
+          }),
+          expect.objectContaining({
+            key: "git-checkout-failed",
+            status: "failed",
+          }),
+        ]),
+      );
     });
   });
 

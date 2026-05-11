@@ -82,7 +82,10 @@ describe("generated managed branch names", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -98,7 +101,10 @@ describe("generated managed branch names", () => {
       expect(getThread(harness.db, thread.id)?.title).toBe(
         "Improve Branch Names",
       );
-      if (queued.command.type !== "environment.provision" || queued.command.workspaceProvisionType === "unmanaged") {
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
         throw new Error("Expected environment.provision command");
       }
       expect(queued.command.branchName).toBe(
@@ -142,7 +148,10 @@ describe("generated managed branch names", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -153,7 +162,10 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (provision.command.type !== "environment.provision" || provision.command.workspaceProvisionType === "unmanaged") {
+      if (
+        provision.command.type !== "environment.provision" ||
+        provision.command.workspaceProvisionType === "unmanaged"
+      ) {
         throw new Error("Expected environment.provision command");
       }
       await reportQueuedCommandSuccess(
@@ -227,7 +239,10 @@ describe("generated managed branch names", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -238,7 +253,10 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (provision.command.type !== "environment.provision" || provision.command.workspaceProvisionType === "unmanaged") {
+      if (
+        provision.command.type !== "environment.provision" ||
+        provision.command.workspaceProvisionType === "unmanaged"
+      ) {
         throw new Error("Expected environment.provision command");
       }
       expect(provision.command.branchName).toBe(
@@ -315,7 +333,10 @@ describe("generated managed branch names", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -328,7 +349,10 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (queued.command.type !== "environment.provision" || queued.command.workspaceProvisionType === "unmanaged") {
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
         throw new Error("Expected environment.provision command");
       }
       expect(queued.command.branchName).toBe(`bb/${thread.id}`);
@@ -369,7 +393,10 @@ describe("generated managed branch names", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -380,7 +407,10 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (queued.command.type !== "environment.provision" || queued.command.workspaceProvisionType === "unmanaged") {
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
         throw new Error("Expected environment.provision command");
       }
       expect(queued.command.branchName).toBe(`bb/${thread.id}`);
@@ -423,7 +453,10 @@ describe("generated managed branch names", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -438,7 +471,10 @@ describe("generated managed branch names", () => {
       expect(getThread(harness.db, thread.id)?.title).toBe(
         "Canonical Generated Title",
       );
-      if (queued.command.type !== "environment.provision" || queued.command.workspaceProvisionType === "unmanaged") {
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
         throw new Error("Expected environment.provision command");
       }
       expect(queued.command.branchName).toBe(

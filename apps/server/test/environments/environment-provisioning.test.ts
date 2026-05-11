@@ -142,6 +142,104 @@ describe("environment reprovisioning", () => {
     }
   });
 
+  it("uses the persisted base branch during managed reprovision", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reprovision-base-branch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/reprovision-base-branch-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-base-branch-target",
+        status: "error",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/base-branch-thread",
+        baseBranch: "release/2026-05",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      await queueManagedEnvironmentReprovision(harness.deps, {
+        environment,
+        projectId: thread.projectId,
+        provisionEventSequence: 1,
+        provisioningId: "tpv-reprovision-base-branch",
+        threadId: thread.id,
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected managed environment.provision command");
+      }
+      expect(queued.command.baseBranch).toBe("release/2026-05");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses the source default base branch during managed reprovision", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reprovision-default-base-branch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/reprovision-default-base-branch-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-default-base-branch-target",
+        status: "error",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/default-base-branch-thread",
+        baseBranch: null,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      await queueManagedEnvironmentReprovision(harness.deps, {
+        environment,
+        projectId: thread.projectId,
+        provisionEventSequence: 1,
+        provisioningId: "tpv-reprovision-default-base-branch",
+        threadId: thread.id,
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected managed environment.provision command");
+      }
+      expect(queued.command.baseBranch).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("fails reprovision before mutating state when the host is disconnected", async () => {
     const harness = await createTestAppHarness();
     try {

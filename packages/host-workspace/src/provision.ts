@@ -11,6 +11,7 @@ import type {
 } from "./workspace.js";
 import { Workspace } from "./workspace.js";
 import { promoteWorkspace, demoteWorkspace } from "./promote.js";
+import { withCheckoutMutationLock } from "./checkout-mutation-lock.js";
 import {
   createWorktree,
   createClone,
@@ -314,19 +315,48 @@ async function applyUnmanagedCheckout(
     checkout.kind === "new"
       ? ["switch", "-C", checkout.name]
       : ["switch", checkout.name];
-  const startedAt = Date.now();
+  const waitingStartedAt = Date.now();
   onProgress?.({
     type: "step",
-    key: "git-checkout-started",
+    key: "git-checkout-waiting",
     text:
       checkout.kind === "new"
-        ? `Creating branch ${checkout.name}`
-        : `Switching to branch ${checkout.name}`,
+        ? `Waiting to create branch ${checkout.name}`
+        : `Waiting to switch to branch ${checkout.name}`,
     status: "started",
-    startedAt,
+    startedAt: waitingStartedAt,
   });
+  let startedAt = waitingStartedAt;
+  let waitingCompleted = false;
   try {
-    await runGit(switchArgs, { cwd });
+    await withCheckoutMutationLock(cwd, async () => {
+      const lockAcquiredAt = Date.now();
+      onProgress?.({
+        type: "step",
+        key: "git-checkout-waiting",
+        text:
+          checkout.kind === "new"
+            ? `Ready to create branch ${checkout.name}`
+            : `Ready to switch to branch ${checkout.name}`,
+        status: "completed",
+        startedAt: waitingStartedAt,
+        metadata: { durationMs: lockAcquiredAt - waitingStartedAt },
+      });
+      waitingCompleted = true;
+      startedAt = lockAcquiredAt;
+      onProgress?.({
+        type: "step",
+        key: "git-checkout-started",
+        text:
+          checkout.kind === "new"
+            ? `Creating branch ${checkout.name}`
+            : `Switching to branch ${checkout.name}`,
+        status: "started",
+        startedAt,
+      });
+      await runGit(switchArgs, { cwd });
+    });
+    waitingCompleted = true;
     onProgress?.({
       type: "step",
       key: "git-checkout-completed",
@@ -339,6 +369,20 @@ async function applyUnmanagedCheckout(
       metadata: { durationMs: Date.now() - startedAt },
     });
   } catch (error) {
+    const failedAt = Date.now();
+    if (!waitingCompleted) {
+      onProgress?.({
+        type: "step",
+        key: "git-checkout-waiting",
+        text:
+          checkout.kind === "new"
+            ? `Failed waiting to create branch ${checkout.name}`
+            : `Failed waiting to switch to branch ${checkout.name}`,
+        status: "failed",
+        startedAt: waitingStartedAt,
+        metadata: { durationMs: failedAt - waitingStartedAt },
+      });
+    }
     onProgress?.({
       type: "step",
       key: "git-checkout-failed",
@@ -348,7 +392,7 @@ async function applyUnmanagedCheckout(
           : `Failed to switch to branch ${checkout.name}`,
       status: "failed",
       startedAt,
-      metadata: { durationMs: Date.now() - startedAt },
+      metadata: { durationMs: failedAt - startedAt },
     });
     throw error;
   }

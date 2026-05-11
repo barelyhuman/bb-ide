@@ -12,18 +12,15 @@ import {
 } from "./process-local-queued-lock.js";
 
 type CheckoutMutationLockWork<T> = ProcessLocalQueuedLockWork<T>;
-type GitCommandArgs = string[];
-type CheckoutPath = string;
-type CheckoutPaths = CheckoutPath[];
 
 async function resolveCheckoutMutationLockSpec(
-  checkoutPath: CheckoutPath,
+  checkoutPath: string,
 ): Promise<ProcessLocalQueuedLockSpec> {
   return { key: await getAbsoluteGitDir(checkoutPath) };
 }
 
 async function tryResolveCheckoutMutationLockSpec(
-  checkoutPath: CheckoutPath,
+  checkoutPath: string,
 ): Promise<ProcessLocalQueuedLockSpec | null> {
   const result = await runGit(["rev-parse", "--absolute-git-dir"], {
     cwd: checkoutPath,
@@ -38,7 +35,7 @@ async function tryResolveCheckoutMutationLockSpec(
 }
 
 export async function withCheckoutMutationLock<T>(
-  checkoutPath: CheckoutPath,
+  checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
 ): Promise<T> {
   const lock = await resolveCheckoutMutationLockSpec(checkoutPath);
@@ -46,7 +43,7 @@ export async function withCheckoutMutationLock<T>(
 }
 
 export async function tryWithCheckoutMutationLock<T>(
-  checkoutPath: CheckoutPath,
+  checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
 ): Promise<T | null> {
   const lock = await tryResolveCheckoutMutationLockSpec(checkoutPath);
@@ -58,7 +55,7 @@ export async function tryWithCheckoutMutationLock<T>(
 }
 
 export async function withCheckoutMutationLocks<T>(
-  checkoutPaths: CheckoutPaths,
+  checkoutPaths: string[],
   work: CheckoutMutationLockWork<T>,
 ): Promise<T> {
   const locks = await Promise.all(
@@ -70,7 +67,7 @@ export async function withCheckoutMutationLocks<T>(
 }
 
 export async function runGitWithCheckoutMutationLock(
-  args: GitCommandArgs,
+  args: string[],
   options: RunGitOptions,
 ): Promise<GitCommandResult> {
   return withCheckoutMutationLock(options.cwd, () => runGit(args, options));

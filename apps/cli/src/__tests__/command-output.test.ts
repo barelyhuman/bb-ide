@@ -150,6 +150,7 @@ function makeEnvironment(
     workspaceProvisionType: "unmanaged",
     branchName: "bb/thread",
     defaultBranch: "main",
+    baseBranch: null,
     mergeBaseBranch: null,
     cleanupRequestedAt: null,
     cleanupMode: null,

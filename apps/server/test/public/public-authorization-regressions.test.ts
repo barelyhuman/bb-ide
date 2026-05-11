@@ -131,6 +131,7 @@ describe("public authorization regressions", () => {
             hostId: host.id,
             workspace: {
               type: "managed-worktree",
+              baseBranch: { kind: "default" },
             },
           },
         }),

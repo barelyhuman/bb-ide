@@ -16,12 +16,20 @@ import {
 } from "./title-generation.js";
 
 /**
- * Convert a {@link BaseBranchSpec} to the wire shape expected by the daemon's
- * `environment.provision` command. `{ kind: "default" }` becomes `null`,
- * which the daemon resolves to the source's default branch.
+ * Convert a {@link BaseBranchSpec} to the stored/wire branch-name shape.
+ * `{ kind: "default" }` becomes `null`, which means the source's default
+ * branch.
  */
-export function baseBranchSpecToWire(spec: BaseBranchSpec): string | null {
+export function baseBranchSpecToStoredName(
+  spec: BaseBranchSpec,
+): string | null {
   return spec.kind === "named" ? spec.name : null;
+}
+
+export function storedBaseBranchNameToSpec(
+  name: string | null,
+): BaseBranchSpec {
+  return name ? { kind: "named", name } : { kind: "default" };
 }
 
 type EnvironmentProvisionCommand = Extract<
@@ -123,7 +131,7 @@ export function buildEnvironmentProvisionCommand(
         sourcePath: args.sourcePath,
         targetPath: args.targetPath,
         branchName: args.branchName,
-        baseBranch: baseBranchSpecToWire(args.baseBranch),
+        baseBranch: baseBranchSpecToStoredName(args.baseBranch),
         setupTimeoutMs: args.setupTimeoutMs,
       };
 }

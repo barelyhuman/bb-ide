@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { isGitHubRepoProjectSource } from "@bb/domain";
 import { NewThreadPromptBox } from "@/components/promptbox/NewThreadPromptBox";
-import { parseEnvironmentValue } from "@/components/pickers/EnvironmentPicker";
+import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { OptionPicker } from "@/components/pickers/OptionPicker";
 import { PageShell } from "@/components/ui";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
 import {
+  useProjectGithubBranches,
   useProjectPromptHistory,
+  useProjectSourceBranches,
   useProjects,
 } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
@@ -18,7 +21,8 @@ import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
-import type { CreateThreadRequest } from "@bb/server-contract";
+import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
+import { useScopedBranchSelection } from "./project-main-branch-selection";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
 
@@ -35,10 +39,6 @@ export function ProjectMainView() {
     useProjectPromptHistory(projectId);
   const promptMentions = usePromptMentions(projectId, { environmentId: null });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<{
-    name: string;
-    isNew: boolean;
-  }>({ name: "main", isNew: false });
   const prompt = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -85,7 +85,14 @@ export function ProjectMainView() {
     () => projects?.find((p) => p.id === projectId),
     [projects, projectId],
   );
-  const projectSources = currentProject?.sources ?? [];
+  const projectSources = useMemo(
+    () => currentProject?.sources ?? [],
+    [currentProject?.sources],
+  );
+  const hasGithubSource = useMemo(
+    () => projectSources.some(isGitHubRepoProjectSource),
+    [projectSources],
+  );
 
   // Fall back to local host direct if no value is stored yet
   const effectiveEnvironmentValue = useMemo(() => {
@@ -100,53 +107,49 @@ export function ProjectMainView() {
     }
     return "";
   }, [environmentSelectionValue, localHostId]);
-
-  const selectedEnvironment = useMemo(():
-    | CreateThreadRequest["environment"]
-    | null => {
-    if (!projectId) return null;
-    const parsed = parseEnvironmentValue(effectiveEnvironmentValue);
-    if (!parsed) return null;
-
-    if (parsed.type === "host") {
-      if (parsed.mode === "worktree") {
-        return {
-          type: "host",
-          hostId: parsed.hostId,
-          workspace: {
-            type: "managed-worktree",
-            baseBranch: { kind: "named", name: selectedBranch.name },
-          },
-        };
-      }
-      return {
-        type: "host",
-        hostId: parsed.hostId,
-        workspace: {
-          type: "unmanaged",
-          path: null,
-          branch: selectedBranch.isNew
-            ? { kind: "new" }
-            : { kind: "existing", name: selectedBranch.name },
-        },
-      };
-    }
-
-    if (parsed.type === "sandbox") {
-      return {
-        type: "sandbox-host",
-        sandboxType: parsed.backendId,
-        baseBranch: { kind: "named", name: selectedBranch.name },
-      };
-    }
-
-    return null;
-  }, [
-    effectiveEnvironmentValue,
+  const parsedEnvironment = useMemo(
+    () => parseEnvironmentValue(effectiveEnvironmentValue),
+    [effectiveEnvironmentValue],
+  );
+  const isHostMode = parsedEnvironment?.type === "host";
+  const isSandboxMode = parsedEnvironment?.type === "sandbox";
+  const hostBranchesQuery = useProjectSourceBranches(
     projectId,
-    selectedBranch.name,
-    selectedBranch.isNew,
-  ]);
+    isHostMode ? parsedEnvironment.hostId : null,
+  );
+  const githubBranchesQuery = useProjectGithubBranches(projectId, {
+    enabled: isSandboxMode && hasGithubSource,
+  });
+  const activeBranchesQuery = isSandboxMode
+    ? githubBranchesQuery
+    : hostBranchesQuery;
+  const branchOptions = activeBranchesQuery.data?.branches ?? [];
+  const resolvedDefaultBranch = activeBranchesQuery.data?.current ?? null;
+  const {
+    selectedBranch,
+    onBranchChange: handleBranchChange,
+    onCreateBranch: handleCreateBranch,
+  } = useScopedBranchSelection({
+    defaultBranch: resolvedDefaultBranch,
+    environmentValue: effectiveEnvironmentValue,
+    projectId,
+  });
+
+  const selectedEnvironment = useMemo(
+    () =>
+      resolveProjectMainThreadEnvironment({
+        environmentValue: effectiveEnvironmentValue,
+        projectId,
+        resolvedDefaultBranch,
+        selectedBranch,
+      }),
+    [
+      effectiveEnvironmentValue,
+      projectId,
+      resolvedDefaultBranch,
+      selectedBranch,
+    ],
+  );
 
   const projectOptions = useMemo(() => {
     const knownOptions =
@@ -352,11 +355,13 @@ export function ProjectMainView() {
             sources: projectSources,
           }}
           branch={{
-            value: selectedBranch.name,
-            isNew: selectedBranch.isNew,
-            onChange: (name) => setSelectedBranch({ name, isNew: false }),
-            onCreate: () =>
-              setSelectedBranch((prev) => ({ name: prev.name, isNew: true })),
+            value: selectedBranch?.name ?? null,
+            current: resolvedDefaultBranch,
+            isNew: selectedBranch?.isNew ?? false,
+            options: branchOptions,
+            loading: activeBranchesQuery.isLoading,
+            onChange: handleBranchChange,
+            onCreate: handleCreateBranch,
           }}
           permission={{
             value: permissionMode,

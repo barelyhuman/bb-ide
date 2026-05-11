@@ -121,6 +121,7 @@ export function seedEnvironment(
     managed?: boolean;
     workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone";
     branchName?: string | null;
+    baseBranch?: string | null;
     defaultBranch?: string | null;
     mergeBaseBranch?: string | null;
   },
@@ -135,6 +136,7 @@ export function seedEnvironment(
     isWorktree: args.workspaceProvisionType === "managed-worktree",
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
     branchName: args.branchName !== undefined ? args.branchName : "bb/test",
+    baseBranch: args.baseBranch !== undefined ? args.baseBranch : null,
     defaultBranch:
       args.defaultBranch !== undefined ? args.defaultBranch : "main",
     mergeBaseBranch: args.mergeBaseBranch ?? null,

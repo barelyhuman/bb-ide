@@ -209,15 +209,15 @@ describe("workspace-status", () => {
     );
   });
 
-  it("reports a deleted workspace when the path is gone", () => {
+  it("reports a missing workspace when the path is gone", () => {
     const error = new HttpError({
       status: 502,
       message: "Managed workspace path does not exist",
       code: "path_not_found",
     });
     expect(getGitStatusDisplay(undefined, { error })).toMatchObject({
-      label: "Deleted",
-      summary: "Workspace deleted.",
+      label: "Unknown",
+      summary: "Workspace not found.",
     });
   });
 });

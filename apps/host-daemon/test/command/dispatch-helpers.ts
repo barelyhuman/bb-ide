@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
@@ -18,6 +20,13 @@ import { noopEventSink } from "../../src/command-dispatch-support.js";
 import type { CommandDispatchOptions } from "../../src/command-dispatch-support.js";
 
 const tempDirs: string[] = [];
+const execFileAsync = promisify(execFile);
+
+type GitCommandArgs = string[];
+
+interface RunGitCommandOptions {
+  cwd: string;
+}
 
 type FakeWorkspaceDiffTarget =
   | { type: "uncommitted" }
@@ -376,6 +385,13 @@ export async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   tempDirs.push(dir);
   return dir;
+}
+
+export async function runGitCommand(
+  args: GitCommandArgs,
+  options: RunGitCommandOptions,
+): Promise<void> {
+  await execFileAsync("git", args, { cwd: options.cwd });
 }
 
 export async function cleanupTempDirs(): Promise<void> {

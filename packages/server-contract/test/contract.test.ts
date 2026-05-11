@@ -16,6 +16,8 @@ import {
   createThreadRequestSchema,
   environmentActionRequestSchema,
   environmentPromotionResponseSchema,
+  baseBranchSpecSchema,
+  gitBranchNameSchema,
   projectSourceWorkspaceStatusResponseSchema,
   resolvePendingInteractionRequestSchema,
   sendMessageRequestSchema,
@@ -24,6 +26,7 @@ import {
   timelineTurnSummaryDetailsResponseSchema,
   updateEnvironmentRequestSchema,
   updateAutomationRequestSchema,
+  unmanagedBranchSpecSchema,
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
@@ -186,6 +189,83 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "uploadedPromptAttachmentSchema.mimeType":
     "Uploaded attachments may omit mime type when the client could not determine one.",
 };
+
+describe("git branch name contract", () => {
+  it("accepts valid branch names", () => {
+    const validNames = [
+      "main",
+      "release/1.2",
+      "feature.foo",
+      "user_name",
+      "bb/thread-123",
+    ];
+
+    for (const name of validNames) {
+      expect(gitBranchNameSchema.safeParse(name).success).toBe(true);
+    }
+  });
+
+  it("rejects names git may parse ambiguously or refuses as refs", () => {
+    const invalidNames = [
+      "",
+      "   ",
+      "-release",
+      "/release",
+      ".release",
+      "bar/.hidden",
+      "bad\nbranch",
+      "bad\u007fbranch",
+      "bad branch",
+      "bad\tbranch",
+      "bad..branch",
+      "bad@{branch",
+      "bad\\branch",
+      "bad:branch",
+      "bad~branch",
+      "bad^branch",
+      "bad?branch",
+      "bad*branch",
+      "bad[branch",
+      "bad/",
+      "bad.lock",
+      "bad.lock/branch",
+      "bad//branch",
+      "bad.",
+      "@",
+      "HEAD",
+      "FETCH_HEAD",
+    ];
+
+    for (const name of invalidNames) {
+      expect(gitBranchNameSchema.safeParse(name).success).toBe(false);
+    }
+  });
+
+  it("uses the shared validator for managed and unmanaged branch specs", () => {
+    expect(
+      baseBranchSpecSchema.safeParse({
+        kind: "named",
+        name: "release/1.2",
+      }).success,
+    ).toBe(true);
+    expect(
+      baseBranchSpecSchema.safeParse({ kind: "named", name: "-release" })
+        .success,
+    ).toBe(false);
+    expect(
+      unmanagedBranchSpecSchema.safeParse({
+        kind: "existing",
+        name: "release/1.2",
+      }).success,
+    ).toBe(true);
+    expect(
+      unmanagedBranchSpecSchema.safeParse({
+        kind: "existing",
+        name: "release 1.2",
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe("server-contract canonical schemas", () => {
   it("parses request contracts", () => {

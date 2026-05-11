@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildManagedBranchName } from "../../src/services/threads/thread-create-helpers.js";
+import {
+  baseBranchSpecToStoredName,
+  buildManagedBranchName,
+} from "../../src/services/threads/thread-create-helpers.js";
 import { sanitizeGeneratedBranchSlug } from "../../src/services/threads/title-generation.js";
 
 describe("sanitizeGeneratedBranchSlug", () => {
@@ -53,5 +56,17 @@ describe("buildManagedBranchName", () => {
       threadId: "thr_abc123xyz789",
     });
     expect(a).not.toBe(b);
+  });
+});
+
+describe("baseBranchSpecToStoredName", () => {
+  it("stores named base branches as their branch name", () => {
+    expect(
+      baseBranchSpecToStoredName({ kind: "named", name: "release/1.2" }),
+    ).toBe("release/1.2");
+  });
+
+  it("stores default base branches as null", () => {
+    expect(baseBranchSpecToStoredName({ kind: "default" })).toBeNull();
   });
 });

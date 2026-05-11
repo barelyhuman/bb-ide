@@ -15,6 +15,8 @@ const githubHeaders = (pat: string) => ({
   Accept: "application/vnd.github+json",
 });
 
+type GithubBranchResponses = [Response, Response];
+
 export interface GithubBranchesResult {
   branches: string[];
   current: string | null;
@@ -35,12 +37,22 @@ export async function fetchGithubBranches(
   }
 
   const headers = githubHeaders(pat);
-  const [branchesRes, repoRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${ref}/branches?per_page=100`, {
-      headers,
-    }),
-    fetch(`https://api.github.com/repos/${ref}`, { headers }),
-  ]);
+  let responses: GithubBranchResponses;
+  try {
+    responses = await Promise.all([
+      fetch(`https://api.github.com/repos/${ref}/branches?per_page=100`, {
+        headers,
+      }),
+      fetch(`https://api.github.com/repos/${ref}`, { headers }),
+    ]);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim() !== ""
+        ? `GitHub API request failed: ${error.message}`
+        : "GitHub API request failed";
+    throw new ApiError(502, "upstream_error", message);
+  }
+  const [branchesRes, repoRes] = responses;
 
   if (branchesRes.status === 404 || repoRes.status === 404) {
     throw new ApiError(404, "invalid_request", "GitHub repo not found");

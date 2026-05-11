@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
+  createProject,
   getProjectExecutionDefaults,
   getProject,
   getThread,
@@ -78,6 +79,11 @@ const hostStatusListResponseSchema = z.array(
     status: z.string(),
   }),
 );
+
+const branchListResponseSchema = z.object({
+  branches: z.array(z.string()),
+  current: z.string().nullable(),
+});
 
 describe("public project and host routes", () => {
   it("supports project CRUD", async () => {
@@ -1028,6 +1034,125 @@ describe("public project and host routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         files: [{ path: "src/index.ts", name: "index.ts" }],
         truncated: true,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues host.list_branches for the default project source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-branches",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-branches",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/branches?hostId=${host.id}`,
+      );
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.list_branches" &&
+          command.path === "/tmp/project-branches",
+      );
+      expect(queued.command).toMatchObject({
+        path: "/tmp/project-branches",
+      });
+      await reportQueuedCommandSuccess(harness, queued, {
+        branches: ["main", "feature/test"],
+        current: "main",
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(branchListResponseSchema.parse(await readJson(response))).toEqual({
+        branches: ["main", "feature/test"],
+        current: "main",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 for branch listing on a missing project", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request(
+        "/api/v1/projects/proj_missing/branches?hostId=host_missing",
+      );
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "project_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("requires GitHub auth configuration for github branch listing", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "GitHub Project",
+        source: {
+          type: "github_repo",
+          repoUrl: "https://github.com/acme/widget",
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/github-branches`,
+      );
+
+      expect(response.status).toBe(501);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "not_configured",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 for github branch listing on a missing project", async () => {
+    const harness = await createTestAppHarness({ githubPat: "ghp_test" });
+    try {
+      const response = await harness.app.request(
+        "/api/v1/projects/proj_missing/github-branches",
+      );
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "project_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects github branch listing for non-GitHub project sources", async () => {
+    const harness = await createTestAppHarness({ githubPat: "ghp_test" });
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-non-github-branches",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-non-github-branches",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/github-branches`,
+      );
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
       });
     } finally {
       await harness.cleanup();

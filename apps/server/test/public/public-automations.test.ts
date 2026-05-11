@@ -87,7 +87,10 @@ describe("public automation routes", () => {
                 environment: {
                   type: "host",
                   hostId: host.id,
-                  workspace: { type: "managed-clone" },
+                  workspace: {
+                    type: "managed-clone",
+                    baseBranch: { kind: "default" },
+                  },
                 },
               },
             },
@@ -229,7 +232,10 @@ describe("public automation routes", () => {
                   environment: {
                     type: "host",
                     hostId: host.id,
-                    workspace: { type: "managed-clone" },
+                    workspace: {
+                      type: "managed-clone",
+                      baseBranch: { kind: "default" },
+                    },
                   },
                 },
               },
@@ -263,7 +269,10 @@ describe("public automation routes", () => {
             environment: {
               type: "host",
               hostId: host.id,
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         }),
@@ -349,7 +358,10 @@ describe("public automation routes", () => {
                   environment: {
                     type: "host",
                     hostId: host.id,
-                    workspace: { type: "managed-clone" },
+                    workspace: {
+                      type: "managed-clone",
+                      baseBranch: { kind: "default" },
+                    },
                   },
                 },
               },
@@ -391,7 +403,10 @@ describe("public automation routes", () => {
                 environment: {
                   type: "host",
                   hostId: host.id,
-                  workspace: { type: "managed-clone" },
+                  workspace: {
+                    type: "managed-clone",
+                    baseBranch: { kind: "default" },
+                  },
                 },
               },
             },
@@ -414,7 +429,10 @@ describe("public automation routes", () => {
             environment: {
               type: "host",
               hostId: host.id,
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         }),
@@ -514,7 +532,10 @@ describe("public automation routes", () => {
                 environment: {
                   type: "host",
                   hostId: foreignHost.id,
-                  workspace: { type: "managed-clone" },
+                  workspace: {
+                    type: "managed-clone",
+                    baseBranch: { kind: "default" },
+                  },
                 },
               },
             },
@@ -544,7 +565,10 @@ describe("public automation routes", () => {
                 environment: {
                   type: "host",
                   hostId: primaryHost.id,
-                  workspace: { type: "managed-clone" },
+                  workspace: {
+                    type: "managed-clone",
+                    baseBranch: { kind: "default" },
+                  },
                 },
               },
             },
@@ -617,6 +641,7 @@ describe("public automation routes", () => {
                 environment: {
                   type: "sandbox-host",
                   sandboxType: "e2b",
+                  baseBranch: { kind: "default" },
                 },
               },
             },
@@ -645,7 +670,10 @@ describe("public automation routes", () => {
             environment: {
               type: "host",
               hostId: host.id,
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         }),
@@ -670,6 +698,7 @@ describe("public automation routes", () => {
                 environment: {
                   type: "sandbox-host",
                   sandboxType: "e2b",
+                  baseBranch: { kind: "default" },
                 },
               },
             },
@@ -725,6 +754,7 @@ describe("public automation routes", () => {
                 environment: {
                   type: "sandbox-host",
                   sandboxType: "e2b",
+                  baseBranch: { kind: "default" },
                 },
               },
             },
@@ -835,7 +865,10 @@ describe("public automation routes", () => {
             environment: {
               type: "host",
               hostId: host.id,
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         }),
@@ -983,7 +1016,10 @@ describe("public automation routes", () => {
             environment: {
               type: "host",
               hostId: host.id,
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         }),

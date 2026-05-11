@@ -624,7 +624,10 @@ describe("automation sweep", () => {
             environment: {
               type: "host",
               hostId: host.id,
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         }),

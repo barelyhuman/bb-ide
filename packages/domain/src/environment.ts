@@ -94,6 +94,7 @@ export const environmentSchema = z.object({
   isWorktree: z.boolean(),
   workspaceProvisionType: workspaceProvisionTypeSchema,
   branchName: z.string().nullable(),
+  baseBranch: z.string().nullable(),
   defaultBranch: z.string().nullable(),
   mergeBaseBranch: z.string().nullable(),
   cleanupRequestedAt: z.number().nullable(),

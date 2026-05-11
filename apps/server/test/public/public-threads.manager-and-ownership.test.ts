@@ -326,7 +326,7 @@ describe("public thread manager and ownership routes", () => {
         expect.objectContaining({ name: "message_user" }),
       ]);
       expect(managerStartCommand.command.instructions).toContain(
-        "You are a manager for this project.",
+        "You are a manager in a project inside bb",
       );
       expect(managerStartCommand.command.instructions).toContain(
         "(file does not exist)",
@@ -632,8 +632,7 @@ describe("public thread manager and ownership routes", () => {
       const reuseThreadStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start" &&
-          command.threadId === reuseChild.id,
+          command.type === "thread.start" && command.threadId === reuseChild.id,
       );
       if (reuseThreadStart.command.type !== "thread.start") {
         throw new Error("Expected thread.start command");
@@ -774,15 +773,18 @@ describe("public thread manager and ownership routes", () => {
       ];
 
       for (const parentThreadId of invalidParentThreadIds) {
-        const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              parentThreadId,
+            }),
           },
-          body: JSON.stringify({
-            parentThreadId,
-          }),
-        });
+        );
 
         expect(response.status).toBe(400);
         await expect(readJson(response)).resolves.toMatchObject({

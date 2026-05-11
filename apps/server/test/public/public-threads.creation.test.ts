@@ -240,6 +240,7 @@ describe("public thread creation routes", () => {
             hostId: host.id,
             workspace: {
               type: "managed-worktree",
+              baseBranch: { kind: "named", name: "release/2026-05" },
             },
           },
         }),
@@ -248,6 +249,11 @@ describe("public thread creation routes", () => {
       expect(response.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
+      const environment = await waitForThreadEnvironment(
+        harness,
+        createdThread.id,
+      );
+      expect(environment.baseBranch).toBe("release/2026-05");
 
       const queued = await waitForQueuedCommand(
         harness,
@@ -255,6 +261,7 @@ describe("public thread creation routes", () => {
       );
       expect(queued.command).toMatchObject({
         branchName: `bb/managed-thread-${createdThread.id}`,
+        baseBranch: "release/2026-05",
         sourcePath: source.path,
         workspaceProvisionType: "managed-worktree",
         setupTimeoutMs: 900000,
@@ -263,6 +270,50 @@ describe("public thread creation routes", () => {
       expect(queued.command).toHaveProperty("branchName");
     } finally {
       await repo.cleanup();
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects malformed managed base branches before queueing host commands", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/malformed-base-branch-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          title: "Malformed base branch",
+          input: [{ type: "text", text: "Build it" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "named", name: "-release" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
+    } finally {
       await harness.cleanup();
     }
   });
@@ -307,6 +358,7 @@ describe("public thread creation routes", () => {
             hostId: secondaryHost.id,
             workspace: {
               type: "managed-worktree",
+              baseBranch: { kind: "default" },
             },
           },
         }),
@@ -375,6 +427,7 @@ describe("public thread creation routes", () => {
             hostId: missingSourceHost.id,
             workspace: {
               type: "managed-worktree",
+              baseBranch: { kind: "default" },
             },
           },
         }),

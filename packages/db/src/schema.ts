@@ -230,6 +230,7 @@ export const environments = sqliteTable(
       .notNull()
       .default(false),
     branchName: text("branch_name"),
+    baseBranch: text("base_branch"),
     defaultBranch: text("default_branch"),
     mergeBaseBranch: text("merge_base_branch"),
     cleanupRequestedAt: integer("cleanup_requested_at"),

@@ -44,6 +44,7 @@ import {
   appendThreadProvisioningEventInTransaction,
 } from "./thread-events.js";
 import {
+  baseBranchSpecToStoredName,
   buildEnvironmentProvisionCommand,
   buildManagedBranchName,
   SETUP_TIMEOUT_MS,
@@ -684,6 +685,7 @@ function buildManagedEnvironmentPlan(
       hostId: args.hostId,
       managed: true,
       workspaceProvisionType: args.workspaceProvisionType,
+      baseBranch: baseBranchSpecToStoredName(args.baseBranch),
       status: "provisioning",
     },
     hostInput: args.hostInput,

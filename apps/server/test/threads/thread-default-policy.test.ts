@@ -16,7 +16,9 @@ type PolicyTestParentThread = Pick<
   "archivedAt" | "deletedAt" | "id" | "projectId" | "type"
 >;
 
-function makeThread(overrides: Partial<PolicyTestThread> = {}): PolicyTestThread {
+function makeThread(
+  overrides: Partial<PolicyTestThread> = {},
+): PolicyTestThread {
   return {
     parentThreadId: null,
     projectId: "proj-1",
@@ -124,7 +126,7 @@ describe("resolveCreateThreadEnvironment", () => {
     ).toEqual({
       type: "host",
       hostId: "host-1",
-      workspace: { type: "managed-worktree" },
+      workspace: { type: "managed-worktree", baseBranch: { kind: "default" } },
     });
   });
 
@@ -216,7 +218,9 @@ describe("resolveCreateThreadEnvironment", () => {
       name: "explicit unmanaged paths",
     },
   ])("passes through $name", ({ args }) => {
-    expect(resolveCreateThreadEnvironment(args)).toEqual(args.requestedEnvironment);
+    expect(resolveCreateThreadEnvironment(args)).toEqual(
+      args.requestedEnvironment,
+    );
   });
 });
 

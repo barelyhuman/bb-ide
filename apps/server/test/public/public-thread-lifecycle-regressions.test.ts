@@ -151,7 +151,10 @@ describe("public thread lifecycle regressions", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -175,7 +178,10 @@ describe("public thread lifecycle regressions", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });
@@ -767,7 +773,10 @@ describe("public thread lifecycle regressions", () => {
           environment: {
             type: "host",
             hostId: host.id,
-            workspace: { type: "managed-worktree" },
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
           },
         }),
       });

@@ -92,6 +92,22 @@ describe("buildSpawnEnvironment", () => {
     });
   });
 
+  it("returns named base branch for --base-branch with managed worktrees", () => {
+    const result = buildSpawnEnvironment({
+      newEnvironmentKind: "worktree",
+      hostId: HOST_ID,
+      baseBranch: "release-1.2",
+    });
+    expect(result).toEqual({
+      type: "host",
+      hostId: HOST_ID,
+      workspace: {
+        type: "managed-worktree",
+        baseBranch: { kind: "named", name: "release-1.2" },
+      },
+    });
+  });
+
   it("throws for --new-environment worktree when host is null", () => {
     expect(() =>
       buildSpawnEnvironment({ newEnvironmentKind: "worktree", hostId: null }),

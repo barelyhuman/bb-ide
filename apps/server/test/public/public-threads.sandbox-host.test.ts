@@ -71,6 +71,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -111,6 +112,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -187,6 +189,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -295,6 +298,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -445,6 +449,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -573,6 +578,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -686,6 +692,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -780,6 +787,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -873,6 +881,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -918,6 +927,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -964,6 +974,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });
@@ -1008,6 +1019,7 @@ describe("public thread sandbox-host routes", () => {
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
+            baseBranch: { kind: "default" },
           },
         }),
       });

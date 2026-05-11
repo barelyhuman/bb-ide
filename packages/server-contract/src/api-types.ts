@@ -44,13 +44,59 @@ export type ThreadContextWindowUsage = z.infer<
 
 // --- Thread creation: environment + workspace discriminated unions ---
 
+const gitBranchForbiddenCharacterPattern = /[\u0000-\u001f\u007f\\:~^?*\[]/u;
+const gitBranchWhitespacePattern = /[ \t]/u;
+const gitBranchReservedNames = new Set([
+  "AUTO_MERGE",
+  "BISECT_HEAD",
+  "CHERRY_PICK_HEAD",
+  "FETCH_HEAD",
+  "HEAD",
+  "MERGE_HEAD",
+  "ORIG_HEAD",
+  "REVERT_HEAD",
+]);
+type GitBranchNameCandidate = string;
+
+// Pure contract-boundary mirror of git's branch/refname restrictions. Keep
+// this close to `git check-ref-format --branch` without shelling out.
+function isValidGitBranchName(name: GitBranchNameCandidate) {
+  const components = name.split("/");
+  return (
+    name.length > 0 &&
+    name.trim().length > 0 &&
+    !name.startsWith("-") &&
+    !name.startsWith("/") &&
+    name !== "@" &&
+    !gitBranchReservedNames.has(name) &&
+    !gitBranchForbiddenCharacterPattern.test(name) &&
+    !gitBranchWhitespacePattern.test(name) &&
+    !name.includes("..") &&
+    !name.includes("@{") &&
+    !name.includes("//") &&
+    !name.endsWith("/") &&
+    !name.endsWith(".") &&
+    components.every(
+      (component) =>
+        component.length > 0 &&
+        !component.startsWith(".") &&
+        !component.endsWith(".lock"),
+    )
+  );
+}
+
+export const gitBranchNameSchema = z
+  .string()
+  .refine(isValidGitBranchName, { message: "Invalid git branch name" });
+export type GitBranchName = z.infer<typeof gitBranchNameSchema>;
+
 /**
  * Pre-thread checkout intent for an unmanaged workspace. Omitting this from
  * the workspace request means "don't touch HEAD"; including it asks the
  * daemon to switch to (or create) the named branch before the thread starts.
  */
 export const unmanagedBranchSpecSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("existing"), name: z.string().min(1) }),
+  z.object({ kind: z.literal("existing"), name: gitBranchNameSchema }),
   z.object({ kind: z.literal("new") }),
 ]);
 export type UnmanagedBranchSpec = z.infer<typeof unmanagedBranchSpecSchema>;
@@ -73,7 +119,7 @@ export const unmanagedWorkspaceSchema = z.object({
  * branch name).
  */
 export const baseBranchSpecSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("named"), name: z.string().min(1) }),
+  z.object({ kind: z.literal("named"), name: gitBranchNameSchema }),
   z.object({ kind: z.literal("default") }),
 ]);
 export type BaseBranchSpec = z.infer<typeof baseBranchSpecSchema>;
