@@ -570,6 +570,7 @@ export function ThreadDetailView() {
       workspaceChangedFilesSection={
         canUseGitUi ? workspaceChangedFilesSection : null
       }
+      workspaceStatusPending={canUseGitUi && workStatusQuery.isLoading}
       contextBannerMergeBase={
         canUseGitUi && showMergeBase && promptBannerMergeBaseBranch
           ? {

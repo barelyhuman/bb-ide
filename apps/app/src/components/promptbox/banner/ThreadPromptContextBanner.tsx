@@ -1,6 +1,8 @@
 import {
+  Archive,
   Check,
   ChevronDown,
+  CircleDashed,
   FileDiff,
   ListTodo,
   Square,
@@ -74,6 +76,15 @@ export interface ThreadPromptManagerChildrenSection {
 }
 
 /**
+ * Archived-state segment for the banner. When present, the banner renders
+ * only this row — archived threads are read-only, so suppressing the other
+ * sections keeps the surface focused on "you are looking at a frozen thread".
+ */
+export interface ThreadPromptArchivedSection {
+  archivedAt: number;
+}
+
+/**
  * Runtime statuses that count as "active managed work" for the banner's
  * children section. These are the children the banner surfaces and (when the
  * bulk-stop slice lands) the children `Stop all` will target. Keep the set in
@@ -97,6 +108,20 @@ export type ThreadPromptContextBannerExpandedSection =
 export interface ThreadPromptContextBannerProps {
   todoSection: ThreadPromptTodoSection | null;
   gitSection: ThreadPromptGitSection | null;
+  /**
+   * True while the workspace status query for this thread is in flight. Holds
+   * banner rendering until the result settles so first paint is the final
+   * form — without this, managedBy would render inline then collapse to its
+   * icon-only sibling form when git pills arrive.
+   */
+  gitSectionPending: boolean;
+  /**
+   * When set, the banner renders the "Thread is archived" row and suppresses
+   * todos, git, and manager-children — those represent live work that no
+   * longer applies. managedBy still renders alongside if provided, since the
+   * manager relationship remains relevant context for a frozen thread.
+   */
+  archivedSection: ThreadPromptArchivedSection | null;
   managedBySection: ThreadPromptManagedBySection | null;
   managerChildrenSection: ThreadPromptManagerChildrenSection | null;
   expandedSection: ThreadPromptContextBannerExpandedSection | null;
@@ -196,7 +221,12 @@ function SectionToggleButton({
       aria-label={ariaLabel}
       onClick={onToggle}
       className={cn(
-        "flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors hover:bg-state-hover",
+        "flex min-w-0 items-center rounded px-1 py-0.5 text-xs transition-colors hover:bg-state-hover",
+        // When a label sits between the icon and the chevron we space the row
+        // for legibility (6px). With no label the chevron sits right after the
+        // icon — the icons' own internal padding provides enough separation,
+        // and a gap here makes the pair look untethered.
+        label !== null && label !== undefined ? "gap-1.5" : "gap-0",
         isExpanded ? "text-foreground/90" : "text-muted-foreground",
       )}
     >
@@ -364,11 +394,58 @@ function AnimatedBody({
 export function ThreadPromptContextBanner({
   todoSection,
   gitSection,
+  gitSectionPending,
+  archivedSection,
   managedBySection,
   managerChildrenSection,
   expandedSection,
   onToggleSection,
 }: ThreadPromptContextBannerProps) {
+  if (gitSectionPending) {
+    return null;
+  }
+  if (archivedSection) {
+    const isManagedByExpandedInArchived =
+      expandedSection === "managedBy" && managedBySection !== null;
+    return (
+      <PromptStackCard
+        ariaLabel="Thread context before sending"
+        className="overflow-hidden"
+      >
+        <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
+          {managedBySection ? (
+            <SectionToggleButton
+              id={SECTION_IDS.managedBy.toggle}
+              controlsId={SECTION_IDS.managedBy.body}
+              ariaLabel={`Managed by ${managedBySection.managerName}`}
+              icon={
+                <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+              }
+              label={null}
+              isExpanded={isManagedByExpandedInArchived}
+              onToggle={() => onToggleSection("managedBy")}
+            />
+          ) : null}
+          <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5">
+            <Archive className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">Thread is archived</span>
+          </div>
+        </div>
+        {managedBySection ? (
+          <AnimatedBody
+            id={SECTION_IDS.managedBy.body}
+            labelledBy={SECTION_IDS.managedBy.toggle}
+            isExpanded={isManagedByExpandedInArchived}
+          >
+            <ManagedByBody
+              managerName={managedBySection.managerName}
+              href={managedBySection.href}
+            />
+          </AnimatedBody>
+        ) : null}
+      </PromptStackCard>
+    );
+  }
   const showTodo =
     todoSection !== null && hasObservedTodoItems(todoSection.pendingTodos);
   const showGit = gitSection !== null;
@@ -404,13 +481,34 @@ export function ThreadPromptContextBanner({
         })
       : [];
 
+  // When the managed-by segment is the only item in the banner, render it
+  // inline as "Managed by <name>" with the name as a link. There's no other
+  // context to compete for the row, so the icon-only toggle would be a strict
+  // downgrade in legibility.
+  const isManagedByOnly =
+    showManagedBy && !showTodo && !showGit && !showManagerChildren;
+
   return (
     <PromptStackCard
       ariaLabel="Thread context before sending"
       className="overflow-hidden"
     >
       <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
-        {showManagedBy && managedBySection ? (
+        {showManagedBy && managedBySection && isManagedByOnly ? (
+          <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5">
+            <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">
+              Managed by{" "}
+              <NavLink
+                to={managedBySection.href}
+                className="text-foreground/90 underline underline-offset-2"
+              >
+                {managedBySection.managerName}
+              </NavLink>
+            </span>
+          </div>
+        ) : null}
+        {showManagedBy && managedBySection && !isManagedByOnly ? (
           <SectionToggleButton
             id={SECTION_IDS.managedBy.toggle}
             controlsId={SECTION_IDS.managedBy.body}
@@ -427,7 +525,12 @@ export function ThreadPromptContextBanner({
           <SectionToggleButton
             id={SECTION_IDS.managerChildren.toggle}
             controlsId={SECTION_IDS.managerChildren.body}
-            icon={<ManagedChildIcon />}
+            icon={
+              <CircleDashed
+                className="size-3.5 shrink-0 animate-spin"
+                aria-hidden="true"
+              />
+            }
             label={`${managerChildrenSection.items.length} active managed ${
               managerChildrenSection.items.length === 1 ? "thread" : "threads"
             }`}
@@ -473,7 +576,7 @@ export function ThreadPromptContextBanner({
           </div>
         ) : null}
       </div>
-      {showManagedBy && managedBySection ? (
+      {showManagedBy && managedBySection && !isManagedByOnly ? (
         <AnimatedBody
           id={SECTION_IDS.managedBy.body}
           labelledBy={SECTION_IDS.managedBy.toggle}

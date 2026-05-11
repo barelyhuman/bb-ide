@@ -88,6 +88,12 @@ interface ThreadDetailPromptAreaProps {
    */
   workspaceChangedFilesSection: WorkspaceChangedFilesSection | null;
   /**
+   * True while the workspace status query is in flight on initial load.
+   * Suppresses the prompt context banner until the result settles so the
+   * banner's first paint is its final form.
+   */
+  workspaceStatusPending: boolean;
+  /**
    * Merge-base picker config for the prompt context banner. Null hides the
    * picker (e.g. thread is on default branch — no merge base to compare).
    */
@@ -152,6 +158,7 @@ export function ThreadDetailPromptArea({
   openThreadDiffPanel,
   projectId,
   workspaceChangedFilesSection,
+  workspaceStatusPending,
   contextBannerMergeBase,
   pendingTodos,
   managedBySection,
@@ -506,6 +513,11 @@ export function ThreadDetailPromptArea({
                 ? null
                 : { pendingTodos }
             }
+            archivedSection={
+              thread.archivedAt !== null
+                ? { archivedAt: thread.archivedAt }
+                : null
+            }
             managedBySection={managedBySection}
             managerChildrenSection={managerChildrenSection}
             gitSection={
@@ -519,6 +531,7 @@ export function ThreadDetailPromptArea({
                   }
                 : null
             }
+            gitSectionPending={workspaceStatusPending}
             expandedSection={expandedBannerSection}
             onToggleSection={(section) => {
               setExpandedBannerSection((previous) =>

@@ -7,6 +7,7 @@ import type {
 import {
   ThreadPromptContextBanner,
   type ContextBannerMergeBaseConfig,
+  type ThreadPromptArchivedSection,
   type ThreadPromptContextBannerExpandedSection,
   type ThreadPromptManagedBySection,
   type ThreadPromptManagerChildrenSection,
@@ -201,6 +202,7 @@ interface RowConfig {
   section?: WorkspaceChangedFilesSection;
   mergeBase?: ContextBannerMergeBaseConfig | null;
   pendingTodos?: ThreadTimelinePendingTodos | null;
+  archived?: ThreadPromptArchivedSection | null;
   managedBy?: ThreadPromptManagedBySection | null;
   managerChildren?: ThreadPromptManagerChildrenSection | null;
   initiallyExpandedSection?: ThreadPromptContextBannerExpandedSection | null;
@@ -210,6 +212,7 @@ function Row({
   section,
   mergeBase = featureBranchMergeBase,
   pendingTodos = null,
+  archived = null,
   managedBy = null,
   managerChildren = null,
   initiallyExpandedSection = null,
@@ -230,6 +233,8 @@ function Row({
               }
             : null
         }
+        gitSectionPending={false}
+        archivedSection={archived}
         managedBySection={managedBy}
         managerChildrenSection={managerChildren}
         expandedSection={expandedSection}
@@ -243,28 +248,50 @@ function Row({
   );
 }
 
+const archivedFixture: ThreadPromptArchivedSection = {
+  archivedAt: 1_731_456_000_000,
+};
+
 export function Overview() {
   return (
     <StoryCard>
       <StoryRow
-        label="managed thread (collapsed)"
-        hint="icon-only segment; click to expand the explainer"
+        label="archived thread"
+        hint="archive icon + 'Thread is archived'; suppresses todos/git/managerChildren"
+      >
+        <Row archived={archivedFixture} mergeBase={null} />
+      </StoryRow>
+      <StoryRow
+        label="archived + managed thread"
+        hint="archived row plus 'Managed by <name>' — manager context still relevant on a frozen thread"
+      >
+        <Row
+          archived={archivedFixture}
+          managedBy={managedByFixture}
+          mergeBase={null}
+        />
+      </StoryRow>
+      <StoryRow
+        label="archived thread (with other context, all suppressed)"
+        hint="archived takes precedence — todos/git/managerChildren are hidden"
+      >
+        <Row
+          archived={archivedFixture}
+          section={uncommittedSection}
+          pendingTodos={pendingTodosFixture}
+          managerChildren={managerChildrenFixture}
+          mergeBase={null}
+        />
+      </StoryRow>
+      <StoryRow
+        label="managed thread (alone)"
+        hint="inline 'Managed by <name>' with the manager name as a link"
       >
         <Row managedBy={managedByFixture} mergeBase={null} />
       </StoryRow>
       <StoryRow
-        label="managed thread (expanded)"
-        hint="explainer text with the manager name as a link"
-      >
-        <Row
-          managedBy={managedByFixture}
-          mergeBase={null}
-          initiallyExpandedSection="managedBy"
-        />
-      </StoryRow>
-      <StoryRow
         label="manager thread with active children (collapsed)"
-        hint="users-icon segment shows active count"
+        hint="spinning icon signals active work; click to expand the child list"
       >
         <Row managerChildren={managerChildrenFixture} mergeBase={null} />
       </StoryRow>
@@ -290,7 +317,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="managed thread + todos + uncommitted"
-        hint="managed thread can have todos and a workspace; manager threads cannot"
+        hint="with other context, the managed-by segment collapses to an icon-only toggle"
       >
         <Row
           section={uncommittedSection}
