@@ -20,7 +20,7 @@ import {
   renderChangeSummary,
 } from "@/components/workspace/workspace-change-summary";
 import { cn } from "@/lib/utils";
-import type { GitDiffStats } from "./git-diff/git-diff-parsing";
+import type { GitDiffStats } from "../git-diff/git-diff-parsing";
 
 export type GitDiffDisplayMode = "unified" | "split";
 

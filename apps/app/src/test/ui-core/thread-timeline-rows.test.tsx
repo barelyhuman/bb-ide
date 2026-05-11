@@ -57,6 +57,7 @@ function threadTimelineRowsProps({
     threadRuntimeDisplayStatus: "idle",
     turnSummaryRowsIdentity: "test-view",
     turnSummaryRowsById: {},
+    workspaceRootPath: undefined,
     ...overrides,
     timelineRows,
   };

@@ -655,7 +655,6 @@ export function ThreadDetailView() {
           onPanelChange: openThreadSecondaryPanel,
           showGitDiffTab: canUseGitUi,
           showThreadStorageTab: thread.type === "manager",
-          threadId: thread.id,
         }}
         timeline={{
           activeThinking,
@@ -685,6 +684,7 @@ export function ThreadDetailView() {
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           turnSummaryRowsIdentity,
           turnSummaryRowsById,
+          workspaceRootPath: environment?.path,
         }}
       />
       {canUseGitUi ? (

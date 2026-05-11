@@ -7,8 +7,8 @@ import {
 import { toast } from "sonner";
 import {
   GIT_DIFF_VIEW_BASE_OPTIONS,
-  GitDiffFileCard,
-} from "./ThreadSecondaryPanel";
+  GitDiffCard,
+} from "../git-diff/GitDiffCard";
 import {
   GitDiffToolbar,
   type GitDiffDisplayMode,
@@ -18,7 +18,7 @@ import {
   parseGitDiffFiles,
   summarizeGitDiff,
   type ParsedGitDiffFile,
-} from "./git-diff/git-diff-parsing";
+} from "../git-diff/git-diff-parsing";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
@@ -199,7 +199,6 @@ function InteractiveDiffPanel({
       return next;
     });
   }, []);
-  const setRef = useCallback(() => {}, []);
   const viewOptions = useMemo(
     () => ({
       ...GIT_DIFF_VIEW_BASE_OPTIONS,
@@ -230,17 +229,15 @@ function InteractiveDiffPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3">
         <div className="space-y-2">
           {parsed.map(({ fileKey, fileDiff }) => (
-            <GitDiffFileCard
+            <GitDiffCard
               key={fileKey}
-              fileKey={fileKey}
               fileDiff={fileDiff}
-              threadId="thr_demo"
-              isCollapsed={collapsedFileKeys.has(fileKey)}
-              isRendering={renderingFileKeys?.has(fileKey) ?? false}
-              setGitDiffFileRef={setRef}
-              toggleGitDiffFileCollapsed={toggleFileCollapsed}
-              gitDiffViewOptions={viewOptions}
+              diffViewOptions={viewOptions}
               onOpenFileInEditor={onOpenFileInEditor}
+              isCollapsed={collapsedFileKeys.has(fileKey)}
+              onToggleCollapsed={() => toggleFileCollapsed(fileKey)}
+              stickyHeader
+              isRendering={renderingFileKeys?.has(fileKey) ?? false}
             />
           ))}
         </div>

@@ -17,7 +17,7 @@ import {
   parseGitDiffPatchChunks,
   summarizeGitDiff,
   type ParsedGitDiffFile,
-} from "./git-diff-parsing";
+} from "../../git-diff/git-diff-parsing";
 import { type GitDiffSelectionOption } from "../ThreadSecondaryPanel";
 import {
   buildGitDiffParsePlan,

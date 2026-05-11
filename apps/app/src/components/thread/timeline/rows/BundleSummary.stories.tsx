@@ -20,6 +20,7 @@ const baseProps = {
   threadRuntimeDisplayStatus: "idle" as const,
   turnSummaryRowsIdentity: "story",
   turnSummaryRowsById: {},
+  workspaceRootPath: undefined,
 };
 
 // The projection composes a bundle's id from its first child row. Mirrored

@@ -36,6 +36,7 @@ interface ThreadTimelinePaneProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  workspaceRootPath: string | undefined;
 }
 
 export interface HostConnectionNotice {
@@ -66,6 +67,7 @@ export function ThreadTimelinePane({
   threadRuntimeDisplayStatus,
   turnSummaryRowsIdentity,
   turnSummaryRowsById,
+  workspaceRootPath,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
   const showActiveThinking =
@@ -131,6 +133,7 @@ export function ThreadTimelinePane({
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
               turnSummaryRowsIdentity={turnSummaryRowsIdentity}
               turnSummaryRowsById={turnSummaryRowsById}
+              workspaceRootPath={workspaceRootPath}
             />
           ) : null}
           {hostConnectionNotice ? (

@@ -9,6 +9,7 @@ import type { ThreadTimelineTheme } from "./types.js";
 export interface WorkRowBodyProps {
   row: TimelineViewWorkRow;
   themeType: ThreadTimelineTheme;
+  workspaceRootPath: string | undefined;
 }
 
 type DetailLine = string | null;
@@ -23,7 +24,11 @@ function compactDetailLines(lines: readonly DetailLine[]): string[] {
   return compactedLines;
 }
 
-export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
+export function WorkRowBody({
+  row,
+  themeType,
+  workspaceRootPath,
+}: WorkRowBodyProps) {
   switch (row.workKind) {
     case "command":
       return (
@@ -49,7 +54,11 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
     case "file-change":
       return (
         <div className="space-y-2">
-          <TimelineFileDiffBlock change={row.change} themeType={themeType} />
+          <TimelineFileDiffBlock
+            change={row.change}
+            themeType={themeType}
+            workspaceRootPath={workspaceRootPath}
+          />
           {row.stderr ? (
             <TimelineDetailScroll
               size="base"

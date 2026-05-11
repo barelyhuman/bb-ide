@@ -24,6 +24,7 @@ const baseProps = {
   threadRuntimeDisplayStatus: "idle" as const,
   turnSummaryRowsIdentity: "story",
   turnSummaryRowsById: {},
+  workspaceRootPath: undefined,
 };
 
 // ---------------------------------------------------------------------------

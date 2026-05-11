@@ -1,12 +1,12 @@
-import { memo, useMemo, type CSSProperties } from "react";
+import { memo, useMemo } from "react";
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
 import type { TimelineFileChange } from "@bb/server-contract";
 import {
   getFileChangeAction,
   isPatchMetadataLine,
   type FileChangeAction,
 } from "@bb/thread-view";
+import { GitDiffCard } from "../../git-diff/GitDiffCard.js";
 import { EventCodeBlock } from "../../ui/event-code-block.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import type { ThreadTimelineTheme } from "./types.js";
@@ -14,11 +14,14 @@ import type { ThreadTimelineTheme } from "./types.js";
 export interface TimelineFileDiffBlockProps {
   change: TimelineFileChange;
   themeType: ThreadTimelineTheme;
-}
-
-interface TimelineDiffViewStyle extends CSSProperties {
-  "--diffs-font-size": string;
-  "--diffs-line-height": string;
+  /**
+   * Workspace root path the agent ran in (`environment.path`). When defined,
+   * the prefix is stripped from `change.path`/`change.movePath` before the
+   * patch is synthesized so the card header shows repo-relative paths
+   * matching what the secondary-panel diff renders. Pass `undefined` only
+   * when the environment hasn't loaded yet — the strip becomes a no-op.
+   */
+  workspaceRootPath: string | undefined;
 }
 
 interface RenderablePatch {
@@ -41,13 +44,7 @@ type SyntheticPatchAction = "created" | "deleted";
 const DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   diffStyle: "unified",
-  disableFileHeader: true,
 } as const;
-
-const DIFF_VIEW_STYLE: TimelineDiffViewStyle = {
-  "--diffs-font-size": "12px",
-  "--diffs-line-height": "18px",
-};
 
 const renderedFileChangeCache = new WeakMap<
   TimelineFileChange,
@@ -76,6 +73,33 @@ function getPatchBodyLines(diff: string | null): string[] {
 
 function normalizePatchPath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\/+/u, "");
+}
+
+function stripWorkspaceRoot(
+  path: string | null,
+  root: string | undefined,
+): string | null {
+  if (!path || !root) return path;
+  const normalizedRoot = root.replace(/\/+$/u, "");
+  if (normalizedRoot.length === 0) return path;
+  if (path === normalizedRoot) return path;
+  if (path.startsWith(`${normalizedRoot}/`)) {
+    return path.slice(normalizedRoot.length + 1);
+  }
+  return path;
+}
+
+function normalizeChangePaths(
+  change: TimelineFileChange,
+  workspaceRootPath: string | undefined,
+): TimelineFileChange {
+  if (!workspaceRootPath) return change;
+  const nextPath = stripWorkspaceRoot(change.path, workspaceRootPath) ?? change.path;
+  const nextMovePath = stripWorkspaceRoot(change.movePath, workspaceRootPath);
+  if (nextPath === change.path && nextMovePath === change.movePath) {
+    return change;
+  }
+  return { ...change, path: nextPath, movePath: nextMovePath };
 }
 
 function buildSyntheticPatchBodyLines(
@@ -155,7 +179,11 @@ function getRenderablePatchText(
     if (patch.includes("@@")) {
       const normalizedPath = normalizePatchPath(change.movePath ?? change.path);
       return {
-        patch: `--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`,
+        // The leading `diff --git` line is what flips parsePatchFiles into
+        // git-aware mode — without it, the parser keeps the `a/` and `b/`
+        // prefixes on the file headers and the card thinks the file was
+        // renamed (prevName="a/foo", name="b/foo").
+        patch: `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`,
         disableLineNumbers: false,
       };
     }
@@ -237,34 +265,30 @@ function buildRenderedFileChange(
 export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
   change,
   themeType,
+  workspaceRootPath,
 }: TimelineFileDiffBlockProps) {
-  const diffViewOptions = useMemo(
-    () => ({
-      ...DIFF_VIEW_BASE_OPTIONS,
-      themeType,
-    }),
-    [themeType],
+  const normalizedChange = useMemo(
+    () => normalizeChangePaths(change, workspaceRootPath),
+    [change, workspaceRootPath],
   );
   const renderedChange = useMemo(
-    () => buildRenderedFileChange(change),
-    [change],
+    () => buildRenderedFileChange(normalizedChange),
+    [normalizedChange],
   );
   const renderablePatch = renderedChange.renderablePatch;
-  const fileDiffOptions = useMemo(
+  const cardDiffViewOptions = useMemo(
     () =>
       renderablePatch
         ? {
-            ...diffViewOptions,
+            ...DIFF_VIEW_BASE_OPTIONS,
+            themeType,
             disableLineNumbers: renderablePatch.disableLineNumbers,
           }
         : null,
-    [diffViewOptions, renderablePatch],
+    [renderablePatch, themeType],
   );
 
-  if (
-    renderedChange.renderablePatch === null &&
-    renderedChange.plainDiff === null
-  ) {
+  if (renderablePatch === null && renderedChange.plainDiff === null) {
     return (
       <div className="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-xs text-muted-foreground">
         No diff available.
@@ -274,6 +298,24 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
 
   const diffContentKey = `${renderablePatch ? "p" : "n"}:${renderedChange.plainDiff?.length ?? 0}`;
 
+  if (renderablePatch && cardDiffViewOptions) {
+    return (
+      <TimelineDetailScroll
+        size="base"
+        contentKey={diffContentKey}
+        className="mt-1"
+      >
+        <div data-timeline-file-diff="">
+          <GitDiffCard
+            fileDiff={renderablePatch.fileDiff}
+            diffViewOptions={cardDiffViewOptions}
+            stickyHeader
+          />
+        </div>
+      </TimelineDetailScroll>
+    );
+  }
+
   return (
     <TimelineDetailScroll
       size="base"
@@ -281,19 +323,9 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
       className="mt-1 rounded-md border border-border/60 bg-background/40"
     >
       <div className="min-w-fit">
-        {renderablePatch && fileDiffOptions ? (
-          <div data-timeline-file-diff="" style={DIFF_VIEW_STYLE}>
-            <FileDiff
-              fileDiff={renderablePatch.fileDiff}
-              options={fileDiffOptions}
-            />
-          </div>
-        ) : null}
-        {renderedChange.plainDiff ? (
-          <EventCodeBlock className="rounded-none border-0 bg-transparent">
-            {renderedChange.plainDiff}
-          </EventCodeBlock>
-        ) : null}
+        <EventCodeBlock className="rounded-none border-0 bg-transparent">
+          {renderedChange.plainDiff!}
+        </EventCodeBlock>
       </div>
     </TimelineDetailScroll>
   );

@@ -102,6 +102,7 @@ describe("TimelineFileDiffBlock", () => {
           },
         })}
         themeType="light"
+        workspaceRootPath={undefined}
       />,
     );
 
@@ -137,6 +138,7 @@ describe("TimelineFileDiffBlock", () => {
           },
         })}
         themeType="light"
+        workspaceRootPath={undefined}
       />,
     );
 

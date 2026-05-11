@@ -75,6 +75,13 @@ export interface ThreadTimelineRowsProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  /**
+   * Workspace root path the agent ran in (`environment.path`). Forwarded to
+   * file-change rows so they can strip the prefix from `change.path` and
+   * render repo-relative paths in the diff card header. Pass `undefined`
+   * only when the environment hasn't loaded yet.
+   */
+  workspaceRootPath: string | undefined;
 }
 
 interface TimelineRendererContextValue {
@@ -90,6 +97,7 @@ interface TimelineRendererContextValue {
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  workspaceRootPath: string | undefined;
 }
 
 interface TimelineRowsListProps {
@@ -611,6 +619,7 @@ function TimelineExpandableBody({
     projectId,
     resolveUserAttachmentImageSrc,
     themeType,
+    workspaceRootPath,
   } = useTimelineRendererContext();
 
   switch (row.kind) {
@@ -693,7 +702,13 @@ function TimelineExpandableBody({
           </TimelineDetailScroll>
         );
       }
-      return <WorkRowBody row={row} themeType={themeType} />;
+      return (
+        <WorkRowBody
+          row={row}
+          themeType={themeType}
+          workspaceRootPath={workspaceRootPath}
+        />
+      );
     case "system":
       return row.detail ? (
         <TimelineSystemDetailBlock
@@ -1043,6 +1058,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
       themeType,
       turnSummaryRowsById: props.turnSummaryRowsById,
+      workspaceRootPath: props.workspaceRootPath,
     }),
     [
       autoExpandedRowIds,
@@ -1056,6 +1072,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       resolveSegmentLinkHref,
       props.resolveUserAttachmentImageSrc,
       props.turnSummaryRowsById,
+      props.workspaceRootPath,
       themeType,
     ],
   );

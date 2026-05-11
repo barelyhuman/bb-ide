@@ -17,6 +17,7 @@ const baseProps = {
   threadRuntimeDisplayStatus: "idle" as const,
   turnSummaryRowsIdentity: "story",
   turnSummaryRowsById: {},
+  workspaceRootPath: undefined,
 };
 
 // The projection composes a step's id from its first child row, same shape as

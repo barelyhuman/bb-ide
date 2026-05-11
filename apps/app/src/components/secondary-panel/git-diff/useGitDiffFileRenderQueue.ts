@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useSetAtom } from "jotai";
 import { useAtomCallback } from "jotai/utils";
-import type { ParsedGitDiffFile } from "./git-diff-parsing";
+import type { ParsedGitDiffFile } from "../../git-diff/git-diff-parsing";
 import {
   gitDiffCollapsedFileKeysAtom,
   gitDiffLoadingFileKeysAtom,

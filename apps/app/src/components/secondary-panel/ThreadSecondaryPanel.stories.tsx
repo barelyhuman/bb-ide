@@ -100,7 +100,6 @@ function ShellRow({
           showThreadStorageTab={showThreadStorageTab}
           showGitDiffTab={showGitDiffTab}
           onPanelChange={noop}
-          threadId="thr_demo"
           onCollapse={noop}
           onClose={noop}
           isMobile

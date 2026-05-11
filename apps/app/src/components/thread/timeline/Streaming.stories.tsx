@@ -17,6 +17,7 @@ const baseProps = {
   threadRuntimeDisplayStatus: "active" as const,
   turnSummaryRowsIdentity: "story",
   turnSummaryRowsById: {},
+  workspaceRootPath: undefined,
 };
 
 const THREAD_ID = "thr_streaming";
