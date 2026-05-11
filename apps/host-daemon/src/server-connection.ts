@@ -4,6 +4,7 @@ import {
   buildHostDaemonWebSocketProtocols,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonServerWsMessageSchema,
+  type HostDaemonSessionCloseReason,
   type HostDaemonSessionOpenResponse,
 } from "@bb/host-daemon-contract";
 import {
@@ -309,7 +310,24 @@ export class ServerConnection {
       return;
     }
 
-    void Promise.resolve(this.sessionCloseHandler?.(message.data.reason)).catch(
+    this.handleSessionCloseMessage(message.data.reason);
+  }
+
+  private handleSessionCloseMessage(
+    reason: HostDaemonSessionCloseReason,
+  ): void {
+    if (reason === "expired") {
+      this.options.logger.info(
+        { sessionId: this.session?.sessionId ?? null },
+        "Server expired host daemon session; reconnecting",
+      );
+      this.clearHeartbeat();
+      this.clearSession();
+      this.websocket?.reconnect(1000, "expired");
+      return;
+    }
+
+    void Promise.resolve(this.sessionCloseHandler?.(reason)).catch(
       () => undefined,
     );
     this.shutdownAfterServerMessage(

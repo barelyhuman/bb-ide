@@ -2,6 +2,7 @@ import ReconnectingWebSocket from "partysocket/ws";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonActiveThread,
+  type HostDaemonSessionCloseReason,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
 } from "@bb/host-daemon-contract";
@@ -20,6 +21,7 @@ export interface ReconnectingWebSocketLike {
   onerror: ((event: any) => void) | null;
   send(data: string): void;
   close(code?: number, reason?: string): void;
+  reconnect(code?: number, reason?: string): void;
 }
 
 export interface ReconnectingWebSocketOptions {
@@ -53,7 +55,7 @@ export interface ServerConnectionOptions {
     | Promise<HostDaemonActiveThread[]>;
   onCommandsAvailable?: () => void | Promise<void>;
   onSessionClose?: (
-    reason: "replaced" | "expired" | "daemon-disconnect",
+    reason: HostDaemonSessionCloseReason,
   ) => void | Promise<void>;
   onSessionOpened?: (
     session: HostDaemonSessionOpenResponse,

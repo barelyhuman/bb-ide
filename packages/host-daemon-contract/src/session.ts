@@ -205,13 +205,23 @@ export const hostDaemonHeartbeatPayloadSchema = z.object({
 export type HostDaemonHeartbeatPayload = z.infer<
   typeof hostDaemonHeartbeatPayloadSchema
 >;
+
+export const hostDaemonSessionCloseReasonSchema = z.enum([
+  "replaced",
+  "expired",
+  "daemon-disconnect",
+]);
+export type HostDaemonSessionCloseReason = z.infer<
+  typeof hostDaemonSessionCloseReasonSchema
+>;
+
 export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("commands-available"),
   }),
   z.object({
     type: z.literal("session-close"),
-    reason: z.enum(["replaced", "expired", "daemon-disconnect"]),
+    reason: hostDaemonSessionCloseReasonSchema,
   }),
 ]);
 export type HostDaemonServerWsMessage = z.infer<

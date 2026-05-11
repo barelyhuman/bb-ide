@@ -7,6 +7,7 @@ import type {
   ThreadChangeKind,
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
+import type { HostDaemonSessionCloseReason } from "@bb/host-daemon-contract";
 import { COMMAND_RESULT_CACHE_TTL_MS } from "../constants.js";
 import type { CommandResultWaiterResponse } from "../internal/command-result-response.js";
 
@@ -144,7 +145,7 @@ export class NotificationHub implements DbNotifier {
 
   closeDaemonSession(
     sessionId: string,
-    reason: "daemon-disconnect" | "expired" | "replaced",
+    reason: HostDaemonSessionCloseReason,
   ): void {
     this.cancelPendingDaemonDisconnect(sessionId);
     const entry = this.daemonSessions.get(sessionId);

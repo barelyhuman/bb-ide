@@ -107,6 +107,13 @@ class FakeReconnectingWebSocket implements ReconnectingWebSocketLike {
     this.disconnect();
   }
 
+  reconnect(): void {
+    this.disconnect();
+    queueMicrotask(() => {
+      void this.open();
+    });
+  }
+
   send(_data: string): void {}
 }
 
@@ -333,6 +340,59 @@ describe("ServerConnection", () => {
     await waitFor(() => testServer!.socketCount() === 0);
 
     expect(onSessionClose).toHaveBeenCalledWith("replaced");
+  });
+
+  it("reconnects when the server expires the current session", async () => {
+    testServer = await createTestServer({ heartbeatIntervalMs: 10 });
+    const openedSessions: string[] = [];
+    const onSessionClose = vi.fn();
+    const publishedSessions: Array<string | null> = [];
+    const { connection, logger } = createConnection(testServer, {
+      connectionOverrides: {
+        onSessionClose,
+        onSessionOpened: (session) => {
+          openedSessions.push(session.sessionId);
+        },
+        setSession: (session) => {
+          publishedSessions.push(session?.sessionId ?? null);
+        },
+      },
+    });
+
+    await connection.start();
+    expect(connection.sessionId).toBe("session-1");
+    expect(testServer.sessionOpenCalls).toHaveLength(1);
+    await waitFor(() =>
+      testServer!.heartbeats.some(
+        (heartbeat) => heartbeat.sessionId === "session-1",
+      ),
+    );
+
+    testServer.sendWebSocketMessage({
+      type: "session-close",
+      reason: "expired",
+    });
+    testServer.closeWebSockets();
+
+    await waitFor(() => testServer!.sessionOpenCalls.length >= 2);
+    await waitFor(() => connection.sessionId === "session-2");
+    await waitFor(() => testServer!.socketCount() === 1);
+    await waitFor(() =>
+      testServer!.heartbeats.some(
+        (heartbeat) => heartbeat.sessionId === "session-2",
+      ),
+    );
+
+    expect(testServer.sessionOpenCalls).toHaveLength(2);
+    expect(onSessionClose).not.toHaveBeenCalled();
+    expect(openedSessions).toEqual(["session-1", "session-2"]);
+    expect(publishedSessions).toEqual(["session-1", null, "session-2"]);
+    expect(logger.info).toHaveBeenCalledWith(
+      { sessionId: "session-1" },
+      "Server expired host daemon session; reconnecting",
+    );
+
+    await connection.shutdown();
   });
 
   it("reconnects after the websocket disconnects", async () => {

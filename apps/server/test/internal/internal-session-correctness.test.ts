@@ -1,7 +1,13 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
-import { getHost, getThread, hostDaemonSessions, listEvents } from "@bb/db";
+import {
+  getActiveSession,
+  getHost,
+  getThread,
+  hostDaemonSessions,
+  listEvents,
+} from "@bb/db";
 import { threadResponseSchema } from "@bb/server-contract";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
@@ -14,6 +20,7 @@ import { ApiError } from "../../src/errors.js";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../../src/constants.js";
 import {
   onDaemonSocketClose,
+  onDaemonSocketMessage,
   validateDaemonWebSocket,
 } from "../../src/ws/daemon-protocol.js";
 import { internalAuthHeaders } from "../helpers/commands.js";
@@ -410,6 +417,94 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("logs inactive daemon heartbeats without an ApiError stack", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-inactive-heartbeat-log",
+      });
+      harness.db
+        .update(hostDaemonSessions)
+        .set({
+          status: "closed",
+          closedAt: Date.now(),
+          closeReason: "expired",
+        })
+        .where(eq(hostDaemonSessions.id, session.id))
+        .run();
+
+      const logger = {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+      };
+      const socket = {
+        close: vi.fn(),
+        send: vi.fn(),
+      };
+
+      onDaemonSocketMessage(
+        { db: harness.db, logger },
+        {
+          hostId: host.id,
+          raw: JSON.stringify({ type: "heartbeat" }),
+          sessionId: session.id,
+          socket,
+        },
+      );
+
+      expect(socket.close).toHaveBeenCalledWith(1008, "inactive-session");
+      expect(logger.info).toHaveBeenCalledWith(
+        { sessionId: session.id },
+        "Daemon heartbeat for inactive session, closing socket",
+      );
+      expect(logger.warn).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("warns and closes distinctly when daemon heartbeats use another host session", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { session } = seedHostSession(harness.deps, {
+        id: "host-heartbeat-owner",
+      });
+
+      const logger = {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+      };
+      const socket = {
+        close: vi.fn(),
+        send: vi.fn(),
+      };
+
+      onDaemonSocketMessage(
+        { db: harness.db, logger },
+        {
+          hostId: "host-heartbeat-intruder",
+          raw: JSON.stringify({ type: "heartbeat" }),
+          sessionId: session.id,
+          socket,
+        },
+      );
+
+      expect(socket.close).toHaveBeenCalledWith(1008, "unauthorized-session");
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          err: expect.any(ApiError),
+          sessionId: session.id,
+        }),
+        "Daemon heartbeat for unauthorized session, closing socket",
+      );
+      expect(logger.info).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("closes the daemon session immediately when the websocket disconnects", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -506,7 +601,7 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("leaves pending interactions pending after the daemon-disconnect grace period", async () => {
+  it("interrupts pending interactions after the daemon-disconnect grace period", async () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
@@ -574,7 +669,7 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("cancels daemon-disconnect fallout if a replacement session opens during the grace period", async () => {
+  it("interrupts old-session pending interactions but keeps runtime connected when a replacement session opens during grace", async () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
@@ -593,6 +688,34 @@ describe("internal session correctness", () => {
         environmentId: environment.id,
         status: "active",
       });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-reconnect-pending-interaction",
+        providerThreadId: "provider-thread-reconnect-pending-interaction",
+      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-reconnect-pending-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-thread-reconnect-pending-interaction",
+            providerRequestId: "request-reconnect-pending-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-reconnect-pending-interaction",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
+      if (registered.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
+      }
 
       onDaemonSocketClose(harness.deps, session.id);
 
@@ -615,6 +738,10 @@ describe("internal session correctness", () => {
       expect(response.status).toBe(201);
       await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
 
+      const activeSession = getActiveSession(harness.db, host.id);
+      expect(activeSession?.id).not.toBe(session.id);
+      expect(activeSession?.status).toBe("active");
+
       const originalSession = harness.db
         .select()
         .from(hostDaemonSessions)
@@ -622,6 +749,27 @@ describe("internal session correctness", () => {
         .get();
       expect(originalSession?.closeReason).toBe("daemon-disconnect");
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction(
+        {
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        },
+      );
+      expect(interrupted).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
+      });
+      const threadResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(threadResponse.status).toBe(200);
+      expect(
+        threadResponseSchema.parse(await readJson(threadResponse)).runtime,
+      ).toMatchObject({
+        displayStatus: "active",
+        hostReconnectGraceExpiresAt: null,
+      });
       expect(
         listEvents(harness.db, { threadId: thread.id }).some(
           (event) => event.type === "system/error",

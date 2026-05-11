@@ -100,9 +100,27 @@ export function onDaemonSocketMessage(
     });
     heartbeatSession(deps.db, session.id, Date.now() + session.leaseTimeoutMs);
   } catch (error) {
+    if (error instanceof ApiError && error.body.code === "inactive_session") {
+      deps.logger.info(
+        { sessionId: args.sessionId },
+        "Daemon heartbeat for inactive session, closing socket",
+      );
+      args.socket.close(1008, "inactive-session");
+      return;
+    }
+
+    if (error instanceof ApiError && error.status === 403) {
+      deps.logger.warn(
+        { sessionId: args.sessionId, err: error },
+        "Daemon heartbeat for unauthorized session, closing socket",
+      );
+      args.socket.close(1008, "unauthorized-session");
+      return;
+    }
+
     deps.logger.warn(
       { sessionId: args.sessionId, err: error },
-      "Daemon heartbeat for inactive session, closing socket",
+      "Daemon heartbeat rejected, closing socket",
     );
     args.socket.close(1008, "inactive-session");
   }
@@ -149,10 +167,10 @@ function notifyHostThreadRuntimeStatusChanged(
 }
 
 /**
- * After the grace period, notify active thread views that the disconnected host
- * is no longer in the reconnecting window. If the daemon reconnected in the
- * meantime, runtime display status is already back to connected and this is a
- * no-op.
+ * After the grace period, settle work owned by the disconnected session and
+ * notify active thread views if the host is still disconnected. If the daemon
+ * reconnected in the meantime, runtime display status is already connected,
+ * but pending interactions still bound to the old session must be interrupted.
  */
 interface NotifyDisconnectedHostAfterGraceArgs {
   hostId: string;
@@ -163,14 +181,15 @@ function notifyDisconnectedHostAfterGrace(
   deps: Pick<AppDeps, "db" | "hub" | "pendingInteractions">,
   args: NotifyDisconnectedHostAfterGraceArgs,
 ): void {
-  if (getActiveSession(deps.db, args.hostId)) {
-    return;
-  }
-
   deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
     sessionIds: [args.sessionId],
     reason:
       "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
   });
+
+  if (getActiveSession(deps.db, args.hostId)) {
+    return;
+  }
+
   notifyHostThreadRuntimeStatusChanged(deps, args.hostId);
 }
