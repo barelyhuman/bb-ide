@@ -13,6 +13,34 @@ import {
 
 type CheckoutMutationLockWork<T> = ProcessLocalQueuedLockWork<T>;
 
+const checkoutMutationAdmissionKeyPrefix = "checkout-mutation-admission:";
+
+function getCheckoutMutationAdmissionLockSpec(
+  checkoutPath: string,
+): ProcessLocalQueuedLockSpec {
+  return {
+    key: `${checkoutMutationAdmissionKeyPrefix}${path.resolve(checkoutPath)}`,
+  };
+}
+
+function getCheckoutMutationAdmissionLockSpecs(
+  checkoutPaths: string[],
+): ProcessLocalQueuedLockSpec[] {
+  return checkoutPaths.map((checkoutPath) =>
+    getCheckoutMutationAdmissionLockSpec(checkoutPath),
+  );
+}
+
+export async function withCheckoutMutationAdmission<T>(
+  checkoutPath: string,
+  work: CheckoutMutationLockWork<T>,
+): Promise<T> {
+  return withProcessLocalQueuedLocks({
+    locks: [getCheckoutMutationAdmissionLockSpec(checkoutPath)],
+    work,
+  });
+}
+
 async function resolveCheckoutMutationLockSpec(
   checkoutPath: string,
 ): Promise<ProcessLocalQueuedLockSpec> {
@@ -38,32 +66,48 @@ export async function withCheckoutMutationLock<T>(
   checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
 ): Promise<T> {
-  const lock = await resolveCheckoutMutationLockSpec(checkoutPath);
-  return withProcessLocalQueuedLocks({ locks: [lock], work });
+  return withCheckoutMutationAdmission(checkoutPath, async () => {
+    const lock = await resolveCheckoutMutationLockSpec(checkoutPath);
+    return withProcessLocalQueuedLocks({ locks: [lock], work });
+  });
+}
+
+async function withCheckoutMutationAdmissions<T>(
+  checkoutPaths: string[],
+  work: CheckoutMutationLockWork<T>,
+): Promise<T> {
+  return withProcessLocalQueuedLocks({
+    locks: getCheckoutMutationAdmissionLockSpecs(checkoutPaths),
+    work,
+  });
 }
 
 export async function tryWithCheckoutMutationLock<T>(
   checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
 ): Promise<T | null> {
-  const lock = await tryResolveCheckoutMutationLockSpec(checkoutPath);
-  if (!lock) {
-    return null;
-  }
+  return withCheckoutMutationAdmission(checkoutPath, async () => {
+    const lock = await tryResolveCheckoutMutationLockSpec(checkoutPath);
+    if (!lock) {
+      return null;
+    }
 
-  return withProcessLocalQueuedLocks({ locks: [lock], work });
+    return withProcessLocalQueuedLocks({ locks: [lock], work });
+  });
 }
 
 export async function withCheckoutMutationLocks<T>(
   checkoutPaths: string[],
   work: CheckoutMutationLockWork<T>,
 ): Promise<T> {
-  const locks = await Promise.all(
-    checkoutPaths.map((checkoutPath) =>
-      resolveCheckoutMutationLockSpec(checkoutPath),
-    ),
-  );
-  return withProcessLocalQueuedLocks({ locks, work });
+  return withCheckoutMutationAdmissions(checkoutPaths, async () => {
+    const locks = await Promise.all(
+      checkoutPaths.map((checkoutPath) =>
+        resolveCheckoutMutationLockSpec(checkoutPath),
+      ),
+    );
+    return withProcessLocalQueuedLocks({ locks, work });
+  });
 }
 
 export async function runGitWithCheckoutMutationLock(

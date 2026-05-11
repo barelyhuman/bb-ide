@@ -6,6 +6,7 @@ import {
   closeSession,
   getActiveSession,
   getActiveSessionById,
+  getLatestSessionForHost,
   getMostRecentlyUpdatedConnectedHostId,
   heartbeatSession,
   listLatestSessionsForHosts,
@@ -185,6 +186,56 @@ describe("sessions", () => {
     expect(sessions.map((session) => session.id).sort()).toEqual(
       [latestSession.id, otherLatestSession.id].sort(),
     );
+  });
+
+  it("prefers an active replacement session when latest timestamps tie", () => {
+    const { db, host } = setup();
+    const closedSession = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    const activeSession = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-2",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    db.update(hostDaemonSessions)
+      .set({
+        id: "hses_z_closed",
+        createdAt: 100,
+        updatedAt: 100,
+      })
+      .where(eq(hostDaemonSessions.id, closedSession.id))
+      .run();
+    db.update(hostDaemonSessions)
+      .set({
+        id: "hses_a_active",
+        createdAt: 100,
+        updatedAt: 100,
+      })
+      .where(eq(hostDaemonSessions.id, activeSession.id))
+      .run();
+
+    expect(getLatestSessionForHost(db, { hostId: host.id })?.id).toBe(
+      "hses_a_active",
+    );
+    expect(
+      listLatestSessionsForHosts(db, { hostIds: [host.id] }).map(
+        (session) => session.id,
+      ),
+    ).toEqual(["hses_a_active"]);
   });
 
   it("updates heartbeat timestamps for an active session", () => {

@@ -11,7 +11,10 @@ import type {
 } from "./workspace.js";
 import { Workspace } from "./workspace.js";
 import { promoteWorkspace, demoteWorkspace } from "./promote.js";
-import { withCheckoutMutationLock } from "./checkout-mutation-lock.js";
+import {
+  withCheckoutMutationAdmission,
+  withCheckoutMutationLock,
+} from "./checkout-mutation-lock.js";
 import {
   createWorktree,
   createClone,
@@ -329,32 +332,47 @@ async function applyUnmanagedCheckout(
   let startedAt = waitingStartedAt;
   let waitingCompleted = false;
   try {
-    await withCheckoutMutationLock(cwd, async () => {
-      const lockAcquiredAt = Date.now();
-      onProgress?.({
-        type: "step",
-        key: "git-checkout-waiting",
-        text:
-          checkout.kind === "new"
-            ? `Ready to create branch ${checkout.name}`
-            : `Ready to switch to branch ${checkout.name}`,
-        status: "completed",
-        startedAt: waitingStartedAt,
-        metadata: { durationMs: lockAcquiredAt - waitingStartedAt },
+    await withCheckoutMutationAdmission(cwd, async () => {
+      if (!(await pathExists(cwd))) {
+        throw new WorkspaceError(
+          "path_not_found",
+          `Unmanaged workspace path does not exist: ${cwd}`,
+        );
+      }
+      if (!(await detectGitRepo(cwd))) {
+        throw new WorkspaceError(
+          "not_git_repo",
+          `Cannot checkout branch on non-git workspace: ${cwd}`,
+        );
+      }
+
+      await withCheckoutMutationLock(cwd, async () => {
+        const lockAcquiredAt = Date.now();
+        onProgress?.({
+          type: "step",
+          key: "git-checkout-waiting",
+          text:
+            checkout.kind === "new"
+              ? `Ready to create branch ${checkout.name}`
+              : `Ready to switch to branch ${checkout.name}`,
+          status: "completed",
+          startedAt: waitingStartedAt,
+          metadata: { durationMs: lockAcquiredAt - waitingStartedAt },
+        });
+        waitingCompleted = true;
+        startedAt = lockAcquiredAt;
+        onProgress?.({
+          type: "step",
+          key: "git-checkout-started",
+          text:
+            checkout.kind === "new"
+              ? `Creating branch ${checkout.name}`
+              : `Switching to branch ${checkout.name}`,
+          status: "started",
+          startedAt,
+        });
+        await runGit(switchArgs, { cwd });
       });
-      waitingCompleted = true;
-      startedAt = lockAcquiredAt;
-      onProgress?.({
-        type: "step",
-        key: "git-checkout-started",
-        text:
-          checkout.kind === "new"
-            ? `Creating branch ${checkout.name}`
-            : `Switching to branch ${checkout.name}`,
-        status: "started",
-        startedAt,
-      });
-      await runGit(switchArgs, { cwd });
     });
     waitingCompleted = true;
     onProgress?.({
@@ -401,26 +419,22 @@ async function applyUnmanagedCheckout(
 async function provisionUnmanaged(
   opts: UnmanagedWorkspaceOpts,
 ): Promise<HostWorkspace> {
-  if (!(await pathExists(opts.path))) {
-    throw new WorkspaceError(
-      "path_not_found",
-      `Unmanaged workspace path does not exist: ${opts.path}`,
-    );
-  }
-
-  const isGitRepo = await detectGitRepo(opts.path);
+  let isGitRepo: boolean;
   if (opts.checkout) {
-    if (!isGitRepo) {
-      throw new WorkspaceError(
-        "not_git_repo",
-        `Cannot checkout branch on non-git workspace: ${opts.path}`,
-      );
-    }
     await applyUnmanagedCheckout({
       cwd: opts.path,
       checkout: opts.checkout,
       onProgress: opts.onProgress,
     });
+    isGitRepo = true;
+  } else {
+    if (!(await pathExists(opts.path))) {
+      throw new WorkspaceError(
+        "path_not_found",
+        `Unmanaged workspace path does not exist: ${opts.path}`,
+      );
+    }
+    isGitRepo = await detectGitRepo(opts.path);
   }
   const isWorktree = isGitRepo ? await detectWorktree(opts.path) : false;
 

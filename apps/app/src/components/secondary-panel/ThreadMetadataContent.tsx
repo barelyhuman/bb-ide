@@ -72,8 +72,6 @@ export function ManagerSelectorRow({
   defaultOpen,
 }: ManagerSelectorRowProps) {
   const isManagerThread = thread.type === "manager";
-  if (isManagerThread) return null;
-
   const parentThreadId = thread.parentThreadId ?? undefined;
   const managerSelectorOptions = useMemo(
     () =>
@@ -97,6 +95,7 @@ export function ManagerSelectorRow({
     (option) => option.value === managerSelectorValue,
   )?.label;
 
+  if (isManagerThread) return null;
   if (!parentThreadId && !canAssignToManager && !canTakeOverThread) {
     return null;
   }
@@ -307,7 +306,6 @@ export function MergeBaseRow({
   onMergeBaseBranchChange,
   defaultOpen,
 }: MergeBaseRowProps) {
-  if (thread.type === "manager") return null;
   const effectiveMergeBaseBranch =
     selectedMergeBaseBranch ??
     workspaceStatus?.mergeBase?.mergeBaseBranch ??
@@ -330,6 +328,7 @@ export function MergeBaseRow({
       workspaceStatus.branch.defaultBranch;
   const showMergeBase =
     showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
+  if (thread.type === "manager") return null;
   if (!showMergeBase) return null;
   const canSelectMergeBase = Boolean(
     mergeBaseBranch && mergeBaseCandidates.length > 0,

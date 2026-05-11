@@ -186,6 +186,9 @@ export function getLatestSessionForHost(
       .orderBy(
         desc(hostDaemonSessions.updatedAt),
         desc(hostDaemonSessions.createdAt),
+        desc(
+          sql<number>`CASE WHEN ${hostDaemonSessions.status} = 'active' THEN 1 ELSE 0 END`,
+        ),
         desc(hostDaemonSessions.id),
       )
       .limit(1)
@@ -221,6 +224,14 @@ export function listLatestSessionsForHosts(
               OR (
                 latest.updated_at = ${hostDaemonSessions.updatedAt}
                 AND latest.created_at = ${hostDaemonSessions.createdAt}
+                AND CASE WHEN latest.status = 'active' THEN 1 ELSE 0 END >
+                  CASE WHEN ${hostDaemonSessions.status} = 'active' THEN 1 ELSE 0 END
+              )
+              OR (
+                latest.updated_at = ${hostDaemonSessions.updatedAt}
+                AND latest.created_at = ${hostDaemonSessions.createdAt}
+                AND CASE WHEN latest.status = 'active' THEN 1 ELSE 0 END =
+                  CASE WHEN ${hostDaemonSessions.status} = 'active' THEN 1 ELSE 0 END
                 AND latest.id > ${hostDaemonSessions.id}
               )
             )

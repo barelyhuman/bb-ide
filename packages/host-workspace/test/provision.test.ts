@@ -218,14 +218,14 @@ describe("provisionWorkspace", () => {
       let secondCompleted = false;
       let lockReleased = false;
       let checkoutStartedBeforeRelease = false;
-      let checkoutStartedCount = 0;
+      const checkoutStartedBranches: string[] = [];
       const firstProvision = provisionWorkspace({
         workspaceProvisionType: "unmanaged",
         path: repoPath,
         checkout: { kind: "existing", name: "feature-a" },
         onProgress: (entry) => {
           if (entry.key === "git-checkout-started") {
-            checkoutStartedCount += 1;
+            checkoutStartedBranches.push("feature-a");
             if (!lockReleased) {
               checkoutStartedBeforeRelease = true;
             }
@@ -243,7 +243,7 @@ describe("provisionWorkspace", () => {
         checkout: { kind: "existing", name: "feature-b" },
         onProgress: (entry) => {
           if (entry.key === "git-checkout-started") {
-            checkoutStartedCount += 1;
+            checkoutStartedBranches.push("feature-b");
             if (!lockReleased) {
               checkoutStartedBeforeRelease = true;
             }
@@ -264,7 +264,7 @@ describe("provisionWorkspace", () => {
       expect(firstCompleted).toBe(false);
       expect(secondCompleted).toBe(false);
       expect(checkoutStartedBeforeRelease).toBe(false);
-      expect(checkoutStartedCount).toBe(0);
+      expect(checkoutStartedBranches).toEqual([]);
       expect(
         (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
       ).toBe("main\n");
@@ -276,13 +276,13 @@ describe("provisionWorkspace", () => {
       expect(firstCompleted).toBe(true);
       expect(secondCompleted).toBe(true);
       expect(checkoutStartedBeforeRelease).toBe(false);
-      expect(checkoutStartedCount).toBe(2);
+      expect(checkoutStartedBranches).toEqual(["feature-a", "feature-b"]);
       expect(
         (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
       ).toBe("feature-b\n");
     });
 
-    it("marks checkout waiting failed when lock acquisition fails", async () => {
+    it("marks checkout waiting failed when the git repo disappears while waiting", async () => {
       const repoPath = await initRepo();
       const entries: ProvisioningTranscriptEntry[] = [];
 
@@ -304,7 +304,7 @@ describe("provisionWorkspace", () => {
             }
           },
         }),
-      ).rejects.toThrow(/git rev-parse --absolute-git-dir failed/u);
+      ).rejects.toThrow(/Cannot checkout branch on non-git workspace/u);
 
       expect(entries).toEqual(
         expect.arrayContaining([

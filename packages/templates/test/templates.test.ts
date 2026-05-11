@@ -62,7 +62,9 @@ describe("@bb/templates", () => {
     });
 
     // Core structure
-    expect(rendered).toContain("You are a manager for this project");
+    expect(rendered).toContain(
+      "You are a manager in a project inside bb, an agent orchestration tool.",
+    );
     expect(rendered).toContain("agent orchestration tool");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
