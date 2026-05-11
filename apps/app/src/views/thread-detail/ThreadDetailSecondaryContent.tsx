@@ -2,9 +2,11 @@ import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import type { WorkspaceFile } from "@bb/server-contract";
 import { ResponsiveDrawerShell } from "@/components/ui";
-import { useIsMobile } from "@/components/ui";
+import { useIsCompactViewport } from "@/components/ui";
+import { useAtomValue } from "jotai";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import { secondaryPanelWidthPercentAtom } from "@/components/secondary-panel/threadSecondaryPanelAtoms";
 import { ManagerThreadStorageBrowser } from "@/components/secondary-panel/ManagerThreadStorageBrowser";
 import {
   ThreadMetadataContent,
@@ -14,7 +16,6 @@ import {
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import type { FilePreview } from "@/lib/file-preview";
 
-const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
 
 type ThreadTimelinePaneProps = Omit<
@@ -23,7 +24,7 @@ type ThreadTimelinePaneProps = Omit<
 >;
 type ThreadSecondaryPanelProps = Omit<
   ComponentProps<typeof ThreadSecondaryPanel>,
-  "threadStorageContent" | "metadataContent"
+  "threadStorageContent" | "metadataContent" | "renderAsDrawer"
 >;
 
 type ThreadStoragePathSelectHandler = (path: string) => void;
@@ -57,22 +58,25 @@ export function ThreadDetailSecondaryContent({
   secondaryPanel,
   timeline,
 }: ThreadDetailSecondaryContentProps) {
-  const isMobile = useIsMobile();
+  const renderAsDrawer = useIsCompactViewport();
   const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
-  const didResetOnMobileRef = useRef(false);
+  const persistedSecondaryWidthPercent = useAtomValue(
+    secondaryPanelWidthPercentAtom,
+  );
+  const didResetOnDrawerRef = useRef(false);
   const { onClose } = secondaryPanel;
 
   useEffect(() => {
-    if (!isMobile) {
-      didResetOnMobileRef.current = false;
+    if (!renderAsDrawer) {
+      didResetOnDrawerRef.current = false;
       return;
     }
-    if (didResetOnMobileRef.current) return;
-    didResetOnMobileRef.current = true;
+    if (didResetOnDrawerRef.current) return;
+    didResetOnDrawerRef.current = true;
     if (isSecondaryPanelOpen) {
       onClose();
     }
-  }, [isMobile, isSecondaryPanelOpen, onClose]);
+  }, [renderAsDrawer, isSecondaryPanelOpen, onClose]);
 
   const metadataContent = hasAnyThreadMetadata(metadata) ? (
     <ThreadMetadataContent {...metadata} />
@@ -84,18 +88,18 @@ export function ThreadDetailSecondaryContent({
   const threadStorageContent = threadStorage ? (
     <ManagerThreadStorageBrowser {...threadStorage} />
   ) : undefined;
-  const desktopSecondaryPanelContent = !isMobile ? (
+  const inlineSecondaryPanelContent = !renderAsDrawer ? (
     <ThreadSecondaryPanel
       {...secondaryPanel}
-      isMobile={false}
+      renderAsDrawer={false}
       metadataContent={metadataContent}
       threadStorageContent={threadStorageContent}
     />
   ) : null;
-  const mobileSecondaryPanelContent = isMobile ? (
+  const drawerSecondaryPanelContent = renderAsDrawer ? (
     <ThreadSecondaryPanel
       {...secondaryPanel}
-      isMobile={true}
+      renderAsDrawer={true}
       metadataContent={metadataContent}
       threadStorageContent={threadStorageContent}
     />
@@ -106,13 +110,12 @@ export function ThreadDetailSecondaryContent({
       <PanelGroup
         direction="horizontal"
         className="h-full w-full min-w-0"
-        autoSaveId="bb.thread.panelLayout"
       >
         <Panel
           id="thread-detail-timeline-panel"
           defaultSize={
-            isSecondaryPanelOpen && !isMobile
-              ? TIMELINE_PANEL_DEFAULT_SIZE_PERCENT
+            isSecondaryPanelOpen && !renderAsDrawer
+              ? 100 - persistedSecondaryWidthPercent
               : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
           }
           minSize={30}
@@ -121,9 +124,9 @@ export function ThreadDetailSecondaryContent({
         >
           <ThreadTimelinePane {...timeline} footer={footer} header={header} />
         </Panel>
-        {desktopSecondaryPanelContent}
+        {inlineSecondaryPanelContent}
       </PanelGroup>
-      {isMobile ? (
+      {renderAsDrawer ? (
         <ResponsiveDrawerShell
           open={isSecondaryPanelOpen}
           onOpenChange={(open) => {
@@ -133,7 +136,7 @@ export function ThreadDetailSecondaryContent({
           contentClassName="h-[92dvh] max-h-[92dvh]"
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {mobileSecondaryPanelContent}
+            {drawerSecondaryPanelContent}
           </div>
         </ResponsiveDrawerShell>
       ) : null}

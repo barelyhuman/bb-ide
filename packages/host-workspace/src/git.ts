@@ -511,6 +511,82 @@ export async function revParse(cwd: string, ref: string): Promise<string> {
   return trimOutput(result.stdout);
 }
 
+export interface ReadGitBlobResult {
+  /** Object bytes, or `null` if no blob exists at `<ref>:<relativePath>`. */
+  contents: Buffer | null;
+  /** Bytes reported by `git cat-file -s` (0 when missing). */
+  sizeBytes: number;
+}
+
+/**
+ * Look up the byte size of a blob at `<ref>:<relativePath>`. Returns
+ * `undefined` when the object does not exist (e.g. the file did not exist
+ * at that ref, or the ref itself is unknown). Caller decides how to surface
+ * "not found" — for context expansion we treat it as "no content on this
+ * side" rather than an error.
+ */
+export async function gitBlobSize(
+  cwd: string,
+  ref: string,
+  relativePath: string,
+): Promise<number | undefined> {
+  await ensureGitRepo(cwd);
+  const result = await runGit(
+    ["cat-file", "-s", `${ref}:${relativePath}`],
+    { cwd, allowFailure: true },
+  );
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(trimOutput(result.stdout), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/**
+ * Read a blob at `<ref>:<relativePath>` as raw bytes. Caller is responsible
+ * for size capping — pass the same `maxBytes` they would apply to a disk
+ * read so we can refuse to materialize very large blobs into memory. Returns
+ * `{ contents: null, sizeBytes: 0 }` when the blob is missing.
+ */
+export async function readGitBlob(
+  cwd: string,
+  ref: string,
+  relativePath: string,
+  maxBytes: number,
+): Promise<ReadGitBlobResult> {
+  const size = await gitBlobSize(cwd, ref, relativePath);
+  if (size === undefined) {
+    return { contents: null, sizeBytes: 0 };
+  }
+  if (size > maxBytes) {
+    throw new WorkspaceError(
+      "blob_too_large",
+      `Blob size ${size} bytes exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`,
+    );
+  }
+  try {
+    const result = await execFileAsync(
+      "git",
+      ["cat-file", "blob", `${ref}:${relativePath}`],
+      {
+        cwd,
+        encoding: "buffer",
+        maxBuffer: maxBytes,
+      },
+    );
+    return { contents: Buffer.from(result.stdout), sizeBytes: size };
+  } catch (error) {
+    const execError = toExecError(error);
+    const stderr = trimOutput(execError?.stderr?.toString() ?? "");
+    const detail = stderr ? `: ${stderr}` : "";
+    throw new WorkspaceError(
+      "git_command_failed",
+      `git cat-file blob ${ref}:${relativePath} failed${detail}`,
+      { cause: error },
+    );
+  }
+}
+
 export async function listBranches(cwd: string): Promise<string[]> {
   await ensureGitRepo(cwd);
   const result = await runGit(

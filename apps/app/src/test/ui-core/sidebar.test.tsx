@@ -3,7 +3,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MOBILE_QUERY } from "@/components/ui/hooks/use-mobile";
+import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
 import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
 import { restoreMatchMedia, setupMatchMedia } from "./helpers/match-media.js";
 
@@ -43,7 +43,7 @@ describe("Sidebar", () => {
     expect(unmountCount).toBe(0);
 
     act(() => {
-      environment.mediaQueryFor(MOBILE_QUERY).setMatches(true);
+      environment.mediaQueryFor(COMPACT_VIEWPORT_QUERY).setMatches(true);
     });
 
     expect(screen.getByText("Sidebar child")).toBeTruthy();
@@ -51,7 +51,7 @@ describe("Sidebar", () => {
     expect(unmountCount).toBe(0);
 
     act(() => {
-      environment.mediaQueryFor(MOBILE_QUERY).setMatches(false);
+      environment.mediaQueryFor(COMPACT_VIEWPORT_QUERY).setMatches(false);
     });
 
     expect(screen.getByText("Sidebar child")).toBeTruthy();

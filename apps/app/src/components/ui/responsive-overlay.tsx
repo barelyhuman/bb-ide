@@ -3,14 +3,14 @@ import { Slot } from "@radix-ui/react-slot";
 
 import { Drawer, DrawerContent, DrawerTitle } from "./drawer.js";
 import { getOverlayTriggerClassName } from "./overlay-trigger.js";
-import { useIsMobile } from "./hooks/use-mobile.js";
+import { useIsCompactViewport } from "./hooks/use-compact-viewport.js";
 
 // ---------------------------------------------------------------------------
 // Shared context value for responsive overlays (dropdown menus, popovers)
 // ---------------------------------------------------------------------------
 
 export interface ResponsiveOverlayContextValue {
-  isMobile: boolean;
+  isCompactViewport: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -25,7 +25,7 @@ export function useResponsiveRoot(
   controlledOnChange: ((open: boolean) => void) | undefined,
   defaultOpen: boolean = false,
 ): ResponsiveOverlayContextValue {
-  const isMobile = useIsMobile();
+  const isCompactViewport = useIsCompactViewport();
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -41,8 +41,8 @@ export function useResponsiveRoot(
   );
 
   return React.useMemo(
-    () => ({ isMobile, open, onOpenChange }),
-    [isMobile, open, onOpenChange],
+    () => ({ isCompactViewport, open, onOpenChange }),
+    [isCompactViewport, open, onOpenChange],
   );
 }
 

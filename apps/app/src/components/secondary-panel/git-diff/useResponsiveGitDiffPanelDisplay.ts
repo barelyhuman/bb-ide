@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { useResizeObserver } from "usehooks-ts";
-import { threadSecondaryPanelResizingAtom } from "../threadSecondaryPanelAtoms";
+import {
+  secondaryPanelWidthPercentAtom,
+  threadSecondaryPanelResizingAtom,
+} from "../threadSecondaryPanelAtoms";
 
-const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;
 
 export function useResponsiveGitDiffPanelDisplay({
@@ -16,9 +18,11 @@ export function useResponsiveGitDiffPanelDisplay({
     "unified" | "split"
   >("unified");
   const setIsResizing = useSetAtom(threadSecondaryPanelResizingAtom);
+  const persistedWidthPercent = useAtomValue(secondaryPanelWidthPercentAtom);
+  const setPersistedWidthPercent = useSetAtom(secondaryPanelWidthPercentAtom);
   const secondaryPanelRef = useRef<HTMLElement>(null!);
   const secondaryResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
-  const lastSecondaryPanelSizeRef = useRef(TIMELINE_PANEL_DEFAULT_SIZE_PERCENT);
+  const lastSecondaryPanelSizeRef = useRef(persistedWidthPercent);
   const lastDiffViewWideEnoughRef = useRef<boolean | null>(null);
   const hasExplicitDisplayModeRef = useRef(false);
 
@@ -51,7 +55,7 @@ export function useResponsiveGitDiffPanelDisplay({
 
   const prevOpenRef = useRef(isSecondaryPanelOpen);
   useEffect(() => {
-    // Skip initial mount — Panel's defaultSize handles that.
+    // Skip initial mount — Panel's defaultSize handles it.
     if (prevOpenRef.current === isSecondaryPanelOpen) {
       return;
     }
@@ -99,9 +103,14 @@ export function useResponsiveGitDiffPanelDisplay({
       setIsResizing(isDragging);
       if (isDragging) {
         hasExplicitDisplayModeRef.current = false;
+        return;
+      }
+      // Drag finished — persist the user's chosen width.
+      if (lastSecondaryPanelSizeRef.current > 0) {
+        setPersistedWidthPercent(lastSecondaryPanelSizeRef.current);
       }
     },
-    [setIsResizing],
+    [setIsResizing, setPersistedWidthPercent],
   );
 
   const handleSecondaryPanelResize = useCallback((size: number) => {
@@ -117,6 +126,7 @@ export function useResponsiveGitDiffPanelDisplay({
     handleGitDiffDisplayModeChange,
     handleSecondaryPanelDragging,
     handleSecondaryPanelResize,
+    persistedWidthPercent,
     secondaryPanelRef,
     secondaryResizablePanelRef,
   };

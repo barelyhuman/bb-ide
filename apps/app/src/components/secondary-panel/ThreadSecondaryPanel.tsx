@@ -5,6 +5,7 @@ import {
   FolderOpen,
   GripVertical,
   Info,
+  PanelRight,
   X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui";
@@ -36,7 +37,6 @@ export type {
 
 const THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT = 24;
 const THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT = 70;
-const THREAD_SECONDARY_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_SKELETON_FILE_COUNT = 3;
 const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
   "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
@@ -51,7 +51,7 @@ function ThreadDiffSkeleton({
       {Array.from({ length: count }).map((_, index) => (
         <div
           key={`git-diff-skeleton-${index}`}
-          className="rounded-lg border border-border/70 bg-background/70 shadow-sm"
+          className="rounded-lg border border-border/70 bg-background/70"
         >
           <div className="border-b border-border/70 bg-card/70 px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -74,6 +74,14 @@ function ThreadDiffSkeleton({
   );
 }
 
+export interface SecondaryPanelFileTab {
+  id: string;
+  filename: string;
+  isActive: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}
+
 export interface ThreadSecondaryPanelProps {
   canUseGitUi: boolean;
   defaultMergeBaseBranch?: string;
@@ -81,6 +89,8 @@ export interface ThreadSecondaryPanelProps {
   isManagerThread: boolean;
   metadataContent: ReactNode;
   threadStorageContent?: ReactNode;
+  fileTabs?: SecondaryPanelFileTab[];
+  fileTabContent?: ReactNode;
   showThreadStorageTab?: boolean;
   showGitDiffTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
@@ -90,9 +100,9 @@ export interface ThreadSecondaryPanelProps {
   /**
    * When true, render only the aside content — skip the PanelResizeHandle +
    * Panel wrappers that are only meaningful inside a desktop PanelGroup.
-   * Caller is responsible for wrapping the content in a Drawer on mobile.
+   * Caller is responsible for wrapping the content in a Drawer in that case.
    */
-  isMobile?: boolean;
+  renderAsDrawer: boolean;
 }
 
 export function ThreadSecondaryPanel({
@@ -102,14 +112,19 @@ export function ThreadSecondaryPanel({
   isManagerThread,
   metadataContent,
   threadStorageContent,
+  fileTabs,
+  fileTabContent,
   showThreadStorageTab = false,
   showGitDiffTab = true,
   onPanelChange,
   onCollapse,
   onClose,
   onOpenFileInEditor,
-  isMobile = false,
+  renderAsDrawer,
 }: ThreadSecondaryPanelProps) {
+  const activeFileTab = fileTabs?.find((tab) => tab.isActive);
+  const hasActiveFileTab = activeFileTab !== undefined;
+  const TogglePanelIcon = renderAsDrawer ? X : PanelRight;
   const rawActivePanel = useActiveSecondaryPanel();
   const isOpen = useIsSecondaryPanelOpen();
   const {
@@ -117,6 +132,7 @@ export function ThreadSecondaryPanel({
     handleGitDiffDisplayModeChange,
     handleSecondaryPanelDragging,
     handleSecondaryPanelResize,
+    persistedWidthPercent,
     secondaryPanelRef: panelRef,
     secondaryResizablePanelRef: resizablePanelRef,
   } = useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: isOpen });
@@ -175,7 +191,7 @@ export function ThreadSecondaryPanel({
       aria-hidden={!isOpen}
       className={cn(
         "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
-        !isMobile && [
+        !renderAsDrawer && [
           "transition-[transform,opacity,background-color]",
           THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
           isOpen
@@ -185,9 +201,9 @@ export function ThreadSecondaryPanel({
       )}
     >
       <div className="bg-background">
-        <div className="flex h-12 min-w-0 items-center justify-between gap-3 px-4">
+        <div className="flex h-12 min-w-0 items-center justify-between gap-2 px-4">
           <div
-            className="inline-flex items-center gap-1"
+            className="flex min-w-0 flex-1 items-center gap-1"
             role="tablist"
             aria-label="Secondary panel views"
           >
@@ -195,10 +211,10 @@ export function ThreadSecondaryPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 w-7 rounded-md p-0 text-muted-foreground"
+              className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
               onClick={() => onPanelChange("thread-info")}
               aria-label="Show thread info panel"
-              aria-pressed={activePanel === "thread-info"}
+              aria-pressed={activePanel === "thread-info" && !hasActiveFileTab}
               title="Info"
             >
               <Info className="size-3.5" />
@@ -208,10 +224,10 @@ export function ThreadSecondaryPanel({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 rounded-md p-0 text-muted-foreground"
+                className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
                 onClick={() => onPanelChange("git-diff")}
                 aria-label="Show diff panel"
-                aria-pressed={isDiffPanelActive}
+                aria-pressed={isDiffPanelActive && !hasActiveFileTab}
                 title="Diff"
               >
                 <FileDiffIcon className="size-3.5" />
@@ -222,14 +238,27 @@ export function ThreadSecondaryPanel({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 rounded-md p-0 text-muted-foreground"
+                className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
                 onClick={() => onPanelChange("thread-storage")}
                 aria-label="Show thread storage panel"
-                aria-pressed={isThreadStoragePanelActive}
+                aria-pressed={isThreadStoragePanelActive && !hasActiveFileTab}
                 title="Storage"
               >
                 <FolderOpen className="size-3.5" />
               </Button>
+            ) : null}
+            {fileTabs && fileTabs.length > 0 ? (
+              <>
+                <div
+                  aria-hidden
+                  className="mx-1 h-4 w-px shrink-0 bg-border/70"
+                />
+                <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+                  {fileTabs.map((tab) => (
+                    <FileTabPill key={tab.id} tab={tab} />
+                  ))}
+                </div>
+              </>
             ) : null}
           </div>
           <Button
@@ -238,13 +267,13 @@ export function ThreadSecondaryPanel({
             size="icon"
             className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
             onClick={onClose}
-            aria-label="Close secondary panel"
-            title="Close secondary panel"
+            aria-label={renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"}
+            title={renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"}
           >
-            <X className="size-3.5" />
+            <TogglePanelIcon className="size-3.5" />
           </Button>
         </div>
-        {isDiffPanelActive ? (
+        {isDiffPanelActive && !hasActiveFileTab ? (
           <GitDiffToolbar
             selectionValue={gitDiffSelectValue}
             selectionOptions={gitDiffSelectOptions}
@@ -263,10 +292,16 @@ export function ThreadSecondaryPanel({
       <div
         className={cn(
           "min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-background px-4 pb-3",
-          isDiffPanelActive ? "pt-0" : "pt-1",
+          isDiffPanelActive && !hasActiveFileTab ? "pt-0" : "pt-1",
         )}
       >
-        {isDiffPanelActive ? (
+        {hasActiveFileTab ? (
+          (fileTabContent ?? (
+            <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+              No file preview content provided.
+            </p>
+          ))
+        ) : isDiffPanelActive ? (
           isPreparingGitDiff ? (
             <ThreadDiffSkeleton />
           ) : gitDiffError ? (
@@ -304,7 +339,7 @@ export function ThreadSecondaryPanel({
                     );
                   })}
                   {isParsingGitDiffFiles ? (
-                    <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3 shadow-sm">
+                    <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
                       <div className="space-y-1.5">
                         <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
                         <Skeleton className="h-3 w-5/6 rounded-sm" />
@@ -313,7 +348,7 @@ export function ThreadSecondaryPanel({
                   ) : null}
                 </div>
               ) : (
-                <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground shadow-sm">
+                <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground">
                   {threadGitDiff.diff}
                 </pre>
               )}
@@ -341,7 +376,7 @@ export function ThreadSecondaryPanel({
     </aside>
   );
 
-  if (isMobile) {
+  if (renderAsDrawer) {
     return asideMarkup;
   }
 
@@ -356,7 +391,7 @@ export function ThreadSecondaryPanel({
         id="thread-detail-secondary-panel"
         collapsible
         collapsedSize={0}
-        defaultSize={isOpen ? THREAD_SECONDARY_PANEL_DEFAULT_SIZE_PERCENT : 0}
+        defaultSize={isOpen ? persistedWidthPercent : 0}
         minSize={THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT}
         maxSize={THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT}
         onCollapse={onCollapse}
@@ -371,6 +406,38 @@ export function ThreadSecondaryPanel({
         {asideMarkup}
       </Panel>
     </>
+  );
+}
+
+function FileTabPill({ tab }: { tab: SecondaryPanelFileTab }) {
+  return (
+    <div
+      className={cn(
+        "group/file-tab relative inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
+        tab.isActive
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted/60",
+      )}
+    >
+      <button
+        type="button"
+        onClick={tab.onSelect}
+        aria-pressed={tab.isActive}
+        title={tab.filename}
+        className="flex h-full min-w-0 items-center rounded-l-md pl-2 pr-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <span className="max-w-[160px] truncate">{tab.filename}</span>
+      </button>
+      <button
+        type="button"
+        onClick={tab.onClose}
+        aria-label={`Close ${tab.filename}`}
+        title="Close tab"
+        className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
+      >
+        <X className="size-3" />
+      </button>
+    </div>
   );
 }
 

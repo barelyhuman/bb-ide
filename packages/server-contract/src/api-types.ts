@@ -561,6 +561,58 @@ export const environmentDiffQuerySchema = z.discriminatedUnion("target", [
 ]);
 export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
 
+const diffFileSideSchema = z.enum(["old", "new"]);
+
+/**
+ * Query for fetching a single file's contents at one side of a diff target.
+ * Used by the diff card to populate `<FileDiff>`'s `oldFile`/`newFile` props
+ * so `@pierre/diffs` can render expand-context buttons between hunks.
+ *
+ * The target shape mirrors `environmentDiffQuerySchema` — the server
+ * resolves it to a (oldRef, newRef) pair, then reads the requested side via
+ * `host.read_file` (with `ref` for committed sides, omitted for the working
+ * tree).
+ */
+export const environmentDiffFileQuerySchema = z.discriminatedUnion("target", [
+  z.object({
+    target: z.literal("uncommitted"),
+    path: z.string().min(1),
+    side: diffFileSideSchema,
+  }),
+  z.object({
+    target: z.literal("branch_committed"),
+    mergeBaseBranch: mergeBaseBranchQuerySchema,
+    path: z.string().min(1),
+    side: diffFileSideSchema,
+  }),
+  z.object({
+    target: z.literal("all"),
+    mergeBaseBranch: mergeBaseBranchQuerySchema,
+    path: z.string().min(1),
+    side: diffFileSideSchema,
+  }),
+  z.object({
+    target: z.literal("commit"),
+    sha: z.string().regex(/^[0-9a-f]{4,40}$/iu),
+    path: z.string().min(1),
+    side: diffFileSideSchema,
+  }),
+]);
+export type EnvironmentDiffFileQuery = z.infer<
+  typeof environmentDiffFileQuerySchema
+>;
+
+export const environmentDiffFileResponseSchema = z.object({
+  path: z.string(),
+  content: z.string(),
+  contentEncoding: z.enum(["base64", "utf8"]),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative(),
+});
+export type EnvironmentDiffFileResponse = z.infer<
+  typeof environmentDiffFileResponseSchema
+>;
+
 export const threadListQuerySchema = z.object({
   projectId: z.string().min(1),
   type: threadTypeSchema.optional(),

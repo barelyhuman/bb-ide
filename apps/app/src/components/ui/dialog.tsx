@@ -24,7 +24,7 @@ import { getOverlayTriggerClassName } from "./overlay-trigger.js";
 
 const ResponsiveDialogContext =
   React.createContext<ResponsiveOverlayContextValue>({
-    isMobile: false,
+    isCompactViewport: false,
     open: false,
     onOpenChange: () => {},
   });
@@ -45,7 +45,7 @@ function Dialog({
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const ctx = useResponsiveRoot(controlledOpen, controlledOnChange);
 
-  const body = ctx.isMobile ? (
+  const body = ctx.isCompactViewport ? (
     children
   ) : (
     <DialogPrimitive.Root
@@ -72,9 +72,9 @@ const DialogTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>
 >(({ asChild, children, className, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveDialog();
+  const { isCompactViewport, open, onOpenChange } = useResponsiveDialog();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return (
       <MobileTrigger
         ref={ref}
@@ -113,9 +113,9 @@ interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 
 const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
   ({ asChild, onClick, children, ...props }, ref) => {
-    const { isMobile, onOpenChange } = useResponsiveDialog();
+    const { isCompactViewport, onOpenChange } = useResponsiveDialog();
 
-    if (isMobile) {
+    if (isCompactViewport) {
       const Comp = asChild ? Slot : "button";
       const handleClick: React.MouseEventHandler<HTMLButtonElement> = (
         event,
@@ -174,9 +174,9 @@ const DialogContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveDialog();
+  const { isCompactViewport, open, onOpenChange } = useResponsiveDialog();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     const domProps = stripRadixContentProps(props);
     return (
       <ResponsiveDrawerShell open={open} onOpenChange={onOpenChange}>
@@ -257,8 +257,8 @@ const DialogTitle = React.forwardRef<
   HTMLHeadingElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
 >(({ className, ...props }, ref) => {
-  const { isMobile } = useResponsiveDialog();
-  const Comp = isMobile ? DrawerTitlePrimitive : DialogPrimitive.Title;
+  const { isCompactViewport } = useResponsiveDialog();
+  const Comp = isCompactViewport ? DrawerTitlePrimitive : DialogPrimitive.Title;
   return (
     <Comp
       ref={ref}
@@ -276,8 +276,8 @@ const DialogDescription = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, ...props }, ref) => {
-  const { isMobile } = useResponsiveDialog();
-  const Comp = isMobile
+  const { isCompactViewport } = useResponsiveDialog();
+  const Comp = isCompactViewport
     ? DrawerDescriptionPrimitive
     : DialogPrimitive.Description;
   return (

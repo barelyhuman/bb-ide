@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { BottomAnchoredScrollBody } from "./bottom-anchored-scroll-body.js";
+import { PAGE_SHELL_CONTENT_STYLE } from "./page-shell-content-style.js";
 import { cn } from "@/lib/utils";
 import { OverflowFade } from "./overflow-fade.js";
 
@@ -94,6 +95,7 @@ export function PageShell({
               maxWidthClassName,
               contentClassName,
             )}
+            style={PAGE_SHELL_CONTENT_STYLE}
           >
             {children}
           </div>

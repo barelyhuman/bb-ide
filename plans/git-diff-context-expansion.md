@@ -22,40 +22,43 @@ apps/server  (new route)
     query: { target: working|commit:sha|all:mergeBase, path, side: old|new }
     → { name, contents, truncated }
 
-apps/host-daemon  (new command)
-  workspace.show_file
-    { workspacePath, workspaceProvisionType, ref, path }
-    → { contents, sizeBytes }    ; runs `git show <ref>:<path>` (or reads
-                                    the working tree when ref === "WORKTREE")
-                                    Throws `file_too_large` like the existing
-                                    file-read primitive — no truncation flag.
+apps/host-daemon  (extend existing command)
+  host.read_file gains an optional `ref?: string`.
+    omitted → today's behavior (read from disk under rootPath jail).
+    set     → `git cat-file -s <ref>:<rel>` to size-probe, then
+              `git cat-file blob <ref>:<rel>` for bytes; same caps,
+              same encoding logic, same `file_too_large` throw.
+  No new command, no new result schema.
 
-ref derivation per target:
-  working           → old: HEAD,        new: WORKTREE
+ref derivation per target (server-internal):
+  working           → old: HEAD,        new: <omit ref> (read from disk)
   commit:<sha>      → old: <sha>^,      new: <sha>
   all:<mergeBase>   → old: <mergeBase>, new: HEAD
 
-For "WORKTREE" the daemon reads the file from disk via the existing
-`readFileForTransport` (already jails to the rootPath, already caps at
-25 MB for non-images / 10 MB for images, already throws `file_too_large`).
-For ref reads it shells `git show` and applies the same 25 MB cap before
-materializing the buffer.
+For the working-tree side, the server simply omits `ref` and the existing
+`readFileForTransport` path runs (already jails, already caps at 25 MB for
+non-images / 10 MB for images, already throws `file_too_large`).
+For ref reads, the same caps + `getContentEncoding` apply post-read.
 ```
 
 ## Phases (ship incrementally)
 
-### Phase 1 — daemon command + server route
+### Phase 1 — extend host.read_file + server route
 
 - **Daemon contract** (`packages/host-daemon-contract/src/commands.ts`):
-  - Add `workspaceShowFileCommandSchema` next to `workspaceDiffCommandSchema`.
-  - Result schema mirrors `host.read_file`'s `fileReadResultSchema` shape (`content`, `contentEncoding`, `sizeBytes`, optional `mimeType`). Reuse the same primitive — diff-context expansion doesn't need its own.
-  - Wire into `hostDaemonNonProvisionCommandSchema` discriminated union and the result map.
+  - Add `ref: z.string().min(1).optional()` to `hostReadFileCommandSchema`.
+  - Result schema is unchanged — keep using `fileReadResultSchema`.
+  - JSDoc on the schema updated to note that when `ref` is set, the file is read from git history at that ref instead of from disk; rootPath is then interpreted as the repo root rather than just a jail.
 
-- **Daemon handler** (`apps/host-daemon/src/command-handlers/workspace-show-file.ts`):
-  - Validate `path` is **repo-relative** (no leading `/`, no `..` segments) — reuse the rootPath-jail pattern from `host-files.ts`.
-  - When `ref === "WORKTREE"`: call `readFileForTransport({ resolvedPath: workspacePath/path, rootPath: workspacePath, ... })` directly. Cap + jail come for free.
-  - Otherwise: `git -C <workspacePath> show <ref>:<path>` via `process-utils`. Read into a buffer, then run it through the same `getContentEncoding`/`getFileSizeLimitBytes` logic as `readFileForTransport` so we throw `file_too_large` consistently and pick utf-8/base64 the same way.
-  - Returns the same `ReadFileForTransportResult` shape as `host.read_file`.
+- **Daemon handler** (`apps/host-daemon/src/command-handlers/host-files.ts`):
+  - When `ref` absent: existing path unchanged.
+  - When `ref` present:
+    1. Sanitize `ref` against a whitelist regex (git ref grammar — letters, digits, `_-./`, no `..`, no leading `-`) to refuse anything that could escape the `git` arg.
+    2. Compute `relativePath = path.relative(rootPath, args.path)` and reject if it starts with `..` (same jail invariant, just enforced before invoking git).
+    3. Probe size: `git -C <rootPath> cat-file -s <ref>:<relativePath>` via `process-utils`. If the object is missing (e.g. file didn't exist at that ref), return `{ content: "", contentEncoding: "utf8", sizeBytes: 0 }` — the UI treats empty as "no context to expand on this side".
+    4. Apply the same `getFileSizeLimitBytes(mimeType)` cap as the disk path. Exceeded → throw `CommandDispatchError("file_too_large", ...)` with the same message shape.
+    5. Read bytes: `git -C <rootPath> cat-file blob <ref>:<relativePath>`. Run through `getContentEncoding` / mimeType lookup as today.
+  - Returns the same `ReadFileForTransportResult`.
 
 - **Server contract** (`packages/server-contract/src/public-api.ts`):
   - Add route `"/environments/:id/diff/file"` with query `EnvironmentDiffFileQuery = { target: ..., path: string, side: "old" | "new" }` and response that mirrors `fileReadResultSchema` (`content`, `contentEncoding`, `sizeBytes`, optional `mimeType`).
@@ -63,16 +66,19 @@ materializing the buffer.
   - On daemon `file_too_large`, surface as `409` with the underlying message; UI disables expand for that file.
 
 - **Server route** (`apps/server/src/routes/environments.ts`):
-  - Resolve target → `(oldRef, newRef)` pair.
-  - Pick the side, dispatch `workspace.show_file` with that ref.
-  - Special case: `target=working & side=new` → `ref = "WORKTREE"`.
-  - For `commit` target's `side=old`, ref is `<sha>^` (handle root-commit edge case: if `git rev-parse <sha>^` fails, return empty contents — file didn't exist).
+  - Resolve target → `(oldRef, newRef | null)` pair (null = working tree on the new side).
+  - Build the `host.read_file` command:
+    - `path` = absolute (workspacePath joined with the query's relative path)
+    - `rootPath` = `environment.path`
+    - `ref` = the chosen ref, or omit when reading the working tree (`target=working & side=new`).
+  - For `commit` target's `side=old`, ref is `<sha>^`; on root-commit edge case (the cat-file probe returns missing-object), the daemon already returns empty content, so no special-casing needed at the server.
   - Same `COMMAND_TIMEOUT_MS` + `requireReadyEnvironment` guards as `/diff`.
 
 **Exit criteria for Phase 1:**
-- New daemon command runs end-to-end against a real workspace.
+- `host.read_file` accepts `ref` and returns the right contents end-to-end against a real workspace; existing callers (no `ref`) keep working unchanged.
 - `curl 'http://localhost:3334/api/v1/environments/<env>/diff/file?target=working&path=apps/app/src/...&side=old'` returns the HEAD contents of that file.
 - For renamed files, caller must use the source path on `side=old` and destination path on `side=new` (server doesn't auto-translate — the diff already exposes both names via `prevName`/`name`).
+- Existing `host.read_file` integration tests still pass; new tests cover the `ref` branch.
 
 ### Phase 2 — react-query hook + GitDiffCard wiring
 
@@ -112,9 +118,11 @@ materializing the buffer.
 
 ## Validation
 
-- Unit: handler picks correct ref per target (working / commit / all+mergeBase), including root-commit edge case.
-- Integration (`integration-tests`): real workspace, real daemon, fetch a file at HEAD and at a commit; assert contents match `git show`.
-- Manual: open a real thread's diff, expand around a hunk in a long file. Try the rename fixture in the story. Try a 2 MB file (truncation path).
+- Unit:
+  - `host.read_file` ref-branch handler picks correct command shape, sanitizes ref, throws `file_too_large` past the cap.
+  - Server route picks correct ref per target (working / commit / all+mergeBase), including the missing-object case for root-commit `<sha>^`.
+- Integration (`integration-tests`): real workspace, real daemon, fetch a file at HEAD and at a commit; assert contents match `git show`. Existing `host.read_file` tests (no `ref`) unchanged.
+- Manual: open a real thread's diff, expand around a hunk in a long file. Try the rename fixture in the story. Try a 30 MB file (cap path → 409 → UI disables expand for that card).
 
 ## Out of scope for this plan
 

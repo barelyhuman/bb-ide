@@ -4,8 +4,28 @@ import { CommandDispatchError } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
 import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
-import { readFileForTransport } from "./file-read.js";
+import { readFileForTransport, readFileFromGitRef } from "./file-read.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
+
+/**
+ * Conservative subset of git's ref name grammar. We only need to refuse
+ * shell-meaningful punctuation and ref-traversal sequences before passing
+ * the value as a `git` argument. `execFile` already prevents shell expansion,
+ * but rejecting bad refs early gives a clean error and avoids ambiguity in
+ * the `<ref>:<path>` join.
+ */
+const SAFE_GIT_REF_REGEX = /^[A-Za-z0-9_./~^@-]+$/;
+
+function assertSafeGitRef(ref: string): void {
+  if (
+    ref.length === 0 ||
+    ref.startsWith("-") ||
+    ref.includes("..") ||
+    !SAFE_GIT_REF_REGEX.test(ref)
+  ) {
+    throw new CommandDispatchError("invalid_ref", `Invalid git ref: ${ref}`);
+  }
+}
 
 export async function listHostFiles(
   command: CommandOf<"host.list_files">,
@@ -42,6 +62,16 @@ export async function readHostFile(
 
   if (!path.isAbsolute(command.rootPath)) {
     throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
+  }
+
+  if (command.ref !== undefined) {
+    assertSafeGitRef(command.ref);
+    return readFileFromGitRef({
+      rootPath: command.rootPath,
+      resolvedPath: command.path,
+      resultPath: command.path,
+      ref: command.ref,
+    });
   }
 
   return readFileForTransport({

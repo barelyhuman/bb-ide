@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useAtomCallback } from "jotai/utils";
+import { useQueryClient } from "@tanstack/react-query";
+import type { FileContents } from "@pierre/diffs";
+import type { WorkspaceDiffTarget } from "@bb/domain";
 import {
   useEnvironmentGitDiff,
   useEnvironmentWorkStatus,
 } from "../../../hooks/queries/environment-queries";
+import { environmentDiffFileQueryKey } from "../../../hooks/queries/query-keys";
+import { getEnvironmentDiffFile } from "../../../lib/api";
+import type { RequestDiffFileContents } from "../../git-diff/GitDiffCard";
 import {
   gitDiffCollapsedFileKeysAtom,
   pendingGitDiffScrollPathAtom,
@@ -303,6 +309,35 @@ export function useGitDiffPanelState({
     setSelectedGitDiffCommitSha(value === "all" ? null : value);
   }, []);
 
+  const queryClient = useQueryClient();
+  const onRequestFileContents = useMemo<RequestDiffFileContents | undefined>(
+    () => {
+      if (!environmentId || gitDiffTarget === undefined) return undefined;
+      const envId = environmentId;
+      const target = gitDiffTarget;
+      const targetKey = diffTargetKey(target);
+      return async (path, side) => {
+        const result = await queryClient.fetchQuery({
+          queryKey: environmentDiffFileQueryKey(
+            envId,
+            target.type,
+            targetKey,
+            path,
+            side,
+          ),
+          queryFn: () => getEnvironmentDiffFile(envId, target, path, side),
+          staleTime: 5_000,
+        });
+        return toFileContents(
+          path,
+          result.content,
+          result.contentEncoding,
+        );
+      };
+    },
+    [environmentId, gitDiffTarget, queryClient],
+  );
+
   return {
     currentGitDiff,
     gitDiffError,
@@ -314,6 +349,7 @@ export function useGitDiffPanelState({
     isParsingGitDiffFiles,
     isPreparingGitDiff,
     onGitDiffSelectionChange,
+    onRequestFileContents,
     parsedGitDiffFileEntries,
     queuedGitDiffFileRenderKeys,
     setGitDiffFileRef,
@@ -321,4 +357,32 @@ export function useGitDiffPanelState({
     toggleAllGitDiffFilesCollapsed,
     toggleGitDiffFileCollapsed,
   };
+}
+
+function diffTargetKey(target: WorkspaceDiffTarget): string | null {
+  switch (target.type) {
+    case "uncommitted":
+      return null;
+    case "branch_committed":
+    case "all":
+      return target.mergeBaseBranch;
+    case "commit":
+      return target.sha;
+    default: {
+      const _exhaustive: never = target;
+      return _exhaustive;
+    }
+  }
+}
+
+function toFileContents(
+  path: string,
+  content: string,
+  contentEncoding: "utf8" | "base64",
+): FileContents | null {
+  // `@pierre/diffs` wants a UTF-8 string; binary blobs come back base64. Skip
+  // those — the diff-rendering library can't show context for binaries
+  // (parsePatchFiles doesn't produce hunks for them anyway).
+  if (contentEncoding !== "utf8") return null;
+  return { name: path, contents: content };
 }

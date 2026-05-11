@@ -25,6 +25,9 @@ export {
   WorkspaceError,
   detectGitRepo,
   getCurrentBranch,
+  gitBlobSize,
   listBranches,
   readDefaultBranch,
+  readGitBlob,
 } from "./git.js";
+export type { ReadGitBlobResult } from "./git.js";

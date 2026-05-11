@@ -1,5 +1,9 @@
 import type { TimelineRow } from "@bb/server-contract";
-import { ThreadTimelineRows } from "@/components/thread/timeline";
+import {
+  ThreadTimelineRows,
+  type ThreadTimelineRowsProps,
+} from "@/components/thread/timeline";
+import { usePreferredTheme } from "@/hooks/useTheme";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -19,6 +23,21 @@ const baseProps = {
   turnSummaryRowsById: {},
   workspaceRootPath: "/Users/michael/.bb-dev/worktrees/env_story/bb",
 };
+
+// Story-only wrapper — pulls the active theme from ladle so the diff body's
+// syntax highlighting flips with the toolbar toggle. Without this each
+// ThreadTimelineRows render would default to themeType="light" regardless
+// of the page theme.
+type ThemedTimelineRowsProps = Omit<
+  ThreadTimelineRowsProps,
+  "themeType"
+> &
+  Partial<Pick<ThreadTimelineRowsProps, "themeType">>;
+
+function ThemedTimelineRows(props: ThemedTimelineRowsProps) {
+  const themeType = usePreferredTheme();
+  return <ThreadTimelineRows themeType={themeType} {...props} />;
+}
 
 // ---------------------------------------------------------------------------
 // Real file-change rows pulled from live threads in ~/.bb-dev/bb.db.
@@ -194,7 +213,7 @@ export function Overview() {
         hint="production-default — header only, click to expand. Real unified diff."
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[updateApiTypes]}
           />
@@ -205,7 +224,7 @@ export function Overview() {
         hint="kind=add. Diff is the full new-file content; stats count plain lines."
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[addFormatHelpersTest]}
           />
@@ -216,7 +235,7 @@ export function Overview() {
         hint="kind=delete. Diff is the prior file content; stats count as removed."
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[deleteActiveThinking]}
           />
@@ -227,7 +246,7 @@ export function Overview() {
         hint="status=pending, no completedAt — edit is mid-flight"
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[runningFileChange]}
           />
@@ -238,7 +257,7 @@ export function Overview() {
         hint="status=error, stderr populated"
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[errorFileChange]}
           />
@@ -249,7 +268,7 @@ export function Overview() {
         hint="status=interrupted — turn was cancelled mid-edit"
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[interruptedFileChange]}
           />
@@ -260,7 +279,7 @@ export function Overview() {
         hint="approvalStatus=waiting_for_approval, parked before applying the edit"
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[waitingApprovalFileChange]}
           />
@@ -271,7 +290,7 @@ export function Overview() {
         hint="approvalStatus=denied, user rejected the edit"
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             timelineRows={[deniedFileChange]}
           />
@@ -282,7 +301,7 @@ export function Overview() {
         hint="extract-to-memo refactor of ThreadFollowUpComposer.tsx — full diff body inline"
       >
         <TimelineStage>
-          <ThreadTimelineRows
+          <ThemedTimelineRows
             {...baseProps}
             initialExpanded={new Set([largeRefactorComposer.id])}
             timelineRows={[largeRefactorComposer]}

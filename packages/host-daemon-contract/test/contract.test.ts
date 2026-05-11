@@ -29,10 +29,14 @@ const PRODUCER_EVENT_ID = "hdevt_23456789abcdefghijkm";
 const CLIENT_REQUEST_ID = "creq_23456789ab";
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
+  "hostDaemonCommandSchema.checkout":
+    "Unmanaged provision may omit checkout when no pre-thread branch switch is needed.",
   "hostDaemonCommandSchema.mergeBaseBranch":
     "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
   "hostDaemonCommandSchema.query":
     "host.list_files may omit a search string to list files without filtering.",
+  "hostDaemonCommandSchema.ref":
+    "host.read_file may omit ref to read from disk; setting ref switches to git history at that ref.",
   "hostDaemonCommandSchema.selectedModel":
     "provider.list_models may omit selectedModel to list only active provider models.",
   "hostDaemonCommandSchema.threadStoragePath":
@@ -186,6 +190,7 @@ describe("host-daemon command schemas", () => {
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
         branchName: "bb/env-123",
+        baseBranch: null,
         setupTimeoutMs: 900000,
       }),
     ).toMatchObject({

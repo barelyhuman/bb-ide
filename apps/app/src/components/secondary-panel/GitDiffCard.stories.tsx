@@ -4,6 +4,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { FileContents } from "@pierre/diffs";
 import { toast } from "sonner";
 import {
   GIT_DIFF_VIEW_BASE_OPTIONS,
@@ -36,91 +37,455 @@ function PanelStage({ children }: { children: ReactNode }) {
   );
 }
 
-const SMALL_DIFF = `diff --git a/apps/app/src/components/sidebar/ProjectRow.tsx b/apps/app/src/components/sidebar/ProjectRow.tsx
-index 1111111..2222222 100644
---- a/apps/app/src/components/sidebar/ProjectRow.tsx
-+++ b/apps/app/src/components/sidebar/ProjectRow.tsx
-@@ -169,7 +169,7 @@ export function ProjectRow({
-       {!isCollapsed ? (
-         threadListState.status === "loading" ? (
-           <div className="group-data-[collapsible=icon]:hidden">
--            <SidebarMenuSkeleton />
-+            <SidebarMenuSkeleton showIcon />
-           </div>
-         ) : projectThreads.length > 0 ? (
-           <div className="space-y-0.5 group-data-[collapsible=icon]:hidden">
+// ---------------------------------------------------------------------------
+// Realistic file fixtures. Each fixture is a fake-but-plausible TypeScript
+// source file (~100-200 lines) used as the OLD side of the diff; edits
+// transform it into the NEW side, and `buildAlignedDiff` synthesizes the
+// matching unified diff so the library's own line-arrays line up with our
+// hunk metadata once contents load. That's what unlocks expand-context
+// buttons in every gap between hunks.
+// ---------------------------------------------------------------------------
+
+const PROJECT_ROW_TSX = `import {
+  type CSSProperties,
+  memo,
+  useMemo,
+} from "react";
+import { ChevronRight } from "lucide-react";
+import {
+  Sidebar,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+} from "@/components/ui";
+import { useThreadList } from "@/hooks/queries/thread-queries";
+import type { Project } from "@bb/domain";
+import { ThreadRow } from "./ThreadRow";
+
+export interface ProjectRowProps {
+  project: Project;
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+const PROJECT_ROW_STYLE: CSSProperties = {
+  contain: "layout paint",
+};
+
+interface ProjectThreadGroup {
+  managerId: string | null;
+  threadIds: readonly string[];
+}
+
+function buildProjectThreadGroups(
+  threadIds: readonly string[],
+  parentByThreadId: Record<string, string | null>,
+): ProjectThreadGroup[] {
+  const groups: ProjectThreadGroup[] = [];
+  const indexByManagerId = new Map<string | null, number>();
+  for (const threadId of threadIds) {
+    const managerId = parentByThreadId[threadId] ?? null;
+    const existing = indexByManagerId.get(managerId);
+    if (existing !== undefined) {
+      groups[existing] = {
+        ...groups[existing]!,
+        threadIds: [...groups[existing]!.threadIds, threadId],
+      };
+      continue;
+    }
+    indexByManagerId.set(managerId, groups.length);
+    groups.push({ managerId, threadIds: [threadId] });
+  }
+  return groups;
+}
+
+function ProjectRowComponent({
+  project,
+  isCollapsed,
+  onToggleCollapsed,
+}: ProjectRowProps) {
+  const threadListState = useThreadList({ projectId: project.id });
+  const projectThreads = useMemo(
+    () => threadListState.data?.threads ?? [],
+    [threadListState.data?.threads],
+  );
+  return (
+    <SidebarMenuItem className="group/project" style={PROJECT_ROW_STYLE}>
+      <SidebarMenuButton
+        type="button"
+        onClick={onToggleCollapsed}
+        className="font-medium text-sidebar-foreground"
+        aria-expanded={!isCollapsed}
+        aria-label={\`\${isCollapsed ? "Expand" : "Collapse"} \${project.name}\`}
+      >
+        <ChevronRight
+          className={
+            isCollapsed
+              ? "size-3.5 shrink-0 transition-transform"
+              : "size-3.5 shrink-0 rotate-90 transition-transform"
+          }
+        />
+        <span className="truncate">{project.name}</span>
+      </SidebarMenuButton>
+      {!isCollapsed ? (
+        threadListState.status === "loading" ? (
+          <div className="group-data-[collapsible=icon]:hidden">
+            <SidebarMenuSkeleton />
+          </div>
+        ) : projectThreads.length > 0 ? (
+          <div className="space-y-0.5 group-data-[collapsible=icon]:hidden">
+            {projectThreads.map((thread) => (
+              <ThreadRow key={thread.id} thread={thread} />
+            ))}
+          </div>
+        ) : (
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            No threads in this project yet.
+          </p>
+        )
+      ) : null}
+    </SidebarMenuItem>
+  );
+}
+
+export const ProjectRow = memo(ProjectRowComponent);
+ProjectRow.displayName = "ProjectRow";
 `;
 
-const NEW_FILE_DIFF = `diff --git a/apps/app/src/components/sidebar/ProjectRow.stories.tsx b/apps/app/src/components/sidebar/ProjectRow.stories.tsx
+const THREAD_ROW_TSX = `import { memo, useMemo } from "react";
+import { Loader2 } from "lucide-react";
+import {
+  Pill,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  StatusPill,
+} from "@/components/ui";
+import { cn } from "@/lib/utils";
+import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
+import type { ThreadListEntry } from "@bb/server-contract";
+
+export interface ThreadRowProps {
+  thread: ThreadListEntry;
+  isActive: boolean;
+  managerOptions?: ThreadRowManagerOptions;
+  onSelect: () => void;
+}
+
+export interface ThreadRowManagerOptions {
+  isCollapsed: boolean;
+  managedChildCount: number;
+  managedChildBusyCount: number;
+  onToggleCollapsed: () => void;
+}
+
+function isThreadBusy(thread: ThreadListEntry): boolean {
+  switch (thread.runtime.displayStatus) {
+    case "active":
+    case "host-reconnecting":
+      return true;
+    case "idle":
+    case "interrupted":
+    case "failed":
+      return false;
+  }
+}
+
+function ThreadRowComponent({
+  thread,
+  isActive,
+  managerOptions,
+  onSelect,
+}: ThreadRowProps) {
+  const threadIsBusy = isThreadBusy(thread);
+  const isManager = thread.type === "manager";
+  const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
+  const managedChildCount = managerOptions?.managedChildCount ?? 0;
+  const hasManagedChildren = managedChildCount > 0;
+  const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
+  const isManagerBusy =
+    isManager && (threadIsBusy || managedChildBusyCount > 0);
+  const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
+    thread.environmentWorkspaceDisplayKind,
+  );
+  const isPromoted = thread.archivedAt === null && thread.parentThreadId !== null;
+  const titleText = useMemo(
+    () => thread.title?.trim() || thread.titleFallback || "Untitled thread",
+    [thread.title, thread.titleFallback],
+  );
+  return (
+    <SidebarMenuItem className="group/thread">
+      <SidebarMenuButton
+        type="button"
+        onClick={onSelect}
+        isActive={isActive}
+        className="text-sm text-sidebar-foreground"
+      >
+        {isManagerBusy ? (
+          <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+        ) : (
+          <EnvironmentIcon className="size-3 shrink-0 text-muted-foreground" />
+        )}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="truncate">{titleText}</span>
+          {isManager && hasManagedChildren ? (
+            <span className="text-xs text-muted-foreground">
+              {managedChildCount}
+            </span>
+          ) : null}
+        </span>
+        {isManager ? (
+          <StatusPill variant="outline" className="shrink-0">
+            manager
+          </StatusPill>
+        ) : null}
+      </SidebarMenuButton>
+      {isPromoted ? (
+        <Pill variant="emphasis" className="relative z-10">
+          promoted
+        </Pill>
+      ) : null}
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-end",
+          managerOptions?.isCollapsed ? "opacity-50" : undefined,
+        )}
+      >
+        {isManager ? (
+          <button
+            type="button"
+            onClick={managerOptions?.onToggleCollapsed}
+            aria-label={isManagerCollapsed ? "Expand children" : "Collapse children"}
+          >
+            chevron
+          </button>
+        ) : null}
+      </span>
+    </SidebarMenuItem>
+  );
+}
+
+export const ThreadRow = memo(ThreadRowComponent);
+ThreadRow.displayName = "ThreadRow";
+`;
+
+const PROJECT_ROW_STORIES_TSX = `import type { ReactNode } from "react";
+import { ProjectRow } from "./ProjectRow";
+import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+
+export default {
+  title: "sidebar/Project Row",
+};
+
+function StoryStage({ children }: { children: ReactNode }) {
+  return <div className="w-72">{children}</div>;
+}
+
+export function Overview() {
+  return (
+    <StoryCard>
+      <StoryRow label="collapsed">
+        <StoryStage>
+          <ProjectRow
+            project={{ id: "proj_demo", name: "demo" } as never}
+            isCollapsed
+            onToggleCollapsed={() => {}}
+          />
+        </StoryStage>
+      </StoryRow>
+      <StoryRow label="expanded">
+        <StoryStage>
+          <ProjectRow
+            project={{ id: "proj_demo", name: "demo" } as never}
+            isCollapsed={false}
+            onToggleCollapsed={() => {}}
+          />
+        </StoryStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}
+`;
+
+// ---------------------------------------------------------------------------
+// Aligned-fixture builders. Each takes a real-looking source file plus an
+// edit list and produces the FileContents pair AND the unified diff that
+// describes the change between them. Once GitDiffCard tags the file lines
+// onto the parsed fileDiff, the library shows expand-context buttons in
+// every gap between hunks.
+// ---------------------------------------------------------------------------
+
+interface AlignedDiffEdit {
+  /** 1-based line number to replace. */
+  line: number;
+  /** New text for that line; oldText is read from `oldContent`. */
+  newText: string;
+}
+
+interface AlignedDiffSpec {
+  filename: string;
+  oldContent: string;
+  edits: readonly AlignedDiffEdit[];
+}
+
+interface AlignedDiffResult {
+  oldFile: FileContents;
+  newFile: FileContents;
+  unifiedDiff: string;
+}
+
+const ALIGNED_DIFF_CONTEXT = 3;
+
+function buildAlignedDiff(spec: AlignedDiffSpec): AlignedDiffResult {
+  const oldLines = spec.oldContent.split("\n");
+  for (const edit of spec.edits) {
+    if (edit.line < 1 || edit.line > oldLines.length) {
+      throw new Error(
+        `buildAlignedDiff: ${spec.filename} has ${oldLines.length} lines; cannot edit line ${edit.line}`,
+      );
+    }
+    if (oldLines[edit.line - 1] === edit.newText) {
+      throw new Error(
+        `buildAlignedDiff: ${spec.filename} line ${edit.line} is identical to newText — diff would be empty`,
+      );
+    }
+  }
+  const newLines = [...oldLines];
+  for (const edit of spec.edits) {
+    newLines[edit.line - 1] = edit.newText;
+  }
+
+  // Sort edits by line so hunks come out in order; collapse adjacent edits
+  // into a single hunk when their context regions overlap (keeps the diff
+  // looking like real `git diff` output).
+  const sortedEdits = [...spec.edits].sort((a, b) => a.line - b.line);
+  const hunkRanges: Array<{ start: number; end: number; lines: number[] }> = [];
+  for (const edit of sortedEdits) {
+    const rangeStart = Math.max(1, edit.line - ALIGNED_DIFF_CONTEXT);
+    const rangeEnd = Math.min(oldLines.length, edit.line + ALIGNED_DIFF_CONTEXT);
+    const last = hunkRanges[hunkRanges.length - 1];
+    if (last && last.end >= rangeStart - 1) {
+      last.end = Math.max(last.end, rangeEnd);
+      last.lines.push(edit.line);
+    } else {
+      hunkRanges.push({ start: rangeStart, end: rangeEnd, lines: [edit.line] });
+    }
+  }
+
+  const hunkBlocks = hunkRanges.map(({ start, end, lines }) => {
+    const editLines = new Set(lines);
+    const range = end - start + 1;
+    const body: string[] = [];
+    for (let n = start; n <= end; n++) {
+      if (editLines.has(n)) {
+        body.push(`-${oldLines[n - 1]}`);
+        body.push(`+${newLines[n - 1]}`);
+      } else {
+        body.push(` ${oldLines[n - 1]}`);
+      }
+    }
+    return `@@ -${start},${range} +${start},${range} @@\n${body.join("\n")}`;
+  });
+
+  const unifiedDiff = `diff --git a/${spec.filename} b/${spec.filename}
+index 1111111..2222222 100644
+--- a/${spec.filename}
++++ b/${spec.filename}
+${hunkBlocks.join("\n")}
+`;
+
+  return {
+    oldFile: { name: spec.filename, contents: oldLines.join("\n") },
+    newFile: { name: spec.filename, contents: newLines.join("\n") },
+    unifiedDiff,
+  };
+}
+
+function buildNewFileDiff(filename: string, content: string): AlignedDiffResult {
+  const lines = content.split("\n");
+  const trailingEmpty = lines[lines.length - 1] === "" ? 1 : 0;
+  const lineCount = lines.length - trailingEmpty;
+  const body = lines
+    .slice(0, lineCount)
+    .map((line) => `+${line}`)
+    .join("\n");
+  return {
+    oldFile: { name: filename, contents: "" },
+    newFile: { name: filename, contents: content },
+    unifiedDiff: `diff --git a/${filename} b/${filename}
 new file mode 100644
 index 0000000..3333333
 --- /dev/null
-+++ b/apps/app/src/components/sidebar/ProjectRow.stories.tsx
-@@ -0,0 +1,12 @@
-+import type { ReactNode } from "react";
-+import { ProjectRow } from "./ProjectRow";
-+
-+export default {
-+  title: "sidebar/Projects",
-+};
-+
-+export function Overview() {
-+  return (
-+    <div>Story stub</div>
-+  );
-+}
-`;
++++ b/${filename}
+@@ -0,0 +1,${lineCount} @@
+${body}
+`,
+  };
+}
 
-const RENAME_DIFF = `diff --git a/apps/app/src/components/layout/AppSidebar.tsx b/apps/app/src/components/sidebar/AppSidebar.tsx
+function buildRenameDiff(
+  oldName: string,
+  newName: string,
+  content: string,
+): AlignedDiffResult {
+  return {
+    oldFile: { name: oldName, contents: content },
+    newFile: { name: newName, contents: content },
+    unifiedDiff: `diff --git a/${oldName} b/${newName}
 similarity index 100%
-rename from apps/app/src/components/layout/AppSidebar.tsx
-rename to apps/app/src/components/sidebar/AppSidebar.tsx
-`;
-
-const LARGER_DIFF = `diff --git a/apps/app/src/components/sidebar/ThreadRow.tsx b/apps/app/src/components/sidebar/ThreadRow.tsx
-index 4444444..5555555 100644
---- a/apps/app/src/components/sidebar/ThreadRow.tsx
-+++ b/apps/app/src/components/sidebar/ThreadRow.tsx
-@@ -278,9 +278,11 @@ function ThreadRowComponent({
-   const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
-   const managedChildCount = managerOptions?.managedChildCount ?? 0;
-   const hasManagedChildren = managedChildCount > 0;
-   const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
--  const isManagerBusy =
--    isManager && (threadIsBusy || managedChildBusyCount > 0);
-+  const isManagerBusy =
-+    isManager &&
-+    (threadIsBusy ||
-+      (isManagerCollapsed && managedChildBusyCount > 0));
-   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
-     thread.environmentWorkspaceDisplayKind,
-   );
-@@ -337,11 +339,16 @@ function ThreadRowComponent({
-         {isManager ? (
-           <StatusPill variant="outline" className="shrink-0">
-             manager
-           </StatusPill>
-         ) : null}
-+        {isPromoted ? (
-+          <Pill variant="emphasis" className="shrink-0">
-+            promoted
-+          </Pill>
-+        ) : null}
-       </span>
--      {isPromoted ? (
--        <Pill variant="emphasis" className="relative z-10">
--          promoted
--        </Pill>
--      ) : null}
-       <span
-         className={cn(
-           "flex shrink-0 items-center justify-end",
-`;
+rename from ${oldName}
+rename to ${newName}
+`,
+  };
+}
 
 // ---------------------------------------------------------------------------
-// Realistic selector fixtures — mimic what useGitDiffPanelState produces:
-// "Working changes" plus a few recent commits.
+// Fixtures: each story row is backed by a real-looking file + matching diff.
 // ---------------------------------------------------------------------------
+
+const SMALL = buildAlignedDiff({
+  filename: "apps/app/src/components/sidebar/ProjectRow.tsx",
+  oldContent: PROJECT_ROW_TSX,
+  edits: [
+    {
+      line: 85,
+      newText: "            <SidebarMenuSkeleton showIcon />",
+    },
+  ],
+});
+
+const LARGER = buildAlignedDiff({
+  filename: "apps/app/src/components/sidebar/ThreadRow.tsx",
+  oldContent: THREAD_ROW_TSX,
+  edits: [
+    {
+      line: 47,
+      newText:
+        "  const isManagerCollapsed = managerOptions?.isCollapsed ?? !hasManagedChildren;",
+    },
+    {
+      line: 52,
+      newText:
+        "    isManager && (threadIsBusy || (isManagerCollapsed && managedChildBusyCount > 0));",
+    },
+    {
+      line: 89,
+      newText: '        <Pill variant="emphasis" className="shrink-0">',
+    },
+  ],
+});
+
+const NEW_FILE = buildNewFileDiff(
+  "apps/app/src/components/sidebar/ProjectRow.stories.tsx",
+  PROJECT_ROW_STORIES_TSX,
+);
+
+const RENAMED = buildRenameDiff(
+  "apps/app/src/components/layout/AppSidebar.tsx",
+  "apps/app/src/components/sidebar/AppSidebar.tsx",
+  PROJECT_ROW_TSX,
+);
+
+const ALL_FIXTURES = [SMALL, LARGER, NEW_FILE, RENAMED] as const;
 
 const SELECTION_OPTIONS: readonly GitDiffSelectionOption[] = [
   { value: "working", label: "Working changes" },
@@ -136,8 +501,13 @@ const SELECTION_OPTIONS: readonly GitDiffSelectionOption[] = [
   },
 ];
 
+interface InteractiveDiffPanelDiff {
+  fileKey: string;
+  fixture: AlignedDiffResult;
+}
+
 interface InteractiveDiffPanelArgs {
-  diffs: readonly { fileKey: string; diffText: string }[];
+  diffs: readonly InteractiveDiffPanelDiff[];
   /** Pre-collapse certain files. */
   initialCollapsed?: ReadonlySet<string>;
   /** Pretend the syntax-highlighting worker hasn't enqueued yet for a file. */
@@ -152,14 +522,21 @@ function InteractiveDiffPanel({
   const parsed = useMemo(
     () =>
       diffs
-        .map(({ fileKey, diffText }) => ({
+        .map(({ fileKey, fixture }) => ({
           fileKey,
-          fileDiff: parseGitDiffFiles(diffText)[0],
-          fullDiff: diffText,
+          fileDiff: parseGitDiffFiles(fixture.unifiedDiff)[0],
+          fullDiff: fixture.unifiedDiff,
+          fixture,
         }))
         .filter(
-          (entry): entry is { fileKey: string; fileDiff: ParsedGitDiffFile; fullDiff: string } =>
-            entry.fileDiff !== undefined,
+          (
+            entry,
+          ): entry is {
+            fileKey: string;
+            fileDiff: ParsedGitDiffFile;
+            fullDiff: string;
+            fixture: AlignedDiffResult;
+          } => entry.fileDiff !== undefined,
         ),
     [diffs],
   );
@@ -211,6 +588,34 @@ function InteractiveDiffPanel({
     toast.message("Opening in editor", { description: path });
   }, []);
 
+  // Single panel-level fetcher that mirrors production: looks up the right
+  // FileContents by path. Cards don't need to know which fixture they came
+  // from; they just call onRequestFileContents(path, side).
+  const contentsByPath = useMemo(() => {
+    const map = new Map<string, { old: FileContents; new: FileContents }>();
+    for (const { fixture } of parsed) {
+      map.set(fixture.newFile.name, {
+        old: fixture.oldFile,
+        new: fixture.newFile,
+      });
+      if (fixture.oldFile.name !== fixture.newFile.name) {
+        map.set(fixture.oldFile.name, {
+          old: fixture.oldFile,
+          new: fixture.newFile,
+        });
+      }
+    }
+    return map;
+  }, [parsed]);
+  const onRequestFileContents = useCallback(
+    (path: string, side: "old" | "new") => {
+      const entry = contentsByPath.get(path);
+      if (!entry) return Promise.resolve(null);
+      return Promise.resolve(side === "old" ? entry.old : entry.new);
+    },
+    [contentsByPath],
+  );
+
   return (
     <PanelStage>
       <GitDiffToolbar
@@ -238,6 +643,7 @@ function InteractiveDiffPanel({
               onToggleCollapsed={() => toggleFileCollapsed(fileKey)}
               stickyHeader
               isRendering={renderingFileKeys?.has(fileKey) ?? false}
+              onRequestFileContents={onRequestFileContents}
             />
           ))}
         </div>
@@ -251,33 +657,55 @@ export function Overview() {
     <StoryCard>
       <StoryRow
         label="modified file"
-        hint="single hunk; chevron toggles collapse, header click opens an editor toast"
+        hint="single hunk in a real-looking ProjectRow.tsx; click ↑/↓/⇅ in the gaps to expand 30 lines at a time"
       >
         <InteractiveDiffPanel
-          diffs={[{ fileKey: "small", diffText: SMALL_DIFF }]}
+          diffs={[{ fileKey: "small", fixture: SMALL }]}
+        />
+      </StoryRow>
+      <StoryRow
+        label="multi-hunk"
+        hint="three small hunks in a single file — same expand affordances between hunks and at the file edges"
+      >
+        <InteractiveDiffPanel
+          diffs={[{ fileKey: "larger", fixture: LARGER }]}
+        />
+      </StoryRow>
+      <StoryRow
+        label="new file"
+        hint="entire file is added; no expand UI (nothing to expand into on the old side)"
+      >
+        <InteractiveDiffPanel
+          diffs={[{ fileKey: "new", fixture: NEW_FILE }]}
+        />
+      </StoryRow>
+      <StoryRow
+        label="rename"
+        hint="similarity index 100% — pure rename, no content delta"
+      >
+        <InteractiveDiffPanel
+          diffs={[{ fileKey: "rename", fixture: RENAMED }]}
         />
       </StoryRow>
       <StoryRow
         label="multi-file working changes"
-        hint="four files in one panel — collapse-all, view-mode toggle, and per-file collapse all live"
+        hint="all four file shapes in one panel — collapse-all, view-mode toggle, per-file collapse"
       >
         <InteractiveDiffPanel
-          diffs={[
-            { fileKey: "small", diffText: SMALL_DIFF },
-            { fileKey: "larger", diffText: LARGER_DIFF },
-            { fileKey: "new", diffText: NEW_FILE_DIFF },
-            { fileKey: "rename", diffText: RENAME_DIFF },
-          ]}
+          diffs={ALL_FIXTURES.map((fixture, i) => ({
+            fileKey: `multi-${i}`,
+            fixture,
+          }))}
         />
       </StoryRow>
       <StoryRow
         label="rendering pending"
-        hint="the syntax-highlighting worker hasn't enqueued the larger file yet — body shows a skeleton"
+        hint="syntax-highlighting worker hasn't enqueued the larger file yet — body shows a skeleton"
       >
         <InteractiveDiffPanel
           diffs={[
-            { fileKey: "small", diffText: SMALL_DIFF },
-            { fileKey: "larger", diffText: LARGER_DIFF },
+            { fileKey: "small", fixture: SMALL },
+            { fileKey: "larger", fixture: LARGER },
           ]}
           renderingFileKeys={new Set(["larger"])}
         />

@@ -20,7 +20,7 @@ import { getOverlayTriggerClassName } from "./overlay-trigger.js";
 
 const ResponsiveMenuContext =
   React.createContext<ResponsiveOverlayContextValue>({
-    isMobile: false,
+    isCompactViewport: false,
     open: false,
     onOpenChange: () => {},
   });
@@ -46,7 +46,7 @@ function DropdownMenu({
     defaultOpen,
   );
 
-  if (ctx.isMobile) {
+  if (ctx.isCompactViewport) {
     return (
       <ResponsiveMenuContext.Provider value={ctx}>
         {children}
@@ -75,9 +75,9 @@ const DropdownMenuTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
 >(({ asChild, children, className, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveMenu();
+  const { isCompactViewport, open, onOpenChange } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return (
       <MobileTrigger
         ref={ref}
@@ -117,9 +117,9 @@ const DropdownMenuContent = React.forwardRef<
     mobileTitle?: string;
   }
 >(({ className, sideOffset = 4, children, mobileTitle, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveMenu();
+  const { isCompactViewport, open, onOpenChange } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     const domProps = stripRadixContentProps(props);
     return (
       <ResponsiveDrawerShell
@@ -190,9 +190,9 @@ const DropdownMenuItem = React.forwardRef<
     },
     ref,
   ) => {
-    const { isMobile, onOpenChange } = useResponsiveMenu();
+    const { isCompactViewport, onOpenChange } = useResponsiveMenu();
 
-    if (isMobile) {
+    if (isCompactViewport) {
       return (
         <button
           ref={ref as React.RefCallback<HTMLButtonElement> | null}
@@ -261,9 +261,9 @@ const DropdownMenuCheckboxItem = React.forwardRef<
     },
     ref,
   ) => {
-    const { isMobile, onOpenChange } = useResponsiveMenu();
+    const { isCompactViewport, onOpenChange } = useResponsiveMenu();
 
-    if (isMobile) {
+    if (isCompactViewport) {
       return (
         <button
           ref={ref as React.RefCallback<HTMLButtonElement> | null}
@@ -349,9 +349,9 @@ function DropdownMenuRadioGroup({
   children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
-  const { isMobile } = useResponsiveMenu();
+  const { isCompactViewport } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return null;
   }
 
@@ -366,9 +366,9 @@ const DropdownMenuRadioItem = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.RadioItem>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
 >(({ className, children, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu();
+  const { isCompactViewport } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return null;
   }
 
@@ -402,9 +402,9 @@ const DropdownMenuLabel = React.forwardRef<
     inset?: boolean;
   }
 >(({ className, inset, children, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu();
+  const { isCompactViewport } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return (
       <div
         ref={ref}
@@ -443,9 +443,9 @@ const DropdownMenuSeparator = React.forwardRef<
   HTMLHRElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
 >(({ className, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu();
+  const { isCompactViewport } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return (
       <hr
         ref={ref as React.RefCallback<HTMLHRElement> | null}
@@ -472,9 +472,9 @@ const DropdownMenuGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Group>
 >(({ children, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu();
+  const { isCompactViewport } = useResponsiveMenu();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return (
       <div ref={ref} role="group" {...props}>
         {children}

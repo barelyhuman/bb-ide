@@ -2,6 +2,7 @@ import { isUtf8 } from "node:buffer";
 import fs from "node:fs/promises";
 import path from "node:path";
 import mimeTypes from "mime-types";
+import { readGitBlob, WorkspaceError } from "@bb/host-workspace";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
@@ -23,6 +24,17 @@ export interface ReadFileForTransportArgs {
   resolvedPath: string;
   resultPath: string;
   rootPath?: string;
+}
+
+export interface ReadFileFromGitRefArgs {
+  /** Repo root — `git -C <rootPath>` runs from here. Must be absolute. */
+  rootPath: string;
+  /** Path under rootPath the caller asked about. Must be absolute, must be within rootPath. */
+  resolvedPath: string;
+  /** Path string echoed back in the result + used for mime-type lookup. */
+  resultPath: string;
+  /** Git ref to read from (e.g. "HEAD", a SHA, "main"). Caller should sanitize. */
+  ref: string;
 }
 
 function isBinaryImageMimeType(mimeType?: string): boolean {
@@ -81,6 +93,81 @@ async function resolveReadablePath(
   }
 
   return realResolvedPath;
+}
+
+/**
+ * Read a file's contents at a specific git ref via `git cat-file`. Mirrors
+ * `readFileForTransport`'s result shape (same caps, same utf-8/base64
+ * detection, same `file_too_large` throw) so callers can treat disk and
+ * git-ref reads identically.
+ *
+ * When the object does not exist at the ref (e.g. the file did not exist at
+ * that ref, or the path was renamed and the caller passed the new name with
+ * an old ref), returns empty content rather than throwing — the caller
+ * decides whether "no context on this side" is meaningful.
+ */
+export async function readFileFromGitRef(
+  args: ReadFileFromGitRefArgs,
+): Promise<ReadFileForTransportResult> {
+  if (!path.isAbsolute(args.rootPath)) {
+    throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
+  }
+  if (!path.isAbsolute(args.resolvedPath)) {
+    throw new CommandDispatchError("invalid_path", "Path must be absolute");
+  }
+  const relativePath = path.relative(args.rootPath, args.resolvedPath);
+  if (
+    relativePath === "" ||
+    relativePath.startsWith("..") ||
+    path.isAbsolute(relativePath)
+  ) {
+    throw new CommandDispatchError(
+      "invalid_path",
+      `Path "${args.resultPath}" escapes read root`,
+    );
+  }
+  // `git cat-file` is happy with `\` on Windows but `<ref>:<path>` syntax wants
+  // forward slashes regardless of host OS — normalize once here.
+  const gitRelativePath = relativePath.split(path.sep).join("/");
+  const mimeType = mimeTypes.lookup(args.resultPath) || undefined;
+  const fileSizeLimitBytes = getFileSizeLimitBytes(mimeType);
+
+  let blob;
+  try {
+    blob = await readGitBlob(
+      args.rootPath,
+      args.ref,
+      gitRelativePath,
+      fileSizeLimitBytes,
+    );
+  } catch (error) {
+    if (error instanceof WorkspaceError && error.code === "blob_too_large") {
+      throw new CommandDispatchError("file_too_large", error.message);
+    }
+    throw error;
+  }
+
+  if (blob.contents === null) {
+    return {
+      path: args.resultPath,
+      content: "",
+      contentEncoding: "utf8",
+      ...(mimeType ? { mimeType } : {}),
+      sizeBytes: 0,
+    };
+  }
+
+  const contentEncoding = getContentEncoding(blob.contents, mimeType);
+  return {
+    path: args.resultPath,
+    content:
+      contentEncoding === "utf8"
+        ? blob.contents.toString("utf8")
+        : blob.contents.toString("base64"),
+    contentEncoding,
+    ...(mimeType ? { mimeType } : {}),
+    sizeBytes: blob.sizeBytes,
+  };
 }
 
 export async function readFileForTransport(

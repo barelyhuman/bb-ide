@@ -7,7 +7,7 @@ import {
   PanelLeft as DesktopSidebarIcon,
 } from "lucide-react";
 
-import { useIsMobile } from "./hooks/use-mobile.js";
+import { useIsCompactViewport } from "./hooks/use-compact-viewport.js";
 import { cn } from "@/lib/utils";
 import { Button } from "./button.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
@@ -45,7 +45,7 @@ type SidebarContext = {
   setOpen: (open: boolean) => void;
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
-  isMobile: boolean;
+  isCompactViewport: boolean;
   toggleSidebar: () => void;
 };
 
@@ -80,7 +80,7 @@ const SidebarProvider = React.forwardRef<
     },
     ref,
   ) => {
-    const isMobile = useIsMobile();
+    const isCompactViewport = useIsCompactViewport();
     const [openMobile, setOpenMobile] = React.useState(false);
 
     const [_open, _setOpen] = React.useState(defaultOpen);
@@ -99,10 +99,10 @@ const SidebarProvider = React.forwardRef<
 
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
-      return isMobile
+      return isCompactViewport
         ? setOpenMobile((open) => !open)
         : setOpen((open) => !open);
-    }, [isMobile, setOpen, setOpenMobile]);
+    }, [isCompactViewport, setOpen, setOpenMobile]);
 
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
@@ -129,7 +129,7 @@ const SidebarProvider = React.forwardRef<
         state,
         open,
         setOpen,
-        isMobile,
+        isCompactViewport,
         openMobile,
         setOpenMobile,
         toggleSidebar,
@@ -138,7 +138,7 @@ const SidebarProvider = React.forwardRef<
         state,
         open,
         setOpen,
-        isMobile,
+        isCompactViewport,
         openMobile,
         setOpenMobile,
         toggleSidebar,
@@ -191,7 +191,7 @@ const Sidebar = React.forwardRef<
     },
     ref,
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+    const { isCompactViewport, state, openMobile, setOpenMobile } = useSidebar();
 
     if (collapsible === "none") {
       return (
@@ -222,7 +222,7 @@ const Sidebar = React.forwardRef<
           className="group peer text-sidebar-foreground"
           data-state={state}
           data-collapsible={
-            !isMobile && state === "collapsed" ? collapsible : ""
+            !isCompactViewport && state === "collapsed" ? collapsible : ""
           }
           data-variant={variant}
           data-side={side}
@@ -614,7 +614,7 @@ const SidebarMenuButton = React.forwardRef<
     ref,
   ) => {
     const Comp = asChild ? Slot : "button";
-    const { isMobile, state } = useSidebar();
+    const { isCompactViewport, state } = useSidebar();
 
     const button = (
       <Comp
@@ -643,7 +643,7 @@ const SidebarMenuButton = React.forwardRef<
         <TooltipContent
           side="right"
           align="center"
-          hidden={state !== "collapsed" || isMobile}
+          hidden={state !== "collapsed" || isCompactViewport}
           {...tooltip}
         />
       </Tooltip>

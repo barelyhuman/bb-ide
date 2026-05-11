@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { Switch } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useAvailableModels } from "@/hooks/queries/system-queries";
-import { useIsMobile } from "@/components/ui";
+import { useIsCompactViewport } from "@/components/ui";
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
@@ -64,7 +64,7 @@ export function ProviderModelPicker({
   defaultOpen = false,
   modal = true,
 }: ProviderModelPickerProps) {
-  const isMobile = useIsMobile();
+  const isCompactViewport = useIsCompactViewport();
   const [open, setOpen] = useState(defaultOpen);
   // While the popover is open, the user can browse other providers without
   // committing. previewProviderId tracks which provider tab is active.
@@ -180,7 +180,7 @@ export function ProviderModelPicker({
           <div
             className={cn(
               "flex items-center gap-0.5 border-b border-border px-2.5 pt-1",
-              isMobile ? "sticky top-0 z-10 bg-background" : "bg-muted/40",
+              isCompactViewport ? "sticky top-0 z-10 bg-background" : "bg-muted/40",
             )}
           >
             {providerOptions.map((provider) => {
@@ -230,7 +230,7 @@ export function ProviderModelPicker({
         <div
           className={cn(
             "overflow-y-auto p-1",
-            !isMobile &&
+            !isCompactViewport &&
               "max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)]",
           )}
         >
@@ -238,7 +238,7 @@ export function ProviderModelPicker({
             <div
               className={cn(
                 "px-2 text-xs text-muted-foreground",
-                isMobile ? "py-2" : "py-[0.3125rem]",
+                isCompactViewport ? "py-2" : "py-[0.3125rem]",
               )}
             >
               Loading models...
@@ -251,7 +251,7 @@ export function ProviderModelPicker({
                 onClick={() => handleModelSelect(option.value)}
                 className={cn(
                   "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground",
-                  isMobile ? "py-2" : "py-[0.3125rem]",
+                  isCompactViewport ? "py-2" : "py-[0.3125rem]",
                 )}
               >
                 <span className="truncate" title={option.label}>
@@ -271,7 +271,7 @@ export function ProviderModelPicker({
             <div
               className={cn(
                 "px-2 text-xs text-muted-foreground",
-                isMobile ? "py-2" : "py-[0.3125rem]",
+                isCompactViewport ? "py-2" : "py-[0.3125rem]",
               )}
             >
               No models available

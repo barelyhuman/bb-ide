@@ -23,13 +23,13 @@ interface AppSidebarProps {
 export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const location = useLocation();
-  const { isMobile, setOpenMobile } = useSidebar();
-  const isMobileRef = useRef(isMobile);
+  const { isCompactViewport, setOpenMobile } = useSidebar();
+  const isCompactViewportRef = useRef(isCompactViewport);
   // Keep the ProjectList callback stable while reading the latest breakpoint.
-  isMobileRef.current = isMobile;
+  isCompactViewportRef.current = isCompactViewport;
 
   const closeOnMobile = useCallback(() => {
-    if (isMobileRef.current) {
+    if (isCompactViewportRef.current) {
       setOpenMobile(false);
     }
   }, [setOpenMobile]);

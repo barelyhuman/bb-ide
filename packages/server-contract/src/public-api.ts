@@ -39,6 +39,8 @@ import type {
   CreateThreadRequest,
   DeleteThreadRequest,
   EnvironmentDiffQuery,
+  EnvironmentDiffFileQuery,
+  EnvironmentDiffFileResponse,
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
@@ -286,6 +288,19 @@ export type PublicApiSchema = {
     $get: Endpoint<
       PathId & { query: EnvironmentDiffQuery },
       ThreadGitDiffResponse
+    >;
+  };
+  "/environments/:id/diff/file": {
+    /**
+     * Read a single file's contents at one side of the same diff target.
+     * Used to feed `<FileDiff>`'s `oldFile`/`newFile` props so the diff
+     * renderer can light up its built-in expand-context buttons.
+     * Proxies to `host.read_file` (with `ref` for committed sides, omitted
+     * for the working tree).
+     */
+    $get: Endpoint<
+      PathId & { query: EnvironmentDiffFileQuery },
+      EnvironmentDiffFileResponse
     >;
   };
   "/environments/:id/diff/branches": {

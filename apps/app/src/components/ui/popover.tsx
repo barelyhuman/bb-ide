@@ -18,7 +18,7 @@ import { getOverlayTriggerClassName } from "./overlay-trigger.js";
 
 const ResponsivePopoverContext =
   React.createContext<ResponsiveOverlayContextValue>({
-    isMobile: false,
+    isCompactViewport: false,
     open: false,
     onOpenChange: () => {},
   });
@@ -44,7 +44,7 @@ function Popover({
     defaultOpen,
   );
 
-  if (ctx.isMobile) {
+  if (ctx.isCompactViewport) {
     return (
       <ResponsivePopoverContext.Provider value={ctx}>
         {children}
@@ -73,9 +73,9 @@ const PopoverTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>
 >(({ asChild, children, className, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsivePopover();
+  const { isCompactViewport, open, onOpenChange } = useResponsivePopover();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return (
       <MobileTrigger
         ref={ref}
@@ -129,9 +129,9 @@ const PopoverContent = React.forwardRef<
     },
     ref,
   ) => {
-    const { isMobile, open, onOpenChange } = useResponsivePopover();
+    const { isCompactViewport, open, onOpenChange } = useResponsivePopover();
 
-    if (isMobile) {
+    if (isCompactViewport) {
       // Forward DOM-level props (event handlers, data-*, aria-*) but strip
       // Radix positioning/behavior props that are meaningless for a Drawer.
       const domProps = stripRadixContentProps(props);
@@ -185,9 +185,9 @@ const PopoverAnchor = React.forwardRef<
   React.ComponentRef<typeof PopoverPrimitive.Anchor>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Anchor>
 >(({ children, ...props }, ref) => {
-  const { isMobile } = useResponsivePopover();
+  const { isCompactViewport } = useResponsivePopover();
 
-  if (isMobile) {
+  if (isCompactViewport) {
     return <>{children}</>;
   }
 

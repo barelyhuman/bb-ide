@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
+import { PAGE_SHELL_CONTENT_STYLE } from "./page-shell-content-style.js";
 
 // BottomAnchoredScrollBody owns "follow the bottom" behavior for streaming
 // surfaces. It combines two mechanisms because neither is sufficient alone:
@@ -291,6 +292,7 @@ export function BottomAnchoredScrollBody({
               maxWidthClassName,
               contentClassName,
             )}
+            style={PAGE_SHELL_CONTENT_STYLE}
           >
             {children}
             <div className="scroll-bottom-anchor" aria-hidden />

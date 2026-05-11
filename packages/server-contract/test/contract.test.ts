@@ -29,6 +29,8 @@ import {
 const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "apiErrorSchema.retryable":
     "Error payloads may omit retryability when the server has no retry guidance.",
+  "createAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
+    "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
   "createAutomationRequestSchema.action.threadRequest.parentThreadId":
     "Automation creation may omit parentThreadId when the scheduled thread stays a root thread.",
   "createAutomationRequestSchema.action.threadRequest.permissionMode":
@@ -57,6 +59,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Queued drafts may inherit the thread's default service tier.",
   "updateAutomationRequestSchema.action":
     "Automation PATCH requests omit action when leaving it unchanged.",
+  "updateAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
+    "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
   "updateAutomationRequestSchema.action.threadRequest.parentThreadId":
     "Automation action updates may omit parentThreadId when the scheduled thread stays a root thread.",
   "updateAutomationRequestSchema.action.threadRequest.permissionMode":
@@ -85,6 +89,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Manager creation may omit reasoning level and use the server default.",
   "createManagerThreadRequestSchema.serviceTier":
     "Manager creation may omit service tier and use the server default.",
+  "createThreadRequestSchema.environment.workspace.branch":
+    "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
   "createThreadRequestSchema.model":
     "Thread creation may omit model and inherit the project/provider default.",
   "createThreadRequestSchema.parentThreadId":
@@ -157,6 +163,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Timeline queries omit beforeAnchorSeq when requesting the latest page.",
   "threadTimelineQuerySchema.beforeAnchorId":
     "Timeline queries omit beforeAnchorId when requesting the latest page.",
+  "threadTimelineQuerySchema.summaryOnly":
+    "Timeline queries may omit summaryOnly; CLI sets it to skip row generation, web client always wants rows.",
   "threadTimelineResponseSchema.contextWindowUsage":
     "Timeline responses omit context window usage when the provider did not report it.",
   "timelineTurnSummaryDetailsQuerySchema.managerTimelineView":
@@ -198,7 +206,10 @@ describe("server-contract canonical schemas", () => {
             environment: {
               type: "host",
               hostId: "host_abc",
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         },
@@ -227,7 +238,10 @@ describe("server-contract canonical schemas", () => {
             environment: {
               type: "host",
               hostId: "host_abc",
-              workspace: { type: "managed-clone" },
+              workspace: {
+                type: "managed-clone",
+                baseBranch: { kind: "default" },
+              },
             },
           },
         },

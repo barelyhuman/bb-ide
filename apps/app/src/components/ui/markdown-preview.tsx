@@ -64,6 +64,7 @@ type MarkdownAnchorEvent = ReactMouseEvent<HTMLAnchorElement>;
 type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
   ExtraProps;
 type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & ExtraProps;
+type MarkdownHeadingProps = ComponentPropsWithoutRef<"h1"> & ExtraProps;
 type MarkdownHrProps = ComponentPropsWithoutRef<"hr"> & ExtraProps;
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps;
 type MarkdownListItemProps = ComponentPropsWithoutRef<"li"> & ExtraProps;
@@ -203,7 +204,7 @@ function MarkdownCode({
     return (
       <div className="my-2 overflow-hidden rounded-md border border-border/70 bg-muted/35">
         <div className="flex items-center justify-between pl-3 pr-1.5 pt-1.5">
-          <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="font-mono text-xs uppercase text-muted-foreground/60">
             {language ?? ""}
           </span>
           <CopyButton text={codeText} label="Copy code" />
@@ -224,7 +225,7 @@ function MarkdownCode({
   }
   return (
     <code
-      className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm"
+      className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
       {...props}
     >
       {children}
@@ -234,6 +235,54 @@ function MarkdownCode({
 
 function MarkdownPre({ children }: MarkdownPreProps) {
   return <>{children}</>;
+}
+
+function MarkdownH1({ children }: MarkdownHeadingProps) {
+  return (
+    <h1 className="mb-2 mt-4 text-lg font-semibold text-foreground first:mt-0">
+      {children}
+    </h1>
+  );
+}
+
+function MarkdownH2({ children }: MarkdownHeadingProps) {
+  return (
+    <h2 className="mb-2 mt-4 text-base font-semibold text-foreground first:mt-0">
+      {children}
+    </h2>
+  );
+}
+
+function MarkdownH3({ children }: MarkdownHeadingProps) {
+  return (
+    <h3 className="mb-2 mt-3 text-sm font-semibold text-foreground first:mt-0">
+      {children}
+    </h3>
+  );
+}
+
+function MarkdownH4({ children }: MarkdownHeadingProps) {
+  return (
+    <h4 className="mb-1 mt-3 text-sm font-medium text-foreground first:mt-0">
+      {children}
+    </h4>
+  );
+}
+
+function MarkdownH5({ children }: MarkdownHeadingProps) {
+  return (
+    <h5 className="mb-1 mt-2 text-sm font-semibold uppercase text-muted-foreground first:mt-0">
+      {children}
+    </h5>
+  );
+}
+
+function MarkdownH6({ children }: MarkdownHeadingProps) {
+  return (
+    <h6 className="mb-1 mt-2 text-xs font-semibold uppercase text-muted-foreground first:mt-0">
+      {children}
+    </h6>
+  );
 }
 
 function MarkdownParagraph({ children }: MarkdownParagraphProps) {
@@ -263,13 +312,24 @@ function MarkdownBlockquote({ children }: MarkdownBlockquoteProps) {
 function MarkdownTable({ children }: MarkdownTableProps) {
   return (
     <div
-      className="my-2"
+      className="my-2 flex justify-center"
       style={{
         width: MARKDOWN_TABLE_BREAKOUT_WIDTH,
         marginInline: `calc((100% - ${MARKDOWN_TABLE_BREAKOUT_WIDTH}) / 2)`,
       }}
     >
-      <div className="mx-auto w-max max-w-full overflow-x-auto">
+      {/*
+        Inner wrapper anchors narrow tables, centers mid-width tables, and
+        scrolls overflow for very wide tables. The min-width is clamped by
+        100% so it never forces the wrapper wider than the breakout
+        container — without that clamp, when the viewport shrinks below
+        `--md-content-w` the wrapper extends past the container and the
+        scrollbar gets clipped.
+      */}
+      <div
+        className="w-max max-w-full overflow-x-auto"
+        style={{ minWidth: "min(var(--md-content-w), 100%)" }}
+      >
         <table className="border border-border/80">{children}</table>
       </div>
     </div>
@@ -340,6 +400,12 @@ function buildMarkdownComponents({
     a: MarkdownLink,
     blockquote: MarkdownBlockquote,
     code: MarkdownCode,
+    h1: MarkdownH1,
+    h2: MarkdownH2,
+    h3: MarkdownH3,
+    h4: MarkdownH4,
+    h5: MarkdownH5,
+    h6: MarkdownH6,
     hr: MarkdownHr,
     img: MarkdownImage,
     li: MarkdownListItem,

@@ -1,10 +1,13 @@
+import path from "node:path";
 import { updateEnvironmentMetadata } from "@bb/db";
 import {
   environmentActionRequestSchema,
+  environmentDiffFileQuerySchema,
   environmentDiffQuerySchema,
   environmentStatusQuerySchema,
   updateEnvironmentRequestSchema,
   typedRoutes,
+  type EnvironmentDiffFileQuery,
   type EnvironmentDiffQuery,
   type PublicApiSchema,
 } from "@bb/server-contract";
@@ -55,6 +58,37 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
         type: "commit" as const,
         sha: query.sha,
       };
+    default: {
+      const _exhaustive: never = query;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Pick the git ref to read for the requested side of a diff. Returns
+ * `undefined` when the side should be read from the working tree (no ref —
+ * `host.read_file` falls back to its disk-read path).
+ *
+ * Only `uncommitted` and `all` have a working-tree side; the others read
+ * from refs on both sides. `branch_committed` and `all` use the merge-base
+ * branch as their old side. `commit` uses the parent commit (`<sha>^`); on
+ * a root commit that ref is missing, but the daemon's `git cat-file`
+ * fallback already returns empty content for missing objects, so we don't
+ * special-case the root-commit edge here.
+ */
+function resolveDiffFileRef(
+  query: EnvironmentDiffFileQuery,
+): string | undefined {
+  switch (query.target) {
+    case "uncommitted":
+      return query.side === "old" ? "HEAD" : undefined;
+    case "branch_committed":
+      return query.side === "old" ? query.mergeBaseBranch : "HEAD";
+    case "all":
+      return query.side === "old" ? query.mergeBaseBranch : undefined;
+    case "commit":
+      return query.side === "old" ? `${query.sha}^` : query.sha;
     default: {
       const _exhaustive: never = query;
       return _exhaustive;
@@ -154,6 +188,43 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         },
       });
       return context.json(result.diff);
+    },
+  );
+
+  get(
+    "/environments/:id/diff/file",
+    environmentDiffFileQuerySchema,
+    async (context, query) => {
+      const environment = requireReadyEnvironment(
+        deps.db,
+        context.req.param("id"),
+      );
+      const repoRelativePath = query.path.replace(/^\/+/u, "");
+      if (
+        repoRelativePath.length === 0 ||
+        repoRelativePath.split("/").includes("..")
+      ) {
+        throw new ApiError(400, "invalid_request", "Invalid path");
+      }
+      const absolutePath = path.join(environment.path, repoRelativePath);
+      const ref = resolveDiffFileRef(query);
+      const result = await queueCommandAndWait(deps, {
+        hostId: environment.hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: {
+          type: "host.read_file",
+          path: absolutePath,
+          rootPath: environment.path,
+          ...(ref !== undefined ? { ref } : {}),
+        },
+      });
+      return context.json({
+        path: result.path,
+        content: result.content,
+        contentEncoding: result.contentEncoding,
+        ...(result.mimeType ? { mimeType: result.mimeType } : {}),
+        sizeBytes: result.sizeBytes,
+      });
     },
   );
 

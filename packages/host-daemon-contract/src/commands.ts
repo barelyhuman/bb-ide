@@ -233,11 +233,19 @@ export const hostSyncRuntimeMaterialCommandSchema = z.object({
 /**
  * Read a file from an absolute host path while enforcing that the resolved file
  * stays under the declared absolute root.
+ *
+ * When `ref` is set, the file is read from git history at that ref instead of
+ * from disk. `rootPath` is then interpreted as the repo root, the path becomes
+ * a `<repo>/<rel>` join, and the daemon shells `git -C <rootPath> cat-file`.
+ * Same caps, same encoding detection, same `file_too_large` behavior — the
+ * only difference is the source of bytes. A missing object at `ref` (e.g.
+ * the file did not exist at that ref) returns empty content, not an error.
  */
 export const hostReadFileCommandSchema = z.object({
   type: z.literal("host.read_file"),
   path: z.string().min(1),
   rootPath: z.string().min(1),
+  ref: z.string().min(1).optional(),
 });
 
 export const hostListFilesCommandSchema = z.object({

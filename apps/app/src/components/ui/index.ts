@@ -125,7 +125,10 @@ export {
   COARSE_POINTER_TEXT_SM_CLASS,
   COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS,
 } from "./coarse-pointer-sizing.js";
-export { useIsMobile, MOBILE_QUERY } from "./hooks/use-mobile.js";
+export {
+  useIsCompactViewport,
+  COMPACT_VIEWPORT_QUERY,
+} from "./hooks/use-compact-viewport.js";
 export { useMediaQuery } from "./hooks/use-media-query.js";
 export { FilePathLink } from "./file-path-link.js";
 export {

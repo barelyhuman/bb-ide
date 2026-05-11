@@ -684,7 +684,7 @@ export function ThreadDetailView() {
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           turnSummaryRowsIdentity,
           turnSummaryRowsById,
-          workspaceRootPath: environment?.path,
+          workspaceRootPath: environment?.path ?? undefined,
         }}
       />
       {canUseGitUi ? (

@@ -10,7 +10,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  useIsMobile,
+  useIsCompactViewport,
 } from "@/components/ui";
 import {
   AppPageHeader,
@@ -106,9 +106,9 @@ export function ThreadDetailHeader({
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
-  const isMobile = useIsMobile();
+  const renderAsDrawer = useIsCompactViewport();
   const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
-  const SecondaryPanelIcon = isMobile ? PanelBottom : PanelRight;
+  const SecondaryPanelIcon = renderAsDrawer ? PanelBottom : PanelRight;
 
   const center = (
     <>
@@ -157,22 +157,24 @@ export function ThreadDetailHeader({
         </Button>
       ) : null}
       {actionsMenu}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
-        aria-label={
-          isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
-        }
-        aria-pressed={isSecondaryPanelOpen}
-        title={
-          isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
-        }
-        onClick={onToggleSecondaryPanel}
-      >
-        <SecondaryPanelIcon />
-      </Button>
+      {!renderAsDrawer && isSecondaryPanelOpen ? null : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
+          aria-label={
+            isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
+          }
+          aria-pressed={isSecondaryPanelOpen}
+          title={
+            isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
+          }
+          onClick={onToggleSecondaryPanel}
+        >
+          <SecondaryPanelIcon />
+        </Button>
+      )}
     </>
   );
 

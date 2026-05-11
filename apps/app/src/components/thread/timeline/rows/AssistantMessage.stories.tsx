@@ -1,20 +1,27 @@
 import { ConversationMessageContent } from "@/components/thread/timeline/ConversationMessageContent";
+import { PAGE_SHELL_CONTENT_STYLE } from "@/components/ui/page-shell-content-style";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
   title: "thread/timeline/rows/Assistant Message",
 };
 
-// Match production: ThreadTimelinePane caps content at 760px AND lives
-// inside PageShell's @container/page scope. The container scope matters
-// because MarkdownPreview tables use a 100cqw breakout that resolves
-// against the nearest container-query ancestor — without it, narrow
-// windows make tables overflow against the viewport instead of the
-// 760px content area.
+// Match production PageShell: a wide outer scroll area carries
+// `@container/page`, and the inner centered div caps content at 760px.
+// Keeping these on separate elements is what gives MarkdownPreview's
+// `100cqw`-based breakout headroom — collapse them onto one element and
+// 100cqw equals the text column, so tables can't break out.
+// PAGE_SHELL_CONTENT_STYLE on the inner div sets `--md-content-w` so
+// narrow tables anchor flush with the prose, matching production.
 function TimelineStage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="@container/page mx-auto w-full max-w-[760px]">
-      {children}
+    <div className="@container/page w-full">
+      <div
+        className="mx-auto w-full max-w-[760px]"
+        style={PAGE_SHELL_CONTENT_STYLE}
+      >
+        {children}
+      </div>
     </div>
   );
 }

@@ -28,6 +28,7 @@ import type {
   DeleteThreadRequest,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentDiffFileResponse,
   EnvironmentPromotionResponse,
   EnvironmentStatusResponse,
   CreateThreadRequest,
@@ -842,6 +843,48 @@ export async function getThreadTimelineTurnSummaryDetails({
         sourceSeqEnd: String(sourceSeqEnd),
         ...(managerTimelineView ? { managerTimelineView } : {}),
       },
+    }),
+  );
+}
+
+export type DiffFileSide = "old" | "new";
+
+export async function getEnvironmentDiffFile(
+  id: string,
+  target: WorkspaceDiffTarget,
+  path: string,
+  side: DiffFileSide,
+): Promise<EnvironmentDiffFileResponse> {
+  const baseQuery = (() => {
+    switch (target.type) {
+      case "uncommitted":
+        return { target: "uncommitted" as const };
+      case "branch_committed":
+        return {
+          target: "branch_committed" as const,
+          mergeBaseBranch: target.mergeBaseBranch,
+        };
+      case "all":
+        return {
+          target: "all" as const,
+          mergeBaseBranch: target.mergeBaseBranch,
+        };
+      case "commit":
+        return {
+          target: "commit" as const,
+          sha: target.sha,
+        };
+      default: {
+        const _exhaustive: never = target;
+        return _exhaustive;
+      }
+    }
+  })();
+
+  return request<EnvironmentDiffFileResponse>(
+    apiClient.environments[":id"].diff.file.$get({
+      param: { id },
+      query: { ...baseQuery, path, side },
     }),
   );
 }
