@@ -79,6 +79,11 @@ export function useManagerStorageBrowser({
   const filePathSet = useMemo(() => new Set(filePaths), [filePaths]);
   const filePathSetRef = useRef<ReadonlySet<string>>(filePathSet);
   const onSelectPathRef = useRef(onSelectPath);
+  // Pierre tree's item.select() is additive (selectPath, not selectOnlyPath),
+  // so reconciling React state into the tree requires deselect+select pairs
+  // that re-emit onSelectionChange. Suppress those echoes here so they don't
+  // bounce back through onSelectPath and revert the caller's state.
+  const isApplyingSelectionRef = useRef(false);
 
   useEffect(() => {
     filePathSetRef.current = filePathSet;
@@ -90,6 +95,7 @@ export function useManagerStorageBrowser({
 
   const handleTreeSelectionChange = useCallback(
     (selectedPaths: readonly string[]) => {
+      if (isApplyingSelectionRef.current) return;
       const nextPath = selectedPaths[0];
       if (!nextPath || !filePathSetRef.current.has(nextPath)) {
         return;
@@ -119,19 +125,28 @@ export function useManagerStorageBrowser({
   }, [expandedDirectoryPaths, filePaths, model]);
 
   useEffect(() => {
-    const selectedPaths = model.getSelectedPaths();
+    const currentSelectedPaths = model.getSelectedPaths();
     const selectedPathIsVisible =
       selectedPath !== null && filePathSet.has(selectedPath);
 
-    if (selectedPathIsVisible) {
-      if (selectedPaths.length !== 1 || selectedPaths[0] !== selectedPath) {
+    const alreadyMatches =
+      selectedPathIsVisible
+        ? currentSelectedPaths.length === 1 &&
+          currentSelectedPaths[0] === selectedPath
+        : currentSelectedPaths.length === 0;
+    if (alreadyMatches) return;
+
+    isApplyingSelectionRef.current = true;
+    try {
+      for (const path of currentSelectedPaths) {
+        if (selectedPathIsVisible && path === selectedPath) continue;
+        model.getItem(path)?.deselect();
+      }
+      if (selectedPathIsVisible) {
         model.getItem(selectedPath)?.select();
       }
-      return;
-    }
-
-    for (const path of selectedPaths) {
-      model.getItem(path)?.deselect();
+    } finally {
+      isApplyingSelectionRef.current = false;
     }
   }, [filePathSet, model, selectedPath]);
 
