@@ -572,6 +572,7 @@ export function ThreadPromptContextBanner({
               onOpenChange={gitSection.mergeBase.onPickerOpenChange}
               className="max-w-[10rem]"
               muted
+              popoverAlign="end"
             />
           </div>
         ) : null}

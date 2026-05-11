@@ -52,6 +52,7 @@ export function BranchPicker({
   muted,
   defaultOpen = false,
   modal = true,
+  popoverAlign = "start",
 }: {
   value: string | null;
   options: readonly string[];
@@ -78,6 +79,8 @@ export function BranchPicker({
   defaultOpen?: boolean;
   /** Whether the popover blocks page interaction. Defaults to true; pass false in stories. */
   modal?: boolean;
+  /** Popover alignment relative to the trigger. Use "end" when the picker is pinned to the right edge of its container. */
+  popoverAlign?: "start" | "end";
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
@@ -160,7 +163,7 @@ export function BranchPicker({
             variant === "default" &&
               "h-8 w-full min-w-0 justify-between rounded-md border-border/60 bg-background px-2.5 text-sm font-normal shadow-none hover:bg-state-hover",
             variant === "minimal" &&
-              "h-5 w-auto min-w-0 justify-between gap-1 rounded-sm px-0 text-xs font-normal shadow-none hover:bg-transparent",
+              "h-5 w-auto min-w-0 justify-between gap-1 rounded-sm px-0 text-xs font-normal shadow-none hover:bg-transparent data-[state=open]:bg-transparent data-[state=open]:hover:bg-transparent",
             variant === "minimal" &&
               muted &&
               "text-muted-foreground hover:text-foreground",
@@ -211,7 +214,7 @@ export function BranchPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align={popoverAlign}
         sideOffset={6}
         collisionPadding={16}
         mobileTitle="Branch"
