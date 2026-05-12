@@ -645,7 +645,7 @@ function convertMessage(
           kind: "system",
           systemKind: message.reconnectAttempt ? "reconnect" : "error",
           title: message.message,
-          detail: null,
+          detail: message.detail,
           status: message.reconnectAttempt ? "pending" : "error",
         },
       ];

@@ -69,6 +69,13 @@ interface PermissionGrantLifecycleEventArgs {
   toolName?: string | null;
 }
 
+interface SystemErrorEventArgs {
+  code?: string;
+  detail?: string;
+  message: string;
+  seq: number;
+}
+
 type BuildTimelineRowsThreadStatus = "active" | "idle";
 
 interface OwnershipOperationCase {
@@ -232,6 +239,29 @@ function systemOperationEvent({
       operationId,
       status,
       ...(metadata ? { metadata } : {}),
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
+function systemErrorEvent({
+  code,
+  detail,
+  message,
+  seq,
+}: SystemErrorEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "system/error",
+      threadId: "thread-1",
+      scope: threadScope(),
+      message,
+      ...(code !== undefined ? { code } : {}),
+      ...(detail !== undefined ? { detail } : {}),
     },
     meta: {
       id: `event-${seq}`,
@@ -502,6 +532,46 @@ describe("buildThreadTimelineFromEvents", () => {
       ]);
     },
   );
+
+  it("keeps system error message and detail as separate row fields", () => {
+    const rows = buildTimelineRows([
+      systemErrorEvent({
+        code: "thread_command_failed",
+        message: "Command thread/start failed",
+        detail:
+          "Error: Cannot find claude code binary\n  at resolveBinary (sdk.js:42)\n  at start (sdk.js:88)",
+        seq: 1,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        status: "error",
+        title: "Command thread/start failed",
+        detail:
+          "Error: Cannot find claude code binary\n  at resolveBinary (sdk.js:42)\n  at start (sdk.js:88)",
+      }),
+    ]);
+  });
+
+  it("leaves system error detail null when only message is provided", () => {
+    const rows = buildTimelineRows([
+      systemErrorEvent({
+        code: "provider_runtime_error",
+        message: "Provider runtime is unavailable",
+        seq: 1,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        title: "Provider runtime is unavailable",
+        detail: null,
+      }),
+    ]);
+  });
 
   it("uses a neutral completed ownership title for invalid ownership actions", () => {
     const rows = buildTimelineRows([

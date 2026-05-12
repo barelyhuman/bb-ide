@@ -458,6 +458,7 @@ function formatRow(
         return [
           rowHeader("Error", context),
           dim(indentBlock(row.title, "  "), context.color),
+          row.detail ? dim(indentBlock(row.detail, "  "), context.color) : "",
         ]
           .filter((line) => line.length > 0)
           .join("\n");

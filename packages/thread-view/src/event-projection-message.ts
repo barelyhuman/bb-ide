@@ -318,6 +318,7 @@ export interface EventProjectionDelegationMessage
 export interface EventProjectionErrorMessage extends EventProjectionMessageBase {
   kind: "error";
   message: string;
+  detail: string | null;
   rawType: string;
   reconnectAttempt?: number;
   reconnectTotal?: number;

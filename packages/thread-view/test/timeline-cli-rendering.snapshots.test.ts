@@ -818,7 +818,8 @@ describe("timeline CLI rendering snapshots", () => {
         pnpm install failed
 
       ── Error ───────────────────────────────────────────────────
-        Provisioning thread failed - pnpm install failed"
+        Provisioning thread failed
+        pnpm install failed"
     `);
   });
 

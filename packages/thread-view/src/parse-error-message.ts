@@ -13,14 +13,6 @@ interface ReconnectState {
   total: number;
 }
 
-function formatErrorDetail(
-  message: string,
-  detail: string | undefined,
-): string {
-  if (detail && detail !== message) return `${message} - ${detail}`;
-  return message || "Error event";
-}
-
 function parseLegacyReconnectState(message: string): ReconnectState | null {
   const match = message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
   if (!match) {
@@ -83,7 +75,8 @@ export function parseErrorMessage(
     createdAt: meta.createdAt,
     scope: decoded.scope,
     rawType: decoded.type,
-    message: formatErrorDetail(message, detail),
+    message: message || "Error event",
+    detail: detail && detail !== message ? detail : null,
     ...(reconnectState
       ? {
           reconnectAttempt: reconnectState.attempt,
