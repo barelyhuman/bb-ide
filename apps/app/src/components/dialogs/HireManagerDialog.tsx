@@ -6,14 +6,8 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import type {
-  AvailableModel,
-  Host,
-  ProjectSource,
-  ReasoningLevel,
-  Thread,
-} from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
+import type { AvailableModel, Host, ReasoningLevel, Thread } from "@bb/domain";
+import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutations";
 import { DetailCard, DetailRow } from "@/components/ui";
@@ -53,6 +47,7 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   xhigh: "Extra High",
 };
 const EMPTY_SYSTEM_PROVIDERS: SystemProviderInfo[] = [];
+const EMPTY_PROJECTS: ProjectResponse[] = [];
 type ReasoningSelectionSource = "default" | "user";
 
 type IsLocalHostFn = (id: string | null | undefined) => boolean;
@@ -76,14 +71,11 @@ export function HireManagerDialog({
   const providers = providersQuery.data ?? EMPTY_SYSTEM_PROVIDERS;
   const providersAreLoaded = providersQuery.data !== undefined;
 
-  const { data: projects } = useProjects();
+  const projectsQuery = useProjects();
+  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
+  const projectsAreLoaded = projectsQuery.data !== undefined;
   const { data: hosts = [] } = useEffectiveHosts();
   const { isLocalHost } = useHostDaemon();
-
-  const projectSources = useMemo(() => {
-    const project = projects?.find((p) => p.id === projectId);
-    return project?.sources ?? [];
-  }, [projects, projectId]);
 
   const resolvedProvider = useMemo(() => {
     if (selectedProviderId) {
@@ -120,8 +112,10 @@ export function HireManagerDialog({
     >
       <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
         <HireManagerDialogContent
-          projectId={projectId}
-          projectSources={projectSources}
+          key={projectId}
+          initialProjectId={projectId}
+          projects={projects}
+          projectsAreLoaded={projectsAreLoaded}
           providers={providers}
           providersAreLoaded={providersAreLoaded}
           hosts={hosts}
@@ -137,8 +131,9 @@ export function HireManagerDialog({
 }
 
 export interface HireManagerDialogContentProps {
-  projectId: string;
-  projectSources: readonly ProjectSource[];
+  initialProjectId: string;
+  projects: readonly ProjectResponse[];
+  projectsAreLoaded: boolean;
   providers: readonly SystemProviderInfo[];
   providersAreLoaded: boolean;
   hosts: Host[];
@@ -150,8 +145,9 @@ export interface HireManagerDialogContentProps {
 }
 
 export function HireManagerDialogContent({
-  projectId,
-  projectSources,
+  initialProjectId,
+  projects,
+  projectsAreLoaded,
   providers,
   providersAreLoaded,
   hosts,
@@ -163,6 +159,7 @@ export function HireManagerDialogContent({
 }: HireManagerDialogContentProps) {
   const nameInputId = useId();
 
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
   const [managerName, setManagerName] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<
@@ -188,6 +185,35 @@ export function HireManagerDialogContent({
   const unavailableProviderMessage = providersAreLoaded
     ? "No providers available"
     : "Loading providers…";
+  const unavailableProjectMessage = projectsAreLoaded
+    ? "No projects available"
+    : "Loading projects…";
+
+  const effectiveProjectId = useMemo(() => {
+    if (projects.some((project) => project.id === selectedProjectId)) {
+      return selectedProjectId;
+    }
+    if (projects.some((project) => project.id === initialProjectId)) {
+      return initialProjectId;
+    }
+    return projects[0]?.id ?? initialProjectId;
+  }, [initialProjectId, projects, selectedProjectId]);
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === effectiveProjectId) ?? null,
+    [effectiveProjectId, projects],
+  );
+
+  const projectOptions = useMemo(
+    (): readonly PickerOption<string>[] =>
+      projects.map((project) => ({
+        value: project.id,
+        label: project.name,
+      })),
+    [projects],
+  );
+
+  const projectSources = selectedProject?.sources ?? [];
 
   const selectedModelData = useMemo(
     () => models.find((m) => m.model === selectedModel),
@@ -292,10 +318,13 @@ export function HireManagerDialogContent({
   );
 
   useEffect(() => {
-    if (
-      eligibleHosts.length > 0 &&
-      !eligibleHosts.some((h) => h.id === selectedHostId)
-    ) {
+    if (eligibleHosts.length === 0) {
+      if (selectedHostId) {
+        setSelectedHostId("");
+      }
+      return;
+    }
+    if (!eligibleHosts.some((h) => h.id === selectedHostId)) {
       const local = eligibleHosts.find((h) => isLocalHost(h.id));
       setSelectedHostId(local?.id ?? eligibleHosts[0]!.id);
     }
@@ -308,6 +337,11 @@ export function HireManagerDialogContent({
     },
     [onSelectedProviderIdChange],
   );
+
+  const handleProjectChange = useCallback((value: string) => {
+    setSelectedProjectId(value);
+    setError(null);
+  }, []);
 
   const handleModelChange = useCallback((model: string) => {
     setSelectedModel(model);
@@ -327,7 +361,7 @@ export function HireManagerDialogContent({
   const handleHire = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (!projectId || isPending) return;
+      if (!effectiveProjectId || isPending) return;
       if (!selectedProvider) {
         setError("A provider is required");
         return;
@@ -345,7 +379,7 @@ export function HireManagerDialogContent({
       try {
         const trimmedManagerName = managerName.trim();
         await onHire({
-          projectId,
+          projectId: effectiveProjectId,
           ...(trimmedManagerName ? { name: trimmedManagerName } : {}),
           providerId: selectedProvider.id,
           model: selectedModel,
@@ -367,10 +401,10 @@ export function HireManagerDialogContent({
     },
     [
       effectiveReasoningLevel,
+      effectiveProjectId,
       isPending,
       managerName,
       onHire,
-      projectId,
       selectedHostId,
       selectedModel,
       selectedProvider,
@@ -387,6 +421,20 @@ export function HireManagerDialogContent({
       </DialogHeader>
       <form className="space-y-5 px-6 pb-5" onSubmit={handleHire}>
         <DetailCard className="border-border/70 bg-muted/20" labelWidth="60px">
+          <DetailRow label="Project" valueClassName="min-w-0">
+            {projectOptions.length > 0 ? (
+              <OptionPicker
+                label="Project"
+                value={effectiveProjectId}
+                options={projectOptions}
+                onChange={handleProjectChange}
+              />
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                {unavailableProjectMessage}
+              </span>
+            )}
+          </DetailRow>
           <DetailRow label="Name" valueClassName="min-w-0">
             <Input
               id={nameInputId}
