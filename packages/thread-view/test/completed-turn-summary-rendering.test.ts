@@ -100,9 +100,10 @@ describe("completed turn summary rendering", () => {
 
     const turnRow = requireOnlyTurnRow(timeline.rows);
     expect(turnRow).toMatchObject({
-      completedAt: 4,
+      completedAt: 6,
       sourceSeqEnd: 4,
       sourceSeqStart: 4,
+      startedAt: 2,
       status: "completed",
       summaryCount: 1,
     });

@@ -231,7 +231,7 @@ describe("timeline CLI rendering snapshots", () => {
       third user line
       ... [truncated 1 lines]
 
-      ── Worked ──────────────────────────────────────────────────
+      ── Worked for (3ms) ────────────────────────────────────────
         ── Explored 1 search, ran 1 command
           ── Searched for timelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimelinetimeline in packages/core-ui
           ── Ran git show 2bc512e57 --stat | head -20
@@ -367,7 +367,7 @@ describe("timeline CLI rendering snapshots", () => {
           "text": "── User ────────────────────────────────────────────────────
       Patch the timeline output
 
-      ── Worked ──────────────────────────────────────────────────
+      ── Worked for (10ms) ───────────────────────────────────────
         ── Explored 1 search, researched 1 search query, edited 1 file
           ── Searched for timeline in packages/core-ui
           ── Ran web search: timeline rendering
@@ -534,7 +534,7 @@ describe("timeline CLI rendering snapshots", () => {
       status: "pending",
     });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (5ms) ────────────────────────────────────────
         ── Ran 2 commands
           ── Ran pnpm test
             $ pnpm test
@@ -606,7 +606,7 @@ describe("timeline CLI rendering snapshots", () => {
     });
     expect(timeline.turnRows).toHaveLength(2);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (0ms) ────────────────────────────────────────
         ── Ran pnpm test
           $ pnpm test
 
@@ -614,7 +614,7 @@ describe("timeline CLI rendering snapshots", () => {
       Please account for the restart
       steer
 
-      ── Worked ──────────────────────────────────────────────────
+      ── Worked for (0ms) ────────────────────────────────────────
         ── Ran sqlite3 ~/.bb-dev/bb.db '.tables'
           $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
@@ -698,7 +698,7 @@ describe("timeline CLI rendering snapshots", () => {
       ── User ────────────────────────────────────────────────────
       Follow-up task
 
-      ── Worked ──────────────────────────────────────────────────
+      ── Worked for (4ms) ────────────────────────────────────────
         ── Ran pnpm test
           $ pnpm test
 
@@ -848,7 +848,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.turnRows).toHaveLength(1);
     expect(timeline.turnRows[0]?.summaryCount).toBe(2);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (4ms) ────────────────────────────────────────
         ── Explored 1 search, ran 1 command
           ── Searched for TODO in packages/core-ui
           ── Ran pnpm test
@@ -904,7 +904,7 @@ describe("timeline CLI rendering snapshots", () => {
       sourceSeqEnd: 5,
     });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (4ms) ────────────────────────────────────────
         ── Ran pnpm test
           $ pnpm test
           Tests passed
@@ -955,7 +955,7 @@ describe("timeline CLI rendering snapshots", () => {
       sourceSeqEnd: 6,
     });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (5ms) ────────────────────────────────────────
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -1122,7 +1122,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (7ms) ────────────────────────────────────────
         ── Explored 1 file, 2 lists, 1 search
           ── Read src/a.ts
           ── Listed files in src
@@ -1186,7 +1186,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (6ms) ────────────────────────────────────────
         ── Edited 4 files
           ── Created /repo/src/a.ts +1
             @@ -0,0 +1 @@
@@ -1231,7 +1231,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (2ms) ────────────────────────────────────────
         ── Edited 2 files
           ── Created /repo/src/created.ts +2
             first line
@@ -1269,7 +1269,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.turnRows[0]?.summaryCount).toBe(1);
     expect(timeline.text).not.toContain("Reasoning");
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (5ms) ────────────────────────────────────────
         ── Ran tool: exec_command { cmd: sed -n '1,80p' packages/core-ui/src/i... }
 
       ── Assistant ───────────────────────────────────────────────
@@ -1380,7 +1380,7 @@ describe("timeline CLI rendering snapshots", () => {
       expect(row).not.toHaveProperty("resultText");
     }
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (5ms) ────────────────────────────────────────
         ── Researched 1 search query, 2 web pages
           ── Ran web search: EyeDropper API browser compatibility
           ── Fetched: https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
@@ -1463,7 +1463,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).not.toContain("Fetched page payload");
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked ──────────────────────────────────────────────────
+      "── Worked for (2ms) ────────────────────────────────────────
         ── Fetched: https://example.com/page"
     `);
   });

@@ -1017,7 +1017,7 @@ describe("buildTimelineRowTitle", () => {
     expect(title.plain).toBe("Worked for (1h 1m 1s)");
   });
 
-  it("hides subsecond turn durations", () => {
+  it("formats subsecond completed turn durations", () => {
     const row = {
       ...turnRow(),
       completedAt: 251,
@@ -1026,7 +1026,32 @@ describe("buildTimelineRowTitle", () => {
 
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Worked");
+    expect(title.plain).toBe("Worked for (250ms)");
+  });
+
+  it("formats completed turn durations of at least one second without milliseconds", () => {
+    const row = {
+      ...turnRow(),
+      completedAt: 1_501,
+      summaryCount: 3,
+    } satisfies TimelineViewTurnRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Worked for (2s)");
+  });
+
+  it("keeps subsecond completed command durations hidden", () => {
+    const row = {
+      ...commandRow(),
+      completedAt: 251,
+    } satisfies TimelineCommandWorkRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe(
+      "Ran pnpm exec turbo run test --filter=@bb/app",
+    );
   });
 
   it("hides one-second turn durations", () => {

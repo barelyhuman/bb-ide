@@ -3,6 +3,7 @@ import type {
   EventProjectionTurn,
 } from "./event-projection-types.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
+import { getMessageStartedAt } from "./format-helpers.js";
 import { isTimelineUngroupableMessage } from "./timeline-message-helpers.js";
 
 export interface CompletedTurnSummaryGroup {
@@ -33,6 +34,52 @@ interface CompletedTurnMessageSlices {
   summaryMessages: EventProjectionMessage[];
   terminalMessages: EventProjectionMessage[];
   trailingMessages: EventProjectionMessage[];
+}
+
+interface SummaryMessageBounds {
+  startedAt: number;
+}
+
+function isCompletedTurnSummaryGroup(
+  item: CompletedTurnSummaryItem,
+): item is CompletedTurnSummaryGroup {
+  return item.kind === "summary";
+}
+
+function getSummaryMessageBounds(
+  sourceMessages: readonly EventProjectionMessage[],
+): SummaryMessageBounds {
+  const firstMessage = sourceMessages[0];
+  if (!firstMessage) {
+    throw new Error("Cannot derive summary message bounds from no messages");
+  }
+
+  let startedAt = getMessageStartedAt(firstMessage);
+  for (const message of sourceMessages.slice(1)) {
+    startedAt = Math.min(startedAt, getMessageStartedAt(message));
+  }
+  return { startedAt };
+}
+
+function applySingleSummaryTurnBounds(
+  turn: EventProjectionTurn,
+  items: readonly CompletedTurnSummaryItem[],
+): CompletedTurnSummaryItem[] {
+  const summaryGroups = items.filter(isCompletedTurnSummaryGroup);
+  if (summaryGroups.length !== 1) {
+    return [...items];
+  }
+
+  const onlySummaryGroup = summaryGroups[0];
+  return items.map((item) =>
+    item === onlySummaryGroup
+      ? {
+          ...item,
+          startedAt: turn.startedAt,
+          completedAt: turn.completedAt,
+        }
+      : item,
+  );
 }
 
 function splitCompletedTurnMessages(
@@ -99,9 +146,10 @@ function groupCompletedTurnSummaryMessages(
     }
 
     const sourceMessages = groupedMessages;
+    const bounds = getSummaryMessageBounds(sourceMessages);
     items.push({
       kind: "summary",
-      startedAt: turn.startedAt,
+      startedAt: bounds.startedAt,
       completedAt: null,
       segmentIndex,
       sourceMessages,
@@ -124,7 +172,7 @@ function groupCompletedTurnSummaryMessages(
   }
 
   flushGroupedMessages();
-  return items;
+  return applySingleSummaryTurnBounds(turn, items);
 }
 
 export function groupCompletedTurnMessages(

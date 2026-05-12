@@ -176,6 +176,7 @@ interface BuildTurnSummaryRowArgs {
   segmentIndex: number | null;
   sourceMessages: EventProjectionMessage[];
   sourceRows: TimelineRow[];
+  startedAt: number;
   summaryCount: number;
   turn: EventProjectionTurn;
 }
@@ -789,6 +790,7 @@ function buildTurnSummaryRow({
   segmentIndex,
   sourceMessages,
   sourceRows,
+  startedAt,
   summaryCount,
   turn,
 }: BuildTurnSummaryRowArgs): TimelineTurnRow | null {
@@ -813,7 +815,7 @@ function buildTurnSummaryRow({
     turnId: turn.turnId,
     sourceSeqStart: bounds.sourceSeqStart,
     sourceSeqEnd: bounds.sourceSeqEnd,
-    startedAt: bounds.startedAt,
+    startedAt,
     createdAt: bounds.createdAt,
     kind: "turn",
     status: turn.status,
@@ -853,6 +855,7 @@ function buildCompletedTurnSummaryRows({
       segmentIndex: item.segmentIndex,
       sourceMessages: item.sourceMessages,
       sourceRows,
+      startedAt: item.startedAt,
       summaryCount: item.summaryCount,
       turn,
     });

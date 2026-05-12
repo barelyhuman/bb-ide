@@ -127,7 +127,7 @@ describe("groupCompletedTurnMessages", () => {
       },
       {
         kind: "summary",
-        startedAt: 1,
+        startedAt: 3,
         completedAt: null,
         segmentIndex: 1,
         summaryCount: 1,

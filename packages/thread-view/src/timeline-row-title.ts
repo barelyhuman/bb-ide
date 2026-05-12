@@ -212,10 +212,8 @@ function visibleDurationMs(durationMs: number | null): number | null {
 }
 
 /**
- * Below-threshold elapsed durations don't render — sub-second flickers
- * would be noisy. We skip emitting the decoration entirely until either
- * the captured terminal duration crosses the threshold (terminal rows)
- * or the live tick will reach it (pending rows).
+ * Most below-threshold elapsed durations don't render — sub-second flickers
+ * would be noisy for active rows and too much detail for small work rows.
  */
 function durationDecoration(
   startedAt: number,
@@ -231,6 +229,19 @@ function durationDecoration(
     startedAt,
     completedAt,
     em: options.em ?? false,
+  };
+}
+
+function completedTurnDurationDecoration(
+  startedAt: number,
+  completedAt: number | null,
+): TimelineTitleDecoration | null {
+  if (completedAt === null) return null;
+  return {
+    kind: "duration",
+    startedAt,
+    completedAt,
+    em: true,
   };
 }
 
@@ -928,9 +939,9 @@ function mapWorkSummaryTitle(
 
 function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
   const isPending = row.status === "pending";
-  const durationDeco = durationDecoration(row.startedAt, row.completedAt, {
-    em: true,
-  });
+  const durationDeco = isPending
+    ? durationDecoration(row.startedAt, row.completedAt, { em: true })
+    : completedTurnDurationDecoration(row.startedAt, row.completedAt);
   const hasCapturedDuration =
     !isPending && row.completedAt !== null && durationDeco !== null;
   if (hasCapturedDuration) {
