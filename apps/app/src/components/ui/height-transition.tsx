@@ -46,10 +46,10 @@ function scheduleRestore(target: HTMLElement, state: SnapState): void {
 function applyHeight(
   target: HTMLElement,
   nextHeight: string,
-  widthChanged: boolean,
+  snap: boolean,
   state: SnapState,
 ): void {
-  if (widthChanged) {
+  if (snap) {
     enterSnapMode(target, state);
     scheduleRestore(target, state);
   }
@@ -100,6 +100,7 @@ export function HeightTransition({
     wrapper.style.height = visible ? `${inner.offsetHeight}px` : "0px";
     if (typeof ResizeObserver === "undefined") return;
     let lastWidth: number | null = null;
+    let pendingVisibilitySnap = false;
     const snapState: SnapState = { savedDuration: null, restoreFrame: null };
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -107,13 +108,32 @@ export function HeightTransition({
       if (!entry || !target) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
+      const snap = widthChanged || pendingVisibilitySnap;
+      pendingVisibilitySnap = false;
       lastWidth = width;
       const nextHeight = visible ? `${height}px` : "0px";
-      applyHeight(target, nextHeight, widthChanged, snapState);
+      applyHeight(target, nextHeight, snap, snapState);
     });
     observer.observe(inner);
+    // While a tab is hidden, ResizeObserver delivery is throttled and the CSS
+    // height transition stays armed. If content grew during streaming, the
+    // first observer fire after the user returns interpolates the full delta
+    // over 180ms — a visible "catch-up" animation. On `visibilitychange`,
+    // snap the wrapper to the inner's current height and arm the next
+    // observer fire (in case offsetHeight isn't yet reconciled) to snap too.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const target = wrapperRef.current;
+      const source = innerRef.current;
+      if (!target || !source) return;
+      pendingVisibilitySnap = true;
+      const nextHeight = visible ? `${source.offsetHeight}px` : "0px";
+      applyHeight(target, nextHeight, true, snapState);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       cleanupSnapState(wrapperRef.current, snapState);
     };
   }, [visible]);
@@ -169,6 +189,7 @@ export function AutoHeightContainer({
     if (!wrapper || !inner || typeof ResizeObserver === "undefined") return;
     wrapper.style.height = `${inner.offsetHeight}px`;
     let lastWidth: number | null = null;
+    let pendingVisibilitySnap = false;
     const snapState: SnapState = { savedDuration: null, restoreFrame: null };
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -176,12 +197,29 @@ export function AutoHeightContainer({
       if (!entry || !target) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
+      const snap = widthChanged || pendingVisibilitySnap;
+      pendingVisibilitySnap = false;
       lastWidth = width;
-      applyHeight(target, `${height}px`, widthChanged, snapState);
+      applyHeight(target, `${height}px`, snap, snapState);
     });
     observer.observe(inner);
+    // See HeightTransition's matching block: a hidden tab pauses observer
+    // delivery and the height transition, so content streamed in while the
+    // tab was backgrounded would otherwise animate in over 180ms on return
+    // — and the bottom-anchor scroll would chase the growing wrapper for the
+    // full duration. Snap-sync on visibility return short-circuits that.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      const target = wrapperRef.current;
+      const source = innerRef.current;
+      if (!target || !source) return;
+      pendingVisibilitySnap = true;
+      applyHeight(target, `${source.offsetHeight}px`, true, snapState);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       cleanupSnapState(wrapperRef.current, snapState);
     };
   }, []);
