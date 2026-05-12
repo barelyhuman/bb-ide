@@ -5,7 +5,6 @@ import type { Hono } from "hono";
 import {
   PROMPT_HISTORY_ENTRY_LIMIT,
   threadEventTypeSchema,
-  type Thread,
 } from "@bb/domain";
 import {
   promptHistoryQuerySchema,
@@ -37,7 +36,7 @@ import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
   resolveThreadTimelineServiceViewMode,
-  resolveThreadTimelineDefaultSegmentLimit,
+  THREAD_TIMELINE_DEFAULT_SEGMENT_LIMIT,
   THREAD_TIMELINE_SEGMENT_LIMIT_MAX,
   type ThreadTimelinePageKind,
   type ThreadTimelinePageRequest,
@@ -112,12 +111,11 @@ function parseThreadTimelineSegmentLimit(
 
 function parseThreadTimelinePage(
   query: ThreadTimelineQuery,
-  thread: Thread,
 ): ThreadTimelinePageRequest {
   const hasBeforeAnchorSeq = query.beforeAnchorSeq !== undefined;
   const kind: ThreadTimelinePageKind = hasBeforeAnchorSeq ? "older" : "latest";
   const segmentLimit = parseThreadTimelineSegmentLimit(
-    resolveThreadTimelineDefaultSegmentLimit({ kind, thread }),
+    THREAD_TIMELINE_DEFAULT_SEGMENT_LIMIT,
     query.segmentLimit,
   );
 
@@ -182,7 +180,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           thread,
         }),
         includeNestedRows: query.includeNestedRows === "true",
-        page: parseThreadTimelinePage(query, thread),
+        page: parseThreadTimelinePage(query),
         summaryOnly: query.summaryOnly === "true",
       }),
     );

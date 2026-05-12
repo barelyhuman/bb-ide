@@ -94,9 +94,7 @@ interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySele
 export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
 export type ThreadTimelinePageKind = "latest" | "older";
 
-export const STANDARD_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT = 20;
-export const MANAGER_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT = 30;
-export const THREAD_TIMELINE_OLDER_SEGMENT_LIMIT = 20;
+export const THREAD_TIMELINE_DEFAULT_SEGMENT_LIMIT = 20;
 export const THREAD_TIMELINE_SEGMENT_LIMIT_MAX = 100;
 
 export interface LatestThreadTimelinePageRequest {
@@ -207,11 +205,6 @@ export interface ResolveThreadTimelineServiceViewModeArgs {
   thread: Thread;
 }
 
-export interface ResolveThreadTimelineDefaultSegmentLimitArgs {
-  kind: ThreadTimelinePageKind;
-  thread: Thread;
-}
-
 export interface ResolveSystemClientRequestVisibilityArgs {
   thread: Thread;
   timelineViewMode: ThreadTimelineServiceViewMode;
@@ -225,19 +218,6 @@ export function resolveThreadTimelineServiceViewMode({
     return "manager-conversation";
   }
   return "standard";
-}
-
-export function resolveThreadTimelineDefaultSegmentLimit({
-  kind,
-  thread,
-}: ResolveThreadTimelineDefaultSegmentLimitArgs): number {
-  if (kind === "older") {
-    return THREAD_TIMELINE_OLDER_SEGMENT_LIMIT;
-  }
-
-  return thread.type === "manager"
-    ? MANAGER_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT
-    : STANDARD_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT;
 }
 
 export function resolveSystemClientRequestVisibility({

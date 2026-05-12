@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -30,6 +31,9 @@ import { PAGE_SHELL_CONTENT_STYLE } from "./page-shell-content-style.js";
 export interface BottomAnchorContextValue {
   isAtBottom: boolean;
   scrollToBottom: () => void;
+  // Snapshot the scroll area so the next height growth (e.g. prepending older
+  // messages) keeps the visible row at the same Y position instead of jumping.
+  captureScrollAnchor: () => void;
 }
 
 export interface BottomAnchoredScrollBodyProps {
@@ -120,6 +124,10 @@ export function BottomAnchoredScrollBody({
   const pointerScrollIntentRef = useRef(false);
   const restoreFrameRef = useRef<number | null>(null);
   const restoreFramesRemainingRef = useRef(0);
+  const pendingPrependAnchorRef = useRef<{
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   const cancelQueuedRestore = useCallback(() => {
@@ -160,6 +168,25 @@ export function BottomAnchoredScrollBody({
     }
     queueBottomRestore();
   }, [queueBottomRestore]);
+
+  const captureScrollAnchor = useCallback(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+    pendingPrependAnchorRef.current = {
+      scrollHeight: scrollArea.scrollHeight,
+      scrollTop: scrollArea.scrollTop,
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    const anchor = pendingPrependAnchorRef.current;
+    if (!scrollArea || !anchor) return;
+    const delta = scrollArea.scrollHeight - anchor.scrollHeight;
+    if (delta <= 0) return;
+    scrollArea.scrollTop = anchor.scrollTop + delta;
+    pendingPrependAnchorRef.current = null;
+  });
 
   const markUserScrollIntent = useCallback(() => {
     userScrollIntentUntilRef.current =
@@ -212,8 +239,9 @@ export function BottomAnchoredScrollBody({
     () => ({
       isAtBottom,
       scrollToBottom,
+      captureScrollAnchor,
     }),
-    [isAtBottom, scrollToBottom],
+    [isAtBottom, scrollToBottom, captureScrollAnchor],
   );
 
   useEffect(() => {

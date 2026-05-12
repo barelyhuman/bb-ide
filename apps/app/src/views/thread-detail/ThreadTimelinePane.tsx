@@ -1,8 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ChevronUp } from "lucide-react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
-import { Button, ConversationTimeline, PageShell } from "@/components/ui";
+import {
+  Button,
+  ConversationTimeline,
+  PageShell,
+  useBottomAnchoredScroll,
+} from "@/components/ui";
 import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
@@ -97,20 +102,10 @@ export function ThreadTimelinePane({
           {hasOlderTimelineRows &&
           !isThreadTimelinePending &&
           !timelineError ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onLoadOlderRows}
-                disabled={isLoadingOlderTimelineRows}
-              >
-                <ChevronUp aria-hidden="true" />
-                {isLoadingOlderTimelineRows
-                  ? "Loading older rows..."
-                  : "Load older rows"}
-              </Button>
-            </div>
+            <LoadOlderMessagesButton
+              isLoadingOlderTimelineRows={isLoadingOlderTimelineRows}
+              onLoadOlderRows={onLoadOlderRows}
+            />
           ) : null}
           {isThreadTimelinePending ? (
             <DelayedThreadLoadingIndicator />
@@ -156,6 +151,37 @@ export function ThreadTimelinePane({
           ) : null}
         </ConversationTimeline>
       </PageShell>
+    </div>
+  );
+}
+
+function LoadOlderMessagesButton({
+  isLoadingOlderTimelineRows,
+  onLoadOlderRows,
+}: {
+  isLoadingOlderTimelineRows: boolean;
+  onLoadOlderRows: () => void;
+}) {
+  const bottomAnchor = useBottomAnchoredScroll();
+  const handleClick = useCallback(() => {
+    bottomAnchor?.captureScrollAnchor();
+    onLoadOlderRows();
+  }, [bottomAnchor, onLoadOlderRows]);
+
+  return (
+    <div className="flex justify-center pt-2 mb-3">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleClick}
+        disabled={isLoadingOlderTimelineRows}
+      >
+        <ChevronUp aria-hidden="true" />
+        {isLoadingOlderTimelineRows
+          ? "Loading older messages..."
+          : "Load older messages"}
+      </Button>
     </div>
   );
 }
