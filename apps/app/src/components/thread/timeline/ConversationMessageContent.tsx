@@ -9,6 +9,7 @@ import { fileNameFromPath } from "@bb/thread-view";
 import { ImageLightbox, getWrappedImageIndex } from "../../ui/image-lightbox.js";
 import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
+import { buildProjectAttachmentContentUrl } from "@/lib/file-content-urls";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
@@ -38,6 +39,7 @@ interface ConversationAttachmentItems {
 interface ConversationAttachmentsProps extends ConversationAttachmentItems {
   align?: "start" | "end";
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  projectId?: string;
 }
 
 interface UserConversationMessageProps extends Omit<
@@ -56,6 +58,42 @@ interface AssistantConversationMessageProps extends Omit<
 
 interface CollapsibleMessageTextProps {
   text: string;
+}
+
+interface ProjectAttachmentHrefArgs {
+  path: string;
+  projectId: string | undefined;
+}
+
+interface PathClassificationArgs {
+  path: string;
+}
+
+const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[a-zA-Z]:[\\/]/u;
+const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/u;
+
+function isAbsoluteLocalPath({ path }: PathClassificationArgs): boolean {
+  return path.startsWith("/") || WINDOWS_ABSOLUTE_PATH_PATTERN.test(path);
+}
+
+function isProjectAttachmentPath({ path }: PathClassificationArgs): boolean {
+  return (
+    path.length > 0 &&
+    !path.startsWith("\\") &&
+    !isAbsoluteLocalPath({ path }) &&
+    !URL_SCHEME_PATTERN.test(path)
+  );
+}
+
+function projectAttachmentHref({
+  path,
+  projectId,
+}: ProjectAttachmentHrefArgs): string | null {
+  if (!projectId || !isProjectAttachmentPath({ path })) {
+    return null;
+  }
+
+  return buildProjectAttachmentContentUrl(projectId, path);
 }
 
 function userRequestLabel(
@@ -106,6 +144,7 @@ function ConversationAttachments({
   filePaths,
   imageItems,
   onOpenLocalFileLink,
+  projectId,
 }: ConversationAttachmentsProps) {
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
     null,
@@ -170,8 +209,23 @@ function ConversationAttachments({
             const label = (
               <span className="truncate">{fileNameFromPath(path)}</span>
             );
+            const attachmentHref = projectAttachmentHref({ path, projectId });
 
-            if (!onOpenLocalFileLink) {
+            if (attachmentHref) {
+              return (
+                <a
+                  key={path}
+                  href={attachmentHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(className, "hover:bg-state-hover")}
+                >
+                  {label}
+                </a>
+              );
+            }
+
+            if (!onOpenLocalFileLink || !isAbsoluteLocalPath({ path })) {
               return (
                 <span key={path} className={cn(className, "cursor-default")}>
                   {label}
@@ -325,6 +379,7 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
 function UserConversationMessage({
   attachmentItems,
   onOpenLocalFileLink,
+  projectId,
   text,
   userRequest,
 }: UserConversationMessageProps) {
@@ -348,6 +403,7 @@ function UserConversationMessage({
             filePaths={attachmentItems.filePaths}
             imageItems={attachmentItems.imageItems}
             onOpenLocalFileLink={onOpenLocalFileLink}
+            projectId={projectId}
           />
         </div>
         {showToolbar ? (
@@ -376,6 +432,7 @@ function UserConversationMessage({
 function AssistantConversationMessage({
   attachmentItems,
   onOpenLocalFileLink,
+  projectId,
   text,
 }: AssistantConversationMessageProps) {
   return (
@@ -388,6 +445,7 @@ function AssistantConversationMessage({
         filePaths={attachmentItems.filePaths}
         imageItems={attachmentItems.imageItems}
         onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
       />
     </div>
   );

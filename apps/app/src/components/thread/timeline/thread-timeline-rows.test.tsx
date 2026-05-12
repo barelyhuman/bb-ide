@@ -1314,4 +1314,42 @@ describe("ThreadTimelineRows", () => {
       path: "/workspace/notes.md",
     });
   });
+
+  it("routes uploaded file attachments through project attachment content", () => {
+    const onOpenLocalFileLink = vi.fn<ThreadTimelineLocalFileLinkHandler>(
+      () => true,
+    );
+
+    renderTimelineRows({
+      timelineRows: [
+        conversationRow({
+          role: "user",
+          text: "Attached.",
+          attachments: {
+            webImages: 0,
+            localImages: 0,
+            localFiles: 1,
+            imageUrls: [],
+            localImagePaths: [],
+            localFilePaths: ["notes-123.txt"],
+          },
+        }),
+      ],
+      overrides: {
+        onOpenLocalFileLink,
+        projectId: "project-1",
+      },
+    });
+
+    const attachmentLink = screen.getByRole("link", { name: "notes-123.txt" });
+
+    expect(attachmentLink.getAttribute("href")).toBe(
+      "/api/v1/projects/project-1/attachments/content?path=notes-123.txt",
+    );
+    expect(attachmentLink.getAttribute("target")).toBe("_blank");
+
+    fireEvent.click(attachmentLink);
+
+    expect(onOpenLocalFileLink).not.toHaveBeenCalled();
+  });
 });
