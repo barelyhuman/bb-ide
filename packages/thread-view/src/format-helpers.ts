@@ -72,3 +72,29 @@ function formatRoundedDurationSeconds(totalSeconds: number): string {
 export function messageId(threadId: string, kind: string, key: string): string {
   return `${threadId}:${kind}:${key}`;
 }
+
+const DIFF_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
+
+export function formatDiffCount(value: number): string {
+  return DIFF_COUNT_FORMATTER.format(value);
+}
+
+/**
+ * Renders an added/removed line tally as plain text (e.g. `+1,000 -42`).
+ * With `hideZero`, sides equal to 0 are dropped — `{ added: 0, removed: 2 }`
+ * becomes `"-2"` and `{ added: 0, removed: 0 }` becomes `""`.
+ */
+export function formatDiffStatsText(input: {
+  added: number;
+  removed: number;
+  hideZero?: boolean;
+}): string {
+  const { added, removed, hideZero = false } = input;
+  const addedText = `+${formatDiffCount(added)}`;
+  const removedText = `-${formatDiffCount(removed)}`;
+  if (!hideZero) return `${addedText} ${removedText}`;
+  const parts: string[] = [];
+  if (added > 0) parts.push(addedText);
+  if (removed > 0) parts.push(removedText);
+  return parts.join(" ");
+}

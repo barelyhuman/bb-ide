@@ -18,7 +18,10 @@ import {
   getFileChangeActionPastTense,
   getFileChangeActionPresentTense,
 } from "./file-change-summary.js";
-import { durationToCompactString } from "./format-helpers.js";
+import {
+  durationToCompactString,
+  formatDiffStatsText,
+} from "./format-helpers.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
 import {
   formatTimelineActivityIntentDetailParts,
@@ -295,12 +298,12 @@ export function formatTimelineDecorationText(
       }
       return parts.length === 0 ? "" : `(${parts.join(", ")})`;
     }
-    case "diff-stats": {
-      const parts: string[] = [];
-      if (d.added > 0) parts.push(`+${d.added}`);
-      if (d.removed > 0) parts.push(`-${d.removed}`);
-      return parts.join(" ");
-    }
+    case "diff-stats":
+      return formatDiffStatsText({
+        added: d.added,
+        removed: d.removed,
+        hideZero: true,
+      });
     default:
       return assertNever(d);
   }

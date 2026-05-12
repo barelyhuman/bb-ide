@@ -11,7 +11,11 @@ export {
   renderTitlePlain,
 } from "./timeline-row-title.js";
 export { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
-export { durationToCompactString } from "./format-helpers.js";
+export {
+  durationToCompactString,
+  formatDiffCount,
+  formatDiffStatsText,
+} from "./format-helpers.js";
 export type {
   BuildTimelineRowTitleOptions,
   TimelineActivityIntentTitle,

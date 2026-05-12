@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import {
   assertNever,
   durationToCompactString,
+  formatDiffStatsText,
   formatTimelineDecorationText,
   type TimelineTitle,
   type TimelineTitleAction,
@@ -12,6 +13,7 @@ import {
   type TimelineTitleTone,
 } from "@bb/thread-view";
 import { cn } from "@/lib/utils";
+import { DiffStatsTally } from "@/components/ui";
 
 /**
  * Resolves a title's declared action to a click callback. Return `null` to
@@ -224,26 +226,26 @@ function renderDecoration(
     }
     case "diff-stats": {
       if (tone === "summary") {
-        const parts = [
-          decoration.added > 0 ? `+${decoration.added}` : null,
-          decoration.removed > 0 ? `-${decoration.removed}` : null,
-        ].filter((part): part is string => part !== null);
+        const text = formatDiffStatsText({
+          added: decoration.added,
+          removed: decoration.removed,
+          hideZero: true,
+        });
+        if (text.length === 0) return null;
         return (
           <span key={index} className={baseClass}>
-            {parts.join(" ")}
+            {text}
           </span>
         );
       }
       return (
-        <span key={index} className="shrink-0 whitespace-pre">
-          {decoration.added > 0 ? (
-            <span className="text-diff-added">+{decoration.added}</span>
-          ) : null}
-          {decoration.added > 0 && decoration.removed > 0 ? " " : null}
-          {decoration.removed > 0 ? (
-            <span className="text-diff-removed">-{decoration.removed}</span>
-          ) : null}
-        </span>
+        <DiffStatsTally
+          key={index}
+          insertions={decoration.added}
+          deletions={decoration.removed}
+          hideZero
+          className="shrink-0"
+        />
       );
     }
     default:

@@ -4,6 +4,7 @@ import type {
   WorkspaceFileStatus,
   WorkspaceStatus,
 } from "@bb/domain";
+import { formatDiffStatsText } from "@bb/thread-view";
 import { DiffStatsTally } from "@/components/ui";
 
 export interface ChangeTally {
@@ -36,7 +37,11 @@ export function formatChangeSummary(tally: ChangeTally): string {
   if (tally.insertions === 0 && tally.deletions === 0) {
     return filesLabel;
   }
-  return `${filesLabel}, +${tally.insertions} -${tally.deletions}`;
+  const diffText = formatDiffStatsText({
+    added: tally.insertions,
+    removed: tally.deletions,
+  });
+  return `${filesLabel}, ${diffText}`;
 }
 
 export function renderChangeSummary(tally: ChangeTally): ReactNode {
