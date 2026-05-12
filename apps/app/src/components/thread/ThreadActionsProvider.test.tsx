@@ -343,7 +343,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       await screen.findByText(
-        /2 child threads are assigned to this manager/i,
+        /assigned threads will be unassigned/i,
       ),
     ).not.toBeNull();
     expect(api.archiveThread).not.toHaveBeenCalled();
@@ -381,14 +381,14 @@ describe("ThreadActionsProvider", () => {
     });
 
     await screen.findByText(
-      /child threads? (?:are|is) assigned to this manager/i,
+      /assigned threads will be unassigned/i,
     );
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
         screen.queryByText(
-          /child threads? (?:are|is) assigned to this manager/i,
+          /assigned threads will be unassigned/i,
         ),
       ).toBeNull();
     });
@@ -449,7 +449,7 @@ describe("ThreadActionsProvider", () => {
     });
     expect(
       screen.queryByText(
-        /child threads? (?:are|is) assigned to this manager/i,
+        /assigned threads will be unassigned/i,
       ),
     ).toBeNull();
   });
@@ -491,7 +491,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       await screen.findByText(
-        /child threads? (?:are|is) assigned to this manager/i,
+        /assigned threads will be unassigned/i,
       ),
     ).not.toBeNull();
     expect(api.archiveThread).toHaveBeenCalledTimes(1);
@@ -547,7 +547,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       screen.queryByText(
-        /child threads? (?:are|is) assigned to this manager/i,
+        /assigned threads will be unassigned/i,
       ),
     ).toBeNull();
     expect(api.archiveThread).not.toHaveBeenCalled();
@@ -601,7 +601,7 @@ describe("ThreadActionsProvider", () => {
 
     // Both warnings render in the same dialog body.
     expect(
-      await screen.findByText(/child thread is assigned to this manager/i),
+      await screen.findByText(/assigned threads will be unassigned/i),
     ).not.toBeNull();
     expect(
       screen.getByText(/uncommitted changes that will be removed/i),
@@ -756,7 +756,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       await screen.findByText(
-        /1 child thread is assigned to this manager and will lose its manager/i,
+        /assigned threads will be unassigned/i,
       ),
     ).not.toBeNull();
     expect(api.deleteThread).not.toHaveBeenCalled();
@@ -793,14 +793,14 @@ describe("ThreadActionsProvider", () => {
     });
 
     await screen.findByText(
-      /child threads? (?:are|is) assigned to this manager and will lose/i,
+      /assigned threads will be unassigned/i,
     );
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
         screen.queryByText(
-          /child threads? (?:are|is) assigned to this manager and will lose/i,
+          /assigned threads will be unassigned/i,
         ),
       ).toBeNull();
     });
@@ -859,7 +859,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       screen.queryByText(
-        /child threads? (?:are|is) assigned to this manager and will lose/i,
+        /assigned threads will be unassigned/i,
       ),
     ).toBeNull();
     fireEvent.click(confirmButton);

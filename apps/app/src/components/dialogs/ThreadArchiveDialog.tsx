@@ -77,7 +77,7 @@ export function ThreadArchiveDialogContent({
         <DialogDescription>
           {[
             target.assignedChildCount
-              ? formatAssignedChildSentence(target.assignedChildCount)
+              ? "Assigned threads will be unassigned."
               : null,
             target.workspaceWarning
               ? formatWorkspaceWarningSentence(target.workspaceWarning)
@@ -107,12 +107,6 @@ export function ThreadArchiveDialogContent({
       </DialogFooter>
     </>
   );
-}
-
-function formatAssignedChildSentence(count: number): string {
-  return count === 1
-    ? "1 child thread is assigned to this manager and will keep its assignment but won't have an active manager until this one is unarchived."
-    : `${count} child threads are assigned to this manager and will keep their assignment but won't have an active manager until this one is unarchived.`;
 }
 
 function formatWorkspaceWarningSentence(

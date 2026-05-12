@@ -63,9 +63,7 @@ export function ThreadDeleteDialogContent({
 }: ThreadDeleteDialogContentProps) {
   const label = threadTypeLabel(target.thread.type);
   const sentences = [
-    target.assignedChildCount
-      ? formatAssignedChildSentence(target.assignedChildCount)
-      : null,
+    target.assignedChildCount ? "Assigned threads will be unassigned." : null,
     target.workspaceWarning
       ? formatWorkspaceWarningSentence(target.workspaceWarning)
       : null,
@@ -98,12 +96,6 @@ export function ThreadDeleteDialogContent({
       </DialogFooter>
     </>
   );
-}
-
-function formatAssignedChildSentence(count: number): string {
-  return count === 1
-    ? "1 child thread is assigned to this manager and will lose its manager."
-    : `${count} child threads are assigned to this manager and will lose their manager.`;
 }
 
 function formatWorkspaceWarningSentence(
