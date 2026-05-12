@@ -58,10 +58,6 @@ interface CollapsibleMessageTextProps {
   text: string;
 }
 
-interface CountPreWrappedLinesInput {
-  text: string;
-}
-
 function userRequestLabel(
   userRequest: TimelineConversationUserRequest | null,
 ): string | null {
@@ -232,9 +228,13 @@ function ConversationAttachments({
 }
 
 const COLLAPSED_MESSAGE_LINE_COUNT = 15;
+// Hard upper bound on what a user message ever hands to the DOM, even fully
+// expanded. Pasting a megabyte-scale blob (logs, HARs, JSON dumps) would
+// otherwise make every window-resize frame reflow the entire string.
+const USER_MESSAGE_CHAR_CAP = 4096;
 
-function countPreWrappedLines({ text }: CountPreWrappedLinesInput): number {
-  return text.split(/\r\n|\r|\n/u).length;
+function splitPreWrappedLines(text: string): string[] {
+  return text.split(/\r\n|\r|\n/u);
 }
 
 function useIsOverflowing(
@@ -275,10 +275,22 @@ function useIsOverflowing(
 function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
-  const exceedsCollapsedLineCount =
-    countPreWrappedLines({ text }) > COLLAPSED_MESSAGE_LINE_COUNT;
-  const isOverflowing = useIsOverflowing(textRef, !isExpanded, text);
-  const showToggle = isExpanded || exceedsCollapsedLineCount || isOverflowing;
+  const isTruncated = text.length > USER_MESSAGE_CHAR_CAP;
+  const cappedText = isTruncated
+    ? text.slice(0, USER_MESSAGE_CHAR_CAP)
+    : text;
+  const lines = splitPreWrappedLines(cappedText);
+  const exceedsCollapsedLineCount = lines.length > COLLAPSED_MESSAGE_LINE_COUNT;
+  // Collapsed view hands only the visible-by-line-clamp lines to the DOM;
+  // expanded view hands the (already-capped) full text. Both stay below the
+  // hard char cap so a megabyte paste can't dominate window-resize reflow.
+  const renderedText =
+    isExpanded || !exceedsCollapsedLineCount
+      ? cappedText
+      : lines.slice(0, COLLAPSED_MESSAGE_LINE_COUNT).join("\n");
+  const isOverflowing = useIsOverflowing(textRef, !isExpanded, renderedText);
+  const showToggle =
+    isExpanded || exceedsCollapsedLineCount || isOverflowing;
 
   return (
     <>
@@ -289,7 +301,10 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
           !isExpanded && "line-clamp-[15]",
         )}
       >
-        {text}
+        {renderedText}
+        {isExpanded && isTruncated ? (
+          <span className="text-muted-foreground"> [truncated]</span>
+        ) : null}
       </p>
       {showToggle ? (
         <div className="mt-1 flex justify-end">
