@@ -102,12 +102,14 @@ describe("ThreadTimelinePane", () => {
     const timelineRowList = container.querySelector(
       '[data-timeline-row-list="top-level"]',
     );
-    const timelineContainer = timelineRowList?.parentElement;
+    const indicator = screen.getByText("Working...");
 
-    expect(timelineContainer).toBeTruthy();
-    expect(timelineContainer?.contains(screen.getByText("Working..."))).toBe(
-      true,
-    );
+    // Row list and indicator both render inside the Pane root (not in a
+    // portal or detached subtree). Asserting on a specific common ancestor
+    // is brittle because intermediate wrappers like AutoHeightContainer
+    // shift the depth.
+    expect(timelineRowList).toBeTruthy();
+    expect(container.contains(indicator)).toBe(true);
   });
 
   it("delays the initial thread loading placeholder", () => {

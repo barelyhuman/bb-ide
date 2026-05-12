@@ -4,7 +4,7 @@ import { ThreadTimelineRows } from "@/components/thread/timeline";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
-  title: "thread/timeline/streaming",
+  title: "thread/timeline/Streaming",
 };
 
 const baseProps = {
@@ -457,7 +457,7 @@ function ExploringBundleStreaming({ restartKey }: { restartKey: number }) {
 
 // ---------------------------------------------------------------------------
 
-export function Overview() {
+export function RowDetails() {
   // Each variant gets its own restart counter; bumping it remounts the
   // streaming effect and resets `step` to 0.
   const [provisioningKey, setProvisioningKey] = useState(0);

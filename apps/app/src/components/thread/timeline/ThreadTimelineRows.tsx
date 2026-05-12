@@ -49,6 +49,7 @@ import {
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { Button } from "../../ui/button.js";
+import { AutoHeightContainer } from "../../ui/height-transition.js";
 import {
   joinSignatureParts,
   timelineRowRenderSignature,
@@ -1079,12 +1080,14 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
 
   return (
     <TimelineRendererContext.Provider value={rendererContextValue}>
-      <TimelineRowsList
-        rows={rows}
-        scopeActive={scopeActive}
-        compactActivityIntents={false}
-        spacing="top-level"
-      />
+      <AutoHeightContainer>
+        <TimelineRowsList
+          rows={rows}
+          scopeActive={scopeActive}
+          compactActivityIntents={false}
+          spacing="top-level"
+        />
+      </AutoHeightContainer>
     </TimelineRendererContext.Provider>
   );
 }

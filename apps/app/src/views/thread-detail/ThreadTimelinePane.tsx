@@ -5,6 +5,7 @@ import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
   Button,
   ConversationTimeline,
+  HeightTransition,
   PageShell,
   useBottomAnchoredScroll,
 } from "@/components/ui";
@@ -141,14 +142,14 @@ export function ThreadTimelinePane({
               }
             />
           ) : null}
-          {showOngoingIndicator ? (
+          <HeightTransition visible={showOngoingIndicator}>
             <TimelineWorkingIndicator
               key={ongoingIndicatorKey}
               details={activeThinkingDetails}
               isThinking={showActiveThinking}
               label={ongoingIndicatorLabel}
             />
-          ) : null}
+          </HeightTransition>
         </ConversationTimeline>
       </PageShell>
     </div>

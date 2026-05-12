@@ -186,6 +186,12 @@ export {
   type BottomAnchorContextValue,
   type BottomAnchoredScrollBodyProps,
 } from "./bottom-anchored-scroll-body.js";
+export {
+  AutoHeightContainer,
+  HeightTransition,
+  type AutoHeightContainerProps,
+  type HeightTransitionProps,
+} from "./height-transition.js";
 export { EmptyState, type EmptyStateProps } from "./empty-state.js";
 export {
   EventCodeBlock,
