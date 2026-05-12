@@ -203,7 +203,7 @@ function ProjectListActionButtons({
         : "New Manager";
 
   return (
-    <div className="space-y-0.5 pb-1 group-data-[collapsible=icon]:hidden">
+    <div className="space-y-0.5">
       <Button
         type="button"
         size="sm"
@@ -432,92 +432,96 @@ function ProjectListComponent({
   );
 
   return (
-    <SidebarStickyStack>
-      <ProjectListActionButtons
-        onNewChat={onNewChat}
-        onNewManager={onNewManager}
-        selectedProjectId={selectedProjectId}
-        isManagerActionPending={isManagerActionPending}
-      />
-      <SidebarStickyTier tier="label" className="justify-between pr-1">
-        Projects
-        {onNewProject ? (
-          <button
-            type="button"
-            onClick={onNewProject}
-            disabled={isCreatingProject}
-            title={isCreatingProject ? "Creating project..." : "Add project"}
-            aria-label="Add project"
-            className={cn(
-              "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
-              COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
-            )}
-          >
-            <Plus className={COARSE_POINTER_ICON_SIZE_CLASS} />
-          </button>
-        ) : null}
-      </SidebarStickyTier>
-      <SidebarGroupContent>
-        <SidebarMenu className="gap-1">
-          {projectsState.status === "loading" ? (
-            <>
-              <SidebarMenuSkeleton />
-              <SidebarMenuSkeleton />
-            </>
-          ) : projects && projects.length > 0 ? (
-            projects.map((project) => {
-              const threadState = threadStatesByProjectId.get(project.id);
-              const threadListState = getProjectThreadListState({
-                status: threadState?.status,
-                threads: threadsByProject.get(project.id),
-              });
-              const localSourcePath = localSourcePathsByProjectId.get(
-                project.id,
-              );
-              const isLocalPathInvalid = isLocalPathMissing(
-                pathExistence,
-                localSourcePath,
-              );
-              return (
-                <ProjectRow
-                  key={project.id}
-                  project={project}
-                  threadListState={threadListState}
-                  selectedThreadId={selectedThreadId}
-                  isActive={
-                    selectedProjectId === project.id && !selectedThreadId
+    <>
+      <div className="px-2 pt-2 pb-1 group-data-[collapsible=icon]:hidden">
+        <ProjectListActionButtons
+          onNewChat={onNewChat}
+          onNewManager={onNewManager}
+          selectedProjectId={selectedProjectId}
+          isManagerActionPending={isManagerActionPending}
+        />
+      </div>
+      <SidebarStickyStack>
+        <SidebarStickyTier tier="label" className="justify-between pr-1">
+          Projects
+          {onNewProject ? (
+            <button
+              type="button"
+              onClick={onNewProject}
+              disabled={isCreatingProject}
+              title={isCreatingProject ? "Creating project..." : "Add project"}
+              aria-label="Add project"
+              className={cn(
+                "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
+                COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
+              )}
+            >
+              <Plus className={COARSE_POINTER_ICON_SIZE_CLASS} />
+            </button>
+          ) : null}
+        </SidebarStickyTier>
+        <SidebarGroupContent>
+          <SidebarMenu className="gap-1">
+            {projectsState.status === "loading" ? (
+              <>
+                <SidebarMenuSkeleton />
+                <SidebarMenuSkeleton />
+              </>
+            ) : projects && projects.length > 0 ? (
+              projects.map((project) => {
+                const threadState = threadStatesByProjectId.get(project.id);
+                const threadListState = getProjectThreadListState({
+                  status: threadState?.status,
+                  threads: threadsByProject.get(project.id),
+                });
+                const localSourcePath = localSourcePathsByProjectId.get(
+                  project.id,
+                );
+                const isLocalPathInvalid = isLocalPathMissing(
+                  pathExistence,
+                  localSourcePath,
+                );
+                return (
+                  <ProjectRow
+                    key={project.id}
+                    project={project}
+                    threadListState={threadListState}
+                    selectedThreadId={selectedThreadId}
+                    isActive={
+                      selectedProjectId === project.id && !selectedThreadId
+                    }
+                    isCollapsed={collapsedProjectIds.has(project.id)}
+                    collapsedManagerIds={collapsedManagerIds}
+                    isLocalPathInvalid={isLocalPathInvalid}
+                    localHostId={localHostId}
+                    onProjectSelect={onProjectSelect}
+                    onToggleProjectCollapsed={toggleProjectCollapsed}
+                    onToggleManagerCollapsed={toggleManagerCollapsed}
+                    promotedBranchName={
+                      promotedBranchNamesByProjectId.get(project.id) ?? null
+                    }
+                  />
+                );
+              })
+            ) : (
+              <SidebarMenuItem>
+                <EmptyState
+                  message={
+                    projectsState.status === "unavailable"
+                      ? "Projects unavailable"
+                      : "No projects"
                   }
-                  isCollapsed={collapsedProjectIds.has(project.id)}
-                  collapsedManagerIds={collapsedManagerIds}
-                  isLocalPathInvalid={isLocalPathInvalid}
-                  localHostId={localHostId}
-                  onProjectSelect={onProjectSelect}
-                  onToggleProjectCollapsed={toggleProjectCollapsed}
-                  onToggleManagerCollapsed={toggleManagerCollapsed}
-                  promotedBranchName={
-                    promotedBranchNamesByProjectId.get(project.id) ?? null
-                  }
+                  icon={Folder}
+                  className="px-2 py-1.5"
+                  iconClassName="size-3.5"
+                  messageClassName="text-xs"
                 />
-              );
-            })
-          ) : (
-            <SidebarMenuItem>
-              <EmptyState
-                message={
-                  projectsState.status === "unavailable"
-                    ? "Projects unavailable"
-                    : "No projects"
-                }
-                icon={Folder}
-                className="px-2 py-1.5"
-                iconClassName="size-3.5"
-                messageClassName="text-xs"
-              />
-            </SidebarMenuItem>
-          )}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarStickyStack>
+              </SidebarMenuItem>
+            )}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarStickyStack>
+    </>
   );
 }
 

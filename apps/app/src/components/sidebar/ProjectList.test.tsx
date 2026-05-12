@@ -162,6 +162,10 @@ describe("ProjectList", () => {
       screen.queryByRole("button", { name: "Manager project" }),
     ).toBeNull();
     expect(newManagerButton.hasAttribute("disabled")).toBe(false);
+    expect(newManagerButton.closest("[data-sidebar-sticky-stack]")).toBeNull();
+    expect(
+      projectHeading.closest("[data-sidebar-sticky-stack]"),
+    ).not.toBeNull();
 
     expect(
       newChatButton.compareDocumentPosition(newManagerButton) &
