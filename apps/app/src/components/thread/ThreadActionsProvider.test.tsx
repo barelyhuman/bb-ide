@@ -8,9 +8,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ThreadWithRuntime } from "@bb/domain";
+import type { Environment, ThreadWithRuntime, WorkspaceStatus } from "@bb/domain";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Provider as JotaiProvider } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -30,6 +30,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     archiveThread: vi.fn(),
     deleteThread: vi.fn(),
+    getEnvironment: vi.fn(),
+    getEnvironmentWorkStatus: vi.fn(),
     getThreadAssignedChildSummary: vi.fn(),
     markThreadRead: vi.fn(),
     markThreadUnread: vi.fn(),
@@ -86,6 +88,48 @@ function makeAssignedChildSummary(
 ): ThreadAssignedChildSummaryResponse {
   return {
     nonDeletedAssignedChildCount: 0,
+    ...overrides,
+  };
+}
+
+function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
+  return {
+    branchName: "main",
+    cleanupMode: null,
+    cleanupRequestedAt: null,
+    createdAt: 1,
+    defaultBranch: "main",
+    hostId: "host-1",
+    id: "environment-1",
+    isGitRepo: true,
+    isWorktree: true,
+    managed: false,
+    mergeBaseBranch: null,
+    path: "/tmp/env",
+    projectId: "project-1",
+    status: "ready",
+    updatedAt: 10,
+    workspaceProvisionType: "managed-worktree",
+    ...overrides,
+  };
+}
+
+function makeWorkspaceStatus(
+  overrides: Partial<WorkspaceStatus> = {},
+): WorkspaceStatus {
+  return {
+    workingTree: {
+      state: "clean",
+      hasUncommittedChanges: false,
+      files: [],
+      insertions: 0,
+      deletions: 0,
+    },
+    branch: {
+      currentBranch: "main",
+      defaultBranch: "main",
+    },
+    mergeBase: null,
     ...overrides,
   };
 }
@@ -147,6 +191,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+beforeEach(() => {
+  // Default: thread isn't a manager, workspace is unmanaged. Tests that
+  // exercise the workspace-warning path override these explicitly.
+  vi.mocked(api.getEnvironment).mockResolvedValue(makeEnvironment());
+  vi.mocked(api.getEnvironmentWorkStatus).mockResolvedValue(null);
+  vi.mocked(api.getThreadAssignedChildSummary).mockResolvedValue(
+    makeAssignedChildSummary(),
+  );
+});
+
 describe("ThreadActionsProvider", () => {
   it("submits a rename and closes the dialog on success", async () => {
     const thread = makeThread();
@@ -185,10 +239,21 @@ describe("ThreadActionsProvider", () => {
     });
   });
 
-  it("opens a force-confirmation when the server rejects a soft archive", async () => {
+  it("opens an archive dialog when the workspace has uncommitted changes", async () => {
     const thread = makeThread();
-    vi.mocked(api.archiveThread).mockRejectedValueOnce(
-      makeArchiveForceRequiredError(),
+    vi.mocked(api.getEnvironment).mockResolvedValue(
+      makeEnvironment({ managed: true }),
+    );
+    vi.mocked(api.getEnvironmentWorkStatus).mockResolvedValue(
+      makeWorkspaceStatus({
+        workingTree: {
+          state: "dirty",
+          hasUncommittedChanges: true,
+          files: [],
+          insertions: 1,
+          deletions: 0,
+        },
+      }),
     );
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
@@ -202,25 +267,31 @@ describe("ThreadActionsProvider", () => {
 
     act(() => {
       actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
-        force: false,
-        managerChildThreadsConfirmed: false,
-      });
     });
 
     expect(
-      await screen.findByRole("button", { name: /archive anyway/i }),
+      await screen.findByText(/uncommitted changes that will be removed/i),
     ).not.toBeNull();
+    expect(api.archiveThread).not.toHaveBeenCalled();
   });
 
-  it("archives with force when the confirmation is accepted", async () => {
+  it("archives with force when the workspace-warning dialog is confirmed", async () => {
     const thread = makeThread();
-    vi.mocked(api.archiveThread)
-      .mockRejectedValueOnce(makeArchiveForceRequiredError())
-      .mockResolvedValueOnce(undefined);
+    vi.mocked(api.getEnvironment).mockResolvedValue(
+      makeEnvironment({ managed: true }),
+    );
+    vi.mocked(api.getEnvironmentWorkStatus).mockResolvedValue(
+      makeWorkspaceStatus({
+        workingTree: {
+          state: "dirty",
+          hasUncommittedChanges: true,
+          files: [],
+          insertions: 1,
+          deletions: 0,
+        },
+      }),
+    );
+    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
     renderWithProvider(
@@ -235,13 +306,13 @@ describe("ThreadActionsProvider", () => {
       actions!.toggleArchive(thread);
     });
 
-    const forceButton = await screen.findByRole("button", {
+    const confirmButton = await screen.findByRole("button", {
       name: /archive anyway/i,
     });
-    fireEvent.click(forceButton);
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenLastCalledWith(thread.id, {
+      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
         force: true,
         managerChildThreadsConfirmed: false,
       });
@@ -494,16 +565,26 @@ describe("ThreadActionsProvider", () => {
     });
   });
 
-  it("opens the force archive confirmation after confirming manager assigned child threads when force is required", async () => {
+  it("combines children + workspace warnings into a single archive dialog", async () => {
     const thread = makeThread({ type: "manager" });
     vi.mocked(api.getThreadAssignedChildSummary).mockResolvedValue(
-      makeAssignedChildSummary({
-        nonDeletedAssignedChildCount: 1,
+      makeAssignedChildSummary({ nonDeletedAssignedChildCount: 1 }),
+    );
+    vi.mocked(api.getEnvironment).mockResolvedValue(
+      makeEnvironment({ managed: true }),
+    );
+    vi.mocked(api.getEnvironmentWorkStatus).mockResolvedValue(
+      makeWorkspaceStatus({
+        workingTree: {
+          state: "dirty",
+          hasUncommittedChanges: true,
+          files: [],
+          insertions: 1,
+          deletions: 0,
+        },
       }),
     );
-    vi.mocked(api.archiveThread)
-      .mockRejectedValueOnce(makeArchiveForceRequiredError())
-      .mockResolvedValueOnce(undefined);
+    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
     renderWithProvider(
@@ -518,22 +599,21 @@ describe("ThreadActionsProvider", () => {
       actions!.toggleArchive(thread);
     });
 
+    // Both warnings render in the same dialog body.
+    expect(
+      await screen.findByText(/child thread is assigned to this manager/i),
+    ).not.toBeNull();
+    expect(
+      screen.getByText(/uncommitted changes that will be removed/i),
+    ).not.toBeNull();
+    expect(api.archiveThread).not.toHaveBeenCalled();
+
     fireEvent.click(
-      await screen.findByRole("button", { name: /archive manager/i }),
+      screen.getByRole("button", { name: /archive anyway/i }),
     );
 
-    const forceButton = await screen.findByRole("button", {
-      name: /archive anyway/i,
-    });
-    expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
-      force: false,
-      managerChildThreadsConfirmed: true,
-    });
-
-    fireEvent.click(forceButton);
-
     await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenLastCalledWith(thread.id, {
+      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
         force: true,
         managerChildThreadsConfirmed: true,
       });

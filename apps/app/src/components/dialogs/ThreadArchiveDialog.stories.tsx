@@ -12,12 +12,7 @@ export default {
 
 const noop = () => {};
 
-const threadTarget: ThreadArchiveDialogTarget = {
-  kind: "workspace-dirty",
-  thread: makeThread(),
-  managerChildThreadsConfirmed: false,
-};
-
+const standardThread = makeThread();
 const managerThread = makeThread({
   id: "thr_manager",
   type: "manager",
@@ -25,44 +20,76 @@ const managerThread = makeThread({
   titleFallback: "Frontend Manager",
 });
 
-const managerWorkspaceDirtyTarget: ThreadArchiveDialogTarget = {
-  kind: "workspace-dirty",
-  thread: managerThread,
-  managerChildThreadsConfirmed: true,
-};
-
-const managerAssignedChildrenTarget: ThreadArchiveDialogTarget = {
-  kind: "assigned-children",
-  thread: managerThread,
-  assignedChildCount: 3,
-};
-
-const managerOneChildTarget: ThreadArchiveDialogTarget = {
-  kind: "assigned-children",
-  thread: managerThread,
-  assignedChildCount: 1,
-};
-
 export function Thread() {
   return (
     <StoryCard>
       <StoryRow
-        label="dirty workspace"
-        hint="archive blocked by uncommitted/unmerged work — only path to a confirm for a non-manager thread"
+        label="uncommitted changes"
+        hint="workspace has uncommitted changes; archive removes them"
       >
         <DialogStage>
           <ThreadArchiveDialogContent
-            target={threadTarget}
+            target={{
+              thread: standardThread,
+              workspaceWarning: {
+                hasUncommittedChanges: true,
+                hasCommittedUnmergedChanges: false,
+              },
+            }}
             pending={false}
             onOpenChange={noop}
             onArchive={noop}
           />
         </DialogStage>
       </StoryRow>
-      <StoryRow label="pending" hint="archive request in flight — button disabled">
+      <StoryRow
+        label="unmerged commits"
+        hint="workspace has committed work not yet merged to base"
+      >
         <DialogStage>
           <ThreadArchiveDialogContent
-            target={threadTarget}
+            target={{
+              thread: standardThread,
+              workspaceWarning: {
+                hasUncommittedChanges: false,
+                hasCommittedUnmergedChanges: true,
+              },
+            }}
+            pending={false}
+            onOpenChange={noop}
+            onArchive={noop}
+          />
+        </DialogStage>
+      </StoryRow>
+      <StoryRow
+        label="both"
+        hint="uncommitted changes AND unmerged commits"
+      >
+        <DialogStage>
+          <ThreadArchiveDialogContent
+            target={{
+              thread: standardThread,
+              workspaceWarning: {
+                hasUncommittedChanges: true,
+                hasCommittedUnmergedChanges: true,
+              },
+            }}
+            pending={false}
+            onOpenChange={noop}
+            onArchive={noop}
+          />
+        </DialogStage>
+      </StoryRow>
+      <StoryRow label="pending" hint="archive request in flight">
+        <DialogStage>
+          <ThreadArchiveDialogContent
+            target={{
+              thread: standardThread,
+              workspaceWarning: {
+                hasUncommittedChanges: true,
+                hasCommittedUnmergedChanges: false,
+              },
+            }}
             pending
             onOpenChange={noop}
             onArchive={noop}
@@ -78,11 +105,14 @@ export function Manager() {
     <StoryCard>
       <StoryRow
         label="assigned children"
-        hint="N child threads assigned — first confirm in the archive flow"
+        hint="manager with N child threads; clean workspace"
       >
         <DialogStage>
           <ThreadArchiveDialogContent
-            target={managerAssignedChildrenTarget}
+            target={{
+              thread: managerThread,
+              assignedChildCount: 3,
+            }}
             pending={false}
             onOpenChange={noop}
             onArchive={noop}
@@ -90,12 +120,15 @@ export function Manager() {
         </DialogStage>
       </StoryRow>
       <StoryRow
-        label="assigned child (singular)"
-        hint="1 child thread — singular phrasing"
+        label="single assigned child"
+        hint="singular phrasing for count=1"
       >
         <DialogStage>
           <ThreadArchiveDialogContent
-            target={managerOneChildTarget}
+            target={{
+              thread: managerThread,
+              assignedChildCount: 1,
+            }}
             pending={false}
             onOpenChange={noop}
             onArchive={noop}
@@ -103,12 +136,39 @@ export function Manager() {
         </DialogStage>
       </StoryRow>
       <StoryRow
-        label="dirty workspace"
-        hint="second confirm after children-warning succeeded — force-required from the server"
+        label="children + uncommitted"
+        hint="both warnings in one dialog — single confirmation"
       >
         <DialogStage>
           <ThreadArchiveDialogContent
-            target={managerWorkspaceDirtyTarget}
+            target={{
+              thread: managerThread,
+              assignedChildCount: 3,
+              workspaceWarning: {
+                hasUncommittedChanges: true,
+                hasCommittedUnmergedChanges: false,
+              },
+            }}
+            pending={false}
+            onOpenChange={noop}
+            onArchive={noop}
+          />
+        </DialogStage>
+      </StoryRow>
+      <StoryRow
+        label="children + both workspace warnings"
+        hint="all warnings combined"
+      >
+        <DialogStage>
+          <ThreadArchiveDialogContent
+            target={{
+              thread: managerThread,
+              assignedChildCount: 2,
+              workspaceWarning: {
+                hasUncommittedChanges: true,
+                hasCommittedUnmergedChanges: true,
+              },
+            }}
             pending={false}
             onOpenChange={noop}
             onArchive={noop}

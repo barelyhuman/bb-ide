@@ -1,5 +1,4 @@
 import type { Thread } from "@bb/domain";
-import { assertNever } from "@bb/core-ui";
 import { Button } from "@/components/ui";
 import {
   Dialog,
@@ -11,17 +10,18 @@ import {
 } from "@/components/ui";
 import { threadTypeLabel } from "@/lib/thread-title";
 
-export type ThreadArchiveDialogTarget =
-  | {
-      kind: "assigned-children";
-      thread: Thread;
-      assignedChildCount: number;
-    }
-  | {
-      kind: "workspace-dirty";
-      thread: Thread;
-      managerChildThreadsConfirmed: boolean;
-    };
+export interface ThreadDirtyWorkspaceWarning {
+  hasUncommittedChanges: boolean;
+  hasCommittedUnmergedChanges: boolean;
+}
+
+export interface ThreadArchiveDialogTarget {
+  thread: Thread;
+  /** Present iff manager thread with one or more assigned children. */
+  assignedChildCount?: number;
+  /** Present iff the workspace is managed and has uncommitted/unmerged work. */
+  workspaceWarning?: ThreadDirtyWorkspaceWarning;
+}
 
 interface ThreadArchiveDialogProps {
   target: ThreadArchiveDialogTarget | null;
@@ -65,54 +65,26 @@ export function ThreadArchiveDialogContent({
   onOpenChange,
   onArchive,
 }: ThreadArchiveDialogContentProps) {
-  switch (target.kind) {
-    case "assigned-children":
-      return (
-        <AssignedChildrenBody
-          target={target}
-          pending={pending}
-          onOpenChange={onOpenChange}
-          onArchive={onArchive}
-        />
-      );
-    case "workspace-dirty":
-      return (
-        <WorkspaceDirtyBody
-          target={target}
-          pending={pending}
-          onArchive={onArchive}
-        />
-      );
-    default:
-      return assertNever(target);
-  }
-}
+  const label = threadTypeLabel(target.thread.type);
+  const title = target.workspaceWarning
+    ? `Archive ${label} with uncommitted changes?`
+    : `Archive ${label}?`;
 
-function formatAssignedChildSentence(count: number): string {
-  return count === 1
-    ? "1 child thread is assigned to this manager."
-    : `${count} child threads are assigned to this manager.`;
-}
-
-function AssignedChildrenBody({
-  target,
-  pending,
-  onOpenChange,
-  onArchive,
-}: {
-  target: Extract<ThreadArchiveDialogTarget, { kind: "assigned-children" }>;
-  pending: boolean;
-  onOpenChange: (open: boolean) => void;
-  onArchive: (target: ThreadArchiveDialogTarget) => void;
-}) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Archive manager?</DialogTitle>
+        <DialogTitle>{title}</DialogTitle>
         <DialogDescription>
-          {formatAssignedChildSentence(target.assignedChildCount)} They&apos;ll
-          keep their assignment, but won&apos;t have an active manager until
-          this one is unarchived.
+          {[
+            target.assignedChildCount
+              ? formatAssignedChildSentence(target.assignedChildCount)
+              : null,
+            target.workspaceWarning
+              ? formatWorkspaceWarningSentence(target.workspaceWarning)
+              : null,
+          ]
+            .filter((part): part is string => part !== null)
+            .join(" ")}
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
@@ -130,42 +102,30 @@ function AssignedChildrenBody({
           disabled={pending}
           onClick={() => onArchive(target)}
         >
-          Archive manager
+          {target.workspaceWarning ? "Archive anyway" : `Archive ${label}`}
         </Button>
       </DialogFooter>
     </>
   );
 }
 
-function WorkspaceDirtyBody({
-  target,
-  pending,
-  onArchive,
-}: {
-  target: Extract<ThreadArchiveDialogTarget, { kind: "workspace-dirty" }>;
-  pending: boolean;
-  onArchive: (target: ThreadArchiveDialogTarget) => void;
-}) {
-  const label = threadTypeLabel(target.thread.type);
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Archive {label} with uncommitted changes?</DialogTitle>
-        <DialogDescription>
-          This {label} has uncommitted or unmerged work in its workspace.
-          Archiving will remove the workspace and changes may be lost.
-        </DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="destructive"
-          disabled={pending}
-          onClick={() => onArchive(target)}
-        >
-          Archive anyway
-        </Button>
-      </DialogFooter>
-    </>
-  );
+function formatAssignedChildSentence(count: number): string {
+  return count === 1
+    ? "1 child thread is assigned to this manager and will keep its assignment but won't have an active manager until this one is unarchived."
+    : `${count} child threads are assigned to this manager and will keep their assignment but won't have an active manager until this one is unarchived.`;
+}
+
+function formatWorkspaceWarningSentence(
+  warning: ThreadDirtyWorkspaceWarning,
+): string {
+  if (
+    warning.hasUncommittedChanges &&
+    warning.hasCommittedUnmergedChanges
+  ) {
+    return "Its workspace has uncommitted changes and unmerged commits that will be removed.";
+  }
+  if (warning.hasUncommittedChanges) {
+    return "Its workspace has uncommitted changes that will be removed.";
+  }
+  return "Its workspace has unmerged commits that will be removed.";
 }

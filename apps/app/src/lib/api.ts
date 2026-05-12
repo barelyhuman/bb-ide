@@ -745,9 +745,15 @@ export async function markThreadUnread(id: string): Promise<ThreadResponse> {
   );
 }
 
-export async function getEnvironment(id: string): Promise<Environment> {
+export async function getEnvironment(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Environment> {
   return request<Environment>(
-    apiClient.environments[":id"].$get({ param: { id } }),
+    apiClient.environments[":id"].$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
   );
 }
 
@@ -763,12 +769,16 @@ export async function updateEnvironment(
 export async function getEnvironmentWorkStatus(
   environmentId: string,
   mergeBaseBranch?: string,
+  signal?: AbortSignal,
 ): Promise<WorkspaceStatus | null> {
   const res = await request<EnvironmentStatusResponse>(
-    apiClient.environments[":id"].status.$get({
-      param: { id: environmentId },
-      query: mergeBaseBranch ? { mergeBaseBranch } : {},
-    }),
+    apiClient.environments[":id"].status.$get(
+      {
+        param: { id: environmentId },
+        query: mergeBaseBranch ? { mergeBaseBranch } : {},
+      },
+      requestOptions(signal),
+    ),
   );
   return res.workspace;
 }
