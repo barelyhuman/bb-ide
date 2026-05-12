@@ -14,7 +14,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
+import {
+  ThreadActionsContextMenu,
+  ThreadActionsMenu,
+} from "@/components/thread/ThreadActionsMenu";
 import {
   COARSE_POINTER_DOT_SIZE_CLASS,
   COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
@@ -230,12 +233,6 @@ function ThreadLeadingStatusSlot({
   );
 }
 
-interface ThreadTrailingIconProps {
-  environmentIcon: LucideIcon | null;
-  environmentIconLabel: string | null;
-  isManager: boolean;
-}
-
 function ThreadTrailingIcon({
   environmentIcon: EnvironmentIcon,
   environmentIconLabel,
@@ -264,6 +261,12 @@ function ThreadTrailingIcon({
   ) : null;
 }
 
+interface ThreadTrailingIconProps {
+  environmentIcon: LucideIcon | null;
+  environmentIconLabel: string | null;
+  isManager: boolean;
+}
+
 function ThreadRowComponent({
   projectId,
   thread,
@@ -272,7 +275,8 @@ function ThreadRowComponent({
   onProjectSelect,
   options,
 }: ThreadRowProps) {
-  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [isDropdownActionsOpen, setIsDropdownActionsOpen] = useState(false);
+  const [isContextActionsOpen, setIsContextActionsOpen] = useState(false);
   const hasPendingInteraction = thread.hasPendingInteraction;
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction;
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread);
@@ -305,6 +309,8 @@ function ThreadRowComponent({
       ? "bg-sidebar-border text-sidebar-foreground"
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   );
+  const isActionsOpen = isDropdownActionsOpen || isContextActionsOpen;
+
   const rowContent = (
     <>
       <NavLink
@@ -404,7 +410,7 @@ function ThreadRowComponent({
                 "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
-              onOpenChange={setIsActionsOpen}
+              onOpenChange={setIsDropdownActionsOpen}
             />
           </div>
         </span>
@@ -412,15 +418,22 @@ function ThreadRowComponent({
     </>
   );
 
-  if (isManager) {
-    return (
-      <SidebarStickyTier tier="manager" className={rowClassName}>
-        {rowContent}
-      </SidebarStickyTier>
-    );
-  }
+  const row = isManager ? (
+    <SidebarStickyTier tier="manager" className={rowClassName}>
+      {rowContent}
+    </SidebarStickyTier>
+  ) : (
+    <div className={rowClassName}>{rowContent}</div>
+  );
 
-  return <div className={rowClassName}>{rowContent}</div>;
+  return (
+    <ThreadActionsContextMenu
+      thread={thread}
+      onOpenChange={setIsContextActionsOpen}
+    >
+      {row}
+    </ThreadActionsContextMenu>
+  );
 }
 
 export const ThreadRow = memo(ThreadRowComponent);

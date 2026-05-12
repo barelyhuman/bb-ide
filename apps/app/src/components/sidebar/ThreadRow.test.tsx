@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider as JotaiProvider } from "jotai";
 import type { ThreadListEntry } from "@bb/domain";
@@ -9,6 +15,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
 
 vi.mock("sonner", () => ({
@@ -26,6 +33,7 @@ interface TestWrapperProps {
 interface RenderThreadRowOptions {
   isActive?: boolean;
   isPromoted?: boolean;
+  onProjectSelect?: () => void;
   rowOptions?: ThreadRowOptions;
 }
 
@@ -110,6 +118,7 @@ function createThreadRowElement({
       thread={thread}
       isActive={rowOptions.isActive ?? false}
       isPromoted={rowOptions.isPromoted}
+      onProjectSelect={rowOptions.onProjectSelect}
       options={rowOptions.rowOptions ?? { kind: "default" }}
     />
   );
@@ -143,6 +152,7 @@ function renderThreadRow(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("ThreadRow", () => {
@@ -213,11 +223,153 @@ describe("ThreadRow", () => {
   it.each(environmentIconCases)(
     "shows the $label icon label",
     ({ kind, label }) => {
-      renderThreadRow(
-        createThread({ environmentWorkspaceDisplayKind: kind }),
-      );
+      renderThreadRow(createThread({ environmentWorkspaceDisplayKind: kind }));
 
       expect(screen.getByLabelText(label)).not.toBeNull();
     },
   );
+
+  it("preserves left-click thread opening", () => {
+    const onProjectSelect = vi.fn();
+
+    renderThreadRow(createThread(), { onProjectSelect });
+
+    fireEvent.click(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+    );
+
+    expect(onProjectSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menuitem", { name: "Mark as read" })).toBeNull();
+  });
+
+  it("opens the thread actions menu from the ellipsis trigger", async () => {
+    renderThreadRow(createThread());
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Thread actions" }),
+      {
+        button: 0,
+        ctrlKey: false,
+      },
+    );
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    ).not.toBeNull();
+  });
+
+  it("opens the thread actions menu from the row context menu gesture", async () => {
+    renderThreadRow(createThread());
+
+    const browserMenuAllowed = fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+      { clientX: 80, clientY: 64 },
+    );
+
+    expect(browserMenuAllowed).toBe(false);
+    expect(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { hidden: true, name: "Thread actions" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it("dismisses a right-click-opened thread actions menu after selecting an action", async () => {
+    const thread = createThread();
+    installFetchRoutes([
+      {
+        method: "POST",
+        pathname: `/api/v1/threads/${thread.id}/read`,
+        handler: () =>
+          jsonResponse({
+            ...thread,
+            lastReadAt: Date.now(),
+          }),
+      },
+    ]);
+
+    renderThreadRow(thread);
+
+    fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+      { clientX: 80, clientY: 64 },
+    );
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menuitem", { name: "Mark as read" }),
+      ).toBeNull();
+    });
+  });
+
+  it("dismisses a right-click-opened thread actions menu when clicking outside", async () => {
+    renderThreadRow(createThread());
+
+    fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+      { clientX: 80, clientY: 64 },
+    );
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    ).not.toBeNull();
+
+    fireEvent.pointerDown(document.body, { button: 0 });
+    fireEvent.click(document.body);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menuitem", { name: "Mark as read" }),
+      ).toBeNull();
+    });
+  });
+
+  it("opens the thread actions menu from a manager row context menu gesture", async () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_manager",
+        type: "manager",
+        title: "Manager thread",
+        titleFallback: "Manager thread",
+      }),
+      {
+        rowOptions: createManagerRowOptions(),
+      },
+    );
+
+    const browserMenuAllowed = fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Manager thread" }),
+      { clientX: 90, clientY: 72 },
+    );
+
+    expect(browserMenuAllowed).toBe(false);
+    expect(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    ).not.toBeNull();
+  });
+
+  it("closes a right-click-opened actions menu with Escape", async () => {
+    renderThreadRow(createThread());
+
+    fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+    );
+
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+
+    fireEvent.keyDown(menu, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menuitem", { name: "Mark as read" }),
+      ).toBeNull();
+    });
+  });
 });
