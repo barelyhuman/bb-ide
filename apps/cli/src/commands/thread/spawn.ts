@@ -154,7 +154,7 @@ export function registerSpawnCommand(
       "Reasoning level: low, medium, high, xhigh",
     )
     .option("--title <title>", "Thread title")
-    .option("--service-tier <tier>", "Service tier: fast or flex")
+    .option("--service-tier <tier>", "Service tier: fast or default")
     .option("--permission-mode <mode>", PERMISSION_MODE_HELP)
     .option("--host <id>", "Host ID (defaults to local host)")
     .option(

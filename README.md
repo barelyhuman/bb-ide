@@ -56,7 +56,7 @@ pnpm install
 pnpm start
 ```
 
-Then open: `http://localhost:3333`
+Then open: `http://localhost:38886`
 
 The full platform policy and checkout/path expectations live in
 [`docs/platform-support.md`](./docs/platform-support.md).

@@ -23,7 +23,7 @@ Spawning:
     --environment <id-or-path>     Attach to an existing environment (UUID or workspace path)
     --new-environment <kind>       Create a new environment (worktree, sandbox/e2b)
     --service-tier <tier>          Service tier: fast, default
-    --sandbox-mode <mode>          Sandbox mode: read-only, workspace-write, danger-full-access
+    --permission-mode <mode>       Permission mode: full, workspace-write, or readonly
     --host <id>                    Host ID (defaults to local host)
     --no-context-parent-thread     Do not default parent thread to BB_THREAD_ID
 
