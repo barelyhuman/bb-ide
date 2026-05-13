@@ -125,12 +125,9 @@ function ManagerChevron({
         <Icon
           name="ChevronRight"
           className={cn(
-            "absolute transition-all duration-150",
+            "absolute opacity-0 transition-all duration-150 group-hover/thread-row:opacity-100",
             COARSE_POINTER_ICON_SIZE_CLASS,
             !isCollapsed && "rotate-90",
-            isBusy
-              ? "opacity-0 group-hover/thread-row:opacity-100"
-              : "opacity-100",
           )}
         />
       </span>
