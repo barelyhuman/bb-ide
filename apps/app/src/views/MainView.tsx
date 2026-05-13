@@ -4,6 +4,7 @@ import {
   useConnectionAwareQueryState,
   type ConnectionAwareQueryStatus,
 } from "../hooks/queries/connection-aware-query-state";
+import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { Button } from "@/components/ui/button.js";
 import { PageShell } from "@/components/ui/page-shell.js";
@@ -88,10 +89,10 @@ export function MainView() {
     isLoadingError,
   });
   const quickCreateProject = useQuickCreateProjectController();
-  const hasProjects = (projects?.length ?? 0) > 0;
+  const activeProjectId = useActiveProjectId();
 
-  if (projectsState.status !== "loading" && hasProjects) {
-    return <Navigate to={`/projects/${projects![0].id}`} replace />;
+  if (projectsState.status !== "loading" && activeProjectId) {
+    return <Navigate to={`/projects/${activeProjectId}`} replace />;
   }
 
   return (

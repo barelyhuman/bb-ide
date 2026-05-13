@@ -13,6 +13,7 @@ import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mutations";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { useThread } from "@/hooks/queries/thread-queries";
+import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { useDialogState } from "@/hooks/useDialogState";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
@@ -256,6 +257,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     isSettingsView,
     isRootView,
   } = useAppRoute();
+  const activeProjectId = useActiveProjectId();
   const showHeader = !isRootView && !isThreadView;
   const showFloatingSidebarTrigger = isRootView;
 
@@ -418,7 +420,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <AppSidebar
             onResizeMouseDown={handleResizeMouseDown}
             isResizing={isSidebarResizing}
-            selectedProjectId={projectId}
+            selectedProjectId={activeProjectId}
             isManagerActionPending={isManagerActionPending}
             onNewManager={(targetProjectId) => {
               if (isManagerActionPending) return;
