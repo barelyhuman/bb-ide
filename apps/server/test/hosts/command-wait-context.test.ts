@@ -16,6 +16,10 @@ type WorkspaceStatusCommand = Extract<
   HostDaemonCommand,
   { type: "workspace.status" }
 >;
+type WorkspaceCommitCommand = Extract<
+  HostDaemonCommand,
+  { type: "workspace.commit" }
+>;
 type TestAppHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
 interface BuildThreadStopCommandArgs {
@@ -25,6 +29,11 @@ interface BuildThreadStopCommandArgs {
 interface BuildWorkspaceStatusCommandArgs {
   environmentId: string;
   mergeBaseBranch?: string;
+  workspacePath: string;
+}
+
+interface BuildWorkspaceCommitCommandArgs {
+  environmentId: string;
   workspacePath: string;
 }
 
@@ -54,6 +63,11 @@ interface RecordWorkspaceStatusFailureArgs {
   harness: TestAppHarness;
 }
 
+interface RecordWorkspaceCommitSuccessArgs {
+  commandId: string;
+  harness: TestAppHarness;
+}
+
 interface WaitForQueuedHostCommandCountArgs {
   count: number;
   harness: TestAppHarness;
@@ -79,6 +93,20 @@ function buildWorkspaceStatusCommand(
     type: "workspace.status",
     environmentId: args.environmentId,
     mergeBaseBranch: args.mergeBaseBranch,
+    workspaceContext: {
+      workspacePath: args.workspacePath,
+      workspaceProvisionType: "managed-worktree",
+    },
+  };
+}
+
+function buildWorkspaceCommitCommand(
+  args: BuildWorkspaceCommitCommandArgs,
+): WorkspaceCommitCommand {
+  return {
+    type: "workspace.commit",
+    environmentId: args.environmentId,
+    message: "bb: automated commit",
     workspaceContext: {
       workspacePath: args.workspacePath,
       workspaceProvisionType: "managed-worktree",
@@ -149,6 +177,21 @@ function recordWorkspaceStatusFailure({
     errorMessage,
     ok: false,
     type: "workspace.status",
+  });
+}
+
+function recordWorkspaceCommitSuccess({
+  commandId,
+  harness,
+}: RecordWorkspaceCommitSuccessArgs): void {
+  harness.hub.recordCommandResult(commandId, {
+    commandId,
+    ok: true,
+    result: {
+      commitSha: "commit-sha",
+      commitSubject: "bb: automated commit",
+    },
+    type: "workspace.commit",
   });
 }
 
@@ -333,6 +376,95 @@ describe("daemon command wait context", () => {
       });
 
       await expect(waitForResults).resolves.toEqual([result, result]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("invalidates cached workspace status after workspace mutations", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-command-wait-workspace-status-mutation",
+      });
+      const environmentId = "env-command-wait-workspace-status-mutation";
+      const workspacePath = "/tmp/bb-command-wait-workspace-status-mutation";
+      const statusCommand = buildWorkspaceStatusCommand({
+        environmentId,
+        mergeBaseBranch: "main",
+        workspacePath,
+      });
+
+      const firstStatusWait = queueCommandAndWait(harness.deps, {
+        command: statusCommand,
+        hostId: host.id,
+        timeoutMs: 5_000,
+      });
+      await waitForQueuedHostCommandCount({
+        count: 1,
+        harness,
+        hostId: host.id,
+      });
+      const firstStatusResult = recordWorkspaceStatusSuccess({
+        commandId: getCommandIdAtIndex({
+          commandIds: listQueuedHostCommandIds({ harness, hostId: host.id }),
+          index: 0,
+        }),
+        harness,
+      });
+      await expect(firstStatusWait).resolves.toEqual(firstStatusResult);
+
+      await expect(
+        queueCommandAndWait(harness.deps, {
+          command: statusCommand,
+          hostId: host.id,
+          timeoutMs: 5_000,
+        }),
+      ).resolves.toEqual(firstStatusResult);
+      expect(countQueuedHostCommands({ harness, hostId: host.id })).toBe(1);
+
+      const commitWait = queueCommandAndWait(harness.deps, {
+        command: buildWorkspaceCommitCommand({ environmentId, workspacePath }),
+        hostId: host.id,
+        timeoutMs: 5_000,
+      });
+      await waitForQueuedHostCommandCount({
+        count: 2,
+        harness,
+        hostId: host.id,
+      });
+      recordWorkspaceCommitSuccess({
+        commandId: getCommandIdAtIndex({
+          commandIds: listQueuedHostCommandIds({ harness, hostId: host.id }),
+          index: 1,
+        }),
+        harness,
+      });
+      await expect(commitWait).resolves.toEqual({
+        commitSha: "commit-sha",
+        commitSubject: "bb: automated commit",
+      });
+
+      const refreshedStatusWait = queueCommandAndWait(harness.deps, {
+        command: statusCommand,
+        hostId: host.id,
+        timeoutMs: 5_000,
+      });
+      await waitForQueuedHostCommandCount({
+        count: 3,
+        harness,
+        hostId: host.id,
+      });
+      const refreshedStatusResult = recordWorkspaceStatusSuccess({
+        commandId: getCommandIdAtIndex({
+          commandIds: listQueuedHostCommandIds({ harness, hostId: host.id }),
+          index: 2,
+        }),
+        harness,
+      });
+      await expect(refreshedStatusWait).resolves.toEqual(
+        refreshedStatusResult,
+      );
     } finally {
       await harness.cleanup();
     }

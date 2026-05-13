@@ -29,6 +29,19 @@ type WorkspaceStatusCommand = Extract<
   HostDaemonCommand,
   { type: "workspace.status" }
 >;
+type WorkspaceStatusCommandWorkspaceContext =
+  WorkspaceStatusCommand["workspaceContext"];
+
+interface WorkspaceStatusCommandCacheScope {
+  environmentId: string;
+  hostId: string;
+  workspaceContext: WorkspaceStatusCommandWorkspaceContext;
+}
+
+interface WorkspaceStatusCommandCacheScopeArgs {
+  command: WorkspaceStatusCommand;
+  hostId: string;
+}
 
 interface QueueWorkspaceStatusCommandAndWaitArgs {
   command: WorkspaceStatusCommand;
@@ -39,6 +52,7 @@ interface QueueWorkspaceStatusCommandAndWaitArgs {
 interface WorkspaceStatusCommandCacheEntry {
   expiresAt: number;
   promise: Promise<HostDaemonCommandResult<"workspace.status">>;
+  scope: WorkspaceStatusCommandCacheScope;
 }
 
 const WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS = 1_000;
@@ -63,17 +77,70 @@ function assertQueueCommandAndWaitAllowed(
   });
 }
 
+function buildWorkspaceStatusCommandCacheScope({
+  command,
+  hostId,
+}: WorkspaceStatusCommandCacheScopeArgs): WorkspaceStatusCommandCacheScope {
+  return {
+    environmentId: command.environmentId,
+    hostId,
+    workspaceContext: command.workspaceContext,
+  };
+}
+
 function buildWorkspaceStatusCommandCacheKey({
   command,
   hostId,
 }: QueueWorkspaceStatusCommandAndWaitArgs): string {
+  const scope = buildWorkspaceStatusCommandCacheScope({ command, hostId });
   return JSON.stringify([
-    hostId,
-    command.environmentId,
-    command.workspaceContext.workspacePath,
-    command.workspaceContext.workspaceProvisionType,
+    scope.hostId,
+    scope.environmentId,
+    scope.workspaceContext.workspacePath,
+    scope.workspaceContext.workspaceProvisionType,
     command.mergeBaseBranch ?? "",
   ]);
+}
+
+function workspaceStatusCacheScopeMatches(
+  first: WorkspaceStatusCommandCacheScope,
+  second: WorkspaceStatusCommandCacheScope,
+): boolean {
+  return (
+    first.hostId === second.hostId &&
+    first.environmentId === second.environmentId &&
+    first.workspaceContext.workspacePath ===
+      second.workspaceContext.workspacePath &&
+    first.workspaceContext.workspaceProvisionType ===
+      second.workspaceContext.workspaceProvisionType
+  );
+}
+
+function invalidateWorkspaceStatusCommandCache(
+  scope: WorkspaceStatusCommandCacheScope,
+): void {
+  for (const [key, entry] of workspaceStatusCommandCache) {
+    if (workspaceStatusCacheScopeMatches(entry.scope, scope)) {
+      workspaceStatusCommandCache.delete(key);
+    }
+  }
+}
+
+function invalidateWorkspaceStatusCacheForMutation(
+  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
+): void {
+  switch (args.command.type) {
+    case "workspace.commit":
+    case "workspace.squash_merge":
+      invalidateWorkspaceStatusCommandCache({
+        environmentId: args.command.environmentId,
+        hostId: args.hostId,
+        workspaceContext: args.command.workspaceContext,
+      });
+      return;
+    default:
+      return;
+  }
 }
 
 function scheduleWorkspaceStatusCacheCleanup(
@@ -119,6 +186,7 @@ function queueWorkspaceStatusCommandAndWait(
         }
         throw error;
       }),
+    scope: buildWorkspaceStatusCommandCacheScope(args),
   };
   workspaceStatusCommandCache.set(key, entry);
   scheduleWorkspaceStatusCacheCleanup(key, entry);
@@ -141,7 +209,9 @@ export async function queueCommandAndWait(
       timeoutMs: args.timeoutMs,
     });
   }
-  return queueCommandAndWaitUncached(deps, args);
+  const result = await queueCommandAndWaitUncached(deps, args);
+  invalidateWorkspaceStatusCacheForMutation(args);
+  return result;
 }
 
 function queueCommandAndWaitUncached<TType extends HostDaemonCommandType>(

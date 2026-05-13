@@ -29,8 +29,9 @@ bb runs from source and orchestrates coding agents you already have installed.
 
 ### Prerequisites
 
-- Node.js
-- pnpm
+- Node.js `22.12.0` or newer (see [`.nvmrc`](./.nvmrc)); Node `20.19.x` also works.
+- pnpm `9.15.0` (the version is pinned in [`package.json`](./package.json)).
+- Git.
 - At least one supported agent provider: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://developers.openai.com/codex/cli), or [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)
 
 If you already use one of these, bb will pick up your existing credentials. If you use all three, you can mix and match per task.
@@ -57,6 +58,10 @@ pnpm start
 ```
 
 Then open: `http://localhost:38886`
+
+`pnpm start` builds the app, server, host daemon, and CLI before launching the
+server and local host daemon. It stores production-mode state under `~/.bb/`
+by default. Press `Ctrl+C` in the terminal to stop both processes.
 
 The full platform policy and checkout/path expectations live in
 [`docs/platform-support.md`](./docs/platform-support.md).
@@ -163,11 +168,17 @@ Implementation packages never import across these boundaries. The server doesn't
 
 ## Configuration
 
-All configuration is via environment variables, validated at startup with sensible defaults. Override them in `.env` files at the repo root (gitignored) and they will be loaded automatically by `pnpm dev` and `pnpm start`. The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade applies: `.env`, `.env.local`, `.env.<environment>`, `.env.<environment>.local` — where environment is `development` for `pnpm dev` and `production` for `pnpm start`. See [`packages/config/src/`](./packages/config/src/) for the full set of variables.
+All configuration is via environment variables, validated at startup with sensible defaults. Override them in `.env` files at the repo root (gitignored) and they will be loaded automatically by `pnpm dev` and `pnpm start`. Start from [`.env.example`](./.env.example) if you want a local template. The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade applies: `.env`, `.env.local`, `.env.<environment>`, `.env.<environment>.local` — where environment is `development` for `pnpm dev` and `production` for `pnpm start`. See [`packages/config/src/`](./packages/config/src/) for the full set of variables.
 
 `BB_DATA_DIR` is the most important one — it's the root directory for all bb-managed state: the SQLite database, logs, host identity, and thread storage. Defaults to `~/.bb/` (or `~/.bb-dev/` when using `pnpm dev`). Pointing two instances at different data directories gives you fully isolated environments — this is how dev and production run side by side, and how tests get clean state.
 
 Use `pnpm reset` or `pnpm reset:dev` to clear a data directory. These only remove bb-managed state, not provider credentials.
+
+If the default ports are already in use, set explicit ports before starting:
+
+```bash
+BB_SERVER_PORT=48886 BB_HOST_DAEMON_PORT=48887 pnpm start
+```
 
 Root commands such as `pnpm start`, `pnpm bb`, `pnpm bb:dev`, and `pnpm reset`
 are thin wrappers around `@bb/scripts`. Those wrappers force `NODE_ENV` to the

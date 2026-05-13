@@ -41,6 +41,7 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
 };
 const EMPTY_SYSTEM_PROVIDERS: SystemProviderInfo[] = [];
 const EMPTY_PROJECTS: ProjectResponse[] = [];
+const EMPTY_PROJECT_SOURCES: ProjectResponse["sources"] = [];
 type ReasoningSelectionSource = "default" | "user";
 
 type IsLocalHostFn = (id: string | null | undefined) => boolean;
@@ -206,7 +207,7 @@ export function HireManagerDialogContent({
     [projects],
   );
 
-  const projectSources = selectedProject?.sources ?? [];
+  const projectSources = selectedProject?.sources ?? EMPTY_PROJECT_SOURCES;
 
   const selectedModelData = useMemo(
     () => models.find((m) => m.model === selectedModel),

@@ -316,6 +316,7 @@ function FilePreviewCode({
   );
 
   useEffect(() => {
+    const cleanupContainer = containerRef.current;
     let animationFrame: number | null = null;
     let retryTimer: number | null = null;
     let attempts = 0;
@@ -350,10 +351,9 @@ function FilePreviewCode({
 
     scrollToLine();
     return () => {
-      const container = containerRef.current;
-      if (container) {
-        clearPreviewTargetLine(container);
-        clearPreviewTargetLine(container.ownerDocument.body);
+      if (cleanupContainer) {
+        clearPreviewTargetLine(cleanupContainer);
+        clearPreviewTargetLine(cleanupContainer.ownerDocument.body);
       }
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);

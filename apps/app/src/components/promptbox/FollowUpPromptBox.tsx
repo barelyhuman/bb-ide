@@ -161,7 +161,7 @@ export function FollowUpPromptBox({
     if (!element) return;
     const measured = element.offsetHeight;
     setStackHeight((prev) => (prev === measured ? prev : measured));
-  });
+  }, [stack]);
   // ResizeObserver catches changes that happen outside a React render —
   // banner sections expanding via CSS animation, window resize affecting
   // markdown line-wrapping inside the stack, etc.
