@@ -562,22 +562,15 @@ describe("public thread archive delete cleanup routes", () => {
       await reportQueuedCommandSuccess(harness, statusCommand, {
         workspaceStatus: cleanWorkspaceStatus(),
       });
-      const archiveCommand = await waitForQueuedCommandAfter(
+      await waitForQueuedCommandAfter(
         harness,
         statusCommand.row.cursor,
         ({ command }) =>
           command.type === "thread.archive" && command.threadId === thread.id,
       );
-      const cleanupStatusCommand = await waitForQueuedCommandAfter(
-        harness,
-        archiveCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, cleanupStatusCommand, {
-        workspaceStatus: cleanWorkspaceStatus(),
-      });
+      // Cleanup advance reuses the cached workspace.status result from the
+      // archive-validation check (workspaceStatusCommandCache, 1s TTL), so it
+      // goes straight to environment.destroy without queueing another status.
       const archiveResponse = await archivePromise;
       expect(archiveResponse.status).toBe(200);
       expect(
@@ -1656,20 +1649,13 @@ describe("public thread archive delete cleanup routes", () => {
       const stopResultResponse = await stopResultPromise;
       expect(stopResultResponse.status).toBe(200);
 
-      const cleanupStatusCommand = await waitForQueuedCommandAfter(
-        harness,
-        stopCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, cleanupStatusCommand, {
-        workspaceStatus: cleanWorkspaceStatus(),
-      });
-
+      // The cleanup advance fired by stop finalization reuses the cached
+      // workspace.status result from the archive-validation check (1s TTL),
+      // so it proceeds straight to environment.destroy without enqueueing
+      // a second status command.
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
-        cleanupStatusCommand.row.cursor,
+        stopCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,

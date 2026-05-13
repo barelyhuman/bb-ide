@@ -174,52 +174,57 @@ describe("public environment and system routes", () => {
         `/api/v1/environments/${environment.id}/promotion`,
       );
 
-      const primaryStatusCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === sourceEnvironment.id,
-      );
-      await reportQueuedCommandSuccess(harness, primaryStatusCommand, {
-        workspaceStatus: {
-          workingTree: {
-            hasUncommittedChanges: false,
-            state: "clean",
-            insertions: 0,
-            deletions: 0,
-            files: [],
+      // The promotion handler queues both workspace.status commands in
+      // parallel via Promise.all; we can't assume which is enqueued first,
+      // so look them up by environmentId rather than chaining cursors.
+      const [primaryStatusCommand, environmentStatusCommand] = await Promise.all([
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === sourceEnvironment.id,
+        ),
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === environment.id,
+        ),
+      ]);
+      await Promise.all([
+        reportQueuedCommandSuccess(harness, primaryStatusCommand, {
+          workspaceStatus: {
+            workingTree: {
+              hasUncommittedChanges: false,
+              state: "clean",
+              insertions: 0,
+              deletions: 0,
+              files: [],
+            },
+            branch: {
+              currentBranch: "bb/promoted",
+              defaultBranch: "main",
+            },
+            mergeBase: null,
           },
-          branch: {
-            currentBranch: "bb/promoted",
-            defaultBranch: "main",
+        }),
+        reportQueuedCommandSuccess(harness, environmentStatusCommand, {
+          workspaceStatus: {
+            workingTree: {
+              hasUncommittedChanges: false,
+              state: "clean",
+              insertions: 0,
+              deletions: 0,
+              files: [],
+            },
+            branch: {
+              currentBranch: null,
+              defaultBranch: "main",
+            },
+            mergeBase: null,
           },
-          mergeBase: null,
-        },
-      });
-
-      const environmentStatusCommand = await waitForQueuedCommandAfter(
-        harness,
-        primaryStatusCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, environmentStatusCommand, {
-        workspaceStatus: {
-          workingTree: {
-            hasUncommittedChanges: false,
-            state: "clean",
-            insertions: 0,
-            deletions: 0,
-            files: [],
-          },
-          branch: {
-            currentBranch: null,
-            defaultBranch: "main",
-          },
-          mergeBase: null,
-        },
-      });
+        }),
+      ]);
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
@@ -274,38 +279,43 @@ describe("public environment and system routes", () => {
         `/api/v1/environments/${environment.id}/promotion`,
       );
 
-      const primaryStatusCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === sourceEnvironment.id,
-      );
-      await reportQueuedCommandSuccess(harness, primaryStatusCommand, {
-        workspaceStatus: makeWorkspaceStatus({
-          workingTree: makeWorkspaceWorkingTree({
-            hasUncommittedChanges: true,
-            state: "dirty_uncommitted",
+      // The promotion handler queues both workspace.status commands in
+      // parallel via Promise.all; we can't assume which is enqueued first,
+      // so look them up by environmentId rather than chaining cursors.
+      const [primaryStatusCommand, environmentStatusCommand] = await Promise.all([
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === sourceEnvironment.id,
+        ),
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === environment.id,
+        ),
+      ]);
+      await Promise.all([
+        reportQueuedCommandSuccess(harness, primaryStatusCommand, {
+          workspaceStatus: makeWorkspaceStatus({
+            workingTree: makeWorkspaceWorkingTree({
+              hasUncommittedChanges: true,
+              state: "dirty_uncommitted",
+            }),
+            branch: { currentBranch: "main", defaultBranch: "main" },
           }),
-          branch: { currentBranch: "main", defaultBranch: "main" },
         }),
-      });
-
-      const environmentStatusCommand = await waitForQueuedCommandAfter(
-        harness,
-        primaryStatusCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, environmentStatusCommand, {
-        workspaceStatus: makeWorkspaceStatus({
-          workingTree: makeWorkspaceWorkingTree({
-            hasUncommittedChanges: true,
-            state: "dirty_uncommitted",
+        reportQueuedCommandSuccess(harness, environmentStatusCommand, {
+          workspaceStatus: makeWorkspaceStatus({
+            workingTree: makeWorkspaceWorkingTree({
+              hasUncommittedChanges: true,
+              state: "dirty_uncommitted",
+            }),
+            branch: { currentBranch: "bb/thread", defaultBranch: "main" },
           }),
-          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
         }),
-      });
+      ]);
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
@@ -360,30 +370,35 @@ describe("public environment and system routes", () => {
         `/api/v1/environments/${environment.id}/promotion`,
       );
 
-      const primaryStatusCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === sourceEnvironment.id,
-      );
-      await reportQueuedCommandSuccess(harness, primaryStatusCommand, {
-        workspaceStatus: makeWorkspaceStatus({
-          branch: { currentBranch: "main", defaultBranch: "main" },
+      // The promotion handler queues both workspace.status commands in
+      // parallel via Promise.all; we can't assume which is enqueued first,
+      // so look them up by environmentId rather than chaining cursors.
+      const [primaryStatusCommand, environmentStatusCommand] = await Promise.all([
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === sourceEnvironment.id,
+        ),
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === environment.id,
+        ),
+      ]);
+      await Promise.all([
+        reportQueuedCommandSuccess(harness, primaryStatusCommand, {
+          workspaceStatus: makeWorkspaceStatus({
+            branch: { currentBranch: "main", defaultBranch: "main" },
+          }),
         }),
-      });
-
-      const environmentStatusCommand = await waitForQueuedCommandAfter(
-        harness,
-        primaryStatusCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, environmentStatusCommand, {
-        workspaceStatus: makeWorkspaceStatus({
-          branch: { currentBranch: "bb/other", defaultBranch: "main" },
+        reportQueuedCommandSuccess(harness, environmentStatusCommand, {
+          workspaceStatus: makeWorkspaceStatus({
+            branch: { currentBranch: "bb/other", defaultBranch: "main" },
+          }),
         }),
-      });
+      ]);
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
@@ -502,6 +517,7 @@ describe("public environment and system routes", () => {
           truncated: false,
           shortstat: " 1 file changed, 1 insertion(+)\n",
           files: "M\tfile.ts\n",
+          mergeBaseRef: "abc1234",
         },
       });
       const diffResponse = await diffPromise;
@@ -511,6 +527,7 @@ describe("public environment and system routes", () => {
         truncated: false,
         shortstat: " 1 file changed, 1 insertion(+)\n",
         files: "M\tfile.ts\n",
+        mergeBaseRef: "abc1234",
       });
 
       const branchesPromise = harness.app.request(
@@ -640,6 +657,7 @@ describe("public environment and system routes", () => {
           truncated: false,
           shortstat: " 1 file changed, 1 insertion(+)\n",
           files: "M\tfile.ts\n",
+          mergeBaseRef: null,
         },
       });
 
@@ -836,6 +854,7 @@ describe("public environment and system routes", () => {
           truncated: false,
           shortstat: " 1 file changed, 1 insertion(+)\n",
           files: "M\tfile.ts\n",
+          mergeBaseRef: "abc1234",
         },
       });
 
@@ -992,6 +1011,7 @@ describe("public environment and system routes", () => {
             truncated: false,
             shortstat: "",
             files: "",
+            mergeBaseRef: null,
           },
         }),
       ]);
@@ -1087,6 +1107,7 @@ describe("public environment and system routes", () => {
           truncated: false,
           shortstat: " 1 file changed, 5 insertions(+), 1 deletion(-)\n",
           files: "M\tfile.ts\n",
+          mergeBaseRef: "abc1234",
         },
       });
 
