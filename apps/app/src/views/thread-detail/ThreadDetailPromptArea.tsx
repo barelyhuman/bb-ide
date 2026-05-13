@@ -105,16 +105,10 @@ interface ThreadDetailPromptAreaProps {
 
 function getPromptPlaceholder(
   displayStatus: ThreadRuntimeDisplayStatus,
-  hasPendingInteraction: boolean,
+  isManagerThread: boolean,
 ): string {
-  if (displayStatus === "created") {
-    return "Thread is being created...";
-  }
-  if (displayStatus === "provisioning") {
-    return "Thread is being provisioned...";
-  }
-  if (hasPendingInteraction) {
-    return "Resolve the pending interaction below before sending another message";
+  if (displayStatus === "created" || displayStatus === "provisioning") {
+    return isManagerThread ? "Hiring manager..." : "Creating thread...";
   }
 
   switch (displayStatus) {
@@ -125,9 +119,10 @@ function getPromptPlaceholder(
     case "error":
       return "Retry by sending a follow-up message";
     case "idle":
-      return "Ask for follow-up changes";
     case "active":
-      return "Send a message to this thread...";
+      return isManagerThread
+        ? "Send a message. @ to mention files or threads"
+        : "Ask for follow-up changes. @ to mention files";
     default:
       return assertNever(displayStatus);
   }
@@ -253,7 +248,7 @@ export function ThreadDetailPromptArea({
   })();
   const promptPlaceholder = getPromptPlaceholder(
     runtimeDisplayStatus,
-    hasPendingInteraction,
+    thread.type === "manager",
   );
   const sendFollowUpInput = useCallback(
     async ({

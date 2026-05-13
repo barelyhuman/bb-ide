@@ -182,7 +182,7 @@ export function PromptBoxInternal({
   value,
   onChange,
   onSubmit,
-  placeholder = "What do you want to build?",
+  placeholder = "Ask anything. @ to mention files",
   className,
   footerStart,
   autoFocus = false,
