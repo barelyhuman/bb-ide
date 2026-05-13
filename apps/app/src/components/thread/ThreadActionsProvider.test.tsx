@@ -8,7 +8,11 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Environment, ThreadWithRuntime, WorkspaceStatus } from "@bb/domain";
+import type {
+  Environment,
+  ThreadWithRuntime,
+  WorkspaceStatus,
+} from "@bb/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -238,6 +242,108 @@ describe("ThreadActionsProvider", () => {
     expect(api.archiveThread).not.toHaveBeenCalled();
   });
 
+  it("checks committed workspace changes against the environment merge base branch", async () => {
+    const thread = makeThread();
+    vi.mocked(api.getEnvironment).mockResolvedValue(
+      makeEnvironment({ managed: true, mergeBaseBranch: null }),
+    );
+    vi.mocked(api.getEnvironmentWorkStatus).mockImplementation(
+      async (_environmentId, mergeBaseBranch) =>
+        makeWorkspaceStatus({
+          mergeBase:
+            mergeBaseBranch === "main"
+              ? {
+                  mergeBaseBranch: "main",
+                  baseRef: "abc1234",
+                  aheadCount: 1,
+                  behindCount: 0,
+                  hasCommittedUnmergedChanges: true,
+                  commits: [],
+                  files: [],
+                  insertions: 1,
+                  deletions: 0,
+                }
+              : null,
+        }),
+    );
+
+    let actions: ReturnType<typeof useThreadActions> | null = null;
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
+
+    act(() => {
+      actions!.toggleArchive(thread);
+    });
+
+    expect(
+      await screen.findByText(/unmerged commits that will be removed/i),
+    ).not.toBeNull();
+    expect(api.getEnvironmentWorkStatus).toHaveBeenCalledWith(
+      thread.environmentId,
+      "main",
+      expect.any(AbortSignal),
+    );
+    expect(api.archiveThread).not.toHaveBeenCalled();
+  });
+
+  it("prefers an explicit environment merge base branch over the default branch", async () => {
+    const thread = makeThread();
+    vi.mocked(api.getEnvironment).mockResolvedValue(
+      makeEnvironment({
+        managed: true,
+        mergeBaseBranch: "develop",
+        defaultBranch: "main",
+      }),
+    );
+    vi.mocked(api.getEnvironmentWorkStatus).mockImplementation(
+      async (_environmentId, mergeBaseBranch) =>
+        makeWorkspaceStatus({
+          mergeBase:
+            mergeBaseBranch === "develop"
+              ? {
+                  mergeBaseBranch: "develop",
+                  baseRef: "abc1234",
+                  aheadCount: 1,
+                  behindCount: 0,
+                  hasCommittedUnmergedChanges: true,
+                  commits: [],
+                  files: [],
+                  insertions: 1,
+                  deletions: 0,
+                }
+              : null,
+        }),
+    );
+
+    let actions: ReturnType<typeof useThreadActions> | null = null;
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
+
+    act(() => {
+      actions!.toggleArchive(thread);
+    });
+
+    expect(
+      await screen.findByText(/unmerged commits that will be removed/i),
+    ).not.toBeNull();
+    expect(api.getEnvironmentWorkStatus).toHaveBeenCalledWith(
+      thread.environmentId,
+      "develop",
+      expect.any(AbortSignal),
+    );
+    expect(api.archiveThread).not.toHaveBeenCalled();
+  });
+
   it("archives without workspace preflight when a managed environment is already destroyed", async () => {
     const thread = makeThread();
     vi.mocked(api.getEnvironment).mockResolvedValue(
@@ -291,9 +397,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      await screen.findByText(
-        /assigned threads will be unassigned/i,
-      ),
+      await screen.findByText(/assigned threads will be unassigned/i),
     ).not.toBeNull();
     expect(api.archiveThread).not.toHaveBeenCalled();
 
@@ -329,16 +433,12 @@ describe("ThreadActionsProvider", () => {
       actions!.toggleArchive(thread);
     });
 
-    await screen.findByText(
-      /assigned threads will be unassigned/i,
-    );
+    await screen.findByText(/assigned threads will be unassigned/i);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
-        screen.queryByText(
-          /assigned threads will be unassigned/i,
-        ),
+        screen.queryByText(/assigned threads will be unassigned/i),
       ).toBeNull();
     });
     expect(api.archiveThread).not.toHaveBeenCalled();
@@ -397,9 +497,7 @@ describe("ThreadActionsProvider", () => {
       });
     });
     expect(
-      screen.queryByText(
-        /assigned threads will be unassigned/i,
-      ),
+      screen.queryByText(/assigned threads will be unassigned/i),
     ).toBeNull();
   });
 
@@ -439,9 +537,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      await screen.findByText(
-        /assigned threads will be unassigned/i,
-      ),
+      await screen.findByText(/assigned threads will be unassigned/i),
     ).not.toBeNull();
     expect(api.archiveThread).toHaveBeenCalledTimes(1);
   });
@@ -495,9 +591,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      screen.queryByText(
-        /assigned threads will be unassigned/i,
-      ),
+      screen.queryByText(/assigned threads will be unassigned/i),
     ).toBeNull();
     expect(api.archiveThread).not.toHaveBeenCalled();
 
@@ -604,9 +698,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      await screen.findByText(
-        /assigned threads will be unassigned/i,
-      ),
+      await screen.findByText(/assigned threads will be unassigned/i),
     ).not.toBeNull();
     expect(api.deleteThread).not.toHaveBeenCalled();
 
@@ -641,16 +733,12 @@ describe("ThreadActionsProvider", () => {
       actions!.requestDelete(thread);
     });
 
-    await screen.findByText(
-      /assigned threads will be unassigned/i,
-    );
+    await screen.findByText(/assigned threads will be unassigned/i);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
-        screen.queryByText(
-          /assigned threads will be unassigned/i,
-        ),
+        screen.queryByText(/assigned threads will be unassigned/i),
       ).toBeNull();
     });
     expect(api.deleteThread).not.toHaveBeenCalled();
@@ -707,9 +795,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      screen.queryByText(
-        /assigned threads will be unassigned/i,
-      ),
+      screen.queryByText(/assigned threads will be unassigned/i),
     ).toBeNull();
     fireEvent.click(confirmButton);
 

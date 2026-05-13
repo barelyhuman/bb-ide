@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import type { Thread } from "@bb/domain";
+import type { Environment, Thread } from "@bb/domain";
 import {
   useArchiveThread,
   useDeleteThread,
@@ -85,6 +85,12 @@ interface DeleteThreadActionRequest {
 interface ThreadActionContext {
   assignedChildCount: number;
   workspaceWarning: ThreadDirtyWorkspaceWarning | null;
+}
+
+function resolveEnvironmentMergeBaseBranch(
+  environment: Environment,
+): string | undefined {
+  return environment.mergeBaseBranch ?? environment.defaultBranch ?? undefined;
 }
 
 export function ThreadActionsProvider({
@@ -197,9 +203,11 @@ export function ThreadActionsProvider({
           environment.path !== null &&
           thread.environmentId
         ) {
+          const mergeBaseBranch =
+            resolveEnvironmentMergeBaseBranch(environment);
           const workspace = await getEnvironmentWorkStatus(
             thread.environmentId,
-            undefined,
+            mergeBaseBranch,
             signal,
           );
           if (signal.aborted) return null;

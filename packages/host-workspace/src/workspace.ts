@@ -385,25 +385,28 @@ export class Workspace {
     await ensureGitRepo(this.path);
 
     const mergeBaseBranch = options.mergeBaseBranch;
-    const [statusOutput, diffOutput, currentBranch, defaultBranch] =
-      await Promise.all([
-        runGit(
-          ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
-          { cwd: this.path },
-        ),
-        readHeadNumstat(this.path),
-        this.currentBranch,
-        readDefaultBranch(this.path),
-      ]);
+    const [
+      statusOutput,
+      diffOutput,
+      currentBranch,
+      defaultBranch,
+      mergeBaseData,
+    ] = await Promise.all([
+      runGit(
+        ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
+        { cwd: this.path },
+      ),
+      readHeadNumstat(this.path),
+      this.currentBranch,
+      readDefaultBranch(this.path),
+      mergeBaseBranch ? this.readMergeBaseStatus(mergeBaseBranch) : null,
+    ]);
 
     const entries = parsePorcelainEntries(statusOutput.stdout);
     const workingTreeSummary = summarizeNumstat(diffOutput);
     const hasUntracked = entries.some((entry) => entry.status === "??");
     const hasTrackedChanges = entries.some((entry) => entry.status !== "??");
     const hasDirtyEntries = entries.length > 0;
-    const mergeBaseData = mergeBaseBranch
-      ? await this.readMergeBaseStatus(mergeBaseBranch)
-      : null;
     const hasCommittedChanges =
       mergeBaseData?.hasCommittedUnmergedChanges ?? false;
     const state = resolveWorkspaceState({
