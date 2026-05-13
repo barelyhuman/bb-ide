@@ -85,7 +85,6 @@ export function ProjectSourceRow({
                 onEditLocalPath(source);
               }}
             >
-              <Icon name="Edit" className="size-4" />
               Edit local path
             </DropdownMenuItem>
           ) : null}
@@ -94,7 +93,6 @@ export function ProjectSourceRow({
             disabled={isOnlySource}
             onSelect={() => onRemove(source)}
           >
-            <Icon name="Trash2" className="size-4" />
             Remove
           </DropdownMenuItem>
         </DropdownMenuContent>
