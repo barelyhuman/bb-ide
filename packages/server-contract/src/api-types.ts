@@ -4,6 +4,7 @@ import {
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
   activeThinkingSchema,
+  featureFlagsSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
   promptHistoryEntrySchema,
@@ -1120,6 +1121,7 @@ export const projectResponseSchema = projectSchema.extend({
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
 export const systemConfigResponseSchema = z.object({
+  featureFlags: featureFlagsSchema,
   githubConnected: z.boolean(),
   hostDaemonPort: z.number().nullable(),
   sandboxHostSupported: z.boolean(),

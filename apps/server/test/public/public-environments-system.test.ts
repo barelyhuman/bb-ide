@@ -773,12 +773,18 @@ describe("public environment and system routes", () => {
 
   it("returns runtime config from GET /system/config", async () => {
     const harness = await createTestAppHarness({
+      featureFlags: {
+        askUserQuestion: true,
+      },
       hostDaemonPort: 4010,
     });
     try {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
+        featureFlags: {
+          askUserQuestion: true,
+        },
         githubConnected: false,
         hostDaemonPort: 4010,
         sandboxHostSupported: true,
@@ -797,6 +803,9 @@ describe("public environment and system routes", () => {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
+        featureFlags: {
+          askUserQuestion: false,
+        },
         githubConnected: false,
         hostDaemonPort: 3001,
         sandboxHostSupported: false,

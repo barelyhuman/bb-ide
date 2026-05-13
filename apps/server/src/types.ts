@@ -1,4 +1,5 @@
 import type { DbConnection } from "@bb/db";
+import type { FeatureFlags } from "@bb/domain";
 import type { Logger } from "@bb/logger";
 import type { CloudAuthService } from "./services/cloud-auth/types.js";
 import type { HostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
@@ -16,6 +17,7 @@ export interface ServerRuntimeConfig {
   dataDir: string;
   e2bApiKey: string;
   e2bTemplate: string;
+  featureFlags: FeatureFlags;
   githubPat: string;
   hostDaemonPort: number;
   inferenceModel: string;

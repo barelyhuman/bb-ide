@@ -1,5 +1,6 @@
 import { atom, useAtomValue } from "jotai";
 import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
+import type { FeatureFlags } from "@bb/domain";
 import type { HostDaemonStatusSnapshot } from "./api-host-daemon";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
@@ -10,25 +11,28 @@ import {
 } from "./workspace-open-target-preference";
 import { wsManager } from "./ws";
 
+// Offline/unavailable app behavior should fail closed independently of server defaults.
+const unavailableFeatureFlags: FeatureFlags = {
+  askUserQuestion: false,
+};
+
+const unavailableSystemConfig: SystemConfigResponse = {
+  featureFlags: unavailableFeatureFlags,
+  githubConnected: false,
+  hostDaemonPort: null,
+  sandboxHostSupported: false,
+  voiceTranscriptionEnabled: false,
+};
+
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
   try {
     const res = await apiClient.system.config.$get();
     if (!res.ok) {
-      return {
-        githubConnected: false,
-        hostDaemonPort: null,
-        sandboxHostSupported: false,
-        voiceTranscriptionEnabled: false,
-      };
+      return unavailableSystemConfig;
     }
     return (await res.json()) as SystemConfigResponse;
   } catch {
-    return {
-      githubConnected: false,
-      hostDaemonPort: null,
-      sandboxHostSupported: false,
-      voiceTranscriptionEnabled: false,
-    };
+    return unavailableSystemConfig;
   }
 }
 

@@ -48,6 +48,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
 
   get("/system/config", (context) =>
     context.json({
+      featureFlags: deps.config.featureFlags,
       githubConnected: deps.config.githubPat !== "",
       hostDaemonPort: deps.config.hostDaemonPort,
       sandboxHostSupported: isSandboxProvisioningConfigured(deps.config),

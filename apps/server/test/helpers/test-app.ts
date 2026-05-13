@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
-import type { HostType } from "@bb/domain";
+import { defaultFeatureFlags, type HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
 import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
@@ -133,6 +133,7 @@ export async function createTestAppHarness(
     dataDir,
     e2bApiKey: "test-e2b-api-key",
     e2bTemplate: "test-e2b-template",
+    featureFlags: defaultFeatureFlags,
     githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",

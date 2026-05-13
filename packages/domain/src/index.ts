@@ -32,6 +32,12 @@ export type {
 } from "./shared-types.js";
 
 export {
+  defaultFeatureFlags,
+  featureFlagsSchema,
+} from "./feature-flags.js";
+export type { FeatureFlags } from "./feature-flags.js";
+
+export {
   PROMPT_HISTORY_ENTRY_LIMIT,
   promptHistoryEntrySchema,
   arePromptHistoryInputsEqual,

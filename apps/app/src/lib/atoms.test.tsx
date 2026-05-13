@@ -2,6 +2,7 @@
 
 import { createStore } from "jotai";
 import { cleanup, waitFor } from "@testing-library/react";
+import { defaultFeatureFlags, type FeatureFlags } from "@bb/domain";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,7 @@ vi.mock("partysocket/ws", async () => {
 
 interface SystemConfigRouteState {
   configs: Array<{
+    featureFlags?: FeatureFlags;
     hostDaemonPort: number | null;
     voiceTranscriptionEnabled: boolean;
   }>;
@@ -46,6 +48,7 @@ function installAtomFetchRoutes(state: SystemConfigRouteState) {
         }
 
         return jsonResponse({
+          featureFlags: nextConfig.featureFlags ?? defaultFeatureFlags,
           githubConnected: false,
           hostDaemonPort: nextConfig.hostDaemonPort,
           sandboxHostSupported: false,

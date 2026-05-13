@@ -2,6 +2,7 @@ import { envsafe, num, port, str } from "envsafe";
 import { commonConfig } from "./common.js";
 import { databaseConfig } from "./database.js";
 import { DEFAULTS } from "./defaults.js";
+import { featureFlags } from "./feature-flags.js";
 import { validateOptionalUrl } from "./public-url.js";
 import { serverPortConfig } from "./server-port.js";
 
@@ -80,6 +81,7 @@ export const serverConfig = {
   ...databaseConfig,
   ...rawServerConfig,
   ...serverPortConfig,
+  featureFlags,
   BB_APP_URL: validateOptionalUrl("BB_APP_URL", rawServerConfig.BB_APP_URL),
   BB_EXTERNAL_URL: validateOptionalUrl(
     "BB_EXTERNAL_URL",

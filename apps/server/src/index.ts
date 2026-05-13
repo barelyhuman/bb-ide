@@ -48,6 +48,7 @@ async function main(): Promise<void> {
     dataDir: commonConfig.BB_DATA_DIR,
     e2bApiKey: serverConfig.E2B_API_KEY,
     e2bTemplate: serverConfig.E2B_TEMPLATE,
+    featureFlags: serverConfig.featureFlags,
     githubPat: serverConfig.BB_GITHUB_PAT,
     hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
     inferenceModel: serverConfig.BB_INFERENCE_MODEL,
