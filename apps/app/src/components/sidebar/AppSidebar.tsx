@@ -2,7 +2,7 @@ import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/icon.js";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar.js";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectList } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
@@ -57,6 +57,11 @@ export function AppSidebar({
   return (
     <>
       <Sidebar>
+        {/* Matches the page-header height so the sidebar's top region mirrors
+            the chrome on the right of the sidebar. */}
+        <div className="flex h-12 shrink-0 items-center px-2">
+          <SidebarTrigger />
+        </div>
         <SidebarContent>
           <ProjectList
             onNewChat={newChatAction}
