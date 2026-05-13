@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useQueryClient } from "@tanstack/react-query";
 import type { FileContents } from "@pierre/diffs";
@@ -11,6 +18,8 @@ import { environmentDiffFileQueryKey } from "../../../hooks/queries/query-keys";
 import { getEnvironmentDiffFile, type DiffFileTarget } from "../../../lib/api";
 import type { RequestDiffFileContents } from "../../git-diff/GitDiffCard";
 import {
+  gitDiffCollapsedFileKeysAtom,
+  gitDiffLoadingFileKeysAtom,
   pendingGitDiffScrollPathAtom,
   selectedMergeBaseBranchAtom,
 } from "../threadSecondaryPanelAtoms";
@@ -55,6 +64,9 @@ export function useGitDiffPanelState({
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const pendingGitDiffScrollPath = useAtomValue(pendingGitDiffScrollPathAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
+  const collapsedGitDiffFileKeys = useAtomValue(gitDiffCollapsedFileKeysAtom);
+  const loadingGitDiffFileKeys = useAtomValue(gitDiffLoadingFileKeysAtom);
+  const lastFocusedScrollPathRef = useRef<string | null>(null);
   const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<
     string | null
   >(null);
@@ -261,8 +273,16 @@ export function useGitDiffPanelState({
 
   // --- Scroll-to-file effect ---
 
-  useEffect(() => {
+  // Layout effect so we measure + scroll *after* React commits the focus
+  // collapse. Scrolling in the same tick as `focusGitDiffFile` would land
+  // against the pre-collapse DOM, where sibling cards above the target are
+  // still fully expanded — the smooth-scroll would then aim hundreds of pixels
+  // too low, and the user would watch the target glide past the viewport as
+  // the layout settled. We instead wait for collapsedGitDiffFileKeys and the
+  // render queue to reflect the focus, then snap instantly to the target.
+  useLayoutEffect(() => {
     if (!pendingGitDiffScrollPath || !isDiffPanelActive) {
+      lastFocusedScrollPathRef.current = null;
       return;
     }
 
@@ -280,34 +300,41 @@ export function useGitDiffPanelState({
       return;
     }
 
-    focusGitDiffFile(targetEntry.key);
-
-    const scrollTarget = gitDiffFileRefs.current.get(targetEntry.key);
-    if (scrollTarget) {
-      scrollTarget.scrollIntoView({ block: "start", behavior: "smooth" });
-      setPendingGitDiffScrollPath(null);
+    if (lastFocusedScrollPathRef.current !== pendingGitDiffScrollPath) {
+      lastFocusedScrollPathRef.current = pendingGitDiffScrollPath;
+      focusGitDiffFile(targetEntry.key);
+      // Defer the scroll to the next effect run so we measure *after* the
+      // focus collapse commits. If the target was already expanded and not
+      // loading, the settled check below would otherwise pass against the
+      // pre-collapse DOM — scrollIntoView would land hundreds of px too low,
+      // and the target would end up in the middle of the panel once the
+      // siblings shrank.
       return;
     }
 
-    const frameId = window.requestAnimationFrame(() => {
-      const deferredTarget = gitDiffFileRefs.current.get(targetEntry.key);
-      if (deferredTarget) {
-        deferredTarget.scrollIntoView({ block: "start", behavior: "smooth" });
-      }
-      setPendingGitDiffScrollPath(null);
-    });
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
+    const isTargetCollapsed = collapsedGitDiffFileKeys.has(targetEntry.key);
+    const isTargetRendering =
+      !queuedGitDiffFileRenderKeys.has(targetEntry.key) ||
+      loadingGitDiffFileKeys.has(targetEntry.key);
+    if (isTargetCollapsed || isTargetRendering) {
+      return;
+    }
+
+    const scrollTarget = gitDiffFileRefs.current.get(targetEntry.key);
+    scrollTarget?.scrollIntoView({ block: "start", behavior: "instant" });
+    setPendingGitDiffScrollPath(null);
   }, [
+    collapsedGitDiffFileKeys,
     focusGitDiffFile,
     gitDiffFileRefs,
     gitDiffPreparationState.isAwaitingCurrentGitDiffParse,
+    isDiffPanelActive,
     isGitDiffLoading,
     isParsingGitDiffFiles,
-    isDiffPanelActive,
+    loadingGitDiffFileKeys,
     parsedGitDiffFileEntries,
     pendingGitDiffScrollPath,
+    queuedGitDiffFileRenderKeys,
     setPendingGitDiffScrollPath,
   ]);
 
