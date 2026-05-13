@@ -26,6 +26,7 @@ import {
   parseLocalFileHref,
   type MarkdownPreviewLocalFileLinkHandler,
 } from "./markdown-local-file-link.js";
+import { usePreferredTheme, type Theme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 
 export interface MarkdownPreviewProps {
@@ -44,6 +45,7 @@ interface MarkdownAnchorProps
 
 interface BuildMarkdownComponentsArgs {
   imageUrls: readonly string[];
+  preferredTheme: Theme;
   setExpandedImageIndex: ExpandedImageIndexSetter;
   onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
 }
@@ -53,6 +55,11 @@ interface MarkdownImageRendererArgs {
   imageUrls: readonly string[];
   setExpandedImageIndex: ExpandedImageIndexSetter;
   src: ComponentPropsWithoutRef<"img">["src"];
+}
+
+interface ResolveMarkdownSourceMediaArgs {
+  media: MarkdownSourceMedia;
+  preferredTheme: Theme;
 }
 
 type ExpandedImageIndexSetter = Dispatch<SetStateAction<number | null>>;
@@ -67,16 +74,18 @@ type MarkdownListItemProps = ComponentPropsWithoutRef<"li"> & ExtraProps;
 type MarkdownOrderedListProps = ComponentPropsWithoutRef<"ol"> & ExtraProps;
 type MarkdownParagraphProps = ComponentPropsWithoutRef<"p"> & ExtraProps;
 type MarkdownPreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps;
+type MarkdownSourceMedia = ComponentPropsWithoutRef<"source">["media"];
+type MarkdownSourceProps = ComponentPropsWithoutRef<"source"> & ExtraProps;
 type MarkdownTableProps = ComponentPropsWithoutRef<"table"> & ExtraProps;
 type MarkdownTableCellProps = ComponentPropsWithoutRef<"td"> & ExtraProps;
 type MarkdownTableHeadProps = ComponentPropsWithoutRef<"thead"> & ExtraProps;
 type MarkdownTableHeaderProps = ComponentPropsWithoutRef<"th"> & ExtraProps;
 type MarkdownUnorderedListProps = ComponentPropsWithoutRef<"ul"> & ExtraProps;
-type MarkdownRehypePlugins = NonNullable<
-  ReactMarkdownOptions["rehypePlugins"]
->;
+type MarkdownRehypePlugins = NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
 
 const MARKDOWN_TABLE_BREAKOUT_WIDTH = "max(100%, min(1100px, 100cqw - 2rem))";
+const MARKDOWN_SOURCE_COLOR_SCHEME_MEDIA_PATTERN =
+  /^\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)$/iu;
 // Security-critical order: raw HTML must become nodes before sanitization can
 // strip unsafe elements, attributes, and URLs.
 const MARKDOWN_HTML_REHYPE_PLUGINS: MarkdownRehypePlugins = [
@@ -336,9 +345,31 @@ function MarkdownHr(_props: MarkdownHrProps) {
   return <hr className="my-4 border-t border-border/70" />;
 }
 
+function parseMarkdownSourceColorScheme(media: string): Theme | null {
+  const match = MARKDOWN_SOURCE_COLOR_SCHEME_MEDIA_PATTERN.exec(media);
+  const colorScheme = match?.[1];
+  if (colorScheme === "dark" || colorScheme === "light") {
+    return colorScheme;
+  }
+  return null;
+}
+
+function resolveMarkdownSourceMedia({
+  media,
+  preferredTheme,
+}: ResolveMarkdownSourceMediaArgs): MarkdownSourceMedia {
+  if (!media) return media;
+
+  const colorScheme = parseMarkdownSourceColorScheme(media);
+  if (!colorScheme) return media;
+
+  return colorScheme === preferredTheme ? "all" : "not all";
+}
+
 function buildMarkdownComponents({
   imageUrls,
   onOpenLocalFileLink,
+  preferredTheme,
   setExpandedImageIndex,
 }: BuildMarkdownComponentsArgs): Components {
   function MarkdownLink(props: MarkdownAnchorProps) {
@@ -354,6 +385,19 @@ function buildMarkdownComponents({
       setExpandedImageIndex,
       src,
     });
+  }
+
+  function MarkdownSource({
+    media,
+    node: _node,
+    ...sourceProps
+  }: MarkdownSourceProps) {
+    return (
+      <source
+        {...sourceProps}
+        media={resolveMarkdownSourceMedia({ media, preferredTheme })}
+      />
+    );
   }
 
   return {
@@ -372,6 +416,7 @@ function buildMarkdownComponents({
     ol: MarkdownOrderedList,
     p: MarkdownParagraph,
     pre: MarkdownPre,
+    source: MarkdownSource,
     table: MarkdownTable,
     td: MarkdownTableCell,
     th: MarkdownTableHeader,
@@ -389,6 +434,7 @@ function MarkdownPreviewComponent({
   onOpenLocalFileLink,
 }: MarkdownPreviewProps) {
   const imageUrls = useMemo(() => extractMarkdownImageUrls(content), [content]);
+  const preferredTheme = usePreferredTheme();
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
     null,
   );
@@ -401,9 +447,10 @@ function MarkdownPreviewComponent({
       buildMarkdownComponents({
         imageUrls,
         onOpenLocalFileLink,
+        preferredTheme,
         setExpandedImageIndex,
       }),
-    [imageUrls, onOpenLocalFileLink, setExpandedImageIndex],
+    [imageUrls, onOpenLocalFileLink, preferredTheme, setExpandedImageIndex],
   );
 
   const showPreviousImage = useCallback(() => {

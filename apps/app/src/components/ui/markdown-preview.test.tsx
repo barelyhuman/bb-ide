@@ -7,6 +7,7 @@ import {
   restoreMatchMedia,
   setupMatchMedia,
 } from "@/test/helpers/match-media.js";
+import { setPreferredTheme } from "@/hooks/useTheme";
 
 type ClipboardWriteText = (text: string) => Promise<void>;
 
@@ -22,6 +23,8 @@ function installClipboardWriteTextMock() {
 
 afterEach(() => {
   cleanup();
+  setPreferredTheme("system");
+  document.documentElement.classList.remove("dark");
   restoreMatchMedia();
   vi.clearAllMocks();
 });
@@ -77,6 +80,39 @@ describe("MarkdownPreview", () => {
     expect(image.getAttribute("onerror")).toBeNull();
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector("style")).toBeNull();
+  });
+
+  it("resolves raw HTML picture color-scheme sources from the app theme", () => {
+    setupMatchMedia();
+    setPreferredTheme("dark");
+
+    const { container } = render(
+      <MarkdownPreview
+        allowHtml
+        content={[
+          "<picture>",
+          '  <source media="(prefers-color-scheme: dark)" srcset="https://example.test/dark.png">',
+          '  <source media="(prefers-color-scheme: light)" srcset="https://example.test/light.png">',
+          '  <img alt="bb" src="https://example.test/light.png" width="128">',
+          "</picture>",
+        ].join("\n")}
+      />,
+    );
+
+    const sourceElements = Array.from(container.querySelectorAll("source"));
+    const darkSource = sourceElements.find(
+      (sourceElement) =>
+        sourceElement.getAttribute("srcset") ===
+        "https://example.test/dark.png",
+    );
+    const lightSource = sourceElements.find(
+      (sourceElement) =>
+        sourceElement.getAttribute("srcset") ===
+        "https://example.test/light.png",
+    );
+
+    expect(darkSource?.getAttribute("media")).toBe("all");
+    expect(lightSource?.getAttribute("media")).toBe("not all");
   });
 
   it("routes local file link clicks through the handler and prevents default navigation", () => {
