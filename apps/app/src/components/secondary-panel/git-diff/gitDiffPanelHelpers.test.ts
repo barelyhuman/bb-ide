@@ -118,6 +118,7 @@ it("tracks when a diff is still preparing for the current parse key", () => {
     const currentGitDiff = buildPatchDiff(2);
     const state = resolveGitDiffPreparationState({
       currentGitDiff,
+      isAwaitingPrerequisites: false,
       isGitDiffLoading: false,
       isParsingGitDiffFiles: false,
       lastParsedGitDiffKey: "stale-key",
@@ -130,6 +131,7 @@ it("tracks when a diff is still preparing for the current parse key", () => {
 
     const readyState = resolveGitDiffPreparationState({
       currentGitDiff,
+      isAwaitingPrerequisites: false,
       isGitDiffLoading: false,
       isParsingGitDiffFiles: false,
       lastParsedGitDiffKey: state.currentGitDiffKey,
@@ -138,6 +140,19 @@ it("tracks when a diff is still preparing for the current parse key", () => {
 
     expect(readyState.hasParsedGitDiffFiles).toBe(true);
     expect(readyState.isPreparingGitDiff).toBe(false);
+  });
+
+  it("keeps preparing while prerequisites resolve, even with no diff payload yet", () => {
+    const state = resolveGitDiffPreparationState({
+      currentGitDiff: "",
+      isAwaitingPrerequisites: true,
+      isGitDiffLoading: false,
+      isParsingGitDiffFiles: false,
+      lastParsedGitDiffKey: "",
+      parsedGitDiffFileCount: 0,
+    });
+
+    expect(state.isPreparingGitDiff).toBe(true);
   });
 
   it("chooses reset, immediate, and batched parse plans from diff shape", () => {

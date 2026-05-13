@@ -296,9 +296,14 @@ export function useGitDiffPanelState({
     isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
     currentGitDiff,
   );
+  const isAwaitingPrerequisites =
+    isDiffPanelActive &&
+    Boolean(environmentId) &&
+    gitDiffTarget === undefined;
   const { hasParsedGitDiffFiles, isPreparingGitDiff } =
     resolveGitDiffPreparationState({
       currentGitDiff,
+      isAwaitingPrerequisites,
       isGitDiffLoading,
       isParsingGitDiffFiles,
       lastParsedGitDiffKey,

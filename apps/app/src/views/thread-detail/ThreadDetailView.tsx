@@ -755,6 +755,7 @@ export function ThreadDetailView() {
       <ThreadDetailSecondaryContent
         footer={composerFooter}
         header={timelineHeader}
+        isMetadataLoading={environmentQuery.isLoading}
         metadata={{
           thread,
           projectId,

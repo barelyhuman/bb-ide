@@ -2,11 +2,13 @@ import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { useAtomValue } from "jotai";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { secondaryPanelWidthPercentAtom } from "@/components/secondary-panel/threadSecondaryPanelAtoms";
 import {
+  ThreadMetadataCard,
   ThreadMetadataContent,
   hasAnyThreadMetadata,
   type ThreadMetadataContentProps,
@@ -27,6 +29,7 @@ type ThreadSecondaryPanelProps = Omit<
 interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
   header: ReactNode;
+  isMetadataLoading: boolean;
   metadata: ThreadMetadataContentProps;
   secondaryPanel: ThreadSecondaryPanelProps;
   timeline: ThreadTimelinePaneProps;
@@ -35,6 +38,7 @@ interface ThreadDetailSecondaryContentProps {
 export function ThreadDetailSecondaryContent({
   footer,
   header,
+  isMetadataLoading,
   metadata,
   secondaryPanel,
   timeline,
@@ -63,6 +67,8 @@ export function ThreadDetailSecondaryContent({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ThreadMetadataContent {...metadata} />
     </div>
+  ) : isMetadataLoading ? (
+    <ThreadMetadataLoadingSkeleton />
   ) : (
     <div className="pt-1 text-sm text-muted-foreground">
       No thread details available.
@@ -124,6 +130,26 @@ export function ThreadDetailSecondaryContent({
           </div>
         </ResponsiveDrawerShell>
       ) : null}
+    </div>
+  );
+}
+
+const METADATA_SKELETON_ROW_VALUE_WIDTHS = ["w-40", "w-28", "w-36", "w-24"];
+
+function ThreadMetadataLoadingSkeleton() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ThreadMetadataCard hasFlexibleHeight={false}>
+        {METADATA_SKELETON_ROW_VALUE_WIDTHS.map((valueWidth, index) => (
+          <div
+            key={index}
+            className="grid grid-cols-[var(--detail-label-width,96px)_minmax(0,1fr)] items-center gap-x-3 py-0.5"
+          >
+            <Skeleton className="h-3 w-14 rounded-sm" />
+            <Skeleton className={`h-3 ${valueWidth} max-w-full rounded-sm`} />
+          </div>
+        ))}
+      </ThreadMetadataCard>
     </div>
   );
 }

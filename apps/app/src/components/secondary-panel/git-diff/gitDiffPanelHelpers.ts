@@ -34,6 +34,7 @@ export type GitDiffParsePlan =
 
 interface GitDiffPreparationStateParams {
   currentGitDiff: string;
+  isAwaitingPrerequisites: boolean;
   isGitDiffLoading: boolean;
   isParsingGitDiffFiles: boolean;
   lastParsedGitDiffKey: string;
@@ -118,7 +119,8 @@ export function resolveGitDiffPreparationState(
     hasCurrentGitDiff && params.lastParsedGitDiffKey !== currentGitDiffKey;
   const isPreparingGitDiff =
     !hasParsedGitDiffFiles &&
-    (params.isGitDiffLoading ||
+    (params.isAwaitingPrerequisites ||
+      params.isGitDiffLoading ||
       params.isParsingGitDiffFiles ||
       isAwaitingCurrentGitDiffParse);
 
