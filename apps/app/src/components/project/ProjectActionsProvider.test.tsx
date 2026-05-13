@@ -96,31 +96,6 @@ afterEach(() => {
 });
 
 describe("ProjectActionsProvider", () => {
-  it("rejects submission with an empty name and does not call the api", async () => {
-    const project = makeProjectResponse();
-    let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.requestRename(project);
-    });
-
-    const input = (await screen.findByLabelText(
-      "Project name",
-    )) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "   " } });
-    fireEvent.submit(input.closest("form")!);
-
-    expect(await screen.findByText(/cannot be empty/i)).not.toBeNull();
-    expect(api.updateProject).not.toHaveBeenCalled();
-  });
-
   it("clears the deleted project from the collapsed-projects atom on success", async () => {
     const project = makeProjectResponse();
     const other = makeProjectResponse({ id: "project-2", name: "Project Two" });

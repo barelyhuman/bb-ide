@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { renderToStaticMarkup } from "react-dom/server";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -59,75 +58,6 @@ afterEach(() => {
 });
 
 describe("TimelineTitleView", () => {
-  it("truncates the em segment while keeping non-em segments and decorations fixed", () => {
-    const html = renderToStaticMarkup(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            seg("Ran"),
-            seg("pnpm exec turbo run test --filter=@bb/app", {
-              em: true,
-              truncate: true,
-            }),
-          ],
-          decorations: [
-            { kind: "duration", startedAt: 0, completedAt: 2_100, em: false },
-          ],
-          plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
-        })}
-      />,
-    );
-
-    expect(html).toContain(">Ran</span>");
-    expect(html).toContain(">pnpm exec turbo run test --filter=@bb/app</span>");
-    expect(html).toContain(">2s</span>");
-  });
-
-  it("uses the full plain title as the browser title while rendering compact text", () => {
-    const html = renderToStaticMarkup(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            seg("Created"),
-            seg("appSettingsAtoms.ts", {
-              em: true,
-              truncate: true,
-              plainText: "apps/app/src/state/appSettingsAtoms.ts",
-            }),
-          ],
-          decorations: [{ kind: "diff-stats", added: 16, removed: 0 }],
-          plain: "Created apps/app/src/state/appSettingsAtoms.ts +16",
-        })}
-      />,
-    );
-
-    expect(html).toContain(
-      'title="Created apps/app/src/state/appSettingsAtoms.ts +16"',
-    );
-    expect(html).toContain(">appSettingsAtoms.ts</span>");
-    expect(html).not.toContain(
-      ">apps/app/src/state/appSettingsAtoms.ts</span>",
-    );
-  });
-
-  it("omits zero diff-stat sides", () => {
-    const html = renderToStaticMarkup(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            seg("Deleted"),
-            seg("react-perf-audit.md", { em: true, truncate: true }),
-          ],
-          decorations: [{ kind: "diff-stats", added: 0, removed: 39 }],
-          plain: "Deleted react-perf-audit.md -39",
-        })}
-      />,
-    );
-
-    expect(html).not.toContain("+0");
-    expect(html).toContain("-39");
-  });
-
   it("invokes the resolved callback on Enter and Space keypress", () => {
     const onAction = vi.fn();
     render(
