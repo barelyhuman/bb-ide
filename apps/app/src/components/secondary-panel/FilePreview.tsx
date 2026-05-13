@@ -8,6 +8,7 @@ import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
 
 export interface FilePreviewFile {
   name: string;
@@ -28,6 +29,7 @@ export interface FilePreviewProps {
   state: FilePreviewState;
   path: string;
   onOpenInEditor?: (path: string) => void;
+  statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
 
 type MarkdownViewMode = "preview" | "source";
@@ -60,7 +62,12 @@ function isMarkdownFile(name: string): boolean {
   return extension !== undefined && MARKDOWN_EXTENSIONS.has(extension);
 }
 
-export function FilePreview({ state, path, onOpenInEditor }: FilePreviewProps) {
+export function FilePreview({
+  state,
+  path,
+  onOpenInEditor,
+  statusLabel = null,
+}: FilePreviewProps) {
   const isReadyMarkdown =
     state.kind === "ready" && isMarkdownFile(state.file.name);
   const [markdownMode, setMarkdownMode] = useState<MarkdownViewMode>("preview");
@@ -77,6 +84,7 @@ export function FilePreview({ state, path, onOpenInEditor }: FilePreviewProps) {
       <FilePreviewHeader
         path={path}
         onOpenInEditor={onOpenInEditor}
+        statusLabel={statusLabel}
         markdownMode={isReadyMarkdown ? markdownMode : null}
         onMarkdownModeChange={setMarkdownMode}
       />
@@ -130,11 +138,13 @@ function FilePreviewBody({
 function FilePreviewHeader({
   path,
   onOpenInEditor,
+  statusLabel,
   markdownMode,
   onMarkdownModeChange,
 }: {
   path: string;
   onOpenInEditor?: (path: string) => void;
+  statusLabel: WorkspaceFilePreviewStatusLabel | null;
   markdownMode: MarkdownViewMode | null;
   onMarkdownModeChange: (mode: MarkdownViewMode) => void;
 }) {
@@ -152,6 +162,11 @@ function FilePreviewHeader({
           >
             {path}
           </TruncateStart>
+          {statusLabel === null ? null : (
+            <span className="shrink-0 text-xs leading-5 text-muted-foreground">
+              ({statusLabel})
+            </span>
+          )}
           <CopyButton
             text={path}
             label="Copy file path"

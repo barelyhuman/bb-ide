@@ -84,6 +84,7 @@ Button.displayName = "Button";
 
 const README_PATH = "docs/secondary-panel/README.md";
 const BUTTON_PATH = "apps/app/src/components/ui/button.tsx";
+const DELETED_BUTTON_PATH = "apps/app/src/components/ui/legacy-button.tsx";
 const STATUS_PATH = "agents/manager-42/STATUS.md";
 const SCREENSHOT_PATH = "docs/screenshots/secondary-panel.svg";
 
@@ -142,6 +143,27 @@ export function Overview() {
               lineNumber: null,
               file: {
                 name: "Button.tsx",
+                contents: SAMPLE_BUTTON_TSX,
+                lang: "tsx",
+              },
+            }}
+          />
+        </PreviewStage>
+      </StoryRow>
+      <StoryRow
+        label="deleted file"
+        hint="Opened from HEAD or the merge base; a muted (deleted) tag sits next to the path"
+      >
+        <PreviewStage>
+          <FilePreview
+            path={DELETED_BUTTON_PATH}
+            onOpenInEditor={noopOpenInEditor}
+            statusLabel="deleted"
+            state={{
+              kind: "ready",
+              lineNumber: null,
+              file: {
+                name: "legacy-button.tsx",
                 contents: SAMPLE_BUTTON_TSX,
                 lang: "tsx",
               },

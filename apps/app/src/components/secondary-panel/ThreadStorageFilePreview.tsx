@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { FilePreview as FilePreviewSurface } from "./FilePreview";
 import { PINNED_STORAGE_FILE_PATH } from "./managerStorage";
 import { HttpError } from "@/lib/api";
@@ -21,10 +20,6 @@ interface SecondaryPanelFilePreviewProps extends ThreadStorageFilePreviewProps {
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
 
-interface FilePreviewStatusLabelProps {
-  label: WorkspaceFilePreviewStatusLabel;
-}
-
 export function SecondaryPanelFilePreview({
   activePath,
   error,
@@ -35,61 +30,55 @@ export function SecondaryPanelFilePreview({
   pendingNotFoundPath,
   statusLabel = null,
 }: SecondaryPanelFilePreviewProps) {
-  const statusMarkup =
-    statusLabel === null ? null : (
-      <FilePreviewStatusLabel label={statusLabel} />
-    );
-  const renderWithStatus = (content: ReactNode) => (
-    <>
-      {statusMarkup}
-      {content}
-    </>
-  );
-
   if (error) {
     const isNotFound = error instanceof HttpError && error.status === 404;
     if (isNotFound && activePath === pendingNotFoundPath) {
-      return renderWithStatus(
+      return (
         <FilePreviewSurface
           path={activePath}
           onOpenInEditor={onOpenInEditor}
+          statusLabel={statusLabel}
           state={{ kind: "manager-status-pending" }}
-        />,
+        />
       );
     }
-    return renderWithStatus(
+    return (
       <FilePreviewSurface
         path={activePath}
         onOpenInEditor={onOpenInEditor}
+        statusLabel={statusLabel}
         state={{ kind: isNotFound ? "not-found" : "error" }}
-      />,
+      />
     );
   }
 
   if (isLoading || !filePreview || filePreview.path !== activePath) {
-    return renderWithStatus(
+    return (
       <FilePreviewSurface
         path={activePath}
         onOpenInEditor={onOpenInEditor}
+        statusLabel={statusLabel}
         state={{ kind: "loading" }}
-      />,
+      />
     );
   }
 
   if (filePreview.kind === "text") {
     if (filePreview.content.length === 0) {
-      return renderWithStatus(
+      return (
         <FilePreviewSurface
           path={activePath}
           onOpenInEditor={onOpenInEditor}
+          statusLabel={statusLabel}
           state={{ kind: "empty" }}
-        />,
+        />
       );
     }
-    return renderWithStatus(
+    return (
       <FilePreviewSurface
         path={activePath}
         onOpenInEditor={onOpenInEditor}
+        statusLabel={statusLabel}
         state={{
           kind: "ready",
           lineNumber,
@@ -98,37 +87,31 @@ export function SecondaryPanelFilePreview({
             contents: filePreview.content,
           },
         }}
-      />,
+      />
     );
   }
 
   if (filePreview.kind === "image") {
-    return renderWithStatus(
+    return (
       <FilePreviewSurface
         path={activePath}
         onOpenInEditor={onOpenInEditor}
+        statusLabel={statusLabel}
         state={{ kind: "image", url: filePreview.url }}
-      />,
+      />
     );
   }
 
-  return renderWithStatus(
+  return (
     <FilePreviewSurface
       path={activePath}
       onOpenInEditor={onOpenInEditor}
+      statusLabel={statusLabel}
       state={{
         kind: "error",
         message: `Preview not available for ${filePreview.mimeType}.`,
       }}
-    />,
-  );
-}
-
-function FilePreviewStatusLabel({ label }: FilePreviewStatusLabelProps) {
-  return (
-    <div className="px-4 pb-2 pt-1 text-xs font-medium text-muted-foreground">
-      ({label})
-    </div>
+    />
   );
 }
 
