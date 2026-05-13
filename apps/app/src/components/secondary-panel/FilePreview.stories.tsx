@@ -39,7 +39,7 @@ dynamic file previews opened from the timeline.
 \`\`\`ts
 import { FilePreview } from "@/components/secondary-panel/FilePreview";
 
-<FilePreview state={{ kind: "ready", file }} />;
+<FilePreview state={{ kind: "ready", lineNumber: null, file }} />;
 \`\`\`
 `;
 
@@ -93,6 +93,7 @@ export function Overview() {
           <FilePreview
             state={{
               kind: "ready",
+              lineNumber: null,
               file: { name: "README.md", contents: SAMPLE_README_MD },
             }}
           />
@@ -106,6 +107,7 @@ export function Overview() {
           <FilePreview
             state={{
               kind: "ready",
+              lineNumber: null,
               file: {
                 name: "Button.tsx",
                 contents: SAMPLE_BUTTON_TSX,

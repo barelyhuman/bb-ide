@@ -8,21 +8,30 @@ interface ThreadStorageFilePreviewProps {
   error?: Error | null;
   filePreview: FilePreview | undefined;
   isLoading: boolean;
+  lineNumber?: number | null;
 }
 
-export function ThreadStorageFilePreview({
+interface SecondaryPanelFilePreviewProps extends ThreadStorageFilePreviewProps {
+  pendingNotFoundPath?: string;
+}
+
+export function SecondaryPanelFilePreview({
   activePath,
   error,
   filePreview,
   isLoading,
-}: ThreadStorageFilePreviewProps) {
+  lineNumber = null,
+  pendingNotFoundPath,
+}: SecondaryPanelFilePreviewProps) {
   if (error) {
     const isNotFound = error instanceof HttpError && error.status === 404;
-    if (isNotFound && activePath === PINNED_STORAGE_FILE_PATH) {
+    if (isNotFound && activePath === pendingNotFoundPath) {
       return <FilePreviewSurface state={{ kind: "manager-status-pending" }} />;
     }
     return (
-      <FilePreviewSurface state={{ kind: isNotFound ? "not-found" : "error" }} />
+      <FilePreviewSurface
+        state={{ kind: isNotFound ? "not-found" : "error" }}
+      />
     );
   }
 
@@ -38,6 +47,7 @@ export function ThreadStorageFilePreview({
       <FilePreviewSurface
         state={{
           kind: "ready",
+          lineNumber,
           file: {
             name: filePreview.name ?? activePath,
             contents: filePreview.content,
@@ -65,6 +75,25 @@ export function ThreadStorageFilePreview({
         kind: "error",
         message: `Preview not available for ${filePreview.mimeType}.`,
       }}
+    />
+  );
+}
+
+export function ThreadStorageFilePreview({
+  activePath,
+  error,
+  filePreview,
+  isLoading,
+  lineNumber,
+}: ThreadStorageFilePreviewProps) {
+  return (
+    <SecondaryPanelFilePreview
+      activePath={activePath}
+      error={error}
+      filePreview={filePreview}
+      isLoading={isLoading}
+      lineNumber={lineNumber}
+      pendingNotFoundPath={PINNED_STORAGE_FILE_PATH}
     />
   );
 }

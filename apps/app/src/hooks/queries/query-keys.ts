@@ -31,6 +31,7 @@ export const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY =
   "environmentMergeBaseBranches";
 export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 export const ENVIRONMENT_DIFF_FILE_QUERY_KEY = "environmentDiffFile";
+export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY =
   "projectSourceWorkspaceStatus";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
@@ -253,6 +254,18 @@ export type EnvironmentDiffFileQueryKeyRootPrefix = readonly [
 ];
 export type EnvironmentDiffFileQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_DIFF_FILE_QUERY_KEY,
+  string,
+];
+export type EnvironmentFilePreviewQueryKey = readonly [
+  typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
+  string | null | undefined,
+  string | null,
+];
+export type EnvironmentFilePreviewQueryKeyRootPrefix = readonly [
+  typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
+];
+export type EnvironmentFilePreviewQueryKeyPrefix = readonly [
+  typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
 export type AvailableModelsQueryKey = readonly [
@@ -627,6 +640,23 @@ export function environmentDiffFileQueryKeyPrefix(
   environmentId: string,
 ): EnvironmentDiffFileQueryKeyPrefix {
   return [ENVIRONMENT_DIFF_FILE_QUERY_KEY, environmentId];
+}
+
+export function environmentFilePreviewQueryKey(
+  environmentId: string | null | undefined,
+  path: string | null,
+): EnvironmentFilePreviewQueryKey {
+  return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY, environmentId, path];
+}
+
+export function allEnvironmentFilePreviewQueryKeyPrefix(): EnvironmentFilePreviewQueryKeyRootPrefix {
+  return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY];
+}
+
+export function environmentFilePreviewQueryKeyPrefix(
+  environmentId: string,
+): EnvironmentFilePreviewQueryKeyPrefix {
+  return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY, environmentId];
 }
 
 export function availableModelsQueryKey(

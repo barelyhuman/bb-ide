@@ -28,6 +28,7 @@ import type {
   DeleteThreadRequest,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
   EnvironmentPromotionResponse,
   EnvironmentStatusResponse,
@@ -87,6 +88,13 @@ interface GetThreadTimelineArgs {
 interface GetThreadTimelineTurnSummaryDetailsArgs extends TimelineTurnSummaryDetailsRequest {
   id: string;
 }
+
+interface GetEnvironmentFilePreviewArgs {
+  id: string;
+  path: string;
+  signal?: AbortSignal;
+}
+
 export type AppCreateManagerThreadRequest = Omit<
   CreateManagerThreadRequest,
   "origin"
@@ -258,6 +266,84 @@ export async function loadFilePreview(
     name: target.name,
     path: target.path,
     url: target.url,
+  });
+}
+
+function decodeBase64Bytes(content: string): Uint8Array {
+  const binaryContent = atob(content);
+  const bytes = new Uint8Array(binaryContent.length);
+  for (let index = 0; index < binaryContent.length; index += 1) {
+    bytes[index] = binaryContent.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function encodeBase64Bytes(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  const binaryChunks: string[] = [];
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binaryChunks.push(
+      String.fromCharCode(...bytes.subarray(index, index + chunkSize)),
+    );
+  }
+  return btoa(binaryChunks.join(""));
+}
+
+function decodeEnvironmentDiffFileContent(
+  response: EnvironmentDiffFileResponse,
+): Uint8Array {
+  if (response.contentEncoding === "base64") {
+    return decodeBase64Bytes(response.content);
+  }
+
+  return new TextEncoder().encode(response.content);
+}
+
+function buildEnvironmentDiffFilePreviewUrl(
+  response: EnvironmentDiffFileResponse,
+  contentBytes: Uint8Array,
+  mimeType: string,
+): string {
+  const base64Content =
+    response.contentEncoding === "base64"
+      ? response.content
+      : encodeBase64Bytes(contentBytes);
+  return `data:${mimeType};base64,${base64Content}`;
+}
+
+/**
+ * The app previews the current workspace file by using the diff-file route
+ * with `target=uncommitted` and `side=new`. For this target the server has no
+ * git ref to read, so the daemon returns the working-tree file contents.
+ * Keep this wrapper as the app boundary if we add a dedicated preview route.
+ */
+export async function getEnvironmentFilePreview({
+  id,
+  path,
+  signal,
+}: GetEnvironmentFilePreviewArgs): Promise<FilePreview> {
+  const query = {
+    target: "uncommitted",
+    path,
+    side: "new",
+  } satisfies EnvironmentDiffFileQuery;
+  const response = await request<EnvironmentDiffFileResponse>(
+    apiClient.environments[":id"].diff.file.$get(
+      {
+        param: { id },
+        query,
+      },
+      requestOptions(signal),
+    ),
+  );
+  const contentBytes = decodeEnvironmentDiffFileContent(response);
+  const mimeType = normalizeFilePreviewMimeType(response.mimeType ?? null);
+  return buildFilePreview({
+    contentBytes,
+    mimeType,
+    name: path.split("/").at(-1),
+    path,
+    url: buildEnvironmentDiffFilePreviewUrl(response, contentBytes, mimeType),
   });
 }
 

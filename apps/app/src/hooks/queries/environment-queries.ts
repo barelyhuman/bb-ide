@@ -6,8 +6,10 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type { EnvironmentPromotionResponse } from "@bb/server-contract";
+import type { FilePreview } from "@/lib/api";
 import * as api from "@/lib/api";
 import {
+  environmentFilePreviewQueryKey,
   environmentPromotionQueryKey,
   environmentGitDiffQueryKey,
   environmentMergeBaseBranchesQueryKey,
@@ -122,6 +124,25 @@ export function useEnvironmentMergeBaseBranches(
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
     refetchOnWindowFocus: false,
     staleTime: MERGE_BASE_BRANCHES_STALE_MS,
+  });
+}
+
+export function useEnvironmentFilePreview(
+  environmentId: string | null | undefined,
+  path: string | null,
+  options?: QueryOptions,
+) {
+  return useQuery<FilePreview>({
+    queryKey: environmentFilePreviewQueryKey(environmentId, path),
+    queryFn: ({ signal }) =>
+      api.getEnvironmentFilePreview({
+        id: requireEnvironmentId(environmentId, "useEnvironmentFilePreview"),
+        path: path ?? "",
+        signal,
+      }),
+    enabled:
+      (options?.enabled ?? true) && Boolean(environmentId) && Boolean(path),
+    refetchOnWindowFocus: false,
   });
 }
 

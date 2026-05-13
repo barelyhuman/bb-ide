@@ -15,6 +15,7 @@ export interface ResolveThreadLocalFileLinkArgs {
 export interface ThreadLocalFileLinkOpenRequest {
   lineNumber: number | null;
   path: string;
+  relativePath: string;
   workspaceRootPath: string;
 }
 
@@ -34,6 +35,17 @@ interface ThreadLocalFileLinkOpenResolution {
 
 interface WorkspacePathWithinRootArgs {
   candidatePath: string;
+  workspaceRootPath: string;
+}
+
+interface NormalizeThreadLocalFileLinkPathArgs {
+  linkPath: string;
+  workspaceRootPath: string;
+}
+
+interface NormalizedThreadLocalFileLinkPath {
+  path: string;
+  relativePath: string;
   workspaceRootPath: string;
 }
 
@@ -72,6 +84,43 @@ function normalizeAbsolutePath(candidatePath: string): string | null {
     : `/${normalizedSegments.join("/")}`;
 }
 
+function normalizeThreadLocalFileLinkPath(
+  args: NormalizeThreadLocalFileLinkPathArgs,
+): NormalizedThreadLocalFileLinkPath | null {
+  const normalizedWorkspaceRootPath = normalizeAbsolutePath(
+    args.workspaceRootPath,
+  );
+  if (!normalizedWorkspaceRootPath) {
+    return null;
+  }
+
+  const normalizedPath = normalizeAbsolutePath(args.linkPath);
+  if (!normalizedPath) {
+    return null;
+  }
+
+  if (
+    !isPathWithinWorkspaceRoot({
+      candidatePath: normalizedPath,
+      workspaceRootPath: normalizedWorkspaceRootPath,
+    }) ||
+    normalizedPath === normalizedWorkspaceRootPath
+  ) {
+    return null;
+  }
+
+  const relativePath =
+    normalizedWorkspaceRootPath === "/"
+      ? normalizedPath.slice(1)
+      : normalizedPath.slice(normalizedWorkspaceRootPath.length + 1);
+
+  return {
+    path: normalizedPath,
+    relativePath,
+    workspaceRootPath: normalizedWorkspaceRootPath,
+  };
+}
+
 function isPathWithinWorkspaceRoot(args: WorkspacePathWithinRootArgs): boolean {
   if (args.workspaceRootPath === "/") {
     return args.candidatePath.startsWith("/");
@@ -99,19 +148,12 @@ export function resolveThreadLocalFileLink(
     };
   }
 
-  const normalizedPath = normalizeAbsolutePath(args.link.path);
-  const normalizedWorkspaceRootPath = normalizeAbsolutePath(
-    args.workspaceRootPath,
-  );
+  const openRequest = normalizeThreadLocalFileLinkPath({
+    linkPath: args.link.path,
+    workspaceRootPath: args.workspaceRootPath,
+  });
 
-  if (
-    !normalizedPath ||
-    !normalizedWorkspaceRootPath ||
-    !isPathWithinWorkspaceRoot({
-      candidatePath: normalizedPath,
-      workspaceRootPath: normalizedWorkspaceRootPath,
-    })
-  ) {
+  if (!openRequest) {
     return {
       description: THREAD_LOCAL_FILE_LINK_OUTSIDE_WORKSPACE_DESCRIPTION,
       kind: "error",
@@ -122,8 +164,9 @@ export function resolveThreadLocalFileLink(
     kind: "open-local-path",
     request: {
       lineNumber: args.link.lineNumber,
-      path: normalizedPath,
-      workspaceRootPath: normalizedWorkspaceRootPath,
+      path: openRequest.path,
+      relativePath: openRequest.relativePath,
+      workspaceRootPath: openRequest.workspaceRootPath,
     },
   };
 }

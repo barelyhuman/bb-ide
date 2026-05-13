@@ -8,8 +8,8 @@ import {
   type MouseEvent as ReactMouseEvent,
   type SetStateAction,
 } from "react";
-import ReactMarkdown from "react-markdown";
-import type { Components, ExtraProps } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import type { Components, ExtraProps, UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageLightbox, getWrappedImageIndex } from "./image-lightbox.js";
 import { CopyButton } from "./copy-button.js";
@@ -17,6 +17,10 @@ import { cn } from "@/lib/utils";
 
 export interface MarkdownPreviewLocalFileLink {
   lineNumber: number | null;
+  /**
+   * Absolute local path. Callers own workspace containment checks so
+   * MarkdownPreview can stay reusable.
+   */
   path: string;
 }
 
@@ -97,19 +101,33 @@ function parsePositiveInteger(value: string): number | null {
     : null;
 }
 
-function parseLineSuffix(value: string): LocalFileHrefParts {
+function parseLineSuffix(value: string): LocalFileHrefParts | null {
   const hashLineMatch = value.match(/#L([0-9]+)$/u);
   if (hashLineMatch) {
+    const lineNumber = parsePositiveInteger(hashLineMatch[1] ?? "");
+    if (lineNumber === null) {
+      return null;
+    }
+
     return {
-      lineNumber: parsePositiveInteger(hashLineMatch[1] ?? ""),
+      lineNumber,
       path: value.slice(0, hashLineMatch.index),
     };
   }
 
+  if (value.includes("#")) {
+    return null;
+  }
+
   const colonLineMatch = value.match(/:([0-9]+)$/u);
   if (colonLineMatch) {
+    const lineNumber = parsePositiveInteger(colonLineMatch[1] ?? "");
+    if (lineNumber === null) {
+      return null;
+    }
+
     return {
-      lineNumber: parsePositiveInteger(colonLineMatch[1] ?? ""),
+      lineNumber,
       path: value.slice(0, colonLineMatch.index),
     };
   }
@@ -118,6 +136,45 @@ function parseLineSuffix(value: string): LocalFileHrefParts {
     lineNumber: null,
     path: value,
   };
+}
+
+function hasLikelyFileBasename(path: string): boolean {
+  const segments = path.split("/");
+  const basename = segments[segments.length - 1] ?? "";
+  return basename.startsWith(".") || basename.includes(".");
+}
+
+function isValidAbsoluteLocalFilePath(path: string): boolean {
+  return (
+    path.startsWith("/") &&
+    !path.startsWith("//") &&
+    path !== "/" &&
+    !path.endsWith("/") &&
+    !path.includes("\n") &&
+    !path.includes("\r") &&
+    !path.includes("?") &&
+    !path.includes("#")
+  );
+}
+
+function parseAbsoluteLocalFileHref(
+  href: string,
+): MarkdownPreviewLocalFileLink | null {
+  if (
+    href.length === 0 ||
+    href.trim() !== href ||
+    !href.startsWith("/") ||
+    href.startsWith("//")
+  ) {
+    return null;
+  }
+
+  const parsed = parseLineSuffix(safeDecodeURIComponent(href));
+  if (!parsed || !isValidAbsoluteLocalFilePath(parsed.path)) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function parseLocalFileHref(
@@ -130,18 +187,49 @@ function parseLocalFileHref(
   if (href.startsWith("file://")) {
     try {
       const url = new URL(href);
-      const parsed = parseLineSuffix(
-        safeDecodeURIComponent(url.pathname + url.hash),
-      );
-      return parsed.path.startsWith("/") ? parsed : null;
+      if (url.search.length > 0) {
+        return null;
+      }
+      return parseAbsoluteLocalFileHref(url.pathname + url.hash);
     } catch {
       return null;
     }
   }
 
-  const parsed = parseLineSuffix(safeDecodeURIComponent(href));
-  return parsed.path.startsWith("/") ? parsed : null;
+  return parseAbsoluteLocalFileHref(href);
 }
+
+function encodeFileUrlPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function shouldRenderFileHref(link: MarkdownPreviewLocalFileLink): boolean {
+  return (
+    link.path.startsWith("/") &&
+    (link.lineNumber !== null || hasLikelyFileBasename(link.path))
+  );
+}
+
+function buildLocalFileAnchorHref(
+  link: MarkdownPreviewLocalFileLink | null,
+  originalHref: string | undefined,
+): string | undefined {
+  if (!link || !shouldRenderFileHref(link)) {
+    return originalHref;
+  }
+
+  return `file://${encodeFileUrlPath(link.path)}${
+    link.lineNumber === null ? "" : `#L${link.lineNumber}`
+  }`;
+}
+
+const localFileAwareUrlTransform: UrlTransform = (value, key) => {
+  if (key === "href" && parseLocalFileHref(value)) {
+    return value;
+  }
+
+  return defaultUrlTransform(value);
+};
 
 function extractMarkdownImageUrls(markdown: string): string[] {
   const imageUrls: string[] = [];
@@ -164,7 +252,8 @@ function MarkdownAnchor({
   onOpenLocalFileLink,
   ...anchorProps
 }: MarkdownAnchorProps) {
-  const localFileLink = parseLocalFileHref(href);
+  const localFileLink = onOpenLocalFileLink ? parseLocalFileHref(href) : null;
+  const anchorHref = buildLocalFileAnchorHref(localFileLink, href);
   const handleLocalFileLinkClick = (event: MarkdownAnchorEvent) => {
     if (!localFileLink || !onOpenLocalFileLink) {
       return;
@@ -180,7 +269,7 @@ function MarkdownAnchor({
   return (
     <a
       {...anchorProps}
-      href={href}
+      href={anchorHref}
       className="break-words underline underline-offset-2"
       target="_blank"
       rel="noopener noreferrer"
@@ -478,6 +567,9 @@ function MarkdownPreviewComponent({
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={markdownComponents}
+          urlTransform={
+            onOpenLocalFileLink ? localFileAwareUrlTransform : undefined
+          }
         >
           {content}
         </ReactMarkdown>

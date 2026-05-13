@@ -7,7 +7,7 @@ describe("resolveThreadLocalFileLink", () => {
       resolveThreadLocalFileLink({
         link: {
           lineNumber: null,
-          path: "/projects/proj_1/threads/thr_1",
+          path: "/projects/proj_gyz9przugq/threads/thr_rq7r4uv8zg",
         },
         workspaceRootPath: "/Users/me/project",
       }),
@@ -26,7 +26,8 @@ describe("resolveThreadLocalFileLink", () => {
         workspaceRootPath: null,
       }),
     ).toEqual({
-      description: "Thread file links are only available for ready local workspaces.",
+      description:
+        "Thread file links are only available for ready local workspaces.",
       kind: "error",
     });
   });
@@ -61,8 +62,41 @@ describe("resolveThreadLocalFileLink", () => {
       request: {
         lineNumber: 12,
         path: "/Users/me/project/src/file.ts",
+        relativePath: "src/file.ts",
         workspaceRootPath: "/Users/me/project",
       },
+    });
+  });
+
+  it("rejects relative file links", () => {
+    expect(
+      resolveThreadLocalFileLink({
+        link: {
+          lineNumber: 7,
+          path: "apps/app/src/main.tsx",
+        },
+        workspaceRootPath: "/Users/me/project",
+      }),
+    ).toEqual({
+      description:
+        "Thread file links can only open files inside the current workspace.",
+      kind: "error",
+    });
+  });
+
+  it("rejects relative file links that escape the workspace root", () => {
+    expect(
+      resolveThreadLocalFileLink({
+        link: {
+          lineNumber: null,
+          path: "../secret.txt",
+        },
+        workspaceRootPath: "/Users/me/project",
+      }),
+    ).toEqual({
+      description:
+        "Thread file links can only open files inside the current workspace.",
+      kind: "error",
     });
   });
 
@@ -80,6 +114,7 @@ describe("resolveThreadLocalFileLink", () => {
       request: {
         lineNumber: null,
         path: "/projects/my-repo/src/file.ts",
+        relativePath: "src/file.ts",
         workspaceRootPath: "/projects/my-repo",
       },
     });

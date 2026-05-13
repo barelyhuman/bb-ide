@@ -19,6 +19,7 @@ import { useSendThreadMessage } from "../../hooks/mutations/thread-runtime-mutat
 import { useUpdateEnvironment } from "../../hooks/mutations/environment-mutations";
 import {
   useEnvironment,
+  useEnvironmentFilePreview,
   useEnvironmentWorkStatus,
 } from "../../hooks/queries/environment-queries";
 import {
@@ -57,7 +58,10 @@ import {
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "@/components/secondary-panel/useThreadStorageViewer";
-import { ThreadStorageFilePreview } from "@/components/secondary-panel/ThreadStorageFilePreview";
+import {
+  SecondaryPanelFilePreview,
+  ThreadStorageFilePreview,
+} from "@/components/secondary-panel/ThreadStorageFilePreview";
 import { PINNED_STORAGE_FILE_PATH } from "@/components/secondary-panel/managerStorage";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
@@ -81,6 +85,16 @@ const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 type MergeBasePickerOpenChangeHandler = NonNullable<
   ContextBannerMergeBaseConfig["onPickerOpenChange"]
 >;
+
+interface WorkspacePreviewFileTab {
+  lineNumber: number | null;
+  path: string;
+}
+
+interface OpenWorkspacePreviewFileArgs {
+  lineNumber: number | null;
+  path: string;
+}
 
 function arePathListsEqual(
   a: readonly string[],
@@ -152,6 +166,19 @@ export function ThreadDetailView() {
     : undefined;
   const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [openWorkspaceFileTabs, setOpenWorkspaceFileTabs] = useState<
+    WorkspacePreviewFileTab[]
+  >([]);
+  const [activeWorkspaceFilePath, setActiveWorkspaceFilePath] = useState<
+    string | null
+  >(null);
+  const activeWorkspaceFileTab =
+    openWorkspaceFileTabs.find((tab) => tab.path === activeWorkspaceFilePath) ??
+    null;
+  const activeWorkspaceFileLineNumber =
+    activeWorkspaceFileTab?.lineNumber ?? null;
+  const activeStorageFilePath =
+    activeWorkspaceFilePath === null ? activeFilePath : null;
   const [hasRequestedMergeBaseOptions, setHasRequestedMergeBaseOptions] =
     useState(false);
   const hasDefaultedToPinnedFileRef = useRef(false);
@@ -167,7 +194,7 @@ export function ThreadDetailView() {
     threadStorageFiles,
     threadStorageFilesError,
   } = useThreadStorageViewer({
-    activePath: activeFilePath,
+    activePath: activeStorageFilePath,
     fileListEnabled: shouldLoadManagerStorageFiles,
     filePreviewEnabled: isSecondaryPanelActive,
     threadId,
@@ -209,6 +236,7 @@ export function ThreadDetailView() {
   const handleOpenStorageFile = useCallback((path: string) => {
     setOpenFilePaths((prev) => (prev.includes(path) ? prev : [...prev, path]));
     setActiveFilePath(path);
+    setActiveWorkspaceFilePath(null);
   }, []);
   const handleCloseStorageFileTab = useCallback((path: string) => {
     if (path === PINNED_STORAGE_FILE_PATH) return;
@@ -217,31 +245,13 @@ export function ThreadDetailView() {
   }, []);
   const handleActivateStorageFileTab = useCallback((path: string) => {
     setActiveFilePath(path);
+    setActiveWorkspaceFilePath(null);
   }, []);
   const storageBrowserController = useManagerStorageBrowser({
     files: threadStorageFiles?.files,
     onSelectPath: handleOpenStorageFile,
-    selectedPath: activeFilePath,
+    selectedPath: activeStorageFilePath,
   });
-  const fileTabs = useMemo<SecondaryPanelFileTab[] | undefined>(() => {
-    if (!isManagerThread || openFilePaths.length === 0) {
-      return undefined;
-    }
-    return openFilePaths.map((path) => ({
-      id: path,
-      filename: path.split("/").at(-1) ?? path,
-      isActive: path === activeFilePath,
-      isPinned: path === PINNED_STORAGE_FILE_PATH,
-      onSelect: () => handleActivateStorageFileTab(path),
-      onClose: () => handleCloseStorageFileTab(path),
-    }));
-  }, [
-    isManagerThread,
-    openFilePaths,
-    activeFilePath,
-    handleActivateStorageFileTab,
-    handleCloseStorageFileTab,
-  ]);
   const handleUseStandardManagerTimelineChange = useCallback(
     (checked: boolean) => {
       if (!isManagerThread) {
@@ -294,6 +304,11 @@ export function ThreadDetailView() {
   const environmentMergeBaseBranch =
     environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined;
   const {
+    data: workspaceFilePreview,
+    error: workspaceFilePreviewError,
+    isLoading: isWorkspaceFilePreviewLoading,
+  } = useEnvironmentFilePreview(thread?.environmentId, activeWorkspaceFilePath);
+  const {
     closeThreadSecondaryPanel,
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
     isLoadingMergeBaseBranchOptions,
@@ -323,10 +338,69 @@ export function ThreadDetailView() {
   const handleSecondaryPanelChange = useCallback(
     (panel: Parameters<typeof openThreadSecondaryPanel>[0]) => {
       setActiveFilePath(null);
+      setActiveWorkspaceFilePath(null);
       openThreadSecondaryPanel(panel);
     },
     [openThreadSecondaryPanel],
   );
+  const handleOpenWorkspaceFile = useCallback(
+    ({ lineNumber, path }: OpenWorkspacePreviewFileArgs) => {
+      const nextTab: WorkspacePreviewFileTab = { lineNumber, path };
+      setOpenWorkspaceFileTabs((prev) => {
+        const existingTab = prev.find((tab) => tab.path === path);
+        if (!existingTab) {
+          return [...prev, nextTab];
+        }
+        if (existingTab.lineNumber === lineNumber) {
+          return prev;
+        }
+        return prev.map((tab) => (tab.path === path ? nextTab : tab));
+      });
+      setActiveWorkspaceFilePath(path);
+      setActiveFilePath(null);
+      openThreadSecondaryPanel("thread-info");
+    },
+    [openThreadSecondaryPanel],
+  );
+  const handleCloseWorkspaceFileTab = useCallback((path: string) => {
+    setOpenWorkspaceFileTabs((prev) => prev.filter((tab) => tab.path !== path));
+    setActiveWorkspaceFilePath((prev) => (prev === path ? null : prev));
+  }, []);
+  const handleActivateWorkspaceFileTab = useCallback((path: string) => {
+    setActiveWorkspaceFilePath(path);
+    setActiveFilePath(null);
+  }, []);
+  const fileTabs = useMemo<SecondaryPanelFileTab[] | undefined>(() => {
+    const workspaceTabs = openWorkspaceFileTabs.map((tab) => ({
+      id: `workspace:${tab.path}`,
+      filename: tab.path.split("/").at(-1) ?? tab.path,
+      isActive: tab.path === activeWorkspaceFilePath,
+      onSelect: () => handleActivateWorkspaceFileTab(tab.path),
+      onClose: () => handleCloseWorkspaceFileTab(tab.path),
+    }));
+    const storageTabs = isManagerThread
+      ? openFilePaths.map((path) => ({
+          id: `storage:${path}`,
+          filename: path.split("/").at(-1) ?? path,
+          isActive: path === activeStorageFilePath,
+          isPinned: path === PINNED_STORAGE_FILE_PATH,
+          onSelect: () => handleActivateStorageFileTab(path),
+          onClose: () => handleCloseStorageFileTab(path),
+        }))
+      : [];
+    const tabs = [...workspaceTabs, ...storageTabs];
+    return tabs.length > 0 ? tabs : undefined;
+  }, [
+    activeStorageFilePath,
+    activeWorkspaceFilePath,
+    handleActivateStorageFileTab,
+    handleActivateWorkspaceFileTab,
+    handleCloseStorageFileTab,
+    handleCloseWorkspaceFileTab,
+    isManagerThread,
+    openFilePaths,
+    openWorkspaceFileTabs,
+  ]);
   const requestedMergeBaseBranch =
     selectedMergeBaseBranch ?? environmentMergeBaseBranch;
   const workStatusQuery = useEnvironmentWorkStatus(
@@ -364,6 +438,10 @@ export function ThreadDetailView() {
   } = useLocalOpenTargets({
     enabled: localWorkspaceRootPath !== null,
   });
+  useEffect(() => {
+    setOpenWorkspaceFileTabs((prev) => (prev.length === 0 ? prev : []));
+    setActiveWorkspaceFilePath((prev) => (prev === null ? prev : null));
+  }, [thread?.environmentId, threadId]);
   const { data: environmentHost } = useEffectiveHost(environment?.hostId);
   const managedChildrenQuery = useThreads(
     {
@@ -515,10 +593,13 @@ export function ThreadDetailView() {
         return true;
       }
 
-      void openPathInPreferredTarget(resolution.request);
+      handleOpenWorkspaceFile({
+        lineNumber: resolution.request.lineNumber,
+        path: resolution.request.relativePath,
+      });
       return true;
     },
-    [localWorkspaceRootPath, openPathInPreferredTarget],
+    [handleOpenWorkspaceFile, localWorkspaceRootPath],
   );
   const handleTimelineTitleAction = useCallback<TimelineTitleActionResolver>(
     (action) => {
@@ -715,9 +796,17 @@ export function ThreadDetailView() {
           isFilesLoading: isThreadStorageFilesLoading,
         }
       : undefined;
-  const fileTabContent = activeFilePath ? (
+  const fileTabContent = activeWorkspaceFilePath ? (
+    <SecondaryPanelFilePreview
+      activePath={activeWorkspaceFilePath}
+      error={workspaceFilePreviewError}
+      filePreview={workspaceFilePreview}
+      isLoading={isWorkspaceFilePreviewLoading}
+      lineNumber={activeWorkspaceFileLineNumber}
+    />
+  ) : activeStorageFilePath ? (
     <ThreadStorageFilePreview
-      activePath={activeFilePath}
+      activePath={activeStorageFilePath}
       error={threadStorageFilePreviewError}
       filePreview={threadStorageFilePreview}
       isLoading={isThreadStorageFilePreviewLoading}

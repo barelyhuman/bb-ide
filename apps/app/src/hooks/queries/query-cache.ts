@@ -13,6 +13,7 @@ import type {
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
+  environmentFilePreviewQueryKeyPrefix,
   environmentPromotionQueryKeyPrefix,
   environmentGitDiffQueryKey,
   environmentGitDiffQueryKeyPrefix,
@@ -119,6 +120,7 @@ export function getEnvironmentWorkspaceStateInvalidationQueryKeys({
   return [
     environmentWorkStatusQueryKeyPrefix(environmentId),
     environmentGitDiffQueryKeyPrefix(environmentId),
+    environmentFilePreviewQueryKeyPrefix(environmentId),
     environmentPromotionQueryKeyPrefix(environmentId),
   ];
 }

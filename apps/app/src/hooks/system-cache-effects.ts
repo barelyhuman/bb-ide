@@ -2,6 +2,7 @@ import type { QueryKey } from "@tanstack/react-query";
 import {
   allAvailableModelsQueryKeyPrefix,
   allEnvironmentGitDiffQueryKeyPrefix,
+  allEnvironmentFilePreviewQueryKeyPrefix,
   allEnvironmentMergeBaseBranchesQueryKeyPrefix,
   allEnvironmentPromotionQueryKeyPrefix,
   allEnvironmentQueryKeyPrefix,
@@ -118,6 +119,7 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allEnvironmentPromotionQueryKeyPrefix(),
     allEnvironmentMergeBaseBranchesQueryKeyPrefix(),
     allEnvironmentGitDiffQueryKeyPrefix(),
+    allEnvironmentFilePreviewQueryKeyPrefix(),
     projectSourceWorkspaceStatusQueryKeyPrefix(),
     localPathExistenceQueryKeyPrefix(),
     systemProvidersQueryKey(),

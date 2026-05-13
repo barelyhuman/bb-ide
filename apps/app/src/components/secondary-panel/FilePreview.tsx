@@ -1,6 +1,6 @@
-import { type CSSProperties, useMemo } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
-import type { SupportedLanguages } from "@pierre/diffs";
+import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
 import { Icon, MarkdownPreview, Skeleton } from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
@@ -16,7 +16,7 @@ export type FilePreviewState =
   | { kind: "not-found" }
   | { kind: "manager-status-pending" }
   | { kind: "error"; message?: string }
-  | { kind: "ready"; file: FilePreviewFile };
+  | { kind: "ready"; file: FilePreviewFile; lineNumber: number | null };
 
 export interface FilePreviewProps {
   state: FilePreviewState;
@@ -82,14 +82,43 @@ function FilePreviewBody({ state }: FilePreviewProps) {
       />
     );
   }
-  if (isMarkdownFile(state.file.name)) {
+  const lineNumber = state.lineNumber ?? null;
+  if (isMarkdownFile(state.file.name) && lineNumber === null) {
     return <MarkdownFilePreview file={state.file} />;
   }
-  return <FilePreviewCode file={state.file} />;
+  return <FilePreviewCode file={state.file} lineNumber={lineNumber} />;
 }
 
 function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
   return <MarkdownPreview content={file.contents} />;
+}
+
+function clearPreviewTargetLine(container: HTMLElement) {
+  const targetLines = container.querySelectorAll(
+    "[data-file-preview-target-line]",
+  );
+  for (const targetLine of targetLines) {
+    targetLine.removeAttribute("data-file-preview-target-line");
+    targetLine.removeAttribute("data-selected-line");
+  }
+}
+
+function findPreviewTargetLine(
+  container: HTMLElement,
+  lineNumber: number,
+): HTMLElement | null {
+  const lines = container.querySelectorAll(`[data-line="${lineNumber}"]`);
+  for (const line of lines) {
+    if (line instanceof HTMLElement && line.dataset.lineIndex !== undefined) {
+      return line;
+    }
+  }
+  for (const line of lines) {
+    if (line instanceof HTMLElement) {
+      return line;
+    }
+  }
+  return null;
 }
 
 function FilePreviewLoading() {
@@ -125,22 +154,92 @@ function FilePreviewMessage({
   );
 }
 
-function FilePreviewCode({ file }: { file: FilePreviewFile }) {
+function FilePreviewCode({
+  file,
+  lineNumber,
+}: {
+  file: FilePreviewFile;
+  lineNumber: number | null;
+}) {
   const preferredTheme = usePreferredTheme();
+  const containerRef = useRef<HTMLDivElement>(null);
   const options = useMemo(
     () => ({
       themeType: preferredTheme,
       overflow: "scroll" as const,
       disableFileHeader: true,
+      enableLineSelection: lineNumber !== null,
     }),
-    [preferredTheme],
+    [lineNumber, preferredTheme],
   );
+  const selectedLines = useMemo<SelectedLineRange | null>(
+    () =>
+      lineNumber === null
+        ? null
+        : {
+            start: lineNumber,
+            end: lineNumber,
+          },
+    [lineNumber],
+  );
+
+  useEffect(() => {
+    let animationFrame: number | null = null;
+    let retryTimer: number | null = null;
+    let attempts = 0;
+
+    function scheduleRetry() {
+      animationFrame = window.requestAnimationFrame(scrollToLine);
+      retryTimer = window.setTimeout(scrollToLine, 16);
+    }
+
+    function scrollToLine() {
+      const container = containerRef.current;
+      if (!container) return;
+      clearPreviewTargetLine(container);
+      clearPreviewTargetLine(container.ownerDocument.body);
+      if (lineNumber === null) return;
+
+      const line =
+        findPreviewTargetLine(container, lineNumber) ??
+        findPreviewTargetLine(container.ownerDocument.body, lineNumber);
+      if (line) {
+        line.setAttribute("data-file-preview-target-line", "");
+        line.setAttribute("data-selected-line", "single");
+        line.scrollIntoView?.({ block: "center" });
+        return;
+      }
+
+      attempts += 1;
+      if (attempts < 8) {
+        scheduleRetry();
+      }
+    }
+
+    scrollToLine();
+    return () => {
+      const container = containerRef.current;
+      if (container) {
+        clearPreviewTargetLine(container);
+        clearPreviewTargetLine(container.ownerDocument.body);
+      }
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+      }
+    };
+  }, [file.contents, file.name, lineNumber]);
+
   return (
     <div
+      ref={containerRef}
       style={FILE_PREVIEW_VIEW_STYLE}
+      data-file-preview-line-number={lineNumber ?? undefined}
       className="overflow-hidden rounded-md border border-border/70"
     >
-      <PierreFile file={file} options={options} />
+      <PierreFile file={file} options={options} selectedLines={selectedLines} />
     </div>
   );
 }

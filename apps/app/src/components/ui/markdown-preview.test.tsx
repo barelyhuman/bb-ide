@@ -3,7 +3,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MarkdownPreview } from "@/components/ui/markdown-preview";
-import { restoreMatchMedia, setupMatchMedia } from "@/test/helpers/match-media.js";
+import {
+  restoreMatchMedia,
+  setupMatchMedia,
+} from "@/test/helpers/match-media.js";
 
 type ClipboardWriteText = (text: string) => Promise<void>;
 
@@ -49,20 +52,71 @@ describe("MarkdownPreview", () => {
     const onOpenLocalFileLink = vi.fn(() => true);
     render(
       <MarkdownPreview
+        content={[
+          "[Open absolute](/workspace/src/app.ts:12)",
+          "[Open file URL](file:///workspace/src/file-url.ts#L4)",
+          "[Leave relative](apps/app/src/main.tsx#L4)",
+          "[Leave bare](README.md)",
+          "[Docs](https://example.test)",
+        ].join(" ")}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Open absolute" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open file URL" }));
+
+    expect(
+      screen.getByRole("link", { name: "Open absolute" }).getAttribute("href"),
+    ).toBe("file:///workspace/src/app.ts#L12");
+    expect(
+      screen.getByRole("link", { name: "Leave relative" }).getAttribute("href"),
+    ).toBe("apps/app/src/main.tsx#L4");
+    expect(
+      screen.getByRole("link", { name: "Leave bare" }).getAttribute("href"),
+    ).toBe("README.md");
+    expect(onOpenLocalFileLink).toHaveBeenCalledTimes(2);
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: 12,
+      path: "/workspace/src/app.ts",
+    });
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: 4,
+      path: "/workspace/src/file-url.ts",
+    });
+  });
+
+  it("does not rewrite local file links without a local file handler", () => {
+    render(
+      <MarkdownPreview content="[Open absolute](/workspace/src/app.ts:12)" />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Open absolute" }).getAttribute("href"),
+    ).toBe("/workspace/src/app.ts:12");
+  });
+
+  it("renders thread file links as file URLs while routing clicks through the local file handler", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
         content={
-          "[Open file](/workspace/src/app.ts:12) [Docs](https://example.test)"
+          "[ThreadTimelinePane.tsx](/Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/views/thread-detail/ThreadTimelinePane.tsx:145)"
         }
         onOpenLocalFileLink={onOpenLocalFileLink}
       />,
     );
 
-    fireEvent.click(screen.getByRole("link", { name: "Open file" }));
-    fireEvent.click(screen.getByRole("link", { name: "Docs" }));
+    const link = screen.getByRole("link", { name: "ThreadTimelinePane.tsx" });
+    expect(link.getAttribute("href")).toBe(
+      "file:///Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/views/thread-detail/ThreadTimelinePane.tsx#L145",
+    );
 
-    expect(onOpenLocalFileLink).toHaveBeenCalledTimes(1);
+    fireEvent.click(link);
+
     expect(onOpenLocalFileLink).toHaveBeenCalledWith({
-      lineNumber: 12,
-      path: "/workspace/src/app.ts",
+      lineNumber: 145,
+      path: "/Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/views/thread-detail/ThreadTimelinePane.tsx",
     });
   });
 

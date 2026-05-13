@@ -1,12 +1,32 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useNavigate,
+  type NavigateFunction,
+} from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
-import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type {
+  Environment,
+  Host,
+  ThreadListEntry,
+  ThreadWithRuntime,
+} from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { SidebarProvider } from "@/components/ui";
+import { conversationRow } from "@/test/fixtures/thread-timeline-rows";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
@@ -15,11 +35,14 @@ import {
   type FetchRoute,
 } from "@/test/http-test-utils";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
 import {
+  environmentQueryKey,
   threadListQueryKey,
   threadQueryKey,
   type ThreadListQueryFilters,
 } from "@/hooks/queries/query-keys";
+import { restoreMatchMedia, setupMatchMedia } from "@/test/helpers/match-media";
 import { wsManager } from "@/lib/ws";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadDetailView } from "./ThreadDetailView";
@@ -41,18 +64,25 @@ interface ThreadDetailWrapperProps {
 
 interface ThreadDetailRenderResult {
   queryClient: QueryClient;
+  navigateTo: (path: string) => void;
 }
 
 interface RenderThreadDetailViewOptions {
   cachedProjectThreads?: ThreadListEntry[];
+  compactViewport?: boolean;
 }
 
 interface CreateThreadDetailSuccessRoutesArgs {
+  environment?: Environment;
+  host?: Host;
+  hostDaemonPort?: number | null;
+  localHostId?: string;
   managerThreads?: ThreadListEntry[];
   parentThread?: ThreadWithRuntime;
   thread: ThreadWithRuntime;
   threadListHandler?: ThreadListHandler;
   threadListRequests?: URL[];
+  timelineResponse?: ThreadTimelineResponse;
   threadStorageFilesHandler?: ThreadStorageFilesHandler;
 }
 
@@ -127,6 +157,57 @@ function createThreadListEntry(
   };
 }
 
+function createEnvironmentResponse(
+  overrides: Partial<Environment> = {},
+): Environment {
+  return {
+    baseBranch: null,
+    branchName: "main",
+    cleanupMode: null,
+    cleanupRequestedAt: null,
+    createdAt: 1,
+    defaultBranch: "main",
+    hostId: "host-local",
+    id: "env-1",
+    isGitRepo: true,
+    isWorktree: true,
+    managed: true,
+    mergeBaseBranch: null,
+    path: "/Users/michael/.bb-dev/worktrees/env_9svzwa4syg/bb",
+    projectId: "project-1",
+    status: "ready",
+    updatedAt: 1,
+    workspaceProvisionType: "managed-worktree",
+    ...overrides,
+  };
+}
+
+function createHostResponse(overrides: Partial<Host> = {}): Host {
+  return {
+    createdAt: 1,
+    id: "host-local",
+    lastSeenAt: 1,
+    name: "Localhost",
+    status: "connected",
+    type: "persistent",
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function createThreadTimelineResponse(
+  rows: ThreadTimelineResponse["rows"],
+): ThreadTimelineResponse {
+  return {
+    ...EMPTY_THREAD_TIMELINE_RESPONSE,
+    rows,
+    timelinePage: {
+      ...EMPTY_THREAD_TIMELINE_RESPONSE.timelinePage,
+      returnedSegmentCount: rows.length,
+    },
+  };
+}
+
 function installThreadDetailSuccessFetchRoutes({
   listThreadsHandler,
   parentThread,
@@ -145,12 +226,19 @@ function installThreadDetailSuccessFetchRoutes({
 
 function createThreadDetailWrapper() {
   const harness = createQueryClientTestHarness();
+  let capturedNavigate: NavigateFunction | null = null;
+
+  function NavigationCapture() {
+    capturedNavigate = useNavigate();
+    return null;
+  }
 
   function ThreadDetailWrapper({ children }: ThreadDetailWrapperProps) {
     return harness.wrapper({
       children: (
         <Suspense fallback={null}>
           <MemoryRouter initialEntries={["/projects/project-1/threads/thr-1"]}>
+            <NavigationCapture />
             <SidebarProvider>
               <ThreadActionsProvider>
                 <Routes>
@@ -168,6 +256,12 @@ function createThreadDetailWrapper() {
   }
 
   return {
+    navigateTo(path: string) {
+      if (!capturedNavigate) {
+        throw new Error("Thread detail test router has not rendered yet");
+      }
+      capturedNavigate(path);
+    },
     queryClient: harness.queryClient,
     wrapper: ThreadDetailWrapper,
   };
@@ -176,7 +270,13 @@ function createThreadDetailWrapper() {
 async function renderThreadDetailView(
   options: RenderThreadDetailViewOptions = {},
 ): Promise<ThreadDetailRenderResult> {
-  const { queryClient, wrapper } = createThreadDetailWrapper();
+  const { navigateTo, queryClient, wrapper } = createThreadDetailWrapper();
+
+  if (options.compactViewport) {
+    setupMatchMedia({
+      matchesByQuery: new Map([[COMPACT_VIEWPORT_QUERY, true]]),
+    });
+  }
 
   if (options.cachedProjectThreads) {
     queryClient.setQueryData(
@@ -188,15 +288,19 @@ async function renderThreadDetailView(
     render(<ThreadDetailView />, { wrapper });
   });
 
-  return { queryClient };
+  return { navigateTo, queryClient };
 }
 
 function createThreadDetailSuccessRoutes(
   args: CreateThreadDetailSuccessRoutesArgs,
 ): FetchRoute[] {
+  const hostDaemonPort = args.hostDaemonPort ?? null;
+  const host = args.host;
+  const localHostId = args.localHostId ?? host?.id ?? "host-local";
+  const threadId = args.thread.id;
   return [
     {
-      pathname: "/api/v1/threads/thr-1",
+      pathname: `/api/v1/threads/${threadId}`,
       handler: () => jsonResponse(args.thread),
     },
     ...(args.parentThread
@@ -208,11 +312,31 @@ function createThreadDetailSuccessRoutes(
         ]
       : []),
     {
-      pathname: "/api/v1/threads/thr-1/timeline",
-      handler: () => jsonResponse(EMPTY_THREAD_TIMELINE_RESPONSE),
+      pathname: `/api/v1/threads/${threadId}/timeline`,
+      handler: () =>
+        jsonResponse(args.timelineResponse ?? EMPTY_THREAD_TIMELINE_RESPONSE),
     },
+    ...(args.environment
+      ? [
+          {
+            pathname: `/api/v1/environments/${args.environment.id}`,
+            handler: () => jsonResponse(args.environment),
+          },
+          {
+            pathname: `/api/v1/environments/${args.environment.id}/status`,
+            handler: () => jsonResponse({ workspace: null }),
+          },
+          {
+            pathname: `/api/v1/hosts/${args.environment.hostId}`,
+            handler: () =>
+              jsonResponse(
+                host ?? createHostResponse({ id: args.environment.hostId }),
+              ),
+          },
+        ]
+      : []),
     {
-      pathname: "/api/v1/threads/thr-1/thread-storage/files",
+      pathname: `/api/v1/threads/${threadId}/thread-storage/files`,
       handler:
         args.threadStorageFilesHandler ??
         (() => jsonResponse({ files: [], truncated: false })),
@@ -241,19 +365,19 @@ function createThreadDetailSuccessRoutes(
       },
     },
     {
-      pathname: "/api/v1/threads/thr-1/default-execution-options",
+      pathname: `/api/v1/threads/${threadId}/default-execution-options`,
       handler: () => jsonResponse(null),
     },
     {
-      pathname: "/api/v1/threads/thr-1/drafts",
+      pathname: `/api/v1/threads/${threadId}/drafts`,
       handler: () => jsonResponse([]),
     },
     {
-      pathname: "/api/v1/threads/thr-1/interactions",
+      pathname: `/api/v1/threads/${threadId}/interactions`,
       handler: () => jsonResponse([]),
     },
     {
-      pathname: "/api/v1/threads/thr-1/prompt-history",
+      pathname: `/api/v1/threads/${threadId}/prompt-history`,
       handler: () => jsonResponse([]),
     },
     {
@@ -261,15 +385,37 @@ function createThreadDetailSuccessRoutes(
       handler: () =>
         jsonResponse({
           githubConnected: false,
-          hostDaemonPort: null,
+          hostDaemonPort,
           sandboxHostSupported: false,
           voiceTranscriptionEnabled: false,
         }),
     },
     {
       pathname: "/api/v1/hosts",
-      handler: () => jsonResponse([]),
+      handler: () => jsonResponse(host ? [host] : []),
     },
+    ...(hostDaemonPort
+      ? [
+          {
+            pathname: "/status",
+            port: hostDaemonPort,
+            handler: () =>
+              jsonResponse({
+                connected: true,
+                hostId: localHostId,
+                platform: "darwin",
+                protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+                serverUrl: "http://localhost:3334",
+                supportsNativeFolderPicker: false,
+              }),
+          },
+          {
+            pathname: "/workspace-open-targets",
+            port: hostDaemonPort,
+            handler: () => jsonResponse({ targets: [] }),
+          },
+        ]
+      : []),
     {
       pathname: "/api/v1/system/providers",
       handler: () =>
@@ -332,6 +478,7 @@ beforeEach(() => {
 afterEach(() => {
   wsManager.disconnect();
   cleanup();
+  restoreMatchMedia();
   window.localStorage.clear();
   resetFakeReconnectingWebSockets();
   vi.restoreAllMocks();
@@ -585,6 +732,180 @@ describe("ThreadDetailView", () => {
     expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
       1,
     );
+  });
+
+  it("opens timeline file links in secondary panel tabs", async () => {
+    const environment = createEnvironmentResponse();
+    const host = createHostResponse({ id: environment.hostId });
+    const relativeFilePath = "docs/README.md";
+    const absoluteFilePath = `${environment.path ?? ""}/${relativeFilePath}`;
+    const fileContents = Array.from({ length: 45 }, (_, index) =>
+      index === 41 ? "target line 42" : `line ${index + 1}`,
+    ).join("\n");
+    const filePreviewRequests: URL[] = [];
+    installFetchRoutes([
+      ...createThreadDetailSuccessRoutes({
+        environment,
+        host,
+        hostDaemonPort: 4123,
+        thread: createThreadResponse({ environmentId: environment.id }),
+        timelineResponse: createThreadTimelineResponse([
+          conversationRow({
+            text: `[README.md](${absoluteFilePath}:42)`,
+          }),
+        ]),
+      }),
+      {
+        pathname: `/api/v1/environments/${environment.id}/diff/file`,
+        handler: (request) => {
+          filePreviewRequests.push(new URL(request.url));
+          return jsonResponse({
+            content: fileContents,
+            contentEncoding: "utf8",
+            mimeType: "text/markdown",
+            path: absoluteFilePath,
+            sizeBytes: fileContents.length,
+          });
+        },
+      },
+    ]);
+
+    const { queryClient } = await renderThreadDetailView({
+      compactViewport: true,
+    });
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(environmentQueryKey(environment.id))?.status,
+      ).toBe("success");
+    });
+    const fileLink = await screen.findByRole("link", { name: "README.md" });
+    expect(fileLink.getAttribute("href")).toBe(
+      `file://${absoluteFilePath}#L42`,
+    );
+
+    fireEvent.click(fileLink);
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-file-preview-line-number="42"]'),
+      ).toBeTruthy();
+    });
+    expect(filePreviewRequests).toHaveLength(1);
+    expect(filePreviewRequests[0]?.searchParams.get("target")).toBe(
+      "uncommitted",
+    );
+    expect(filePreviewRequests[0]?.searchParams.get("path")).toBe(
+      relativeFilePath,
+    );
+    expect(filePreviewRequests[0]?.searchParams.get("side")).toBe("new");
+  });
+
+  it("resets workspace preview tabs after thread navigation", async () => {
+    const environmentA = createEnvironmentResponse({
+      id: "env-a",
+      path: "/Users/michael/.bb-dev/worktrees/env_a/bb",
+    });
+    const environmentB = createEnvironmentResponse({
+      id: "env-b",
+      path: "/Users/michael/.bb-dev/worktrees/env_b/bb",
+    });
+    const threadA = createThreadResponse({
+      environmentId: environmentA.id,
+      id: "thr-1",
+      title: "Thread A",
+      titleFallback: "Thread A",
+    });
+    const threadB = createThreadResponse({
+      environmentId: environmentB.id,
+      id: "thr-2",
+      title: "Thread B",
+      titleFallback: "Thread B",
+    });
+    const fileContents = Array.from({ length: 45 }, (_, index) =>
+      index === 41 ? "thread A target line" : `line ${index + 1}`,
+    ).join("\n");
+    const threadAPreviewRequests: URL[] = [];
+    const threadBPreviewRequests: URL[] = [];
+
+    installFetchRoutes([
+      ...createThreadDetailSuccessRoutes({
+        environment: environmentA,
+        host: createHostResponse({ id: environmentA.hostId }),
+        hostDaemonPort: 4123,
+        thread: threadA,
+        timelineResponse: createThreadTimelineResponse([
+          conversationRow({
+            text: `[README.md](${environmentA.path ?? ""}/README.md:42)`,
+          }),
+        ]),
+      }),
+      ...createThreadDetailSuccessRoutes({
+        environment: environmentB,
+        host: createHostResponse({ id: environmentB.hostId }),
+        hostDaemonPort: 4123,
+        thread: threadB,
+        timelineResponse: EMPTY_THREAD_TIMELINE_RESPONSE,
+      }),
+      {
+        pathname: `/api/v1/environments/${environmentA.id}/diff/file`,
+        handler: (request) => {
+          threadAPreviewRequests.push(new URL(request.url));
+          return jsonResponse({
+            content: fileContents,
+            contentEncoding: "utf8",
+            mimeType: "text/markdown",
+            path: `${environmentA.path ?? ""}/README.md`,
+            sizeBytes: fileContents.length,
+          });
+        },
+      },
+      {
+        pathname: `/api/v1/environments/${environmentB.id}/diff/file`,
+        handler: (request) => {
+          threadBPreviewRequests.push(new URL(request.url));
+          return jsonResponse({
+            content: "stale preview should not load",
+            contentEncoding: "utf8",
+            mimeType: "text/plain",
+            path: `${environmentB.path ?? ""}/README.md`,
+            sizeBytes: 29,
+          });
+        },
+      },
+    ]);
+
+    const { navigateTo, queryClient } = await renderThreadDetailView({
+      compactViewport: true,
+    });
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(environmentQueryKey(environmentA.id))?.status,
+      ).toBe("success");
+    });
+    const fileLink = await screen.findByRole("link", { name: "README.md" });
+    fireEvent.click(fileLink);
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-file-preview-line-number="42"]'),
+      ).toBeTruthy();
+    });
+    expect(threadAPreviewRequests).toHaveLength(1);
+
+    await act(async () => {
+      navigateTo("/projects/project-1/threads/thr-2");
+    });
+
+    await screen.findByText("Thread B");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "README.md" })).toBeNull();
+      expect(
+        document.querySelector('[data-file-preview-line-number="42"]'),
+      ).toBeNull();
+    });
+    expect(threadBPreviewRequests).toHaveLength(0);
   });
 
   it("defers thread storage files for manager threads", async () => {

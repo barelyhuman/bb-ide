@@ -8,6 +8,7 @@ import {
   getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
 } from "./queries/query-cache";
 import {
+  environmentFilePreviewQueryKeyPrefix,
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
@@ -59,6 +60,9 @@ export function removeEnvironmentScopedQueries({
   });
   queryClient.removeQueries({
     queryKey: environmentGitDiffQueryKeyPrefix(environmentId),
+  });
+  queryClient.removeQueries({
+    queryKey: environmentFilePreviewQueryKeyPrefix(environmentId),
   });
   queryClient.removeQueries({
     queryKey: environmentMergeBaseBranchesQueryKeyPrefix(environmentId),
