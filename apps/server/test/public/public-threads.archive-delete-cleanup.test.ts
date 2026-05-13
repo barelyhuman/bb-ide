@@ -23,6 +23,7 @@ import {
 } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import {
+  listQueuedEnvironmentCommands,
   listQueuedThreadCommands,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -495,6 +496,13 @@ describe("public thread archive delete cleanup routes", () => {
   });
 
   it("queues Codex archive forwarding once when stop finalizes during archive validation", async () => {
+    // Contract: if thread.stop happens to finalize *while* the archive
+    // route is awaiting its workspace.status validation, the resulting
+    // thread.archive forwarding to Codex must be queued exactly once —
+    // neither the stop-result side effect nor the archive route itself
+    // may double-enqueue. The intermediate command waits below exist to
+    // *trigger* the race window; the assertion is the final queue
+    // contents.
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -519,17 +527,13 @@ describe("public thread archive delete cleanup routes", () => {
         providerThreadId: "provider-archive-stop-race",
       });
 
+      // Kick off stop + archive concurrently, then wait until both daemon
+      // commands they generate are queued (without responding yet).
       const stopResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/stop`,
         { method: "POST" },
       );
       expect(stopResponse.status).toBe(200);
-      const stopCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.stop" && command.threadId === thread.id,
-      );
-
       const archivePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/archive`,
         {
@@ -541,38 +545,33 @@ describe("public thread archive delete cleanup routes", () => {
           }),
         },
       );
-      const statusCommand = await waitForQueuedCommandAfter(
-        harness,
-        stopCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
+      const [stopCommand, statusCommand] = await Promise.all([
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "thread.stop" && command.threadId === thread.id,
+        ),
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === environment.id,
+        ),
+      ]);
 
-      const stopResultResponse = await reportQueuedCommandSuccess(
-        harness,
-        stopCommand,
-        {},
-      );
-      expect(stopResultResponse.status).toBe(200);
-      expect(
-        listQueuedThreadCommands(harness, "thread.archive", thread.id),
-      ).toHaveLength(0);
-
+      // Trigger the race: stop result lands first, then archive validation
+      // completes. Both code paths now have a window to forward to Codex.
+      await reportQueuedCommandSuccess(harness, stopCommand, {});
       await reportQueuedCommandSuccess(harness, statusCommand, {
         workspaceStatus: cleanWorkspaceStatus(),
       });
-      await waitForQueuedCommandAfter(
-        harness,
-        statusCommand.row.cursor,
-        ({ command }) =>
-          command.type === "thread.archive" && command.threadId === thread.id,
-      );
-      // Cleanup advance reuses the cached workspace.status result from the
-      // archive-validation check (workspaceStatusCommandCache, 1s TTL), so it
-      // goes straight to environment.destroy without queueing another status.
+
       const archiveResponse = await archivePromise;
       expect(archiveResponse.status).toBe(200);
+
+      // Outcome: thread is archived in the DB and the Codex forwarding
+      // command was enqueued exactly once across both code paths.
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
       expect(
         listQueuedThreadCommands(harness, "thread.archive", thread.id),
       ).toHaveLength(1);
@@ -1593,6 +1592,11 @@ describe("public thread archive delete cleanup routes", () => {
         status: "active",
       });
 
+      // Contract: archiving an *active* managed-worktree thread marks it
+      // archived, requests stop, but defers environment.destroy until the
+      // stop result comes back. Two snapshots — one after the archive HTTP
+      // returns, one after stop finalizes — verify both halves of the
+      // contract without relying on intermediate command ordering.
       const archivePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/archive`,
         {
@@ -1607,6 +1611,7 @@ describe("public thread archive delete cleanup routes", () => {
         },
       );
 
+      // Drive archive validation forward.
       const initialStatusCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -1617,45 +1622,39 @@ describe("public thread archive delete cleanup routes", () => {
         workspaceStatus: cleanWorkspaceStatus(),
       });
 
-      const stopCommand = await waitForQueuedCommandAfter(
-        harness,
-        initialStatusCommand.row.cursor,
-        ({ command }) =>
-          command.type === "thread.stop" && command.threadId === thread.id,
-      );
-
       const archiveResponse = await archivePromise;
       expect(archiveResponse.status).toBe(200);
+
+      // Snapshot 1: archive committed, stop in flight, destroy deferred.
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
       expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf(
         "number",
       );
-      await expect(
-        waitForQueuedCommandAfter(
+      expect(
+        listQueuedEnvironmentCommands(
           harness,
-          stopCommand.row.cursor,
-          ({ command }) =>
-            command.type === "environment.destroy" &&
-            command.environmentId === environment.id,
-          100,
+          "environment.destroy",
+          environment.id,
         ),
-      ).rejects.toThrow("Timed out waiting for queued command");
+      ).toHaveLength(0);
 
-      const stopResultPromise = reportQueuedCommandSuccess(
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      const stopResultResponse = await reportQueuedCommandSuccess(
         harness,
         stopCommand,
         {},
       );
-      const stopResultResponse = await stopResultPromise;
       expect(stopResultResponse.status).toBe(200);
 
-      // The cleanup advance fired by stop finalization reuses the cached
-      // workspace.status result from the archive-validation check (1s TTL),
-      // so it proceeds straight to environment.destroy without enqueueing
-      // a second status command.
-      const destroyCommand = await waitForQueuedCommandAfter(
+      // Snapshot 2: stop result handler advances cleanup; the cached
+      // workspace.status from archive validation (1s TTL) is reused, so
+      // destroy is queued directly with no second status round trip.
+      const destroyCommand = await waitForQueuedCommand(
         harness,
-        stopCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -1663,6 +1662,13 @@ describe("public thread archive delete cleanup routes", () => {
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
       });
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          environment.id,
+        ),
+      ).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }

@@ -20,7 +20,6 @@ import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
-  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -142,15 +141,20 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("returns derived promotion state and separate action availability", async () => {
+  it("queues workspace.status for primary + env, then returns a promotion response", async () => {
+    // Smoke test for the /promotion HTTP wiring — verifies the route fetches
+    // both workspace statuses through the daemon command queue and shapes
+    // the response per contract. Scenario coverage for the derivation logic
+    // (promote/demote blockers, isPromoted, etc.) lives in
+    // test/services/environments/promotion-derivation.test.ts.
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-environment-promotion",
+        id: "host-environment-promotion-smoke",
       });
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/environment-promotion",
+        path: "/tmp/environment-promotion-smoke",
       });
       const sourceEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
@@ -163,112 +167,7 @@ describe("public environment and system routes", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/environment-promotion/.bb-worktrees/thread",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
-        branchName: "bb/promoted",
-        defaultBranch: "main",
-      });
-
-      const responsePromise = harness.app.request(
-        `/api/v1/environments/${environment.id}/promotion`,
-      );
-
-      // The promotion handler queues both workspace.status commands in
-      // parallel via Promise.all; we can't assume which is enqueued first,
-      // so look them up by environmentId rather than chaining cursors.
-      const [primaryStatusCommand, environmentStatusCommand] = await Promise.all([
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "workspace.status" &&
-            command.environmentId === sourceEnvironment.id,
-        ),
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "workspace.status" &&
-            command.environmentId === environment.id,
-        ),
-      ]);
-      await Promise.all([
-        reportQueuedCommandSuccess(harness, primaryStatusCommand, {
-          workspaceStatus: {
-            workingTree: {
-              hasUncommittedChanges: false,
-              state: "clean",
-              insertions: 0,
-              deletions: 0,
-              files: [],
-            },
-            branch: {
-              currentBranch: "bb/promoted",
-              defaultBranch: "main",
-            },
-            mergeBase: null,
-          },
-        }),
-        reportQueuedCommandSuccess(harness, environmentStatusCommand, {
-          workspaceStatus: {
-            workingTree: {
-              hasUncommittedChanges: false,
-              state: "clean",
-              insertions: 0,
-              deletions: 0,
-              files: [],
-            },
-            branch: {
-              currentBranch: null,
-              defaultBranch: "main",
-            },
-            mergeBase: null,
-          },
-        }),
-      ]);
-
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        state: {
-          isPromoted: true,
-          branchName: "bb/promoted",
-        },
-        actions: {
-          promote: {
-            unavailableReasons: ["already_promoted"],
-          },
-          demote: {
-            unavailableReasons: [],
-          },
-        },
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("returns every applicable promote blocker when both worktrees are dirty", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-environment-promotion-both-dirty",
-      });
-      const { project, source } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/environment-promotion-both-dirty",
-      });
-      const sourceEnvironment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: source.path,
-        managed: false,
-        workspaceProvisionType: "unmanaged",
-        branchName: "main",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/environment-promotion-both-dirty/.bb-worktrees/thread",
+        path: "/tmp/environment-promotion-smoke/.bb-worktrees/thread",
         managed: true,
         workspaceProvisionType: "managed-worktree",
         branchName: "bb/thread",
@@ -279,9 +178,8 @@ describe("public environment and system routes", () => {
         `/api/v1/environments/${environment.id}/promotion`,
       );
 
-      // The promotion handler queues both workspace.status commands in
-      // parallel via Promise.all; we can't assume which is enqueued first,
-      // so look them up by environmentId rather than chaining cursors.
+      // Two parallel workspace.status calls (Promise.all in the handler) —
+      // order isn't part of the contract, so resolve both by env id.
       const [primaryStatusCommand, environmentStatusCommand] = await Promise.all([
         waitForQueuedCommand(
           harness,
@@ -299,19 +197,11 @@ describe("public environment and system routes", () => {
       await Promise.all([
         reportQueuedCommandSuccess(harness, primaryStatusCommand, {
           workspaceStatus: makeWorkspaceStatus({
-            workingTree: makeWorkspaceWorkingTree({
-              hasUncommittedChanges: true,
-              state: "dirty_uncommitted",
-            }),
             branch: { currentBranch: "main", defaultBranch: "main" },
           }),
         }),
         reportQueuedCommandSuccess(harness, environmentStatusCommand, {
           workspaceStatus: makeWorkspaceStatus({
-            workingTree: makeWorkspaceWorkingTree({
-              hasUncommittedChanges: true,
-              state: "dirty_uncommitted",
-            }),
             branch: { currentBranch: "bb/thread", defaultBranch: "main" },
           }),
         }),
@@ -319,101 +209,14 @@ describe("public environment and system routes", () => {
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toMatchObject({
-        actions: {
-          promote: {
-            unavailableReasons: ["primary_checkout_dirty", "environment_dirty"],
-          },
-          demote: {
-            unavailableReasons: [
-              "primary_checkout_dirty",
-              "environment_dirty",
-              "not_promoted",
-            ],
-          },
-        },
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("disables promotion when the environment worktree is on another branch", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-environment-promotion-branch-mismatch",
-      });
-      const { project, source } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/environment-promotion-branch-mismatch",
-      });
-      const sourceEnvironment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: source.path,
-        managed: false,
-        workspaceProvisionType: "unmanaged",
-        branchName: "main",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/environment-promotion-branch-mismatch/.bb-worktrees/thread",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
-        branchName: "bb/thread",
-        defaultBranch: "main",
-      });
-
-      const responsePromise = harness.app.request(
-        `/api/v1/environments/${environment.id}/promotion`,
-      );
-
-      // The promotion handler queues both workspace.status commands in
-      // parallel via Promise.all; we can't assume which is enqueued first,
-      // so look them up by environmentId rather than chaining cursors.
-      const [primaryStatusCommand, environmentStatusCommand] = await Promise.all([
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "workspace.status" &&
-            command.environmentId === sourceEnvironment.id,
-        ),
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "workspace.status" &&
-            command.environmentId === environment.id,
-        ),
-      ]);
-      await Promise.all([
-        reportQueuedCommandSuccess(harness, primaryStatusCommand, {
-          workspaceStatus: makeWorkspaceStatus({
-            branch: { currentBranch: "main", defaultBranch: "main" },
-          }),
-        }),
-        reportQueuedCommandSuccess(harness, environmentStatusCommand, {
-          workspaceStatus: makeWorkspaceStatus({
-            branch: { currentBranch: "bb/other", defaultBranch: "main" },
-          }),
-        }),
-      ]);
-
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toMatchObject({
+      await expect(readJson(response)).resolves.toEqual({
         state: {
           isPromoted: false,
           branchName: "bb/thread",
         },
         actions: {
-          promote: {
-            unavailableReasons: ["environment_branch_mismatch"],
-          },
-          demote: {
-            unavailableReasons: ["not_promoted"],
-          },
+          promote: { unavailableReasons: [] },
+          demote: { unavailableReasons: ["not_promoted"] },
         },
       });
     } finally {

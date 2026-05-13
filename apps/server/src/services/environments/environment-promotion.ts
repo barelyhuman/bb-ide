@@ -35,7 +35,7 @@ interface DemoteEnvironmentArgs {
   environment: Environment;
 }
 
-interface PromotionWorkspaceFacts {
+export interface PromotionWorkspaceFacts {
   eligibilityUnavailableReason: EnvironmentPromotionUnavailableReason | null;
   environmentStatus: WorkspaceStatus | null;
   primaryStatus: WorkspaceStatus | null;
@@ -155,7 +155,7 @@ function getPromotionWorkspaceEligibility({
   };
 }
 
-function derivePromotionStateFromFacts(
+export function derivePromotionStateFromFacts(
   environment: Environment,
   facts: PromotionWorkspaceFacts,
 ): EnvironmentPromotionState {
@@ -222,7 +222,7 @@ function checkCommonAvailability(
   };
 }
 
-function buildPromoteAvailability(
+export function buildPromoteAvailability(
   facts: PromotionWorkspaceFacts,
   state: EnvironmentPromotionState,
 ): EnvironmentPromotionActionAvailability {
@@ -241,7 +241,7 @@ function buildPromoteAvailability(
   return reasons.length === 0 ? AVAILABLE : withReasons(reasons);
 }
 
-function buildDemoteAvailability(
+export function buildDemoteAvailability(
   environment: Environment,
   facts: PromotionWorkspaceFacts,
   state: EnvironmentPromotionState,

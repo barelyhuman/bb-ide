@@ -45,6 +45,24 @@ export function listQueuedThreadCommands(
     .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
 }
 
+export function listQueuedEnvironmentCommands(
+  harness: TestAppHarness,
+  type: HostDaemonCommand["type"],
+  environmentId: string,
+): HostDaemonCommand[] {
+  return harness.db
+    .select({ payload: hostDaemonCommands.payload })
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.type, type),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${environmentId}`,
+      ),
+    )
+    .all()
+    .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+}
+
 const TEST_PRODUCER_EVENT_ID_PREFIX = "hdevt_";
 const TEST_PRODUCER_EVENT_ID_SUFFIX_LENGTH = 20;
 
