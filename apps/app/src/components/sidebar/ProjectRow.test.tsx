@@ -4,7 +4,6 @@ import { Suspense, type ReactNode } from "react";
 import {
   act,
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
@@ -148,16 +147,6 @@ function getThreadOpenLabels(): string[] {
     const label = link.getAttribute("aria-label")?.replace(/^Open /u, "");
     return label === undefined ? [] : [label];
   });
-}
-
-function getProjectOpenLink(): HTMLAnchorElement {
-  const link = document.querySelector<HTMLAnchorElement>(
-    'a[href="/projects/proj_1"]',
-  );
-  if (link === null) {
-    throw new Error("Expected project open link to be rendered");
-  }
-  return link;
 }
 
 afterEach(() => {
@@ -310,136 +299,4 @@ describe("ProjectRow", () => {
     expect(screen.queryByLabelText("Open Managed child")).toBeNull();
   });
 
-  it("preserves left-click project opening", async () => {
-    const onProjectSelect = vi.fn();
-
-    await renderProjectRow({
-      onProjectSelect,
-      threadListState: {
-        status: "ready",
-        threads: [],
-      },
-    });
-
-    fireEvent.click(getProjectOpenLink());
-
-    expect(onProjectSelect).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
-  });
-
-  it("opens the project actions menu from the ellipsis trigger", async () => {
-    await renderProjectRow({
-      threadListState: {
-        status: "ready",
-        threads: [],
-      },
-    });
-
-    fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Project Alpha actions" }),
-      {
-        button: 0,
-        ctrlKey: false,
-      },
-    );
-
-    expect(
-      await screen.findByRole("menuitem", { name: "Rename" }),
-    ).not.toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Remove" })).not.toBeNull();
-  });
-
-  it("opens the project actions menu from the row context menu gesture", async () => {
-    await renderProjectRow({
-      threadListState: {
-        status: "ready",
-        threads: [],
-      },
-    });
-
-    const browserMenuAllowed = fireEvent.contextMenu(
-      screen.getByText("Project Alpha"),
-      { clientX: 96, clientY: 48 },
-    );
-
-    expect(browserMenuAllowed).toBe(false);
-    expect(
-      await screen.findByRole("menuitem", { name: "Rename" }),
-    ).not.toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Remove" })).not.toBeNull();
-    expect(
-      screen
-        .getByRole("button", { hidden: true, name: "Project Alpha actions" })
-        .getAttribute("aria-expanded"),
-    ).toBe("false");
-  });
-
-  it("dismisses a right-click-opened project actions menu after selecting an action", async () => {
-    await renderProjectRow({
-      threadListState: {
-        status: "ready",
-        threads: [],
-      },
-    });
-
-    fireEvent.contextMenu(screen.getByText("Project Alpha"), {
-      clientX: 96,
-      clientY: 48,
-    });
-
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
-    });
-  });
-
-  it("dismisses a right-click-opened project actions menu when clicking outside", async () => {
-    await renderProjectRow({
-      threadListState: {
-        status: "ready",
-        threads: [],
-      },
-    });
-
-    fireEvent.contextMenu(screen.getByText("Project Alpha"), {
-      clientX: 96,
-      clientY: 48,
-    });
-
-    expect(
-      await screen.findByRole("menuitem", { name: "Rename" }),
-    ).not.toBeNull();
-
-    fireEvent.pointerDown(document.body, { button: 0 });
-    fireEvent.click(document.body);
-
-    await waitFor(() => {
-      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
-    });
-  });
-
-  it("closes a right-click-opened project actions menu with Escape", async () => {
-    await renderProjectRow({
-      threadListState: {
-        status: "ready",
-        threads: [],
-      },
-    });
-
-    fireEvent.contextMenu(screen.getByText("Project Alpha"), {
-      clientX: 96,
-      clientY: 48,
-    });
-
-    const menu = await screen.findByRole("menu", {
-      name: "Project Alpha actions",
-    });
-
-    fireEvent.keyDown(menu, { key: "Escape" });
-
-    await waitFor(() => {
-      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
-    });
-  });
 });

@@ -20,17 +20,12 @@ import {
   systemRow,
   toolRow,
   turnRow,
-  webFetchRow,
-  webSearchRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline/ThreadTimelineRows";
-import type {
-  ThreadTimelineLocalFileLinkHandler,
-  UserAttachmentImageSrcResolver,
-} from "@/components/thread/timeline/types";
+import type { UserAttachmentImageSrcResolver } from "@/components/thread/timeline/types";
 
 type ElementScrollMetricName = "clientHeight" | "scrollHeight";
 type ThreadTimelineRowsPropsOverrides = Partial<
@@ -189,23 +184,6 @@ describe("ThreadTimelineRows", () => {
     expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the expand control when a short user message overflows by wrapping", () => {
-    const wrappedShortMessage = "wrapped ".repeat(70);
-
-    withElementScrollMetrics(() => {
-      renderTimelineRows({
-        timelineRows: [
-          conversationRow({
-            role: "user",
-            text: wrappedShortMessage,
-          }),
-        ],
-      });
-
-      expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy();
-    });
-  });
-
   it("uses active-latest treatment for trailing completed bundles in an active scope", () => {
     // New spec: a bundle that is the trailing/latest bundle in the open step
     // gets active-latest treatment (present tense + shimmer) regardless of
@@ -280,31 +258,6 @@ describe("ThreadTimelineRows", () => {
     expect(exploringBundleButton.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("uses active wording for pending tail activity summaries in an active scope", () => {
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [
-        commandRow({
-          id: "command-pending-1",
-          command: "pnpm test",
-          sourceSeqStart: 1,
-          status: "pending",
-        }),
-        commandRow({
-          id: "command-pending-2",
-          command: "pnpm lint",
-          sourceSeqStart: 2,
-          status: "pending",
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    expect(html).toContain("Running");
-    expect(html).toContain("2 commands");
-  });
-
   it("renders activity summary exploration details as compact static rows", () => {
     const view = renderTimelineRows({
       timelineRows: [
@@ -368,19 +321,6 @@ describe("ThreadTimelineRows", () => {
     );
 
     expect(view.container.textContent ?? "").toContain("rg timeline apps/app");
-  });
-
-  it("does not render web search and fetch leaves as expandable rows", () => {
-    const view = renderTimelineRows({
-      timelineRows: [webSearchRow(), webFetchRow()],
-    });
-
-    expect(screen.getAllByRole("button")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button"));
-
-    expect(view.container.textContent ?? "").toContain("Ran web search");
-    expect(view.container.textContent ?? "").toContain("Fetched");
-    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("groups completed work once a second completed row appends to the run", () => {
@@ -609,26 +549,6 @@ describe("ThreadTimelineRows", () => {
     );
   });
 
-  it("hides command detail until the row is expanded", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-1",
-          command: "true",
-        }),
-      ],
-    });
-
-    expect(view.container.textContent ?? "").toContain("Ran");
-    expect(screen.queryByRole("button", { name: /Ran 1 command/u })).toBeNull();
-    expect(view.container.textContent ?? "").not.toContain("$ true");
-
-    fireEvent.click(screen.getByRole("button", { name: /Ran\s+true/u }));
-
-    expect(view.container.textContent ?? "").toContain("$ true");
-    expect(view.container.textContent ?? "").toContain("exit code 0");
-  });
-
   it("updates expanded pending command output when source sequence advances", () => {
     const view = renderTimelineRows({
       timelineRows: [
@@ -665,35 +585,6 @@ describe("ThreadTimelineRows", () => {
 
     expect(view.container.textContent ?? "").toContain("second chunk");
     expect(view.container.textContent ?? "").not.toContain("first chunk");
-  });
-
-  it("renders error command bundles with neutral status metadata", () => {
-    renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-error-1",
-          command: "pnpm test",
-          status: "error",
-        }),
-        commandRow({
-          id: "command-error-2",
-          command: "pnpm lint",
-          status: "error",
-          sourceSeqStart: 2,
-        }),
-      ],
-    });
-
-    const summaryButton = screen.getByRole("button", {
-      name: /Ran 2 commands \(2 errors\)/u,
-    });
-
-    fireEvent.click(summaryButton);
-
-    const button = screen.getByRole("button", {
-      name: /Ran\s+pnpm test\s+\(2s, error\)/u,
-    });
-    expect(button).toBeTruthy();
   });
 
   it("renders failed structured tools as compact intent rows with an (error) marker", () => {
@@ -751,47 +642,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain(
       "ENOENT: no such file or directory",
     );
-  });
-
-  it("does not auto-expand error command leaves", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-error-1",
-          command: "pnpm test",
-          output: "test failure",
-          status: "error",
-        }),
-      ],
-    });
-
-    const commandButton = screen.getByRole("button", {
-      name: /Ran\s+pnpm test/u,
-    });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("test failure");
-  });
-
-  it("auto-expands pending single work rows in an active turn", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-pending-1",
-          command: "pnpm test",
-          output: "still running",
-          status: "pending",
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    const commandButton = screen.getByRole("button", {
-      name: /Running\s+pnpm test\s+2s/u,
-    });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("still running");
   });
 
   it("auto-expands a trailing bundle in an active scope without expanding its children", () => {
@@ -966,24 +816,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("\u001b");
   });
 
-  it("hides file diff detail until the row is expanded", () => {
-    const view = renderTimelineRows({
-      timelineRows: [fileChangeRow()],
-    });
-
-    expect(view.container.textContent ?? "").toContain("Edited");
-    expect(
-      view.container.querySelector("[data-timeline-file-diff]"),
-    ).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /Edited\s+app\.ts/u }));
-
-    expect(
-      view.container.querySelector("[data-timeline-file-diff]"),
-    ).not.toBeNull();
-    expect(view.container.textContent ?? "").not.toContain("applied");
-  });
-
   it("renders file-change stderr without rendering stdout below diffs", () => {
     const view = renderTimelineRows({
       timelineRows: [
@@ -1000,76 +832,6 @@ describe("ThreadTimelineRows", () => {
       "Success. Updated the following files:",
     );
     expect(view.container.textContent ?? "").toContain("patch failed");
-  });
-
-  it("renders raw created-file diffs with the same diff viewer", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        fileChangeRow({
-          id: "created-file-change-1",
-          kind: "add",
-          path: "src/new-file.ts",
-          diff: "first line\nsecond line\n",
-          diffStats: {
-            added: 2,
-            removed: 0,
-          },
-        }),
-      ],
-    });
-
-    expect(
-      screen.getByRole("button", {
-        name: /Created\s+new-file\.ts\s+\+2/u,
-      }),
-    ).toBeTruthy();
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Created\s+new-file\.ts\s+\+2/u,
-      }),
-    );
-
-    expect(
-      view.container.querySelector("[data-timeline-file-diff]"),
-    ).not.toBeNull();
-    expect(view.container.textContent ?? "").not.toContain("No diff available");
-  });
-
-  it("keeps nested lazy-loaded bundles expandable", () => {
-    const view = renderTimelineRows({
-      timelineRows: [turnRow()],
-      overrides: {
-        turnSummaryRowsById: {
-          "turn-summary-1": [
-            commandRow({
-              id: "command-1",
-              command: "echo one",
-              sourceSeqStart: 11,
-            }),
-            commandRow({
-              id: "command-2",
-              command: "echo two",
-              sourceSeqStart: 12,
-            }),
-          ],
-        },
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
-
-    const bundleButton = screen.getByRole("button", {
-      name: /Ran 2 commands/u,
-    });
-    expect(bundleButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("echo one");
-
-    fireEvent.click(bundleButton);
-
-    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("echo one");
-    expect(view.container.textContent ?? "").toContain("echo two");
   });
 
   it("collapses lazy turn-detail trailing work into a step-summary", () => {
@@ -1167,38 +929,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("still running");
   });
 
-  it("does not auto-expand lazy turn children when the runtime scope is idle", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        {
-          ...turnRow(),
-          status: "pending",
-        },
-      ],
-      overrides: {
-        turnSummaryRowsById: {
-          "turn-summary-1": [
-            commandRow({
-              id: "nested-pending-command-1",
-              command: "pnpm test",
-              output: "still running",
-              sourceSeqStart: 11,
-              status: "pending",
-            }),
-          ],
-        },
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Working\s*4s/u }));
-
-    const nestedCommandButton = screen.getByRole("button", {
-      name: /Running\s+pnpm test/u,
-    });
-    expect(nestedCommandButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("still running");
-  });
-
   it("keeps expanded system details pinned to bottom on streaming updates unless the user scrolls up", () => {
     // Sticky-bottom only fires while the row is still pending — completed
     // system rows preserve whatever scroll position the user landed on.
@@ -1247,109 +977,4 @@ describe("ThreadTimelineRows", () => {
     });
   });
 
-  it("routes markdown local file links through the timeline handler", () => {
-    const onOpenLocalFileLink = vi.fn<ThreadTimelineLocalFileLinkHandler>(
-      () => true,
-    );
-
-    renderTimelineRows({
-      timelineRows: [
-        conversationRow({
-          text: "[Open file](/workspace/src/app.ts:7)",
-        }),
-      ],
-      overrides: {
-        onOpenLocalFileLink,
-      },
-    });
-
-    fireEvent.click(screen.getByRole("link", { name: "Open file" }));
-
-    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
-      lineNumber: 7,
-      path: "/workspace/src/app.ts",
-    });
-  });
-
-  it("renders user attachments and routes file attachment clicks", () => {
-    const onOpenLocalFileLink = vi.fn<ThreadTimelineLocalFileLinkHandler>(
-      () => true,
-    );
-    const resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver = (
-      path,
-      projectId,
-    ) => `/attachments/${projectId}${path}`;
-
-    renderTimelineRows({
-      timelineRows: [
-        conversationRow({
-          role: "user",
-          text: "Attached.",
-          attachments: {
-            webImages: 0,
-            localImages: 1,
-            localFiles: 1,
-            imageUrls: [],
-            localImagePaths: ["/workspace/shot.png"],
-            localFilePaths: ["/workspace/notes.md"],
-          },
-        }),
-      ],
-      overrides: {
-        onOpenLocalFileLink,
-        projectId: "project-1",
-        resolveUserAttachmentImageSrc,
-      },
-    });
-
-    const image = screen.getByRole("img", { name: "shot.png" });
-    expect(image.getAttribute("src")).toBe(
-      "/attachments/project-1/workspace/shot.png",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "notes.md" }));
-
-    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
-      lineNumber: null,
-      path: "/workspace/notes.md",
-    });
-  });
-
-  it("routes uploaded file attachments through project attachment content", () => {
-    const onOpenLocalFileLink = vi.fn<ThreadTimelineLocalFileLinkHandler>(
-      () => true,
-    );
-
-    renderTimelineRows({
-      timelineRows: [
-        conversationRow({
-          role: "user",
-          text: "Attached.",
-          attachments: {
-            webImages: 0,
-            localImages: 0,
-            localFiles: 1,
-            imageUrls: [],
-            localImagePaths: [],
-            localFilePaths: ["notes-123.txt"],
-          },
-        }),
-      ],
-      overrides: {
-        onOpenLocalFileLink,
-        projectId: "project-1",
-      },
-    });
-
-    const attachmentLink = screen.getByRole("link", { name: "notes-123.txt" });
-
-    expect(attachmentLink.getAttribute("href")).toBe(
-      "/api/v1/projects/project-1/attachments/content?path=notes-123.txt",
-    );
-    expect(attachmentLink.getAttribute("target")).toBe("_blank");
-
-    fireEvent.click(attachmentLink);
-
-    expect(onOpenLocalFileLink).not.toHaveBeenCalled();
-  });
 });

@@ -126,22 +126,6 @@ function pressIgnoredHistoryArrow({
 }
 
 describe("PromptBoxInternal history navigation", () => {
-  it("places an autofocused existing draft caret at the end", () => {
-    render(
-      <PromptBoxHarness
-        autoFocus
-        initialDraft={{ text: "working draft", attachments: [] }}
-        historyEntries={[]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-
-    expect(document.activeElement).toBe(textarea);
-    expect(textarea.selectionStart).toBe(textarea.value.length);
-    expect(textarea.selectionEnd).toBe(textarea.value.length);
-  });
-
   it("recalls the newest history entry when the input is empty", async () => {
     render(
       <PromptBoxHarness

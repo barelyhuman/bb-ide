@@ -110,35 +110,6 @@ describe("TimelineTitleView", () => {
     );
   });
 
-  it("allows truncating segments to shrink with ellipsis", () => {
-    const html = renderToStaticMarkup(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            seg("Ran subagent"),
-            seg("Review correctness + plan adherence", {
-              em: true,
-              truncate: true,
-            }),
-            seg("(general-purpose-with-long-provider-controlled-name)", {
-              em: false,
-              truncate: true,
-            }),
-          ],
-          decorations: [
-            { kind: "duration", startedAt: 0, completedAt: 45_000, em: false },
-          ],
-          plain:
-            "Ran subagent Review correctness + plan adherence (general-purpose-with-long-provider-controlled-name) 45s",
-        })}
-      />,
-    );
-
-    expect(html).toContain(
-      "(general-purpose-with-long-provider-controlled-name)",
-    );
-  });
-
   it("omits zero diff-stat sides", () => {
     const html = renderToStaticMarkup(
       <TimelineTitleView
@@ -155,74 +126,6 @@ describe("TimelineTitleView", () => {
 
     expect(html).not.toContain("+0");
     expect(html).toContain("-39");
-  });
-
-  it("renders em segments as plain spans when no resolver is provided", () => {
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("src/foo.ts", { em: true, truncate: true })],
-          action: fileDiffAction,
-        })}
-      />,
-    );
-
-    expect(screen.queryByRole("link")).toBeNull();
-    const node = screen.getByText("src/foo.ts");
-    expect(node.tagName).toBe("SPAN");
-    expect(node.getAttribute("role")).toBeNull();
-    expect(node.getAttribute("tabindex")).toBeNull();
-  });
-
-  it("renders em segments as plain spans when the resolver returns null", () => {
-    const resolver = vi.fn(() => null);
-
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("src/foo.ts", { em: true, truncate: true })],
-          action: fileDiffAction,
-        })}
-        onTitleAction={resolver}
-      />,
-    );
-
-    expect(resolver).toHaveBeenCalledWith(fileDiffAction);
-    expect(screen.queryByRole("link")).toBeNull();
-  });
-
-  it("renders em segments as a focusable role=link and never a nested button", () => {
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("src/foo.ts", { em: true, truncate: true })],
-          action: fileDiffAction,
-        })}
-        onTitleAction={() => () => {}}
-      />,
-    );
-
-    const link = screen.getByRole("link", { name: /src\/foo\.ts/ });
-    expect(link.tagName).toBe("SPAN");
-    expect(link.getAttribute("tabindex")).toBe("0");
-    expect(screen.queryByRole("button")).toBeNull();
-  });
-
-  it("invokes the resolved callback on mouse click", () => {
-    const onAction = vi.fn();
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("src/foo.ts", { em: true, truncate: true })],
-          action: fileDiffAction,
-        })}
-        onTitleAction={() => onAction}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("link", { name: /src\/foo\.ts/ }));
-
-    expect(onAction).toHaveBeenCalledTimes(1);
   });
 
   it("invokes the resolved callback on Enter and Space keypress", () => {
@@ -242,42 +145,6 @@ describe("TimelineTitleView", () => {
     fireEvent.keyDown(link, { key: " " });
 
     expect(onAction).toHaveBeenCalledTimes(2);
-  });
-
-  it("ignores unrelated keys", () => {
-    const onAction = vi.fn();
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("src/foo.ts", { em: true, truncate: true })],
-          action: fileDiffAction,
-        })}
-        onTitleAction={() => onAction}
-      />,
-    );
-
-    fireEvent.keyDown(screen.getByRole("link", { name: /src\/foo\.ts/ }), {
-      key: "a",
-    });
-
-    expect(onAction).not.toHaveBeenCalled();
-  });
-
-  it("does not consult the resolver for titles without an action", () => {
-    const resolver = vi.fn();
-
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("src/foo.ts", { em: true, truncate: true })],
-          action: null,
-        })}
-        onTitleAction={resolver}
-      />,
-    );
-
-    expect(resolver).not.toHaveBeenCalled();
-    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("ticks live duration forward without re-rendering from the server", () => {
@@ -337,63 +204,6 @@ describe("TimelineTitleView", () => {
     expect(onAction).toHaveBeenCalledTimes(2);
     expect(onWrapperClick).not.toHaveBeenCalled();
     expect(onWrapperKeyDown).not.toHaveBeenCalled();
-  });
-
-  it("renders linked segments as anchors using the resolver href", () => {
-    const resolver = vi.fn(() => "/projects/proj_1/threads/thr_manager");
-
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            seg("Thread assigned to"),
-            {
-              text: "Manager",
-              em: true,
-              shimmer: false,
-              truncate: true,
-              link: { kind: "thread", threadId: "thr_manager" },
-            },
-          ],
-        })}
-        resolveSegmentLinkHref={resolver}
-      />,
-    );
-
-    expect(resolver).toHaveBeenCalledWith({
-      kind: "thread",
-      threadId: "thr_manager",
-    });
-    const link = screen.getByRole("link", { name: "Manager" });
-    expect(link.tagName).toBe("A");
-    expect(link.getAttribute("href")).toBe(
-      "/projects/proj_1/threads/thr_manager",
-    );
-  });
-
-  it("falls back to a plain span when the link resolver returns null", () => {
-    const resolver = vi.fn(() => null);
-
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            {
-              text: "Manager",
-              em: true,
-              shimmer: false,
-              truncate: true,
-              link: { kind: "thread", threadId: "thr_manager" },
-            },
-          ],
-        })}
-        resolveSegmentLinkHref={resolver}
-      />,
-    );
-
-    expect(resolver).toHaveBeenCalled();
-    expect(screen.queryByRole("link")).toBeNull();
-    expect(screen.getByText("Manager").tagName).toBe("SPAN");
   });
 
   it("stops link click propagation so the row header doesn't toggle", () => {

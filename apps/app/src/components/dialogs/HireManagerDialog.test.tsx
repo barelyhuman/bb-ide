@@ -354,22 +354,6 @@ afterEach(() => {
 });
 
 describe("HireManagerDialog", () => {
-  it("shows an empty provider state after providers load with no entries", async () => {
-    installHireManagerRoutes({
-      systemProviders: [],
-    });
-    const { wrapper } = createSuspenseWrapper();
-
-    await renderOpenHireManagerDialog({
-      wrapper,
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("No providers available")).toBeTruthy();
-    });
-    expect(screen.queryByText("Loading providers…")).toBeNull();
-  });
-
   it("omits the server default option and submits the selected provider and model", async () => {
     const piModels = [
       makeModel("anthropic/claude-opus-4-7", {

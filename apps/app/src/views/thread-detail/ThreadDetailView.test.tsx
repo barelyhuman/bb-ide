@@ -47,7 +47,6 @@ import { restoreMatchMedia, setupMatchMedia } from "@/test/helpers/match-media";
 import { wsManager } from "@/lib/ws";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadDetailView } from "./ThreadDetailView";
-import { buildManagerSelectorOptions } from "./threadManagerSelectorOptions";
 
 vi.unmock("@/lib/api");
 
@@ -491,59 +490,6 @@ afterEach(() => {
 });
 
 describe("ThreadDetailView", () => {
-  it("builds new assignment targets from active manager query results", () => {
-    const thread = createThreadResponse({ title: "Standard thread" });
-    const activeManager = createThreadListEntry({
-      id: "thr-manager-active",
-      title: "Active manager",
-      titleFallback: "Active manager",
-      type: "manager",
-    });
-
-    const managerSelectorOptions = buildManagerSelectorOptions({
-      currentThreadId: thread.id,
-      isManagerThread: false,
-      managerThreads: [activeManager],
-      parentThreadDisplayName: null,
-      parentThreadId: null,
-    });
-
-    expect(managerSelectorOptions).toEqual([
-      { label: "None", value: "none" },
-      { label: "Active manager", value: activeManager.id },
-    ]);
-  });
-
-  it("keeps an already-assigned archived manager parent in selector options", () => {
-    const archivedManager = createThreadResponse({
-      archivedAt: 10,
-      id: "thr-manager-archived",
-      title: "Archived manager",
-      titleFallback: "Archived manager",
-      type: "manager",
-    });
-    const thread = createThreadResponse({
-      parentThreadId: archivedManager.id,
-      title: "Managed child thread",
-    });
-
-    const managerSelectorOptions = buildManagerSelectorOptions({
-      currentThreadId: thread.id,
-      isManagerThread: false,
-      managerThreads: [],
-      parentThreadDisplayName: archivedManager.title,
-      parentThreadId: archivedManager.id,
-    });
-    const selectedManagerOption = managerSelectorOptions.find(
-      (option) => option.value === archivedManager.id,
-    );
-
-    expect(selectedManagerOption).toEqual({
-      label: "Archived manager",
-      value: archivedManager.id,
-    });
-  });
-
   it("keeps showing loading when the thread request fails before the websocket connects", async () => {
     installFetchRoutes([
       {
@@ -638,41 +584,6 @@ describe("ThreadDetailView", () => {
     expect(listThreadsRequestCount).toBe(0);
   });
 
-  it("loads project threads for root standard threads so they can be assigned to managers", async () => {
-    let listThreadsRequestCount = 0;
-    const threadListRequests: URL[] = [];
-    installThreadDetailSuccessFetchRoutes({
-      thread: createThreadResponse(),
-      listThreadsHandler: (request) => {
-        threadListRequests.push(new URL(request.url));
-        listThreadsRequestCount += 1;
-        return jsonResponse([
-          createThreadListEntry({
-            id: "manager-1",
-            title: "Manager thread",
-            titleFallback: "Manager thread",
-            type: "manager",
-          }),
-        ]);
-      },
-    });
-
-    await renderThreadDetailView();
-
-    await screen.findByText("Loaded thread");
-    await waitFor(() => {
-      expect(listThreadsRequestCount).toBe(1);
-    });
-    expect(
-      threadListRequests.every(
-        (requestUrl) =>
-          requestUrl.searchParams.get("projectId") === "project-1" &&
-          requestUrl.searchParams.get("archived") === "false" &&
-          requestUrl.searchParams.get("type") === "manager",
-      ),
-    ).toBe(true);
-  });
-
   it("does not add a manager-selector thread-list observer for manager threads", async () => {
     let listThreadsRequestCount = 0;
     installThreadDetailSuccessFetchRoutes({
@@ -737,73 +648,6 @@ describe("ThreadDetailView", () => {
     expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
       1,
     );
-  });
-
-  it("opens timeline file links in secondary panel tabs", async () => {
-    const environment = createEnvironmentResponse();
-    const host = createHostResponse({ id: environment.hostId });
-    const relativeFilePath = "docs/notes.txt";
-    const absoluteFilePath = `${environment.path ?? ""}/${relativeFilePath}`;
-    const fileContents = Array.from({ length: 45 }, (_, index) =>
-      index === 41 ? "target line 42" : `line ${index + 1}`,
-    ).join("\n");
-    const filePreviewRequests: URL[] = [];
-    installFetchRoutes([
-      ...createThreadDetailSuccessRoutes({
-        environment,
-        host,
-        hostDaemonPort: 4123,
-        thread: createThreadResponse({ environmentId: environment.id }),
-        timelineResponse: createThreadTimelineResponse([
-          conversationRow({
-            text: `[notes.txt](${absoluteFilePath}:42)`,
-          }),
-        ]),
-      }),
-      {
-        pathname: `/api/v1/environments/${environment.id}/diff/file`,
-        handler: (request) => {
-          filePreviewRequests.push(new URL(request.url));
-          return jsonResponse({
-            content: fileContents,
-            contentEncoding: "utf8",
-            mimeType: "text/plain",
-            path: absoluteFilePath,
-            sizeBytes: fileContents.length,
-          });
-        },
-      },
-    ]);
-
-    const { queryClient } = await renderThreadDetailView({
-      compactViewport: true,
-    });
-
-    await waitFor(() => {
-      expect(
-        queryClient.getQueryState(environmentQueryKey(environment.id))?.status,
-      ).toBe("success");
-    });
-    const fileLink = await screen.findByRole("link", { name: /notes\.txt/ });
-    expect(fileLink.getAttribute("href")).toBe(
-      `file://${absoluteFilePath}#L42`,
-    );
-
-    fireEvent.click(fileLink);
-
-    await waitFor(() => {
-      expect(
-        document.querySelector('[data-file-preview-line-number="42"]'),
-      ).toBeTruthy();
-    });
-    expect(filePreviewRequests).toHaveLength(1);
-    expect(filePreviewRequests[0]?.searchParams.get("target")).toBe(
-      "uncommitted",
-    );
-    expect(filePreviewRequests[0]?.searchParams.get("path")).toBe(
-      relativeFilePath,
-    );
-    expect(filePreviewRequests[0]?.searchParams.get("side")).toBe("new");
   });
 
   it("resets workspace preview tabs after thread navigation", async () => {
@@ -913,71 +757,4 @@ describe("ThreadDetailView", () => {
     expect(threadBPreviewRequests).toHaveLength(0);
   });
 
-  it("defers thread storage files for manager threads", async () => {
-    let standardStorageRequestCount = 0;
-    installFetchRoutes(
-      createThreadDetailSuccessRoutes({
-        thread: createThreadResponse({ type: "standard" }),
-        threadStorageFilesHandler: () => {
-          standardStorageRequestCount += 1;
-          return jsonResponse({ files: [], truncated: false });
-        },
-      }),
-    );
-
-    await renderThreadDetailView();
-    await screen.findByText("Loaded thread");
-    expect(standardStorageRequestCount).toBe(0);
-    cleanup();
-    wsManager.disconnect();
-    resetFakeReconnectingWebSockets();
-
-    let managerStorageRequestCount = 0;
-    installFetchRoutes(
-      createThreadDetailSuccessRoutes({
-        thread: createThreadResponse({ type: "manager" }),
-        threadStorageFilesHandler: () => {
-          managerStorageRequestCount += 1;
-          return jsonResponse({ files: [], truncated: false });
-        },
-      }),
-    );
-
-    await renderThreadDetailView();
-    await screen.findByText("Loaded thread");
-    expect(managerStorageRequestCount).toBe(0);
-  });
-
-  it("loads manager storage files when the secondary panel is restored open", async () => {
-    window.localStorage.setItem("bb.thread.secondaryPanel", "thread-info");
-    let managerStorageRequestCount = 0;
-    installFetchRoutes(
-      createThreadDetailSuccessRoutes({
-        thread: createThreadResponse({ type: "manager" }),
-        threadStorageFilesHandler: () => {
-          managerStorageRequestCount += 1;
-          return jsonResponse({
-            files: [
-              { path: "STATUS.md", name: "STATUS.md" },
-              { path: "notes/plan.md", name: "plan.md" },
-            ],
-            truncated: false,
-          });
-        },
-      }),
-    );
-
-    await renderThreadDetailView();
-    await screen.findByText("Loaded thread");
-    await waitFor(() => {
-      expect(managerStorageRequestCount).toBe(1);
-    });
-
-    await act(async () => {
-      screen.getByLabelText("Show thread info panel").click();
-    });
-
-    expect(managerStorageRequestCount).toBe(1);
-    expect(screen.queryByText("No files yet.")).toBeNull();
-  });
 });

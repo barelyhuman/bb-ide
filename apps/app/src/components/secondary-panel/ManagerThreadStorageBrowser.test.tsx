@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   act,
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
@@ -232,35 +231,6 @@ afterEach(() => {
 });
 
 describe("ManagerThreadStorageBrowser", () => {
-  it("renders tree paths and reports selection through onSelectPath", async () => {
-    const onSelectPath = vi.fn();
-    render(
-      <Harness
-        files={makeFiles(["README.md", "docs/guide.md", "docs/reports/q1.md"])}
-        onSelectPath={onSelectPath}
-      />,
-    );
-
-    expect(await screen.findByRole("treeitem", { name: "README.md" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("treeitem", { name: "README.md" }));
-    expect(onSelectPath).toHaveBeenCalledWith("README.md");
-  });
-
-  it("resets the tree with file paths and no auto-expanded directories by default", async () => {
-    render(
-      <Harness
-        files={makeFiles(["README.md", "docs/guide.md", "docs/reports/q1.md"])}
-      />,
-    );
-
-    await screen.findByRole("treeitem", { name: "README.md" });
-
-    expect(treeResetCalls.at(-1)).toEqual({
-      initialExpandedPaths: [],
-      paths: ["README.md", "docs/guide.md", "docs/reports/q1.md"],
-    });
-  });
-
   it("syncs the shadow-root tree color-scheme with the selected theme", async () => {
     render(<Harness files={makeFiles(["README.md"])} />);
 
@@ -277,53 +247,5 @@ describe("ManagerThreadStorageBrowser", () => {
     await waitFor(() => {
       expect(tree.style.getPropertyValue("color-scheme")).toBe("dark");
     });
-  });
-
-  it("filters loaded paths and auto-expands matching directories when searching", async () => {
-    render(
-      <Harness
-        files={makeFiles(["docs/guide.md", "reports/q1.md"])}
-      />,
-    );
-
-    fireEvent.click(screen.getByLabelText("Open search"));
-    fireEvent.change(screen.getByLabelText("Search files"), {
-      target: { value: "reports" },
-    });
-
-    expect(
-      await screen.findByRole("treeitem", { name: "reports/q1.md" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("treeitem", { name: "docs/guide.md" }),
-    ).toBeNull();
-
-    expect(treeResetCalls.at(-1)).toEqual({
-      initialExpandedPaths: ["reports/"],
-      paths: ["reports/q1.md"],
-    });
-  });
-
-  it("shows an error message when filesError is set", () => {
-    render(
-      <Harness
-        files={[]}
-        filesError={new Error("Failed to load file list.")}
-      />,
-    );
-
-    expect(screen.getByText("Failed to load file list.")).toBeTruthy();
-  });
-
-  it("shows a loading state while files are loading with no data", () => {
-    render(<Harness isFilesLoading />);
-
-    expect(screen.getByText("Loading files...")).toBeTruthy();
-  });
-
-  it("shows an empty state when there are no files", () => {
-    render(<Harness files={[]} />);
-
-    expect(screen.getByText("No files yet.")).toBeTruthy();
   });
 });

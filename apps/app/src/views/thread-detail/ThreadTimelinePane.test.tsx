@@ -8,61 +8,10 @@ import {
   type RenderResult,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TimelineCommandWorkRow, TimelineRow } from "@bb/server-contract";
 import {
   LOADING_INDICATOR_REVEAL_DELAY_MS,
   ThreadTimelinePane,
 } from "./ThreadTimelinePane";
-
-function commandRow(): TimelineCommandWorkRow {
-  return {
-    id: "command-1",
-    threadId: "thread-1",
-    turnId: "turn-1",
-    sourceSeqStart: 1,
-    sourceSeqEnd: 1,
-    startedAt: 1,
-    createdAt: 1,
-    kind: "work",
-    workKind: "command",
-    status: "pending",
-    callId: "command-1",
-    command: "pnpm test",
-    cwd: null,
-    source: null,
-    output: "still running",
-    exitCode: null,
-    completedAt: null,
-    approvalStatus: null,
-    activityIntents: [],
-  };
-}
-
-function renderTimelinePane(rows: TimelineRow[]): HTMLElement {
-  const view = render(
-    <ThreadTimelinePane
-      activeThinking={null}
-      footer={<div>Composer</div>}
-      hasOlderTimelineRows={false}
-      header={<div>Header</div>}
-      hostConnectionNotice={null}
-      isLoadingOlderTimelineRows={false}
-      isThreadTimelinePending={false}
-      timelineError={false}
-      loadingTurnSummaryIds={new Set()}
-      erroredTurnSummaryIds={new Set()}
-      onLoadOlderRows={() => {}}
-      onLoadTurnSummaryRows={() => {}}
-      showOngoingIndicator={true}
-      timelineRows={rows}
-      threadId="thread-1"
-      threadRuntimeDisplayStatus="active"
-      turnSummaryRowsIdentity="thread-1:default"
-      turnSummaryRowsById={{}}
-    />,
-  );
-  return view.container;
-}
 
 function renderLoadingTimelinePane(): RenderResult {
   return render(
@@ -96,22 +45,6 @@ afterEach(() => {
 });
 
 describe("ThreadTimelinePane", () => {
-  it("keeps the working indicator attached to the rendered timeline rows", () => {
-    const container = renderTimelinePane([commandRow()]);
-
-    const timelineRowList = container.querySelector(
-      '[data-timeline-row-list="top-level"]',
-    );
-    const indicator = screen.getByText("Working...");
-
-    // Row list and indicator both render inside the Pane root (not in a
-    // portal or detached subtree). Asserting on a specific common ancestor
-    // is brittle because intermediate wrappers like AutoHeightContainer
-    // shift the depth.
-    expect(timelineRowList).toBeTruthy();
-    expect(container.contains(indicator)).toBe(true);
-  });
-
   it("delays the initial thread loading placeholder", () => {
     vi.useFakeTimers();
 

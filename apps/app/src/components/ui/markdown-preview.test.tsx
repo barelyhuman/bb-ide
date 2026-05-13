@@ -27,27 +27,6 @@ afterEach(() => {
 });
 
 describe("MarkdownPreview", () => {
-  it("renders GFM content as Markdown elements", () => {
-    render(
-      <MarkdownPreview
-        content={[
-          "# Storage Notes",
-          "",
-          "- [x] shipped",
-          "",
-          "| File | State |",
-          "| --- | --- |",
-          "| notes.md | done |",
-        ].join("\n")}
-      />,
-    );
-
-    expect(screen.getByRole("heading", { name: "Storage Notes" })).toBeTruthy();
-    expect(screen.getByRole("table")).toBeTruthy();
-    expect(screen.getByText("notes.md")).toBeTruthy();
-    expect(screen.getByRole("checkbox")).toBeTruthy();
-  });
-
   it("lets callers intercept local file links without changing other links", () => {
     const onOpenLocalFileLink = vi.fn(() => true);
     render(

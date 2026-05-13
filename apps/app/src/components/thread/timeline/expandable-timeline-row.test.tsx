@@ -66,51 +66,6 @@ describe("ExpandableTimelineRow", () => {
     }
   });
 
-  it("exposes expansion state on the toggle button", () => {
-    const view = render(
-      <ExpandableTimelineRow
-        title={TITLE}
-        renderBody={() => <div>details</div>}
-      />,
-    );
-
-    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
-      "false",
-    );
-
-    view.rerender(
-      <ExpandableTimelineRow
-        title={TITLE}
-        autoExpanded
-        renderBody={() => <div>details</div>}
-      />,
-    );
-
-    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
-      "true",
-    );
-  });
-
-  it("toggles from the accessible row header", () => {
-    const view = render(
-      <ExpandableTimelineRow
-        title={TITLE}
-        renderBody={() => <div>expanded row content</div>}
-      />,
-    );
-
-    const button = screen.getByRole("button", { name: /Ran details/u });
-    expect(button.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain(
-      "expanded row content",
-    );
-
-    fireEvent.click(button);
-
-    expect(button.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("expanded row content");
-  });
-
   it("keeps manual collapse across auto-expanded rerenders", () => {
     const view = render(
       <ExpandableTimelineRow

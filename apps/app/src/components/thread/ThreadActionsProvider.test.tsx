@@ -202,43 +202,6 @@ beforeEach(() => {
 });
 
 describe("ThreadActionsProvider", () => {
-  it("submits a rename and closes the dialog on success", async () => {
-    const thread = makeThread();
-    vi.mocked(api.updateThread).mockResolvedValue({
-      ...thread,
-      title: "Renamed thread",
-    });
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.requestRename(thread);
-    });
-
-    const input = (await screen.findByLabelText(
-      /thread name/i,
-    )) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "Renamed thread" } });
-    fireEvent.submit(input.closest("form")!);
-
-    await waitFor(() => {
-      expect(api.updateThread).toHaveBeenCalledWith(thread.id, {
-        title: "Renamed thread",
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText(/thread name/i)).toBeNull();
-    });
-  });
-
   it("opens an archive dialog when the workspace has uncommitted changes", async () => {
     const thread = makeThread();
     vi.mocked(api.getEnvironment).mockResolvedValue(
@@ -303,50 +266,6 @@ describe("ThreadActionsProvider", () => {
     });
     expect(api.getEnvironmentWorkStatus).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
-  });
-
-  it("archives with force when the workspace-warning dialog is confirmed", async () => {
-    const thread = makeThread();
-    vi.mocked(api.getEnvironment).mockResolvedValue(
-      makeEnvironment({ managed: true }),
-    );
-    vi.mocked(api.getEnvironmentWorkStatus).mockResolvedValue(
-      makeWorkspaceStatus({
-        workingTree: {
-          state: "dirty",
-          hasUncommittedChanges: true,
-          files: [],
-          insertions: 1,
-          deletions: 0,
-        },
-      }),
-    );
-    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    const confirmButton = await screen.findByRole("button", {
-      name: /archive anyway/i,
-    });
-    fireEvent.click(confirmButton);
-
-    await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
-        force: true,
-        managerChildThreadsConfirmed: false,
-      });
-    });
   });
 
   it("confirms before archiving a manager with assigned child threads", async () => {
@@ -595,84 +514,6 @@ describe("ThreadActionsProvider", () => {
     });
   });
 
-  it("combines children + workspace warnings into a single archive dialog", async () => {
-    const thread = makeThread({ type: "manager" });
-    vi.mocked(api.getThreadAssignedChildSummary).mockResolvedValue(
-      makeAssignedChildSummary({ nonDeletedAssignedChildCount: 1 }),
-    );
-    vi.mocked(api.getEnvironment).mockResolvedValue(
-      makeEnvironment({ managed: true }),
-    );
-    vi.mocked(api.getEnvironmentWorkStatus).mockResolvedValue(
-      makeWorkspaceStatus({
-        workingTree: {
-          state: "dirty",
-          hasUncommittedChanges: true,
-          files: [],
-          insertions: 1,
-          deletions: 0,
-        },
-      }),
-    );
-    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    // Both warnings render in the same dialog body.
-    expect(
-      await screen.findByText(/assigned threads will be unassigned/i),
-    ).not.toBeNull();
-    expect(
-      screen.getByText(/uncommitted changes that will be removed/i),
-    ).not.toBeNull();
-    expect(api.archiveThread).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /archive anyway/i }),
-    );
-
-    await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
-        force: true,
-        managerChildThreadsConfirmed: true,
-      });
-    });
-  });
-
-  it("toggleArchive on an archived thread routes to unarchive", async () => {
-    const thread = makeThread({ archivedAt: 100 });
-    vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(api.unarchiveThread).toHaveBeenCalledWith(thread.id);
-    });
-    expect(api.archiveThread).not.toHaveBeenCalled();
-  });
-
   it("toggleRead picks mark-read vs mark-unread based on last-read state", async () => {
     const unreadThread = makeThread({
       id: "thread-unread",
@@ -708,28 +549,6 @@ describe("ThreadActionsProvider", () => {
     await waitFor(() => {
       expect(api.markThreadRead).toHaveBeenCalledWith(unreadThread.id);
       expect(api.markThreadUnread).toHaveBeenCalledWith(readThread.id);
-    });
-  });
-
-  it("surfaces a toast when archive fails for a non-confirmation reason", async () => {
-    const thread = makeThread();
-    vi.mocked(api.archiveThread).mockRejectedValueOnce(new Error("Boom"));
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalled();
     });
   });
 

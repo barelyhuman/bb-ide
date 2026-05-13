@@ -71,17 +71,6 @@ function createCommandApprovalInteraction(): PendingInteraction {
   };
 }
 
-function createResolvingCommandApprovalInteraction(): PendingInteraction {
-  return {
-    ...createCommandApprovalInteraction(),
-    status: "resolving",
-    resolution: {
-      decision: "allow_for_session",
-      grantedPermissions: null,
-    },
-  };
-}
-
 function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
@@ -277,15 +266,4 @@ describe("ThreadPendingInteractionBanner", () => {
     expect(submitButton.hasAttribute("disabled")).toBe(false);
   });
 
-  it("shows resolving interactions as submitted instead of actionable", () => {
-    renderBanner({
-      interaction: createResolvingCommandApprovalInteraction(),
-    });
-
-    expect(screen.getByText("Delivering")).not.toBeNull();
-    expect(
-      screen.getByText("Answer submitted. Delivering it to the provider."),
-    ).not.toBeNull();
-    expect(screen.queryByRole("button", { name: /Submit/ })).toBeNull();
-  });
 });

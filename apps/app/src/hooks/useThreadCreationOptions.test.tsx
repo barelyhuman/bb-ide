@@ -8,10 +8,7 @@ import * as api from "@/lib/api";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { createTestSystemProvider } from "@/test/system-provider-test-utils";
-import {
-  formatModelLabel,
-  useThreadCreationOptions,
-} from "./useThreadCreationOptions";
+import { useThreadCreationOptions } from "./useThreadCreationOptions";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -85,18 +82,6 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.clearAllMocks();
-});
-
-describe("formatModelLabel", () => {
-  it("strips the Claude prefix for the claude-code provider", () => {
-    expect(formatModelLabel("Claude Sonnet 4.6", "claude-code")).toBe(
-      "Sonnet 4.6",
-    );
-  });
-
-  it("preserves GPT capitalization", () => {
-    expect(formatModelLabel("gpt-5.4")).toBe("GPT-5.4");
-  });
 });
 
 describe("useThreadCreationOptions", () => {

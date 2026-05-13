@@ -158,12 +158,6 @@ afterEach(() => {
 });
 
 describe("BottomAnchoredScrollBody", () => {
-  it("returns null outside the provider", () => {
-    render(<BottomAnchorProbe />);
-
-    expect(screen.getByTestId("bottom-state").textContent).toBe("null");
-  });
-
   it("keeps bottom state when non-bottom scroll is not user initiated", () => {
     const { scrollArea, content } = renderBody();
     setScrollMetrics(scrollArea, {

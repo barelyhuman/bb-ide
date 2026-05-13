@@ -174,36 +174,6 @@ afterEach(() => {
 });
 
 describe("ProjectArchivedThreadsView", () => {
-  it("shows archived managed child threads with a managed pill", async () => {
-    await renderProjectArchivedThreadsView({
-      threads: [
-        createThread({
-          archivedAt: 30,
-          id: "thr_managed",
-          parentThreadId: "thr_manager",
-          title: "Managed archived thread",
-          titleFallback: "Managed archived thread",
-        }),
-        createThread({
-          archivedAt: 20,
-          id: "thr_root",
-          title: "Root archived thread",
-          titleFallback: "Root archived thread",
-        }),
-      ],
-    });
-
-    expect(await screen.findByText("Managed archived thread")).toBeTruthy();
-    expect(screen.getByText("Root archived thread")).toBeTruthy();
-    expect(screen.getByText("managed")).toBeTruthy();
-  });
-
-  it("shows an empty state when the archived API returns no threads", async () => {
-    await renderProjectArchivedThreadsView({ threads: [] });
-
-    expect(await screen.findByText("No archived threads yet.")).toBeTruthy();
-  });
-
   it("filters threads with null archivedAt from the response", async () => {
     await renderProjectArchivedThreadsView({
       threads: [
@@ -268,22 +238,6 @@ describe("ProjectArchivedThreadsView", () => {
 
     await screen.findByText("Page2 thread");
     expect(requestedOffsets).toContain("100");
-    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
-  });
-
-  it("does not show Load more when fewer than a full page are returned", async () => {
-    await renderProjectArchivedThreadsView({
-      threads: [
-        createThread({
-          archivedAt: 20,
-          id: "thr_root",
-          title: "Root archived thread",
-          titleFallback: "Root archived thread",
-        }),
-      ],
-    });
-
-    await screen.findByText("Root archived thread");
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 

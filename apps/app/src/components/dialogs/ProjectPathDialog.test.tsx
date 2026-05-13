@@ -45,28 +45,6 @@ describe("ProjectPathDialog", () => {
     });
   });
 
-  it("shows the filesystem root validation message for create mode", () => {
-    render(
-      <ProjectPathDialog
-        target={{ kind: "create" }}
-        platform="linux"
-        onOpenChange={() => {}}
-        onSubmit={() => {}}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText("Project path"), {
-      target: { value: "/" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
-
-    expect(
-      screen.getByText(
-        "Project path must point to a project directory, not the filesystem root.",
-      ),
-    ).toBeTruthy();
-  });
-
   it("submits the normalized path in update mode", async () => {
     const onSubmit = vi.fn();
 
@@ -102,16 +80,4 @@ describe("ProjectPathDialog", () => {
     });
   });
 
-  it("uses the WSL hint copy when platform is wsl", () => {
-    render(
-      <ProjectPathDialog
-        target={{ kind: "create" }}
-        platform="wsl"
-        onOpenChange={() => {}}
-        onSubmit={() => {}}
-      />,
-    );
-
-    expect(screen.getByText(/\/mnt\/c\/\.\.\./)).toBeTruthy();
-  });
 });

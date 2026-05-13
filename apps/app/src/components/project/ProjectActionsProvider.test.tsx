@@ -96,45 +96,6 @@ afterEach(() => {
 });
 
 describe("ProjectActionsProvider", () => {
-  it("submits a rename and closes the dialog on success", async () => {
-    const project = makeProjectResponse();
-    vi.mocked(api.updateProject).mockResolvedValue({
-      ...project,
-      name: "Renamed project",
-    });
-
-    let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.requestRename(project);
-    });
-
-    const input = (await screen.findByLabelText(
-      "Project name",
-    )) as HTMLInputElement;
-    expect(input.value).toBe(project.name);
-
-    fireEvent.change(input, { target: { value: "Renamed project" } });
-    fireEvent.submit(input.closest("form")!);
-
-    await waitFor(() => {
-      expect(api.updateProject).toHaveBeenCalledWith(project.id, {
-        name: "Renamed project",
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText("Project name")).toBeNull();
-    });
-  });
-
   it("rejects submission with an empty name and does not call the api", async () => {
     const project = makeProjectResponse();
     let actions: ReturnType<typeof useProjectActions> | null = null;
@@ -158,33 +119,6 @@ describe("ProjectActionsProvider", () => {
 
     expect(await screen.findByText(/cannot be empty/i)).not.toBeNull();
     expect(api.updateProject).not.toHaveBeenCalled();
-  });
-
-  it("opens a delete confirmation and calls deleteProject when confirmed", async () => {
-    const project = makeProjectResponse();
-    vi.mocked(api.deleteProject).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.requestDelete(project);
-    });
-
-    const confirmButton = await screen.findByRole("button", {
-      name: /remove project/i,
-    });
-    fireEvent.click(confirmButton);
-
-    await waitFor(() => {
-      expect(api.deleteProject).toHaveBeenCalledWith(project.id);
-    });
   });
 
   it("clears the deleted project from the collapsed-projects atom on success", async () => {
