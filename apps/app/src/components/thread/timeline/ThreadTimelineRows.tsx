@@ -201,7 +201,7 @@ interface TurnRowBodyProps {
 }
 
 const NESTED_ROWS_GROUP_LINE_CLASS =
-  "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-border before:content-['']";
+  "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-foreground/15 before:content-['']";
 
 const TimelineRendererContext =
   createContext<TimelineRendererContextValue | null>(null);
