@@ -47,6 +47,11 @@ export interface IssueHostEnrollKeyArgs {
   hostType: HostType;
 }
 
+export interface RevokeHostEnrollKeysArgs {
+  hostId: string;
+  hostType: HostType;
+}
+
 export interface IssueDaemonHostKeyArgs {
   hostId: string;
   hostType: HostType;
@@ -104,6 +109,7 @@ export interface MachineAuthService {
     args: IssueHostEnrollKeyArgs,
   ): Promise<IssueHostEnrollKeyResult>;
   pruneExpiredKeys(): Promise<void>;
+  revokeHostEnrollKeys(args: RevokeHostEnrollKeysArgs): Promise<void>;
   rotateDaemonHostKey(args: RotateDaemonHostKeyArgs): Promise<string>;
   verifyDaemonHostKey(token: string): Promise<VerifyMachineKeyResult | null>;
 }
@@ -422,6 +428,15 @@ export async function createMachineAuthService(
     },
     async pruneExpiredKeys(): Promise<void> {
       await pruneExpiredKeys();
+    },
+    async revokeHostEnrollKeys({
+      hostId,
+      hostType,
+    }: RevokeHostEnrollKeysArgs): Promise<void> {
+      await disableActiveEnrollKeysForHost({
+        hostId,
+        hostType,
+      });
     },
     async rotateDaemonHostKey({
       keyId,

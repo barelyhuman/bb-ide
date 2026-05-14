@@ -66,6 +66,10 @@ by default. Press `Ctrl+C` in the terminal to stop both processes.
 The full platform policy and checkout/path expectations live in
 [`docs/platform-support.md`](./docs/platform-support.md).
 
+For real-user testing across devices and machines, see the
+[`mobile story`](./docs/mobile-story.md) and
+[`multi-host story`](./docs/multi-host-story.md).
+
 ### Provider credentials
 
 bb uses whichever providers you have configured. If you need to set one up:
@@ -194,6 +198,9 @@ addressing values instead.
 ## Further Reading
 
 - [Vision](docs/VISION.md)
+- [Platform support](docs/platform-support.md)
+- [Mobile story](docs/mobile-story.md)
+- [Multi-host story](docs/multi-host-story.md)
 
 ## Contributing
 

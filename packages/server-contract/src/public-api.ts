@@ -262,6 +262,10 @@ export type PublicApiSchema = {
       201
     >;
   };
+  "/hosts/:id/join": {
+    /** Cancels pending join material and deletes the host row only when the host has never opened a session. */
+    $delete: Endpoint<PathId, { ok: true }>;
+  };
   "/hosts/:id": {
     $get: Endpoint<PathId, Host>;
     $patch: Endpoint<PathId & { json: UpdateHostRequest }, Host>;

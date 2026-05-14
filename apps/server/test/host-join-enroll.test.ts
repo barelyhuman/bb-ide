@@ -1,9 +1,10 @@
-import { authApiKeys, getHost } from "@bb/db";
+import { authApiKeys, closeSession, getHost } from "@bb/db";
 import { eq } from "drizzle-orm";
 import { hostDaemonEnrollResponseSchema } from "@bb/host-daemon-contract";
 import { createHostJoinResponseSchema } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import { readJson } from "./helpers/json.js";
+import { seedSession } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
 describe("host join and enroll routes", () => {
@@ -63,6 +64,166 @@ describe("host join and enroll routes", () => {
         provider: "e2b",
         type: "ephemeral",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("cancels pending host joins by revoking the enroll key and deleting the unconnected stub", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_cancel_pending_join",
+          hostType: "persistent",
+        }),
+      });
+      const joinBody = createHostJoinResponseSchema.parse(
+        await readJson(joinResponse),
+      );
+
+      const cancelResponse = await harness.app.request(
+        `/api/v1/hosts/${joinBody.hostId}/join`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      expect(cancelResponse.status).toBe(200);
+      expect(await readJson(cancelResponse)).toEqual({ ok: true });
+      expect(getHost(harness.db, joinBody.hostId)).toBeNull();
+
+      const enrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${joinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: joinBody.hostId,
+            hostName: "canceled-host",
+            hostType: "persistent",
+          }),
+        },
+      );
+
+      expect(enrollResponse.status).toBe(401);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps hosts that have connected when canceling outstanding join material", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_cancel_connected_join",
+          hostType: "persistent",
+        }),
+      });
+      const joinBody = createHostJoinResponseSchema.parse(
+        await readJson(joinResponse),
+      );
+      const session = seedSession(harness.deps, joinBody.hostId);
+      closeSession(harness.db, harness.hub, session.id, "test-disconnect");
+
+      const cancelResponse = await harness.app.request(
+        `/api/v1/hosts/${joinBody.hostId}/join`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      expect(cancelResponse.status).toBe(200);
+      expect(getHost(harness.db, joinBody.hostId)).toMatchObject({
+        id: joinBody.hostId,
+        type: "persistent",
+      });
+
+      const enrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${joinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: joinBody.hostId,
+            hostName: "canceled-connected-host",
+            hostType: "persistent",
+          }),
+        },
+      );
+
+      expect(enrollResponse.status).toBe(401);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps active hosts when canceling outstanding join material", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const joinResponse = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_cancel_active_join",
+          hostType: "persistent",
+        }),
+      });
+      const joinBody = createHostJoinResponseSchema.parse(
+        await readJson(joinResponse),
+      );
+      seedSession(harness.deps, joinBody.hostId);
+
+      const cancelResponse = await harness.app.request(
+        `/api/v1/hosts/${joinBody.hostId}/join`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      expect(cancelResponse.status).toBe(200);
+      expect(getHost(harness.db, joinBody.hostId)).toMatchObject({
+        id: joinBody.hostId,
+        type: "persistent",
+      });
+
+      const enrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${joinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: joinBody.hostId,
+            hostName: "canceled-active-host",
+            hostType: "persistent",
+          }),
+        },
+      );
+
+      expect(enrollResponse.status).toBe(401);
     } finally {
       await harness.cleanup();
     }

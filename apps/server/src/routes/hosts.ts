@@ -1,6 +1,7 @@
 import {
   createHostId,
   deleteHost,
+  getLatestSessionForHost,
   getHost,
   updateHost,
   upsertHost,
@@ -29,6 +30,32 @@ function resolveJoinServerUrl(
 
 function resolvePendingHostName(hostId: string): string {
   return `pending-${hostId.slice(-8)}`;
+}
+
+interface CancelPendingHostJoinArgs {
+  deps: AppDeps;
+  hostId: string;
+}
+
+async function cancelPendingHostJoin({
+  deps,
+  hostId,
+}: CancelPendingHostJoinArgs): Promise<void> {
+  const host = requireNonDestroyedHostWithStatus(deps.db, hostId);
+  await deps.machineAuth.revokeHostEnrollKeys({
+    hostId: host.id,
+    hostType: host.type,
+  });
+
+  const latestSession = getLatestSessionForHost(deps.db, { hostId: host.id });
+  if (latestSession) {
+    return;
+  }
+
+  const deleted = deleteHost(deps.db, deps.hub, host.id);
+  if (!deleted) {
+    throw new ApiError(404, "host_not_found", "Host not found");
+  }
 }
 
 export function registerHostRoutes(app: Hono, deps: AppDeps): void {
@@ -81,6 +108,14 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
       },
       201,
     );
+  });
+
+  del("/hosts/:id/join", async (context) => {
+    await cancelPendingHostJoin({
+      deps,
+      hostId: context.req.param("id"),
+    });
+    return context.json({ ok: true });
   });
 
   get("/hosts/:id", (context) =>
