@@ -12,10 +12,13 @@ import { waitForThreadStatus } from "../../helpers/assertions.js";
 import { createProjectFixture } from "../../helpers/fixtures.js";
 import { withHarness } from "../../helpers/harness.js";
 import { createTestGitRepo } from "../../helpers/seed.js";
+import { scaleTimeoutMs } from "../../helpers/time.js";
 import { DEFAULT_TIMEOUT_MS } from "./shared.js";
 
 const FANOUT_PROVIDERS: ReadonlyArray<string> = ["codex", "claude-code", "pi"];
 const THREADS_PER_PROVIDER = 5;
+// Same-source managed worktrees serialize through the git worktree metadata lock.
+const FRESH_FANOUT_TIMEOUT_MS = scaleTimeoutMs(45_000);
 
 describe.sequential(
   "fake provider fresh-environment fanout integration",
@@ -148,7 +151,7 @@ describe.sequential(
                 harness.api,
                 entry.thread.id,
                 "idle",
-                DEFAULT_TIMEOUT_MS,
+                FRESH_FANOUT_TIMEOUT_MS,
               ),
             })),
           );
