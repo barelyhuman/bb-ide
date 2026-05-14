@@ -625,7 +625,17 @@ export type ProjectBranchesQuery = z.infer<typeof projectBranchesQuerySchema>;
 
 export const projectBranchesResponseSchema = z.object({
   branches: z.array(z.string()),
+  /**
+   * For host sources, the HEAD of the primary checkout. For GitHub sources,
+   * null (no working tree). Use this when the env will operate on the
+   * checkout in place (i.e., `host:local` threads).
+   */
   current: z.string().nullable(),
+  /**
+   * The repo's tracked default branch. Use this when the env will create a
+   * fresh workspace from the repo's default (host worktree or sandbox).
+   */
+  defaultBranch: z.string().nullable(),
 });
 export type ProjectBranchesResponse = z.infer<
   typeof projectBranchesResponseSchema

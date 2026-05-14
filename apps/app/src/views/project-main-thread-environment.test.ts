@@ -14,12 +14,12 @@ function selectedBranch(name: string): ProjectMainSelectedBranch {
 }
 
 describe("resolveProjectMainThreadEnvironment", () => {
-  it("omits unmanaged branch checkout when no branch is resolved", () => {
+  it("omits unmanaged branch checkout when no current branch is known", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
-        resolvedDefaultBranch: null,
+        currentBranch: null,
         selectedBranch: null,
       }),
     ).toEqual({
@@ -32,12 +32,12 @@ describe("resolveProjectMainThreadEnvironment", () => {
     });
   });
 
-  it("uses the resolved default branch for host local checkout", () => {
+  it("uses the env's current branch (HEAD) for host local checkout", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
-        resolvedDefaultBranch: "develop",
+        currentBranch: "develop",
         selectedBranch: null,
       }),
     ).toMatchObject({
@@ -53,7 +53,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
       resolveProjectMainThreadEnvironment({
         environmentValue: hostWorktreeEnvironmentValue,
         projectId,
-        resolvedDefaultBranch: "master",
+        currentBranch: "master",
         selectedBranch: null,
       }),
     ).toMatchObject({
@@ -64,12 +64,12 @@ describe("resolveProjectMainThreadEnvironment", () => {
     });
   });
 
-  it("sends a named base branch when the selected branch matches the resolved default", () => {
+  it("sends a named base branch when the selected branch matches the env's current", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostWorktreeEnvironmentValue,
         projectId,
-        resolvedDefaultBranch: "develop",
+        currentBranch: "develop",
         selectedBranch: selectedBranch("develop"),
       }),
     ).toMatchObject({
@@ -85,7 +85,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
       resolveProjectMainThreadEnvironment({
         environmentValue: sandboxEnvironmentValue,
         projectId,
-        resolvedDefaultBranch: "main",
+        currentBranch: "main",
         selectedBranch: selectedBranch("release/2026-05"),
       }),
     ).toMatchObject({

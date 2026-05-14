@@ -498,7 +498,10 @@ export const hostDaemonCommandResultSchemaByType = {
   "host.list_files": fileListResultSchema,
   "host.list_branches": z.object({
     branches: z.array(z.string()),
+    /** HEAD of the primary checkout at `path`. Null when the path is not a git repo. */
     current: z.string().nullable(),
+    /** Repo's tracked default branch (origin/HEAD or `init.defaultBranch`). Null when unknown. */
+    defaultBranch: z.string().nullable(),
   }),
   "host.read_file": fileReadResultSchema,
   "provider.list": z.object({

@@ -267,6 +267,7 @@ describe("public environment and system routes", () => {
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],
         current: "bb/details",
+        defaultBranch: "main",
       });
       const branchesResponse = await branchesPromise;
       expect(branchesResponse.status).toBe(200);
