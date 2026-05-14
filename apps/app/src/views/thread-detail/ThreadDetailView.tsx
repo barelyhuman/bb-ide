@@ -29,6 +29,7 @@ import {
 import {
   getLatestPendingInteraction,
   useThread,
+  useThreadComposerBootstrap,
   useThreadDetailBootstrap,
   useThreadPendingInteractions,
   useThreads,
@@ -144,9 +145,29 @@ export function ThreadDetailView() {
     isFetching: threadDetailBootstrapQuery.isFetching || isFetching,
     isLoadingError,
   });
+  const threadComposerBootstrapQuery = useThreadComposerBootstrap(
+    thread?.id ?? "",
+    {
+      enabled: threadQueryState.status === "ready" && Boolean(thread?.id),
+      environmentId: thread?.environmentId ?? undefined,
+    },
+  );
+  const hasThreadComposerBootstrapSettled =
+    threadComposerBootstrapQuery.isSuccess ||
+    threadComposerBootstrapQuery.isError;
+  const composerSeededStaleTime = threadComposerBootstrapQuery.isSuccess
+    ? 10_000
+    : undefined;
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: pendingInteractions = [] } = useThreadPendingInteractions(
     thread?.id ?? "",
+    {
+      enabled: hasThreadComposerBootstrapSettled,
+      refetchOnMount: threadComposerBootstrapQuery.isSuccess
+        ? false
+        : "always",
+      staleTime: composerSeededStaleTime,
+    },
   );
   const hasPendingInteraction =
     getLatestPendingInteraction(pendingInteractions) !== null;
@@ -710,6 +731,11 @@ export function ThreadDetailView() {
           : undefined
       }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
+      composerQueriesEnabled={hasThreadComposerBootstrapSettled}
+      composerQueriesRefetchOnMount={
+        threadComposerBootstrapQuery.isSuccess ? false : "always"
+      }
+      composerQueriesStaleTime={composerSeededStaleTime}
       onChangedFileClick={handleChangedFileClick}
       openThreadDiffPanel={openThreadDiffPanel}
       projectId={projectId}

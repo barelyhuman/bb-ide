@@ -14,7 +14,7 @@ function selectedBranch(name: string): ProjectMainSelectedBranch {
 }
 
 describe("resolveProjectMainThreadEnvironment", () => {
-  it("defers host local submit until a branch is resolved", () => {
+  it("omits unmanaged branch checkout when no branch is resolved", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
@@ -22,7 +22,14 @@ describe("resolveProjectMainThreadEnvironment", () => {
         resolvedDefaultBranch: null,
         selectedBranch: null,
       }),
-    ).toBeNull();
+    ).toEqual({
+      type: "host",
+      hostId: "host_123",
+      workspace: {
+        type: "unmanaged",
+        path: null,
+      },
+    });
   });
 
   it("uses the resolved default branch for host local checkout", () => {

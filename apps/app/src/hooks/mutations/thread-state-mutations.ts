@@ -7,7 +7,6 @@ import {
   invalidateProjectPromptHistoryQueries,
   invalidateThreadDeleteQueries,
   invalidateThreadListMembershipQueries,
-  invalidateThreadReadStateQueries,
   invalidateThreadListAndStatusQueries,
   removeEnvironmentScopedQueries,
   removeThreadScopedQueries,
@@ -59,6 +58,11 @@ interface ThreadListMutationContext {
   previousThreadLists: ThreadListSnapshot;
 }
 
+interface UpdateThreadInListsArgs {
+  queryClient: QueryClient;
+  thread: ThreadWithRuntime;
+}
+
 function resolveProjectIdForThread(args: {
   previousThread: ThreadWithRuntime | undefined;
   previousThreadLists: ThreadListSnapshot;
@@ -83,10 +87,7 @@ function snapshotThreadLists(queryClient: QueryClient): ThreadListSnapshot {
   return getCachedThreadLists(queryClient, { queryKey: threadsQueryKey() });
 }
 
-function removeThreadFromLists(
-  queryClient: QueryClient,
-  id: string,
-): void {
+function removeThreadFromLists(queryClient: QueryClient, id: string): void {
   applyToCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
     mapper: (list) => list.filter((thread) => thread.id !== id),
@@ -100,6 +101,19 @@ function restoreThreadLists(
   for (const { queryKey, data } of threadLists) {
     queryClient.setQueryData(queryKey, data);
   }
+}
+
+function updateThreadInLists({
+  queryClient,
+  thread,
+}: UpdateThreadInListsArgs): void {
+  applyToCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+    mapper: (list) =>
+      list.map((candidate) =>
+        candidate.id === thread.id ? { ...candidate, ...thread } : candidate,
+      ),
+  });
 }
 
 export function useUpdateThread() {
@@ -343,7 +357,7 @@ export function useMarkThreadRead() {
         threadQueryKey(thread.id),
         thread,
       );
-      invalidateThreadReadStateQueries({ queryClient });
+      updateThreadInLists({ queryClient, thread });
     },
   });
 }
@@ -362,7 +376,7 @@ export function useMarkThreadUnread() {
         threadQueryKey(thread.id),
         thread,
       );
-      invalidateThreadReadStateQueries({ queryClient });
+      updateThreadInLists({ queryClient, thread });
     },
   });
 }

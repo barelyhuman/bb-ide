@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
+  availableModelSchema,
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
   activeThinkingSchema,
@@ -14,7 +15,9 @@ import {
   projectSourceSchema,
   promptInputSchema,
   permissionModeSchema,
+  providerInfoSchema,
   reasoningLevelSchema,
+  resolvedThreadExecutionOptionsSchema,
   sandboxBackendInfoSchema,
   serviceTierSchema,
   threadListEntrySchema,
@@ -643,6 +646,25 @@ export type PromptHistoryQuery = z.infer<typeof promptHistoryQuerySchema>;
 export const promptHistoryResponseSchema = z.array(promptHistoryEntrySchema);
 export type PromptHistoryResponse = z.infer<typeof promptHistoryResponseSchema>;
 
+export const systemExecutionOptionsResponseSchema = z.object({
+  providers: z.array(providerInfoSchema),
+  models: z.array(availableModelSchema),
+});
+export type SystemExecutionOptionsResponse = z.infer<
+  typeof systemExecutionOptionsResponseSchema
+>;
+
+export const threadComposerBootstrapResponseSchema = z.object({
+  defaultExecutionOptions: resolvedThreadExecutionOptionsSchema.nullable(),
+  drafts: threadDraftListResponseSchema,
+  executionOptions: systemExecutionOptionsResponseSchema,
+  pendingInteractions: threadPendingInteractionsResponseSchema,
+  promptHistory: promptHistoryResponseSchema,
+});
+export type ThreadComposerBootstrapResponse = z.infer<
+  typeof threadComposerBootstrapResponseSchema
+>;
+
 const mergeBaseBranchQuerySchema = z
   .string("A merge base branch is required")
   .min(1, "A merge base branch is required");
@@ -850,6 +872,23 @@ export const systemModelsQuerySchema = z
   .partial();
 export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
 
+export const systemExecutionOptionsProviderScopeSchema = z.enum([
+  "all",
+  "selected",
+]);
+export type SystemExecutionOptionsProviderScope = z.infer<
+  typeof systemExecutionOptionsProviderScopeSchema
+>;
+
+export const systemExecutionOptionsQuerySchema = systemModelsQuerySchema.extend(
+  {
+    providerScope: systemExecutionOptionsProviderScopeSchema.optional(),
+  },
+);
+export type SystemExecutionOptionsQuery = z.infer<
+  typeof systemExecutionOptionsQuerySchema
+>;
+
 export const systemProvidersQuerySchema = z
   .object({
     hostId: z.string().min(1),
@@ -1017,10 +1056,7 @@ export type UpdateProjectSourceRequest = z.infer<
   typeof updateProjectSourceRequestSchema
 >;
 
-export const environmentActionTypeSchema = z.enum([
-  "commit",
-  "squash_merge",
-]);
+export const environmentActionTypeSchema = z.enum(["commit", "squash_merge"]);
 export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const squashMergeOptionsSchema = z

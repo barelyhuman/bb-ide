@@ -20,10 +20,12 @@ import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
+  seedHost,
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
@@ -961,6 +963,200 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+
+      const executionOptionsPromise = harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex&providerScope=selected&selectedModel=legacy-model`,
+      );
+      const executionProvidersCommand = await waitForQueuedCommandAfter(
+        harness,
+        providersCommand.row.cursor,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, executionProvidersCommand, {
+        providers: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+            available: true,
+          },
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: false,
+              supportedPermissionModes: ["full"],
+            },
+            available: true,
+          },
+        ],
+      });
+      const executionModelsCommand = await waitForQueuedCommandAfter(
+        harness,
+        executionProvidersCommand.row.cursor,
+        ({ command }) =>
+          command.type === "provider.list_models" &&
+          command.providerId === "codex" &&
+          command.selectedModel === "legacy-model",
+      );
+      await reportQueuedCommandSuccess(harness, executionModelsCommand, {
+        models: [
+          {
+            id: "codex-mini",
+            model: "gpt-4o-mini",
+            displayName: "Codex Mini",
+            description: "Fast codex model",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "medium",
+                description: "Balanced",
+              },
+            ],
+            defaultReasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      });
+      const executionOptionsResponse = await executionOptionsPromise;
+      expect(executionOptionsResponse.status).toBe(200);
+      await expect(readJson(executionOptionsResponse)).resolves.toEqual({
+        providers: [
+          expect.objectContaining({
+            id: "codex",
+          }),
+        ],
+        models: [
+          expect.objectContaining({
+            id: "codex-mini",
+          }),
+        ],
+      });
+
+      const defaultScopeOptionsPromise = harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex&selectedModel=legacy-model`,
+      );
+      const defaultScopeProvidersCommand = await waitForQueuedCommandAfter(
+        harness,
+        executionModelsCommand.row.cursor,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, defaultScopeProvidersCommand, {
+        providers: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+            available: true,
+          },
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: false,
+              supportedPermissionModes: ["full"],
+            },
+            available: true,
+          },
+        ],
+      });
+      const defaultScopeModelsCommand = await waitForQueuedCommandAfter(
+        harness,
+        defaultScopeProvidersCommand.row.cursor,
+        ({ command }) =>
+          command.type === "provider.list_models" &&
+          command.providerId === "codex" &&
+          command.selectedModel === "legacy-model",
+      );
+      await reportQueuedCommandSuccess(harness, defaultScopeModelsCommand, {
+        models: [
+          {
+            id: "codex-mini",
+            model: "gpt-4o-mini",
+            displayName: "Codex Mini",
+            description: "Fast codex model",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "medium",
+                description: "Balanced",
+              },
+            ],
+            defaultReasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      });
+      const defaultScopeOptionsResponse = await defaultScopeOptionsPromise;
+      expect(defaultScopeOptionsResponse.status).toBe(200);
+      await expect(readJson(defaultScopeOptionsResponse)).resolves.toEqual({
+        providers: [
+          expect.objectContaining({
+            id: "codex",
+          }),
+          expect.objectContaining({
+            id: "claude-code",
+          }),
+        ],
+        models: [
+          expect.objectContaining({
+            id: "codex-mini",
+          }),
+        ],
+      });
+
+      const missingProviderOptionsPromise = harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=missing-provider&providerScope=selected&selectedModel=legacy-model`,
+      );
+      const missingProviderCommand = await waitForQueuedCommandAfter(
+        harness,
+        defaultScopeModelsCommand.row.cursor,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, missingProviderCommand, {
+        providers: [
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: false,
+              supportedPermissionModes: ["full"],
+            },
+            available: true,
+          },
+        ],
+      });
+      const missingProviderOptionsResponse =
+        await missingProviderOptionsPromise;
+      expect(missingProviderOptionsResponse.status).toBe(200);
+      await expect(readJson(missingProviderOptionsResponse)).resolves.toEqual({
+        providers: [],
+        models: [],
+      });
+      const modelCommandsAfterMissingProvider = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .all()
+        .filter(
+          (row) =>
+            row.cursor > missingProviderCommand.row.cursor &&
+            row.type === "provider.list_models",
+        );
+      expect(modelCommandsAfterMissingProvider).toEqual([]);
     } finally {
       await harness.cleanup();
     }
@@ -1146,6 +1342,36 @@ describe("public environment and system routes", () => {
 
       const response = await harness.app.request(
         `/api/v1/system/providers?hostId=${host.id}`,
+      );
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects destroyed environment hosts for system execution-option lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, {
+        id: "host-system-env-destroyed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      updateHost(harness.db, harness.hub, host.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/system/execution-options?environmentId=${environment.id}&providerId=codex&providerScope=selected`,
       );
 
       expect(response.status).toBe(404);

@@ -39,6 +39,8 @@ import type {
   PromptHistoryResponse,
   SendDraftResponse,
   SendMessageRequest,
+  SystemExecutionOptionsProviderScope,
+  SystemExecutionOptionsResponse,
   SystemProviderInfo,
   ManagerTimelineView,
   TimelinePaginationCursor,
@@ -46,6 +48,7 @@ import type {
   SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
   ThreadAssignedChildSummaryResponse,
+  ThreadComposerBootstrapResponse,
   ThreadPendingInteractionsResponse,
   ThreadDraftListResponse,
   ThreadListResponse,
@@ -769,6 +772,14 @@ export async function createThreadDraft(
   );
 }
 
+export async function getThreadComposerBootstrap(
+  id: string,
+): Promise<ThreadComposerBootstrapResponse> {
+  return request<ThreadComposerBootstrapResponse>(
+    apiClient.threads[":id"]["composer-bootstrap"].$get({ param: { id } }),
+  );
+}
+
 export async function listThreadDrafts(
   id: string,
 ): Promise<ThreadDraftListResponse> {
@@ -1086,6 +1097,24 @@ export async function getAvailableModels(
       query: {
         ...(providerId ? { providerId } : {}),
         ...(selectedModel ? { selectedModel } : {}),
+      },
+    }),
+  );
+}
+
+export async function getSystemExecutionOptions(args: {
+  environmentId?: string;
+  providerId?: string;
+  providerScope?: SystemExecutionOptionsProviderScope;
+  selectedModel?: string;
+}): Promise<SystemExecutionOptionsResponse> {
+  return request<SystemExecutionOptionsResponse>(
+    apiClient.system["execution-options"].$get({
+      query: {
+        ...(args.environmentId ? { environmentId: args.environmentId } : {}),
+        ...(args.providerId ? { providerId: args.providerId } : {}),
+        ...(args.providerScope ? { providerScope: args.providerScope } : {}),
+        ...(args.selectedModel ? { selectedModel: args.selectedModel } : {}),
       },
     }),
   );

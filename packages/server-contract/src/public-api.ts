@@ -64,6 +64,7 @@ import type {
   SendMessageRequest,
   ResolvePendingInteractionRequest,
   ThreadAssignedChildSummaryResponse,
+  ThreadComposerBootstrapResponse,
   ThreadDraftListResponse,
   GithubRepoInfo,
   GithubReposQuery,
@@ -71,6 +72,8 @@ import type {
   SandboxEnvVarName,
   SandboxEnvVarsResponse,
   SystemConfigResponse,
+  SystemExecutionOptionsQuery,
+  SystemExecutionOptionsResponse,
   SystemSandboxBackendInfo,
   SystemModelsQuery,
   SystemProviderInfo,
@@ -376,6 +379,10 @@ export type PublicApiSchema = {
      */
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
   };
+  "/threads/:id/composer-bootstrap": {
+    /** Load initial composer state and prime the canonical composer query caches. */
+    $get: Endpoint<PathId, ThreadComposerBootstrapResponse>;
+  };
   "/threads/:id/drafts": {
     $get: Endpoint<PathId, ThreadDraftListResponse>;
     /** Create a queued draft. Use /threads/:id/send for immediate agent-to-agent messages. */
@@ -550,6 +557,13 @@ export type PublicApiSchema = {
   "/system/github-repos": {
     /** List GitHub repositories accessible via the configured PAT. */
     $get: Endpoint<{ query?: GithubReposQuery }, GithubRepoInfo[]>;
+  };
+  "/system/execution-options": {
+    /** List provider metadata and models for execution controls in one host lookup flow. */
+    $get: Endpoint<
+      { query?: SystemExecutionOptionsQuery },
+      SystemExecutionOptionsResponse
+    >;
   };
   "/system/models": {
     /** List available models. Proxies to `provider.list_models`; default lookup uses persistent hosts only. */

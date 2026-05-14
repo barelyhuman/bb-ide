@@ -19,10 +19,8 @@ import {
   rawStringLocalStorage,
 } from "@/lib/browser-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
-import {
-  useAvailableModels,
-  useSystemProviders,
-} from "./queries/system-queries";
+import type { SystemExecutionOptionsProviderScope } from "@bb/server-contract";
+import { useSystemExecutionOptions } from "./queries/system-queries";
 
 const MODEL_STORAGE_KEY = "bb.promptbox.model";
 const SERVICE_TIER_STORAGE_KEY = "bb.promptbox.service-tier";
@@ -65,6 +63,9 @@ interface PickerOption<T extends string> {
 }
 
 interface UsePromptModelReasoningOptions {
+  enabled?: boolean;
+  environmentId?: string;
+  providerScope?: SystemExecutionOptionsProviderScope;
   scope?: "new-thread" | "thread";
   projectId?: string | null;
   resetKey?: string | number | null;
@@ -290,6 +291,8 @@ export function useThreadCreationOptions(
   options?: UsePromptModelReasoningOptions,
 ) {
   const {
+    enabled = true,
+    environmentId,
     initialEnvironmentSelectionValue,
     initialModel,
     initialProviderId,
@@ -297,6 +300,7 @@ export function useThreadCreationOptions(
     initialReasoningLevel,
     initialServiceTier,
     projectId,
+    providerScope = "all",
     resetKey,
     scope = "new-thread",
   } = options ?? {};
@@ -333,11 +337,6 @@ export function useThreadCreationOptions(
     resetKey,
   );
 
-  // --- Provider selection ---
-  const providersQuery = useSystemProviders();
-  const providers = providersQuery.data ?? EMPTY_PROVIDERS;
-  const hasMultipleProviders = providers.length >= 2;
-
   const rawSelectedProviderId =
     scope === "new-thread"
       ? storedProviderId
@@ -362,6 +361,21 @@ export function useThreadCreationOptions(
     scope === "new-thread"
       ? storedEnvironmentSelectionValue
       : threadSelections.environmentSelectionValue;
+
+  // --- Provider selection ---
+  const executionOptionsEnvironmentId =
+    scope === "thread" ? environmentId : undefined;
+  const executionOptionsQuery = useSystemExecutionOptions({
+    enabled:
+      enabled &&
+      (scope !== "thread" || executionOptionsEnvironmentId !== undefined),
+    environmentId: executionOptionsEnvironmentId,
+    providerId: rawSelectedProviderId || undefined,
+    providerScope,
+    selectedModel: rawSelectedModel || undefined,
+  });
+  const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
+  const hasMultipleProviders = providers.length >= 2;
 
   // Resolve the effective provider: use selectedProviderId if it matches a known
   // provider, otherwise fall back to the first provider in the list.
@@ -390,12 +404,6 @@ export function useThreadCreationOptions(
     [providers],
   );
 
-  const availableModelsQuery = useAvailableModels({
-    enabled: providersQuery.status === "success" && effectiveProviderId !== "",
-    providerId: effectiveProviderId || undefined,
-    selectedModel: rawSelectedModel || undefined,
-  });
-
   const activeProviderCapabilities = selectedProviderInfo?.capabilities;
 
   const supportsServiceTier =
@@ -415,10 +423,11 @@ export function useThreadCreationOptions(
 
   const availableModels = useMemo(
     () =>
-      availableModelsQuery.data && availableModelsQuery.data.length > 0
-        ? availableModelsQuery.data
+      executionOptionsQuery.data?.models &&
+      executionOptionsQuery.data.models.length > 0
+        ? executionOptionsQuery.data.models
         : [],
-    [availableModelsQuery.data],
+    [executionOptionsQuery.data?.models],
   );
   const selectedModel = useMemo(() => {
     if (availableModels.length === 0) {

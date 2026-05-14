@@ -24,6 +24,10 @@ import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
 import { useScopedBranchSelection } from "./project-main-branch-selection";
+import {
+  isProjectMainBranchPickerOpenForContext,
+  type ProjectMainBranchPickerOpenContext,
+} from "./project-main-branch-picker-open-context";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
 
@@ -46,6 +50,8 @@ export function ProjectMainView() {
     useProjectPromptHistory(projectId);
   const promptMentions = usePromptMentions(projectId, { environmentId: null });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [branchPickerOpenedFor, setBranchPickerOpenedFor] =
+    useState<ProjectMainBranchPickerOpenContext | null>(null);
   const prompt = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -120,12 +126,18 @@ export function ProjectMainView() {
   );
   const isHostMode = parsedEnvironment?.type === "host";
   const isSandboxMode = parsedEnvironment?.type === "sandbox";
+  const branchPickerOpened = isProjectMainBranchPickerOpenForContext({
+    environmentValue: effectiveEnvironmentValue,
+    openedFor: branchPickerOpenedFor,
+    projectId,
+  });
   const hostBranchesQuery = useProjectSourceBranches(
     projectId,
     isHostMode ? parsedEnvironment.hostId : null,
+    { enabled: branchPickerOpened && isHostMode },
   );
   const githubBranchesQuery = useProjectGithubBranches(projectId, {
-    enabled: isSandboxMode && hasGithubSource,
+    enabled: branchPickerOpened && isSandboxMode && hasGithubSource,
   });
   const activeBranchesQuery = isSandboxMode
     ? githubBranchesQuery
@@ -367,8 +379,19 @@ export function ProjectMainView() {
             isNew: selectedBranch?.isNew ?? false,
             options: branchOptions,
             loading: activeBranchesQuery.isLoading,
+            placeholder: "Default branch",
             onChange: handleBranchChange,
             onCreate: handleCreateBranch,
+            onOpenChange: (open) => {
+              if (open) {
+                setBranchPickerOpenedFor({
+                  environmentValue: effectiveEnvironmentValue,
+                  projectId,
+                });
+              } else {
+                setBranchPickerOpenedFor(null);
+              }
+            },
           }}
           permission={{
             value: permissionMode,

@@ -136,6 +136,16 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "System model lookup may omit provider id to list models for every provider on the chosen host.",
   "systemModelsQuerySchema.selectedModel":
     "System model lookup may omit selectedModel to list only active provider models.",
+  "systemExecutionOptionsQuerySchema.environmentId":
+    "System execution option lookup may target a host indirectly through an environment id.",
+  "systemExecutionOptionsQuerySchema.hostId":
+    "System execution option lookup may target a specific host directly.",
+  "systemExecutionOptionsQuerySchema.providerId":
+    "System execution option lookup may omit provider id to use the chosen host's default provider.",
+  "systemExecutionOptionsQuerySchema.providerScope":
+    "System execution option lookup may omit providerScope to return all providers.",
+  "systemExecutionOptionsQuerySchema.selectedModel":
+    "System execution option lookup may omit selectedModel to list only active provider models.",
   "systemProvidersQuerySchema.environmentId":
     "System provider lookup may target a host indirectly through an environment id.",
   "systemProvidersQuerySchema.hostId":
@@ -725,6 +735,14 @@ describe("server-contract clients", () => {
         .pathname,
     ).toBe("/api/v1/threads/thr_123/drafts");
     expect(
+      publicClient.threads[":id"]["composer-bootstrap"].$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/composer-bootstrap");
+    expect(publicClient.system["execution-options"].$url().pathname).toBe(
+      "/api/v1/system/execution-options",
+    );
+    expect(
       publicClient.projects[":id"].managers.$url({
         param: { id: "proj_123" },
       }).pathname,
@@ -886,6 +904,8 @@ describe("server-contract clients", () => {
       sendDraftResponseSchema: contract.sendDraftResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,
       squashMergeActionResponseSchema: contract.squashMergeActionResponseSchema,
+      systemExecutionOptionsQuerySchema:
+        contract.systemExecutionOptionsQuerySchema,
       systemModelsQuerySchema: contract.systemModelsQuerySchema,
       systemProvidersQuerySchema: contract.systemProvidersQuerySchema,
       threadEventsQuerySchema: contract.threadEventsQuerySchema,

@@ -1,10 +1,15 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+} from "@tanstack/react-query";
 import type { AvailableModel, Host, SandboxBackendInfo } from "@bb/domain";
 import type {
   CloudAuthAttemptResponse,
   CloudAuthSettingsResponse,
   GithubRepoInfo,
   SandboxEnvVarsResponse,
+  SystemExecutionOptionsProviderScope,
+  SystemExecutionOptionsResponse,
   SystemProviderInfo,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
@@ -18,12 +23,21 @@ import {
   githubReposQueryKey,
   sandboxBackendsQueryKey,
   sandboxEnvVarsQueryKey,
+  systemExecutionOptionsQueryKey,
   systemProvidersQueryKey,
 } from "./query-keys";
 
 export interface UseAvailableModelsArgs {
   enabled?: boolean;
   providerId?: string;
+  selectedModel?: string;
+}
+
+export interface UseSystemExecutionOptionsArgs {
+  enabled?: boolean;
+  environmentId?: string;
+  providerId?: string;
+  providerScope?: SystemExecutionOptionsProviderScope;
   selectedModel?: string;
 }
 
@@ -69,10 +83,38 @@ export function useAvailableModels(args: UseAvailableModelsArgs = {}) {
   });
 }
 
-export function useSystemProviders() {
+export function useSystemExecutionOptions(
+  args: UseSystemExecutionOptionsArgs = {},
+) {
+  const environmentId = args.environmentId ?? null;
+  const providerId = args.providerId ?? null;
+  const selectedModel = args.selectedModel ?? null;
+  const providerScope = args.providerScope ?? "all";
+
+  return useQuery<SystemExecutionOptionsResponse>({
+    queryKey: systemExecutionOptionsQueryKey({
+      environmentId,
+      providerId,
+      providerScope,
+      selectedModel,
+    }),
+    queryFn: () =>
+      api.getSystemExecutionOptions({
+        environmentId: args.environmentId,
+        providerId: args.providerId,
+        providerScope,
+        selectedModel: args.selectedModel,
+      }),
+    enabled: args.enabled ?? true,
+    staleTime: 60_000,
+  });
+}
+
+export function useSystemProviders(options?: QueryOptions) {
   return useQuery<SystemProviderInfo[]>({
     queryKey: systemProvidersQueryKey(),
     queryFn: () => api.listSystemProviders(),
+    enabled: options?.enabled ?? true,
     staleTime: 60_000,
   });
 }

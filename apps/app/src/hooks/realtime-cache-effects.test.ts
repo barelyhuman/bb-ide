@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { QueryObserver } from "@tanstack/react-query";
 import { createAppQueryClient } from "@/lib/query-client";
-import { projectPromptHistoryQueryKey } from "./queries/query-keys";
+import {
+  projectPromptHistoryQueryKey,
+  statusQueryKey,
+  threadListQueryKey,
+  threadQueryKey,
+} from "./queries/query-keys";
 import { createRealtimeCacheEffects } from "./realtime-cache-effects";
 
 const PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
@@ -111,6 +117,55 @@ describe("createRealtimeCacheEffects", () => {
       effects.dispose();
     },
   );
+
+  it("does not refetch active thread queries for read-state changes", () => {
+    vi.useFakeTimers();
+    const { effects, queryClient } = createRealtimeEffectsTestContext();
+    const threadKey = threadQueryKey("thr_1");
+    const threadListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
+    queryClient.setQueryData(threadKey, { id: "thr_1" });
+    queryClient.setQueryData(threadListKey, []);
+    queryClient.setQueryData(statusQueryKey(), {});
+    const threadQueryFn = vi.fn(async () => null);
+    const threadListQueryFn = vi.fn(async () => []);
+    const threadObserver = new QueryObserver(queryClient, {
+      queryKey: threadKey,
+      queryFn: threadQueryFn,
+      staleTime: Infinity,
+    });
+    const threadListObserver = new QueryObserver(queryClient, {
+      queryKey: threadListKey,
+      queryFn: threadListQueryFn,
+      staleTime: Infinity,
+    });
+    const unsubscribeThread = threadObserver.subscribe(() => {});
+    const unsubscribeThreadList = threadListObserver.subscribe(() => {});
+    threadQueryFn.mockClear();
+    threadListQueryFn.mockClear();
+
+    effects.handleChanged({
+      type: "changed",
+      entity: "thread",
+      id: "thr_1",
+      changes: ["read-state-changed"],
+    });
+    vi.advanceTimersByTime(50);
+
+    expect(threadQueryFn).not.toHaveBeenCalled();
+    expect(threadListQueryFn).not.toHaveBeenCalled();
+    expect(queryClient.getQueryState(threadKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(threadListKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(statusQueryKey())?.isInvalidated).not.toBe(
+      true,
+    );
+
+    unsubscribeThread();
+    unsubscribeThreadList();
+    effects.dispose();
+  });
 
   it("invalidates all cached project prompt histories for project threads-changed events", () => {
     const {

@@ -19,6 +19,7 @@ export const THREADS_QUERY_KEY = "threads";
 export const THREADS_DISABLED_QUERY_KEY = "threadsDisabled";
 export const THREAD_QUERY_KEY = "thread";
 export const THREAD_DETAIL_BOOTSTRAP_QUERY_KEY = "threadDetailBootstrap";
+export const THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY = "threadComposerBootstrap";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "threadDefaultExecutionOptions";
 export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
@@ -37,6 +38,7 @@ export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
+export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
 export const SANDBOX_BACKENDS_QUERY_KEY = "sandboxBackends";
 export const CLOUD_AUTH_SETTINGS_QUERY_KEY = "cloudAuthSettings";
 export const CLOUD_AUTH_ATTEMPT_QUERY_KEY = "cloudAuthAttempt";
@@ -123,6 +125,18 @@ export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
 export type ThreadDetailBootstrapQueryKey = readonly [
   typeof THREAD_DETAIL_BOOTSTRAP_QUERY_KEY,
   string,
+];
+export type ThreadComposerBootstrapQueryKey = readonly [
+  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
+  string | null,
+  string,
+];
+export type ThreadComposerBootstrapQueryKeyPrefix = readonly [
+  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
+];
+export type ThreadComposerBootstrapEnvironmentQueryKeyPrefix = readonly [
+  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
+  string | null,
 ];
 export type ThreadDefaultExecutionOptionsQueryKeyPrefix = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
@@ -268,6 +282,20 @@ export type AllAvailableModelsQueryKeyPrefix = readonly [
 export type SystemProvidersQueryKey = readonly [
   typeof SYSTEM_PROVIDERS_QUERY_KEY,
 ];
+export type SystemExecutionOptionsQueryKey = readonly [
+  typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+  string | null,
+  string | null,
+  string | null,
+  "all" | "selected",
+];
+export type AllSystemExecutionOptionsQueryKeyPrefix = readonly [
+  typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+];
+export type SystemExecutionOptionsEnvironmentQueryKeyPrefix = readonly [
+  typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+  string | null,
+];
 export type SandboxBackendsQueryKey = readonly [
   typeof SANDBOX_BACKENDS_QUERY_KEY,
 ];
@@ -402,6 +430,23 @@ export function threadDetailBootstrapQueryKey(
   threadId: string,
 ): ThreadDetailBootstrapQueryKey {
   return [THREAD_DETAIL_BOOTSTRAP_QUERY_KEY, threadId];
+}
+
+export function threadComposerBootstrapQueryKey(
+  threadId: string,
+  environmentId: string | null,
+): ThreadComposerBootstrapQueryKey {
+  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY, environmentId, threadId];
+}
+
+export function allThreadComposerBootstrapQueryKeyPrefix(): ThreadComposerBootstrapQueryKeyPrefix {
+  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY];
+}
+
+export function threadComposerBootstrapEnvironmentQueryKeyPrefix(
+  environmentId: string | null,
+): ThreadComposerBootstrapEnvironmentQueryKeyPrefix {
+  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY, environmentId];
 }
 
 export function allThreadQueryKeyPrefix(): ThreadQueryKeyPrefix {
@@ -645,6 +690,38 @@ export function allAvailableModelsQueryKeyPrefix(): AllAvailableModelsQueryKeyPr
 
 export function systemProvidersQueryKey(): SystemProvidersQueryKey {
   return [SYSTEM_PROVIDERS_QUERY_KEY];
+}
+
+export interface SystemExecutionOptionsQueryKeyArgs {
+  environmentId: string | null;
+  providerId: string | null;
+  providerScope: "all" | "selected";
+  selectedModel: string | null;
+}
+
+export function systemExecutionOptionsQueryKey({
+  environmentId,
+  providerId,
+  providerScope,
+  selectedModel,
+}: SystemExecutionOptionsQueryKeyArgs): SystemExecutionOptionsQueryKey {
+  return [
+    SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+    environmentId,
+    providerId,
+    selectedModel,
+    providerScope,
+  ];
+}
+
+export function allSystemExecutionOptionsQueryKeyPrefix(): AllSystemExecutionOptionsQueryKeyPrefix {
+  return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY];
+}
+
+export function systemExecutionOptionsEnvironmentQueryKeyPrefix(
+  environmentId: string | null,
+): SystemExecutionOptionsEnvironmentQueryKeyPrefix {
+  return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY, environmentId];
 }
 
 export function sandboxBackendsQueryKey(): SandboxBackendsQueryKey {

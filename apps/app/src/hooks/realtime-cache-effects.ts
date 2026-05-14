@@ -30,7 +30,6 @@ import {
 } from "./environment-cache-effects";
 import {
   invalidateHostChangeDependentQueries,
-  invalidateHostsAfterServerInitialConnection,
   invalidateRealtimeQueriesAfterServerReconnect,
   refetchErroredRealtimeQueriesOnInitialConnect,
 } from "./system-cache-effects";
@@ -65,6 +64,7 @@ interface ThreadChangeFlags {
   listChanged: boolean;
   projectPromptHistoryChanged: boolean;
   queueChanged: boolean;
+  readStateChanged: boolean;
   threadChanged: boolean;
   timelineChanged: boolean;
   statusChanged: boolean;
@@ -80,6 +80,7 @@ interface ThreadChangeState {
   shouldInvalidateAllThreadsById: boolean;
   shouldInvalidateStatus: boolean;
   shouldInvalidateThreads: boolean;
+  shouldMarkThreadsStale: boolean;
 }
 
 interface MergeThreadChangesArg {
@@ -108,6 +109,7 @@ function createThreadChangeState(): ThreadChangeState {
     shouldInvalidateAllThreadsById: false,
     shouldInvalidateStatus: false,
     shouldInvalidateThreads: false,
+    shouldMarkThreadsStale: false,
   };
 }
 
@@ -121,6 +123,7 @@ function resetThreadChangeState(state: ThreadChangeState): void {
   state.shouldInvalidateAllThreadsById = false;
   state.shouldInvalidateStatus = false;
   state.shouldInvalidateThreads = false;
+  state.shouldMarkThreadsStale = false;
 }
 
 function getThreadChangeFlags(
@@ -131,6 +134,7 @@ function getThreadChangeFlags(
     listChanged: false,
     projectPromptHistoryChanged: false,
     queueChanged: false,
+    readStateChanged: false,
     threadChanged: false,
     timelineChanged: false,
     statusChanged: false,
@@ -149,13 +153,15 @@ function getThreadChangeFlags(
       case "thread-created":
       case "thread-deleted":
       case "archived-changed":
-      case "read-state-changed":
       case "title-changed":
         flags.listChanged = true;
         flags.threadChanged = true;
         if (change === "thread-created" || change === "thread-deleted") {
           flags.timelineChanged = true;
         }
+        break;
+      case "read-state-changed":
+        flags.readStateChanged = true;
         break;
       case "queue-changed":
         flags.queueChanged = true;
@@ -235,6 +241,11 @@ function flushThreadInvalidations(
 ): void {
   if (state.shouldInvalidateThreads) {
     queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  } else if (state.shouldMarkThreadsStale) {
+    queryClient.invalidateQueries({
+      queryKey: threadsQueryKey(),
+      refetchType: "none",
+    });
   }
 
   if (state.shouldInvalidateAllThreadsById) {
@@ -264,6 +275,11 @@ function flushThreadInvalidations(
 
     if (flags.threadChanged) {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
+    } else if (flags.readStateChanged) {
+      queryClient.invalidateQueries({
+        queryKey: threadQueryKey(threadId),
+        refetchType: "none",
+      });
     }
     if (flags.queueChanged) {
       queryClient.invalidateQueries({
@@ -324,6 +340,9 @@ function recordThreadChange(
       state.shouldInvalidateThreads = true;
       state.shouldInvalidateStatus = true;
     }
+    if (flags.readStateChanged) {
+      state.shouldMarkThreadsStale = true;
+    }
     if (flags.projectPromptHistoryChanged) {
       state.shouldInvalidateAllProjectPromptHistory = true;
     }
@@ -337,6 +356,9 @@ function recordThreadChange(
   if (globalFlags.listChanged) {
     state.shouldInvalidateThreads = true;
     state.shouldInvalidateStatus = true;
+  }
+  if (globalFlags.readStateChanged) {
+    state.shouldMarkThreadsStale = true;
   }
   state.shouldInvalidateAllProjectPromptHistory =
     globalFlags.projectPromptHistoryChanged;
@@ -433,7 +455,6 @@ export function createRealtimeCacheEffects({
         return;
       }
       refetchErroredRealtimeQueriesOnInitialConnect({ queryClient });
-      invalidateHostsAfterServerInitialConnection({ queryClient });
     },
   };
 }

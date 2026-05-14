@@ -8,6 +8,8 @@ import {
   allEnvironmentWorkStatusQueryKeyPrefix,
   allHostQueryKeyPrefix,
   allProjectFilesQueryKeyPrefix,
+  allSystemExecutionOptionsQueryKeyPrefix,
+  allThreadComposerBootstrapQueryKeyPrefix,
   allThreadDefaultExecutionOptionsQueryKeyPrefix,
   allThreadDraftsQueryKeyPrefix,
   allThreadPendingInteractionsQueryKeyPrefix,
@@ -30,12 +32,6 @@ import {
   invalidateQueryKeys,
   refetchFailedActiveQueryKeys,
 } from "./cache-effect-utils";
-
-export function invalidateHostsAfterServerInitialConnection({
-  queryClient,
-}: QueryClientArg): void {
-  invalidateHostAvailabilityQueries({ queryClient });
-}
 
 export function invalidateRealtimeQueriesAfterServerReconnect({
   queryClient,
@@ -70,6 +66,12 @@ export function invalidateHostChangeDependentQueries({
   queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
   queryClient.invalidateQueries({
     queryKey: allAvailableModelsQueryKeyPrefix(),
+  });
+  queryClient.invalidateQueries({
+    queryKey: allSystemExecutionOptionsQueryKeyPrefix(),
+  });
+  queryClient.invalidateQueries({
+    queryKey: allThreadComposerBootstrapQueryKeyPrefix(),
   });
 }
 
@@ -106,6 +108,7 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allProjectFilesQueryKeyPrefix(),
     threadsQueryKey(),
     allThreadQueryKeyPrefix(),
+    allThreadComposerBootstrapQueryKeyPrefix(),
     allThreadTimelineQueryKeyPrefix(),
     allThreadDraftsQueryKeyPrefix(),
     allThreadPendingInteractionsQueryKeyPrefix(),
@@ -120,6 +123,7 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     localPathExistenceQueryKeyPrefix(),
     systemProvidersQueryKey(),
     allAvailableModelsQueryKeyPrefix(),
+    allSystemExecutionOptionsQueryKeyPrefix(),
     statusQueryKey(),
   ];
 }

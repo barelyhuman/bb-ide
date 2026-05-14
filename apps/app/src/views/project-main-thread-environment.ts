@@ -59,15 +59,15 @@ export function resolveProjectMainThreadEnvironment(
     }
 
     const branchName = args.selectedBranch?.name ?? args.resolvedDefaultBranch;
-    if (!branchName) return null;
-
     return {
       type: "host",
       hostId: parsed.hostId,
       workspace: {
         type: "unmanaged",
         path: null,
-        branch: { kind: "existing", name: branchName },
+        ...(branchName
+          ? { branch: { kind: "existing", name: branchName } }
+          : {}),
       },
     };
   }

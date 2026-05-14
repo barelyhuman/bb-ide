@@ -11,6 +11,8 @@ import {
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
+  systemExecutionOptionsEnvironmentQueryKeyPrefix,
+  threadComposerBootstrapEnvironmentQueryKeyPrefix,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
 } from "./queries/query-keys";
@@ -64,6 +66,12 @@ export function removeEnvironmentScopedQueries({
   });
   queryClient.removeQueries({
     queryKey: environmentMergeBaseBranchesQueryKeyPrefix(environmentId),
+  });
+  queryClient.removeQueries({
+    queryKey: systemExecutionOptionsEnvironmentQueryKeyPrefix(environmentId),
+  });
+  queryClient.removeQueries({
+    queryKey: threadComposerBootstrapEnvironmentQueryKeyPrefix(environmentId),
   });
 }
 

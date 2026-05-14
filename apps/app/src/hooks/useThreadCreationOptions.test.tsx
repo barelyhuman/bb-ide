@@ -2,7 +2,6 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { AvailableModel } from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
@@ -16,16 +15,12 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return {
     ...actual,
     getAvailableModels: vi.fn(),
+    getSystemExecutionOptions: vi.fn(),
     listSystemProviders: vi.fn(),
   };
 });
 
 interface ModelOverrides extends Partial<AvailableModel> {}
-
-interface DeferredSystemProviders {
-  promise: Promise<SystemProviderInfo[]>;
-  resolve: (providers: SystemProviderInfo[]) => void;
-}
 
 const PERMISSION_MODE_OPTIONS = [
   {
@@ -65,17 +60,17 @@ function makeModel(overrides: ModelOverrides = {}): AvailableModel {
   };
 }
 
-function createDeferredSystemProviders(): DeferredSystemProviders {
-  let resolveProviders: (providers: SystemProviderInfo[]) => void = () => {
-    throw new Error("Deferred system providers promise was not initialized");
-  };
-  const promise = new Promise<SystemProviderInfo[]>((resolve) => {
-    resolveProviders = resolve;
+function mockExecutionOptions({
+  models,
+  providers,
+}: {
+  models: AvailableModel[];
+  providers: ReturnType<typeof createTestSystemProvider>[];
+}): void {
+  vi.mocked(api.getSystemExecutionOptions).mockResolvedValue({
+    models,
+    providers,
   });
-  return {
-    promise,
-    resolve: resolveProviders,
-  };
 }
 
 afterEach(() => {
@@ -85,20 +80,57 @@ afterEach(() => {
 });
 
 describe("useThreadCreationOptions", () => {
-  it("waits for providers before loading provider models", async () => {
-    const deferredProviders = createDeferredSystemProviders();
-    vi.mocked(api.listSystemProviders).mockReturnValue(
-      deferredProviders.promise,
-    );
-    vi.mocked(api.getAvailableModels).mockResolvedValue([
-      makeModel({
-        id: "gpt-5.4",
-        model: "gpt-5.4",
-      }),
-    ]);
-
+  it("does not load provider or model options while disabled", () => {
     const { wrapper } = createQueryClientTestHarness();
     renderHook(
+      () =>
+        useThreadCreationOptions({
+          enabled: false,
+          initialProviderId: "codex",
+          projectId: "project-disabled-options",
+          scope: "thread",
+        }),
+      { wrapper },
+    );
+
+    expect(api.listSystemProviders).not.toHaveBeenCalled();
+    expect(api.getAvailableModels).not.toHaveBeenCalled();
+    expect(api.getSystemExecutionOptions).not.toHaveBeenCalled();
+  });
+
+  it("does not load hostless execution options for a thread without an environment", () => {
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          initialProviderId: "codex",
+          projectId: "project-thread-without-environment",
+          scope: "thread",
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.providerOptions).toEqual([]);
+    expect(api.getSystemExecutionOptions).not.toHaveBeenCalled();
+  });
+
+  it("loads provider metadata and models with one execution-options request", async () => {
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
       () =>
         useThreadCreationOptions({
           projectId: "project-provider-gating",
@@ -107,23 +139,18 @@ describe("useThreadCreationOptions", () => {
       { wrapper },
     );
 
-    expect(api.getAvailableModels).not.toHaveBeenCalled();
-
-    await act(async () => {
-      deferredProviders.resolve([
-        createTestSystemProvider({
-          id: "codex",
-        }),
-      ]);
-    });
-
     await waitFor(() => {
-      expect(api.getAvailableModels).toHaveBeenCalledWith("codex", undefined);
+      expect(result.current.selectedProviderId).toBe("codex");
     });
-    expect(api.getAvailableModels).not.toHaveBeenCalledWith(
-      undefined,
-      undefined,
-    );
+
+    expect(api.getSystemExecutionOptions).toHaveBeenCalledWith({
+      environmentId: undefined,
+      providerId: undefined,
+      providerScope: "all",
+      selectedModel: undefined,
+    });
+    expect(api.listSystemProviders).not.toHaveBeenCalled();
+    expect(api.getAvailableModels).not.toHaveBeenCalled();
   });
 
   it("falls back to valid provider and model values from query data", async () => {
@@ -145,33 +172,35 @@ describe("useThreadCreationOptions", () => {
       "fast",
     );
 
-    vi.mocked(api.listSystemProviders).mockResolvedValue([
-      createTestSystemProvider({
-        capabilities: {
-          supportsServiceTier: false,
-        },
-        displayName: "Codex",
-        id: "codex",
-      }),
-    ]);
-    vi.mocked(api.getAvailableModels).mockResolvedValue([
-      makeModel({
-        defaultReasoningEffort: "low",
-        displayName: "gpt-5.4",
-        id: "gpt-5.4",
-        model: "gpt-5.4",
-        supportedReasoningEfforts: [
-          {
-            description: "Low effort",
-            reasoningEffort: "low",
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          capabilities: {
+            supportsServiceTier: false,
           },
-          {
-            description: "Medium effort",
-            reasoningEffort: "medium",
-          },
-        ],
-      }),
-    ]);
+          displayName: "Codex",
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          defaultReasoningEffort: "low",
+          displayName: "gpt-5.4",
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+          supportedReasoningEfforts: [
+            {
+              description: "Low effort",
+              reasoningEffort: "low",
+            },
+            {
+              description: "Medium effort",
+              reasoningEffort: "medium",
+            },
+          ],
+        }),
+      ],
+    });
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
@@ -200,37 +229,39 @@ describe("useThreadCreationOptions", () => {
   it("persists new-thread selections to project-scoped local storage", async () => {
     const projectId = "project-storage";
 
-    vi.mocked(api.listSystemProviders).mockResolvedValue([
-      createTestSystemProvider({
-        capabilities: {
-          supportsServiceTier: true,
-        },
-        id: "codex",
-      }),
-    ]);
-    vi.mocked(api.getAvailableModels).mockResolvedValue([
-      makeModel({
-        id: "gpt-5.4",
-        model: "gpt-5.4",
-      }),
-      makeModel({
-        defaultReasoningEffort: "high",
-        displayName: "gpt-5.4-mini",
-        id: "gpt-5.4-mini",
-        isDefault: false,
-        model: "gpt-5.4-mini",
-        supportedReasoningEfforts: [
-          {
-            description: "Medium effort",
-            reasoningEffort: "medium",
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          capabilities: {
+            supportsServiceTier: true,
           },
-          {
-            description: "High effort",
-            reasoningEffort: "high",
-          },
-        ],
-      }),
-    ]);
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+        }),
+        makeModel({
+          defaultReasoningEffort: "high",
+          displayName: "gpt-5.4-mini",
+          id: "gpt-5.4-mini",
+          isDefault: false,
+          model: "gpt-5.4-mini",
+          supportedReasoningEfforts: [
+            {
+              description: "Medium effort",
+              reasoningEffort: "medium",
+            },
+            {
+              description: "High effort",
+              reasoningEffort: "high",
+            },
+          ],
+        }),
+      ],
+    });
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
@@ -285,35 +316,37 @@ describe("useThreadCreationOptions", () => {
   });
 
   it("preserves touched thread selections until the reset key changes", async () => {
-    vi.mocked(api.listSystemProviders).mockResolvedValue([
-      createTestSystemProvider({
-        id: "codex",
-      }),
-    ]);
-    vi.mocked(api.getAvailableModels).mockResolvedValue([
-      makeModel({
-        id: "gpt-5.4",
-        isDefault: true,
-        model: "gpt-5.4",
-      }),
-      makeModel({
-        defaultReasoningEffort: "high",
-        displayName: "gpt-5.4-mini",
-        id: "gpt-5.4-mini",
-        isDefault: false,
-        model: "gpt-5.4-mini",
-        supportedReasoningEfforts: [
-          {
-            description: "Medium effort",
-            reasoningEffort: "medium",
-          },
-          {
-            description: "High effort",
-            reasoningEffort: "high",
-          },
-        ],
-      }),
-    ]);
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.4",
+          isDefault: true,
+          model: "gpt-5.4",
+        }),
+        makeModel({
+          defaultReasoningEffort: "high",
+          displayName: "gpt-5.4-mini",
+          id: "gpt-5.4-mini",
+          isDefault: false,
+          model: "gpt-5.4-mini",
+          supportedReasoningEfforts: [
+            {
+              description: "Medium effort",
+              reasoningEffort: "medium",
+            },
+            {
+              description: "High effort",
+              reasoningEffort: "high",
+            },
+          ],
+        }),
+      ],
+    });
 
     const { wrapper } = createQueryClientTestHarness();
     const { result, rerender } = renderHook(
@@ -325,6 +358,7 @@ describe("useThreadCreationOptions", () => {
         resetKey: string;
       }) =>
         useThreadCreationOptions({
+          environmentId: "environment-thread",
           initialModel,
           initialProviderId: "codex",
           projectId: "project-thread",
@@ -370,7 +404,7 @@ describe("useThreadCreationOptions", () => {
   });
 
   it("switches to the new provider default model when the provider changes", async () => {
-    vi.mocked(api.listSystemProviders).mockResolvedValue([
+    const providers = [
       createTestSystemProvider({
         displayName: "Codex",
         id: "codex",
@@ -382,27 +416,29 @@ describe("useThreadCreationOptions", () => {
         displayName: "Claude Code",
         id: "claude-code",
       }),
-    ]);
-    vi.mocked(api.getAvailableModels).mockImplementation(async (providerId) => {
-      if (providerId === "claude-code") {
-        return [
-          makeModel({
-            defaultReasoningEffort: "high",
-            displayName: "Claude Sonnet 4.6",
-            id: "claude-sonnet-4-6",
-            model: "claude-sonnet-4-6",
-          }),
-        ];
-      }
-
-      return [
-        makeModel({
-          displayName: "gpt-5.4",
-          id: "gpt-5.4",
-          model: "gpt-5.4",
-        }),
-      ];
-    });
+    ];
+    vi.mocked(api.getSystemExecutionOptions).mockImplementation(
+      async ({ providerId }) => ({
+        providers,
+        models:
+          providerId === "claude-code"
+            ? [
+                makeModel({
+                  defaultReasoningEffort: "high",
+                  displayName: "Claude Sonnet 4.6",
+                  id: "claude-sonnet-4-6",
+                  model: "claude-sonnet-4-6",
+                }),
+              ]
+            : [
+                makeModel({
+                  displayName: "gpt-5.4",
+                  id: "gpt-5.4",
+                  model: "gpt-5.4",
+                }),
+              ],
+      }),
+    );
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
@@ -439,7 +475,7 @@ describe("useThreadCreationOptions", () => {
   });
 
   it("passes the current model to provider lookup for selected-only runtime models", async () => {
-    vi.mocked(api.listSystemProviders).mockResolvedValue([
+    const providers = [
       createTestSystemProvider({
         displayName: "Codex",
         id: "codex",
@@ -451,40 +487,42 @@ describe("useThreadCreationOptions", () => {
         displayName: "Claude Code",
         id: "claude-code",
       }),
-    ]);
-    vi.mocked(api.getAvailableModels).mockImplementation(
-      async (providerId, selectedModel) => {
-        if (providerId === "claude-code" && selectedModel === "opus[1m]") {
-          return [
-            makeModel({
-              displayName: "Opus Alias (1M, Legacy)",
-              id: "opus[1m]",
-              isDefault: false,
-              model: "opus[1m]",
-            }),
-            makeModel({
-              defaultReasoningEffort: "xhigh",
-              displayName: "Claude Opus 4.7 (1M)",
-              id: "claude-opus-4-7[1m]",
-              isDefault: true,
-              model: "claude-opus-4-7[1m]",
-            }),
-          ];
-        }
-        return [
-          makeModel({
-            displayName: "gpt-5.4",
-            id: "gpt-5.4",
-            model: "gpt-5.4",
-          }),
-        ];
-      },
+    ];
+    vi.mocked(api.getSystemExecutionOptions).mockImplementation(
+      async ({ providerId, selectedModel }) => ({
+        providers,
+        models:
+          providerId === "claude-code" && selectedModel === "opus[1m]"
+            ? [
+                makeModel({
+                  displayName: "Opus Alias (1M, Legacy)",
+                  id: "opus[1m]",
+                  isDefault: false,
+                  model: "opus[1m]",
+                }),
+                makeModel({
+                  defaultReasoningEffort: "xhigh",
+                  displayName: "Claude Opus 4.7 (1M)",
+                  id: "claude-opus-4-7[1m]",
+                  isDefault: true,
+                  model: "claude-opus-4-7[1m]",
+                }),
+              ]
+            : [
+                makeModel({
+                  displayName: "gpt-5.4",
+                  id: "gpt-5.4",
+                  model: "gpt-5.4",
+                }),
+              ],
+      }),
     );
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () =>
         useThreadCreationOptions({
+          environmentId: "environment-selected-only",
           initialModel: "opus[1m]",
           initialProviderId: "claude-code",
           projectId: "project-selected-only",
@@ -494,10 +532,12 @@ describe("useThreadCreationOptions", () => {
     );
 
     await waitFor(() => {
-      expect(api.getAvailableModels).toHaveBeenCalledWith(
-        "claude-code",
-        "opus[1m]",
-      );
+      expect(api.getSystemExecutionOptions).toHaveBeenCalledWith({
+        environmentId: "environment-selected-only",
+        providerId: "claude-code",
+        providerScope: "all",
+        selectedModel: "opus[1m]",
+      });
     });
     await waitFor(() => {
       expect(result.current.modelOptions[0]).toEqual({

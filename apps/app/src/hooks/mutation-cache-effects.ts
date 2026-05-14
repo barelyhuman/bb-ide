@@ -115,12 +115,6 @@ export function invalidateThreadDeleteQueries({
   queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
-export function invalidateThreadReadStateQueries({
-  queryClient,
-}: QueryClientArg): void {
-  queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-}
-
 export function invalidateThreadQueueQueries({
   queryClient,
   threadId,

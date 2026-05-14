@@ -62,8 +62,13 @@ interface SendFollowUpInputParams {
   serviceTier?: ServiceTier;
 }
 
+type ComposerQueryRefetchOnMount = boolean | "always";
+
 interface ThreadDetailPromptAreaProps {
   canUseGitUi: boolean;
+  composerQueriesEnabled: boolean;
+  composerQueriesRefetchOnMount: ComposerQueryRefetchOnMount;
+  composerQueriesStaleTime?: number;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
   environmentHostConnected?: boolean;
@@ -136,6 +141,9 @@ function shouldQueueFollowUpDraft(
 
 export function ThreadDetailPromptArea({
   canUseGitUi,
+  composerQueriesEnabled,
+  composerQueriesRefetchOnMount,
+  composerQueriesStaleTime,
   contextWindowUsage,
   environmentBranchName,
   environmentHostConnected,
@@ -158,9 +166,25 @@ export function ThreadDetailPromptArea({
 }: ThreadDetailPromptAreaProps) {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     thread.id,
+    {
+      enabled: composerQueriesEnabled,
+      refetchOnMount: composerQueriesRefetchOnMount,
+      staleTime: composerQueriesStaleTime,
+    },
   );
-  const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
-  const { data: promptHistoryEntries = [] } = useThreadPromptHistory(thread.id);
+  const { data: queuedMessages = [] } = useThreadDrafts(thread.id, {
+    enabled: composerQueriesEnabled,
+    refetchOnMount: composerQueriesRefetchOnMount,
+    staleTime: composerQueriesStaleTime,
+  });
+  const { data: promptHistoryEntries = [] } = useThreadPromptHistory(
+    thread.id,
+    {
+      enabled: composerQueriesEnabled,
+      refetchOnMount: composerQueriesRefetchOnMount,
+      staleTime: composerQueriesStaleTime,
+    },
+  );
   const createDraft = useCreateThreadDraft();
   const sendDraft = useSendThreadDraft();
   const deleteDraft = useDeleteThreadDraft();
@@ -206,6 +230,9 @@ export function ThreadDetailPromptArea({
     supportsServiceTier,
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({
+    enabled: composerQueriesEnabled,
+    environmentId: thread.environmentId ?? undefined,
+    providerScope: "selected",
     scope: "thread",
     resetKey: thread.id,
     initialProviderId: thread.providerId,

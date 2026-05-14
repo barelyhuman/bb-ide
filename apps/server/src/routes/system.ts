@@ -4,42 +4,23 @@ import {
   githubReposQuerySchema,
   sandboxEnvVarNameSchema,
   upsertSandboxEnvVarRequestSchema,
+  systemExecutionOptionsQuerySchema,
   systemModelsQuerySchema,
   systemProvidersQuerySchema,
   typedRoutes,
   type PublicApiSchema,
-  type SystemProvidersQuery,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import {
-  requireEnvironment,
-  requireDefaultConnectedPersistentHostId,
-  requireNonDestroyedHostWithStatus,
-} from "../services/lib/entity-lookup.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { listAvailableSandboxBackends } from "../services/hosts/sandbox-backends.js";
 import { isSandboxProvisioningConfigured } from "../services/hosts/sandbox-config.js";
 import { transcribeVoiceInput } from "../services/ai/voice-transcription.js";
 import { fetchGithubRepos } from "../services/github/repos.js";
-
-type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
-
-function resolveSystemLookupHostId(
-  deps: AppDeps,
-  query: HostLookupQuery,
-): string {
-  if (query.environmentId) {
-    return requireEnvironment(deps.db, query.environmentId).hostId;
-  }
-  if (query.hostId) {
-    requireNonDestroyedHostWithStatus(deps.db, query.hostId);
-    return query.hostId;
-  }
-  return requireDefaultConnectedPersistentHostId(deps.db);
-}
+import { resolveSystemExecutionOptions } from "../services/system/execution-options.js";
+import { resolveSystemLookupHostId } from "../services/system/host-lookup.js";
 
 export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
   const { del, get, post } = typedRoutes<PublicApiSchema>(app, {
@@ -163,6 +144,18 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       });
       return context.json(result.providers);
     },
+  );
+
+  get(
+    "/system/execution-options",
+    systemExecutionOptionsQuerySchema,
+    async (context, query) =>
+      context.json(
+        await resolveSystemExecutionOptions(deps, {
+          ...query,
+          providerScope: query.providerScope ?? "all",
+        }),
+      ),
   );
 
   get("/system/models", systemModelsQuerySchema, async (context, query) => {
