@@ -101,7 +101,7 @@ function getPlatformCopy(platform: HostPlatform | null): PlatformCopy {
   if (platform === "wsl") {
     return {
       description:
-        "Enter an absolute path to the project folder. Use /mnt/c/... to point at a Windows checkout.",
+        "Enter an absolute WSL path to the project folder, such as /home/me/repo or /mnt/c/...",
       placeholder,
     };
   }
