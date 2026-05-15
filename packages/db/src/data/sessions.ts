@@ -210,36 +210,26 @@ export function listLatestSessionsForHosts(
     return [];
   }
 
+  // Correlated `id = (ORDER BY ... LIMIT 1)` keeps the seek on
+  // host_daemon_sessions_host_latest_idx (host_id, updated_at, created_at, id)
+  // and only sorts the inner rows for one host. The earlier NOT EXISTS
+  // OR-chain was not sargable and degraded to row-by-row anti-join.
   return db
     .select()
     .from(hostDaemonSessions)
     .where(
       and(
         inArray(hostDaemonSessions.hostId, hostIds),
-        sql`NOT EXISTS (
-          SELECT 1
+        sql`${hostDaemonSessions.id} = (
+          SELECT latest.id
           FROM host_daemon_sessions AS latest
           WHERE latest.host_id = ${hostDaemonSessions.hostId}
-            AND (
-              latest.updated_at > ${hostDaemonSessions.updatedAt}
-              OR (
-                latest.updated_at = ${hostDaemonSessions.updatedAt}
-                AND latest.created_at > ${hostDaemonSessions.createdAt}
-              )
-              OR (
-                latest.updated_at = ${hostDaemonSessions.updatedAt}
-                AND latest.created_at = ${hostDaemonSessions.createdAt}
-                AND CASE WHEN latest.status = 'active' THEN 1 ELSE 0 END >
-                  CASE WHEN ${hostDaemonSessions.status} = 'active' THEN 1 ELSE 0 END
-              )
-              OR (
-                latest.updated_at = ${hostDaemonSessions.updatedAt}
-                AND latest.created_at = ${hostDaemonSessions.createdAt}
-                AND CASE WHEN latest.status = 'active' THEN 1 ELSE 0 END =
-                  CASE WHEN ${hostDaemonSessions.status} = 'active' THEN 1 ELSE 0 END
-                AND latest.id > ${hostDaemonSessions.id}
-              )
-            )
+          ORDER BY
+            latest.updated_at DESC,
+            latest.created_at DESC,
+            CASE WHEN latest.status = 'active' THEN 1 ELSE 0 END DESC,
+            latest.id DESC
+          LIMIT 1
         )`,
       ),
     )

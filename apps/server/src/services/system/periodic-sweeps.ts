@@ -1,10 +1,12 @@
 import {
+  CLOSED_SESSION_ROW_RETENTION_MS,
   compactDatabase,
   COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
   COMPLETED_EVENT_OUTPUT_RETENTION_MS,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
+  DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
   getDatabaseCompactionStats,
@@ -17,6 +19,7 @@ import {
   listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
+  pruneClosedSessions,
   pruneCompletedCommands,
   pruneCompletedCommandPayloads,
   shouldCompactDatabase,
@@ -423,6 +426,10 @@ export async function runPeriodicSweeps(
     pruneCompletedCommands(deps.db, {
       completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
       limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
+    });
+    pruneClosedSessions(deps.db, {
+      closedBefore: now - CLOSED_SESSION_ROW_RETENTION_MS,
+      limit: DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
     });
     const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
     if (expiredLeases.expiredSessionIds.length > 0) {

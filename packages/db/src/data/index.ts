@@ -422,11 +422,14 @@ export type {
 } from "./queued-thread-messages.js";
 
 export {
+  CLOSED_SESSION_ROW_RETENTION_MS,
   COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
   COMPLETED_EVENT_OUTPUT_RETENTION_MS,
+  DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+  pruneClosedSessions,
   pruneCompletedCommands,
   pruneCompletedCommandPayloads,
   truncateCompletedEventItemOutputs,
@@ -438,6 +441,8 @@ export {
   sweepManagedEnvironments,
 } from "./sweeps.js";
 export type {
+  PruneClosedSessionsArgs,
+  PruneClosedSessionsResult,
   PruneCompletedCommandsArgs,
   PruneCompletedCommandsResult,
   PruneCompletedCommandPayloadsArgs,

@@ -41,6 +41,9 @@ export const COMPLETED_COMMAND_PAYLOAD_RETENTION_MS = 24 * 60 * 60_000;
 /** Completed daemon command rows are retained briefly for debugging/history. */
 export const COMPLETED_COMMAND_ROW_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
+/** Closed daemon session rows are retained briefly for debugging/history. */
+export const CLOSED_SESSION_ROW_RETENTION_MS = 7 * 24 * 60 * 60_000;
+
 /** Completed item output remains inspectable, but old large blobs are bounded. */
 export const COMPLETED_EVENT_OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
@@ -49,6 +52,7 @@ export const COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS = 2 * 1024;
 export const COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS = 2 * 1024;
 export const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_VERSION = 1;
 export const DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE = 1_000;
+export const DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE = 1_000;
 export const DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE = 250;
 
 const COMPLETED_EVENT_OUTPUT_TRUNCATION_MARKER =
@@ -126,6 +130,15 @@ export interface PruneCompletedCommandsResult {
   deleted: number;
 }
 
+export interface PruneClosedSessionsArgs {
+  closedBefore: number;
+  limit: number;
+}
+
+export interface PruneClosedSessionsResult {
+  deleted: number;
+}
+
 export interface TruncateCompletedEventItemOutputsArgs {
   createdBefore: number;
   limit: number;
@@ -191,6 +204,30 @@ export function pruneCompletedCommands(
       `,
     )
     .run("success", "error", args.completedBefore, args.limit);
+
+  return { deleted: result.changes };
+}
+
+export function pruneClosedSessions(
+  db: DbConnection,
+  args: PruneClosedSessionsArgs,
+): PruneClosedSessionsResult {
+  const result = db.$client
+    .prepare<[number, number]>(
+      `
+        DELETE FROM host_daemon_sessions
+        WHERE id IN (
+          SELECT id
+          FROM host_daemon_sessions
+          WHERE status = 'closed'
+            AND closed_at IS NOT NULL
+            AND closed_at < ?
+          ORDER BY closed_at
+          LIMIT ?
+        )
+      `,
+    )
+    .run(args.closedBefore, args.limit);
 
   return { deleted: result.changes };
 }
