@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { getThreadEvents, sendTextMessage } from "../../helpers/api.js";
 import {
   waitForHostConnected,
+  waitForSuccessfulQueuedCommandsAfterCursor,
   waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
-import { listQueuedCommands, readSessionRow } from "../../helpers/queries.js";
+import {
+  listQueuedCommandsForHostAfterCursor,
+  readSessionRow,
+} from "../../helpers/queries.js";
 import {
   assertMonotonicSequences,
   createRecoveryThread,
@@ -39,12 +43,16 @@ describe.sequential("fake provider session continuity integration", () => {
         TURN_TIMEOUT_MS,
       );
 
-      const commandsBefore = listQueuedCommands(harness.db);
+      const commandsBefore = listQueuedCommandsForHostAfterCursor(harness.db, {
+        cursor: 0,
+        hostId: harness.hostId,
+      });
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
       const baselineCompletedCount = eventsBefore.filter(
         (event) => event.type === "turn/completed",
       ).length;
       expect(commandsBefore.length).toBeGreaterThan(0);
+      const baselineCommandCursor = commandsBefore.at(-1)?.cursor ?? 0;
 
       await harness.restartDaemon("cursor-restart");
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
@@ -65,8 +73,14 @@ describe.sequential("fake provider session continuity integration", () => {
         TURN_TIMEOUT_MS,
       );
 
-      const commandsAfter = listQueuedCommands(harness.db);
-      const newCommands = commandsAfter.slice(commandsBefore.length);
+      // Thread events reach idle before the daemon's command-result POST settles.
+      const newCommands = await waitForSuccessfulQueuedCommandsAfterCursor({
+        cursor: baselineCommandCursor,
+        db: harness.db,
+        hostId: harness.hostId,
+        minCount: 1,
+        timeoutMs: TURN_TIMEOUT_MS,
+      });
       const eventsAfter = await getThreadEvents(harness.api, thread.id);
       expect(newCommands.length).toBeGreaterThan(0);
       expect(

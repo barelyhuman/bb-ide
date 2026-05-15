@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNotNull, or } from "drizzle-orm";
 import {
   events,
   hostDaemonCommands,
@@ -25,6 +25,11 @@ export interface QueuedCommand {
   sessionId: string | null;
   state: string;
   type: string;
+}
+
+export interface ListQueuedCommandsForHostAfterCursorArgs {
+  cursor: number;
+  hostId: string;
 }
 
 export interface StoredTurnEventRow {
@@ -56,6 +61,24 @@ export function listQueuedCommands(db: DbConnection): QueuedCommand[] {
   return db
     .select()
     .from(hostDaemonCommands)
+    .orderBy(hostDaemonCommands.cursor)
+    .all()
+    .map(parseQueuedCommand);
+}
+
+export function listQueuedCommandsForHostAfterCursor(
+  db: DbConnection,
+  args: ListQueuedCommandsForHostAfterCursorArgs,
+): QueuedCommand[] {
+  return db
+    .select()
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.hostId, args.hostId),
+        gt(hostDaemonCommands.cursor, args.cursor),
+      ),
+    )
     .orderBy(hostDaemonCommands.cursor)
     .all()
     .map(parseQueuedCommand);

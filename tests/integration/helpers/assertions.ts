@@ -12,6 +12,7 @@ import { createPublicApiClient } from "@bb/server-contract";
 import {
   listPendingHostCommands,
   listQueuedCommands,
+  listQueuedCommandsForHostAfterCursor,
   type QueuedCommand,
 } from "./queries.js";
 import {
@@ -28,6 +29,14 @@ interface ThreadStatusFailureContext {
   currentStatus: ThreadStatus | "unknown";
   expectedStatus: ThreadStatus;
   threadId: string;
+}
+
+interface WaitForSuccessfulQueuedCommandsAfterCursorArgs {
+  cursor: number;
+  db: DbConnection;
+  hostId: string;
+  minCount: number;
+  timeoutMs: number;
 }
 
 async function pollUntil<T>(
@@ -357,6 +366,47 @@ export async function waitForCommand(
     "Timed out waiting for a matching command",
     timeoutMs,
     () => currentCommands,
+  );
+}
+
+function describeQueuedCommands(commands: QueuedCommand[]): string {
+  if (commands.length === 0) {
+    return "none";
+  }
+
+  return commands
+    .map(
+      (command) =>
+        `${command.cursor}:${command.type}:${command.state}:completedAt=${command.completedAt ?? "null"}`,
+    )
+    .join(", ");
+}
+
+function isSuccessfulQueuedCommand(command: QueuedCommand): boolean {
+  return command.state === "success" && command.completedAt !== null;
+}
+
+export async function waitForSuccessfulQueuedCommandsAfterCursor(
+  args: WaitForSuccessfulQueuedCommandsAfterCursorArgs,
+): Promise<QueuedCommand[]> {
+  let currentCommands: QueuedCommand[] = [];
+
+  return pollUntil(
+    async () => {
+      currentCommands = listQueuedCommandsForHostAfterCursor(args.db, {
+        cursor: args.cursor,
+        hostId: args.hostId,
+      });
+      if (currentCommands.length < args.minCount) {
+        return null;
+      }
+      return currentCommands.every(isSuccessfulQueuedCommand)
+        ? currentCommands
+        : null;
+    },
+    `Timed out waiting for ${args.minCount} queued command(s) after cursor ${args.cursor} to succeed`,
+    args.timeoutMs,
+    () => describeQueuedCommands(currentCommands),
   );
 }
 
