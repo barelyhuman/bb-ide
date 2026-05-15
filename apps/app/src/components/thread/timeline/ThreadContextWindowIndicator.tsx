@@ -23,6 +23,10 @@ export function ThreadContextWindowIndicator({
   const leftPercent = Math.max(0, 100 - usedPercent);
   const visualPercent = Math.min(Math.max(usedPercent, 0), 100);
 
+  const radius = 6.5;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - visualPercent / 100);
+
   const toneClass =
     usedPercent >= 90
       ? "text-destructive/75"
@@ -49,21 +53,32 @@ export function ThreadContextWindowIndicator({
           aria-label={`Context window ${usedPercent}% used`}
           title={title}
         >
-          <span
-            className={cn(
-              "relative block size-4 rounded-full border border-border/80",
-              toneClass,
-            )}
+          <svg
+            viewBox="0 0 16 16"
+            className={cn("size-4", toneClass)}
             aria-hidden="true"
           >
-            <span
-              className="absolute inset-0 rounded-full"
-              style={{
-                background: `conic-gradient(currentColor ${visualPercent}%, transparent 0%)`,
-              }}
+            <circle
+              cx="8"
+              cy="8"
+              r={radius}
+              fill="none"
+              strokeWidth="3"
+              className="stroke-border/40"
             />
-            <span className="absolute inset-[3px] rounded-full bg-background" />
-          </span>
+            <circle
+              cx="8"
+              cy="8"
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 8 8)"
+            />
+          </svg>
         </button>
       </PopoverTrigger>
       <PopoverContent
