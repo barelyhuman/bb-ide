@@ -85,6 +85,13 @@
       "when": 1779052800000,
       "tag": "0011_maintenance_cursor_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1779053800000,
+      "tag": "0012_safe_cleanup_only",
+      "breakpoints": true
     }
   ]
 }

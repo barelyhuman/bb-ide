@@ -15,7 +15,6 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type {
-  ArchiveThreadRequest,
   CreateManagerThreadRequest,
   CloudAuthAttemptResponse,
   CloudAuthConnectResponse,
@@ -873,14 +872,10 @@ export async function resolveThreadPendingInteraction(
   );
 }
 
-export async function archiveThread(
-  id: string,
-  opts: ArchiveThreadRequest,
-): Promise<void> {
+export async function archiveThread(id: string): Promise<void> {
   await requestVoid(
     apiClient.threads[":id"].archive.$post({
       param: { id },
-      json: opts,
     }),
   );
 }

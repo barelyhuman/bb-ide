@@ -136,11 +136,9 @@ async function requireMergeBaseBranch(
 export async function archiveThread(
   api: PublicApiClient,
   threadId: string,
-  force = false,
 ): Promise<void> {
   const response = await api.threads[":id"].archive.$post({
     param: { id: threadId },
-    json: { force, managerChildThreadsConfirmed: false },
   });
   await expectStatus(response, 200, `archive thread ${threadId}`);
 }

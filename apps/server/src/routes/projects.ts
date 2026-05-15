@@ -60,8 +60,8 @@ import {
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { parseOptionalInteger } from "../services/lib/validation.js";
 import {
-  advanceProjectDeletion,
-  requestProjectDeletion,
+  beginProjectDeletion,
+  requestProjectDeletionAdvance,
 } from "../services/projects/project-deletion.js";
 import { fetchGithubBranches } from "../services/github/branches.js";
 import { listProjectPromptHistory } from "../services/prompt-history.js";
@@ -304,8 +304,8 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   del("/projects/:id", async (context) => {
     const id = context.req.param("id");
     requireProject(deps.db, id);
-    requestProjectDeletion(deps, { projectId: id });
-    await advanceProjectDeletion(deps, { projectId: id });
+    beginProjectDeletion(deps, { projectId: id });
+    requestProjectDeletionAdvance(deps, { projectId: id });
     return context.json({ ok: true });
   });
 

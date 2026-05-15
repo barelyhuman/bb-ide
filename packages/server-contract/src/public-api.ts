@@ -22,7 +22,6 @@ import type {
   PathThreadAndQueuedMessage,
 } from "./common.js";
 import type {
-  ArchiveThreadRequest,
   Automation,
   CloudAuthAttemptResponse,
   CloudAuthConnectRequest,
@@ -433,16 +432,15 @@ export type PublicApiSchema = {
   };
   "/threads/:id/archive": {
     /**
-     * Archive a thread. Rejects if work could be lost (unless force=true) —
-     * checks workspace status for uncommitted or unmerged changes. Manager
-     * threads with assigned child threads require explicit confirmation
-     * separate from workspace force.
-     * Stops the thread if active. If its managed environment now has zero
-     * non-archived threads, destroys the environment.
+     * Archive a thread. Stops the thread if active. If its managed environment
+     * now has zero non-archived threads, asynchronously requests safe
+     * environment cleanup; cleanup waits when the workspace has uncommitted or
+     * unmerged work.
      */
-    $post: Endpoint<PathId & { json: ArchiveThreadRequest }, { ok: true }>;
+    $post: Endpoint<PathId, { ok: true }>;
   };
   "/threads/:id/unarchive": {
+    /** Unarchive a thread and cancel any still-pending cleanup for its environment. */
     $post: Endpoint<PathId, { ok: true }>;
   };
   "/threads/:id/read": {

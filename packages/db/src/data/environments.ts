@@ -139,7 +139,6 @@ export interface UpdateEnvironmentStatusInput {
 }
 
 export interface RequestEnvironmentCleanupInput {
-  cleanupMode: EnvironmentCleanupMode;
   requestedAt?: number;
 }
 
@@ -315,16 +314,6 @@ export function setEnvironmentStatus(
   });
 }
 
-function resolveRequestedCleanupMode(
-  current: EnvironmentCleanupMode | null,
-  requested: EnvironmentCleanupMode,
-): EnvironmentCleanupMode {
-  if (current === "force" || requested === "force") {
-    return "force";
-  }
-  return "safe";
-}
-
 export function recordEnvironmentCleanupRequest(
   db: EnvironmentWriteConnection,
   notifier: DbNotifier,
@@ -339,10 +328,7 @@ export function recordEnvironmentCleanupRequest(
   return updateEnvironmentLifecycleRecord(db, notifier, id, {
     cleanupRequestedAt:
       existing.cleanupRequestedAt ?? input.requestedAt ?? Date.now(),
-    cleanupMode: resolveRequestedCleanupMode(
-      existing.cleanupMode,
-      input.cleanupMode,
-    ),
+    cleanupMode: "safe",
   });
 }
 

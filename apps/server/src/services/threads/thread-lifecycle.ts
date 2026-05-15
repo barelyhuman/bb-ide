@@ -1063,7 +1063,6 @@ export function finalizeStoppedThreadInTransaction(
     deleteThread(deps.db, deps.hub, finalizedThread.id);
     requestEnvironmentCleanup(deps, {
       environmentId,
-      mode: "force",
     });
     return true;
   }

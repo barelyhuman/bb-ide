@@ -2,14 +2,11 @@ import type { Thread } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { threadTypeLabel } from "@/lib/thread-title";
-import type { ThreadDirtyWorkspaceWarning } from "./ThreadArchiveDialog";
 
 export interface ThreadDeleteDialogTarget {
   thread: Thread;
   /** Present iff manager thread with one or more assigned children. */
   assignedChildCount?: number;
-  /** Present iff the workspace is managed and has uncommitted/unmerged work. */
-  workspaceWarning?: ThreadDirtyWorkspaceWarning;
 }
 
 interface ThreadDeleteDialogProps {
@@ -57,9 +54,6 @@ export function ThreadDeleteDialogContent({
   const label = threadTypeLabel(target.thread.type);
   const sentences = [
     target.assignedChildCount ? "Assigned threads will be unassigned." : null,
-    target.workspaceWarning
-      ? formatWorkspaceWarningSentence(target.workspaceWarning)
-      : null,
     "This action cannot be undone.",
   ].filter((part): part is string => part !== null);
 
@@ -89,19 +83,4 @@ export function ThreadDeleteDialogContent({
       </DialogFooter>
     </>
   );
-}
-
-function formatWorkspaceWarningSentence(
-  warning: ThreadDirtyWorkspaceWarning,
-): string {
-  if (
-    warning.hasUncommittedChanges &&
-    warning.hasCommittedUnmergedChanges
-  ) {
-    return "Its workspace has uncommitted changes and unmerged commits that will be lost.";
-  }
-  if (warning.hasUncommittedChanges) {
-    return "Its workspace has uncommitted changes that will be lost.";
-  }
-  return "Its workspace has unmerged commits that will be lost.";
 }

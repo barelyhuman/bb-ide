@@ -135,7 +135,13 @@ export function requirePublicThread(
   threadId: string,
 ): Thread {
   const thread = requireThread(db, threadId);
-  if (thread.deletedAt !== null) {
+  if (
+    thread.deletedAt !== null ||
+    getProjectOperation(db, {
+      projectId: thread.projectId,
+      kind: "delete",
+    }) !== null
+  ) {
     throw new ApiError(404, "thread_not_found", "Thread not found");
   }
   return thread;

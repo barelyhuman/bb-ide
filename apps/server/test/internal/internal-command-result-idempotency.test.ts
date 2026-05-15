@@ -17,6 +17,7 @@ import {
 } from "@bb/db";
 import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
 import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
 import { handleCommandResult } from "../../src/internal/command-results.js";
 import {
@@ -504,7 +505,6 @@ describe("internal command result idempotency", () => {
       });
       requestEnvironmentCleanup(harness.deps, {
         environmentId: environment.id,
-        mode: "force",
       });
       const queuedStop = await waitForQueuedCommand(
         harness,
@@ -551,14 +551,29 @@ describe("internal command result idempotency", () => {
         .all();
       expect(destroyCommandsBeforeSweep).toHaveLength(0);
 
-      await runManagedEnvironmentArchiveCleanupSweep(
+      const cleanupSweepPromise = runManagedEnvironmentArchiveCleanupSweep(
         harness.deps,
         advanceEnvironmentCleanup,
       );
 
-      const destroyCommand = await waitForQueuedCommandAfter(
+      const statusCommand = await waitForQueuedCommandAfter(
         harness,
         queuedStop.row.cursor,
+        ({ command: queuedCommand }) =>
+          queuedCommand.type === "workspace.status" &&
+          queuedCommand.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+      await cleanupSweepPromise;
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
         ({ command: queuedCommand }) =>
           queuedCommand.type === "environment.destroy" &&
           queuedCommand.environmentId === environment.id,

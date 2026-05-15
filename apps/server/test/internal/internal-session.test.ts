@@ -36,6 +36,7 @@ import {
   threadSchema,
   turnScope,
 } from "@bb/domain";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
@@ -2444,12 +2445,26 @@ describe("internal session routes", () => {
 
       expect(response.status).toBe(201);
       expect(getThread(harness.db, thread.id)).toBeNull();
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(
         "destroying",
       );
 
-      const destroyCommand = await waitForQueuedCommand(
+      const destroyCommand = await waitForQueuedCommandAfter(
         harness,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -2848,11 +2863,11 @@ describe("internal session routes", () => {
     }
   });
 
-  it("resumes forced archived cleanup after reconciliation clears a lost stop result", async () => {
+  it("resumes safe archived cleanup after reconciliation clears a lost stop result", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-reconcile-archived-force-cleanup",
+        id: "host-reconcile-archived-safe-cleanup",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2862,7 +2877,7 @@ describe("internal session routes", () => {
         projectId: project.id,
         managed: true,
         workspaceProvisionType: "managed-worktree",
-        path: "/tmp/reconcile-archived-force-cleanup",
+        path: "/tmp/reconcile-archived-safe-cleanup",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -2874,19 +2889,12 @@ describe("internal session routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: true,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
       expect(archiveResponse.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupMode: "force",
+        cleanupMode: "safe",
         cleanupRequestedAt: expect.any(Number),
         status: "ready",
       });
@@ -2904,11 +2912,11 @@ describe("internal session routes", () => {
           headers: internalAuthHeaders(harness),
           body: JSON.stringify({
             activeThreads: [],
-            dataDir: "/tmp/reconcile-archived-force-cleanup",
+            dataDir: "/tmp/reconcile-archived-safe-cleanup",
             hostId: host.id,
-            hostName: "Reconcile Archived Force Cleanup Host",
+            hostName: "Reconcile Archived Safe Cleanup Host",
             hostType: "persistent",
-            instanceId: "instance-reconcile-archived-force-cleanup",
+            instanceId: "instance-reconcile-archived-safe-cleanup",
             protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           }),
         },
@@ -2917,9 +2925,23 @@ describe("internal session routes", () => {
       expect(reconnectResponse.status).toBe(201);
       expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeNull();
 
-      const destroyCommand = await waitForQueuedCommandAfter(
+      const statusCommand = await waitForQueuedCommandAfter(
         harness,
         stopCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -3151,8 +3173,21 @@ describe("internal session routes", () => {
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)).toBeNull();
 
-      const destroyCommand = await waitForQueuedCommand(
+      const statusCommand = await waitForQueuedCommand(
         harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,

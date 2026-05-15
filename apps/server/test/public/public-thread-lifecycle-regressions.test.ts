@@ -10,10 +10,12 @@ import {
   transitionThreadStatus,
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
 import { completeThreadStart } from "../../src/services/threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
 import {
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
@@ -503,8 +505,21 @@ describe("public thread lifecycle regressions", () => {
       );
       expect(secondDelete.status).toBe(200);
 
-      const destroyCommand = await waitForQueuedCommand(
+      const statusCommand = await waitForQueuedCommand(
         harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,

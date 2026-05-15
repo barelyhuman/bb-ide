@@ -90,7 +90,6 @@ export type {
 export {
   AUTOMATION_NAME_MAX_LENGTH,
   FILE_LIST_QUERY_MAX_LENGTH,
-  archiveThreadRequestSchema,
   automationActionSchema,
   automationNameSchema,
   automationScheduleTriggerSchema,
@@ -220,7 +219,6 @@ export {
   workspaceFileSchema,
 } from "./api-types.js";
 export type {
-  ArchiveThreadRequest,
   Automation,
   AutomationAction,
   AutomationThreadRequest,

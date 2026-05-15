@@ -27,9 +27,7 @@ interface ThreadUpdateCommandOptions {
 }
 
 interface ThreadArchiveCommandOptions {
-  confirmAssignedChildThreads?: boolean;
   self?: boolean;
-  force?: boolean;
   json?: boolean;
 }
 
@@ -137,14 +135,6 @@ export function registerActionsCommands(
     .command("archive [id]")
     .description("Archive a thread")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
-    .option(
-      "--force",
-      "Archive even when the thread workspace has uncommitted or unmerged work",
-    )
-    .option(
-      "--confirm-assigned-child-threads",
-      "Confirm archiving a manager with assigned child threads",
-    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(
@@ -155,11 +145,6 @@ export function registerActionsCommands(
             await unwrap<{ ok: boolean }>(
               client.api.v1.threads[":id"].archive.$post({
                 param: { id: threadId },
-                json: {
-                  force: opts.force === true,
-                  managerChildThreadsConfirmed:
-                    opts.confirmAssignedChildThreads === true,
-                },
               }),
             );
           } catch (err: unknown) {

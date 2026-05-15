@@ -11,7 +11,7 @@ export const environmentStatusValues = [
 export const environmentStatusSchema = z.enum(environmentStatusValues);
 export type EnvironmentStatus = z.infer<typeof environmentStatusSchema>;
 
-export const environmentCleanupModeValues = ["force", "safe"] as const;
+export const environmentCleanupModeValues = ["safe"] as const;
 export const environmentCleanupModeSchema = z.enum(
   environmentCleanupModeValues,
 );

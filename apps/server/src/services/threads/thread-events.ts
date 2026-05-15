@@ -709,6 +709,47 @@ export function appendThreadOwnershipChangeEvent(
   });
 }
 
+export function appendThreadOwnershipChangeEventInTransaction(
+  deps: ThreadEventTransactionDeps,
+  args: AppendThreadOwnershipChangeEventArgs,
+): number | null {
+  const action = resolveThreadOwnershipChangeAction(args);
+  if (!action) {
+    return null;
+  }
+
+  const previousParentThreadTitle = resolveParentThreadTitle(
+    deps.db,
+    args.previousParentThreadId,
+  );
+  const nextParentThreadTitle = resolveParentThreadTitle(
+    deps.db,
+    args.nextParentThreadId,
+  );
+
+  const sequence = appendThreadEventInTransaction(deps.db, {
+    threadId: args.threadId,
+    environmentId: args.environmentId ?? null,
+    type: "system/operation",
+    scope: threadScope(),
+    data: {
+      operation: "ownership_change",
+      operationId: createEventId(),
+      status: "completed",
+      message: threadOwnershipChangeMessage(action),
+      metadata: {
+        action,
+        previousParentThreadId: args.previousParentThreadId,
+        previousParentThreadTitle,
+        nextParentThreadId: args.nextParentThreadId,
+        nextParentThreadTitle,
+      },
+    },
+  });
+  deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  return sequence;
+}
+
 export function getActiveTurnId(
   deps: ThreadEventReadDeps,
   threadId: string,

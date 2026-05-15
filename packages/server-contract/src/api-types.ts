@@ -440,12 +440,6 @@ export type ThreadAssignedChildSummaryResponse = z.infer<
   typeof threadAssignedChildSummaryResponseSchema
 >;
 
-export const archiveThreadRequestSchema = z.object({
-  force: z.boolean(),
-  managerChildThreadsConfirmed: z.boolean(),
-});
-export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
-
 export const deleteThreadRequestSchema = z.object({
   managerChildThreadsConfirmed: z.boolean(),
 });

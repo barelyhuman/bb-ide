@@ -15,6 +15,7 @@ import {
   restoreAutomationAfterFailedRun,
   updateAutomation,
 } from "../../src/data/automations.js";
+import { upsertProjectOperationRecord } from "../../src/data/project-operations.js";
 import { createProject } from "../../src/data/projects.js";
 import { openSession } from "../../src/data/sessions.js";
 import { createThread } from "../../src/data/threads.js";
@@ -117,6 +118,42 @@ describe("automations", () => {
     });
 
     expect(listAutomations(db, project.id)).toHaveLength(2);
+  });
+
+  it("excludes and refuses due automations for projects pending deletion", () => {
+    const { db, host, project } = setup();
+    const now = Date.now();
+    const automation = createScheduleAutomation({
+      db,
+      hostId: host.id,
+      projectId: project.id,
+      now: now - 120_000,
+    });
+
+    upsertProjectOperationRecord(db, {
+      projectId: project.id,
+      kind: "delete",
+      payload: JSON.stringify({}),
+    });
+
+    expect(listDueAutomations(db, { now })).toEqual([]);
+
+    const claimed = claimAutomationScheduledRun(db, noopNotifier, {
+      automationId: automation.id,
+      expectedNextRunAt: automation.nextRunAt,
+      hostId: null,
+      nextRunAt: now + 60_000,
+    });
+    expect(claimed).toEqual({
+      advanced: false,
+      reason: "project-deleting",
+      shouldCreateThread: false,
+    });
+    expect(getAutomation(db, automation.id)).toMatchObject({
+      lastRunAt: null,
+      nextRunAt: automation.nextRunAt,
+      runCount: 0,
+    });
   });
 
   it("tracks open automation threads and clears them when archived or deleted", () => {

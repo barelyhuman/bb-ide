@@ -159,6 +159,10 @@ export interface CountNonDeletedAssignedChildThreadsArgs {
   parentThreadId: string;
 }
 
+export interface ListUnarchivedAssignedChildThreadsArgs {
+  parentThreadId: string;
+}
+
 export interface MarkThreadStopRequestedArgs {
   requestedAt?: number;
   threadId: string;
@@ -398,7 +402,7 @@ export function listThreadsWithPendingInteractionStateForProjects(
 }
 
 export function countLiveThreadsInEnvironment(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   args: CountLiveThreadsInEnvironmentArgs,
 ): number {
   const liveThreadCount = db
@@ -433,6 +437,23 @@ export function countNonDeletedAssignedChildThreads(
     .get();
 
   return assignedChildThreadCount?.count ?? 0;
+}
+
+export function listUnarchivedAssignedChildThreads(
+  db: ThreadWriteConnection,
+  args: ListUnarchivedAssignedChildThreadsArgs,
+): ThreadRow[] {
+  return db
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.parentThreadId, args.parentThreadId),
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .all();
 }
 
 export function listThreadEnvironmentAssignmentsOnHost(
@@ -529,6 +550,7 @@ export function updateThread(
 
   const changes: ThreadChangeKind[] = [];
   if ("title" in input) changes.push("title-changed");
+  if ("parentThreadId" in input) changes.push("parent-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
   if (
     "parentThreadId" in input &&
@@ -624,7 +646,7 @@ export function clearThreadStopRequested(
 }
 
 export function markThreadDeleted(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   notifier: DbNotifier,
   args: MarkThreadDeletedArgs,
 ) {
@@ -649,7 +671,7 @@ export function markThreadDeleted(
 }
 
 export function archiveThread(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   notifier: DbNotifier,
   id: string,
 ) {

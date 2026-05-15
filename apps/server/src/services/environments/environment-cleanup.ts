@@ -1,11 +1,12 @@
 import type {
-  EnvironmentCleanupMode,
   EnvironmentOperationKind,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import { isActiveLifecycleOperationState } from "@bb/domain";
 import {
+  cancelCommand,
   countLiveThreadsInEnvironment,
+  getCommand,
   getEnvironment,
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
@@ -17,6 +18,8 @@ import {
   type DbQueryConnection,
 } from "@bb/db";
 import {
+  cancelEnvironmentOperationRecord,
+  clearEnvironmentCleanupRequestRecord,
   markEnvironmentOperationRecordCompleted,
   markEnvironmentOperationRecordFailed,
   markEnvironmentOperationRecordQueued,
@@ -29,7 +32,6 @@ import {
   hostDaemonCommandResultSchemaByType,
   type HostDaemonCommandResult,
 } from "@bb/host-daemon-contract";
-import { z } from "zod";
 import { ApiError } from "../../errors.js";
 import type {
   AppDeps,
@@ -37,7 +39,6 @@ import type {
 } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
-import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 export interface EnvironmentDestroyTarget {
   hostId: string;
@@ -56,8 +57,16 @@ export interface RequestEnvironmentCleanupAdvanceArgs {
 
 export interface RequestEnvironmentCleanupArgs {
   environmentId: string | null | undefined;
-  mode: EnvironmentCleanupMode;
 }
+
+export interface CancelPendingEnvironmentCleanupArgs {
+  environmentId: string | null | undefined;
+}
+
+export type CancelPendingEnvironmentCleanupResult =
+  | "cancelled"
+  | "in_progress"
+  | "not_requested";
 
 export interface EnvironmentCleanupCommandMutationArgs {
   commandId: string;
@@ -67,20 +76,10 @@ export interface FailEnvironmentCleanupForCommandArgs extends EnvironmentCleanup
   failureReason: string;
 }
 
-export interface ValidateEnvironmentCleanupRequestArgs {
-  environmentId: string | null | undefined;
-  mode: EnvironmentCleanupMode;
-}
-
 export interface WouldCleanupEnvironmentArgs {
   environmentId: string | null | undefined;
   excludeThreadId: string;
 }
-
-const destroyOperationPayloadSchema = z.object({
-  mode: z.enum(["safe", "force"]),
-});
-type DestroyOperationPayload = z.infer<typeof destroyOperationPayloadSchema>;
 
 interface EnvironmentCleanupReadDeps {
   db: DbQueryConnection;
@@ -109,7 +108,7 @@ function workspaceHasRiskyChanges(
   );
 }
 
-async function assertWorkspaceCanBeSafelyCleaned(
+async function workspaceCanBeSafelyCleaned(
   deps: LoggedSandboxWorkSessionDeps,
   environmentId: string,
 ): Promise<boolean> {
@@ -167,15 +166,7 @@ async function assertWorkspaceCanBeSafelyCleaned(
     }
     throw error;
   }
-  if (workspaceHasRiskyChanges(result.workspaceStatus)) {
-    throw new ApiError(
-      409,
-      "archive_confirmation_required",
-      "Archiving this thread would clean up a workspace that contains work.",
-    );
-  }
-
-  return true;
+  return !workspaceHasRiskyChanges(result.workspaceStatus);
 }
 
 function canRequestCleanup(
@@ -184,39 +175,21 @@ function canRequestCleanup(
   return environment.managed && environment.status !== "destroyed";
 }
 
-function resolveRequestedCleanupMode(
-  current: EnvironmentCleanupMode,
-  requested: EnvironmentCleanupMode,
-): EnvironmentCleanupMode {
-  if (current === "force" || requested === "force") {
-    return "force";
-  }
-
-  return "safe";
-}
-
-function getDestroyOperationPayload(
+function hasDestroyOperationRequest(
   deps: EnvironmentCleanupReadDeps,
   environmentId: string,
-): DestroyOperationPayload | null {
+): boolean {
   const operation = getEnvironmentOperation(deps.db, {
     environmentId,
     kind: "destroy",
   });
 
   if (operation && isActiveLifecycleOperationState(operation.state)) {
-    return parseJsonWithSchema(
-      operation.payload,
-      destroyOperationPayloadSchema,
-    );
+    return true;
   }
 
   const environment = getEnvironment(deps.db, environmentId);
-  if (!environment || environment.cleanupMode === null) {
-    return null;
-  }
-
-  return { mode: environment.cleanupMode };
+  return environment !== null && environment.cleanupMode !== null;
 }
 
 function getActiveDestroyOperationByCommandId(
@@ -233,6 +206,19 @@ function getActiveDestroyOperationByCommandId(
   }
 
   return operation;
+}
+
+function restoreEnvironmentAfterCleanupCancellation(
+  deps: EnvironmentCleanupWriteDeps,
+  environment: NonNullable<ReturnType<typeof getEnvironment>>,
+): void {
+  if (environment.status !== "destroying") {
+    return;
+  }
+
+  setEnvironmentStatus(deps.db, deps.hub, environment.id, {
+    status: environment.path ? "ready" : "error",
+  });
 }
 
 export function hasActiveEnvironmentDestroyOperationForCommand(
@@ -255,6 +241,24 @@ export function completeEnvironmentDestroyForCommand(
   if (!environment) {
     return false;
   }
+  if (
+    countLiveThreadsInEnvironment(deps.db, {
+      environmentId: operation.environmentId,
+    }) > 0
+  ) {
+    cancelEnvironmentOperationRecord(deps.db, {
+      environmentId: operation.environmentId,
+      kind: operation.kind,
+    });
+    clearEnvironmentCleanupRequestRecord(
+      deps.db,
+      deps.hub,
+      operation.environmentId,
+    );
+    restoreEnvironmentAfterCleanupCancellation(deps, environment);
+    return false;
+  }
+
   if (environment.status === "destroying") {
     setEnvironmentRecordDestroyed(deps.db, deps.hub, operation.environmentId);
   } else if (environment.status !== "destroyed") {
@@ -293,22 +297,6 @@ export function failEnvironmentDestroyForCommand(
   return true;
 }
 
-export async function validateEnvironmentCleanupRequest(
-  deps: LoggedSandboxWorkSessionDeps,
-  args: ValidateEnvironmentCleanupRequestArgs,
-): Promise<void> {
-  if (!args.environmentId || args.mode === "force") {
-    return;
-  }
-
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (!environment || !canRequestCleanup(environment)) {
-    return;
-  }
-
-  await assertWorkspaceCanBeSafelyCleaned(deps, environment.id);
-}
-
 export function requestEnvironmentCleanup(
   deps: EnvironmentCleanupWriteDeps,
   args: RequestEnvironmentCleanupArgs,
@@ -322,20 +310,57 @@ export function requestEnvironmentCleanup(
     return;
   }
 
-  const currentPayload = getDestroyOperationPayload(deps, environment.id);
-  const mode = currentPayload
-    ? resolveRequestedCleanupMode(currentPayload.mode, args.mode)
-    : args.mode;
-
   upsertEnvironmentOperationRecord(deps.db, {
     environmentId: environment.id,
     kind: "destroy",
-    payload: JSON.stringify({ mode }),
+    payload: JSON.stringify({}),
     requestedAt: environment.cleanupRequestedAt ?? undefined,
   });
-  recordEnvironmentCleanupRequest(deps.db, deps.hub, environment.id, {
-    cleanupMode: mode,
+  recordEnvironmentCleanupRequest(deps.db, deps.hub, environment.id, {});
+}
+
+export function cancelPendingEnvironmentCleanup(
+  deps: EnvironmentCleanupWriteDeps,
+  args: CancelPendingEnvironmentCleanupArgs,
+): CancelPendingEnvironmentCleanupResult {
+  if (!args.environmentId) {
+    return "not_requested";
+  }
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment || environment.cleanupMode === null) {
+    return "not_requested";
+  }
+
+  const operation = getEnvironmentOperation(deps.db, {
+    environmentId: environment.id,
+    kind: "destroy",
   });
+  if (operation?.commandId) {
+    const command = getCommand(deps.db, operation.commandId);
+    if (command?.state === "fetched") {
+      return "in_progress";
+    }
+    if (command?.state === "pending") {
+      cancelCommand(deps.db, {
+        commandId: command.id,
+        resultPayload: JSON.stringify({
+          errorCode: "environment_cleanup_cancelled",
+          errorMessage: "Environment cleanup was cancelled",
+        }),
+      });
+    }
+  }
+
+  if (operation) {
+    cancelEnvironmentOperationRecord(deps.db, {
+      environmentId: environment.id,
+      kind: "destroy",
+    });
+  }
+  clearEnvironmentCleanupRequestRecord(deps.db, deps.hub, environment.id);
+  restoreEnvironmentAfterCleanupCancellation(deps, environment);
+  return "cancelled";
 }
 
 function queueEnvironmentDestroyCommand(
@@ -418,12 +443,11 @@ export async function advanceEnvironmentCleanup(
     environmentId: args.environmentId,
     kind: "destroy",
   });
-  const destroyPayload = getDestroyOperationPayload(deps, args.environmentId);
   if (
     !environment ||
     !environment.managed ||
     environment.status === "destroyed" ||
-    destroyPayload === null
+    !hasDestroyOperationRequest(deps, args.environmentId)
   ) {
     return;
   }
@@ -439,7 +463,7 @@ export async function advanceEnvironmentCleanup(
     destroyOperation = upsertEnvironmentOperationRecord(deps.db, {
       environmentId: environment.id,
       kind: "destroy",
-      payload: JSON.stringify(destroyPayload),
+      payload: JSON.stringify({}),
       requestedAt: environment.cleanupRequestedAt ?? undefined,
     });
   }
@@ -479,59 +503,47 @@ export async function advanceEnvironmentCleanup(
     return;
   }
 
-  if (destroyPayload.mode === "safe") {
-    const canDestroyNow = await assertWorkspaceCanBeSafelyCleaned(
-      deps,
-      environment.id,
-    );
-    if (!canDestroyNow) {
-      return;
-    }
+  const canDestroyNow = await workspaceCanBeSafelyCleaned(
+    deps,
+    environment.id,
+  );
+  if (!canDestroyNow) {
+    return;
+  }
 
-    const refreshedEnvironment = getEnvironment(deps.db, environment.id);
-    if (
-      !refreshedEnvironment ||
-      refreshedEnvironment.status === "destroyed" ||
-      refreshedEnvironment.status !== "ready" ||
-      !refreshedEnvironment.path
-    ) {
-      return;
-    }
+  const refreshedEnvironment = getEnvironment(deps.db, environment.id);
+  if (
+    !refreshedEnvironment ||
+    refreshedEnvironment.status === "destroyed" ||
+    refreshedEnvironment.status !== "ready" ||
+    !refreshedEnvironment.path
+  ) {
+    return;
+  }
 
-    if (
-      countLiveThreadsInEnvironment(deps.db, {
-        environmentId: refreshedEnvironment.id,
-      }) > 0
-    ) {
-      return;
-    }
+  if (
+    countLiveThreadsInEnvironment(deps.db, {
+      environmentId: refreshedEnvironment.id,
+    }) > 0
+  ) {
+    return;
+  }
 
-    if (
-      hasPendingThreadShutdownInEnvironment(deps.db, {
-        environmentId: refreshedEnvironment.id,
-      })
-    ) {
-      return;
-    }
-
-    queueDestroyAndMarkDestroying(deps, {
-      hostId: refreshedEnvironment.hostId,
-      id: refreshedEnvironment.id,
-      operationKind: "destroy",
-      path: refreshedEnvironment.path,
-      status: refreshedEnvironment.status,
-      workspaceProvisionType: refreshedEnvironment.workspaceProvisionType,
-    });
+  if (
+    hasPendingThreadShutdownInEnvironment(deps.db, {
+      environmentId: refreshedEnvironment.id,
+    })
+  ) {
     return;
   }
 
   queueDestroyAndMarkDestroying(deps, {
-    hostId: environment.hostId,
-    id: environment.id,
+    hostId: refreshedEnvironment.hostId,
+    id: refreshedEnvironment.id,
     operationKind: "destroy",
-    path: environment.path,
-    status: environment.status,
-    workspaceProvisionType: environment.workspaceProvisionType,
+    path: refreshedEnvironment.path,
+    status: refreshedEnvironment.status,
+    workspaceProvisionType: refreshedEnvironment.workspaceProvisionType,
   });
 }
 

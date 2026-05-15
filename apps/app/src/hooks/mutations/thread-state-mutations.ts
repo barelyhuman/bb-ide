@@ -34,8 +34,6 @@ type ThreadListSnapshot = Array<{
 
 interface ArchiveThreadMutationRequest {
   id: string;
-  force: boolean;
-  managerChildThreadsConfirmed: boolean;
 }
 
 interface DeleteThreadMutationRequest {
@@ -120,12 +118,8 @@ export function useArchiveThread() {
       errorMessage: "Failed to archive thread.",
       showErrorToast: false,
     },
-    mutationFn: ({
-      id,
-      force,
-      managerChildThreadsConfirmed,
-    }: ArchiveThreadMutationRequest) =>
-      api.archiveThread(id, { force, managerChildThreadsConfirmed }),
+    mutationFn: ({ id }: ArchiveThreadMutationRequest) =>
+      api.archiveThread(id),
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });

@@ -84,7 +84,6 @@ Lifecycle:
 
   bb thread archive [id]                   Archive a thread
     --self                                 Archive current thread
-    --force                                Force archive
 
   bb thread unarchive [id]                 Unarchive a thread
     --self                                 Unarchive current thread

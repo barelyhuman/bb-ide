@@ -9,14 +9,16 @@ import {
 } from "drizzle-orm";
 import {
   environments,
+  getThread,
   listThreadIdsWithLatestHostDaemonRestartInterruption,
   threads,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../types.js";
+import { requestEnvironmentCleanupAdvance } from "../services/environments/environment-cleanup.js";
 import {
   completeThreadStart,
-  finalizeStoppedThreadAndAdvanceCleanup,
+  finalizeStoppedThread,
   interruptActiveThreads,
   requestThreadStop,
 } from "../services/threads/thread-lifecycle.js";
@@ -69,14 +71,14 @@ export async function reconcileSessionThreads(
     }
 
     if (thread.stopRequestedAt !== null && !isActive) {
-      await finalizeStoppedThreadAndAdvanceCleanup(deps, {
+      finalizeStoppedThreadAndRequestCleanupAdvance(deps, {
         threadId: thread.id,
       });
       continue;
     }
 
     if (thread.deletedAt !== null && !isActive) {
-      await finalizeStoppedThreadAndAdvanceCleanup(deps, {
+      finalizeStoppedThreadAndRequestCleanupAdvance(deps, {
         threadId: thread.id,
       });
     }
@@ -160,4 +162,26 @@ export async function reconcileSessionThreads(
       });
     }
   }
+}
+
+interface FinalizeStoppedThreadAndRequestCleanupAdvanceArgs {
+  threadId: string;
+}
+
+function finalizeStoppedThreadAndRequestCleanupAdvance(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: FinalizeStoppedThreadAndRequestCleanupAdvanceArgs,
+): void {
+  const threadBeforeFinalize = getThread(deps.db, args.threadId);
+  const finalized = finalizeStoppedThread(deps, args);
+  if (!finalized) {
+    return;
+  }
+
+  const threadAfterFinalize = getThread(deps.db, args.threadId);
+  const environmentId =
+    threadAfterFinalize?.environmentId ??
+    threadBeforeFinalize?.environmentId ??
+    null;
+  requestEnvironmentCleanupAdvance(deps, { environmentId });
 }

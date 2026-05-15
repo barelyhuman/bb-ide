@@ -331,7 +331,6 @@ async function archiveCompletedAutomationThreadIfNeeded(
     if (shouldRequestCleanup) {
       requestEnvironmentCleanup(deps, {
         environmentId: args.latestThread.environmentId,
-        mode: "safe",
       });
     }
   }

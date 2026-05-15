@@ -32,10 +32,11 @@ import {
 const PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
   "thread-created",
   "thread-deleted",
+  "archived-changed",
 ] as const;
 const NON_PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
-  "archived-changed",
   "manager-assignment-changed",
+  "parent-changed",
   "read-state-changed",
   "title-changed",
 ] as const;

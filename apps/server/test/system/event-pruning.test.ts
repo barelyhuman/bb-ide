@@ -375,13 +375,6 @@ describe("thread event pruning", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: true,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 

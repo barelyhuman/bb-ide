@@ -20,16 +20,6 @@ const managerThread = makeThread({
   titleFallback: "Frontend Manager",
 });
 
-const dirty = {
-  hasUncommittedChanges: true,
-  hasCommittedUnmergedChanges: false,
-};
-
-const dirtyAndUnmerged = {
-  hasUncommittedChanges: true,
-  hasCommittedUnmergedChanges: true,
-};
-
 export function Thread() {
   return (
     <StoryCard>
@@ -40,35 +30,6 @@ export function Thread() {
         <DialogStage>
           <ThreadDeleteDialogContent
             target={{ thread: standardThread }}
-            pending={false}
-            onOpenChange={noop}
-            onDelete={noop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="uncommitted changes"
-        hint="dirty managed workspace will be removed alongside the thread"
-      >
-        <DialogStage>
-          <ThreadDeleteDialogContent
-            target={{ thread: standardThread, workspaceWarning: dirty }}
-            pending={false}
-            onOpenChange={noop}
-            onDelete={noop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="uncommitted + unmerged"
-        hint="both workspace warnings combined"
-      >
-        <DialogStage>
-          <ThreadDeleteDialogContent
-            target={{
-              thread: standardThread,
-              workspaceWarning: dirtyAndUnmerged,
-            }}
             pending={false}
             onOpenChange={noop}
             onDelete={noop}
@@ -123,47 +84,13 @@ export function Manager() {
       </StoryRow>
       <StoryRow
         label="single assigned child"
-        hint="singular phrasing for count=1"
+        hint="same confirmation language with one child"
       >
         <DialogStage>
           <ThreadDeleteDialogContent
             target={{
               thread: managerThread,
               assignedChildCount: 1,
-            }}
-            pending={false}
-            onOpenChange={noop}
-            onDelete={noop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="children + uncommitted"
-        hint="both warnings combined in one dialog"
-      >
-        <DialogStage>
-          <ThreadDeleteDialogContent
-            target={{
-              thread: managerThread,
-              assignedChildCount: 3,
-              workspaceWarning: dirty,
-            }}
-            pending={false}
-            onOpenChange={noop}
-            onDelete={noop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="children + both workspace warnings"
-        hint="all warnings combined"
-      >
-        <DialogStage>
-          <ThreadDeleteDialogContent
-            target={{
-              thread: managerThread,
-              assignedChildCount: 2,
-              workspaceWarning: dirtyAndUnmerged,
             }}
             pending={false}
             onOpenChange={noop}

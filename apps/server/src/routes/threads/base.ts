@@ -20,17 +20,13 @@ import {
   type ThreadWithIncludesResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
-import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
-import type {
-  AppDeps,
-  LoggedPendingInteractionWorkSessionDeps,
-} from "../../types.js";
+import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { parseOptionalInteger } from "../../services/lib/validation.js";
 import {
-  advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
+  requestEnvironmentCleanupAdvance,
 } from "../../services/environments/environment-cleanup.js";
 import {
   getNonDestroyedHostWithStatus,
@@ -44,15 +40,14 @@ import {
   finalizeStoppedThread,
   requestThreadStopIfNeeded,
 } from "../../services/threads/thread-lifecycle.js";
-import { appendThreadOwnershipChangeEvent } from "../../services/threads/thread-events.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
-import { queueManagerSystemMessage } from "../../services/threads/manager-system-messages.js";
 import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
 import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
 } from "../../services/threads/thread-runtime-display.js";
 import { assertValidManagerParentThread } from "../../services/threads/thread-parent.js";
+import { handleThreadOwnershipChange } from "../../services/threads/thread-ownership.js";
 
 function parseThreadIncludes(query: ThreadGetQuery): Set<ThreadIncludeOption> {
   const includes = new Set<ThreadIncludeOption>();
@@ -107,40 +102,6 @@ function buildThreadResponse(
   return response;
 }
 
-function formatThreadLabelForManager(thread: {
-  id: string;
-  title: string | null;
-}): string {
-  return thread.title ? `${thread.id}: ${thread.title}` : thread.id;
-}
-
-async function queueManagerSystemMessageBestEffort(
-  deps: LoggedPendingInteractionWorkSessionDeps,
-  args: {
-    managedThreadId: string;
-    managerThreadId: string;
-    messageText: string;
-    reason: "assigned" | "removed";
-  },
-): Promise<void> {
-  try {
-    await queueManagerSystemMessage(deps, {
-      managerThreadId: args.managerThreadId,
-      messageText: args.messageText,
-    });
-  } catch (error) {
-    deps.logger.error(
-      {
-        err: error,
-        managedThreadId: args.managedThreadId,
-        managerThreadId: args.managerThreadId,
-        reason: args.reason,
-      },
-      "Failed to queue manager ownership system message",
-    );
-  }
-}
-
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -159,6 +120,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
         "offset must be non-negative",
       );
     }
+    requirePublicProject(deps.db, query.projectId);
     const threads = listThreadsWithPendingInteractionState(deps.db, {
       projectId: query.projectId,
       ...(query.type ? { type: query.type } : {}),
@@ -252,34 +214,11 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       "parentThreadId" in payload &&
       payload.parentThreadId !== thread.parentThreadId
     ) {
-      appendThreadOwnershipChangeEvent(deps, {
-        threadId: updated.id,
-        environmentId: updated.environmentId,
-        previousParentThreadId: thread.parentThreadId,
-        nextParentThreadId: updated.parentThreadId,
+      await handleThreadOwnershipChange(deps, {
+        previousThread: thread,
+        queueManagerMessages: true,
+        updatedThread: updated,
       });
-
-      const threadLabel = formatThreadLabelForManager(updated);
-      if (updated.parentThreadId) {
-        await queueManagerSystemMessageBestEffort(deps, {
-          managedThreadId: updated.id,
-          managerThreadId: updated.parentThreadId,
-          messageText: renderTemplate("systemMessageThreadOwnershipAssigned", {
-            threadLabel,
-          }),
-          reason: "assigned",
-        });
-      }
-      if (thread.parentThreadId) {
-        await queueManagerSystemMessageBestEffort(deps, {
-          managedThreadId: updated.id,
-          managerThreadId: thread.parentThreadId,
-          messageText: renderTemplate("systemMessageThreadOwnershipRemoved", {
-            threadLabel,
-          }),
-          reason: "removed",
-        });
-      }
     }
 
     return context.json(toThreadResponseFromThread(deps, { thread: updated }));
@@ -304,9 +243,8 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     });
     requestEnvironmentCleanup(deps, {
       environmentId: environment.id,
-      mode: "force",
     });
-    await advanceEnvironmentCleanup(deps, {
+    requestEnvironmentCleanupAdvance(deps, {
       environmentId: environment.id,
     });
     return context.json({ ok: true });

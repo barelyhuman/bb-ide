@@ -41,13 +41,13 @@ describe("environment operations", () => {
     const first = upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "destroy",
-      payload: JSON.stringify({ mode: "safe" }),
+      payload: JSON.stringify({}),
       requestedAt: 123,
     });
     const second = upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "destroy",
-      payload: JSON.stringify({ mode: "force" }),
+      payload: JSON.stringify({}),
       requestedAt: 456,
     });
 
@@ -55,7 +55,7 @@ describe("environment operations", () => {
       environmentId: environment.id,
       kind: "destroy",
       state: "requested",
-      payload: JSON.stringify({ mode: "safe" }),
+      payload: JSON.stringify({}),
       requestedAt: 123,
     });
     expect(second).toMatchObject({
@@ -63,7 +63,7 @@ describe("environment operations", () => {
       environmentId: environment.id,
       kind: "destroy",
       state: "requested",
-      payload: JSON.stringify({ mode: "force" }),
+      payload: JSON.stringify({}),
       requestedAt: 123,
       commandId: null,
     });

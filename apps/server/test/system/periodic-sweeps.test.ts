@@ -26,6 +26,7 @@ import {
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { threadResponseSchema } from "@bb/server-contract";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -62,6 +63,7 @@ import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   listQueuedThreadCommands,
   reportQueuedCommandError,
+  reportQueuedCommandSuccess,
   reportNextRuntimeMaterialSyncSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -281,11 +283,9 @@ describe("periodic sweeps", () => {
       });
       requestEnvironmentCleanup(harness.deps, {
         environmentId: firstEnvironment.id,
-        mode: "force",
       });
       requestEnvironmentCleanup(harness.deps, {
         environmentId: secondEnvironment.id,
-        mode: "force",
       });
 
       const visitedEnvironmentIds: string[] = [];
@@ -1303,7 +1303,6 @@ describe("periodic sweeps", () => {
       archiveThread(harness.db, harness.hub, thread.id);
       requestEnvironmentCleanup(harness.deps, {
         environmentId: environment.id,
-        mode: "force",
       });
       requestThreadStop(harness.deps, {
         environmentId: environment.id,
@@ -1318,7 +1317,22 @@ describe("periodic sweeps", () => {
       );
       transitionThreadStatus(harness.db, harness.hub, thread.id, "idle");
 
-      await runThreadLifecycleSweep(harness.deps);
+      const sweepPromise = runThreadLifecycleSweep(harness.deps);
+
+      const statusCommand = await waitForQueuedCommandAfter(
+        harness,
+        queuedStop.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+      await sweepPromise;
 
       expect(getThread(harness.db, thread.id)).toMatchObject({
         archivedAt: expect.any(Number),
@@ -1352,7 +1366,7 @@ describe("periodic sweeps", () => {
 
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
-        queuedStop.row.cursor,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -1408,7 +1422,22 @@ describe("periodic sweeps", () => {
       );
       transitionThreadStatus(harness.db, harness.hub, thread.id, "idle");
 
-      await runThreadLifecycleSweep(harness.deps);
+      const sweepPromise = runThreadLifecycleSweep(harness.deps);
+
+      const statusCommand = await waitForQueuedCommandAfter(
+        harness,
+        queuedStop.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+      await sweepPromise;
 
       expect(getThread(harness.db, thread.id)).toBeNull();
       expect(

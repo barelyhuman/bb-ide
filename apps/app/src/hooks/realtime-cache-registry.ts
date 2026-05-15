@@ -105,6 +105,14 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
     dirty: [
       dirtyThreadListQueries, // Archive state moves threads between active/archived lists.
       dirtyThreadDetailQueries, // Detail controls and banners depend on archive state.
+      dirtyProjectPromptHistoryQueries, // Archived prompts may leave project history.
+    ],
+  },
+  "parent-changed": {
+    flush: "debounced",
+    dirty: [
+      dirtyThreadListQueries, // Sidebar grouping and manager-child filters depend on parentThreadId.
+      dirtyThreadDetailQueries, // Detail metadata and managed-by UI render parentThreadId.
     ],
   },
   "read-state-changed": {

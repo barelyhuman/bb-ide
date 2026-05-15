@@ -1,5 +1,4 @@
 import {
-  archiveThread,
   createQueuedThreadMessage,
   deleteQueuedThreadMessage,
   getEnvironment,
@@ -8,7 +7,6 @@ import {
   updateThread,
 } from "@bb/db";
 import {
-  archiveThreadRequestSchema,
   createQueuedMessageRequestSchema,
   sendQueuedMessageRequestSchema,
   sendMessageRequestSchema,
@@ -21,9 +19,9 @@ import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
 import {
-  advanceEnvironmentCleanup,
+  cancelPendingEnvironmentCleanup,
   requestEnvironmentCleanup,
-  validateEnvironmentCleanupRequest,
+  requestEnvironmentCleanupAdvance,
   wouldCleanupEnvironment,
 } from "../../services/environments/environment-cleanup.js";
 import {
@@ -34,7 +32,6 @@ import {
   requestQueuedMessageAutoSendForThread,
   sendQueuedMessage,
 } from "../../services/threads/queued-messages.js";
-import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
 import {
   ensureThreadIsNotAwaitingUserInteraction,
   ensureThreadIsWritable,
@@ -54,26 +51,16 @@ import {
   requestThreadStopIfNeeded,
 } from "../../services/threads/thread-lifecycle.js";
 import { toThreadResponseFromThread } from "../../services/threads/thread-runtime-display.js";
+import { archiveThreadAndReleaseChildren } from "../../services/threads/thread-ownership.js";
 
-async function validateArchiveCleanupRequest(
+function shouldCleanupAfterArchive(
   deps: AppDeps,
   thread: Thread,
-  force: boolean,
-): Promise<boolean> {
-  const shouldRequestCleanup = wouldCleanupEnvironment(deps, {
+): boolean {
+  return wouldCleanupEnvironment(deps, {
     environmentId: thread.environmentId,
     excludeThreadId: thread.id,
   });
-
-  if (!shouldRequestCleanup) {
-    return false;
-  }
-
-  await validateEnvironmentCleanupRequest(deps, {
-    environmentId: thread.environmentId,
-    mode: force ? "force" : "safe",
-  });
-  return true;
 }
 
 export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
@@ -187,66 +174,39 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  post(
-    "/threads/:id/archive",
-    archiveThreadRequestSchema,
-    async (context, payload) => {
-      const force = payload.force;
-      const { environment, thread } = requirePublicThreadEnvironment(
-        deps.db,
-        context.req.param("id"),
-      );
-      // Idempotent: archiving an already-archived thread is a no-op success.
-      // A concurrent archive (e.g. from another tab) could land between the
-      // client seeing a confirmation-required 409 and the user clicking
-      // "Archive anyway"; we'd rather succeed than surface a confusing error.
-      if (thread.archivedAt !== null) {
-        return context.json({ ok: true });
-      }
-      requireManagerChildThreadsConfirmation({
-        action: "archive",
-        confirmed: payload.managerChildThreadsConfirmed,
-        deps,
-        thread,
-      });
-      const shouldRequestCleanup = await validateArchiveCleanupRequest(
-        deps,
-        thread,
-        force,
-      );
-      // Cleanup validation can await host workspace status. Re-check after
-      // that wait so a child assigned during validation still gates archive.
-      requireManagerChildThreadsConfirmation({
-        action: "archive",
-        confirmed: payload.managerChildThreadsConfirmed,
-        deps,
-        thread,
-      });
-      const archivedThread = archiveThread(deps.db, deps.hub, thread.id);
-      if (!archivedThread) {
-        throw new ApiError(404, "thread_not_found", "Thread not found");
-      }
-      requestThreadStopIfNeeded(deps, archivedThread, environment);
-      queueSettledArchivedThreadProviderArchiveCommand(deps, {
-        threadId: archivedThread.id,
-      });
-      resetActiveThreadEventPruningState(thread.id);
-      pruneThreadEventHistoryBestEffort(deps, {
-        mode: "archived",
-        threadId: thread.id,
-      });
-      if (shouldRequestCleanup) {
-        requestEnvironmentCleanup(deps, {
-          environmentId: environment.id,
-          mode: force ? "force" : "safe",
-        });
-        await advanceEnvironmentCleanup(deps, {
-          environmentId: environment.id,
-        });
-      }
+  post("/threads/:id/archive", async (context) => {
+    const { environment, thread } = requirePublicThreadEnvironment(
+      deps.db,
+      context.req.param("id"),
+    );
+    if (thread.archivedAt !== null) {
       return context.json({ ok: true });
-    },
-  );
+    }
+    const shouldRequestCleanup = shouldCleanupAfterArchive(deps, thread);
+    const archiveResult = archiveThreadAndReleaseChildren(deps, { thread });
+    if (!archiveResult) {
+      throw new ApiError(404, "thread_not_found", "Thread not found");
+    }
+    const { archivedThread } = archiveResult;
+    requestThreadStopIfNeeded(deps, archivedThread, environment);
+    queueSettledArchivedThreadProviderArchiveCommand(deps, {
+      threadId: archivedThread.id,
+    });
+    resetActiveThreadEventPruningState(thread.id);
+    pruneThreadEventHistoryBestEffort(deps, {
+      mode: "archived",
+      threadId: thread.id,
+    });
+    if (shouldRequestCleanup) {
+      requestEnvironmentCleanup(deps, {
+        environmentId: environment.id,
+      });
+      requestEnvironmentCleanupAdvance(deps, {
+        environmentId: environment.id,
+      });
+    }
+    return context.json({ ok: true });
+  });
 
   post("/threads/:id/unarchive", (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
@@ -254,6 +214,16 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const environment = thread.environmentId
       ? getEnvironment(deps.db, thread.environmentId)
       : null;
+    const cleanupCancellation = cancelPendingEnvironmentCleanup(deps, {
+      environmentId: thread.environmentId,
+    });
+    if (cleanupCancellation === "in_progress") {
+      throw new ApiError(
+        409,
+        "environment_cleanup_in_progress",
+        "Environment cleanup is already in progress",
+      );
+    }
     unarchiveThread(deps.db, deps.hub, thread.id);
     if (providerThreadId && environment) {
       queueThreadUnarchiveCommand(deps, {

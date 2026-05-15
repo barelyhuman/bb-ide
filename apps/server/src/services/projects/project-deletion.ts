@@ -7,9 +7,10 @@ import {
   listProjectOperations,
   markThreadDeleted,
   threads,
+  type DbQueryConnection,
 } from "@bb/db";
 import { upsertProjectOperationRecord } from "@bb/db/internal-lifecycle";
-import type { Environment } from "@bb/domain";
+import type { Environment, ThreadStatus } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
@@ -19,12 +20,32 @@ import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
 } from "../environments/environment-cleanup.js";
+import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 import {
   finalizeStoppedThreadAndAdvanceCleanup,
   requestThreadStopIfNeeded,
 } from "../threads/thread-lifecycle.js";
+import { NotificationBuffer } from "../lib/notification-buffer.js";
 
 export interface ProjectDeletionArgs {
+  projectId: string;
+}
+
+interface ProjectDeletionThread {
+  deletedAt: number | null;
+  environmentId: string | null;
+  id: string;
+  status: ThreadStatus;
+  stopRequestedAt: number | null;
+}
+
+interface ProjectDeletionThreadStopArgs {
+  environmentsById: Map<string, Environment>;
+  threads: ProjectDeletionThread[];
+}
+
+interface AdvanceProjectThreadsForDeletionArgs {
+  environmentsById: Map<string, Environment>;
   projectId: string;
 }
 
@@ -40,25 +61,79 @@ function isProjectDeletionActive(
   );
 }
 
-async function advanceProjectThreadsForDeletion(
-  deps: LoggedPendingInteractionWorkSessionDeps,
-  args: {
-    environmentsById: Map<string, Environment>;
-    projectId: string;
-  },
-): Promise<void> {
-  const projectThreads = deps.db
+function listProjectDeletionThreads(
+  db: DbQueryConnection,
+  args: ProjectDeletionArgs,
+): ProjectDeletionThread[] {
+  return db
     .select({
       deletedAt: threads.deletedAt,
       environmentId: threads.environmentId,
       id: threads.id,
-      projectId: threads.projectId,
       status: threads.status,
       stopRequestedAt: threads.stopRequestedAt,
     })
     .from(threads)
     .where(eq(threads.projectId, args.projectId))
     .all();
+}
+
+function mapEnvironmentsById(
+  environments: Environment[],
+): Map<string, Environment> {
+  return new Map(
+    environments.map((environment) => [environment.id, environment]),
+  );
+}
+
+function requestProjectThreadStopsForDeletion(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: ProjectDeletionThreadStopArgs,
+): void {
+  for (const thread of args.threads) {
+    const environment = thread.environmentId
+      ? (args.environmentsById.get(thread.environmentId) ?? null)
+      : null;
+    if (environment) {
+      requestThreadStopIfNeeded(deps, thread, environment);
+    }
+  }
+}
+
+function tombstoneProjectThreadsForDeletion(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: ProjectDeletionArgs,
+): ProjectDeletionThread[] {
+  const notificationBuffer = new NotificationBuffer();
+  const projectThreads = deps.db.transaction(
+    (tx) => {
+      upsertProjectOperationRecord(tx, {
+        projectId: args.projectId,
+        kind: "delete",
+        payload: JSON.stringify({}),
+      });
+
+      const threadsForDeletion = listProjectDeletionThreads(tx, args);
+      for (const thread of threadsForDeletion) {
+        if (thread.deletedAt === null) {
+          markThreadDeleted(tx, notificationBuffer, { threadId: thread.id });
+        }
+      }
+      return threadsForDeletion;
+    },
+    { behavior: "immediate" },
+  );
+  notificationBuffer.flushInto(deps.hub);
+  return projectThreads;
+}
+
+async function advanceProjectThreadsForDeletion(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: AdvanceProjectThreadsForDeletionArgs,
+): Promise<void> {
+  const projectThreads = listProjectDeletionThreads(deps.db, {
+    projectId: args.projectId,
+  });
 
   for (const thread of projectThreads) {
     const environment = thread.environmentId
@@ -97,18 +172,35 @@ function hasRemainingManagedEnvironments(environments: Environment[]): boolean {
   );
 }
 
-export function requestProjectDeletion(
-  deps: Pick<AppDeps, "db">,
+export function beginProjectDeletion(
+  deps: Pick<AppDeps, "db" | "hub">,
   args: ProjectDeletionArgs,
 ): void {
   if (!getProject(deps.db, args.projectId)) {
     return;
   }
 
-  upsertProjectOperationRecord(deps.db, {
-    projectId: args.projectId,
-    kind: "delete",
-    payload: JSON.stringify({}),
+  const projectEnvironments = listEnvironments(deps.db, args.projectId);
+  const projectThreads = tombstoneProjectThreadsForDeletion(deps, args);
+  requestProjectThreadStopsForDeletion(deps, {
+    environmentsById: mapEnvironmentsById(projectEnvironments),
+    threads: projectThreads,
+  });
+}
+
+export function requestProjectDeletionAdvance(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: ProjectDeletionArgs,
+): void {
+  scheduleAfterDaemonIngressResponse({
+    context: {
+      projectId: args.projectId,
+    },
+    logger: deps.logger,
+    name: "Project deletion advance request",
+    work: async () => {
+      await advanceProjectDeletion(deps, args);
+    },
   });
 }
 
@@ -125,9 +217,7 @@ export async function advanceProjectDeletion(
   }
 
   const projectEnvironments = listEnvironments(deps.db, args.projectId);
-  const environmentsById = new Map(
-    projectEnvironments.map((environment) => [environment.id, environment]),
-  );
+  const environmentsById = mapEnvironmentsById(projectEnvironments);
 
   await advanceProjectThreadsForDeletion(deps, {
     environmentsById,
@@ -141,7 +231,6 @@ export async function advanceProjectDeletion(
 
     requestEnvironmentCleanup(deps, {
       environmentId: environment.id,
-      mode: "force",
     });
     await advanceEnvironmentCleanup(deps, {
       environmentId: environment.id,

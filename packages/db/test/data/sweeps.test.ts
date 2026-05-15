@@ -985,7 +985,6 @@ describe("sweepManagedEnvironments", () => {
     });
 
     recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
-      cleanupMode: "force",
       requestedAt: 123,
     });
 
@@ -1007,7 +1006,6 @@ describe("sweepManagedEnvironments", () => {
     });
 
     recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
-      cleanupMode: "force",
       requestedAt: 123,
     });
 
@@ -1042,7 +1040,6 @@ describe("sweepManagedEnvironments", () => {
     });
 
     recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
-      cleanupMode: "safe",
       requestedAt: 123,
     });
 
@@ -1078,7 +1075,6 @@ describe("sweepManagedEnvironments", () => {
     });
 
     recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
-      cleanupMode: "force",
       requestedAt: 123,
     });
 
@@ -1102,7 +1098,6 @@ describe("sweepManagedEnvironments", () => {
     });
 
     recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
-      cleanupMode: "force",
       requestedAt: 123,
     });
 
@@ -1118,7 +1113,6 @@ describe("sweepManagedEnvironments", () => {
       hostId: host.id,
       path: "/tmp/env",
       managed: true,
-      cleanupMode: "force",
       cleanupRequestedAt: 123,
       workspaceProvisionType: "managed-worktree",
       status: "destroying",

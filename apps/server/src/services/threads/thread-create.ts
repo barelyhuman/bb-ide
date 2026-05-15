@@ -23,7 +23,7 @@ import {
   buildEnvironmentProvisionCommand,
   createThreadRecord,
   getThreadSafe,
-  requireProjectExists,
+  requirePublicProjectForThreadCreate,
 } from "./thread-create-helpers.js";
 import {
   advanceEnvironmentProvisioning,
@@ -172,7 +172,7 @@ export async function createThreadFromRequest(
   deps: ThreadCreateDeps,
   requestInput: ThreadCreateServiceRequestInput,
 ) {
-  requireProjectExists(deps, requestInput.projectId);
+  requirePublicProjectForThreadCreate(deps, requestInput.projectId);
   const parentThread = requestInput.parentThreadId
     ? assertValidManagerParentThread(deps, {
         parentThreadId: requestInput.parentThreadId,

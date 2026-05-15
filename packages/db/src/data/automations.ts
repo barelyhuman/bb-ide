@@ -1,9 +1,17 @@
-import { and, desc, eq, inArray, isNull, lte } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lte,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createAutomationId } from "../ids.js";
-import { automations, threads } from "../schema.js";
-import { sql } from "drizzle-orm";
+import { automations, projectOperations, threads } from "../schema.js";
 import { getActiveSession } from "./sessions.js";
 import { buildOrderedNumberCursorFilter } from "./cursor-pagination.js";
 
@@ -68,7 +76,12 @@ export interface ClaimAutomationScheduledRunArgs {
 
 export interface ClaimAutomationScheduledRunResult {
   advanced: boolean;
-  reason: "host-disconnected" | "lost-race" | "open-thread" | "run";
+  reason:
+    | "host-disconnected"
+    | "lost-race"
+    | "open-thread"
+    | "project-deleting"
+    | "run";
   shouldCreateThread: boolean;
 }
 
@@ -147,6 +160,13 @@ export function listDueAutomations(
         eq(automations.enabled, true),
         eq(automations.triggerType, "schedule"),
         lte(automations.nextRunAt, args.now),
+        notInArray(
+          automations.projectId,
+          db
+            .select({ projectId: projectOperations.projectId })
+            .from(projectOperations)
+            .where(eq(projectOperations.kind, "delete")),
+        ),
         afterFilter,
       ),
     )
@@ -313,6 +333,24 @@ export function claimAutomationScheduledRun(
         return {
           advanced: false,
           reason: "lost-race",
+          shouldCreateThread: false,
+        } satisfies ClaimAutomationScheduledRunResult;
+      }
+
+      const projectDeleteOperation = tx
+        .select({ id: projectOperations.id })
+        .from(projectOperations)
+        .where(
+          and(
+            eq(projectOperations.projectId, current.projectId),
+            eq(projectOperations.kind, "delete"),
+          ),
+        )
+        .get();
+      if (projectDeleteOperation) {
+        return {
+          advanced: false,
+          reason: "project-deleting",
           shouldCreateThread: false,
         } satisfies ClaimAutomationScheduledRunResult;
       }

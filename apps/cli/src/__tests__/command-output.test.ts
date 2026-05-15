@@ -1900,17 +1900,13 @@ describe("CLI command output contracts", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
-      json: {
-        force: false,
-        managerChildThreadsConfirmed: false,
-      },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived",
     );
   });
 
-  it("bb thread archive --self resolves from BB_THREAD_ID and forwards --force", async () => {
+  it("bb thread archive --self resolves from BB_THREAD_ID", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-archive-2");
     const archivePost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(
@@ -1929,53 +1925,12 @@ describe("CLI command output contracts", () => {
       }),
     );
 
-    await runCommand(["thread", "archive", "--self", "--force"], (program) =>
+    await runCommand(["thread", "archive", "--self"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-2" },
-      json: {
-        force: true,
-        managerChildThreadsConfirmed: false,
-      },
-    });
-  });
-
-  it("bb thread archive forwards explicit assigned-child confirmation", async () => {
-    const archivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            threads: {
-              ":id": {
-                archive: {
-                  $post: archivePost,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "thread",
-        "archive",
-        "thread-archive-children",
-        "--confirm-assigned-child-threads",
-      ],
-      (program) => registerThreadCommands(program, () => "http://server"),
-    );
-
-    expect(archivePost).toHaveBeenCalledWith({
-      param: { id: "thread-archive-children" },
-      json: {
-        force: false,
-        managerChildThreadsConfirmed: true,
-      },
     });
   });
 
@@ -2010,10 +1965,6 @@ describe("CLI command output contracts", () => {
     );
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
-      json: {
-        force: false,
-        managerChildThreadsConfirmed: false,
-      },
     });
   });
 

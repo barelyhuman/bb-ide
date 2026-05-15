@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import type { Environment, Thread } from "@bb/domain";
+import type { Thread } from "@bb/domain";
 import {
   useArchiveThread,
   useDeleteThread,
@@ -18,11 +18,7 @@ import {
   useUnarchiveThread,
   useUpdateThread,
 } from "@/hooks/mutations/thread-state-mutations";
-import {
-  getEnvironment,
-  getEnvironmentWorkStatus,
-  getThreadAssignedChildSummary,
-} from "@/lib/api";
+import { getThreadAssignedChildSummary } from "@/lib/api";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { useDialogState } from "@/hooks/useDialogState";
 import {
@@ -38,11 +34,6 @@ import {
   ThreadDeleteDialog,
   type ThreadDeleteDialogTarget,
 } from "@/components/dialogs/ThreadDeleteDialog";
-import {
-  ThreadArchiveDialog,
-  type ThreadArchiveDialogTarget,
-  type ThreadDirtyWorkspaceWarning,
-} from "@/components/dialogs/ThreadArchiveDialog";
 import { getThreadReadToggleAction } from "@/components/sidebar/threadReadState";
 
 export interface ThreadActionsContextValue {
@@ -70,12 +61,6 @@ interface ThreadActionsProviderProps {
   children: ReactNode;
 }
 
-interface ArchiveThreadActionRequest {
-  force: boolean;
-  managerChildThreadsConfirmed: boolean;
-  thread: Thread;
-}
-
 interface DeleteThreadActionRequest {
   closeDialog: () => void;
   managerChildThreadsConfirmed: boolean;
@@ -84,13 +69,6 @@ interface DeleteThreadActionRequest {
 
 interface ThreadActionContext {
   assignedChildCount: number;
-  workspaceWarning: ThreadDirtyWorkspaceWarning | null;
-}
-
-function resolveEnvironmentMergeBaseBranch(
-  environment: Environment,
-): string | undefined {
-  return environment.mergeBaseBranch ?? environment.defaultBranch ?? undefined;
 }
 
 export function ThreadActionsProvider({
@@ -118,12 +96,9 @@ export function ThreadActionsProvider({
 
   const renameDialog = useDialogState<ThreadRenameDialogTarget>();
   const deleteDialog = useDialogState<ThreadDeleteDialogTarget>();
-  const archiveDialog = useDialogState<ThreadArchiveDialogTarget>();
 
   const { onClose: closeRenameDialog, onOpen: openRenameDialog } = renameDialog;
   const { onClose: closeDeleteDialog, onOpen: openDeleteDialog } = deleteDialog;
-  const { onClose: closeArchiveDialog, onOpen: openArchiveDialog } =
-    archiveDialog;
 
   useEffect(() => {
     return () => {
@@ -168,66 +143,23 @@ export function ThreadActionsProvider({
     [closeRenameDialog, updateMutate],
   );
 
-  // Fetches everything the consolidated dialog needs in one pass: how many
-  // child threads are still assigned (for managers), and whether the workspace
-  // has uncommitted/unmerged work that the action would destroy. Returns null
-  // when the caller's request was superseded (a newer click aborted us) or the
-  // fetch errored — in the error case, also surfaces a toast before returning.
+  // Fetches the delete dialog context. Returns null when the caller's request
+  // was superseded (a newer click aborted us) or the fetch errored; in the
+  // error case, also surfaces a toast before returning.
   const loadThreadActionContext = useCallback(
     async (
       thread: Thread,
       signal: AbortSignal,
     ): Promise<ThreadActionContext | null> => {
       try {
-        const childSummaryPromise =
+        const childSummary =
           thread.type === "manager"
-            ? getThreadAssignedChildSummary(thread.id, signal)
-            : Promise.resolve(null);
-        const envPromise = thread.environmentId
-          ? getEnvironment(thread.environmentId, signal)
-          : Promise.resolve(null);
-
-        const [childSummary, environment] = await Promise.all([
-          childSummaryPromise,
-          envPromise,
-        ]);
+            ? await getThreadAssignedChildSummary(thread.id, signal)
+            : null;
         if (signal.aborted) return null;
-
-        let workspaceWarning: ThreadDirtyWorkspaceWarning | null = null;
-        // Workspace cleanup only needs a warning when there is a ready managed
-        // workspace to inspect; destroyed/provisioning environments cannot
-        // return workspace status and should not block archive.
-        if (
-          environment?.managed &&
-          environment.status === "ready" &&
-          environment.path !== null &&
-          thread.environmentId
-        ) {
-          const mergeBaseBranch =
-            resolveEnvironmentMergeBaseBranch(environment);
-          const workspace = await getEnvironmentWorkStatus(
-            thread.environmentId,
-            mergeBaseBranch,
-            signal,
-          );
-          if (signal.aborted) return null;
-          if (workspace) {
-            const hasUncommittedChanges =
-              workspace.workingTree.hasUncommittedChanges;
-            const hasCommittedUnmergedChanges =
-              workspace.mergeBase?.hasCommittedUnmergedChanges === true;
-            if (hasUncommittedChanges || hasCommittedUnmergedChanges) {
-              workspaceWarning = {
-                hasUncommittedChanges,
-                hasCommittedUnmergedChanges,
-              };
-            }
-          }
-        }
 
         return {
           assignedChildCount: childSummary?.nonDeletedAssignedChildCount ?? 0,
-          workspaceWarning,
         };
       } catch (error) {
         if (signal.aborted) return null;
@@ -256,17 +188,11 @@ export function ThreadActionsProvider({
   function buildDialogTargetFromContext<T extends { thread: Thread }>(
     base: T,
     context: ThreadActionContext,
-  ): T & {
-    assignedChildCount?: number;
-    workspaceWarning?: ThreadDirtyWorkspaceWarning;
-  } {
+  ): T & { assignedChildCount?: number } {
     return {
       ...base,
       ...(context.assignedChildCount > 0
         ? { assignedChildCount: context.assignedChildCount }
-        : {}),
-      ...(context.workspaceWarning
-        ? { workspaceWarning: context.workspaceWarning }
         : {}),
     };
   }
@@ -318,7 +244,7 @@ export function ThreadActionsProvider({
     [closeDeleteDialog, performDelete],
   );
 
-  const showArchiveError = useCallback((thread: Thread, error: unknown) => {
+  const showArchiveError = useCallback((thread: Thread, error: Error) => {
     toast.error(
       getMutationErrorMessage({
         error,
@@ -327,17 +253,21 @@ export function ThreadActionsProvider({
     );
   }, []);
 
-  const submitArchive = useCallback(
-    ({
-      force,
-      managerChildThreadsConfirmed,
-      thread,
-    }: ArchiveThreadActionRequest) => {
+  const archiveWithUndoToast = useCallback(
+    (thread: Thread) => {
       archiveMutate(
-        { id: thread.id, force, managerChildThreadsConfirmed },
+        { id: thread.id },
         {
           onSuccess: () => {
             navigateAwayIfViewing(thread);
+            toast.success(`Archived ${threadTypeLabel(thread.type)}`, {
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  unarchiveMutate({ id: thread.id });
+                },
+              },
+            });
           },
           onError: (error) => {
             showArchiveError(thread, error);
@@ -345,49 +275,12 @@ export function ThreadActionsProvider({
         },
       );
     },
-    [archiveMutate, navigateAwayIfViewing, showArchiveError],
-  );
-
-  const requestArchive = useCallback(
-    async (thread: Thread) => {
-      const controller = claimThreadActionContextAbortController();
-      const context = await loadThreadActionContext(thread, controller.signal);
-      if (context === null || controller.signal.aborted) return;
-      if (threadActionContextAbortRef.current === controller) {
-        threadActionContextAbortRef.current = null;
-      }
-      // Archive only prompts when there's something to warn about.
-      if (
-        context.assignedChildCount === 0 &&
-        context.workspaceWarning === null
-      ) {
-        submitArchive({
-          force: false,
-          managerChildThreadsConfirmed: false,
-          thread,
-        });
-        return;
-      }
-      openArchiveDialog(buildDialogTargetFromContext({ thread }, context));
-    },
     [
-      claimThreadActionContextAbortController,
-      loadThreadActionContext,
-      openArchiveDialog,
-      submitArchive,
+      archiveMutate,
+      navigateAwayIfViewing,
+      showArchiveError,
+      unarchiveMutate,
     ],
-  );
-
-  const confirmArchive = useCallback(
-    (target: ThreadArchiveDialogTarget) => {
-      closeArchiveDialog();
-      submitArchive({
-        force: target.workspaceWarning !== undefined,
-        managerChildThreadsConfirmed: target.assignedChildCount !== undefined,
-        thread: target.thread,
-      });
-    },
-    [closeArchiveDialog, submitArchive],
   );
 
   const toggleArchive = useCallback(
@@ -396,9 +289,9 @@ export function ThreadActionsProvider({
         unarchiveMutate({ id: thread.id });
         return;
       }
-      requestArchive(thread);
+      archiveWithUndoToast(thread);
     },
-    [requestArchive, unarchiveMutate],
+    [archiveWithUndoToast, unarchiveMutate],
   );
 
   const toggleRead = useCallback(
@@ -454,12 +347,6 @@ export function ThreadActionsProvider({
         pending={deleteThread.isPending}
         onOpenChange={deleteDialog.onOpenChange}
         onDelete={confirmDelete}
-      />
-      <ThreadArchiveDialog
-        target={archiveDialog.target}
-        pending={archiveThread.isPending}
-        onOpenChange={archiveDialog.onOpenChange}
-        onArchive={confirmArchive}
       />
     </ThreadActionsContext.Provider>
   );

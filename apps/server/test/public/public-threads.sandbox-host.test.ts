@@ -811,7 +811,7 @@ describe("public thread sandbox-host routes", () => {
       );
       expect(deleteResponse.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupMode: "force",
+        cleanupMode: "safe",
         cleanupRequestedAt: expect.any(Number),
         status: "provisioning",
       });

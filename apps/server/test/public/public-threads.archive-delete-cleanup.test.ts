@@ -8,7 +8,11 @@ import {
   archiveThread,
   createEnvironment,
   createThread,
+  events,
+  fetchCommands,
+  getCommand,
   getEnvironment,
+  getEnvironmentOperation,
   getThread,
   hostDaemonCommands,
   listThreads,
@@ -16,6 +20,7 @@ import {
   reportCommandResult,
 } from "@bb/db";
 import {
+  systemOperationEventDataSchema,
   threadSchema,
   turnScope,
   type Thread,
@@ -29,6 +34,8 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
+import { queueEnvironmentDestroyLifecycleCommand } from "../helpers/lifecycle-commands.js";
+import { requestEnvironmentCleanup } from "../../src/services/environments/environment-cleanup.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -68,6 +75,11 @@ interface QueueExistingNativeArchiveCommandArgs {
   sessionId: string | null;
   state: ExistingArchiveCommandState;
   thread: Thread;
+}
+
+interface ReportCleanWorkspaceStatusForEnvironmentArgs {
+  afterCursor?: number;
+  environmentId: string;
 }
 
 function seedManagerWithAssignedChild(
@@ -136,58 +148,52 @@ function queueExistingNativeArchiveCommand(
   }
 }
 
+async function reportCleanWorkspaceStatusForEnvironment(
+  harness: TestAppHarness,
+  args: ReportCleanWorkspaceStatusForEnvironmentArgs,
+) {
+  const command =
+    args.afterCursor === undefined
+      ? await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === args.environmentId,
+        )
+      : await waitForQueuedCommandAfter(
+          harness,
+          args.afterCursor,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === args.environmentId,
+        );
+  await reportQueuedCommandSuccess(harness, command, {
+    workspaceStatus: cleanWorkspaceStatus(),
+  });
+  return command;
+}
+
 describe("public thread archive delete cleanup routes", () => {
   beforeEach(() => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
   });
 
-  it("rejects archiving managers with assigned child threads unless confirmed", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { managerThread } = seedManagerWithAssignedChild(harness);
-
-      const response = await harness.app.request(
-        `/api/v1/threads/${managerThread.id}/archive`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
-        },
-      );
-
-      expect(response.status).toBe(409);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "manager_child_threads_confirmation_required",
-      });
-      expect(getThread(harness.db, managerThread.id)?.archivedAt).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("archives managers with assigned child threads after explicit confirmation", async () => {
+  it("archives managers by unassigning unarchived child threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { childThread, managerThread } =
         seedManagerWithAssignedChild(harness);
+      const archivedChildThread = seedThread(harness.deps, {
+        projectId: managerThread.projectId,
+        parentThreadId: managerThread.id,
+      });
+      archiveThread(harness.db, harness.hub, archivedChildThread.id);
 
       const response = await harness.app.request(
         `/api/v1/threads/${managerThread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: true,
-          }),
         },
       );
 
@@ -195,9 +201,36 @@ describe("public thread archive delete cleanup routes", () => {
       expect(getThread(harness.db, managerThread.id)?.archivedAt).toBeTypeOf(
         "number",
       );
-      expect(getThread(harness.db, childThread.id)?.parentThreadId).toBe(
-        managerThread.id,
+      expect(getThread(harness.db, childThread.id)).toMatchObject({
+        archivedAt: null,
+        parentThreadId: null,
+      });
+      expect(getThread(harness.db, archivedChildThread.id)).toMatchObject({
+        parentThreadId: managerThread.id,
+      });
+
+      const storedEvent = harness.db
+        .select({ type: events.type, data: events.data })
+        .from(events)
+        .where(eq(events.threadId, childThread.id))
+        .orderBy(events.sequence)
+        .all()
+        .at(-1);
+
+      expect(storedEvent?.type).toBe("system/operation");
+      const parsedData = systemOperationEventDataSchema.parse(
+        storedEvent ? JSON.parse(storedEvent.data) : null,
       );
+      expect(parsedData).toMatchObject({
+        operation: "ownership_change",
+        status: "completed",
+        message: "Thread released from manager",
+        metadata: {
+          action: "release",
+          previousParentThreadId: managerThread.id,
+          nextParentThreadId: null,
+        },
+      });
     } finally {
       await harness.cleanup();
     }
@@ -292,11 +325,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -350,11 +378,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -407,11 +430,6 @@ describe("public thread archive delete cleanup routes", () => {
           `/api/v1/threads/${thread.id}/archive`,
           {
             method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              force: false,
-              managerChildThreadsConfirmed: false,
-            }),
           },
         );
 
@@ -451,11 +469,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -495,14 +508,9 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("queues Codex archive forwarding once when stop finalizes during archive validation", async () => {
-    // Contract: if thread.stop happens to finalize *while* the archive
-    // route is awaiting its workspace.status validation, the resulting
-    // thread.archive forwarding to Codex must be queued exactly once —
-    // neither the stop-result side effect nor the archive route itself
-    // may double-enqueue. The intermediate command waits below exist to
-    // *trigger* the race window; the assertion is the final queue
-    // contents.
+  it("queues Codex archive forwarding once when stop finalizes after archive", async () => {
+    // Contract: if stop is already in flight when the archive request lands,
+    // only stop finalization should forward the native archive command.
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -527,8 +535,6 @@ describe("public thread archive delete cleanup routes", () => {
         providerThreadId: "provider-archive-stop-race",
       });
 
-      // Kick off stop + archive concurrently, then wait until both daemon
-      // commands they generate are queued (without responding yet).
       const stopResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/stop`,
         { method: "POST" },
@@ -538,40 +544,32 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
-      const [stopCommand, statusCommand] = await Promise.all([
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "thread.stop" && command.threadId === thread.id,
-        ),
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "workspace.status" &&
-            command.environmentId === environment.id,
-        ),
-      ]);
-
-      // Trigger the race: stop result lands first, then archive validation
-      // completes. Both code paths now have a window to forward to Codex.
-      await reportQueuedCommandSuccess(harness, stopCommand, {});
-      await reportQueuedCommandSuccess(harness, statusCommand, {
-        workspaceStatus: cleanWorkspaceStatus(),
-      });
-
       const archiveResponse = await archivePromise;
       expect(archiveResponse.status).toBe(200);
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toHaveLength(0);
 
-      // Outcome: thread is archived in the DB and the Codex forwarding
-      // command was enqueued exactly once across both code paths.
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      await reportQueuedCommandSuccess(harness, stopCommand, {});
+
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
+      const archiveCommand = await waitForQueuedCommandAfter(
+        harness,
+        stopCommand.row.cursor,
+        ({ command }) =>
+          command.type === "thread.archive" && command.threadId === thread.id,
+      );
+      expect(archiveCommand.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: thread.id,
+      });
       expect(
         listQueuedThreadCommands(harness, "thread.archive", thread.id),
       ).toHaveLength(1);
@@ -601,11 +599,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -651,11 +644,6 @@ describe("public thread archive delete cleanup routes", () => {
           `/api/v1/threads/${thread.id}/archive`,
           {
             method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              force: false,
-              managerChildThreadsConfirmed: false,
-            }),
           },
         );
 
@@ -721,11 +709,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -743,7 +726,7 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("skips Codex archive forwarding when BB child threads are still live", async () => {
+  it("queues Codex archive forwarding after releasing live BB child threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -760,7 +743,7 @@ describe("public thread archive delete cleanup routes", () => {
         status: "idle",
         type: "manager",
       });
-      seedThread(harness.deps, {
+      const childThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
         parentThreadId: parentThread.id,
@@ -776,24 +759,22 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${parentThread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: true,
-          }),
         },
       );
 
       expect(response.status).toBe(200);
-      await expect(
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "thread.archive" &&
-            command.threadId === parentThread.id,
-          100,
-        ),
-      ).rejects.toThrow("Timed out waiting for queued command");
+      expect(getThread(harness.db, childThread.id)?.parentThreadId).toBeNull();
+      const archiveCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.archive" &&
+          command.threadId === parentThread.id,
+      );
+      expect(archiveCommand.command).toMatchObject({
+        providerThreadId: "provider-live-child-risk",
+        threadId: parentThread.id,
+        type: "thread.archive",
+      });
     } finally {
       await harness.cleanup();
     }
@@ -862,11 +843,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
       expect(archiveResponse.status).toBe(200);
@@ -942,7 +918,257 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("stops threads, archives unmanaged workspaces directly, and requires confirmation for dirty isolated managed workspaces", async () => {
+  it("cancels pending managed cleanup when a thread is unarchived", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/unarchive-cancels-cleanup",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      archiveThread(harness.db, harness.hub, thread.id);
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: environment.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/unarchive`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: null,
+        cleanupRequestedAt: null,
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({ state: "cancelled" });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("cancels a queued managed destroy command when a thread is unarchived", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/unarchive-cancels-queued-destroy",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+        },
+      );
+      expect(archiveResponse.status).toBe(200);
+      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+        harness,
+        {
+          environmentId: environment.id,
+        },
+      );
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/unarchive`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeNull();
+      expect(getCommand(harness.db, destroyCommand.row.id)).toMatchObject({
+        state: "error",
+      });
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: null,
+        cleanupRequestedAt: null,
+        status: "ready",
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({ state: "cancelled" });
+
+      const staleResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        destroyCommand,
+        {},
+      );
+      expect(staleResultResponse.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects unarchive when managed destroy has already been fetched", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/unarchive-rejects-fetched-destroy",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+        },
+      );
+      expect(archiveResponse.status).toBe(200);
+      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+        harness,
+        {
+          environmentId: environment.id,
+        },
+      );
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/unarchive`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "environment_cleanup_in_progress",
+      });
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
+
+      const destroyResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        destroyCommand,
+        {},
+      );
+      expect(destroyResultResponse.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroyed",
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("ignores stale destroy results when an environment has live threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/stale-destroy-live-thread",
+        status: "destroying",
+        workspaceProvisionType: "managed-worktree",
+      });
+      seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const queuedRow = queueEnvironmentDestroyLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.destroy",
+          environmentId: environment.id,
+          workspaceContext: {
+            workspacePath: "/tmp/stale-destroy-live-thread",
+            workspaceProvisionType: "managed-worktree",
+          },
+        },
+      });
+      const destroyCommand = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === queuedRow.id,
+      );
+
+      const response = await reportQueuedCommandSuccess(
+        harness,
+        destroyCommand,
+        {},
+      );
+
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({ state: "cancelled" });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives dirty managed workspaces and leaves unsafe cleanup pending", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -990,13 +1216,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${dirtyThread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
       const dirtyStatusCommand = await waitForQueuedCommand(
@@ -1016,24 +1235,29 @@ describe("public thread archive delete cleanup routes", () => {
         },
       });
       const dirtyArchiveResponse = await dirtyArchivePromise;
-      expect(dirtyArchiveResponse.status).toBe(409);
-      await expect(readJson(dirtyArchiveResponse)).resolves.toMatchObject({
-        code: "archive_confirmation_required",
-        message:
-          "Archiving this thread would clean up a workspace that contains work.",
+      expect(dirtyArchiveResponse.status).toBe(200);
+      expect(getThread(harness.db, dirtyThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(
+        getEnvironment(harness.db, isolatedManagedEnvironment.id),
+      ).toMatchObject({
+        cleanupMode: "safe",
+        cleanupRequestedAt: expect.any(Number),
+        status: "ready",
       });
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          isolatedManagedEnvironment.id,
+        ),
+      ).toEqual([]);
 
       const archiveResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
       expect(archiveResponse.status).toBe(200);
@@ -1209,7 +1433,7 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("deletes idle managed threads while disconnected and defers cleanup until reconnect", async () => {
+  it("deletes idle managed threads while disconnected and leaves safe cleanup pending", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, {
@@ -1248,17 +1472,19 @@ describe("public thread archive delete cleanup routes", () => {
         deletedAt: expect.any(Number),
       });
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupMode: "force",
+        cleanupMode: "safe",
         cleanupRequestedAt: expect.any(Number),
-        status: "destroying",
+        status: "ready",
       });
-      const destroyCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "environment.destroy" &&
-          command.environmentId === environment.id,
-      );
-      expect(destroyCommand.row.sessionId).toBeNull();
+      await expect(
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "environment.destroy" &&
+            command.environmentId === environment.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
       await expect(
         waitForQueuedCommand(
           harness,
@@ -1404,13 +1630,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${createdThread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: true,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -1476,13 +1695,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${archivedThread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -1539,13 +1751,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 
@@ -1592,37 +1797,12 @@ describe("public thread archive delete cleanup routes", () => {
         status: "active",
       });
 
-      // Contract: archiving an *active* managed-worktree thread marks it
-      // archived, requests stop, but defers environment.destroy until the
-      // stop result comes back. Two snapshots — one after the archive HTTP
-      // returns, one after stop finalizes — verify both halves of the
-      // contract without relying on intermediate command ordering.
-      const archivePromise = harness.app.request(
+      const archiveResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
-
-      // Drive archive validation forward.
-      const initialStatusCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, initialStatusCommand, {
-        workspaceStatus: cleanWorkspaceStatus(),
-      });
-
-      const archiveResponse = await archivePromise;
       expect(archiveResponse.status).toBe(200);
 
       // Snapshot 1: archive committed, stop in flight, destroy deferred.
@@ -1650,11 +1830,13 @@ describe("public thread archive delete cleanup routes", () => {
       );
       expect(stopResultResponse.status).toBe(200);
 
-      // Snapshot 2: stop result handler advances cleanup; the cached
-      // workspace.status from archive validation (1s TTL) is reused, so
-      // destroy is queued directly with no second status round trip.
-      const destroyCommand = await waitForQueuedCommand(
+      await reportCleanWorkspaceStatusForEnvironment(harness, {
+        afterCursor: stopCommand.row.cursor,
+        environmentId: environment.id,
+      });
+      const destroyCommand = await waitForQueuedCommandAfter(
         harness,
+        stopCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -1674,11 +1856,11 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("preserves forced managed cleanup across active thread stop finalization", async () => {
+  it("preserves safe managed cleanup across active thread stop finalization", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-archive-managed-active-force",
+        id: "host-archive-managed-active-safe",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1688,7 +1870,7 @@ describe("public thread archive delete cleanup routes", () => {
         projectId: project.id,
         managed: true,
         workspaceProvisionType: "managed-worktree",
-        path: "/tmp/archive-managed-active-force",
+        path: "/tmp/archive-managed-active-safe",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -1700,18 +1882,11 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: true,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
       expect(archiveResponse.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupMode: "force",
+        cleanupMode: "safe",
         cleanupRequestedAt: expect.any(Number),
         status: "ready",
       });
@@ -1730,9 +1905,16 @@ describe("public thread archive delete cleanup routes", () => {
       const stopResultResponse = await stopResultPromise;
       expect(stopResultResponse.status).toBe(200);
 
+      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+        harness,
+        {
+          afterCursor: stopCommand.row.cursor,
+          environmentId: environment.id,
+        },
+      );
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
-        stopCommand.row.cursor,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -1743,7 +1925,7 @@ describe("public thread archive delete cleanup routes", () => {
       await expect(
         waitForQueuedCommandAfter(
           harness,
-          stopCommand.row.cursor,
+          statusCommand.row.cursor,
           ({ command }) =>
             command.type === "workspace.status" &&
             command.environmentId === environment.id,
@@ -1786,8 +1968,13 @@ describe("public thread archive delete cleanup routes", () => {
       );
       expect(response.status).toBe(200);
 
-      const destroyCommand = await waitForQueuedCommand(
+      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
         harness,
+        { environmentId: environment.id },
+      );
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
@@ -1832,7 +2019,7 @@ describe("public thread archive delete cleanup routes", () => {
       );
       expect(response.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupMode: "force",
+        cleanupMode: "safe",
         cleanupRequestedAt: expect.any(Number),
         status: "provisioning",
       });
@@ -1881,13 +2068,6 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}/archive`,
         {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            force: false,
-            managerChildThreadsConfirmed: false,
-          }),
         },
       );
 

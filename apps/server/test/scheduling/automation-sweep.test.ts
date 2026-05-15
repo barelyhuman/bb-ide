@@ -11,6 +11,7 @@ import {
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { sweepDueAutomations } from "../../src/services/scheduling/automation-sweep.js";
+import { createThreadFromRequest } from "../../src/services/threads/thread-create.js";
 import { waitForQueuedCommand } from "../helpers/commands.js";
 import {
   createDailySchedule,
@@ -95,6 +96,94 @@ describe("automation sweep", () => {
       expect(updatedAutomation?.lastRunAt).toBeGreaterThanOrEqual(now);
       expect(updatedAutomation?.runCount).toBe(1);
       expect(updatedAutomation?.nextRunAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not create or claim automation threads for projects pending deletion", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-project-delete",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        path: "/tmp/automation-project-delete",
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const now = Date.now();
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Deleting project automation",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Do not run after delete" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: now - 1,
+      });
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(200);
+
+      await sweepDueAutomations(harness.deps, { now });
+
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.automationId, automation.id))
+          .all(),
+      ).toEqual([]);
+      expect(getAutomation(harness.db, automation.id)).toMatchObject({
+        lastRunAt: null,
+        nextRunAt: automation.nextRunAt,
+        runCount: 0,
+      });
+
+      await expect(
+        createThreadFromRequest(harness.deps, {
+          automationId: null,
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          type: "standard",
+          input: [{ type: "text", text: "Reject after delete" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      ).rejects.toMatchObject({
+        body: {
+          code: "project_not_found",
+        },
+        status: 404,
+      });
     } finally {
       await harness.cleanup();
     }

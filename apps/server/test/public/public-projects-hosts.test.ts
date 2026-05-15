@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   archiveThread,
+  createThread,
   createProject,
   getProjectExecutionDefaults,
   getProject,
@@ -15,6 +16,7 @@ import {
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { threadListEntrySchema, threadSchema } from "@bb/domain";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -31,6 +33,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import type { TestAppHarness } from "../helpers/test-app.js";
 import { runProjectDeletionSweep } from "../../src/services/system/periodic-sweeps.js";
 
 const idOnlyResponseSchema = z.object({
@@ -75,6 +78,39 @@ const branchListResponseSchema = z.object({
   current: z.string().nullable(),
   defaultBranch: z.string().nullable(),
 });
+
+interface ReportCleanWorkspaceStatusForEnvironmentArgs {
+  afterCursor?: number;
+  environmentId: string;
+}
+
+async function reportCleanWorkspaceStatusForEnvironment(
+  harness: TestAppHarness,
+  args: ReportCleanWorkspaceStatusForEnvironmentArgs,
+) {
+  const command =
+    args.afterCursor === undefined
+      ? await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === args.environmentId,
+        )
+      : await waitForQueuedCommandAfter(
+          harness,
+          args.afterCursor,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === args.environmentId,
+        );
+  await reportQueuedCommandSuccess(harness, command, {
+    workspaceStatus: makeWorkspaceStatus({
+      branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+      mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+    }),
+  });
+  return command;
+}
 
 describe("public project and host routes", () => {
   it("supports project CRUD", async () => {
@@ -748,15 +784,25 @@ describe("public project and host routes", () => {
       );
 
       expect(deleteProjectResponse.status).toBe(200);
-      await expect(readJson(deleteProjectResponse)).resolves.toEqual({
-        ok: true,
-      });
       expect(getProject(harness.db, project.id)).not.toBeNull();
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
         deletedAt: expect.any(Number),
         stopRequestedAt: expect.any(Number),
         status: "provisioning",
       });
+      await expect(readJson(deleteProjectResponse)).resolves.toEqual({
+        ok: true,
+      });
+
+      const threadsResponse = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}`,
+      );
+      expect(threadsResponse.status).toBe(404);
+
+      const threadResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}`,
+      );
+      expect(threadResponse.status).toBe(404);
 
       const queuedStop = await waitForQueuedCommandAfter(
         harness,
@@ -773,6 +819,56 @@ describe("public project and host routes", () => {
       const projectsResponse = await harness.app.request("/api/v1/projects");
       expect(projectsResponse.status).toBe(200);
       await expect(readJson(projectsResponse)).resolves.toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("hides live threads that appear after project deletion begins", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-delete-live-thread",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-delete-live-thread",
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        path: "/tmp/project-delete-live-thread-managed",
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const deleteProjectResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}`,
+        { method: "DELETE" },
+      );
+      expect(deleteProjectResponse.status).toBe(200);
+      expect(getProject(harness.db, project.id)).not.toBeNull();
+
+      const liveThread = createThread(harness.db, harness.hub, {
+        projectId: project.id,
+        providerId: "codex",
+        status: "created",
+      });
+      expect(getThread(harness.db, liveThread.id)).toMatchObject({
+        deletedAt: null,
+        projectId: project.id,
+      });
+
+      const threadsResponse = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}`,
+      );
+      expect(threadsResponse.status).toBe(404);
+
+      const threadResponse = await harness.app.request(
+        `/api/v1/threads/${liveThread.id}`,
+      );
+      expect(threadResponse.status).toBe(404);
     } finally {
       await harness.cleanup();
     }
@@ -1478,6 +1574,19 @@ describe("public project and host routes", () => {
       );
       expect(deleteResponse.status).toBe(200);
 
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === managed.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+        }),
+      });
+
       const commands = harness.db
         .select()
         .from(hostDaemonCommands)
@@ -1699,10 +1808,19 @@ describe("public project and host routes", () => {
         workspaceProvisionType: "managed-worktree",
       });
 
-      const deleteResponse = await harness.app.request(
+      const deletePromise = harness.app.request(
         `/api/v1/projects/${project.id}`,
         { method: "DELETE" },
       );
+      const firstStatus = await reportCleanWorkspaceStatusForEnvironment(
+        harness,
+        { environmentId: firstEnvironment.id },
+      );
+      await reportCleanWorkspaceStatusForEnvironment(harness, {
+        afterCursor: firstStatus.row.cursor,
+        environmentId: secondEnvironment.id,
+      });
+      const deleteResponse = await deletePromise;
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
 

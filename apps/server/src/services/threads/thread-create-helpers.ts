@@ -2,6 +2,7 @@ import {
   createThread,
   getProjectSourceByHost,
   getProject,
+  getProjectOperation,
   getThread,
 } from "@bb/db";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
@@ -53,12 +54,18 @@ export function buildManagedBranchName(args: ManagedBranchNameArgs): string {
     : `bb/${args.threadId}`;
 }
 
-export function requireProjectExists(
+export function requirePublicProjectForThreadCreate(
   deps: Pick<AppDeps, "db">,
   projectId: string,
 ) {
   const project = getProject(deps.db, projectId);
-  if (!project) {
+  if (
+    !project ||
+    getProjectOperation(deps.db, {
+      projectId,
+      kind: "delete",
+    }) !== null
+  ) {
     throw new ApiError(404, "project_not_found", "Project not found");
   }
   return project;

@@ -187,16 +187,14 @@ describe("environments", () => {
       notifier,
       environment.id,
       {
-        cleanupMode: "safe",
         requestedAt: 123,
       },
     );
-    const escalated = recordEnvironmentCleanupRequest(
+    const requestedAgain = recordEnvironmentCleanupRequest(
       db,
       notifier,
       environment.id,
       {
-        cleanupMode: "force",
         requestedAt: 456,
       },
     );
@@ -210,9 +208,9 @@ describe("environments", () => {
       cleanupRequestedAt: 123,
       cleanupMode: "safe",
     });
-    expect(escalated).toMatchObject({
+    expect(requestedAgain).toMatchObject({
       cleanupRequestedAt: 123,
-      cleanupMode: "force",
+      cleanupMode: "safe",
     });
     expect(cleared).toMatchObject({
       cleanupRequestedAt: null,
@@ -228,11 +226,7 @@ describe("environments", () => {
       environment.id,
       ["metadata-changed"],
     );
-    expect(notifier.notifyEnvironment).toHaveBeenNthCalledWith(
-      3,
-      environment.id,
-      ["metadata-changed"],
-    );
+    expect(notifier.notifyEnvironment).toHaveBeenCalledTimes(2);
   });
 
   it("marks destroyed through the lifecycle write path", () => {
@@ -244,7 +238,7 @@ describe("environments", () => {
       workspaceProvisionType: "managed-worktree",
       managed: true,
       cleanupRequestedAt: 123,
-      cleanupMode: "force",
+      cleanupMode: "safe",
       status: "destroying",
     });
 
