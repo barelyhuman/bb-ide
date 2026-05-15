@@ -32,7 +32,10 @@ import {
 } from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
-import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
+import type {
+  ServerLogger,
+  ServerRuntimeConfig,
+} from "../../../apps/server/src/types.js";
 import { NotificationHub } from "../../../apps/server/src/ws/hub.js";
 import { createPublicApiClient } from "@bb/server-contract";
 import { waitForHostConnected } from "./assertions.js";
@@ -52,7 +55,8 @@ let loadedProjectEnvPath: string | null | undefined;
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 type InternalHostDaemonClient = ReturnType<typeof createHostDaemonClient>;
 
-const testLogger = {
+const testLogger: ServerLogger = {
+  debug(): void {},
   error(): void {},
   info(): void {},
   warn(): void {},
