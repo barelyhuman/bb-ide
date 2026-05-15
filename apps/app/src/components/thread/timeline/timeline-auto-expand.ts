@@ -64,16 +64,35 @@ export function isNonExpandableSummary(
   );
 }
 
+function shouldAutoExpandFrontierRow(row: ThreadTimelineViewRow): boolean {
+  if (!isRowExpandable(row)) {
+    return false;
+  }
+  switch (row.kind) {
+    case "system":
+    case "bundle-summary":
+      return true;
+    case "work":
+      return row.workKind === "delegation";
+    case "conversation":
+    case "step-summary":
+    case "turn":
+      return false;
+    default:
+      return assertNever(row);
+  }
+}
+
 // Auto-expand rule (single rule, applied uniformly):
 //
 //   In an active container, find the trailing row that the agent produced
 //   (skipping over user-role conversation rows — initial messages,
 //   follow-ups, accepted or pending steers — since those are inputs to
 //   the agent rather than events on the activity timeline). If that
-//   frontier row is expandable, auto-expand it. If it isn't expandable
-//   (assistant text, denied web fetch, system row without detail, ...),
-//   nothing in the container auto-expands. We do not search backward past
-//   a non-expandable frontier.
+//   frontier row is expandable and is a system row, bundle summary, or
+//   delegation, auto-expand it. Otherwise, nothing in the container
+//   auto-expands. We do not search backward past a non-qualifying
+//   frontier.
 //
 // Active containers are the timeline's top-level row list (when the thread
 // is active) and the childRows of pending delegations *inside an active
@@ -92,7 +111,7 @@ function visitForAutoExpand(
     return;
   }
   const frontier = findTimelineFrontierRow(rows);
-  if (frontier && isRowExpandable(frontier)) {
+  if (frontier && shouldAutoExpandFrontierRow(frontier)) {
     ids.add(frontier.id);
   }
   for (const row of rows) {

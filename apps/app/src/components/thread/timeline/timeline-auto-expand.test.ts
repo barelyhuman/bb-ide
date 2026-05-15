@@ -4,6 +4,7 @@ import {
   commandRow,
   conversationRow,
   delegationRow,
+  systemRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import { collectTimelineAutoExpandedRowIds } from "./timeline-auto-expand";
 
@@ -29,7 +30,8 @@ describe("collectTimelineAutoExpandedRowIds", () => {
 
   it("auto-expands a trailing bundle in an active scope without expanding its children", () => {
     // Single rule: in an active container, expand the trailing row if it
-    // is expandable. Bundle children do not get the rule applied.
+    // is expandable and one of the auto-expandable frontier kinds. Bundle
+    // children do not get the rule applied.
     const rows = buildTimelineViewRows([
       commandRow({
         id: "command-pending-1",
@@ -61,6 +63,42 @@ describe("collectTimelineAutoExpandedRowIds", () => {
     for (const child of bundle.children) {
       expect(ids.has(child.id)).toBe(false);
     }
+  });
+
+  it("auto-expands a trailing system row with detail in an active scope", () => {
+    const rows = buildTimelineViewRows([
+      systemRow({
+        id: "system-with-detail",
+        detail: "provider transcript",
+        status: "pending",
+      }),
+    ]);
+
+    const ids = collectTimelineAutoExpandedRowIds({
+      rows,
+      scopeActive: true,
+    });
+
+    expect(Array.from(ids)).toEqual(["system-with-detail"]);
+  });
+
+  it("does not auto-expand a trailing command row in an active scope", () => {
+    const rows = buildTimelineViewRows([
+      commandRow({
+        id: "command-1",
+        command: "pnpm test",
+        output: "first output",
+        sourceSeqStart: 1,
+        status: "pending",
+      }),
+    ]);
+
+    const ids = collectTimelineAutoExpandedRowIds({
+      rows,
+      scopeActive: true,
+    });
+
+    expect(Array.from(ids)).toEqual([]);
   });
 
   it("does not auto-expand a displaced completed bundle in an active scope", () => {
@@ -226,9 +264,9 @@ describe("collectTimelineAutoExpandedRowIds", () => {
 
   it("auto-expands a pending delegation's frontier when the top-level scope is active", () => {
     // Active scope propagates *through* a pending delegation: the
-    // delegation row itself auto-expands at the top level and the
-    // pending command inside the delegation auto-expands as the
-    // delegation's frontier.
+    // delegation row itself auto-expands at the top level. The pending
+    // command inside the delegation is still visited as the delegation's
+    // frontier, but commands are not auto-expandable frontier rows.
     const rows = buildTimelineViewRows([
       delegationRow({
         id: "active-pending-delegation",
@@ -251,6 +289,6 @@ describe("collectTimelineAutoExpandedRowIds", () => {
     });
 
     expect(ids.has("active-pending-delegation")).toBe(true);
-    expect(ids.has("nested-pending-command")).toBe(true);
+    expect(ids.has("nested-pending-command")).toBe(false);
   });
 });
