@@ -550,7 +550,6 @@ export function updateThread(
 
   const changes: ThreadChangeKind[] = [];
   if ("title" in input) changes.push("title-changed");
-  if ("parentThreadId" in input) changes.push("parent-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
   if (
     "parentThreadId" in input &&
