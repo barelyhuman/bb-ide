@@ -235,6 +235,107 @@ describe("createAgentRuntime command contracts", () => {
     }
   });
 
+  it("prefixes provider rename titles and normalizes provider title events", async () => {
+    const events = new Array<ThreadEvent>();
+    const renameLogPath = join(tmpDir, "rename-title.txt");
+    const renameProviderScriptPath = join(tmpDir, "rename-provider.cjs");
+    writeFileSync(
+      renameProviderScriptPath,
+      `
+const fs = require("node:fs");
+const readline = require("node:readline");
+const renameLogPath = ${JSON.stringify(renameLogPath)};
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function paramsOf(message) {
+  return message && typeof message.params === "object" && message.params !== null
+    ? message.params
+    : {};
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  const params = paramsOf(message);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { providerThreadId: "provider-thread-1" },
+    });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/identity",
+      params: {
+        threadId: params.threadId,
+        providerThreadId: "provider-thread-1",
+      },
+    });
+    return;
+  }
+  if (message.method === "thread/name/set") {
+    fs.writeFileSync(renameLogPath, params.title, "utf8");
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/name/updated",
+      params: {
+        threadId: params.threadId,
+        providerThreadId: params.providerThreadId,
+        threadName: params.title,
+      },
+    });
+    return;
+  }
+});
+`,
+      "utf8",
+    );
+    const runtime = createContractRuntime({
+      onEvent: (event) => events.push(event),
+      scriptPath: renameProviderScriptPath,
+      workspacePath: tmpDir,
+    });
+
+    try {
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t1",
+        projectId: "p1",
+        providerId: "fake",
+        options: fullRuntimeOptions,
+      });
+      await runtime.renameThread({ threadId: "t1", title: "New Title" });
+      await waitForRuntimeThreadEvent({
+        events,
+        label: "normalized provider title event",
+        predicate: (event) =>
+          event.type === "thread/name/updated" &&
+          event.threadId === "t1" &&
+          event.threadName === "New Title",
+        runtime,
+        threadId: "t1",
+      });
+
+      expect(readFileSync(renameLogPath, "utf8")).toBe("[bb] New Title");
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          threadName: "[bb] New Title",
+          type: "thread/name/updated",
+        }),
+      );
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
   it("preserves Codex captured linked-worktree git roots from start to turn/start", async () => {
     const fixture = createRuntimeLinkedWorktreeFixture({ rootPath: tmpDir });
     const providerScriptPath = join(tmpDir, "codex-runtime-provider.cjs");

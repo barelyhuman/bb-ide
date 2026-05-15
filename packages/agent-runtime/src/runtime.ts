@@ -1,3 +1,7 @@
+import {
+  normalizeProviderThreadNameEvent,
+  toProviderExternalThreadName,
+} from "@bb/domain";
 import type { DynamicTool, InstructionMode, ThreadEvent } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
@@ -445,9 +449,12 @@ function createAgentRuntimeInternal(
         continue;
       }
 
-      turnState.observe(replayResult.event);
+      const normalizedEvent = normalizeProviderThreadNameEvent(
+        replayResult.event,
+      );
+      turnState.observe(normalizedEvent);
       emitRuntimeEvent({
-        event: replayResult.event,
+        event: normalizedEvent,
         proc: args.proc,
         providerId: args.providerId,
         rawCaptureId: args.rawCaptureId,
@@ -991,7 +998,7 @@ function createAgentRuntimeInternal(
         type: "thread/name/set",
         threadId,
         providerThreadId: requireProviderThreadId(threadId),
-        title,
+        title: toProviderExternalThreadName(title),
       };
       const cmd = requireProviderRequestPlan({
         commandType: adapterCommand.type,

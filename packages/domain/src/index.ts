@@ -168,6 +168,20 @@ export type {
 } from "./protocol-ids.js";
 
 export {
+  BB_THREAD_NAME_TAG,
+  REPLAY_THREAD_NAME_TAG,
+  fromProviderExternalThreadName,
+  normalizeProviderThreadNameEvent,
+  tagThreadName,
+  toProviderExternalThreadName,
+  untagThreadName,
+} from "./thread-name-tags.js";
+export type {
+  TagThreadNameArgs,
+  UntagThreadNameArgs,
+} from "./thread-name-tags.js";
+
+export {
   canonicalizeEventSpoolPayload,
   canonicalizeProducerEventPayload,
 } from "./producer-event-payload.js";

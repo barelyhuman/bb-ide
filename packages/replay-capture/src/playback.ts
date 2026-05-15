@@ -1,3 +1,9 @@
+import {
+  BB_THREAD_NAME_TAG,
+  REPLAY_THREAD_NAME_TAG,
+  tagThreadName,
+  untagThreadName,
+} from "@bb/domain";
 import type { ThreadEvent } from "@bb/domain";
 import {
   getReplayCaptureTerminalTurnId,
@@ -80,9 +86,18 @@ export function remapReplayThreadEvent(
   args: RemapReplayThreadEventArgs,
 ): ThreadEvent {
   if (args.event.type === "thread/name/updated") {
-    const threadName = args.event.threadName.startsWith("[Replay] ")
-      ? args.event.threadName
-      : `[Replay] ${args.event.threadName}`;
+    const providerName = untagThreadName({
+      name: args.event.threadName,
+      tag: BB_THREAD_NAME_TAG,
+    });
+    const replayName = untagThreadName({
+      name: providerName,
+      tag: REPLAY_THREAD_NAME_TAG,
+    });
+    const threadName = tagThreadName({
+      name: replayName,
+      tag: REPLAY_THREAD_NAME_TAG,
+    });
     return {
       ...args.event,
       providerThreadId: args.providerThreadId,

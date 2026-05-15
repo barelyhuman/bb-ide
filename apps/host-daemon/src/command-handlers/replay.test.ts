@@ -358,7 +358,7 @@ describe("runReplay", () => {
           captureId: "raw-title",
           ordinal: 2,
           relativeMs: 10,
-          threadName: "Original title",
+          threadName: "[bb] Original title",
         }),
         rawProviderRecord({
           captureId: "raw-2",
