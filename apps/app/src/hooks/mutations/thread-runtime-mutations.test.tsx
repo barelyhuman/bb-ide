@@ -218,6 +218,88 @@ describe("thread runtime mutations", () => {
     });
   });
 
+  it("optimistically flips displayStatus to active for an idle thread", async () => {
+    let resolveSend: (() => void) | null = null;
+    vi.mocked(api.sendThreadMessage).mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSend = () => resolve(undefined);
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      makeThreadWithRuntime({
+        status: "idle",
+        runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
+      }),
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    let mutationPromise: Promise<void> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Hello there" }],
+        mode: "auto",
+      });
+    });
+
+    await waitFor(() => {
+      const thread = queryClient.getQueryData<ThreadWithRuntime>(
+        threadQueryKey("thread-1"),
+      );
+      expect(thread?.runtime.displayStatus).toBe("active");
+    });
+
+    await act(async () => {
+      resolveSend?.();
+      await mutationPromise;
+    });
+  });
+
+  it("preserves host-reconnecting runtime state during optimistic send", async () => {
+    let resolveSend: (() => void) | null = null;
+    vi.mocked(api.sendThreadMessage).mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSend = () => resolve(undefined);
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      makeThreadWithRuntime({
+        runtime: {
+          displayStatus: "host-reconnecting",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    let mutationPromise: Promise<void> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Hello there" }],
+        mode: "auto",
+      });
+    });
+
+    await waitFor(() => {
+      const thread = queryClient.getQueryData<ThreadWithRuntime>(
+        threadQueryKey("thread-1"),
+      );
+      expect(thread?.runtime.displayStatus).toBe("host-reconnecting");
+    });
+
+    await act(async () => {
+      resolveSend?.();
+      await mutationPromise;
+    });
+  });
+
   it("preserves unavailable-host runtime state during optimistic send", async () => {
     let resolveSend: (() => void) | null = null;
     vi.mocked(api.sendThreadMessage).mockImplementation(

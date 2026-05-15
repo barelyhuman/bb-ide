@@ -311,6 +311,21 @@ export function useSendThreadMessage() {
         ...thread,
         status: "active",
         updatedAt: Math.max(thread.updatedAt, optimisticCreatedAt),
+        runtime: {
+          ...thread.runtime,
+          // Flip displayStatus so the working indicator mounts in the same
+          // render as the optimistic user-message row. Without this, the
+          // indicator waits for the server's runtime update and animates in
+          // separately, looking like a two-step reveal. Preserve
+          // host-reconnecting / waiting-for-host because they signal a known
+          // host blocker — promoting them to "active" would lie about the
+          // host's readiness to do work.
+          displayStatus:
+            thread.runtime.displayStatus === "host-reconnecting" ||
+            thread.runtime.displayStatus === "waiting-for-host"
+              ? thread.runtime.displayStatus
+              : "active",
+        },
       }));
 
       const optimisticRow = buildOptimisticUserMessageRow({
