@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import {
   archiveThread,
   createDraftId,
+  createPromptHistoryEntry,
   deleteHost,
   environments,
   events,
@@ -1104,6 +1105,13 @@ describe("public thread data routes", () => {
           },
           source: "tell",
         },
+      });
+      createPromptHistoryEntry(harness.deps.db, {
+        projectId: project.id,
+        threadId: thread.id,
+        scope: "thread",
+        requestSequence: 1,
+        input: [{ type: "text", text: "Accepted prompt" }],
       });
       seedDraft(harness.deps, {
         threadId: thread.id,

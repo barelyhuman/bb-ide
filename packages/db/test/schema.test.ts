@@ -13,6 +13,7 @@ import {
   createHostId,
   createManagerThreadNudgeId,
   createProjectId,
+  createPromptHistoryEntryId,
   createProjectSourceId,
   createThreadId,
   environments,
@@ -22,6 +23,7 @@ import {
   hosts,
   managerThreadNudges,
   migrate,
+  promptHistoryEntries,
   projectSources,
   projects,
   queuedThreadMessages,
@@ -56,6 +58,7 @@ describe("db rebuild schema", () => {
     const sessionId = createHostDaemonSessionId();
     const commandId = createHostDaemonCommandId();
     const eventId = createEventId();
+    const promptHistoryEntryId = createPromptHistoryEntryId();
 
     db.insert(hosts)
       .values({
@@ -189,6 +192,17 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
+    db.insert(promptHistoryEntries)
+      .values({
+        id: promptHistoryEntryId,
+        projectId,
+        threadId,
+        scope: "project",
+        requestSequence: 1,
+        input: '[{"type":"text","text":"Start thread"}]',
+        createdAt: now,
+      })
+      .run();
     db.insert(events)
       .values({
         id: eventId,
@@ -223,6 +237,11 @@ describe("db rebuild schema", () => {
     expect(db.select().from(hostDaemonCommands).get()).toMatchObject({
       sessionId,
       type: "workspace.status",
+    });
+    expect(db.select().from(promptHistoryEntries).get()).toMatchObject({
+      projectId,
+      scope: "project",
+      threadId,
     });
 
     closeConnection(db);
@@ -692,7 +711,7 @@ describe("db rebuild schema", () => {
     closeConnection(db);
   });
 
-  it("cascades thread deletion to events and queued drafts", () => {
+  it("cascades thread deletion to events, prompt history, and queued drafts", () => {
     const db = createConnection(":memory:");
     migrate(db);
 
@@ -733,6 +752,17 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
+    db.insert(promptHistoryEntries)
+      .values({
+        id: createPromptHistoryEntryId(),
+        projectId,
+        threadId,
+        scope: "thread",
+        requestSequence: 1,
+        input: '[{"type":"text","text":"Follow up"}]',
+        createdAt: now,
+      })
+      .run();
     db.insert(events)
       .values({
         id: createEventId(),
@@ -748,6 +778,7 @@ describe("db rebuild schema", () => {
     db.delete(threads).where(eq(threads.id, threadId)).run();
 
     expect(db.select().from(queuedThreadMessages).all()).toHaveLength(0);
+    expect(db.select().from(promptHistoryEntries).all()).toHaveLength(0);
     expect(db.select().from(events).all()).toHaveLength(0);
 
     closeConnection(db);
@@ -821,6 +852,7 @@ describe("db rebuild schema", () => {
     expect(createAutomationId()).toMatch(/^auto_/u);
     expect(createManagerThreadNudgeId()).toMatch(/^mnge_/u);
     expect(createEventId()).toMatch(/^evt_/u);
+    expect(createPromptHistoryEntryId()).toMatch(/^phist_/u);
     expect(createDraftId()).toMatch(/^draft_/u);
     expect(createHostDaemonSessionId()).toMatch(/^hses_/u);
     expect(createHostDaemonCommandId()).toMatch(/^hcmd_/u);

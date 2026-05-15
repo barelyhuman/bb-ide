@@ -9,13 +9,15 @@ export {
 export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 
 export {
-  listStoredProjectPromptHistoryEventRows,
-  listStoredThreadPromptHistoryEventRows,
+  createPromptHistoryEntry,
+  listStoredProjectPromptHistoryRows,
+  listStoredThreadPromptHistoryRows,
 } from "./prompt-history.js";
 export type {
+  CreatePromptHistoryEntryInput,
   ListStoredProjectPromptHistoryArgs,
   ListStoredThreadPromptHistoryArgs,
-  StoredPromptHistoryEventRow,
+  StoredPromptHistoryEntryRow,
 } from "./prompt-history.js";
 
 export {

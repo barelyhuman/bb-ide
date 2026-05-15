@@ -323,6 +323,8 @@ export function registerDevelopmentOnlyReplayRoutes(
         title: `[Replay] ${resolved.title ?? manifest.captureId}`,
       });
       try {
+        // Replay threads are synthetic development-only artifacts, so their
+        // prompts intentionally do not enter prompt_history_entries recall.
         const request = appendClientTurnEvent(deps, {
           threadId: replayThread.id,
           environmentId: resolved.environmentId,

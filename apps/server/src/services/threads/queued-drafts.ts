@@ -34,6 +34,7 @@ import { ensureThreadCanQueueStartRequest } from "./thread-lifecycle.js";
 import { requireReadyThreadEnvironment } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { sendThreadMessage } from "./thread-send.js";
+import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
 interface SendQueuedDraftArgs {
   draftId: string;
@@ -198,6 +199,16 @@ async function sendClaimedDraftForIdleProviderThread(
         threadId: thread.id,
         type: "client/turn/requested",
       });
+      recordAcceptedPromptHistoryEntry(
+        { db: tx },
+        {
+          thread,
+          input: payload.input,
+          initiator: "user",
+          target: { kind: "new-turn" },
+          requestSequence: request.sequence,
+        },
+      );
       const command = addRequestIdToTurnSubmitCommandPayload({
         requestId: request.requestId,
         preparedCommand,

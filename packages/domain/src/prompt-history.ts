@@ -3,6 +3,10 @@ import { promptInputSchema, type PromptInput } from "./shared-types.js";
 
 export const PROMPT_HISTORY_ENTRY_LIMIT = 50;
 
+export const promptHistoryScopeValues = ["project", "thread"] as const;
+export const promptHistoryScopeSchema = z.enum(promptHistoryScopeValues);
+export type PromptHistoryScope = z.infer<typeof promptHistoryScopeSchema>;
+
 export const promptHistoryEntrySchema = z.object({
   id: z.string().min(1),
   createdAt: z.number(),

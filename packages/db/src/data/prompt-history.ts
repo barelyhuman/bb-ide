@@ -1,18 +1,28 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import {
   PROMPT_HISTORY_ENTRY_LIMIT,
-  type ThreadEventType,
+  type PromptHistoryScope,
+  type PromptInput,
 } from "@bb/domain";
-import type { DbConnection } from "../connection.js";
-import { events, threads } from "../schema.js";
+import type { DbQueryConnection } from "../connection.js";
+import { promptHistoryEntries, threads } from "../schema.js";
+import { createPromptHistoryEntryId } from "../ids.js";
 
-export interface StoredPromptHistoryEventRow {
+export interface StoredPromptHistoryEntryRow {
   createdAt: number;
-  data: string;
   id: string;
-  sequence: number;
+  input: string;
+  requestSequence: number;
   threadId: string;
-  type: ThreadEventType;
+}
+
+export interface CreatePromptHistoryEntryInput {
+  createdAt?: number;
+  input: PromptInput[];
+  projectId: string;
+  requestSequence: number;
+  scope: PromptHistoryScope;
+  threadId: string;
 }
 
 export interface ListStoredPromptHistoryArgs {
@@ -29,44 +39,6 @@ export interface ListStoredThreadPromptHistoryArgs
   threadId: string;
 }
 
-function userInitiatedPromptHistoryEventPredicate() {
-  return sql`json_extract(${events.data}, '$.initiator') = 'user'`;
-}
-
-function promptHistoryInputPredicate() {
-  return sql`json_type(${events.data}, '$.input') IS NOT NULL`;
-}
-
-function projectCreatePromptHistoryEventPredicate() {
-  return or(
-    and(
-      eq(events.type, "client/turn/requested"),
-      userInitiatedPromptHistoryEventPredicate(),
-      sql`json_extract(${events.data}, '$.target.kind') = 'thread-start'`,
-    ),
-    and(
-      eq(events.type, "client/thread/start"),
-      userInitiatedPromptHistoryEventPredicate(),
-      promptHistoryInputPredicate(),
-    ),
-  );
-}
-
-function threadFollowUpPromptHistoryEventPredicate() {
-  return or(
-    and(
-      eq(events.type, "client/turn/requested"),
-      userInitiatedPromptHistoryEventPredicate(),
-      sql`json_extract(${events.data}, '$.target.kind') <> 'thread-start'`,
-    ),
-    and(
-      eq(events.type, "client/turn/start"),
-      userInitiatedPromptHistoryEventPredicate(),
-      promptHistoryInputPredicate(),
-    ),
-  );
-}
-
 function rawPromptHistoryRowLimit(limit: number): number {
   // Fetch one extra visible window to absorb consecutive duplicate collapse
   // without falling back to OFFSET paging.
@@ -76,54 +48,86 @@ function rawPromptHistoryRowLimit(limit: number): number {
   );
 }
 
-export function listStoredProjectPromptHistoryEventRows(
-  db: DbConnection,
+export function createPromptHistoryEntry(
+  db: DbQueryConnection,
+  input: CreatePromptHistoryEntryInput,
+): StoredPromptHistoryEntryRow {
+  const createdAt = input.createdAt ?? Date.now();
+  return db
+    .insert(promptHistoryEntries)
+    .values({
+      id: createPromptHistoryEntryId(),
+      projectId: input.projectId,
+      threadId: input.threadId,
+      scope: input.scope,
+      requestSequence: input.requestSequence,
+      input: JSON.stringify(input.input),
+      createdAt,
+    })
+    .returning({
+      createdAt: promptHistoryEntries.createdAt,
+      id: promptHistoryEntries.id,
+      input: promptHistoryEntries.input,
+      requestSequence: promptHistoryEntries.requestSequence,
+      threadId: promptHistoryEntries.threadId,
+    })
+    .get();
+}
+
+export function listStoredProjectPromptHistoryRows(
+  db: DbQueryConnection,
   args: ListStoredProjectPromptHistoryArgs,
-): StoredPromptHistoryEventRow[] {
+): StoredPromptHistoryEntryRow[] {
   return db
     .select({
-      createdAt: events.createdAt,
-      data: events.data,
-      id: events.id,
-      sequence: events.sequence,
-      threadId: events.threadId,
-      type: events.type,
+      createdAt: promptHistoryEntries.createdAt,
+      id: promptHistoryEntries.id,
+      input: promptHistoryEntries.input,
+      requestSequence: promptHistoryEntries.requestSequence,
+      threadId: promptHistoryEntries.threadId,
     })
-    .from(events)
-    .innerJoin(threads, eq(threads.id, events.threadId))
+    .from(promptHistoryEntries)
+    .innerJoin(threads, eq(threads.id, promptHistoryEntries.threadId))
     .where(
       and(
-        eq(threads.projectId, args.projectId),
+        eq(promptHistoryEntries.projectId, args.projectId),
+        eq(promptHistoryEntries.scope, "project"),
         isNull(threads.deletedAt),
-        projectCreatePromptHistoryEventPredicate(),
       ),
     )
-    .orderBy(desc(events.createdAt), desc(events.sequence), desc(events.id))
+    .orderBy(
+      desc(promptHistoryEntries.createdAt),
+      desc(promptHistoryEntries.requestSequence),
+      desc(promptHistoryEntries.id),
+    )
     .limit(rawPromptHistoryRowLimit(args.limit))
     .all();
 }
 
-export function listStoredThreadPromptHistoryEventRows(
-  db: DbConnection,
+export function listStoredThreadPromptHistoryRows(
+  db: DbQueryConnection,
   args: ListStoredThreadPromptHistoryArgs,
-): StoredPromptHistoryEventRow[] {
+): StoredPromptHistoryEntryRow[] {
   return db
     .select({
-      createdAt: events.createdAt,
-      data: events.data,
-      id: events.id,
-      sequence: events.sequence,
-      threadId: events.threadId,
-      type: events.type,
+      createdAt: promptHistoryEntries.createdAt,
+      id: promptHistoryEntries.id,
+      input: promptHistoryEntries.input,
+      requestSequence: promptHistoryEntries.requestSequence,
+      threadId: promptHistoryEntries.threadId,
     })
-    .from(events)
+    .from(promptHistoryEntries)
     .where(
       and(
-        eq(events.threadId, args.threadId),
-        threadFollowUpPromptHistoryEventPredicate(),
+        eq(promptHistoryEntries.threadId, args.threadId),
+        eq(promptHistoryEntries.scope, "thread"),
       ),
     )
-    .orderBy(desc(events.createdAt), desc(events.sequence), desc(events.id))
+    .orderBy(
+      desc(promptHistoryEntries.createdAt),
+      desc(promptHistoryEntries.requestSequence),
+      desc(promptHistoryEntries.id),
+    )
     .limit(rawPromptHistoryRowLimit(args.limit))
     .all();
 }

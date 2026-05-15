@@ -5,6 +5,7 @@ import type {
   Thread,
   ThreadStatus,
   ThreadTurnInitiator,
+  TurnRequestTarget,
 } from "@bb/domain";
 import type { SendMessageRequest } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
@@ -27,6 +28,7 @@ import {
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
 import { tryTransition } from "./thread-transitions.js";
+import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
 type TextPromptInput = Extract<PromptInput, { type: "text" }>;
@@ -202,8 +204,8 @@ export async function sendThreadMessage(
         senderThreadId,
       })
     : payload.input;
-  // Agent-originated CLI sends still appear as normal turn requests in
-  // timeline/prompt history, while initiator lets policy distinguish the source.
+  // Agent-originated CLI sends still appear as normal turn requests in the
+  // timeline, while initiator lets policy distinguish the source.
   const initiator: ThreadTurnInitiator = senderThreadId ? "agent" : "user";
   const expectedSteerTurnId =
     mode === "auto" || mode === "steer"
@@ -235,6 +237,15 @@ export async function sendThreadMessage(
     return;
   }
   const readyEnvironment = requireReadyThreadEnvironment(environment);
+  let target: TurnRequestTarget;
+  if (mode === "start") {
+    target = { kind: "new-turn" };
+  } else {
+    target = {
+      kind: mode,
+      expectedTurnId: expectedSteerTurnId,
+    };
+  }
 
   const request = appendClientTurnEvent(deps, {
     threadId: thread.id,
@@ -245,13 +256,14 @@ export async function sendThreadMessage(
     initiator,
     requestMethod: "turn/start",
     source: "tell",
-    target:
-      mode === "start"
-        ? { kind: "new-turn" }
-        : {
-            kind: mode,
-            expectedTurnId: expectedSteerTurnId,
-          },
+    target,
+  });
+  recordAcceptedPromptHistoryEntry(deps, {
+    thread,
+    input,
+    initiator,
+    target,
+    requestSequence: request.sequence,
   });
 
   if (mode === "start") {

@@ -19,6 +19,7 @@ import type {
   LifecycleOperationState,
   PermissionMode,
   ProjectOperationKind,
+  PromptHistoryScope,
   ProjectSourceType,
   ReasoningLevel,
   ServiceTier,
@@ -437,6 +438,43 @@ export const events = sqliteTable(
         OR
         (${table.scopeKind} = 'thread' AND ${table.turnId} IS NULL)
       )`,
+    ),
+  ],
+);
+
+export const promptHistoryEntries = sqliteTable(
+  "prompt_history_entries",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    scope: text("scope").$type<PromptHistoryScope>().notNull(),
+    requestSequence: integer("request_sequence").notNull(),
+    input: text("input").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("prompt_history_entries_thread_request_idx").on(
+      table.threadId,
+      table.requestSequence,
+    ),
+    index("prompt_history_entries_project_scope_created_idx").on(
+      table.projectId,
+      table.scope,
+      table.createdAt,
+      table.requestSequence,
+      table.id,
+    ),
+    index("prompt_history_entries_thread_scope_created_idx").on(
+      table.threadId,
+      table.scope,
+      table.createdAt,
+      table.requestSequence,
+      table.id,
     ),
   ],
 );

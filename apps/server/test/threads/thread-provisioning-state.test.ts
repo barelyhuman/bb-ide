@@ -4,18 +4,24 @@ import {
   createEnvironment,
   createProject,
   createThread,
+  createThreadProvisioningId,
   getThreadOperation,
   migrate,
   noopNotifier,
   upsertHost,
 } from "@bb/db";
 import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
-import { requestThreadProvision } from "../../src/services/threads/thread-provisioning.js";
+import type { PromptInput } from "@bb/domain";
+import {
+  requestThreadProvision,
+  requestThreadReprovision,
+} from "../../src/services/threads/thread-provisioning.js";
 import {
   readThreadProvisioningIdFromRecord,
   readThreadProvisioningStateFromRecord,
 } from "../../src/services/threads/thread-provisioning-state.js";
 import { NotificationHub } from "../../src/ws/hub.js";
+import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -47,6 +53,9 @@ function setup() {
 describe("thread provisioning operation state", () => {
   it("stores lifecycle progress in operation columns instead of the request payload", () => {
     const { db, host, hub, thread } = setup();
+    const input: PromptInput[] = [
+      { type: "text", text: "start this workspace" },
+    ];
 
     requestThreadProvision(
       { db, hub },
@@ -57,7 +66,7 @@ describe("thread provisioning operation state", () => {
           hostId: host.id,
           path: "/tmp/source",
         },
-        input: [{ type: "text", text: "start this workspace" }],
+        input,
         execution: {
           model: "gpt-5",
           serviceTier: "default",
@@ -81,6 +90,45 @@ describe("thread provisioning operation state", () => {
     expect(operation?.workspaceReadyEventSequence).toBeNull();
     expect(operation?.payload).not.toContain('"provisioningId"');
     expect(operation?.payload).not.toContain('"stage"');
+    assertPromptHistoryForTurnRequest({
+      db,
+      threadId: thread.id,
+      scope: "project",
+      input,
+    });
+  });
+
+  it("records thread prompt history for reprovision requests", () => {
+    const { db, environment, hub, thread } = setup();
+    const input: PromptInput[] = [
+      { type: "text", text: "resume after reprovision" },
+    ];
+
+    requestThreadReprovision(
+      { db, hub },
+      {
+        thread,
+        environment,
+        provisionEventSequence: 0,
+        input,
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+        provisioningId: createThreadProvisioningId(),
+      },
+    );
+
+    assertPromptHistoryForTurnRequest({
+      db,
+      threadId: thread.id,
+      scope: "thread",
+      input,
+    });
   });
 
   it("rejects payload-only provisioning records without provisioning columns", () => {

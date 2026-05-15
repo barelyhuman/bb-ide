@@ -1,15 +1,26 @@
 import {
+  createPromptHistoryEntry,
   listDrafts,
-  listStoredProjectPromptHistoryEventRows,
-  listStoredThreadPromptHistoryEventRows,
+  listStoredProjectPromptHistoryRows,
+  listStoredThreadPromptHistoryRows,
+  type DbQueryConnection,
   type DraftRow,
-  type StoredPromptHistoryEventRow,
+  type StoredPromptHistoryEntryRow,
 } from "@bb/db";
-import { takeVisiblePromptHistoryEntries } from "@bb/domain";
-import type { PromptHistoryEntry } from "@bb/domain";
-import { parseStoredTurnRequestEvent } from "./threads/thread-events.js";
+import {
+  promptInputSchema,
+  takeVisiblePromptHistoryEntries,
+  type PromptHistoryEntry,
+  type PromptHistoryScope,
+  type Thread,
+  type ThreadTurnInitiator,
+  type TurnRequestTarget,
+} from "@bb/domain";
+import { z } from "zod";
 import { toQueuedMessage } from "./threads/drafts.js";
 import type { AppDeps, ServerLogger } from "../types.js";
+
+const storedPromptHistoryInputSchema = z.array(promptInputSchema).min(1);
 
 interface PromptHistoryArgs {
   limit: number;
@@ -24,6 +35,19 @@ interface ThreadPromptHistoryArgs extends PromptHistoryArgs {
 }
 
 type PromptHistoryServiceDeps = Pick<AppDeps, "db" | "logger">;
+type PromptHistoryEntryInput = PromptHistoryEntry["input"];
+type PromptHistoryScopeThread = Pick<
+  Thread,
+  "automationId" | "parentThreadId" | "type"
+>;
+type PromptHistoryRecordThread = Pick<
+  Thread,
+  "automationId" | "id" | "parentThreadId" | "projectId" | "type"
+>;
+
+interface PromptHistoryRecordDeps {
+  db: DbQueryConnection;
+}
 
 type InternalPromptHistoryEntryState = "accepted" | "queued";
 
@@ -33,6 +57,20 @@ interface InternalPromptHistoryEntry extends PromptHistoryEntry {
 
 type PromptHistoryRowLogContext = Record<string, number | string>;
 
+interface ResolveAcceptedPromptHistoryScopeArgs {
+  initiator: ThreadTurnInitiator;
+  target: TurnRequestTarget;
+  thread: PromptHistoryScopeThread;
+}
+
+interface RecordAcceptedPromptHistoryEntryArgs {
+  initiator: ThreadTurnInitiator;
+  input: PromptHistoryEntryInput;
+  requestSequence: number;
+  target: TurnRequestTarget;
+  thread: PromptHistoryRecordThread;
+}
+
 interface BuildPromptHistoryEntriesArgs<TRow> {
   buildEntry: (row: TRow) => InternalPromptHistoryEntry;
   describeRow: (row: TRow) => PromptHistoryRowLogContext;
@@ -40,14 +78,20 @@ interface BuildPromptHistoryEntriesArgs<TRow> {
   rows: readonly TRow[];
 }
 
+function parseStoredPromptHistoryInput(
+  row: StoredPromptHistoryEntryRow,
+): PromptHistoryEntryInput {
+  const input = JSON.parse(row.input);
+  return storedPromptHistoryInputSchema.parse(input);
+}
+
 function buildAcceptedPromptHistoryEntry(
-  row: StoredPromptHistoryEventRow,
+  row: StoredPromptHistoryEntryRow,
 ): InternalPromptHistoryEntry {
-  const event = parseStoredTurnRequestEvent(row);
   return {
-    id: `event:${row.id}`,
+    id: row.id,
     createdAt: row.createdAt,
-    input: event.input,
+    input: parseStoredPromptHistoryInput(row),
     state: "accepted",
   };
 }
@@ -114,6 +158,28 @@ function buildPromptHistoryEntries<TRow>({
   return entries;
 }
 
+function resolveAcceptedPromptHistoryScope(
+  args: ResolveAcceptedPromptHistoryScopeArgs,
+): PromptHistoryScope | null {
+  if (args.initiator !== "user") {
+    return null;
+  }
+
+  if (args.target.kind !== "thread-start") {
+    return "thread";
+  }
+
+  if (
+    args.thread.type !== "standard" ||
+    args.thread.parentThreadId !== null ||
+    args.thread.automationId !== null
+  ) {
+    return null;
+  }
+
+  return "project";
+}
+
 function buildVisibleThreadPromptHistory(
   queuedEntries: readonly InternalPromptHistoryEntry[],
   acceptedEntries: readonly InternalPromptHistoryEntry[],
@@ -133,17 +199,16 @@ export function listProjectPromptHistory(
   args: ProjectPromptHistoryArgs,
 ): PromptHistoryEntry[] {
   const acceptedEntries = buildPromptHistoryEntries({
-    rows: listStoredProjectPromptHistoryEventRows(deps.db, {
+    rows: listStoredProjectPromptHistoryRows(deps.db, {
       projectId: args.projectId,
       limit: args.limit,
     }),
     logger: deps.logger,
     buildEntry: buildAcceptedPromptHistoryEntry,
     describeRow: (row) => ({
-      eventId: row.id,
-      sequence: row.sequence,
+      entryId: row.id,
+      requestSequence: row.requestSequence,
       threadId: row.threadId,
-      type: row.type,
     }),
   });
 
@@ -167,17 +232,16 @@ export function listThreadPromptHistory(
     }),
   });
   const acceptedEntries = buildPromptHistoryEntries({
-    rows: listStoredThreadPromptHistoryEventRows(deps.db, {
+    rows: listStoredThreadPromptHistoryRows(deps.db, {
       threadId: args.threadId,
       limit: args.limit,
     }),
     logger: deps.logger,
     buildEntry: buildAcceptedPromptHistoryEntry,
     describeRow: (row) => ({
-      eventId: row.id,
-      sequence: row.sequence,
+      entryId: row.id,
+      requestSequence: row.requestSequence,
       threadId: row.threadId,
-      type: row.type,
     }),
   });
 
@@ -186,4 +250,27 @@ export function listThreadPromptHistory(
     acceptedEntries,
     args.limit,
   );
+}
+
+export function recordAcceptedPromptHistoryEntry(
+  deps: PromptHistoryRecordDeps,
+  args: RecordAcceptedPromptHistoryEntryArgs,
+): boolean {
+  const scope = resolveAcceptedPromptHistoryScope({
+    initiator: args.initiator,
+    target: args.target,
+    thread: args.thread,
+  });
+  if (scope === null) {
+    return false;
+  }
+
+  createPromptHistoryEntry(deps.db, {
+    projectId: args.thread.projectId,
+    threadId: args.thread.id,
+    scope,
+    requestSequence: args.requestSequence,
+    input: args.input,
+  });
+  return true;
 }

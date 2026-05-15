@@ -1,16 +1,46 @@
 import { describe, expect, it } from "vitest";
 import { hostDaemonCommands, listEvents } from "@bb/db";
+import type { PromptInput } from "@bb/domain";
+import { sendQueuedDraft } from "../../src/services/threads/queued-drafts.js";
 import { sendThreadMessage } from "../../src/services/threads/thread-send.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
+import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
 import {
+  seedDraft,
   seedEnvironment,
   seedHost,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
   seedTurnStarted,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+interface ActiveSendPromptHistoryCase {
+  input: PromptInput[];
+  label: string;
+  mode: "auto" | "steer";
+  providerThreadId: string;
+  turnId: string;
+}
+
+const activeSendPromptHistoryCases: ActiveSendPromptHistoryCase[] = [
+  {
+    input: [{ type: "text", text: "continue active work" }],
+    label: "auto",
+    mode: "auto",
+    providerThreadId: "provider-thread-send-auto-history",
+    turnId: "turn-send-auto-history",
+  },
+  {
+    input: [{ type: "text", text: "adjust active work" }],
+    label: "steer",
+    mode: "steer",
+    providerThreadId: "provider-thread-send-steer-history",
+    turnId: "turn-send-steer-history",
+  },
+];
 
 describe("sendThreadMessage", () => {
   it("rejects user sends while the thread is awaiting interaction", async () => {
@@ -37,8 +67,8 @@ describe("sendThreadMessage", () => {
         providerThreadId: "provider-thread-send-blocked",
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction(
-        {
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
           interaction: {
             threadId: thread.id,
             turnId: "turn-send-blocked",
@@ -48,8 +78,7 @@ describe("sendThreadMessage", () => {
             payload: createCommandApprovalPayload(),
           },
           sessionId: session.id,
-        },
-      );
+        });
       expect(registered.outcome).toBe("created");
 
       await expect(
@@ -79,6 +108,178 @@ describe("sendThreadMessage", () => {
     }
   });
 
+  it("records thread prompt history for start sends on idle threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-send-start-history",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        status: "idle",
+      });
+      const input: PromptInput[] = [{ type: "text", text: "start idle work" }];
+
+      await sendThreadMessage(harness.deps, {
+        environment,
+        payload: {
+          input,
+          mode: "start",
+          model: "gpt-5.4",
+          permissionMode: "full",
+          reasoningLevel: "medium",
+          serviceTier: "default",
+        },
+        thread,
+        trigger: "user",
+      });
+
+      assertPromptHistoryForTurnRequest({
+        db: harness.db,
+        threadId: thread.id,
+        scope: "thread",
+        input,
+      });
+      expect(
+        harness.db
+          .select({ type: hostDaemonCommands.type })
+          .from(hostDaemonCommands)
+          .all()
+          .map((command) => command.type),
+      ).toContain("thread.start");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it.each(activeSendPromptHistoryCases)(
+    "records thread prompt history for $label sends on active threads",
+    async ({ input, mode, providerThreadId, turnId }) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps, {
+          id: `host-thread-send-${mode}-history`,
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          environmentId: environment.id,
+          projectId: project.id,
+          status: "active",
+        });
+        seedThreadRuntimeState(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId,
+        });
+        seedTurnStarted(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          turnId,
+          providerThreadId,
+        });
+
+        await sendThreadMessage(harness.deps, {
+          environment,
+          payload: {
+            input,
+            mode,
+            model: "gpt-5.4",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+          },
+          thread,
+          trigger: "user",
+        });
+
+        assertPromptHistoryForTurnRequest({
+          db: harness.db,
+          threadId: thread.id,
+          scope: "thread",
+          input,
+        });
+        expect(
+          harness.db
+            .select({ type: hostDaemonCommands.type })
+            .from(hostDaemonCommands)
+            .all()
+            .map((command) => command.type),
+        ).toContain("turn.submit");
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it("records thread prompt history for idle queued draft auto-sends", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-send-queued-draft-history",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-send-queued-draft-history",
+      });
+      const input: PromptInput[] = [
+        { type: "text", text: "send queued draft" },
+      ];
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: input,
+      });
+
+      await sendQueuedDraft(harness.deps, {
+        draftId: draft.id,
+        mode: "auto",
+        threadId: thread.id,
+      });
+
+      assertPromptHistoryForTurnRequest({
+        db: harness.db,
+        threadId: thread.id,
+        scope: "thread",
+        input,
+      });
+      expect(
+        harness.db
+          .select({ type: hostDaemonCommands.type })
+          .from(hostDaemonCommands)
+          .all()
+          .map((command) => command.type),
+      ).toContain("turn.submit");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("allows queued auto-dispatch while the thread is awaiting interaction", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -103,8 +304,8 @@ describe("sendThreadMessage", () => {
         providerThreadId: "provider-thread-send-auto-dispatch",
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction(
-        {
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
           interaction: {
             threadId: thread.id,
             turnId: "turn-send-auto-dispatch",
@@ -114,8 +315,7 @@ describe("sendThreadMessage", () => {
             payload: createCommandApprovalPayload(),
           },
           sessionId: session.id,
-        },
-      );
+        });
       expect(registered.outcome).toBe("created");
 
       await sendThreadMessage(harness.deps, {

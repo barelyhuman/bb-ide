@@ -68,6 +68,10 @@ export function createEventId(): string {
   return createId("evt");
 }
 
+export function createPromptHistoryEntryId(): string {
+  return createId("phist");
+}
+
 export function createDraftId(): string {
   return createId("draft");
 }

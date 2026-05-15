@@ -37,11 +37,14 @@ export type { FeatureFlags } from "./feature-flags.js";
 export {
   PROMPT_HISTORY_ENTRY_LIMIT,
   promptHistoryEntrySchema,
+  promptHistoryScopeSchema,
+  promptHistoryScopeValues,
   arePromptHistoryInputsEqual,
   takeVisiblePromptHistoryEntries,
 } from "./prompt-history.js";
 export type {
   PromptHistoryEntry,
+  PromptHistoryScope,
   PromptHistoryComparableEntry,
 } from "./prompt-history.js";
 

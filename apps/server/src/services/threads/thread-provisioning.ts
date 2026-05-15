@@ -13,6 +13,7 @@ import {
   type ResolvedThreadExecutionOptions,
   type Thread,
   type ThreadTurnInitiator,
+  type TurnRequestTarget,
 } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import {
@@ -39,6 +40,7 @@ import {
   upsertThreadProvisionOperation,
   type ThreadProvisioningDeps,
 } from "./thread-provisioning-environment.js";
+import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
 export interface RequestThreadProvisionArgs {
   environmentIntent: ThreadProvisionEnvironmentIntent;
@@ -151,22 +153,32 @@ export function requestThreadProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadProvisionArgs,
 ): void {
+  const initiator: ThreadTurnInitiator =
+    args.thread.type === "manager" ? "system" : "user";
+  const target: TurnRequestTarget = { kind: "thread-start" };
   const request = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.thread.environmentId,
     type: "client/turn/requested",
     input: args.input,
     execution: args.execution,
-    initiator: args.thread.type === "manager" ? "system" : "user",
+    initiator,
     requestMethod: "thread/start",
     source: "spawn",
-    target: { kind: "thread-start" },
+    target,
+  });
+  recordAcceptedPromptHistoryEntry(deps, {
+    thread: args.thread,
+    input: args.input,
+    initiator,
+    target,
+    requestSequence: request.sequence,
   });
   appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.thread.environmentId,
     type: "client/thread/start",
-    initiator: args.thread.type === "manager" ? "system" : "user",
+    initiator,
     requestMethod: "thread/start",
     source: "spawn",
   });
@@ -195,6 +207,13 @@ export function requestThreadReprovision(
     requestMethod: "turn/start",
     source: "tell",
     target: { kind: "new-turn" },
+  });
+  recordAcceptedPromptHistoryEntry(deps, {
+    thread: args.thread,
+    input: args.input,
+    initiator: args.initiator,
+    target: { kind: "new-turn" },
+    requestSequence: request.sequence,
   });
 
   const context = createReprovisioningContext({

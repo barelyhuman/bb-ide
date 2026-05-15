@@ -25,6 +25,7 @@ export {
   createManagerThreadNudgeId,
   createPendingInteractionId,
   createProjectId,
+  createPromptHistoryEntryId,
   createProjectSourceId,
   createSandboxProviderCredentialId,
   createThreadId,

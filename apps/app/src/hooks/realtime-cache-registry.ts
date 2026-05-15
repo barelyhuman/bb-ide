@@ -53,7 +53,7 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
       dirtyThreadListQueries, // New thread can appear in project lists.
       dirtyThreadDetailQueries, // Detail may already be mounted after optimistic create/navigation.
       dirtyThreadTimelineQueries, // Creation can seed initial timeline rows.
-      dirtyProjectPromptHistoryQueries, // Prompt history is derived from project threads.
+      dirtyProjectPromptHistoryQueries, // Project thread changes can hide or reveal stored prompt history.
     ],
   },
   "thread-deleted": {
@@ -194,7 +194,7 @@ export const REALTIME_PROJECT_CHANGE_REGISTRY = {
   "threads-changed": {
     dirty: [
       dirtyProjectListQueries, // Sidebar bootstrap includes thread membership per project.
-      dirtyProjectPromptHistoryQueries, // Prompt history is derived from project threads.
+      dirtyProjectPromptHistoryQueries, // Project thread changes can hide or reveal stored prompt history.
     ],
   },
   "automations-changed": {
