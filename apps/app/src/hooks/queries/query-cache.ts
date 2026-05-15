@@ -128,10 +128,11 @@ function isArchivedThreadsListFilters(
     return false;
   }
   if (
-    !("managed" in candidate) ||
-    (candidate.managed !== "all" &&
-      candidate.managed !== "managed" &&
-      candidate.managed !== "unmanaged")
+    !("kind" in candidate) ||
+    (candidate.kind !== "all" &&
+      candidate.kind !== "manager" &&
+      candidate.kind !== "managed" &&
+      candidate.kind !== "unmanaged")
   ) {
     return false;
   }

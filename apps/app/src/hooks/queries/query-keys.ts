@@ -57,11 +57,15 @@ export interface ThreadListQueryFilters {
   archived: boolean;
 }
 
-export type ArchivedThreadsManagedFilter = "all" | "managed" | "unmanaged";
+export type ArchivedThreadsKindFilter =
+  | "all"
+  | "manager"
+  | "managed"
+  | "unmanaged";
 
 export interface ArchivedThreadsListFilters {
   projectId: string;
-  managed: ArchivedThreadsManagedFilter;
+  kind: ArchivedThreadsKindFilter;
 }
 
 export const ARCHIVED_THREADS_LIST_KIND = "archivedList";

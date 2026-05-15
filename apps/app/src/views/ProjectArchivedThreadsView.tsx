@@ -8,31 +8,38 @@ import { Pill } from "@/components/ui/pill.js";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useArchivedThreads } from "@/hooks/queries/thread-queries";
-import type { ArchivedThreadsManagedFilter } from "@/hooks/queries/query-keys";
+import type { ArchivedThreadsKindFilter } from "@/hooks/queries/query-keys";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 
 interface FilterOption {
-  value: ArchivedThreadsManagedFilter;
+  value: ArchivedThreadsKindFilter;
   label: string;
 }
 
 const FILTER_OPTIONS: readonly FilterOption[] = [
-  { value: "all", label: "All threads" },
-  { value: "unmanaged", label: "Unmanaged" },
+  { value: "all", label: "All" },
+  { value: "manager", label: "Managers" },
   { value: "managed", label: "Managed" },
+  { value: "unmanaged", label: "Unmanaged" },
 ];
 
-function isManagedThread(thread: ThreadListEntry): boolean {
-  return thread.parentThreadId !== null;
+type ArchivedThreadPillLabel = "managed" | "manager";
+
+function getArchivedThreadPillLabel(
+  thread: ThreadListEntry,
+): ArchivedThreadPillLabel | null {
+  if (thread.type === "manager") return "manager";
+  if (thread.parentThreadId !== null) return "managed";
+  return null;
 }
 
 export function ProjectArchivedThreadsView() {
   const { projectId } = useParams<{ projectId: string }>();
-  const [managedFilter, setManagedFilter] =
-    useState<ArchivedThreadsManagedFilter>("all");
+  const [kindFilter, setKindFilter] =
+    useState<ArchivedThreadsKindFilter>("all");
   const archivedThreadsQuery = useArchivedThreads({
     projectId,
-    managed: managedFilter,
+    kind: kindFilter,
   });
   const unarchiveThread = useUnarchiveThread();
 
@@ -67,7 +74,7 @@ export function ProjectArchivedThreadsView() {
             aria-label="Filter archived threads"
           >
             {FILTER_OPTIONS.map((option) => {
-              const isActive = managedFilter === option.value;
+              const isActive = kindFilter === option.value;
               return (
                 <Button
                   key={option.value}
@@ -77,8 +84,8 @@ export function ProjectArchivedThreadsView() {
                   role="tab"
                   aria-selected={isActive}
                   aria-pressed={isActive}
-                  className="h-7 rounded-md px-3 text-xs font-medium text-muted-foreground"
-                  onClick={() => setManagedFilter(option.value)}
+                  className="h-7 rounded-md px-2 text-xs font-medium text-muted-foreground sm:px-3"
+                  onClick={() => setKindFilter(option.value)}
                 >
                   {option.label}
                 </Button>
@@ -98,39 +105,42 @@ export function ProjectArchivedThreadsView() {
             </p>
           ) : (
             <div className="space-y-1">
-              {archivedThreads.map((thread) => (
-                <div
-                  key={thread.id}
-                  className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-state-hover"
-                >
-                  <Link
-                    to={`/projects/${projectId}/threads/${thread.id}`}
-                    className="min-w-0 flex-1"
+              {archivedThreads.map((thread) => {
+                const pillLabel = getArchivedThreadPillLabel(thread);
+                return (
+                  <div
+                    key={thread.id}
+                    className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-state-hover"
                   >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate">
-                        {getThreadDisplayTitle(thread)}
+                    <Link
+                      to={`/projects/${projectId}/threads/${thread.id}`}
+                      className="min-w-0 flex-1"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">
+                          {getThreadDisplayTitle(thread)}
+                        </span>
+                        {pillLabel ? (
+                          <Pill variant="secondary" className="shrink-0">
+                            {pillLabel}
+                          </Pill>
+                        ) : null}
                       </span>
-                      {isManagedThread(thread) ? (
-                        <Pill variant="secondary" className="shrink-0">
-                          managed
-                        </Pill>
-                      ) : null}
-                    </span>
-                  </Link>
-                  <ThreadUnarchiveButton
-                    isPending={
-                      unarchiveThread.isPending &&
-                      unarchiveThread.variables?.id === thread.id
-                    }
-                    onUnarchive={() => {
-                      unarchiveThread.mutate({ id: thread.id });
-                    }}
-                    threadType={thread.type}
-                    className="hover:bg-accent-foreground/15"
-                  />
-                </div>
-              ))}
+                    </Link>
+                    <ThreadUnarchiveButton
+                      isPending={
+                        unarchiveThread.isPending &&
+                        unarchiveThread.variables?.id === thread.id
+                      }
+                      onUnarchive={() => {
+                        unarchiveThread.mutate({ id: thread.id });
+                      }}
+                      threadType={thread.type}
+                      className="hover:bg-accent-foreground/15"
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
 

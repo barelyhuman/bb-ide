@@ -182,7 +182,7 @@ describe("createRealtimeCacheEffects", () => {
       projectId: "project-1",
     });
     const firstProjectArchivedThreadListKey = archivedThreadsListQueryKey({
-      managed: "all",
+      kind: "all",
       projectId: "project-1",
     });
     const secondProjectThreadListKey = threadListQueryKey({

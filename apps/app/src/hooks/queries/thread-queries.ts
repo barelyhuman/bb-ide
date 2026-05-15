@@ -49,7 +49,7 @@ import {
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
   threadTimelineQueryKey,
-  type ArchivedThreadsManagedFilter,
+  type ArchivedThreadsKindFilter,
 } from "./query-keys";
 import { ARCHIVED_THREADS_PAGE_SIZE } from "./archived-threads-page-size";
 
@@ -93,24 +93,30 @@ function requireThreadId(id: string, hookName: string): string {
 
 export interface UseArchivedThreadsFilters {
   projectId: string | undefined;
-  managed: ArchivedThreadsManagedFilter;
+  kind: ArchivedThreadsKindFilter;
 }
 
-function archivedThreadsManagedToBoolean(
-  managed: ArchivedThreadsManagedFilter,
-): boolean | undefined {
-  if (managed === "managed") return true;
-  if (managed === "unmanaged") return false;
-  return undefined;
+interface ArchivedThreadsApiFilters {
+  managed?: boolean;
+  type?: ThreadListFilters["type"];
+}
+
+function archivedThreadsKindToApiFilters(
+  kind: ArchivedThreadsKindFilter,
+): ArchivedThreadsApiFilters {
+  if (kind === "manager") return { type: "manager" };
+  if (kind === "managed") return { managed: true, type: "standard" };
+  if (kind === "unmanaged") return { managed: false, type: "standard" };
+  return {};
 }
 
 export function useArchivedThreads(
   filters: UseArchivedThreadsFilters,
   options?: QueryOptions,
 ) {
-  const { projectId, managed } = filters;
+  const { projectId, kind } = filters;
   const enabled = (options?.enabled ?? true) && Boolean(projectId);
-  const managedBoolean = archivedThreadsManagedToBoolean(managed);
+  const apiFilters = archivedThreadsKindToApiFilters(kind);
 
   return useInfiniteQuery<
     ThreadListResponse,
@@ -121,14 +127,14 @@ export function useArchivedThreads(
   >({
     queryKey: archivedThreadsListQueryKey({
       projectId: projectId ?? "",
-      managed,
+      kind,
     }),
     queryFn: ({ pageParam, signal }) =>
       api.listThreads(
         {
           projectId: requireThreadId(projectId ?? "", "useArchivedThreads"),
           archived: true,
-          ...(managedBoolean !== undefined ? { managed: managedBoolean } : {}),
+          ...apiFilters,
           limit: ARCHIVED_THREADS_PAGE_SIZE,
           offset: pageParam,
         },
