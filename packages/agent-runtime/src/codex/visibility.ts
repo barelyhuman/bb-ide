@@ -11,7 +11,6 @@ import {
   getRecordProperty,
   getStringProperty,
   isRecord,
-  type StringRecord,
 } from "../shared/provider-visibility-helpers.js";
 import type { ServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
 
@@ -40,9 +39,7 @@ interface CodexNotificationRawEvent {
 }
 
 interface CodexMcpStartupStatusRawEvent {
-  error: StringRecord | null;
   kind: "mcp-startup-status";
-  status?: string;
 }
 
 interface CodexRemoteControlStatusRawEvent {
@@ -176,11 +173,8 @@ function isCodexServerNotificationMethod(
 
 function parseCodexRawEvent(event: JsonRpcMessage): CodexRawEvent {
   if (event.method === "mcpServer/startupStatus/updated") {
-    const params = isRecord(event.params) ? event.params : null;
     return {
       kind: "mcp-startup-status",
-      status: params ? getStringProperty(params, "status") : undefined,
-      error: params ? getRecordProperty(params, "error") : null,
     };
   }
 
@@ -209,13 +203,7 @@ function describeParsedCodexRawEvent(
 ): ProviderRawEventDescription {
   switch (event.kind) {
     case "mcp-startup-status":
-      if (
-        (event.status === "starting" || event.status === "ready") &&
-        event.error === null
-      ) {
-        return { kind: "mcpServer/startupStatus/updated", coverage: "noise" };
-      }
-      return { kind: "mcpServer/startupStatus/updated", coverage: "unknown" };
+      return { kind: "mcpServer/startupStatus/updated", coverage: "noise" };
 
     case "remote-control-status":
       return { kind: "remoteControl/status/changed", coverage: "noise" };

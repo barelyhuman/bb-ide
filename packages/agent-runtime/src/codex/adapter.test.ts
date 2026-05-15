@@ -3758,6 +3758,31 @@ describe("codex provider adapter", () => {
     );
   });
 
+  it("translateEvent ignores MCP startup status updates", () => {
+    const adapter = createCodexProviderAdapter();
+    const failedEvents = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "mcpServer/startupStatus/updated",
+      params: {
+        name: "codex_apps",
+        status: "failed",
+        error: "MCP client failed to start",
+      },
+    });
+    const readyEvents = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "mcpServer/startupStatus/updated",
+      params: {
+        name: "codex_apps",
+        status: "ready",
+        error: null,
+      },
+    });
+
+    expect(failedEvents).toEqual([]);
+    expect(readyEvents).toEqual([]);
+  });
+
   // -- translateEvent: unknown events --------------------------------------
 
   it("translateEvent returns empty for unhandled codex events", () => {

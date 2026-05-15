@@ -325,4 +325,38 @@ describe("provider registry", () => {
       coverage: "normalized",
     });
   });
+
+  it("classifies Codex MCP startup status updates as noise", () => {
+    const codex = getProviderVisibilityMetadata("codex");
+
+    expect(
+      codex.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "mcpServer/startupStatus/updated",
+        params: {
+          name: "codex_apps",
+          status: "failed",
+          error: "MCP client failed to start",
+        },
+      }),
+    ).toEqual({
+      kind: "mcpServer/startupStatus/updated",
+      coverage: "noise",
+    });
+
+    expect(
+      codex.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "mcpServer/startupStatus/updated",
+        params: {
+          name: "codex_apps",
+          status: "ready",
+          error: null,
+        },
+      }),
+    ).toEqual({
+      kind: "mcpServer/startupStatus/updated",
+      coverage: "noise",
+    });
+  });
 });
