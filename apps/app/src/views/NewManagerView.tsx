@@ -254,16 +254,17 @@ export function NewManagerForm({
     [providers],
   );
 
+  const providerIdForLabel = selectedProvider?.id;
   const modelOptions = useMemo(
     (): readonly PickerOption<string>[] =>
       models.map((model) => ({
         value: model.model,
         label: formatModelLabel(
           model.displayName || model.model,
-          selectedProvider?.id,
+          providerIdForLabel,
         ),
       })),
-    [models, selectedProvider],
+    [models, providerIdForLabel],
   );
 
   useEffect(() => {
