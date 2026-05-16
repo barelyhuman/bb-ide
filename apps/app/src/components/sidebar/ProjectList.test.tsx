@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
@@ -21,8 +28,9 @@ import {
 } from "@/hooks/queries/query-keys";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { SidebarMenuItem } from "@/components/ui/sidebar.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProjectList } from "./ProjectList";
+import { ProjectList, ProjectListShell } from "./ProjectList";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket: FakeSocket } =
@@ -166,6 +174,28 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
+  it("keeps project creation behind the project options menu", async () => {
+    const onNewProject = vi.fn();
+
+    render(
+      <ProjectListShell onNewProject={onNewProject}>
+        <SidebarMenuItem>Project row</SidebarMenuItem>
+      </ProjectListShell>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Project options" });
+    expect(trigger.querySelector('[data-icon="MoreHorizontal"]')).toBeTruthy();
+    expect(trigger.querySelector('[data-icon="Plus"]')).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Add project" })).toBeNull();
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Add project" }),
+    );
+
+    await waitFor(() => expect(onNewProject).toHaveBeenCalledTimes(1));
+  });
+
   it("primes project and thread-list caches from the sidebar bootstrap", async () => {
     let includeProjectRequestCount = 0;
     let leanProjectRequestCount = 0;

@@ -34,6 +34,12 @@ import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
 import { OverflowFade } from "@/components/ui/overflow-fade.js";
@@ -68,6 +74,11 @@ export interface ProjectListActionButtonsProps {
 interface ProjectListSectionLabelProps {
   onNewProject?: () => void;
   isCreatingProject?: boolean;
+}
+
+interface ProjectListSectionOptionsProps {
+  onNewProject: () => void;
+  isCreatingProject: boolean;
 }
 
 interface ProjectListShellProps {
@@ -176,6 +187,46 @@ function getProjectThreadListState({
   }
 }
 
+function ProjectListSectionOptions({
+  onNewProject,
+  isCreatingProject,
+}: ProjectListSectionOptionsProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="Project options"
+          aria-label="Project options"
+          className={cn(
+            "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
+            COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
+          )}
+        >
+          <Icon
+            name="MoreHorizontal"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
+          />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-40"
+        mobileTitle="Project options"
+      >
+        <DropdownMenuItem
+          disabled={isCreatingProject}
+          onSelect={() => {
+            window.setTimeout(onNewProject, 0);
+          }}
+        >
+          Add project
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function ProjectListSectionLabel({
   onNewProject,
   isCreatingProject = false,
@@ -184,19 +235,10 @@ function ProjectListSectionLabel({
     <SidebarStickyTier tier="label" className="justify-between pr-1">
       Projects
       {onNewProject ? (
-        <button
-          type="button"
-          onClick={onNewProject}
-          disabled={isCreatingProject}
-          title={isCreatingProject ? "Creating project..." : "Add project"}
-          aria-label="Add project"
-          className={cn(
-            "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
-            COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
-          )}
-        >
-          <Icon name="Plus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
-        </button>
+        <ProjectListSectionOptions
+          onNewProject={onNewProject}
+          isCreatingProject={isCreatingProject}
+        />
       ) : null}
       <OverflowFade placement="below" tone="sidebar" size="sm" />
     </SidebarStickyTier>

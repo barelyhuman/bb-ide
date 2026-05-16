@@ -28,7 +28,7 @@ describe("ProjectPathDialog", () => {
     fireEvent.change(screen.getByLabelText("Project path"), {
       target: { value: "relative/path" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add project" }));
 
     expect(
       screen.getByText("Project path must be an absolute path."),

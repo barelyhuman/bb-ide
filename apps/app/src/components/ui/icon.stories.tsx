@@ -55,13 +55,13 @@ const USAGE: Partial<Record<IconName, string>> = {
   Mic: "Voice toggle in prompt",
   Minimize2: "Exit zen mode (prompt collapse)",
   MoreHorizontal:
-    "Triple-dot actions menu trigger (projects, threads, project sources, hosts)",
+    "Triple-dot actions menu trigger (project list, projects, threads, project sources, hosts)",
   PanelBottom: "Toggle secondary panel as bottom drawer (compact viewport)",
   PanelLeft: "Sidebar toggle (desktop / fine pointer)",
   PanelRight:
     "Toggle secondary panel (desktop / non-drawer; resolved via togglePanelIconName)",
   Paperclip: "Attach files button",
-  Plus: "New project button, “new branch” option in branch picker",
+  Plus: "New host button, new terminal button, “new branch” option in branch picker",
   RotateCcw: "Retry button when fetching timeline turn details fails",
   Rows2: "Git diff toolbar “unified view”",
   Search: "Picker search inputs, file tree search, branch picker filter",

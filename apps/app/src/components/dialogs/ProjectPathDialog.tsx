@@ -77,7 +77,7 @@ interface PlatformCopy {
 function getDialogTitle(kind: ProjectPathDialogTarget["kind"]): string {
   switch (kind) {
     case "create":
-      return "Create project";
+      return "Add project";
     case "update":
       return "Update project path";
     case "add-source":
@@ -88,7 +88,7 @@ function getDialogTitle(kind: ProjectPathDialogTarget["kind"]): string {
 function getDialogSubmitLabel(kind: ProjectPathDialogTarget["kind"]): string {
   switch (kind) {
     case "create":
-      return "Create project";
+      return "Add project";
     case "update":
       return "Save path";
     case "add-source":
