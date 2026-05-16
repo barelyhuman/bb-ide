@@ -360,7 +360,7 @@ function renderMarkdownImage({
       {...imageAttributes}
       src={imageUrl}
       alt={typeof alt === "string" ? alt : "Image"}
-      className="my-2 max-h-96 max-w-full cursor-zoom-in rounded-md border border-border/60 object-contain"
+      className="my-2 max-h-96 max-w-full cursor-zoom-in object-contain"
       loading="lazy"
       onClick={() => setExpandedImageIndex(imageIndex >= 0 ? imageIndex : 0)}
     />
