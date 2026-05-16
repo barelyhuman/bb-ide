@@ -3,6 +3,7 @@ import { events, getThread, threads } from "@bb/db";
 import { threadScope, turnScope } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  appendClientTurnEvent,
   appendThreadEvent,
   appendThreadEventInTransaction,
   appendThreadEventsInTransaction,
@@ -307,6 +308,99 @@ describe("thread event appends", () => {
           eventTypes: ["system/manager/user_message"],
           projectId: thread.projectId,
         },
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("advances lastReadAt and notifies read-state-changed for a user-initiated turn request", async () => {
+    const { environment, harness, thread } =
+      await createThreadEventTestContext({ threadType: "manager" });
+    try {
+      harness.db
+        .update(threads)
+        .set({
+          lastReadAt: 1_000,
+          latestAttentionAt: 1_000,
+          updatedAt: 1_000,
+        })
+        .where(eq(threads.id, thread.id))
+        .run();
+      vi.spyOn(Date, "now").mockReturnValue(2_000);
+      const notifyThreadSpy = vi.spyOn(harness.deps.hub, "notifyThread");
+
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "kick off the audit" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          serviceTier: "default",
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+        requestMethod: "turn/start",
+        source: "tell",
+      });
+
+      expect(getThread(harness.db, thread.id)?.lastReadAt).toBe(2_000);
+      expect(notifyThreadSpy).toHaveBeenCalledWith(
+        thread.id,
+        ["events-appended", "read-state-changed"],
+        {
+          eventTypes: ["client/turn/requested"],
+          projectId: thread.projectId,
+        },
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not advance lastReadAt for an agent-initiated turn request", async () => {
+    const { environment, harness, thread } =
+      await createThreadEventTestContext({ threadType: "manager" });
+    try {
+      harness.db
+        .update(threads)
+        .set({
+          lastReadAt: 1_000,
+          latestAttentionAt: 1_000,
+          updatedAt: 1_000,
+        })
+        .where(eq(threads.id, thread.id))
+        .run();
+      vi.spyOn(Date, "now").mockReturnValue(2_000);
+      const notifyThreadSpy = vi.spyOn(harness.deps.hub, "notifyThread");
+
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "agent handoff" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          serviceTier: "default",
+          source: "client/turn/requested",
+        },
+        initiator: "agent",
+        requestMethod: "turn/start",
+        source: "tell",
+      });
+
+      expect(getThread(harness.db, thread.id)?.lastReadAt).toBe(1_000);
+      expect(notifyThreadSpy).toHaveBeenCalledWith(
+        thread.id,
+        ["events-appended"],
+        { eventTypes: ["client/turn/requested"] },
       );
     } finally {
       await harness.cleanup();

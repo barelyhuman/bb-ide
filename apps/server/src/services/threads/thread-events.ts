@@ -9,6 +9,7 @@ import {
   listStoredTurnStartedKeys,
   markThreadAttentionRequested,
   noopNotifier,
+  updateThread,
   type StoredTurnRequestEventRow,
 } from "@bb/db";
 import {
@@ -228,24 +229,24 @@ function buildClientTurnRequestedEventData(
 
 type AppendClientTurnEvent = (args: AppendThreadEventArgs) => number;
 
-interface ManagerUserMessageAttentionResult {
-  attentionChanged: boolean;
+interface ThreadReadStateUpdate {
+  changed: boolean;
   projectId: string;
   threadId: string;
 }
 
 interface AppendThreadEventTransactionResult {
-  attentionResult: ManagerUserMessageAttentionResult | null;
+  readStateUpdate: ThreadReadStateUpdate | null;
   sequence: number;
 }
 
 interface AppendThreadEventsTransactionResult {
-  attentionResults: readonly ManagerUserMessageAttentionResult[];
+  readStateUpdates: readonly ThreadReadStateUpdate[];
   sequences: number[];
 }
 
 interface BuildAppendThreadEventNotificationMetadataArgs {
-  attentionResult: ManagerUserMessageAttentionResult | null;
+  readStateUpdate: ThreadReadStateUpdate | null;
   eventType: ThreadEventType;
 }
 
@@ -286,16 +287,19 @@ function appendBuiltClientTurnEvent(
   }
 }
 
-function isManagerUserMessageAttentionResult(
-  result: ManagerUserMessageAttentionResult | null,
-): result is ManagerUserMessageAttentionResult {
+function isThreadReadStateUpdate(
+  result: ThreadReadStateUpdate | null,
+): result is ThreadReadStateUpdate {
   return result !== null;
 }
 
-function requestManagerUserMessageAttentionInTransaction(
+// `system/manager/user_message` is the manager's outbound message to the user
+// (via the `message_user` tool). It advances `latestAttentionAt` so the
+// sidebar and the manager unread divider can mark the message as new.
+function applyManagerAttentionForEvent(
   db: DbTransaction,
   args: AppendThreadEventArgs,
-): ManagerUserMessageAttentionResult | null {
+): ThreadReadStateUpdate | null {
   if (args.type !== "system/manager/user_message") {
     return null;
   }
@@ -309,11 +313,52 @@ function requestManagerUserMessageAttentionInTransaction(
   }
 
   return {
-    attentionChanged:
+    changed:
       updatedThread.latestAttentionAt !== previousThread.latestAttentionAt,
     projectId: updatedThread.projectId,
     threadId: updatedThread.id,
   };
+}
+
+// A user-initiated turn request implies the user has eyes on the thread, so
+// `lastReadAt` advances alongside the event. Without this, the manager
+// unread divider would later be placed against a stale read floor — the
+// user's own message would land past the cutoff when the manager eventually
+// replies and re-arms the snapshot.
+function applyUserTurnReadForEvent(
+  db: DbTransaction,
+  args: AppendThreadEventArgs,
+): ThreadReadStateUpdate | null {
+  if (args.type !== "client/turn/requested") {
+    return null;
+  }
+  if (args.data.initiator !== "user") {
+    return null;
+  }
+
+  const previousThread = getThread(db, args.threadId);
+  const updatedThread = updateThread(db, noopNotifier, args.threadId, {
+    lastReadAt: Date.now(),
+  });
+  if (!previousThread || !updatedThread) {
+    return null;
+  }
+
+  return {
+    changed: updatedThread.lastReadAt !== previousThread.lastReadAt,
+    projectId: updatedThread.projectId,
+    threadId: updatedThread.id,
+  };
+}
+
+function applyReadStateUpdateForEvent(
+  db: DbTransaction,
+  args: AppendThreadEventArgs,
+): ThreadReadStateUpdate | null {
+  return (
+    applyManagerAttentionForEvent(db, args) ??
+    applyUserTurnReadForEvent(db, args)
+  );
 }
 
 function appendThreadEventsInTransactionWithAttention(
@@ -322,13 +367,11 @@ function appendThreadEventsInTransactionWithAttention(
 ): AppendThreadEventsTransactionResult {
   assertStoredTurnStartedForEvents(db, args);
   const sequences = appendStoredThreadEventsInTransaction(db, args);
-  const attentionResults = args
-    .map((eventArgs) =>
-      requestManagerUserMessageAttentionInTransaction(db, eventArgs),
-    )
-    .filter(isManagerUserMessageAttentionResult);
+  const readStateUpdates = args
+    .map((eventArgs) => applyReadStateUpdateForEvent(db, eventArgs))
+    .filter(isThreadReadStateUpdate);
 
-  return { attentionResults, sequences };
+  return { readStateUpdates, sequences };
 }
 
 function appendThreadEventInTransactionWithAttention(
@@ -342,30 +385,30 @@ function appendThreadEventInTransactionWithAttention(
   }
 
   return {
-    attentionResult: result.attentionResults[0] ?? null,
+    readStateUpdate: result.readStateUpdates[0] ?? null,
     sequence,
   };
 }
 
 function buildAppendThreadEventNotificationChanges(
-  attentionResult: ManagerUserMessageAttentionResult | null,
+  readStateUpdate: ThreadReadStateUpdate | null,
 ): ThreadChangeKind[] {
   const changes: ThreadChangeKind[] = ["events-appended"];
-  if (attentionResult?.attentionChanged === true) {
+  if (readStateUpdate?.changed === true) {
     changes.push("read-state-changed");
   }
   return changes;
 }
 
 function buildAppendThreadEventNotificationMetadata({
-  attentionResult,
+  readStateUpdate,
   eventType,
 }: BuildAppendThreadEventNotificationMetadataArgs): ThreadChangeMetadata {
   const metadata: ThreadChangeMetadata = {
     eventTypes: [eventType],
   };
-  if (attentionResult?.attentionChanged === true) {
-    metadata.projectId = attentionResult.projectId;
+  if (readStateUpdate?.changed === true) {
+    metadata.projectId = readStateUpdate.projectId;
   }
   return metadata;
 }
@@ -463,9 +506,9 @@ export function appendThreadEvent(
   );
   deps.hub.notifyThread(
     args.threadId,
-    buildAppendThreadEventNotificationChanges(result.attentionResult),
+    buildAppendThreadEventNotificationChanges(result.readStateUpdate),
     buildAppendThreadEventNotificationMetadata({
-      attentionResult: result.attentionResult,
+      readStateUpdate: result.readStateUpdate,
       eventType: args.type,
     }),
   );
