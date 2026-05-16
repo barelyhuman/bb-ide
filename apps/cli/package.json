@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "bb": "./bin/bb"
+    "bb": "./bin/bb",
+    "title": "./bin/title"
   },
   "scripts": {
     "build": "node ../../scripts/build-node-entry.mjs src/index.ts dist/index.js --clean-dist --templates",

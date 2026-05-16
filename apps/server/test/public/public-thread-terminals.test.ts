@@ -4,6 +4,7 @@ import {
   listTerminalSessionsByThread,
   markDaemonTerminalSessionsDisconnected,
   markEnvironmentTerminalSessionsExited,
+  markTerminalSessionExited,
   markThreadDeleted,
   markThreadTerminalSessionsExited,
 } from "@bb/db";
@@ -246,6 +247,23 @@ describe("public thread terminal routes", () => {
       status: "running",
       threadId: fixture.thread.id,
       title: "Terminal 1",
+    });
+    const exited = createTerminalSession(fixture.harness.db, {
+      cols: 120,
+      currentCwd: null,
+      daemonSessionId: fixture.session.id,
+      environmentId: fixture.environment.id,
+      hostId: fixture.host.id,
+      initialCwd: fixture.environment.path ?? "/tmp/terminal-workspace",
+      rows: 32,
+      status: "running",
+      threadId: fixture.thread.id,
+      title: "Terminal 2",
+    });
+    markTerminalSessionExited(fixture.harness.db, {
+      terminalId: exited.id,
+      exitCode: 0,
+      closeReason: "user",
     });
 
     const response = await fixture.harness.app.request(

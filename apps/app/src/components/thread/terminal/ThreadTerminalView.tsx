@@ -1,18 +1,74 @@
 import { useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
-import type { Terminal as XTermTerminal } from "@xterm/xterm";
+import type { ITheme, Terminal as XTermTerminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { TerminalServerMessage, TerminalSession } from "@bb/server-contract";
 import { terminalServerMessageSchema } from "@bb/server-contract";
+import { usePreferredTheme } from "@/hooks/useTheme";
 import { buildTerminalWebSocketUrl } from "./terminal-websocket-url";
 
 const TERMINAL_FONT_FAMILY =
   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
 
+function readResolvedCssColor(
+  probe: HTMLElement,
+  varName: string,
+): string | undefined {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName)
+    .trim();
+  if (!raw) {
+    return undefined;
+  }
+  probe.style.color = raw;
+  return getComputedStyle(probe).color;
+}
+
+function buildTerminalTheme(): ITheme {
+  if (typeof document === "undefined") {
+    return {};
+  }
+  const probe = document.createElement("span");
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  document.body.appendChild(probe);
+  const get = (name: string) => readResolvedCssColor(probe, name);
+  const theme: ITheme = {
+    background: get("--background"),
+    foreground: get("--foreground"),
+    cursor: get("--foreground"),
+    cursorAccent: get("--background"),
+    selectionBackground: get("--muted"),
+    black: get("--ansi-0"),
+    red: get("--ansi-1"),
+    green: get("--ansi-2"),
+    yellow: get("--ansi-3"),
+    blue: get("--ansi-4"),
+    magenta: get("--ansi-5"),
+    cyan: get("--ansi-6"),
+    white: get("--ansi-7"),
+    brightBlack: get("--ansi-8"),
+    brightRed: get("--ansi-9"),
+    brightGreen: get("--ansi-10"),
+    brightYellow: get("--ansi-11"),
+    brightBlue: get("--ansi-12"),
+    brightMagenta: get("--ansi-13"),
+    brightCyan: get("--ansi-14"),
+    brightWhite: get("--ansi-15"),
+  };
+  probe.remove();
+  return theme;
+}
+
 interface ThreadTerminalViewProps {
+  onTitleChange?: TerminalTitleChangeHandler;
+  onUserInput?: () => void;
   session: TerminalSession;
   threadId: string;
 }
+
+type TerminalTitleChangeHandler = (title: string) => void;
 
 interface SendTerminalResizeArgs {
   socket: WebSocket;
@@ -22,6 +78,25 @@ interface SendTerminalResizeArgs {
 interface WriteTerminalStatusArgs {
   terminal: XTermTerminal;
   text: string;
+}
+
+interface TerminalOutputWriteArgs {
+  isReplay: boolean;
+  replayWriteState: TerminalReplayWriteState;
+  terminal: XTermTerminal;
+  text: string;
+}
+
+interface TerminalReplayWriteState {
+  suppressedWriteCount: number;
+}
+
+interface HandleTerminalServerMessageArgs {
+  message: TerminalServerMessage;
+  replayNextSeq: number | null;
+  replayWriteState: TerminalReplayWriteState;
+  setReplayNextSeq: (nextSeq: number) => void;
+  terminal: XTermTerminal;
 }
 
 function encodeUtf8Base64(value: string): string {
@@ -62,17 +137,44 @@ function writeTerminalStatus({ terminal, text }: WriteTerminalStatusArgs): void 
   terminal.write(`\r\n\x1b[2m${text}\x1b[0m\r\n`);
 }
 
-function handleTerminalServerMessage(
-  terminal: XTermTerminal,
-  message: TerminalServerMessage,
-): void {
+function writeTerminalOutput({
+  isReplay,
+  replayWriteState,
+  terminal,
+  text,
+}: TerminalOutputWriteArgs): void {
+  if (!isReplay) {
+    terminal.write(text);
+    return;
+  }
+
+  replayWriteState.suppressedWriteCount += 1;
+  terminal.write(text, () => {
+    replayWriteState.suppressedWriteCount -= 1;
+  });
+}
+
+function handleTerminalServerMessage({
+  message,
+  replayNextSeq,
+  replayWriteState,
+  setReplayNextSeq,
+  terminal,
+}: HandleTerminalServerMessageArgs): void {
   switch (message.type) {
     case "attached":
+      setReplayNextSeq(message.nextSeq);
+      return;
     case "pong":
     case "session-updated":
       return;
     case "output":
-      terminal.write(decodeUtf8Base64(message.chunk.dataBase64));
+      writeTerminalOutput({
+        isReplay: replayNextSeq !== null && message.chunk.seq < replayNextSeq,
+        replayWriteState,
+        terminal,
+        text: decodeUtf8Base64(message.chunk.dataBase64),
+      });
       return;
     case "error":
       writeTerminalStatus({
@@ -93,10 +195,21 @@ function handleTerminalServerMessage(
 }
 
 export function ThreadTerminalView({
+  onTitleChange,
+  onUserInput,
   session,
   threadId,
 }: ThreadTerminalViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<XTermTerminal | null>(null);
+  const onTitleChangeRef = useRef<TerminalTitleChangeHandler | undefined>(
+    onTitleChange,
+  );
+  const onUserInputRef = useRef<(() => void) | undefined>(onUserInput);
+  const preferredTheme = usePreferredTheme();
+
+  onTitleChangeRef.current = onTitleChange;
+  onUserInputRef.current = onUserInput;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -108,6 +221,10 @@ export function ThreadTerminalView({
     let socket: WebSocket | null = null;
     let terminal: XTermTerminal | null = null;
     let fitAddon: FitAddon | null = null;
+    let replayNextSeq: number | null = null;
+    const replayWriteState: TerminalReplayWriteState = {
+      suppressedWriteCount: 0,
+    };
     let resizeObserver: ResizeObserver | null = null;
 
     async function mountTerminal(containerElement: HTMLDivElement): Promise<void> {
@@ -131,13 +248,9 @@ export function ThreadTerminalView({
         fontFamily: TERMINAL_FONT_FAMILY,
         fontSize: 12,
         scrollback: 10_000,
-        theme: {
-          background: "#0b0d10",
-          foreground: "#e5e7eb",
-          cursor: "#f8fafc",
-          selectionBackground: "#334155",
-        },
+        theme: buildTerminalTheme(),
       });
+      terminalRef.current = terminal;
       fitAddon = new LoadedFitAddon();
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(new WebLinksAddon());
@@ -173,7 +286,15 @@ export function ThreadTerminalView({
         if (!result.success) {
           return;
         }
-        handleTerminalServerMessage(activeTerminal, result.data);
+        handleTerminalServerMessage({
+          message: result.data,
+          replayNextSeq,
+          replayWriteState,
+          setReplayNextSeq: (nextSeq) => {
+            replayNextSeq = nextSeq;
+          },
+          terminal: activeTerminal,
+        });
       };
       activeSocket.onclose = () => {
         if (!disposed) {
@@ -184,15 +305,25 @@ export function ThreadTerminalView({
         }
       };
       activeTerminal.onData((data) => {
+        if (replayWriteState.suppressedWriteCount > 0) {
+          return;
+        }
         if (activeSocket.readyState !== WebSocket.OPEN) {
           return;
         }
+        onUserInputRef.current?.();
         activeSocket.send(
           JSON.stringify({
             type: "input",
             dataBase64: encodeUtf8Base64(data),
           }),
         );
+      });
+      activeTerminal.onTitleChange((title) => {
+        if (replayWriteState.suppressedWriteCount > 0) {
+          return;
+        }
+        onTitleChangeRef.current?.(title);
       });
 
       resizeObserver = new ResizeObserver(() => {
@@ -220,13 +351,22 @@ export function ThreadTerminalView({
       resizeObserver?.disconnect();
       socket?.close();
       terminal?.dispose();
+      terminalRef.current = null;
     };
   }, [session.id, threadId]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+    terminal.options.theme = buildTerminalTheme();
+  }, [preferredTheme]);
 
   return (
     <div
       ref={containerRef}
-      className="h-full min-h-0 w-full overflow-hidden bg-[#0b0d10] p-2"
+      className="h-full min-h-0 w-full overflow-hidden bg-background p-2"
     />
   );
 }

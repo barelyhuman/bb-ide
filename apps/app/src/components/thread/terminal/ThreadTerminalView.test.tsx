@@ -6,14 +6,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadTerminalView } from "./ThreadTerminalView";
 
 type TerminalDataHandler = (data: string) => void;
+type TerminalTitleHandler = (title: string) => void;
+type TerminalWriteCallback = () => void;
 
 const xtermMocks = vi.hoisted(() => {
   class MockTerminal {
     static instances: MockTerminal[] = [];
 
     readonly onDataHandlers: TerminalDataHandler[] = [];
-    readonly write = vi.fn();
+    readonly onTitleChangeHandlers: TerminalTitleHandler[] = [];
+    readonly write = vi.fn((_: string, callback?: TerminalWriteCallback) => {
+      const data = this.dataDuringNextWrite;
+      const title = this.titleDuringNextWrite;
+      this.dataDuringNextWrite = null;
+      this.titleDuringNextWrite = null;
+      if (data !== null) {
+        this.emitData(data);
+      }
+      if (title !== null) {
+        this.emitTitle(title);
+      }
+      callback?.();
+    });
     readonly dispose = vi.fn();
+    dataDuringNextWrite: string | null = null;
+    titleDuringNextWrite: string | null = null;
     cols = 80;
     rows = 24;
 
@@ -29,9 +46,19 @@ const xtermMocks = vi.hoisted(() => {
       this.onDataHandlers.push(handler);
     }
 
+    onTitleChange(handler: TerminalTitleHandler): void {
+      this.onTitleChangeHandlers.push(handler);
+    }
+
     emitData(data: string): void {
       for (const handler of this.onDataHandlers) {
         handler(data);
+      }
+    }
+
+    emitTitle(title: string): void {
+      for (const handler of this.onTitleChangeHandlers) {
+        handler(title);
       }
     }
   }
@@ -138,8 +165,13 @@ afterEach(() => {
 
 describe("ThreadTerminalView", () => {
   it("sends xterm input to the terminal websocket", async () => {
+    const onUserInput = vi.fn();
     render(
-      <ThreadTerminalView session={terminalSession} threadId="thr_test" />,
+      <ThreadTerminalView
+        onUserInput={onUserInput}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
     );
 
     await waitFor(() => {
@@ -165,6 +197,7 @@ describe("ThreadTerminalView", () => {
 
     terminal.emitData("pwd\n");
 
+    expect(onUserInput).toHaveBeenCalledTimes(1);
     expect(JSON.parse(socket.sentMessages[1] ?? "")).toEqual({
       type: "input",
       dataBase64: "cHdkCg==",
@@ -198,5 +231,179 @@ describe("ThreadTerminalView", () => {
     );
 
     expect(terminal.write).toHaveBeenCalledWith("hello\n");
+  });
+
+  it("reports xterm title changes", async () => {
+    const onTitleChange = vi.fn();
+    render(
+      <ThreadTerminalView
+        onTitleChange={onTitleChange}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+    });
+
+    const terminal = xtermMocks.MockTerminal.instances[0];
+    if (!terminal) {
+      throw new Error("Expected terminal instance");
+    }
+
+    terminal.emitTitle("X");
+
+    expect(onTitleChange).toHaveBeenCalledWith("X");
+  });
+
+  it("ignores title changes emitted while replaying scrollback", async () => {
+    const onTitleChange = vi.fn();
+    render(
+      <ThreadTerminalView
+        onTitleChange={onTitleChange}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeTerminalWebSocket.instances).toHaveLength(1);
+      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+    });
+
+    const socket = FakeTerminalWebSocket.instances[0];
+    const terminal = xtermMocks.MockTerminal.instances[0];
+    if (!socket || !terminal) {
+      throw new Error("Expected terminal websocket and xterm instances");
+    }
+
+    socket.receive(
+      JSON.stringify({
+        type: "attached",
+        session: terminalSession,
+        nextSeq: 1,
+      }),
+    );
+    terminal.titleDuringNextWrite = "~/Projects/bb";
+    socket.receive(
+      JSON.stringify({
+        type: "output",
+        chunk: {
+          seq: 0,
+          dataBase64: "Zm9vCg==",
+        },
+      }),
+    );
+    terminal.emitTitle("foo");
+
+    expect(onTitleChange).toHaveBeenCalledTimes(1);
+    expect(onTitleChange).toHaveBeenCalledWith("foo");
+  });
+
+  it("does not send xterm-generated data while replaying scrollback", async () => {
+    const onUserInput = vi.fn();
+    render(
+      <ThreadTerminalView
+        onUserInput={onUserInput}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeTerminalWebSocket.instances).toHaveLength(1);
+      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+    });
+
+    const socket = FakeTerminalWebSocket.instances[0];
+    const terminal = xtermMocks.MockTerminal.instances[0];
+    if (!socket || !terminal) {
+      throw new Error("Expected terminal websocket and xterm instances");
+    }
+
+    socket.open();
+    socket.receive(
+      JSON.stringify({
+        type: "attached",
+        session: terminalSession,
+        nextSeq: 1,
+      }),
+    );
+    terminal.dataDuringNextWrite = "\x1b[?1;2c";
+    socket.receive(
+      JSON.stringify({
+        type: "output",
+        chunk: {
+          seq: 0,
+          dataBase64: "Zm9vCg==",
+        },
+      }),
+    );
+    terminal.emitData("pwd\n");
+
+    expect(onUserInput).toHaveBeenCalledTimes(1);
+    expect(socket.sentMessages.map((message) => JSON.parse(message))).toEqual([
+      {
+        type: "resize",
+        cols: 80,
+        rows: 24,
+      },
+      {
+        type: "input",
+        dataBase64: "cHdkCg==",
+      },
+    ]);
+  });
+
+  it("keeps the terminal mounted when callback props change", async () => {
+    const firstTitleChange = vi.fn();
+    const secondTitleChange = vi.fn();
+    const firstUserInput = vi.fn();
+    const secondUserInput = vi.fn();
+    const { rerender } = render(
+      <ThreadTerminalView
+        onTitleChange={firstTitleChange}
+        onUserInput={firstUserInput}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeTerminalWebSocket.instances).toHaveLength(1);
+      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+    });
+
+    const socket = FakeTerminalWebSocket.instances[0];
+    const terminal = xtermMocks.MockTerminal.instances[0];
+    if (!socket || !terminal) {
+      throw new Error("Expected terminal websocket and xterm instances");
+    }
+
+    socket.open();
+    rerender(
+      <ThreadTerminalView
+        onTitleChange={secondTitleChange}
+        onUserInput={secondUserInput}
+        session={{
+          ...terminalSession,
+          title: "Renamed terminal",
+          updatedAt: terminalSession.updatedAt + 1,
+        }}
+        threadId="thr_test"
+      />,
+    );
+
+    terminal.emitTitle("Renamed terminal");
+    terminal.emitData("pwd\n");
+
+    expect(FakeTerminalWebSocket.instances).toHaveLength(1);
+    expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+    expect(terminal.dispose).not.toHaveBeenCalled();
+    expect(firstTitleChange).not.toHaveBeenCalled();
+    expect(firstUserInput).not.toHaveBeenCalled();
+    expect(secondTitleChange).toHaveBeenCalledWith("Renamed terminal");
+    expect(secondUserInput).toHaveBeenCalledTimes(1);
   });
 });

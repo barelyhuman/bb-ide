@@ -9,7 +9,6 @@ import {
   AppPageHeader,
   HEADER_ICON_BUTTON_CLASS,
 } from "@/components/layout/AppPageHeader";
-import { cn } from "@/lib/utils";
 import type { ThreadGitActionDialogTarget } from "@/components/dialogs/ThreadGitActionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -22,6 +21,7 @@ interface ThreadHeaderGitAction {
 
 interface ThreadDetailHeaderProps {
   actionsMenu: ReactNode;
+  activeTerminalCount: number;
   isManagedThread: boolean;
   isManagerThread: boolean;
   isSecondaryPanelOpen: boolean;
@@ -38,6 +38,7 @@ interface ThreadDetailHeaderProps {
 
 export function ThreadDetailHeader({
   actionsMenu,
+  activeTerminalCount,
   isManagedThread,
   isManagerThread,
   isSecondaryPanelOpen,
@@ -94,13 +95,12 @@ export function ThreadDetailHeader({
           {primaryAction.label}
         </Button>
       ) : null}
-      {actionsMenu}
       {showTerminalPanelToggle ? (
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
+          className={`${HEADER_ICON_BUTTON_CLASS} relative`}
           aria-label={
             isTerminalPanelOpen ? "Hide terminal panel" : "Show terminal panel"
           }
@@ -110,15 +110,24 @@ export function ThreadDetailHeader({
           }
           onClick={onToggleTerminalPanel}
         >
-          <Icon name="PanelBottom" />
+          <Icon name="Terminal" />
+          {activeTerminalCount > 0 ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground"
+            >
+              {activeTerminalCount > 9 ? "9+" : activeTerminalCount}
+            </span>
+          ) : null}
         </Button>
       ) : null}
+      {actionsMenu}
       {!renderAsDrawer && isSecondaryPanelOpen ? null : (
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
+          className={HEADER_ICON_BUTTON_CLASS}
           aria-label={
             isSecondaryPanelOpen
               ? "Hide secondary panel"

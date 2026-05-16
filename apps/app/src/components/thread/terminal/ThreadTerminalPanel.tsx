@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { TerminalSession } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -6,9 +6,11 @@ import { Skeleton } from "@/components/ui/skeleton.js";
 import {
   useCloseThreadTerminal,
   useCreateThreadTerminal,
+  useRenameThreadTerminal,
   useThreadTerminals,
 } from "@/hooks/queries/thread-terminal-queries";
 import {
+  useSetThreadTerminalPanelOpen,
   useThreadTerminalPanelState,
   useUpdateThreadTerminalPanelState,
 } from "@/lib/thread-terminal-panel";
@@ -18,6 +20,9 @@ import { ThreadTerminalView } from "./ThreadTerminalView";
 const DEFAULT_TERMINAL_COLS = 100;
 const DEFAULT_TERMINAL_ROWS = 30;
 const EMPTY_TERMINAL_SESSIONS: readonly TerminalSession[] = [];
+const TERMINAL_TITLE_MAX_LENGTH = 200;
+const TERMINAL_TITLE_PATH_SEGMENT_COUNT = 3;
+const TERMINAL_TITLE_RENAME_DEBOUNCE_MS = 250;
 
 interface ThreadTerminalPanelProps {
   canCreateTerminal: boolean;
@@ -32,6 +37,99 @@ interface TerminalTabProps {
   session: TerminalSession;
 }
 
+interface StartTerminalArgs {
+  markUnused: boolean;
+}
+
+interface NormalizeTerminalTitleArgs {
+  title: string;
+}
+
+interface FormatTerminalPathTitleArgs {
+  path: string;
+}
+
+interface IsPathLikeTerminalTitlePathArgs {
+  path: string;
+}
+
+interface ParseShellPathTitleArgs {
+  title: string;
+}
+
+interface ShellPathTitleParts {
+  path: string;
+}
+
+interface TerminalTitleRenameRequest {
+  terminalId: string;
+  title: string;
+}
+
+type NormalizedTerminalTitle = string | null;
+type TerminalTitleChangeHandler = (title: string) => void;
+type TerminalTitleRenameTimeout = number;
+
+function isVisibleTerminalSession(session: TerminalSession): boolean {
+  return session.status !== "exited";
+}
+
+function normalizeTerminalTitle({
+  title,
+}: NormalizeTerminalTitleArgs): NormalizedTerminalTitle {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) {
+    return null;
+  }
+
+  const pathTitle = parseShellPathTitle({ title: trimmedTitle });
+  if (pathTitle !== null) {
+    return formatTerminalPathTitle({
+      path: pathTitle.path,
+    }).slice(0, TERMINAL_TITLE_MAX_LENGTH);
+  }
+
+  return trimmedTitle.slice(0, TERMINAL_TITLE_MAX_LENGTH);
+}
+
+function parseShellPathTitle({
+  title,
+}: ParseShellPathTitleArgs): ShellPathTitleParts | null {
+  const match = /^[^@\s:]+@[^:\s]+:(.+)$/u.exec(title);
+  const path = match?.[1];
+  if (!path || !isPathLikeTerminalTitlePath({ path })) {
+    return null;
+  }
+  return { path };
+}
+
+function isPathLikeTerminalTitlePath({
+  path,
+}: IsPathLikeTerminalTitlePathArgs): boolean {
+  return (
+    path === "~" ||
+    path === "." ||
+    path.startsWith("~/") ||
+    path.startsWith("/") ||
+    path.startsWith("./")
+  );
+}
+
+function formatTerminalPathTitle({
+  path,
+}: FormatTerminalPathTitleArgs): string {
+  if (path === "/" || path === "~" || path === ".") {
+    return path;
+  }
+
+  const segments = path.split("/").filter((segment) => segment.length > 0);
+  if (segments.length <= TERMINAL_TITLE_PATH_SEGMENT_COUNT) {
+    return path;
+  }
+
+  return `.../${segments.slice(-TERMINAL_TITLE_PATH_SEGMENT_COUNT).join("/")}`;
+}
+
 function pickActiveTerminalId(
   sessions: readonly TerminalSession[],
   preferredTerminalId: string | null,
@@ -42,7 +140,7 @@ function pickActiveTerminalId(
   ) {
     return preferredTerminalId;
   }
-  return sessions.find((session) => session.status !== "exited")?.id ?? null;
+  return sessions[0]?.id ?? null;
 }
 
 function terminalStatusLabel(session: TerminalSession): string {
@@ -64,18 +162,30 @@ export function ThreadTerminalPanel({
 }: ThreadTerminalPanelProps) {
   const panelState = useThreadTerminalPanelState(threadId);
   const updatePanelState = useUpdateThreadTerminalPanelState(threadId);
+  const setPanelOpen = useSetThreadTerminalPanelOpen(threadId);
+  const unusedTerminalIdsRef = useRef<Set<string>>(new Set());
+  const closingUnusedTerminalIdsRef = useRef<Set<string>>(new Set());
+  const latestRequestedTitleRenameRef =
+    useRef<TerminalTitleRenameRequest | null>(null);
+  const pendingTitleRenameTimeoutRef =
+    useRef<TerminalTitleRenameTimeout | null>(null);
   const terminalsQuery = useThreadTerminals(threadId, {
     enabled: panelState.isOpen,
   });
   const createTerminal = useCreateThreadTerminal();
   const closeTerminal = useCloseThreadTerminal();
+  const renameTerminal = useRenameThreadTerminal();
   const sessions = terminalsQuery.data?.sessions ?? EMPTY_TERMINAL_SESSIONS;
+  const visibleSessions = useMemo(
+    () => sessions.filter(isVisibleTerminalSession),
+    [sessions],
+  );
   const activeTerminalId = useMemo(
-    () => pickActiveTerminalId(sessions, panelState.activeTerminalId),
-    [panelState.activeTerminalId, sessions],
+    () => pickActiveTerminalId(visibleSessions, panelState.activeTerminalId),
+    [panelState.activeTerminalId, visibleSessions],
   );
   const activeSession =
-    sessions.find((session) => session.id === activeTerminalId) ?? null;
+    visibleSessions.find((session) => session.id === activeTerminalId) ?? null;
 
   useEffect(() => {
     if (panelState.activeTerminalId === activeTerminalId) {
@@ -87,27 +197,92 @@ export function ThreadTerminalPanel({
     }));
   }, [activeTerminalId, panelState.activeTerminalId, updatePanelState]);
 
-  const handleCreateTerminal = useCallback(() => {
+  useEffect(() => {
+    return () => {
+      if (pendingTitleRenameTimeoutRef.current === null) {
+        return;
+      }
+      window.clearTimeout(pendingTitleRenameTimeoutRef.current);
+    };
+  }, []);
+
+  const startTerminal = useCallback(
+    (args: StartTerminalArgs) => {
+      if (!canCreateTerminal || createTerminal.isPending) {
+        return;
+      }
+      createTerminal.mutate(
+        {
+          threadId,
+          cols: DEFAULT_TERMINAL_COLS,
+          rows: DEFAULT_TERMINAL_ROWS,
+        },
+        {
+          onSuccess: (session) => {
+            if (args.markUnused) {
+              unusedTerminalIdsRef.current.add(session.id);
+            }
+            updatePanelState((current) => ({
+              ...current,
+              activeTerminalId: session.id,
+            }));
+          },
+        },
+      );
+    },
+    [canCreateTerminal, createTerminal, threadId, updatePanelState],
+  );
+
+  useEffect(() => {
     if (!canCreateTerminal || createTerminal.isPending) {
       return;
     }
-    createTerminal.mutate(
-      {
-        threadId,
-        cols: DEFAULT_TERMINAL_COLS,
-        rows: DEFAULT_TERMINAL_ROWS,
-      },
-      {
-        onSuccess: (session) => {
-          updatePanelState((current) => ({
-            ...current,
-            activeTerminalId: session.id,
-            isOpen: true,
-          }));
+    if (
+      !panelState.isOpen ||
+      terminalsQuery.isLoading ||
+      terminalsQuery.error ||
+      visibleSessions.length > 0
+    ) {
+      return;
+    }
+    startTerminal({ markUnused: true });
+  }, [
+    canCreateTerminal,
+    createTerminal.isPending,
+    panelState.isOpen,
+    startTerminal,
+    terminalsQuery.error,
+    terminalsQuery.isLoading,
+    visibleSessions.length,
+  ]);
+
+  useEffect(() => {
+    if (panelState.isOpen) {
+      return;
+    }
+    for (const session of visibleSessions) {
+      if (
+        !unusedTerminalIdsRef.current.has(session.id) ||
+        closingUnusedTerminalIdsRef.current.has(session.id)
+      ) {
+        continue;
+      }
+      closingUnusedTerminalIdsRef.current.add(session.id);
+      closeTerminal.mutate(
+        { threadId, terminalId: session.id },
+        {
+          onSettled: () => {
+            closingUnusedTerminalIdsRef.current.delete(session.id);
+            unusedTerminalIdsRef.current.delete(session.id);
+          },
         },
-      },
-    );
-  }, [canCreateTerminal, createTerminal, threadId, updatePanelState]);
+      );
+    }
+  }, [closeTerminal, panelState.isOpen, threadId, visibleSessions]);
+
+  const handleCreateTerminal = useCallback(() => {
+    startTerminal({ markUnused: true });
+  }, [startTerminal]);
 
   const handleSelectTerminal = useCallback(
     (terminalId: string) => {
@@ -122,17 +297,132 @@ export function ThreadTerminalPanel({
 
   const handleCloseTerminal = useCallback(
     (terminalId: string) => {
-      closeTerminal.mutate({ threadId, terminalId });
+      const shouldCreateReplacement =
+        panelState.isOpen &&
+        visibleSessions.length <= 1 &&
+        visibleSessions.some((session) => session.id === terminalId);
+      closeTerminal.mutate(
+        { threadId, terminalId },
+        {
+          onSuccess: () => {
+            unusedTerminalIdsRef.current.delete(terminalId);
+            closingUnusedTerminalIdsRef.current.delete(terminalId);
+            if (shouldCreateReplacement) {
+              startTerminal({ markUnused: true });
+            }
+          },
+        },
+      );
     },
-    [closeTerminal, threadId],
+    [closeTerminal, panelState.isOpen, startTerminal, threadId, visibleSessions],
+  );
+
+  const handleActiveTerminalUserInput = useCallback(() => {
+    if (!activeTerminalId) {
+      return;
+    }
+    unusedTerminalIdsRef.current.delete(activeTerminalId);
+  }, [activeTerminalId]);
+
+  const handleActiveTerminalTitleChange: TerminalTitleChangeHandler =
+    useCallback(
+      (title) => {
+        if (!activeSession || activeSession.status !== "running") {
+          return;
+        }
+        const normalizedTitle = normalizeTerminalTitle({ title });
+        if (!normalizedTitle || normalizedTitle === activeSession.title) {
+          return;
+        }
+
+        const request: TerminalTitleRenameRequest = {
+          terminalId: activeSession.id,
+          title: normalizedTitle,
+        };
+        const latestRequest = latestRequestedTitleRenameRef.current;
+        if (
+          latestRequest !== null &&
+          latestRequest.terminalId === request.terminalId &&
+          latestRequest.title === request.title
+        ) {
+          return;
+        }
+
+        latestRequestedTitleRenameRef.current = request;
+        if (pendingTitleRenameTimeoutRef.current !== null) {
+          window.clearTimeout(pendingTitleRenameTimeoutRef.current);
+        }
+        pendingTitleRenameTimeoutRef.current = window.setTimeout(() => {
+          pendingTitleRenameTimeoutRef.current = null;
+          renameTerminal.mutate(
+            {
+              threadId,
+              terminalId: request.terminalId,
+              title: request.title,
+            },
+            {
+              onSettled: () => {
+                const currentRequest = latestRequestedTitleRenameRef.current;
+                if (
+                  currentRequest !== null &&
+                  currentRequest.terminalId === request.terminalId &&
+                  currentRequest.title === request.title
+                ) {
+                  latestRequestedTitleRenameRef.current = null;
+                }
+              },
+            },
+          );
+        }, TERMINAL_TITLE_RENAME_DEBOUNCE_MS);
+      },
+      [activeSession, renameTerminal, threadId],
+    );
+
+  const emptyTerminalMessage =
+    canCreateTerminal && panelState.isOpen
+      ? "Starting terminal..."
+      : "No terminals";
+
+  const inactiveTerminalBodyMessage = canCreateTerminal
+    ? "Starting terminal..."
+    : "Terminals unavailable.";
+
+  const terminalIsStarting = createTerminal.isPending || panelState.isOpen;
+
+  const bodyMessage = terminalIsStarting
+    ? inactiveTerminalBodyMessage
+    : "No terminals";
+
+  const tabSessions = visibleSessions;
+
+  const showTerminalPlaceholders =
+    terminalsQuery.isLoading || (tabSessions.length === 0 && terminalIsStarting);
+
+  const terminalBody = activeSession ? (
+    activeSession.status === "running" ? (
+      <ThreadTerminalView
+        onTitleChange={handleActiveTerminalTitleChange}
+        onUserInput={handleActiveTerminalUserInput}
+        session={activeSession}
+        threadId={threadId}
+      />
+    ) : (
+      <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+        Terminal {terminalStatusLabel(activeSession)}.
+      </div>
+    )
+  ) : (
+    <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
+      {bodyMessage}
+    </div>
   );
 
   return (
     <section
       aria-label="Thread terminals"
-      className="flex h-full min-h-0 min-w-0 flex-col border-t border-border bg-background"
+      className="flex h-full min-h-0 min-w-0 flex-col bg-background"
     >
-      <div className="flex h-10 min-h-10 items-center gap-2 border-b border-border bg-background px-3">
+      <div className="flex h-10 min-h-10 items-center gap-2 bg-background px-3">
         <div
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
           role="tablist"
@@ -140,11 +430,11 @@ export function ThreadTerminalPanel({
         >
           {terminalsQuery.isLoading ? (
             <>
-              <Skeleton className="h-6 w-28 rounded-md" />
-              <Skeleton className="h-6 w-24 rounded-md" />
+              <Skeleton className="h-6 w-28 shrink-0 rounded-md" />
+              <Skeleton className="h-6 w-24 shrink-0 rounded-md" />
             </>
-          ) : sessions.length > 0 ? (
-            sessions.map((session) => (
+          ) : tabSessions.length > 0 ? (
+            tabSessions.map((session) => (
               <TerminalTab
                 key={session.id}
                 session={session}
@@ -157,50 +447,51 @@ export function ThreadTerminalPanel({
                 onClose={() => handleCloseTerminal(session.id)}
               />
             ))
+          ) : showTerminalPlaceholders ? (
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {emptyTerminalMessage}
+            </p>
           ) : (
-            <p className="text-xs text-muted-foreground">No terminals</p>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              No terminals
+            </p>
           )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
+            disabled={!canCreateTerminal || createTerminal.isPending}
+            onClick={handleCreateTerminal}
+            aria-label="New terminal"
+            title="New terminal"
+          >
+            {createTerminal.isPending ? (
+              <Icon name="Spinner" className="size-3.5 animate-spin" />
+            ) : (
+              <Icon name="Plus" className="size-3.5" />
+            )}
+          </Button>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
-          disabled={!canCreateTerminal || createTerminal.isPending}
-          onClick={handleCreateTerminal}
-          aria-label="New terminal"
-          title="New terminal"
+          onClick={() => setPanelOpen(false)}
+          aria-label="Close terminal panel"
+          title="Close terminal panel"
         >
-          {createTerminal.isPending ? (
-            <Icon name="Spinner" className="size-3.5 animate-spin" />
-          ) : (
-            <Icon name="Plus" className="size-3.5" />
-          )}
+          <Icon name="X" className="size-3.5" />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden bg-[#0b0d10]">
+      <div className="min-h-0 flex-1 overflow-hidden bg-background">
         {terminalsQuery.error ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-sm text-destructive">
             Failed to load terminals.
           </div>
-        ) : activeSession && activeSession.status === "running" ? (
-          <ThreadTerminalView session={activeSession} threadId={threadId} />
-        ) : activeSession ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-            Terminal {terminalStatusLabel(activeSession)}.
-          </div>
         ) : (
-          <div className="flex h-full items-center justify-center px-4">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!canCreateTerminal || createTerminal.isPending}
-              onClick={handleCreateTerminal}
-            >
-              {createTerminal.isPending ? "Starting..." : "Start terminal"}
-            </Button>
-          </div>
+          terminalBody
         )}
       </div>
     </section>
@@ -241,7 +532,7 @@ function TerminalTab({
       <button
         type="button"
         onClick={onClose}
-        disabled={isClosing || session.status === "exited"}
+        disabled={isClosing}
         aria-label={`Close ${session.title}`}
         title="Close terminal"
         className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-30"

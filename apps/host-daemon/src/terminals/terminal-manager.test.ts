@@ -305,6 +305,7 @@ describe("TerminalManager", () => {
       BB_BASE_ENV: "1",
       BB_TERMINAL_SESSION_ID: "term-1",
       COLORTERM: "truecolor",
+      DISABLE_AUTO_TITLE: "true",
       TERM: "xterm-256color",
     });
     expect(harness.messages).toContainEqual(

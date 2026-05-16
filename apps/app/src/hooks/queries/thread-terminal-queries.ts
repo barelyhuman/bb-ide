@@ -28,6 +28,46 @@ interface CloseThreadTerminalMutationRequest {
   threadId: string;
 }
 
+function upsertTerminalSession(
+  current: ThreadTerminalListResponse | undefined,
+  session: TerminalSession,
+): ThreadTerminalListResponse {
+  if (!current) {
+    return { sessions: [session] };
+  }
+
+  const existingIndex = current.sessions.findIndex(
+    (existingSession) => existingSession.id === session.id,
+  );
+  if (existingIndex === -1) {
+    return { sessions: [...current.sessions, session] };
+  }
+
+  return {
+    sessions: current.sessions.map((existingSession) =>
+      existingSession.id === session.id ? session : existingSession,
+    ),
+  };
+}
+
+function removeTerminalSession(
+  current: ThreadTerminalListResponse | undefined,
+  terminalId: string,
+): ThreadTerminalListResponse | undefined {
+  if (!current) {
+    return current;
+  }
+
+  const sessions = current.sessions.filter((session) => {
+    return session.id !== terminalId;
+  });
+  if (sessions.length === current.sessions.length) {
+    return current;
+  }
+
+  return { sessions };
+}
+
 function requireThreadId(id: string, hookName: string): string {
   if (!id) {
     throw new Error(`${hookName}: thread id is required when query is enabled`);
@@ -59,6 +99,10 @@ export function useCreateThreadTerminal() {
     mutationFn: ({ threadId, ...request }: CreateThreadTerminalMutationRequest) =>
       api.createThreadTerminal(threadId, request),
     onSuccess: (session: TerminalSession) => {
+      queryClient.setQueryData<ThreadTerminalListResponse>(
+        threadTerminalsQueryKey(session.threadId),
+        (current) => upsertTerminalSession(current, session),
+      );
       queryClient.invalidateQueries({
         queryKey: threadTerminalsQueryKey(session.threadId),
       });
@@ -80,6 +124,10 @@ export function useRenameThreadTerminal() {
     }: RenameThreadTerminalMutationRequest) =>
       api.renameThreadTerminal(threadId, terminalId, request),
     onSuccess: (session: TerminalSession) => {
+      queryClient.setQueryData<ThreadTerminalListResponse>(
+        threadTerminalsQueryKey(session.threadId),
+        (current) => upsertTerminalSession(current, session),
+      );
       queryClient.invalidateQueries({
         queryKey: threadTerminalsQueryKey(session.threadId),
       });
@@ -96,7 +144,11 @@ export function useCloseThreadTerminal() {
     },
     mutationFn: ({ terminalId, threadId }: CloseThreadTerminalMutationRequest) =>
       api.closeThreadTerminal(threadId, terminalId, { reason: "user" }),
-    onSuccess: (session: TerminalSession) => {
+    onSuccess: (session: TerminalSession, variables) => {
+      queryClient.setQueryData<ThreadTerminalListResponse>(
+        threadTerminalsQueryKey(session.threadId),
+        (current) => removeTerminalSession(current, variables.terminalId),
+      );
       queryClient.invalidateQueries({
         queryKey: threadTerminalsQueryKey(session.threadId),
       });

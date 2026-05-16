@@ -295,6 +295,7 @@ export {
   getTerminalSessionForThread,
   listTerminalSessionsByEnvironment,
   listTerminalSessionsByThread,
+  listVisibleTerminalSessionsByThread,
   markDaemonTerminalSessionExited,
   markDaemonTerminalSessionsDisconnected,
   markEnvironmentTerminalSessionsExited,

@@ -193,6 +193,7 @@ function buildTerminalEnv(args: BuildTerminalEnvArgs): NodeJS.ProcessEnv {
     ...args.shellEnv,
     BB_TERMINAL_SESSION_ID: args.terminalId,
     COLORTERM: "truecolor",
+    DISABLE_AUTO_TITLE: "true",
     TERM: "xterm-256color",
   };
 }

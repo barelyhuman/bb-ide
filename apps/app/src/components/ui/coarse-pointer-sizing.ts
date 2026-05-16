@@ -26,13 +26,13 @@ export const COARSE_POINTER_CHECK_SLOT_CLASS =
   "h-3.5 w-3.5 max-md:pointer-coarse:h-5 max-md:pointer-coarse:w-5";
 
 export const COARSE_POINTER_HEADER_ICON_BUTTON_CLASS =
-  "h-8 w-8 rounded-md p-0 [&_svg]:size-4 max-md:pointer-coarse:h-9 max-md:pointer-coarse:w-9 max-md:pointer-coarse:[&_svg]:size-5";
+  "h-7 w-7 rounded-md p-0 [&_svg]:size-4 max-md:pointer-coarse:h-9 max-md:pointer-coarse:w-9 max-md:pointer-coarse:[&_svg]:size-5";
 
 export const COARSE_POINTER_CHILD_ICON_BUTTON_CLASS =
   "h-8 w-8 justify-center p-0 [&>svg]:size-4 max-md:pointer-coarse:h-9 max-md:pointer-coarse:w-9 max-md:pointer-coarse:[&>svg]:size-5";
 
 export const COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS =
-  "h-8 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-state-hover hover:text-foreground max-md:pointer-coarse:h-9";
+  "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-state-hover hover:text-foreground max-md:pointer-coarse:h-9";
 
 export const COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS =
   "h-8 px-2 transition-all max-md:pointer-coarse:h-10 max-md:pointer-coarse:px-2.5";

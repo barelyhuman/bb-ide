@@ -53,6 +53,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
+import { useThreadTerminals } from "@/hooks/queries/thread-terminal-queries";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { resolveAbsoluteFilePath } from "@/lib/absolute-file-path";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
@@ -303,6 +304,16 @@ export function ThreadDetailView() {
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
   const terminalsEnabled = useAtomValue(terminalsEnabledAtom);
+  const terminalsListQuery = useThreadTerminals(threadId ?? "", {
+    enabled: terminalsEnabled,
+  });
+  const activeTerminalCount = useMemo(
+    () =>
+      terminalsListQuery.data?.sessions.filter(
+        (session) => session.status !== "exited",
+      ).length ?? 0,
+    [terminalsListQuery.data],
+  );
   const hostConnectionNotice = useMemo(
     () => (thread ? buildHostConnectionNotice(thread) : null),
     [thread],
@@ -807,6 +818,7 @@ export function ThreadDetailView() {
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
       isSecondaryPanelOpen={isSecondaryPanelOpen}
+      activeTerminalCount={activeTerminalCount}
       isTerminalPanelOpen={terminalsEnabled && terminalPanelState.isOpen}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}

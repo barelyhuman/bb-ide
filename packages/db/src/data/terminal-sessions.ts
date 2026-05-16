@@ -146,6 +146,23 @@ export function listTerminalSessionsByThread(
     .all();
 }
 
+export function listVisibleTerminalSessionsByThread(
+  db: TerminalSessionReadConnection,
+  threadId: string,
+): TerminalSessionRow[] {
+  return db
+    .select()
+    .from(terminalSessions)
+    .where(
+      and(
+        eq(terminalSessions.threadId, threadId),
+        inArray(terminalSessions.status, NON_TERMINAL_SESSION_STATUSES),
+      ),
+    )
+    .orderBy(asc(terminalSessions.createdAt), asc(terminalSessions.id))
+    .all();
+}
+
 export function listTerminalSessionsByEnvironment(
   db: TerminalSessionReadConnection,
   environmentId: string,

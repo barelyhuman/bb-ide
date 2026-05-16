@@ -4,6 +4,7 @@ import {
   getTerminalSessionForThread,
   listTerminalSessionsByEnvironment,
   listTerminalSessionsByThread,
+  listVisibleTerminalSessionsByThread,
   markDaemonTerminalSessionExited,
   markDaemonTerminalSessionsDisconnected,
   markEnvironmentTerminalSessionsExited,
@@ -310,7 +311,7 @@ export class TerminalSessionLifecycle {
 
   listThreadTerminals(threadId: string): TerminalSession[] {
     requirePublicThread(this.options.db, threadId);
-    return listTerminalSessionsByThread(this.options.db, threadId).map(
+    return listVisibleTerminalSessionsByThread(this.options.db, threadId).map(
       toTerminalSession,
     );
   }
@@ -852,19 +853,21 @@ export class TerminalSessionLifecycle {
     if (!current) {
       return;
     }
-    const resized = updateTerminalSessionSize(this.options.db, {
-      cols: args.message.cols,
-      rows: args.message.rows,
-      terminalId: current.id,
-      threadId: args.threadId,
-    });
-    if (resized) {
-      const session = toTerminalSession(resized);
-      this.notifyThreadTerminalsChanged(resized.threadId);
-      this.options.hub.sendTerminalClientMessage(resized.id, {
-        type: "session-updated",
-        session,
+    if (current.cols !== args.message.cols || current.rows !== args.message.rows) {
+      const resized = updateTerminalSessionSize(this.options.db, {
+        cols: args.message.cols,
+        rows: args.message.rows,
+        terminalId: current.id,
+        threadId: args.threadId,
       });
+      if (resized) {
+        const session = toTerminalSession(resized);
+        this.notifyThreadTerminalsChanged(resized.threadId);
+        this.options.hub.sendTerminalClientMessage(resized.id, {
+          type: "session-updated",
+          session,
+        });
+      }
     }
     const sent = this.options.hub.sendDaemonSessionMessage(
       current.daemonSessionId,

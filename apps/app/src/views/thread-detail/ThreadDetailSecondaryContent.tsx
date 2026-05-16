@@ -1,5 +1,16 @@
-import { type ComponentProps, type ReactNode } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle,
+  type ImperativePanelHandle,
+} from "react-resizable-panels";
 import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
@@ -20,6 +31,8 @@ import {
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
+const TERMINAL_PANEL_TRANSITION_CLASS =
+  "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
 
 type ThreadTimelinePaneProps = Omit<
   ComponentProps<typeof ThreadTimelinePane>,
@@ -60,6 +73,38 @@ export function ThreadDetailSecondaryContent({
   const renderAsDrawer = useIsCompactViewport();
   const persistedSecondaryWidthPercent = useAtomValue(
     secondaryPanelWidthPercentAtom,
+  );
+
+  const terminalPanelRef = useRef<ImperativePanelHandle | null>(null);
+  const lastTerminalSizeRef = useRef(terminalPanelHeightPercent);
+  const didMountTerminalRef = useRef(false);
+
+  useEffect(() => {
+    // Skip initial mount — Panel's defaultSize handles it.
+    if (!didMountTerminalRef.current) {
+      didMountTerminalRef.current = true;
+      return;
+    }
+    const panel = terminalPanelRef.current;
+    if (!panel) {
+      return;
+    }
+    if (terminalPanelOpen) {
+      panel.expand(lastTerminalSizeRef.current);
+    } else {
+      panel.collapse();
+    }
+  }, [terminalPanelOpen]);
+
+  const handleTerminalPanelResize = useCallback(
+    (size: number) => {
+      if (size <= 0) {
+        return;
+      }
+      lastTerminalSizeRef.current = size;
+      onTerminalPanelResize(size);
+    },
+    [onTerminalPanelResize],
   );
 
   const metadataContent = hasAnyThreadMetadata(metadata) ? (
@@ -123,17 +168,26 @@ export function ThreadDetailSecondaryContent({
             {inlineSecondaryPanelContent}
           </PanelGroup>
         </Panel>
-        {terminalPanelOpen && terminalPanel ? (
+        {terminalPanel ? (
           <>
-            <TerminalPanelResizeHandle />
+            <TerminalPanelResizeHandle isOpen={terminalPanelOpen} />
             <Panel
+              ref={terminalPanelRef}
               id="thread-detail-terminal-panel"
-              defaultSize={terminalPanelHeightPercent}
+              collapsible
+              collapsedSize={0}
+              defaultSize={
+                terminalPanelOpen ? terminalPanelHeightPercent : 0
+              }
               minSize={MIN_TERMINAL_PANEL_HEIGHT_PERCENT}
               maxSize={MAX_TERMINAL_PANEL_HEIGHT_PERCENT}
               order={2}
-              onResize={onTerminalPanelResize}
-              className="min-h-0 min-w-0 overflow-hidden"
+              onResize={handleTerminalPanelResize}
+              className={cn(
+                "min-h-0 min-w-0 overflow-hidden transition-[flex-grow,flex-basis,opacity]",
+                TERMINAL_PANEL_TRANSITION_CLASS,
+                terminalPanelOpen ? "opacity-100" : "opacity-0",
+              )}
             >
               {terminalPanel}
             </Panel>
@@ -164,13 +218,16 @@ export function ThreadDetailSecondaryContent({
   );
 }
 
-function TerminalPanelResizeHandle() {
+function TerminalPanelResizeHandle({ isOpen }: { isOpen: boolean }) {
   return (
     <PanelResizeHandle
       id="thread-detail-terminal-panel-handle"
+      disabled={!isOpen}
       className={cn(
-        "group relative h-px shrink-0 cursor-row-resize bg-border/70",
+        "group relative shrink-0 cursor-row-resize overflow-visible bg-transparent transition-[height,opacity,background-color]",
+        TERMINAL_PANEL_TRANSITION_CLASS,
         "before:absolute before:-inset-y-1.5 before:inset-x-0 before:content-['']",
+        isOpen ? "h-px opacity-100" : "pointer-events-none h-0 opacity-0",
       )}
       aria-label="Resize thread and terminal panels"
     >

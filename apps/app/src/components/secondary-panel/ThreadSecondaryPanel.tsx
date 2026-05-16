@@ -280,26 +280,26 @@ export function ThreadSecondaryPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
+              className="h-7 w-7 shrink-0 rounded-md p-0"
               onClick={() => onPanelChange("thread-info")}
               aria-label="Show thread info panel"
               aria-pressed={activePanel === "thread-info" && !hasActiveFileTab}
               title="Info"
             >
-              <Icon name="Info" className="size-3.5" />
+              <Icon name="Info" />
             </Button>
             {showGitDiffTab !== false ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
+                className="h-7 w-7 shrink-0 rounded-md p-0"
                 onClick={() => onPanelChange("git-diff")}
                 aria-label="Show diff panel"
                 aria-pressed={isDiffPanelActive && !hasActiveFileTab}
                 title="Diff"
               >
-                <Icon name="FileDiff" className="size-3.5" />
+                <Icon name="FileDiff" />
               </Button>
             ) : null}
             {fileTabs && fileTabs.length > 0 ? (
@@ -314,7 +314,7 @@ export function ThreadSecondaryPanel({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
+            className="h-7 w-7 shrink-0 rounded-md p-0"
             onClick={onClose}
             aria-label={
               renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"
@@ -323,7 +323,7 @@ export function ThreadSecondaryPanel({
               renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"
             }
           >
-            <Icon name={togglePanelIconName} className="size-3.5" />
+            <Icon name={togglePanelIconName} />
           </Button>
         </div>
         {isDiffPanelActive && !hasActiveFileTab ? (
