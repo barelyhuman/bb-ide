@@ -615,6 +615,9 @@ importers:
       better-sqlite3:
         specifier: ^12.10.0
         version: 12.10.0
+      node-pty:
+        specifier: ^1.1.0
+        version: 1.1.0
       pino:
         specifier: ^9.6.0
         version: 9.14.0

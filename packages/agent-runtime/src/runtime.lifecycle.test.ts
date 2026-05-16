@@ -17,6 +17,7 @@ import {
   fullRuntimeOptions,
   wait,
   waitForThreadAgentMessageText,
+  waitForThreadTurnCompleted,
   waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
 
@@ -482,7 +483,11 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
       });
-      await wait(100);
+      await waitForThreadTurnCompleted({
+        events,
+        runtime,
+        threadId: "t1",
+      });
 
       expect(events.some((e) => e.type === "turn/started")).toBe(true);
       expect(events.some((e) => e.type === "turn/completed")).toBe(true);
@@ -562,7 +567,11 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
       });
-      await wait(100);
+      await waitForThreadTurnCompleted({
+        events,
+        runtime,
+        threadId: "t1",
+      });
 
       expect(
         events.filter((event) => event.type === "turn/started"),
@@ -591,7 +600,11 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "hello from start" }],
         options: fullRuntimeOptions,
       });
-      await wait(100);
+      await waitForThreadTurnCompleted({
+        events,
+        runtime,
+        threadId: "t1",
+      });
 
       expect(events.some((e) => e.type === "thread/identity")).toBe(true);
       expect(events.some((e) => e.type === "turn/started")).toBe(true);
@@ -634,7 +647,11 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "hello after start" }],
         options: fullRuntimeOptions,
       });
-      await wait(100);
+      await waitForThreadTurnCompleted({
+        events,
+        runtime,
+        threadId: "t1",
+      });
 
       expect(events.some((event) => event.type === "turn/started")).toBe(true);
       expect(events.some((event) => event.type === "turn/completed")).toBe(
@@ -672,7 +689,11 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "after resume" }],
         options: fullRuntimeOptions,
       });
-      await wait(100);
+      await waitForThreadTurnCompleted({
+        events,
+        runtime,
+        threadId: "t1",
+      });
       expect(events.some((e) => e.type === "turn/completed")).toBe(true);
       await runtime.shutdown();
     });

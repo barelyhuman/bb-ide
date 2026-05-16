@@ -17,6 +17,7 @@ import { ThreadTerminalView } from "./ThreadTerminalView";
 
 const DEFAULT_TERMINAL_COLS = 100;
 const DEFAULT_TERMINAL_ROWS = 30;
+const EMPTY_TERMINAL_SESSIONS: readonly TerminalSession[] = [];
 
 interface ThreadTerminalPanelProps {
   canCreateTerminal: boolean;
@@ -68,7 +69,7 @@ export function ThreadTerminalPanel({
   });
   const createTerminal = useCreateThreadTerminal();
   const closeTerminal = useCloseThreadTerminal();
-  const sessions = terminalsQuery.data?.sessions ?? [];
+  const sessions = terminalsQuery.data?.sessions ?? EMPTY_TERMINAL_SESSIONS;
   const activeTerminalId = useMemo(
     () => pickActiveTerminalId(sessions, panelState.activeTerminalId),
     [panelState.activeTerminalId, sessions],

@@ -16,6 +16,7 @@ export const NATIVE_EXTERNAL_PACKAGES = [
   "better-sqlite3",
   "bufferutil",
   "fsevents",
+  "node-pty",
   "pino",
   "pino-pretty",
   "pino-roll",

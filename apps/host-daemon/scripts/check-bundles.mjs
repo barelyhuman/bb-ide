@@ -1,9 +1,13 @@
 import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { bundleTargets } from "./bundle-manifest.mjs";
 
 const execFileAsync = promisify(execFile);
+const scriptsDir = dirname(fileURLToPath(import.meta.url));
+const packageRoot = resolve(scriptsDir, "..");
 
 async function main() {
   let totalBytes = 0;
@@ -13,6 +17,25 @@ async function main() {
     const bundleStats = await stat(target.outfile);
     totalBytes += bundleStats.size;
     console.log(`${target.label}: syntax ok (${bundleStats.size} bytes)`);
+  }
+
+  const importTargets = [
+    {
+      label: "daemon entry",
+      path: resolve(packageRoot, "dist", "index.js"),
+    },
+    {
+      label: "daemon bundle",
+      path: bundleTargets.find((target) => target.label === "daemon")?.outfile,
+    },
+  ];
+
+  for (const target of importTargets) {
+    if (!target.path) {
+      throw new Error(`Missing ${target.label} import target`);
+    }
+    await import(pathToFileURL(target.path).href);
+    console.log(`${target.label}: runtime import ok`);
   }
 
   console.log(`total bundle size: ${totalBytes} bytes`);
