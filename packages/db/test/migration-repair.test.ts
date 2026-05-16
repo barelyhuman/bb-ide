@@ -13,10 +13,16 @@ const repairMigrationPath = resolve(
   "drizzle",
   "0013_rebuild_pending_interactions.sql",
 );
+const terminalMigrationPath = resolve(
+  __dirname,
+  "..",
+  "drizzle",
+  "0014_terminal_sessions.sql",
+);
 
-function repairMigrationHash(): string {
+function migrationHash(migrationPath: string): string {
   return createHash("sha256")
-    .update(readFileSync(repairMigrationPath))
+    .update(readFileSync(migrationPath))
     .digest("hex");
 }
 
@@ -72,8 +78,13 @@ describe("migration repairs", () => {
       .run();
     const deletedMigration = db.$client
       .prepare("DELETE FROM __drizzle_migrations WHERE hash = ?")
-      .run(repairMigrationHash());
+      .run(migrationHash(repairMigrationPath));
     expect(deletedMigration.changes).toBe(1);
+    const deletedTerminalMigration = db.$client
+      .prepare("DELETE FROM __drizzle_migrations WHERE hash = ?")
+      .run(migrationHash(terminalMigrationPath));
+    expect(deletedTerminalMigration.changes).toBe(1);
+    db.$client.prepare("DROP TABLE terminal_sessions").run();
 
     migrate(db);
 

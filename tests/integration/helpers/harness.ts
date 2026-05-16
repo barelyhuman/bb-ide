@@ -32,6 +32,7 @@ import {
 } from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
+import { TerminalSessionLifecycle } from "../../../apps/server/src/services/terminals/terminal-session-lifecycle.js";
 import type {
   ServerLogger,
   ServerRuntimeConfig,
@@ -54,6 +55,7 @@ let loadedProjectEnvPath: string | null | undefined;
 
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 type InternalHostDaemonClient = ReturnType<typeof createHostDaemonClient>;
+type FeatureFlagOverrides = Partial<FeatureFlags>;
 
 const testLogger: ServerLogger = {
   debug(): void {},
@@ -92,7 +94,7 @@ export interface IntegrationHarness {
 
 export interface CreateHarnessOptions {
   adapterFactory?: ProviderAdapterFactory;
-  featureFlags?: FeatureFlags;
+  featureFlags?: FeatureFlagOverrides;
 }
 
 export type WithHarnessCallback<T> = (
@@ -132,6 +134,16 @@ function resolveAdapterFactory(
     return options.adapterFactory;
   }
   return () => createFakeAdapter();
+}
+
+function resolveFeatureFlags(
+  overrides: FeatureFlagOverrides | undefined,
+): FeatureFlags {
+  return {
+    askUserQuestion:
+      overrides?.askUserQuestion ?? defaultFeatureFlags.askUserQuestion,
+    terminals: overrides?.terminals ?? defaultFeatureFlags.terminals,
+  };
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -213,6 +225,13 @@ async function startIntegrationServer(
     logger: testLogger,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
+  const terminalSessions = new TerminalSessionLifecycle({
+    attachTimeoutMs: 50,
+    db,
+    hub,
+    logger: testLogger,
+    openTimeoutMs: 50,
+  });
   pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
@@ -220,7 +239,7 @@ async function startIntegrationServer(
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",
     e2bTemplate: process.env.E2B_TEMPLATE ?? "",
-    featureFlags: options.featureFlags ?? defaultFeatureFlags,
+    featureFlags: resolveFeatureFlags(options.featureFlags),
     githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
@@ -261,6 +280,7 @@ async function startIntegrationServer(
     sandboxEnv,
     pendingInteractions,
     sandboxRegistry,
+    terminalSessions,
   });
 
   let addressInfo: ListeningAddress | null = null;
