@@ -257,7 +257,7 @@ describe("ThreadTerminalPanel", () => {
     expect(apiMocks.closeThreadTerminal).not.toHaveBeenCalled();
   });
 
-  it("removes a closed last tab and starts a replacement", async () => {
+  it("allows closing the last tab without starting a replacement", async () => {
     serverSessions = [makeTerminalSession()];
     renderPanel();
 
@@ -274,10 +274,12 @@ describe("ThreadTerminalPanel", () => {
           reason: "user",
         },
       );
-      expect(apiMocks.createThreadTerminal).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText("Terminal 2")).toBeTruthy();
-    expect(screen.queryByText("Terminal 1")).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByText("Terminal 1")).toBeNull();
+    });
+    expect(apiMocks.createThreadTerminal).not.toHaveBeenCalled();
+    expect(screen.getAllByText("No terminals")).toHaveLength(1);
   });
 
   it("renames the active tab from a terminal title escape", async () => {

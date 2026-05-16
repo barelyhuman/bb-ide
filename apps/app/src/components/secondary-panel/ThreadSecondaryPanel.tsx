@@ -8,6 +8,7 @@ import {
 import { useAtomValue } from "jotai";
 import { Icon } from "@/components/ui/icon.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { TabPill } from "@/components/ui/tab-pill";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/lib/utils";
@@ -305,7 +306,7 @@ export function ThreadSecondaryPanel({
             {fileTabs && fileTabs.length > 0 ? (
               <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
                 {fileTabs.map((tab) => (
-                  <FileTabPill key={tab.id} tab={tab} />
+                  <FileTab key={tab.id} tab={tab} />
                 ))}
               </div>
             ) : null}
@@ -459,49 +460,29 @@ export function ThreadSecondaryPanel({
   );
 }
 
-function FileTabPill({ tab }: { tab: SecondaryPanelFileTab }) {
+function FileTab({ tab }: { tab: SecondaryPanelFileTab }) {
   const title =
     tab.statusLabel === null
       ? tab.filename
       : `${tab.filename} (${tab.statusLabel})`;
   return (
-    <div
-      className={cn(
-        "group/file-tab relative inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
-        tab.isActive
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60",
-      )}
-    >
-      <button
-        type="button"
-        onClick={tab.onSelect}
-        aria-pressed={tab.isActive}
-        title={title}
-        className={cn(
-          "flex h-full min-w-0 items-center rounded-l-md pl-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-          tab.isPinned ? "pr-2 rounded-r-md" : "pr-1",
-        )}
-      >
-        <span className="max-w-[160px] truncate">{tab.filename}</span>
-        {tab.statusLabel === null ? null : (
-          <span className="ml-1 shrink-0 text-muted-foreground/80">
-            ({tab.statusLabel})
-          </span>
-        )}
-      </button>
-      {tab.isPinned ? null : (
-        <button
-          type="button"
-          onClick={tab.onClose}
-          aria-label={`Close ${tab.filename}`}
-          title="Close tab"
-          className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
-        >
-          <Icon name="X" className="size-3" />
-        </button>
-      )}
-    </div>
+    <TabPill
+      label={tab.filename}
+      secondaryLabel={tab.statusLabel === null ? null : `(${tab.statusLabel})`}
+      title={title}
+      isActive={tab.isActive}
+      onSelect={tab.onSelect}
+      labelMaxWidthClass="max-w-[160px]"
+      closeAction={
+        tab.isPinned
+          ? null
+          : {
+              onClose: tab.onClose,
+              closeLabel: `Close ${tab.filename}`,
+              closeTooltip: "Close tab",
+            }
+      }
+    />
   );
 }
 

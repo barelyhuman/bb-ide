@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TerminalSession } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { TabPill } from "@/components/ui/tab-pill";
 import {
   useCloseThreadTerminal,
   useCreateThreadTerminal,
@@ -14,7 +15,6 @@ import {
   useThreadTerminalPanelState,
   useUpdateThreadTerminalPanelState,
 } from "@/lib/thread-terminal-panel";
-import { cn } from "@/lib/utils";
 import { ThreadTerminalView } from "./ThreadTerminalView";
 
 const DEFAULT_TERMINAL_COLS = 100;
@@ -165,10 +165,12 @@ export function ThreadTerminalPanel({
   const setPanelOpen = useSetThreadTerminalPanelOpen(threadId);
   const unusedTerminalIdsRef = useRef<Set<string>>(new Set());
   const closingUnusedTerminalIdsRef = useRef<Set<string>>(new Set());
+  const wasPanelOpenRef = useRef(panelState.isOpen);
   const latestRequestedTitleRenameRef =
     useRef<TerminalTitleRenameRequest | null>(null);
   const pendingTitleRenameTimeoutRef =
     useRef<TerminalTitleRenameTimeout | null>(null);
+  const [shouldAutoStartOnOpen, setShouldAutoStartOnOpen] = useState(false);
   const terminalsQuery = useThreadTerminals(threadId, {
     enabled: panelState.isOpen,
   });
@@ -196,6 +198,19 @@ export function ThreadTerminalPanel({
       activeTerminalId,
     }));
   }, [activeTerminalId, panelState.activeTerminalId, updatePanelState]);
+
+  useEffect(() => {
+    const wasPanelOpen = wasPanelOpenRef.current;
+    wasPanelOpenRef.current = panelState.isOpen;
+
+    if (!panelState.isOpen) {
+      setShouldAutoStartOnOpen(false);
+      return;
+    }
+    if (!wasPanelOpen) {
+      setShouldAutoStartOnOpen(true);
+    }
+  }, [panelState.isOpen]);
 
   useEffect(() => {
     return () => {
@@ -234,22 +249,27 @@ export function ThreadTerminalPanel({
   );
 
   useEffect(() => {
-    if (!canCreateTerminal || createTerminal.isPending) {
+    if (!shouldAutoStartOnOpen) {
       return;
     }
-    if (
-      !panelState.isOpen ||
-      terminalsQuery.isLoading ||
-      terminalsQuery.error ||
-      visibleSessions.length > 0
-    ) {
+    if (!panelState.isOpen || !canCreateTerminal || terminalsQuery.error) {
+      setShouldAutoStartOnOpen(false);
       return;
     }
+    if (createTerminal.isPending || terminalsQuery.isLoading) {
+      return;
+    }
+    if (visibleSessions.length > 0) {
+      setShouldAutoStartOnOpen(false);
+      return;
+    }
+    setShouldAutoStartOnOpen(false);
     startTerminal({ markUnused: true });
   }, [
     canCreateTerminal,
     createTerminal.isPending,
     panelState.isOpen,
+    shouldAutoStartOnOpen,
     startTerminal,
     terminalsQuery.error,
     terminalsQuery.isLoading,
@@ -297,24 +317,17 @@ export function ThreadTerminalPanel({
 
   const handleCloseTerminal = useCallback(
     (terminalId: string) => {
-      const shouldCreateReplacement =
-        panelState.isOpen &&
-        visibleSessions.length <= 1 &&
-        visibleSessions.some((session) => session.id === terminalId);
       closeTerminal.mutate(
         { threadId, terminalId },
         {
           onSuccess: () => {
             unusedTerminalIdsRef.current.delete(terminalId);
             closingUnusedTerminalIdsRef.current.delete(terminalId);
-            if (shouldCreateReplacement) {
-              startTerminal({ markUnused: true });
-            }
           },
         },
       );
     },
-    [closeTerminal, panelState.isOpen, startTerminal, threadId, visibleSessions],
+    [closeTerminal, threadId],
   );
 
   const handleActiveTerminalUserInput = useCallback(() => {
@@ -378,16 +391,17 @@ export function ThreadTerminalPanel({
       [activeSession, renameTerminal, threadId],
     );
 
-  const emptyTerminalMessage =
-    canCreateTerminal && panelState.isOpen
-      ? "Starting terminal..."
-      : "No terminals";
+  const terminalIsStarting =
+    createTerminal.isPending ||
+    (canCreateTerminal && panelState.isOpen && shouldAutoStartOnOpen);
+
+  const emptyTerminalMessage = terminalIsStarting
+    ? "Starting terminal..."
+    : "No terminals";
 
   const inactiveTerminalBodyMessage = canCreateTerminal
     ? "Starting terminal..."
     : "Terminals unavailable.";
-
-  const terminalIsStarting = createTerminal.isPending || panelState.isOpen;
 
   const bodyMessage = terminalIsStarting
     ? inactiveTerminalBodyMessage
@@ -451,11 +465,7 @@ export function ThreadTerminalPanel({
             <p className="shrink-0 text-xs text-muted-foreground">
               {emptyTerminalMessage}
             </p>
-          ) : (
-            <p className="shrink-0 text-xs text-muted-foreground">
-              No terminals
-            </p>
-          )}
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -507,42 +517,18 @@ function TerminalTab({
 }: TerminalTabProps) {
   const statusLabel = terminalStatusLabel(session);
   return (
-    <div
-      className={cn(
-        "group/terminal-tab inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
-        isActive
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60",
-      )}
-    >
-      <button
-        type="button"
-        className="flex h-full min-w-0 items-center rounded-l-md pl-2 pr-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        onClick={onSelect}
-        aria-pressed={isActive}
-        title={`${session.title} (${statusLabel})`}
-      >
-        <span className="max-w-[180px] truncate">{session.title}</span>
-        {session.status === "running" ? null : (
-          <span className="ml-1 shrink-0 text-muted-foreground/80">
-            {statusLabel}
-          </span>
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={onClose}
-        disabled={isClosing}
-        aria-label={`Close ${session.title}`}
-        title="Close terminal"
-        className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-30"
-      >
-        {isClosing ? (
-          <Icon name="Spinner" className="size-3 animate-spin" />
-        ) : (
-          <Icon name="X" className="size-3" />
-        )}
-      </button>
-    </div>
+    <TabPill
+      label={session.title}
+      secondaryLabel={session.status === "running" ? null : statusLabel}
+      title={`${session.title} (${statusLabel})`}
+      isActive={isActive}
+      onSelect={onSelect}
+      closeAction={{
+        onClose,
+        closeLabel: `Close ${session.title}`,
+        closeTooltip: "Close terminal",
+        isClosing,
+      }}
+    />
   );
 }
