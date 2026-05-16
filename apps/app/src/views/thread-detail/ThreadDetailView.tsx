@@ -54,6 +54,7 @@ import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
+import { resolveAbsoluteFilePath } from "@/lib/absolute-file-path";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import {
@@ -897,9 +898,22 @@ export function ThreadDetailView() {
           });
         }
       : undefined;
+  const workspaceFileCopyPath = activeWorkspaceFilePath
+    ? resolveAbsoluteFilePath({
+        path: activeWorkspaceFilePath,
+        rootPath: environment?.path,
+      })
+    : null;
+  const storageFileCopyPath = activeStorageFilePath
+    ? resolveAbsoluteFilePath({
+        path: activeStorageFilePath,
+        rootPath: threadStorageRootPath,
+      })
+    : null;
   const fileTabContent = activeWorkspaceFilePath ? (
     <SecondaryPanelFilePreview
       activePath={activeWorkspaceFilePath}
+      copyPath={workspaceFileCopyPath}
       error={workspaceFilePreviewError}
       filePreview={workspaceFilePreview}
       isLoading={isWorkspaceFilePreviewLoading}
@@ -920,6 +934,7 @@ export function ThreadDetailView() {
   ) : activeStorageFilePath ? (
     <ThreadStorageFilePreview
       activePath={activeStorageFilePath}
+      copyPath={storageFileCopyPath}
       error={threadStorageFilePreviewError}
       filePreview={threadStorageFilePreview}
       isLoading={isThreadStorageFilePreviewLoading}
@@ -961,6 +976,7 @@ export function ThreadDetailView() {
           canUseGitUi,
           defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
           environmentId: thread.environmentId ?? undefined,
+          workspaceRootPath: environment?.path,
           fileTabs,
           fileTabContent,
           isOpen: isSecondaryPanelOpen,

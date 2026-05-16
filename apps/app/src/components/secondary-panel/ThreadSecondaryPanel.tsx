@@ -78,6 +78,7 @@ interface GitDiffFileCardContainerProps {
   fileKey: string;
   fileDiff: ParsedGitDiffFile;
   diffViewOptions: Record<string, string | boolean | number>;
+  filePathRoot?: string | null;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
   isCollapsed: boolean;
@@ -91,6 +92,7 @@ const GitDiffFileCardContainer = memo(function GitDiffFileCardContainer({
   fileKey,
   fileDiff,
   diffViewOptions,
+  filePathRoot,
   onOpenFileInEditor,
   onOpenFilePreview,
   isCollapsed,
@@ -113,6 +115,7 @@ const GitDiffFileCardContainer = memo(function GitDiffFileCardContainer({
     <GitDiffCard
       fileDiff={fileDiff}
       diffViewOptions={diffViewOptions}
+      filePathRoot={filePathRoot}
       onOpenFileInEditor={onOpenFileInEditor}
       onOpenFilePreview={onOpenFilePreview}
       isCollapsed={isCollapsed}
@@ -149,6 +152,7 @@ export interface ThreadSecondaryPanelProps {
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   onCollapse: () => void;
   onClose: () => void;
+  workspaceRootPath?: string | null;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
   /**
@@ -173,6 +177,7 @@ export function ThreadSecondaryPanel({
   onPanelChange,
   onCollapse,
   onClose,
+  workspaceRootPath,
   onOpenFileInEditor,
   onOpenFilePreview,
   renderAsDrawer,
@@ -373,6 +378,7 @@ export function ThreadSecondaryPanel({
                           fileKey={key}
                           fileDiff={fileDiff}
                           diffViewOptions={gitDiffViewOptions}
+                          filePathRoot={workspaceRootPath}
                           onOpenFileInEditor={onOpenFileInEditor}
                           onOpenFilePreview={onOpenFilePreview}
                           isCollapsed={isCollapsed}

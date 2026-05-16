@@ -28,8 +28,24 @@ export type FilePreviewState =
 export interface FilePreviewProps {
   state: FilePreviewState;
   path: string;
+  copyPath?: string | null;
   onOpenInEditor?: (path: string) => void;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
+}
+
+interface FilePreviewBodyProps {
+  state: FilePreviewState;
+  path: string;
+  markdownMode: MarkdownViewMode;
+}
+
+interface FilePreviewHeaderProps {
+  path: string;
+  copyPath: string | null;
+  onOpenInEditor?: (path: string) => void;
+  statusLabel: WorkspaceFilePreviewStatusLabel | null;
+  markdownMode: MarkdownViewMode | null;
+  onMarkdownModeChange: (mode: MarkdownViewMode) => void;
 }
 
 type MarkdownViewMode = "preview" | "source";
@@ -65,6 +81,7 @@ function isMarkdownFile(name: string): boolean {
 export function FilePreview({
   state,
   path,
+  copyPath = null,
   onOpenInEditor,
   statusLabel = null,
 }: FilePreviewProps) {
@@ -83,6 +100,7 @@ export function FilePreview({
     <div className="@container/page" style={FILE_PREVIEW_WRAPPER_STYLE}>
       <FilePreviewHeader
         path={path}
+        copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         markdownMode={isReadyMarkdown ? markdownMode : null}
@@ -101,11 +119,7 @@ function FilePreviewBody({
   state,
   path,
   markdownMode,
-}: {
-  state: FilePreviewState;
-  path: string;
-  markdownMode: MarkdownViewMode;
-}) {
+}: FilePreviewBodyProps) {
   if (state.kind === "loading") {
     return <FilePreviewLoading />;
   }
@@ -137,17 +151,12 @@ function FilePreviewBody({
 
 function FilePreviewHeader({
   path,
+  copyPath,
   onOpenInEditor,
   statusLabel,
   markdownMode,
   onMarkdownModeChange,
-}: {
-  path: string;
-  onOpenInEditor?: (path: string) => void;
-  statusLabel: WorkspaceFilePreviewStatusLabel | null;
-  markdownMode: MarkdownViewMode | null;
-  onMarkdownModeChange: (mode: MarkdownViewMode) => void;
-}) {
+}: FilePreviewHeaderProps) {
   // The fade is `absolute top-full` so the bar's bottom border is the actual
   // overflow edge — content scrolls under right at the border. The fade lives
   // in the sticky element so it pins with the header, but `absolute` keeps it
@@ -167,11 +176,13 @@ function FilePreviewHeader({
               ({statusLabel})
             </span>
           )}
-          <CopyButton
-            text={path}
-            label="Copy file path"
-            className="shrink-0 rounded-md hover:bg-state-hover hover:text-foreground"
-          />
+          {copyPath === null ? null : (
+            <CopyButton
+              text={copyPath}
+              label="Copy file path"
+              className="shrink-0 rounded-md hover:bg-state-hover hover:text-foreground"
+            />
+          )}
           {onOpenInEditor ? (
             <button
               type="button"

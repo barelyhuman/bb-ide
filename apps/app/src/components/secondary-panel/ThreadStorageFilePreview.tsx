@@ -8,6 +8,7 @@ import type {
 
 interface ThreadStorageFilePreviewProps {
   activePath: string;
+  copyPath?: string | null;
   error?: Error | null;
   filePreview: FilePreview | undefined;
   isLoading: boolean;
@@ -22,6 +23,7 @@ interface SecondaryPanelFilePreviewProps extends ThreadStorageFilePreviewProps {
 
 export function SecondaryPanelFilePreview({
   activePath,
+  copyPath = null,
   error,
   filePreview,
   isLoading,
@@ -36,6 +38,7 @@ export function SecondaryPanelFilePreview({
       return (
         <FilePreviewSurface
           path={activePath}
+          copyPath={copyPath}
           onOpenInEditor={onOpenInEditor}
           statusLabel={statusLabel}
           state={{ kind: "manager-status-pending" }}
@@ -45,6 +48,7 @@ export function SecondaryPanelFilePreview({
     return (
       <FilePreviewSurface
         path={activePath}
+        copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         state={{ kind: isNotFound ? "not-found" : "error" }}
@@ -56,6 +60,7 @@ export function SecondaryPanelFilePreview({
     return (
       <FilePreviewSurface
         path={activePath}
+        copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         state={{ kind: "loading" }}
@@ -68,6 +73,7 @@ export function SecondaryPanelFilePreview({
       return (
         <FilePreviewSurface
           path={activePath}
+          copyPath={copyPath}
           onOpenInEditor={onOpenInEditor}
           statusLabel={statusLabel}
           state={{ kind: "empty" }}
@@ -77,6 +83,7 @@ export function SecondaryPanelFilePreview({
     return (
       <FilePreviewSurface
         path={activePath}
+        copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         state={{
@@ -95,6 +102,7 @@ export function SecondaryPanelFilePreview({
     return (
       <FilePreviewSurface
         path={activePath}
+        copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         state={{ kind: "image", url: filePreview.url }}
@@ -105,6 +113,7 @@ export function SecondaryPanelFilePreview({
   return (
     <FilePreviewSurface
       path={activePath}
+      copyPath={copyPath}
       onOpenInEditor={onOpenInEditor}
       statusLabel={statusLabel}
       state={{
@@ -117,6 +126,7 @@ export function SecondaryPanelFilePreview({
 
 export function ThreadStorageFilePreview({
   activePath,
+  copyPath,
   error,
   filePreview,
   isLoading,
@@ -126,6 +136,7 @@ export function ThreadStorageFilePreview({
   return (
     <SecondaryPanelFilePreview
       activePath={activePath}
+      copyPath={copyPath}
       error={error}
       filePreview={filePreview}
       isLoading={isLoading}

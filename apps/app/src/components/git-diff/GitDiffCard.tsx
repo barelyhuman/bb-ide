@@ -16,6 +16,7 @@ import { FilePathLink } from "@/components/ui/file-path-link.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
+import { resolveAbsoluteFilePath } from "@/lib/absolute-file-path";
 import { cn } from "@/lib/utils";
 import {
   formatGitDiffFileLabel,
@@ -54,6 +55,7 @@ const GIT_DIFF_CARD_BODY_STYLE: CSSProperties = {
 export interface GitDiffCardProps {
   fileDiff: ParsedGitDiffFile;
   diffViewOptions: Record<string, string | boolean | number>;
+  filePathRoot?: string | null;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
   /**
@@ -179,6 +181,7 @@ function splitFileContentsForDiffContext(file: FileContents): string[] {
 export const GitDiffCard = memo(function GitDiffCard({
   fileDiff,
   diffViewOptions,
+  filePathRoot,
   onOpenFileInEditor,
   onOpenFilePreview,
   isCollapsed,
@@ -217,6 +220,9 @@ export const GitDiffCard = memo(function GitDiffCard({
     () => getOpenableGitDiffPath(fileDiff),
     [fileDiff],
   );
+  const copyablePath = openablePath
+    ? resolveAbsoluteFilePath({ path: openablePath, rootPath: filePathRoot })
+    : null;
   const canOpenFile = Boolean(openablePath);
   // Pure renames + identical content land here with zero hunks; nothing for
   // the body to show, so force-collapse and disable the chevron.
@@ -424,9 +430,9 @@ export const GitDiffCard = memo(function GitDiffCard({
                 }
                 className="font-mono font-medium text-foreground"
               />
-              {openablePath ? (
+              {copyablePath ? (
                 <CopyButton
-                  text={openablePath}
+                  text={copyablePath}
                   label={`Copy path for ${fileDiffLabel}`}
                   className="rounded-md hover:bg-state-hover"
                 />

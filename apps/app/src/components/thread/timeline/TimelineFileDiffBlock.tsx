@@ -309,6 +309,7 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
           <GitDiffCard
             fileDiff={renderablePatch.fileDiff}
             diffViewOptions={cardDiffViewOptions}
+            filePathRoot={workspaceRootPath}
             stickyHeader
           />
         </div>

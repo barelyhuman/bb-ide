@@ -4,6 +4,7 @@ import type {
   EnvironmentFilePreviewSource,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
+import { buildAbsoluteFilePath } from "@/lib/absolute-file-path";
 
 interface ResolveThreadWorkspaceOpenPathArgs {
   canOpenWorkspace: boolean;
@@ -19,14 +20,6 @@ export interface BuildOpenInEditorHandlerArgs {
     lineNumber: number | null;
     path: string;
   }) => Promise<boolean>;
-}
-
-function joinAbsolutePath(rootPath: string, relativePath: string): string {
-  const trimmedRoot = rootPath.endsWith("/") ? rootPath.slice(0, -1) : rootPath;
-  const trimmedRelative = relativePath.startsWith("/")
-    ? relativePath.slice(1)
-    : relativePath;
-  return `${trimmedRoot}/${trimmedRelative}`;
 }
 
 /**
@@ -45,7 +38,7 @@ export function buildOpenInEditorHandler(
   return (relativePath) => {
     void args.openInPreferredTarget({
       lineNumber: null,
-      path: joinAbsolutePath(rootPath, relativePath),
+      path: buildAbsoluteFilePath({ path: relativePath, rootPath }),
     });
   };
 }

@@ -30,6 +30,18 @@ interface DeferredDiffFileContentRequest extends RequestedDiffFileContent {
   resolve: (file: FileContents | null) => void;
 }
 
+type ClipboardWriteText = (text: string) => Promise<void>;
+
+function installClipboardWriteTextMock() {
+  const writeText = vi.fn<ClipboardWriteText>();
+  writeText.mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
+}
+
 vi.mock("@pierre/diffs/react", () => ({
   FileDiff: ({ fileDiff }: MockFileDiffProps) => (
     <div
@@ -84,9 +96,62 @@ const MODIFIED_FILE_DIFF = [
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 describe("GitDiffCard", () => {
+  it("does not render a copy button for a relative path without a workspace root", () => {
+    const modifiedFile = parseGitDiffFiles(MODIFIED_FILE_DIFF)[0];
+    expect(modifiedFile).toBeDefined();
+    if (!modifiedFile) return;
+
+    render(
+      <GitDiffCard
+        fileDiff={modifiedFile}
+        diffViewOptions={{}}
+        isCollapsed={false}
+        onToggleCollapsed={() => {}}
+        isRendering={false}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", {
+        name: "Copy path for src/modified-file.ts",
+      }),
+    ).toBeNull();
+  });
+
+  it("copies an absolute file path when a workspace root is provided", async () => {
+    const modifiedFile = parseGitDiffFiles(MODIFIED_FILE_DIFF)[0];
+    expect(modifiedFile).toBeDefined();
+    if (!modifiedFile) return;
+    const writeText = installClipboardWriteTextMock();
+
+    render(
+      <GitDiffCard
+        fileDiff={modifiedFile}
+        diffViewOptions={{}}
+        filePathRoot="/Users/me/project"
+        isCollapsed={false}
+        onToggleCollapsed={() => {}}
+        isRendering={false}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Copy path for src/modified-file.ts",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        "/Users/me/project/src/modified-file.ts",
+      );
+    });
+  });
+
   it("gates deleted file rendering and content loading behind an explicit load action", async () => {
     const deletedFile = parseGitDiffFiles(DELETED_FILE_DIFF)[0];
     expect(deletedFile).toBeDefined();
