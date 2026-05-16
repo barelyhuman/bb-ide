@@ -21,14 +21,14 @@ fallback only.
 
 Before changing files, resolve these inputs from the user request:
 
-| Input                   | Default during alpha | Notes                                                                  |
-| ----------------------- | -------------------- | ---------------------------------------------------------------------- |
-| Package                 | `bb-app`             | This runbook does not publish other packages.                          |
-| Version bump            | `alpha prerelease`   | Example: `0.0.1-alpha.3` to `0.0.1-alpha.4`.                           |
-| npm dist-tag            | `latest`             | During alpha, use `latest` only while plain `npx bb-app` tracks alpha. |
-| Allow prerelease latest | `true` during alpha  | Required when publishing an alpha version with `npm_tag=latest`.       |
-| Publish dry run         | `false`              | Use `true` only when testing the workflow itself.                      |
-| Source branch           | `main`               | Release commit must land on `main` before publishing.                  |
+| Input                   | Default  | Notes                                                             |
+| ----------------------- | -------- | ----------------------------------------------------------------- |
+| Package                 | `bb-app` | This runbook does not publish other packages.                     |
+| Version bump            | `patch`  | Example: `0.0.1` to `0.0.2`.                                      |
+| npm dist-tag            | `latest` | This is the tag plain `npx bb-app` uses.                          |
+| Allow prerelease latest | `false`  | Set to `true` only for an explicit prerelease-on-latest decision. |
+| Publish dry run         | `false`  | Use `true` only when testing the workflow itself.                 |
+| Source branch           | `main`   | Release commit must land on `main` before publishing.             |
 
 If any input is unclear, ask before bumping the version.
 
@@ -49,11 +49,18 @@ If any input is unclear, ask before bumping the version.
 
 3. Bump only `packages/bb-app/package.json`.
 
-   For the normal alpha loop:
+   For the normal stable loop:
 
    ```bash
    cd packages/bb-app
-   npm version prerelease --preid alpha --no-git-tag-version
+   npm version patch --no-git-tag-version
+   ```
+
+   When promoting from a prerelease to the first stable version, set the exact
+   version instead:
+
+   ```bash
+   npm version 0.0.1 --no-git-tag-version
    ```
 
 4. Make any release documentation updates requested by the user.
@@ -97,15 +104,14 @@ After the release commit is on pushed `main`, trigger the workflow:
 gh workflow run publish-bb-app.yml \
   --ref main \
   -f npm_tag=latest \
-  -f allow_prerelease_latest=true \
+  -f allow_prerelease_latest=false \
   -f dry_run=false
 ```
 
-Use `npm_tag=alpha` instead when the user wants `npx bb-app@alpha` without
-changing what plain `npx bb-app` resolves to. If `npm_tag=alpha`, leave
-`allow_prerelease_latest=false`. npm Trusted Publishing authenticates
-`npm publish`, not post-publish tag edits, so the OIDC-only workflow can set
-one tag per release.
+Use prerelease dist-tags such as `alpha` only when the user explicitly asks for
+a separate prerelease channel. npm Trusted Publishing authenticates
+`npm publish`, not post-publish tag edits, so the OIDC-only workflow can set one
+tag per release.
 
 If the `npm-release` GitHub environment requires approval, tell the user the
 workflow is waiting for approval. The agent may monitor the run, but the human
@@ -127,15 +133,15 @@ Report:
 
 - version published
 - Git commit published
-- npm `alpha` and `latest` dist-tags
+- npm `latest` and any non-latest dist-tags
 - workflow run URL
 - validation commands and result
 - any follow-up risks
 
 ## Failure Handling
 
-- If the version already exists on npm, stop. Bump to the next prerelease in a
-  new commit and rerun validation.
+- If the version already exists on npm, stop. Bump to the next version in a new
+  commit and rerun validation.
 - If validation fails, stop. Fix the issue before triggering the workflow.
 - If Trusted Publishing fails, check the npm trusted publisher config: owner,
   repo, workflow filename, and environment must exactly match the workflow.
@@ -144,6 +150,6 @@ Report:
 - If local emergency publish is unavoidable, use `npm publish --tag <tag>` from
   `packages/bb-app` only after explicit user approval and record the OTP-based
   path as a deviation.
-- If the release needs both `alpha` and `latest` moved for the same version,
-  either use an explicit token-backed fallback for the second tag or do the tag
-  move manually as a recorded deviation.
+- If a legacy prerelease tag should stop resolving to an old build, remove it
+  with `npm dist-tag rm bb-app <tag>` using explicit user approval and normal
+  npm authentication.

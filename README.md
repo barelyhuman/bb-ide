@@ -23,8 +23,7 @@ execution, and keep humans and agents working in the same loop.
 
 > [!NOTE]
 > bb is in active development. Core architecture is stable, but workflows
-> and surfaces are still evolving. The npm package is currently published as
-> an alpha while the install and first-run flow settles.
+> and surfaces are still evolving.
 
 ## Use bb
 

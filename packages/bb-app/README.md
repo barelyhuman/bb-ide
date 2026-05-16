@@ -17,8 +17,7 @@ shared workspace with a web app, CLI, and server they can all operate through.
 Use it to run work in threads, inspect progress, steer execution, and keep
 humans and agents working in the same loop.
 
-> Note: bb is in active development. The npm package is currently published as
-> an alpha while the install and first-run flow settles.
+> Note: bb is in active development. Workflows and surfaces are still evolving.
 
 ## Quick Start
 

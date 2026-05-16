@@ -2,13 +2,13 @@
 
 ## Current Status
 
-`bb-app` is published manually from `packages/bb-app` using an alpha dist-tag. The
-local safety checks already exist:
+`bb-app` is published through the manual GitHub Actions workflow using npm
+Trusted Publishing/OIDC. The local safety checks are:
 
 - `pnpm exec turbo run typecheck test --filter=bb-app`
 - `pnpm exec turbo run smoke:tarball --filter=bb-app --force`
-- `npm publish --dry-run --tag alpha`
-- `npm publish --tag alpha`
+- `npm publish --dry-run --tag latest`
+- `npm publish --tag latest`
 
 This plan keeps the first automated version intentionally conservative:
 publishing remains a human-triggered release action, but CI owns the exact
@@ -26,7 +26,7 @@ Why:
   publishing.
 - The version in `packages/bb-app/package.json` remains the release source of
   truth.
-- Alpha releases can keep moving quickly without teaching every contributor a
+- `0.0.x` releases can keep moving quickly without teaching every contributor a
   manual npm publishing sequence.
 
 Avoid fully automatic publish-on-merge for now. This package includes bundled app
@@ -54,12 +54,12 @@ open.
 
 Feasible options:
 
-| Option                                      | OTP burden | Release control                            | Security posture                                          | Recommendation                                          |
-| ------------------------------------------- | ---------- | ------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------- |
-| Manual local publish                        | Every time | Whoever runs `npm publish` locally         | Good 2FA, weak reproducibility                            | Keep only as emergency fallback.                        |
-| GitHub Actions + npm Trusted Publishing     | None       | Manual workflow dispatch + optional review | Best: short-lived OIDC credential, no stored write secret | Use this first.                                         |
-| GitHub Actions + npm granular access token  | None       | Manual workflow dispatch + optional review | Acceptable but stores a long-lived publish secret         | Fallback only if Trusted Publishing setup is blocked.   |
-| Publish automatically on every `main` merge | None       | Merge to `main` is the release trigger     | Can be secure, but easy to publish accidental versions    | Avoid until the alpha path is boring and fully guarded. |
+| Option                                      | OTP burden | Release control                            | Security posture                                          | Recommendation                                            |
+| ------------------------------------------- | ---------- | ------------------------------------------ | --------------------------------------------------------- | --------------------------------------------------------- |
+| Manual local publish                        | Every time | Whoever runs `npm publish` locally         | Good 2FA, weak reproducibility                            | Keep only as emergency fallback.                          |
+| GitHub Actions + npm Trusted Publishing     | None       | Manual workflow dispatch + optional review | Best: short-lived OIDC credential, no stored write secret | Use this first.                                           |
+| GitHub Actions + npm granular access token  | None       | Manual workflow dispatch + optional review | Acceptable but stores a long-lived publish secret         | Fallback only if Trusted Publishing setup is blocked.     |
+| Publish automatically on every `main` merge | None       | Merge to `main` is the release trigger     | Can be secure, but easy to publish accidental versions    | Avoid until the release path is boring and fully guarded. |
 
 Important constraints:
 
@@ -69,15 +69,13 @@ Important constraints:
 - The trusted-publisher identity must exactly match the GitHub owner, repo,
   workflow filename, and optional environment configured in npm.
 - npm dist-tags are mutable aliases. The package version is immutable after
-  publish, but `alpha`/`latest` can be moved later with a separate authenticated
-  `npm dist-tag` command.
+  publish, but tags such as `alpha`/`latest` can be moved later with a separate
+  authenticated `npm dist-tag` command.
 - npm Trusted Publishing currently authenticates `npm publish`; post-publish
   tag edits such as `npm dist-tag add` still need traditional authentication.
 - The OIDC-only workflow can set exactly one dist-tag through
-  `npm publish --tag <tag>`. During the current alpha period, use
-  `npm_tag=latest` if we intentionally want plain `npx bb-app` to resolve to
-  the alpha. Use `npm_tag=alpha` if we want `npx bb-app@alpha` without moving
-  plain `npx`.
+  `npm publish --tag <tag>`. The normal release path uses `npm_tag=latest` so
+  plain `npx bb-app` resolves to the newest stable `0.0.x` release.
 
 The agent-facing operator doc should be
 [`docs/releasing-bb-app.md`](../docs/releasing-bb-app.md). The intended user
@@ -95,10 +93,9 @@ Create `.github/workflows/publish-bb-app.yml`.
 
 Workflow inputs:
 
-- `npm_tag`: choice of `alpha`, `beta`, or `latest`; default `latest` while
-  plain `npx bb-app` intentionally tracks alpha.
+- `npm_tag`: choice of `alpha`, `beta`, or `latest`; default `latest`.
 - `allow_prerelease_latest`: boolean; default `false`. Set to `true` only
-  during alpha periods where plain `npx bb-app` intentionally tracks a
+  when a release request explicitly says plain `npx bb-app` should track a
   prerelease.
 - Optional `dry_run`: boolean; default `true` for first rollout, flip to
   `false` once the trusted publisher setup has been verified.
@@ -142,8 +139,8 @@ Exit criteria:
 - `.github/workflows/publish-bb-app.yml` exists and is manually runnable.
 - The workflow publishes only `packages/bb-app`, not the monorepo root.
 - The workflow requires the existing `bb-app` checks before publishing.
-- The workflow can publish alpha versions under `alpha` or `latest`, depending
-  on the explicit `npm_tag` input.
+- The workflow can publish stable versions under `latest` and prerelease
+  versions under an explicit prerelease tag.
 
 Validation:
 
@@ -202,13 +199,13 @@ Exit criteria:
 
 Validation:
 
-Run the workflow against the next prerelease version, for example
-`0.0.1-alpha.2`, with `npm_tag=alpha`. Then verify:
+Run the workflow against the next stable version, for example `0.0.2`, with
+`npm_tag=latest`. Then verify:
 
 ```sh
-npm view bb-app@alpha version
+npm view bb-app@latest version
 npm view bb-app dist-tags --json
-npx --yes bb-app@alpha --help
+npx --yes bb-app --help
 ```
 
 ## Fallback: Granular npm Token
@@ -222,8 +219,8 @@ access token as a temporary fallback:
   not as a broad repository secret.
 - Keep the same manual `workflow_dispatch` trigger and required reviewer gate.
 - Publish with `NODE_AUTH_TOKEN`.
-- Use it only if we need post-publish commands such as moving both `alpha` and
-  `latest` for the same package version.
+- Use it only if we need post-publish commands such as moving or removing a
+  legacy dist-tag.
 
 This removes OTP prompts but stores a long-lived credential, so it is worse than
 Trusted Publishing. Treat it as a bridge, not the target state.
@@ -256,27 +253,27 @@ Validation:
 Trigger dry-run workflows for these cases:
 
 - Existing version: expected failure.
-- `0.0.1-alpha.N` with `alpha`: expected success.
-- `0.0.1-alpha.N` with `latest`: expected success only while the alpha policy
-  allows plain `npx bb-app` to follow alpha.
+- `0.0.1-alpha.N` with `alpha`: expected success only for an explicit
+  prerelease-channel request.
+- `0.0.1-alpha.N` with `latest`: expected success only when the release request
+  explicitly allows plain `npx bb-app` to follow a prerelease.
 - Any version from a non-`main` ref: expected failure.
 - `0.0.1` with `latest`: expected success once we are ready for stable.
 
 ## Phase 4: Decide Version Bump Workflow
 
-Keep version bumps manual until alpha publishing stabilizes. The normal alpha
-loop is:
+Keep version bumps manual until publishing is boring. The normal stable loop is:
 
 ```sh
 cd packages/bb-app
-npm version prerelease --preid alpha --no-git-tag-version
+npm version patch --no-git-tag-version
 ```
 
 Then commit the version change, merge it, and run the publish workflow.
 
 Later, consider adding one of these:
 
-- A `pnpm release:bb-app -- alpha` script that bumps, validates, and prints the
+- A `pnpm release:bb-app -- patch` script that bumps, validates, and prints the
   workflow command to run.
 - Changesets if multiple packages start publishing together.
 - semantic-release only if commit-message-driven releases become a team norm.
