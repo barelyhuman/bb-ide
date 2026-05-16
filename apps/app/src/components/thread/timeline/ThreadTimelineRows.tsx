@@ -533,14 +533,11 @@ function TimelineUnreadDivider() {
       ref={dividerRef}
       role="separator"
       aria-label="New messages"
-      className="flex items-center gap-3 py-1 text-xs font-medium text-primary"
+      className="flex items-center gap-2 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-foreground"
       data-testid="manager-unread-divider"
     >
-      <span className="h-px min-w-0 flex-1 bg-primary/50" aria-hidden />
-      <span className="shrink-0 rounded-full border border-primary/30 bg-background px-2 py-0.5">
-        New
-      </span>
-      <span className="h-px min-w-0 flex-1 bg-primary/50" aria-hidden />
+      <span className="shrink-0">New</span>
+      <span className="h-px min-w-0 flex-1 bg-border" aria-hidden />
     </div>
   );
 }
