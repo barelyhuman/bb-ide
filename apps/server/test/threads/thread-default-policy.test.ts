@@ -55,7 +55,7 @@ function makeManagerParentThread(
 }
 
 describe("resolveCreateThreadExecutionDefaults", () => {
-  it("uses the server-owned Pi manager defaults when a manager omits provider and stored defaults", () => {
+  it("uses the server-owned Codex manager defaults when a manager omits provider and stored defaults", () => {
     expect(
       resolveCreateThreadExecutionDefaults({
         storedDefaults: null,
@@ -63,11 +63,11 @@ describe("resolveCreateThreadExecutionDefaults", () => {
       }),
     ).toEqual({
       kind: "resolved",
-      providerId: "pi",
+      providerId: "codex",
       executionDefaults: {
-        providerId: "pi",
-        model: "anthropic/claude-opus-4-7",
-        reasoningLevel: "medium",
+        providerId: "codex",
+        model: "gpt-5.5",
+        reasoningLevel: "xhigh",
         permissionMode: "full",
         serviceTier: "default",
       },
@@ -77,16 +77,16 @@ describe("resolveCreateThreadExecutionDefaults", () => {
   it("discards stored defaults when the resolved provider changes", () => {
     expect(
       resolveCreateThreadExecutionDefaults({
-        requestedProviderId: "codex",
+        requestedProviderId: "pi",
         storedDefaults: makeDefaults({
-          providerId: "pi",
-          model: "anthropic/claude-opus-4-7",
+          providerId: "codex",
+          model: "gpt-5.5",
         }),
         threadType: "manager",
       }),
     ).toEqual({
       kind: "resolved",
-      providerId: "codex",
+      providerId: "pi",
       executionDefaults: null,
     });
   });

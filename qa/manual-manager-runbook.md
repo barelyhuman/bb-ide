@@ -8,8 +8,8 @@ coverage in [manual-runbook.md](manual-runbook.md).
 
 Manager providers under test:
 
-- default server policy: omit provider/model and expect `pi` with
-  `anthropic/claude-opus-4-7` / `medium`
+- default server policy: omit provider/model and expect `codex` with
+  `gpt-5.5` / `xhigh`
 - explicit codex override: `codex` with `gpt-5.4` / `medium`
 - explicit Pi fallback: `openai-codex/gpt-5.4` / `medium`
 
@@ -179,9 +179,9 @@ Expected:
 
 - the hired thread is type `manager`
 - the manager starts immediately and reaches `idle`
-- the thread provider is `pi`
+- the thread provider is `codex`
 - if the initial execution payload is visible in the manager log, it shows the
-  server default manager target of `anthropic/claude-opus-4-7` / `medium`
+  server default manager target of `gpt-5.5` / `xhigh`
 - the first visible manager message is a meet-and-greet sent without any user
   prompt
 - the welcome behavior is visible in the manager log

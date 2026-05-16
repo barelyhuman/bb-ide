@@ -20,8 +20,9 @@ export const DEFAULT_SERVICE_TIER: ServiceTier = "default";
 export const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
 const MANAGED_CHILD_PERMISSION_MODE: PermissionMode = "workspace-write";
-const MANAGER_DEFAULT_PROVIDER_ID = "pi";
-const MANAGER_DEFAULT_MODEL = "anthropic/claude-opus-4-7";
+const MANAGER_DEFAULT_PROVIDER_ID = "codex";
+const MANAGER_DEFAULT_MODEL = "gpt-5.5";
+const MANAGER_DEFAULT_REASONING_LEVEL: ReasoningLevel = "xhigh";
 
 export interface ResolveCreateThreadExecutionDefaultsArgs {
   requestedProviderId?: string;
@@ -127,7 +128,7 @@ function buildManagerThreadExecutionDefaults(
   return {
     providerId,
     model: MANAGER_DEFAULT_MODEL,
-    reasoningLevel: DEFAULT_REASONING_LEVEL,
+    reasoningLevel: MANAGER_DEFAULT_REASONING_LEVEL,
     permissionMode: resolveSupportedPermissionMode({
       providerId,
       preferredPermissionMode: DEFAULT_PERMISSION_MODE,

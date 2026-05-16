@@ -587,9 +587,9 @@ describe("public project and host routes", () => {
           threadType: "manager",
         }),
       ).toEqual({
-        providerId: "pi",
-        model: "anthropic/claude-opus-4-7",
-        reasoningLevel: "medium",
+        providerId: "codex",
+        model: "gpt-5.5",
+        reasoningLevel: "xhigh",
         permissionMode: "full",
         serviceTier: "default",
       });
@@ -678,7 +678,7 @@ describe("public project and host routes", () => {
 
       expect(response.status).toBe(201);
       await expect(readJson(response)).resolves.toMatchObject({
-        providerId: "pi",
+        providerId: "codex",
         type: "manager",
       });
       expect(
