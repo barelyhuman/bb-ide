@@ -171,7 +171,7 @@ export const REALTIME_ENVIRONMENT_CHANGE_REGISTRY = {
   },
   "work-status-changed": {
     dirty: [
-      dirtyEnvironmentLiveWorkspaceStateQueries, // Refresh live status/preview but keep active diff reads stable.
+      dirtyEnvironmentLiveWorkspaceStateQueries, // Refresh live workspace-derived views after file edits.
     ],
   },
   "git-refs-changed": {
@@ -499,7 +499,6 @@ function dirtyEnvironmentLiveWorkspaceStateQueries({
   });
   queryClient.invalidateQueries({
     queryKey: environmentGitDiffQueryKeyPrefix(environmentId),
-    refetchType: "none",
   });
 }
 

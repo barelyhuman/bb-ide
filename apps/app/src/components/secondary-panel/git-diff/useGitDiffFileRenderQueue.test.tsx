@@ -31,6 +31,7 @@ interface MockGitDiffQuery {
   data: MockThreadGitDiffResponse | undefined;
   error: Error | null;
   isLoading: boolean;
+  isPlaceholderData: boolean;
 }
 
 interface MockWorkspaceStatus {
@@ -56,6 +57,7 @@ const mockEnvironmentQueries = vi.hoisted<MockEnvironmentQueries>(() => ({
     data: undefined,
     error: null,
     isLoading: false,
+    isPlaceholderData: false,
   },
   workStatus: {
     data: {
@@ -122,6 +124,7 @@ function resetEnvironmentQueryMocks(): void {
   mockEnvironmentQueries.gitDiff.data = undefined;
   mockEnvironmentQueries.gitDiff.error = null;
   mockEnvironmentQueries.gitDiff.isLoading = false;
+  mockEnvironmentQueries.gitDiff.isPlaceholderData = false;
   mockEnvironmentQueries.workStatus.data = {
     mergeBase: {
       commits: [],
@@ -465,6 +468,25 @@ describe("useGitDiffFileRenderQueue", () => {
 });
 
 describe("useGitDiffPanelState pending scroll", () => {
+  it("keeps the displayed diff while the same request temporarily reloads", async () => {
+    const diff = buildPatchDiff(["src/a.ts"]);
+    mockEnvironmentQueries.gitDiff.data = makeThreadGitDiffResponse(diff);
+    const store = createStore();
+    const { result, rerender } = renderPanelStateHook(store);
+
+    await waitFor(() => {
+      expect(result.current.parsedGitDiffFileEntries).toHaveLength(1);
+    });
+
+    mockEnvironmentQueries.gitDiff.data = undefined;
+    mockEnvironmentQueries.gitDiff.isLoading = true;
+    rerender();
+
+    expect(result.current.currentGitDiff).toBe(diff);
+    expect(result.current.isPreparingGitDiff).toBe(false);
+    expect(result.current.parsedGitDiffFileEntries).toHaveLength(1);
+  });
+
   it("keeps a pending scroll path while the diff is still loading", () => {
     mockEnvironmentQueries.gitDiff.isLoading = true;
     const store = createStore();

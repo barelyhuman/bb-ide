@@ -332,7 +332,7 @@ describe("createRealtimeCacheEffects", () => {
     effects.dispose();
   });
 
-  it("does not refetch active git diff queries for work-status changes", async () => {
+  it("refetches active git diff queries for work-status changes", async () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const gitDiffKey = environmentGitDiffQueryKey("env-1", "all", "main");
@@ -376,9 +376,8 @@ describe("createRealtimeCacheEffects", () => {
     });
     await vi.advanceTimersByTimeAsync(250);
 
-    expect(gitDiffQueryFn).not.toHaveBeenCalled();
+    expect(gitDiffQueryFn).toHaveBeenCalledTimes(1);
     expect(workStatusQueryFn).toHaveBeenCalledTimes(1);
-    expect(queryClient.getQueryState(gitDiffKey)?.isInvalidated).toBe(true);
 
     unsubscribeGitDiff();
     unsubscribeWorkStatus();

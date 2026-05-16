@@ -9,7 +9,7 @@ import {
 import { useAtomValue, useSetAtom } from "jotai";
 import { useQueryClient } from "@tanstack/react-query";
 import type { FileContents } from "@pierre/diffs";
-import type { WorkspaceDiffTarget } from "@bb/domain";
+import type { ThreadGitDiffResponse, WorkspaceDiffTarget } from "@bb/domain";
 import {
   useEnvironmentGitDiff,
   useEnvironmentWorkStatus,
@@ -56,6 +56,16 @@ interface GitDiffIdentityParams {
   target: WorkspaceDiffTarget | undefined;
 }
 
+interface GitDiffRequestIdentityParams {
+  environmentId?: string;
+  target: WorkspaceDiffTarget | undefined;
+}
+
+interface DisplayedGitDiffState {
+  requestIdentity: string;
+  response: ThreadGitDiffResponse;
+}
+
 export function useGitDiffPanelState({
   environmentId,
   isDiffPanelActive,
@@ -76,6 +86,8 @@ export function useGitDiffPanelState({
   const [expectedGitDiffFileCount, setExpectedGitDiffFileCount] = useState(0);
   const [isParsingGitDiffFiles, setIsParsingGitDiffFiles] = useState(false);
   const [lastParsedGitDiffKey, setLastParsedGitDiffKey] = useState("");
+  const [displayedGitDiffState, setDisplayedGitDiffState] =
+    useState<DisplayedGitDiffState | null>(null);
 
   const effectiveMergeBaseBranch =
     selectedMergeBaseBranch ?? defaultMergeBaseBranch;
@@ -83,6 +95,10 @@ export function useGitDiffPanelState({
     () =>
       buildGitDiffTarget(selectedGitDiffCommitSha, effectiveMergeBaseBranch),
     [effectiveMergeBaseBranch, selectedGitDiffCommitSha],
+  );
+  const gitDiffRequestIdentity = useMemo(
+    () => buildGitDiffRequestIdentity({ environmentId, target: gitDiffTarget }),
+    [environmentId, gitDiffTarget],
   );
   const { data: gitDiffWorkspaceStatus } = useEnvironmentWorkStatus(
     environmentId ?? "",
@@ -95,8 +111,9 @@ export function useGitDiffPanelState({
     },
   );
   const {
-    data: threadGitDiff,
+    data: fetchedThreadGitDiff,
     isLoading: isGitDiffLoading,
+    isPlaceholderData: isGitDiffPlaceholderData,
     error: gitDiffError,
   } = useEnvironmentGitDiff(environmentId ?? "", {
     enabled:
@@ -105,6 +122,42 @@ export function useGitDiffPanelState({
       gitDiffTarget !== undefined,
     target: gitDiffTarget,
   });
+  useEffect(() => {
+    if (fetchedThreadGitDiff && !isGitDiffPlaceholderData) {
+      setDisplayedGitDiffState((currentState) => {
+        if (
+          currentState?.requestIdentity === gitDiffRequestIdentity &&
+          currentState.response === fetchedThreadGitDiff
+        ) {
+          return currentState;
+        }
+        return {
+          requestIdentity: gitDiffRequestIdentity,
+          response: fetchedThreadGitDiff,
+        };
+      });
+      return;
+    }
+
+    if (!isGitDiffLoading) {
+      setDisplayedGitDiffState((currentState) =>
+        currentState?.requestIdentity === gitDiffRequestIdentity
+          ? currentState
+          : null,
+      );
+    }
+  }, [
+    fetchedThreadGitDiff,
+    gitDiffRequestIdentity,
+    isGitDiffLoading,
+    isGitDiffPlaceholderData,
+  ]);
+  const threadGitDiff =
+    fetchedThreadGitDiff && !isGitDiffPlaceholderData
+      ? fetchedThreadGitDiff
+      : displayedGitDiffState?.requestIdentity === gitDiffRequestIdentity
+        ? displayedGitDiffState.response
+        : undefined;
   const diffMergeBaseRef = threadGitDiff?.mergeBaseRef ?? null;
   const gitDiffIdentity = useMemo(
     () =>
@@ -438,6 +491,33 @@ function buildGitDiffIdentity({
         target.mergeBaseBranch,
         mergeBaseRef ?? "pending",
       ].join(":");
+    case "commit":
+      return `${environmentKey}:commit:${target.sha}`;
+    default: {
+      const _exhaustive: never = target;
+      return _exhaustive;
+    }
+  }
+}
+
+function buildGitDiffRequestIdentity({
+  environmentId,
+  target,
+}: GitDiffRequestIdentityParams): string {
+  const environmentKey = environmentId ?? "none";
+  if (!target) return `${environmentKey}:none`;
+
+  switch (target.type) {
+    case "uncommitted":
+      return `${environmentKey}:uncommitted`;
+    case "branch_committed":
+      return [
+        environmentKey,
+        "branch_committed",
+        target.mergeBaseBranch,
+      ].join(":");
+    case "all":
+      return [environmentKey, "all", target.mergeBaseBranch].join(":");
     case "commit":
       return `${environmentKey}:commit:${target.sha}`;
     default: {
