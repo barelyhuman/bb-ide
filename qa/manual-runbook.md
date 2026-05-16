@@ -17,6 +17,7 @@ codex --help
 claude --help
 pi --help
 jq --help
+sqlite3 --version
 ```
 
 ## Standalone Setup
@@ -187,18 +188,38 @@ DIRTY_ARCHIVE_THREAD_ID=$(bb thread spawn \
 bb thread wait "$DIRTY_ARCHIVE_THREAD_ID" --status idle --timeout 120
 DIRTY_ARCHIVE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_THREAD_ID" | jq -r '.environmentId')
 DIRTY_ARCHIVE_ENV_PATH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$DIRTY_ARCHIVE_ENV_ID" | jq -er '.path')
+SERVER_DB_PATH=$(jq -er '.server.dataDir + "/bb.db"' "$STATE_PATH")
 printf 'dirty archive safety\n' > "$DIRTY_ARCHIVE_ENV_PATH/dirty-archive.txt"
 bb thread show "$DIRTY_ARCHIVE_THREAD_ID" --work-status
+DIRTY_PRE_ARCHIVE_COMMAND_CURSOR=$(sqlite3 "$SERVER_DB_PATH" \
+  "SELECT COALESCE(MAX(cursor), 0) FROM host_daemon_commands;")
 
-if bb thread archive "$DIRTY_ARCHIVE_THREAD_ID"; then
-  echo "expected dirty managed worktree archive to require --force"
-  false
-else
-  echo "dirty managed worktree archive was blocked without --force"
-fi
+bb thread archive "$DIRTY_ARCHIVE_THREAD_ID"
 
-bb thread archive "$DIRTY_ARCHIVE_THREAD_ID" --force
-curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_THREAD_ID" | jq
+curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_THREAD_ID" | jq -e '.archivedAt != null'
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$DIRTY_ARCHIVE_ENV_ID" \
+  | jq -e '.cleanupMode == "safe" and (.cleanupRequestedAt | type == "number") and .status == "ready"'
+test -d "$DIRTY_ARCHIVE_ENV_PATH"
+test -f "$DIRTY_ARCHIVE_ENV_PATH/dirty-archive.txt"
+
+DIRTY_CLEANUP_OPERATION_STATE=$(sqlite3 "$SERVER_DB_PATH" \
+  "SELECT state FROM environment_operations WHERE environment_id = '$DIRTY_ARCHIVE_ENV_ID' AND kind = 'destroy';")
+test "$DIRTY_CLEANUP_OPERATION_STATE" = "requested"
+
+DIRTY_STATUS_SUCCESS_COUNT=0
+for _ in {1..30}; do
+  DIRTY_STATUS_SUCCESS_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
+    "SELECT COUNT(*) FROM host_daemon_commands WHERE cursor > $DIRTY_PRE_ARCHIVE_COMMAND_CURSOR AND type = 'workspace.status' AND state = 'success' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
+  if [ "$DIRTY_STATUS_SUCCESS_COUNT" -ge 1 ]; then
+    break
+  fi
+  sleep 1
+done
+test "$DIRTY_STATUS_SUCCESS_COUNT" -ge 1
+
+DIRTY_DESTROY_COMMAND_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
+  "SELECT COUNT(*) FROM host_daemon_commands WHERE type = 'environment.destroy' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
+test "$DIRTY_DESTROY_COMMAND_COUNT" -eq 0
 ```
 
 Expected result:
@@ -207,7 +228,7 @@ Expected result:
 - The worktree thread reaches `idle`, the environment reports `isWorktree: true`, and workspace status/diff routes return data for uncommitted, branch-committed, and combined targets.
 - Environment merge-base metadata can be set, reflected by `bb environment show`, used by thread status/diff output, and cleared.
 - Archiving blocks `bb thread tell`; unarchiving restores normal operation.
-- Dirty isolated managed worktree archive is blocked without `--force` and succeeds with `--force`.
+- Dirty isolated managed worktree archive succeeds, records safe cleanup intent, runs the cleanup safety inspection, and keeps the worktree intact without queueing `environment.destroy` while uncommitted or unmerged work remains.
 
 ## Multi-Thread and Shared Environment
 
