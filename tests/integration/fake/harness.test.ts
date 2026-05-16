@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { waitForHostConnected } from "../helpers/assertions.js";
 import { withHarness } from "../helpers/harness.js";
@@ -25,6 +26,22 @@ describe("integration harness", () => {
 
       expect(harness.hostId).toBe(initialHostId);
       expect(host.id).toBe(initialHostId);
+    });
+  });
+
+  it("reloads bb-app managed config through the integration server", async () => {
+    await withHarness(async (harness) => {
+      await fs.writeFile(
+        path.join(harness.server.config.dataDir, "config.json"),
+        `${JSON.stringify({ env: { OPENAI_API_KEY: "stored-openai-key" } })}\n`,
+        "utf8",
+      );
+
+      const response = await harness.api.system.config.reload.$post({});
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ ok: true });
+      expect(harness.server.config.openAiApiKey).toBe("stored-openai-key");
     });
   });
 });
