@@ -14,19 +14,6 @@ export {
   upsertEnvironmentOperationRecord,
 } from "./data/environment-operations.js";
 export {
-  cancelHostOperationRecord,
-  markHostOperationRecordCompletedWithPayload,
-  markHostOperationRecordCompleted,
-  markHostOperationRecordFailed,
-  markHostOperationRecordQueued,
-  resetHostOperationRecordToRequested,
-  upsertHostOperationRecord,
-} from "./data/host-operations.js";
-export {
-  markHostResumed,
-  markHostSuspended,
-} from "./data/host-lifecycle-state.js";
-export {
   cancelProjectOperationRecord,
   markProjectOperationRecordCompleted,
   markProjectOperationRecordFailed,

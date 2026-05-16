@@ -300,32 +300,6 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      contract.hostRuntimeMaterialSnapshotSchema.parse({
-        env: {
-          OPENAI_API_KEY: "test-openai-key",
-        },
-        files: [
-          {
-            contents: "{}\n",
-            managedBy: "bb-runtime-material",
-            mode: 0o600,
-            path: "~/.codex/auth.json",
-          },
-        ],
-        version: "runtime-version-1",
-      }),
-    ).toMatchObject({
-      files: [
-        {
-          managedBy: "bb-runtime-material",
-          mode: 0o600,
-          path: "~/.codex/auth.json",
-        },
-      ],
-      version: "runtime-version-1",
-    });
-
-    expect(
       hostDaemonCommandSchema.parse({
         type: "interactive.resolve",
         environmentId: "env_123",
@@ -345,16 +319,6 @@ describe("host-daemon command schemas", () => {
       resolution: {
         decision: "allow_for_session",
       },
-    });
-
-    expect(
-      hostDaemonCommandSchema.parse({
-        type: "host.sync_runtime_material",
-        version: "runtime-version-1",
-      }),
-    ).toMatchObject({
-      type: "host.sync_runtime_material",
-      version: "runtime-version-1",
     });
   });
 

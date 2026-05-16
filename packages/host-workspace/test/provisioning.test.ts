@@ -7,7 +7,6 @@ import { shellSingleQuote, waitForSetupMarkerCount } from "@bb/test-helpers";
 import { Workspace } from "../src/workspace.js";
 import {
   buildSetupScriptCommand,
-  createClone,
   createWorktree,
   removeDirectory,
   removeWorktree,
@@ -152,63 +151,6 @@ describe("workspace provisioning", () => {
       { path: secondTargetPath },
     ]);
   }, 15000);
-
-  it("creates clones and checks out the requested branch", async () => {
-    const sourceRepo = await initRepoWithOptionalSetup();
-    const parentDir = await makeTempDir("bb-clone-parent-");
-    const targetPath = path.join(parentDir, "clone");
-
-    await createClone({
-      sourcePath: sourceRepo,
-      targetPath,
-      branchName: "clone-branch",
-      baseBranch: "main",
-      timeoutMs: 900000,
-    });
-
-    expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
-  });
-
-  it("rolls back failed clone setup scripts", async () => {
-    const sourceRepo = await initRepoWithOptionalSetup(
-      "echo failing >&2\nexit 1\n",
-    );
-    const parentDir = await makeTempDir("bb-clone-fail-parent-");
-    const targetPath = path.join(parentDir, "broken-clone");
-
-    await expect(
-      createClone({
-        sourcePath: sourceRepo,
-        targetPath,
-        branchName: "broken-clone",
-        baseBranch: "main",
-        timeoutMs: 900000,
-      }),
-    ).rejects.toThrow(/Setup script failed/u);
-
-    await expect(fs.stat(targetPath)).rejects.toThrow();
-  });
-
-  it("creates nested clone targets when parent directories do not exist", async () => {
-    const sourceRepo = await initRepoWithOptionalSetup();
-    const parentDir = await makeTempDir("bb-clone-nested-parent-");
-    const targetPath = path.join(
-      parentDir,
-      ".bb-worktrees",
-      "proj_123",
-      "thr_456",
-    );
-
-    await createClone({
-      sourcePath: sourceRepo,
-      targetPath,
-      branchName: "clone-branch",
-      baseBranch: "main",
-      timeoutMs: 900000,
-    });
-
-    expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
-  });
 
   it("creates nested worktree targets when parent directories do not exist", async () => {
     const sourceRepo = await initRepoWithOptionalSetup();

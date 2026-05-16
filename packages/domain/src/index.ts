@@ -154,15 +154,6 @@ export type {
 } from "./provider-types.js";
 
 export {
-  sandboxBackendCapabilitiesSchema,
-  sandboxBackendInfoSchema,
-} from "./sandbox-backend.js";
-export type {
-  SandboxBackendCapabilities,
-  SandboxBackendInfo,
-} from "./sandbox-backend.js";
-
-export {
   environmentCleanupModeSchema,
   WORKSPACE_PROVISION_TYPES,
   discoveredWorkspacePropertiesSchema,
@@ -231,8 +222,6 @@ export {
   activeLifecycleOperationStates,
   environmentOperationKindSchema,
   environmentOperationKindValues,
-  hostOperationKindSchema,
-  hostOperationKindValues,
   isActiveLifecycleOperationState,
   lifecycleOperationStateSchema,
   lifecycleOperationStateValues,
@@ -245,7 +234,6 @@ export {
 } from "./lifecycle-operations.js";
 export type {
   EnvironmentOperationKind,
-  HostOperationKind,
   LifecycleOperationState,
   ProjectOperationKind,
   ThreadOperationKind,
@@ -255,8 +243,6 @@ export type {
 
 export {
   findLocalPathProjectSourceForHost,
-  githubRepoProjectSourceSchema,
-  isGitHubRepoProjectSource,
   isLocalPathProjectSource,
   localPathProjectSourceSchema,
   projectSchema,
@@ -265,7 +251,6 @@ export {
   projectSourceTypeValues,
 } from "./project.js";
 export type {
-  GitHubRepoProjectSource,
   LocalPathProjectSource,
   Project,
   ProjectSource,

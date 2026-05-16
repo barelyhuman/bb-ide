@@ -150,7 +150,10 @@ describe("thread runtime mutations", () => {
         environment: {
           type: "host",
           hostId: "host-1",
-          workspace: { type: "managed-clone", baseBranch: { kind: "default" } },
+          workspace: {
+            type: "managed-worktree",
+            baseBranch: { kind: "default" },
+          },
         },
       });
     });

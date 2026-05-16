@@ -25,7 +25,7 @@ function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
     return "connected";
   }
 
-  return host.suspendedAt !== null ? "suspended" : "disconnected";
+  return "disconnected";
 }
 
 function toHostRecord(
@@ -37,8 +37,6 @@ function toHostRecord(
     name: row.name,
     type: row.type,
     status,
-    ...(row.provider ? { provider: row.provider } : {}),
-    ...(row.externalId ? { externalId: row.externalId } : {}),
     lastSeenAt: row.lastSeenAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -56,11 +54,7 @@ export function listPublicHostsWithStatus(db: DbConnection): Host[] {
   return rows.map((row) =>
     toHostRecord(
       row,
-      connectedHostIds.has(row.id)
-        ? "connected"
-        : row.suspendedAt !== null
-          ? "suspended"
-          : "disconnected",
+      connectedHostIds.has(row.id) ? "connected" : "disconnected",
     ),
   );
 }

@@ -6,7 +6,7 @@ import type {
   ThreadTurnInitiator,
 } from "@bb/domain";
 import { createThreadProvisioningId } from "@bb/db";
-import type { SandboxWorkSessionDeps } from "../../types.js";
+import type { WorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { queueManagedEnvironmentReprovision } from "../environments/environment-provisioning.js";
 import {
@@ -25,7 +25,7 @@ export interface ReadyThreadEnvironment extends Environment {
 }
 
 export interface QueueTurnDuringReprovisionArgs {
-  deps: SandboxWorkSessionDeps;
+  deps: WorkSessionDeps;
   environment: Environment;
   execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
@@ -38,8 +38,6 @@ function reprovisionStartedText(
   workspaceProvisionType: Environment["workspaceProvisionType"],
 ): string {
   switch (workspaceProvisionType) {
-    case "managed-clone":
-      return "Restoring clone";
     case "managed-worktree":
       return "Restoring worktree";
     case "unmanaged":

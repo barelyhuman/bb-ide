@@ -498,151 +498,6 @@ describe("CLI command output contracts", () => {
     ).toEqual(created);
   });
 
-  it("bb project create supports github repo sources", async () => {
-    const created = {
-      id: "proj-created",
-      name: "Alpha",
-      createdAt: 1,
-      updatedAt: 2,
-      sources: [
-        {
-          createdAt: 1,
-          id: "source-1",
-          isDefault: true,
-          projectId: "proj-created",
-          repoUrl: "https://github.com/example/repo.git",
-          type: "github_repo",
-          updatedAt: 2,
-        },
-      ],
-    };
-    const post = vi.fn(async () => created);
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              $post: post,
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "project",
-        "create",
-        "--name",
-        "Alpha",
-        "--repo-url",
-        "https://github.com/example/repo.git",
-      ],
-      (program) => registerProjectCommands(program, () => "http://server"),
-    );
-
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Project created: proj-created",
-    );
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "    -  github_repo  https://github.com/example/repo.git",
-    );
-    expect(post).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        json: {
-          name: "Alpha",
-          source: {
-            repoUrl: "https://github.com/example/repo.git",
-            type: "github_repo",
-          },
-        },
-      }),
-    );
-  });
-
-  it("bb project source add posts a github source and can mark it default", async () => {
-    const post = vi.fn(async () => ({
-      createdAt: 1,
-      id: "source-2",
-      isDefault: false,
-      projectId: "proj-1",
-      repoUrl: "https://github.com/example/repo.git",
-      type: "github_repo",
-      updatedAt: 2,
-    }));
-    const patch = vi.fn(async () => ({
-      createdAt: 1,
-      id: "source-2",
-      isDefault: true,
-      projectId: "proj-1",
-      repoUrl: "https://github.com/example/repo.git",
-      type: "github_repo",
-      updatedAt: 3,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                sources: {
-                  $post: post,
-                  ":sourceId": {
-                    $patch: patch,
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "project",
-        "source",
-        "add",
-        "proj-1",
-        "--repo-url",
-        "https://github.com/example/repo.git",
-        "--default",
-      ],
-      (program) => registerProjectCommands(program, () => "http://server"),
-    );
-
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "Project source added: source-2",
-    );
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "source-2  github_repo  https://github.com/example/repo.git [default]",
-    );
-    expect(post).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        json: {
-          repoUrl: "https://github.com/example/repo.git",
-          type: "github_repo",
-        },
-        param: { id: "proj-1" },
-      }),
-    );
-    expect(patch).toHaveBeenCalledTimes(1);
-    expect(patch).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        json: {
-          isDefault: true,
-          type: "github_repo",
-        },
-        param: { id: "proj-1", sourceId: "source-2" },
-      }),
-    );
-  });
-
   it("bb project source update patches the existing source type", async () => {
     const get = vi.fn(async () => ({
       createdAt: 1,
@@ -1232,13 +1087,13 @@ describe("CLI command output contracts", () => {
       makeEnvironment({
         id: "env-1",
         projectId: "proj-1",
-        hostId: "host-ephemeral",
+        hostId: "host-remote",
       }),
     );
     const getHost = vi.fn(async () => ({
-      id: "host-ephemeral",
-      name: "Sandbox Host",
-      type: "ephemeral",
+      id: "host-remote",
+      name: "Remote Host",
+      type: "persistent",
       status: "connected",
       createdAt: 1,
       updatedAt: 2,
@@ -1278,10 +1133,10 @@ describe("CLI command output contracts", () => {
     );
 
     expect(getHost).toHaveBeenCalledWith({
-      param: { id: "host-ephemeral" },
+      param: { id: "host-remote" },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "  Environment: Sandbox (env-1)",
+      "  Environment: Working remotely (env-1)",
     );
   });
 

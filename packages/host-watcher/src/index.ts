@@ -2,6 +2,7 @@ import type {
   HostWatcher,
   CreateHostWatcherArgs,
 } from "./host-watcher-types.js";
+import { createParcelHostWatcher } from "./parcel-host-watcher.js";
 
 export type {
   HostObservedChange,
@@ -19,12 +20,7 @@ export type {
 } from "./watch-status-types.js";
 
 export async function createHostWatcher(
-  args: CreateHostWatcherArgs,
+  _args: CreateHostWatcherArgs,
 ): Promise<HostWatcher | undefined> {
-  if (args.hostType === "ephemeral") {
-    return undefined;
-  }
-
-  const { createParcelHostWatcher } = await import("./parcel-host-watcher.js");
   return createParcelHostWatcher();
 }

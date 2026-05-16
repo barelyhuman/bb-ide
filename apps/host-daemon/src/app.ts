@@ -1,7 +1,3 @@
-import {
-  readRuntimeMaterialState,
-  writeRuntimeMaterialState,
-} from "@bb/host-runtime-material";
 import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import {
@@ -607,10 +603,6 @@ export async function createHostDaemonApp(
   const router = new CommandRouter({
     dataDir: options.dataDir,
     fetchProjectAttachment: (args) => serverClient.fetchProjectAttachment(args),
-    fetchRuntimeMaterial: (version) =>
-      serverClient.fetchRuntimeMaterial({ version }),
-    readPersistedRuntimeMaterial: () =>
-      readRuntimeMaterialState(options.dataDir),
     runtimeManager,
     terminalManager,
     listModels: (args) =>
@@ -634,8 +626,6 @@ export async function createHostDaemonApp(
     reportResult: async (report) => {
       await serverClient.reportCommandResult(report);
     },
-    persistRuntimeMaterial: (snapshot) =>
-      writeRuntimeMaterialState(options.dataDir, snapshot),
   });
 
   const commandFetchLoop = createCommandFetchLoop({

@@ -338,7 +338,7 @@ describe("local API server", () => {
     expect(pickFolderResponse.status).toBe(501);
   });
 
-  it("supports health-only mode for sandbox hosts", async () => {
+  it("supports health-only mode", async () => {
     server = await startLocalApiServer({
       hostId: "host-1",
       localApiConfig: createLocalApiConfig({

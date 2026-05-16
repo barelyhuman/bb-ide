@@ -2,11 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  detectHostName,
-  loadHostIdentity,
-  persistHostId,
-} from "./identity.js";
+import { detectHostName, loadHostIdentity, persistHostId } from "./identity.js";
 
 const tempDirs: string[] = [];
 
@@ -44,14 +40,14 @@ describe("identity", () => {
     const first = await loadHostIdentity({
       dataDir,
       createId: () => "host-first",
-      fallbackHostName: () => "sandbox-host",
+      fallbackHostName: () => "test-host",
     });
     await persistHostId({ dataDir, hostId: first.hostId });
 
     const second = await loadHostIdentity({
       dataDir,
       createId: () => "host-second",
-      fallbackHostName: () => "sandbox-host",
+      fallbackHostName: () => "test-host",
     });
 
     expect(first.hostId).toBe("host-first");
@@ -74,7 +70,7 @@ describe("identity", () => {
 
     const identity = await loadHostIdentity({
       dataDir,
-      fallbackHostName: () => "sandbox-host",
+      fallbackHostName: () => "test-host",
       providedHostId: "host-provided",
     });
 
@@ -96,7 +92,7 @@ describe("identity", () => {
 
     const first = await loadHostIdentity({
       dataDir,
-      fallbackHostName: () => "sandbox-host",
+      fallbackHostName: () => "test-host",
       providedHostId: "host-original",
     });
     expect(first.hostId).toBe("host-original");
@@ -105,7 +101,7 @@ describe("identity", () => {
     // persistHostId — the user retries with a different BB_HOST_ID.
     const second = await loadHostIdentity({
       dataDir,
-      fallbackHostName: () => "sandbox-host",
+      fallbackHostName: () => "test-host",
       providedHostId: "host-retry",
     });
     expect(second.hostId).toBe("host-retry");
@@ -119,7 +115,7 @@ describe("identity", () => {
     await expect(
       loadHostIdentity({
         dataDir,
-        fallbackHostName: () => "sandbox-host",
+        fallbackHostName: () => "test-host",
         providedHostId: "host-mismatch",
       }),
     ).rejects.toThrow(/does not match persisted host ID/u);
@@ -133,10 +129,10 @@ describe("identity", () => {
       dataDir,
       execFile,
       fallbackHostName: () => "fallback-host",
-      providedHostName: "sandbox-abcdef",
+      providedHostName: "remote-abcdef",
     });
 
-    expect(identity.hostName).toBe("sandbox-abcdef");
+    expect(identity.hostName).toBe("remote-abcdef");
     expect(execFile).not.toHaveBeenCalled();
   });
 });

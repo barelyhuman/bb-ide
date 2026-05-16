@@ -47,10 +47,10 @@ export default function (bb: ExtensionAPI) {
   });
 
   bb.registerEnvironment({
-    kind: "e2b",
+    kind: "container",
     info: {
-      id: "e2b",
-      displayName: "E2B Sandbox",
+      id: "container",
+      displayName: "Container Workspace",
       capabilities: {
         host_filesystem: false,
         isolated_workspace: true,
@@ -63,7 +63,7 @@ export default function (bb: ExtensionAPI) {
     restore(state, context) {
       /* ... */
     },
-    isState(value): value is E2BState {
+    isState(value): value is ContainerState {
       /* ... */
     },
   });
@@ -191,16 +191,16 @@ import type {
   IEnvironment,
 } from "@bb/environment";
 
-interface E2BState {
-  sandboxId: string;
+interface ContainerState {
+  containerId: string;
   workspaceRoot: string;
 }
 
-const e2bDefinition: EnvironmentDefinition<E2BState> = {
-  kind: "e2b",
+const containerDefinition: EnvironmentDefinition<ContainerState> = {
+  kind: "container",
   info: {
-    id: "e2b",
-    displayName: "E2B Sandbox",
+    id: "container",
+    displayName: "Container Workspace",
     capabilities: {
       host_filesystem: false,
       isolated_workspace: true,
@@ -208,7 +208,7 @@ const e2bDefinition: EnvironmentDefinition<E2BState> = {
     },
   },
   create(context: CreateEnvironmentContext): IEnvironment {
-    // Provision a new E2B sandbox
+    // Provision a new container workspace
     // Must return an object implementing the full IEnvironment interface:
     //   kind, info, serialize(), suspend(), destroy(), exists(),
     //   supportsHostFilesystemAccess(), isIsolatedWorkspace(),
@@ -217,15 +217,15 @@ const e2bDefinition: EnvironmentDefinition<E2BState> = {
     //   getWorkspaceStatus(), watchWorkspaceStatus(),
     //   commitWorkspace(), getWorkspaceDiff(), ...
   },
-  restore(state: E2BState, context: CreateEnvironmentContext): IEnvironment {
+  restore(state: ContainerState, context: CreateEnvironmentContext): IEnvironment {
     // Rehydrate from persisted state (returned by serialize())
   },
-  isState(value: unknown): value is E2BState {
+  isState(value: unknown): value is ContainerState {
     return (
       !!value &&
       typeof value === "object" &&
-      "sandboxId" in value &&
-      typeof (value as any).sandboxId === "string"
+      "containerId" in value &&
+      typeof (value as any).containerId === "string"
     );
   },
 };
@@ -269,10 +269,10 @@ examples/extensions/
       config.json     # { "apiKey": "..." } or env var reference
       package.json    # depends on @google/genai
   environments/
-    e2b/
-      index.ts        # E2B sandbox implementing EnvironmentDefinition<E2BState>
+    container/
+      index.ts        # Container workspace implementing EnvironmentDefinition<ContainerState>
       config.json
-      package.json    # depends on @e2b/code-interpreter
+      package.json
 ```
 
 ## Implementation Steps
@@ -391,7 +391,7 @@ In `apps/server/src/index.ts` (`main()`):
 ### Step 6: Write examples
 
 1. Write a working Gemini provider extension implementing the full `ProviderAdapter` interface from `@bb/core` (the process-based MCP bridge pattern)
-2. Write a working E2B environment extension implementing `EnvironmentDefinition<E2BState>` and returning an `IEnvironment` from `create()`/`restore()`
+2. Write a working container environment extension implementing `EnvironmentDefinition<ContainerState>` and returning an `IEnvironment` from `create()`/`restore()`
 3. Each example includes setup instructions for installing dependencies and configuring API keys
 4. Test each example end-to-end: install extension, start server, spawn thread with extension provider/environment
 
@@ -409,7 +409,7 @@ In `apps/server/src/index.ts` (`main()`):
 3. **Fault tolerance:** Verify a broken extension (throws on load) does not crash the server — the server starts normally with the broken extension logged and skipped.
 4. **ID conflict:** Verify that registering a provider with a built-in ID (`"codex"`, `"claude-code"`, `"pi"`) logs a warning and is rejected.
 5. **E2E — extension provider:** With the Gemini example installed, spawn a thread with `providerId: "gemini"` and verify the MCP bridge process launches and events flow.
-6. **E2E — extension environment:** With the E2B example installed, spawn a thread with `environmentCreationArgs: { kind: "e2b" }` and verify provisioning completes.
+6. **E2E — extension environment:** With the container example installed, spawn a thread with `environmentCreationArgs: { kind: "container" }` and verify provisioning completes.
 7. **Scoping:** Verify project-local extensions are only loaded for threads in that project, not for other projects on the same server.
 
 ## Open Questions/Risks

@@ -121,14 +121,6 @@ const worktreeEnvironmentSummary: ReactNode = (
   />
 );
 
-const sandboxEnvironmentSummary: ReactNode = (
-  <ThreadEnvironmentSummary
-    environmentLabel="E2B Sandbox"
-    environmentIcon={getEnvironmentWorkspaceLabelIconName("sandbox")}
-    environmentBranchName="bb/promptbox-stories"
-  />
-);
-
 const usage: ThreadContextWindowUsage = {
   usedTokens: 32_400,
   modelContextWindow: 128_000,
@@ -199,9 +191,8 @@ const dirtyWorkspaceStatus: WorkspaceStatus = {
   mergeBase: null,
 };
 
-const dirtyContextBannerSection = selectWorkspaceChangedFilesSection(
-  dirtyWorkspaceStatus,
-);
+const dirtyContextBannerSection =
+  selectWorkspaceChangedFilesSection(dirtyWorkspaceStatus);
 
 const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
   <ThreadPromptContextBanner
@@ -225,9 +216,7 @@ const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
 const queuedMessages: readonly ThreadQueuedMessage[] = [
   {
     id: "q_1",
-    content: [
-      { type: "text", text: "Also check the timeline error overlay." },
-    ],
+    content: [{ type: "text", text: "Also check the timeline error overlay." }],
     model: "gpt-5.5",
     reasoningLevel: "medium",
     permissionMode: "workspace-write",
@@ -240,7 +229,7 @@ const queuedMessages: readonly ThreadQueuedMessage[] = [
     content: [
       {
         type: "text",
-        text: "And confirm the new env summary renders without the branch button on sandbox hosts.",
+        text: "And confirm the new env summary renders without the branch button on unmanaged environments.",
       },
     ],
     model: "gpt-5.5",
@@ -280,7 +269,9 @@ interface RowConfig {
   zenModeResetKey?: string;
 }
 
-type ComposerCoreRuntimeStatus = Parameters<typeof FollowUpPromptBox>[0]["composer"]["threadRuntimeDisplayStatus"];
+type ComposerCoreRuntimeStatus = Parameters<
+  typeof FollowUpPromptBox
+>[0]["composer"]["threadRuntimeDisplayStatus"];
 
 // Match production: ThreadTimelinePane's PageShell footer caps content at
 // 760px. The story's StoryRow value cell uses flex-wrap, which would
@@ -401,10 +392,7 @@ export function Overview() {
         />
       </StoryRow>
       <StoryRow label="with promptbox context banner">
-        <Row
-          submitMode={{ kind: "ready" }}
-          stack={contextBannerElement}
-        />
+        <Row submitMode={{ kind: "ready" }} stack={contextBannerElement} />
       </StoryRow>
       <StoryRow
         label="stacked cards"
@@ -435,12 +423,6 @@ export function Overview() {
         <Row
           submitMode={{ kind: "ready" }}
           environmentSummary={worktreeEnvironmentSummary}
-        />
-      </StoryRow>
-      <StoryRow label="env: sandbox" hint="ephemeral host label + container icon">
-        <Row
-          submitMode={{ kind: "ready" }}
-          environmentSummary={sandboxEnvironmentSummary}
         />
       </StoryRow>
     </StoryCard>

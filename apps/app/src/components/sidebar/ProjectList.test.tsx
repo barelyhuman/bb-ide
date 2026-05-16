@@ -1,13 +1,7 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import {
-  act,
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
@@ -214,9 +208,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/system/config",
         handler: () =>
           jsonResponse({
-            githubConnected: false,
             hostDaemonPort: null,
-            sandboxHostSupported: false,
             voiceTranscriptionEnabled: false,
           }),
       },
@@ -253,9 +245,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/system/config",
         handler: () =>
           jsonResponse({
-            githubConnected: false,
             hostDaemonPort: null,
-            sandboxHostSupported: false,
             voiceTranscriptionEnabled: false,
           }),
       },
@@ -292,9 +282,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/system/config",
         handler: () =>
           jsonResponse({
-            githubConnected: false,
             hostDaemonPort: null,
-            sandboxHostSupported: false,
             voiceTranscriptionEnabled: false,
           }),
       },
@@ -333,9 +321,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/system/config",
         handler: () =>
           jsonResponse({
-            githubConnected: false,
             hostDaemonPort: null,
-            sandboxHostSupported: false,
             voiceTranscriptionEnabled: false,
           }),
       },

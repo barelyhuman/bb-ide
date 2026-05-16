@@ -239,8 +239,6 @@ export function EnvironmentRow({
     environment,
     isLocalHost: environmentIsLocal,
     hostName: environmentHost?.name,
-    hostType: environmentHost?.type,
-    hostProvider: environmentHost?.provider,
   });
   return (
     <DetailRow label="Environment" valueClassName="min-w-0 truncate">

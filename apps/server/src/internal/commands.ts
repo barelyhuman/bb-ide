@@ -7,7 +7,6 @@ import {
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
-import { markSandboxActivity } from "../services/hosts/host-lifecycle.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { parseInteger } from "../services/lib/validation.js";
 import { getAuthenticatedDaemon } from "./auth.js";
@@ -44,11 +43,6 @@ export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
           }
           return context.json({ commands: [] });
         }
-
-        void markSandboxActivity(deps, {
-          hostId: session.hostId,
-          source: "commands",
-        });
 
         return context.json({
           commands: commands.map((command) => ({

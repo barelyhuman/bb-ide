@@ -4,7 +4,6 @@ import type { DbConnection } from "../connection.js";
 import {
   environmentOperations,
   hostDaemonCommands,
-  hostOperations,
   pendingInteractions,
   projectOperations,
   threadOperations,
@@ -41,7 +40,6 @@ interface DbstatUnusedRow {
 export interface DatabaseMaintenanceActivity {
   activeCommandCount: number;
   activeEnvironmentOperationCount: number;
-  activeHostOperationCount: number;
   activePendingInteractionCount: number;
   activeProjectOperationCount: number;
   activeThreadCount: number;
@@ -152,13 +150,6 @@ export function getDatabaseMaintenanceActivity(
       )
       .get(),
   );
-  const activeHostOperationCount = countValue(
-    db
-      .select({ value: count() })
-      .from(hostOperations)
-      .where(inArray(hostOperations.state, [...activeLifecycleOperationStates]))
-      .get(),
-  );
   const activeThreadOperationCount = countValue(
     db
       .select({ value: count() })
@@ -183,7 +174,6 @@ export function getDatabaseMaintenanceActivity(
   return {
     activeCommandCount,
     activeEnvironmentOperationCount,
-    activeHostOperationCount,
     activePendingInteractionCount,
     activeProjectOperationCount,
     activeThreadCount,
@@ -197,7 +187,6 @@ export function isDatabaseMaintenanceIdle(
   return (
     activity.activeCommandCount === 0 &&
     activity.activeEnvironmentOperationCount === 0 &&
-    activity.activeHostOperationCount === 0 &&
     activity.activePendingInteractionCount === 0 &&
     activity.activeProjectOperationCount === 0 &&
     activity.activeThreadCount === 0 &&

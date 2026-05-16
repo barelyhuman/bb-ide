@@ -100,9 +100,6 @@ describe("dispatchCommand", () => {
       fetchProjectAttachment: async () => {
         throw new Error("Unexpected project attachment fetch");
       },
-      fetchRuntimeMaterial: async () => unexpectedWorkspaceCall(),
-      persistRuntimeMaterial: async () => undefined,
-      readPersistedRuntimeMaterial: async () => null,
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-thread-storage",
     }).then(() => {
@@ -147,9 +144,6 @@ describe("dispatchCommand", () => {
       fetchProjectAttachment: async () => {
         throw new Error("Unexpected project attachment fetch");
       },
-      fetchRuntimeMaterial: async () => unexpectedWorkspaceCall(),
-      persistRuntimeMaterial: async () => undefined,
-      readPersistedRuntimeMaterial: async () => null,
       replayTasks,
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-thread-storage",

@@ -36,10 +36,6 @@ export function createEnvironmentProvisioningId(): string {
   return createId("epv");
 }
 
-export function createHostOperationId(): string {
-  return createId("hop");
-}
-
 export function createThreadId(): string {
   return createId("thr");
 }
@@ -94,12 +90,4 @@ export function createHostDaemonCommandId(): string {
 
 export function createTerminalSessionId(): string {
   return createId("term");
-}
-
-export function createSandboxProviderCredentialId(): string {
-  return createId("pcred");
-}
-
-export function createCloudAuthAttemptId(): string {
-  return createId("authatt");
 }

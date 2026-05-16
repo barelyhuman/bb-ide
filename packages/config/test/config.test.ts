@@ -86,16 +86,10 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_DATABASE_URL", undefined);
     vi.stubEnv("BB_APP_URL", undefined);
     vi.stubEnv("BB_EXTERNAL_URL", undefined);
-    vi.stubEnv("E2B_API_KEY", undefined);
-    vi.stubEnv("E2B_TEMPLATE", undefined);
-    vi.stubEnv("BB_GITHUB_PAT", undefined);
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", undefined);
     vi.stubEnv("BB_FF_TERMINALS", undefined);
     vi.stubEnv("BB_INFERENCE_MODEL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
-    vi.stubEnv("BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS", undefined);
-    vi.stubEnv("BB_SANDBOX_IDLE_THRESHOLD_MS", undefined);
 
     const { serverConfig } =
       await importFresh<typeof import("../src/server.js")>("../src/server.js");
@@ -104,18 +98,12 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
     expect(serverConfig.BB_APP_URL).toBe("");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
-    expect(serverConfig.E2B_API_KEY).toBe("");
-    expect(serverConfig.E2B_TEMPLATE).toBe("");
-    expect(serverConfig.BB_GITHUB_PAT).toBe("");
     expect(serverConfig.featureFlags).toEqual({
       askUserQuestion: false,
       terminals: false,
     });
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
-    expect(serverConfig.ANTHROPIC_API_KEY).toBe("test-anthropic-key");
-    expect(serverConfig.BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS).toBe(30_000);
-    expect(serverConfig.BB_SANDBOX_IDLE_THRESHOLD_MS).toBe(300_000);
   });
 
   it("lets tooling read the server port without validating unrelated server env", async () => {
@@ -147,7 +135,6 @@ describe("consumer-specific config", () => {
   it("requires provider/model format for BB_INFERENCE_MODEL", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
     vi.stubEnv("BB_INFERENCE_MODEL", "gpt-4o-mini");
 
     await expect(
@@ -233,7 +220,6 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_APP_URL", undefined);
     vi.stubEnv("BB_EXTERNAL_URL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
     const { serverConfig } =
       await importFresh<typeof import("../src/server.js")>("../src/server.js");
@@ -247,7 +233,6 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_APP_URL", "https://app.example.test");
     vi.stubEnv("BB_EXTERNAL_URL", "https://external.example.test");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
     const { serverConfig } =
       await importFresh<typeof import("../src/server.js")>("../src/server.js");
@@ -267,10 +252,9 @@ describe("consumer-specific config", () => {
     ).rejects.toThrow(/BB_EXTERNAL_URL/u);
   });
 
-  it("reads the dev-env tunnel token from its dedicated config scope", async () => {
+  it("reads dev app host from its dedicated config scope", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DEV_APP_HOST", "0.0.0.0");
-    vi.stubEnv("DEV_CLOUDFLARED_TUNNEL_TOKEN", "test-tunnel-token");
 
     const { devEnvConfig } =
       await importFresh<typeof import("../src/dev-env.js")>(
@@ -278,7 +262,6 @@ describe("consumer-specific config", () => {
       );
 
     expect(devEnvConfig.BB_DEV_APP_HOST).toBe("0.0.0.0");
-    expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
   });
 
   it("parses optional host-daemon entrypoint env vars in one place", async () => {
@@ -286,8 +269,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_BRIDGE_DIR", " /tmp/bridges ");
     vi.stubEnv("BB_HOST_ENROLL_KEY", " enroll-token ");
     vi.stubEnv("BB_HOST_ID", " host-123 ");
-    vi.stubEnv("BB_HOST_NAME", " sandbox-123 ");
-    vi.stubEnv("BB_HOST_TYPE", "ephemeral");
+    vi.stubEnv("BB_HOST_NAME", " host-123 ");
+    vi.stubEnv("BB_HOST_TYPE", "persistent");
 
     const { hostDaemonEntrypointConfig } = await importFresh<
       typeof import("../src/host-daemon-entrypoint.js")
@@ -298,8 +281,8 @@ describe("consumer-specific config", () => {
       BB_CLI_DIR: "/tmp/bb-bin",
       BB_HOST_ENROLL_KEY: "enroll-token",
       BB_HOST_ID: "host-123",
-      BB_HOST_NAME: "sandbox-123",
-      BB_HOST_TYPE: "ephemeral",
+      BB_HOST_NAME: "host-123",
+      BB_HOST_TYPE: "persistent",
     });
   });
 
@@ -326,12 +309,12 @@ describe("consumer-specific config", () => {
   });
 
   it("rejects invalid host-daemon entrypoint host types", async () => {
-    vi.stubEnv("BB_HOST_TYPE", "sandbox");
+    vi.stubEnv("BB_HOST_TYPE", "ephemeral");
 
     await expect(
       importFresh<typeof import("../src/host-daemon-entrypoint.js")>(
         "../src/host-daemon-entrypoint.js",
       ),
-    ).rejects.toThrow('Invalid BB_HOST_TYPE "sandbox"');
+    ).rejects.toThrow('Invalid BB_HOST_TYPE "ephemeral"');
   });
 });

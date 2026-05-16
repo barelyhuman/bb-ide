@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
 import {
-  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
-  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
-  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
   DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
@@ -26,33 +23,20 @@ describe("host daemon local API config", () => {
     });
   });
 
-  it("uses health-only sandbox defaults for ephemeral hosts", () => {
-    expect(
-      resolveHostDaemonLocalApiConfig({
-        hostType: "ephemeral",
-        localApi: undefined,
-      }),
-    ).toEqual({
-      bindHost: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
-      healthPath: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
-      healthValue: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
-      mode: "health-only",
-      port: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
-    });
-  });
-
   it("allows explicit overrides on top of the host-type preset", () => {
     expect(
       resolveHostDaemonLocalApiConfig({
-        hostType: "ephemeral",
+        hostType: "persistent",
         localApi: {
+          bindHost: "127.0.0.1",
           healthPath: "/ready",
           healthValue: "healthy",
+          mode: "health-only",
           port: 9123,
         },
       }),
     ).toEqual({
-      bindHost: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
+      bindHost: "127.0.0.1",
       healthPath: "/ready",
       healthValue: "healthy",
       mode: "health-only",

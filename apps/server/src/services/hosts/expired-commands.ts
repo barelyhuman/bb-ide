@@ -9,9 +9,7 @@ import {
   buildCommandResultSettlementDeps,
   handleCommandResultSideEffects,
 } from "../../internal/command-result-owners.js";
-import {
-  dispatchCommandResultPostCommitActions,
-} from "../../internal/command-result-post-commit-actions.js";
+import { dispatchCommandResultPostCommitActions } from "../../internal/command-result-post-commit-actions.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
@@ -20,10 +18,6 @@ const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
 const EXPIRED_COMMAND_SESSION_ID = "expired";
 
 type LifecycleFailureReport =
-  | Extract<
-      HostDaemonCommandResultReport,
-      { type: "host.sync_runtime_material" }
-    >
   | Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>
   | Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>
   | Extract<HostDaemonCommandResultReport, { type: "thread.start" }>
@@ -32,7 +26,6 @@ type LifecycleFailureReport =
 
 type ExpiredCommandDeps = Pick<
   ServerAppDeps,
-  | "cloudAuth"
   | "config"
   | "db"
   | "hostLifecycle"
@@ -41,8 +34,6 @@ type ExpiredCommandDeps = Pick<
   | "logger"
   | "machineAuth"
   | "pendingInteractions"
-  | "sandboxEnv"
-  | "sandboxRegistry"
   | "terminalSessions"
 >;
 
@@ -101,7 +92,6 @@ export async function handleExpiredCommands(
     const completedAt = commandRow.completedAt ?? Date.now();
 
     switch (command.type) {
-      case "host.sync_runtime_material":
       case "environment.destroy":
       case "environment.provision":
       case "thread.start":

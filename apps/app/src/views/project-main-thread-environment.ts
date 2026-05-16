@@ -11,8 +11,8 @@ export interface ResolveProjectMainThreadEnvironmentArgs {
   projectId: string | undefined;
   /**
    * The branch the env will use when no override is selected. For host:local
-   * this is the primary checkout's HEAD; for worktree/sandbox it is the
-   * repo's default branch (and is ignored — the server resolves
+   * this is the primary checkout's HEAD; for worktree it is the
+   * repo's default branch (and is ignored - the server resolves
    * `baseBranch: "default"` from its own knowledge of the source).
    */
   currentBranch: string | null;
@@ -75,14 +75,6 @@ export function resolveProjectMainThreadEnvironment(
           ? { branch: { kind: "existing", name: branchName } }
           : {}),
       },
-    };
-  }
-
-  if (parsed.type === "sandbox") {
-    return {
-      type: "sandbox-host",
-      sandboxType: parsed.backendId,
-      baseBranch: resolveManagedBaseBranch(args),
     };
   }
 

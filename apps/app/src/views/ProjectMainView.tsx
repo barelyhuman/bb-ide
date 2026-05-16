@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { isGitHubRepoProjectSource } from "@bb/domain";
 import { NewThreadPromptBox } from "@/components/promptbox/NewThreadPromptBox";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { OptionPicker } from "@/components/pickers/OptionPicker";
@@ -8,7 +7,6 @@ import { PageShell } from "@/components/ui/page-shell.js";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
 import {
-  useProjectGithubBranches,
   useProjectPromptHistory,
   useProjectSourceBranches,
   useProjects,
@@ -96,10 +94,6 @@ export function ProjectMainView() {
     () => currentProject?.sources ?? [],
     [currentProject?.sources],
   );
-  const hasGithubSource = useMemo(
-    () => projectSources.some(isGitHubRepoProjectSource),
-    [projectSources],
-  );
 
   // Fall back to local host direct if no value is stored yet
   const effectiveEnvironmentValue = useMemo(() => {
@@ -119,28 +113,20 @@ export function ProjectMainView() {
     [effectiveEnvironmentValue],
   );
   const isHostMode = parsedEnvironment?.type === "host";
-  const isSandboxMode = parsedEnvironment?.type === "sandbox";
   const hostBranchesQuery = useProjectSourceBranches(
     projectId,
     isHostMode ? parsedEnvironment.hostId : null,
     { enabled: isHostMode },
   );
-  const githubBranchesQuery = useProjectGithubBranches(projectId, {
-    enabled: isSandboxMode && hasGithubSource,
-  });
-  const activeBranchesQuery = isSandboxMode
-    ? githubBranchesQuery
-    : hostBranchesQuery;
+  const activeBranchesQuery = hostBranchesQuery;
   const branchOptions = activeBranchesQuery.data?.branches ?? [];
   // The branch this env will use if the user doesn't override:
   //   - host:local      → the primary checkout's HEAD (`current`)
   //   - host:worktree   → the repo's default branch (the server's `default`
   //                       base-branch resolves to this)
-  //   - sandbox         → the repo's default branch (same reason)
-  // For non-local environments, `current` is meaningless (or null, for
-  // GitHub sources), so we prefer `defaultBranch`.
-  const isHostLocalMode =
-    isHostMode && parsedEnvironment.mode === "local";
+  // For non-local environments, `current` is meaningless, so we prefer
+  // `defaultBranch`.
+  const isHostLocalMode = isHostMode && parsedEnvironment.mode === "local";
   const effectiveCurrentBranch = isHostLocalMode
     ? (activeBranchesQuery.data?.current ?? null)
     : (activeBranchesQuery.data?.defaultBranch ?? null);
@@ -370,7 +356,6 @@ export function ProjectMainView() {
           environment={{
             value: effectiveEnvironmentValue,
             onChange: setEnvironmentSelectionValue,
-            projectId,
             sources: projectSources,
           }}
           branch={{

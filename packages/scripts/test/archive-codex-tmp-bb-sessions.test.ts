@@ -38,7 +38,7 @@ describe("archive-codex-tmp-bb-sessions", () => {
         "*/bb-standalone-*",
         "*/bb-integration-*",
         "*/bb-integ-*",
-        "*/bb-e2b-smoke-*",
+        "*/bb-qa-smoke-*",
       ],
       yes: false,
     });
@@ -78,10 +78,7 @@ describe("archive-codex-tmp-bb-sessions", () => {
       "/Users/tester",
     );
 
-    expect(parsedArgs.options.patterns).toEqual([
-      "*/bb-foo-*",
-      "*/bb-bar-*",
-    ]);
+    expect(parsedArgs.options.patterns).toEqual(["*/bb-foo-*", "*/bb-bar-*"]);
   });
 
   it("rejects unknown or incomplete options", () => {
@@ -102,7 +99,7 @@ describe("archive-codex-tmp-bb-sessions", () => {
     expect(help).toContain("*/bb-standalone-*");
     expect(help).toContain("*/bb-integration-*");
     expect(help).toContain("*/bb-integ-*");
-    expect(help).toContain("*/bb-e2b-smoke-*");
+    expect(help).toContain("*/bb-qa-smoke-*");
     expect(help).toContain("repeatable");
     expect(help).toContain("state_<n>.sqlite");
   });

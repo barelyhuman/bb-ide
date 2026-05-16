@@ -1,7 +1,6 @@
 import {
   listEnvironmentOperations,
   createEnvironment,
-  createHostId,
   getEnvironment,
   getThread,
   getThreadOperation,
@@ -9,9 +8,7 @@ import {
   type DbConnection,
   type DbNotifier,
   type DbTransaction,
-  type UpsertHostInput,
   updateThread,
-  upsertHost,
 } from "@bb/db";
 import {
   markThreadOperationRecordFailed,
@@ -26,17 +23,13 @@ import {
   type ProvisioningTranscriptEntry,
   type Thread,
 } from "@bb/domain";
-import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
 import type { BaseBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import type { LifecycleCoordinationDeps } from "../../lifecycle-coordination-deps.js";
 import { ApiError } from "../../errors.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { advanceEnvironmentProvisioning } from "../environments/environment-provisioning.js";
-import {
-  buildDirectEnvironmentProvisionRequest,
-  buildSandboxHostEnvironmentProvisionRequest,
-} from "../environments/environment-provision-request.js";
+import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   appendSystemErrorEvent,
@@ -87,10 +80,6 @@ type ActiveDirectEnvironmentOperationKind = "provision" | "reprovision";
 type DirectManagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
   { type: "direct-managed" }
->;
-type SandboxManagedIntent = Extract<
-  ThreadProvisionEnvironmentIntent,
-  { type: "sandbox-managed" }
 >;
 type DirectUnmanagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
@@ -151,11 +140,8 @@ interface BuildEnvironmentProvisionRequestArgs {
 interface ThreadProvisionEnvironmentPlan {
   buildRequest: (
     args: BuildEnvironmentProvisionRequestArgs,
-  ) =>
-    | ReturnType<typeof buildDirectEnvironmentProvisionRequest>
-    | ReturnType<typeof buildSandboxHostEnvironmentProvisionRequest>;
+  ) => ReturnType<typeof buildDirectEnvironmentProvisionRequest>;
   environmentInput: CreateEnvironmentInput;
-  hostInput: UpsertHostInput | null;
 }
 
 interface CreateProvisioningEnvironmentWithOperationArgs extends ThreadProvisionEnvironmentPlan {
@@ -185,23 +171,10 @@ interface ManagedEnvironmentPlanCommonArgs {
   sourcePath: string;
   baseBranch: BaseBranchSpec;
   thread: Thread;
-  workspaceProvisionType: "managed-clone" | "managed-worktree";
+  workspaceProvisionType: "managed-worktree";
 }
 
-interface DirectManagedEnvironmentPlanArgs extends ManagedEnvironmentPlanCommonArgs {
-  hostInput: null;
-  requestMode: "direct";
-}
-
-interface SandboxManagedEnvironmentPlanArgs extends ManagedEnvironmentPlanCommonArgs {
-  hostInput: UpsertHostInput;
-  requestMode: "sandbox-host";
-  sandboxType: string;
-}
-
-type ManagedEnvironmentPlanArgs =
-  | DirectManagedEnvironmentPlanArgs
-  | SandboxManagedEnvironmentPlanArgs;
+type ManagedEnvironmentPlanArgs = ManagedEnvironmentPlanCommonArgs;
 
 interface EnsureEnvironmentRequestedArgs {
   context: ThreadProvisionContext;
@@ -238,15 +211,6 @@ function initialProvisioningEntries(
           type: "step",
           key: "workspace-started",
           text: "Preparing worktree",
-          status: "started",
-        },
-      ];
-    case "managed-clone":
-      return [
-        {
-          type: "step",
-          key: "workspace-started",
-          text: "Preparing clone",
           status: "started",
         },
       ];
@@ -408,8 +372,7 @@ async function resolveMetadataIfNeeded(
   }
 
   const needsBranch =
-    args.context.request.environmentIntent.type === "direct-managed" ||
-    args.context.request.environmentIntent.type === "sandbox-managed";
+    args.context.request.environmentIntent.type === "direct-managed";
   if (!needsBranch) {
     if (!args.context.request.titleProvided) {
       void inferThreadMetadata(deps, {
@@ -588,9 +551,6 @@ function createProvisioningEnvironmentWithOperation(
         };
       }
 
-      if (args.hostInput) {
-        upsertHost(tx, deps.hub, args.hostInput);
-      }
       const environment = createEnvironment(
         tx,
         deps.hub,
@@ -650,7 +610,6 @@ function buildDirectUnmanagedEnvironmentPlan(
       workspaceProvisionType: "unmanaged",
       status: "provisioning",
     },
-    hostInput: null,
     buildRequest: ({ context, environment }) => {
       // Resolve intent.branch to a daemon-side checkout payload. The daemon
       // expects an explicit branch name in both kinds; for "new" we mint a
@@ -696,7 +655,6 @@ function buildManagedEnvironmentPlan(
       baseBranch: baseBranchSpecToStoredName(args.baseBranch),
       status: "provisioning",
     },
-    hostInput: args.hostInput,
     buildRequest: ({ context, environment }) => {
       const command = buildEnvironmentProvisionCommand({
         branchName: buildManagedBranchName({
@@ -720,15 +678,7 @@ function buildManagedEnvironmentPlan(
         setupTimeoutMs: SETUP_TIMEOUT_MS,
       });
 
-      if (args.requestMode === "direct") {
-        return buildDirectEnvironmentProvisionRequest({
-          command,
-          provisioningId: context.state.provisioningId,
-        });
-      }
-
-      return buildSandboxHostEnvironmentProvisionRequest({
-        sandboxType: args.sandboxType,
+      return buildDirectEnvironmentProvisionRequest({
         command,
         provisioningId: context.state.provisioningId,
       });
@@ -754,32 +704,10 @@ async function resolveEnvironmentCreationPlan(
       return buildManagedEnvironmentPlan({
         dataDir: hostSession.dataDir,
         hostId: intent.hostId,
-        hostInput: null,
-        requestMode: "direct",
         sourcePath: intent.sourcePath,
         baseBranch: intent.baseBranch,
         thread: args.thread,
         workspaceProvisionType: intent.workspaceProvisionType,
-      });
-    }
-    case "sandbox-managed": {
-      const intent: SandboxManagedIntent = args.intent;
-      const hostId = createHostId();
-      return buildManagedEnvironmentPlan({
-        dataDir: SANDBOX_DATA_DIR,
-        hostId,
-        hostInput: {
-          id: hostId,
-          name: `sandbox-${hostId.slice(-6)}`,
-          provider: intent.sandboxType,
-          type: "ephemeral",
-        },
-        requestMode: "sandbox-host",
-        sandboxType: intent.sandboxType,
-        sourcePath: intent.cloneRepoUrl,
-        baseBranch: intent.baseBranch,
-        thread: args.thread,
-        workspaceProvisionType: "managed-clone",
       });
     }
   }

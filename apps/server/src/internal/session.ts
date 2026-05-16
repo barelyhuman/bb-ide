@@ -6,9 +6,7 @@ import {
 } from "@bb/db";
 import {
   hostDaemonProjectAttachmentContentQuerySchema,
-  hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonSessionOpenRequestSchema,
-  hostRuntimeMaterialSnapshotSchema,
   typedRoutes,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
@@ -25,14 +23,8 @@ import {
   getAuthenticatedDaemon,
 } from "./auth.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
-import {
-  advanceSandboxRuntimeMaterialSync,
-  requestSandboxRuntimeMaterialSync,
-} from "../services/hosts/sandbox-runtime-material.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { markHostSessionOpened } from "../services/hosts/host-lifecycle.js";
-import { reconcileSandboxRuntimeMaterialAfterSessionOpen } from "../services/hosts/sandbox-runtime-material-operation.js";
-import { readSandboxRuntimeMaterialSnapshotForVersion } from "../services/hosts/sandbox-runtime-material-snapshot.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
 import { readAttachment } from "../services/projects/attachments.js";
 
@@ -73,21 +65,6 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
           await markHostSessionOpened(deps, {
             hostId: daemon.hostId,
           });
-          if (daemon.hostType === "ephemeral") {
-            // A replaced session can strand a fetched runtime-sync command on the
-            // old daemon session. Refresh the desired version first, then requeue
-            // only if the existing operation is no longer reusable.
-            await requestSandboxRuntimeMaterialSync(deps, {
-              hostId: daemon.hostId,
-            });
-            reconcileSandboxRuntimeMaterialAfterSessionOpen(deps, {
-              hostId: daemon.hostId,
-            });
-            advanceSandboxRuntimeMaterialSync(deps, {
-              hostId: daemon.hostId,
-            });
-          }
-
           deps.logger.info(
             {
               sessionId: session.id,
@@ -135,30 +112,6 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
               ),
             },
             201,
-          );
-        },
-      }),
-  );
-
-  get(
-    "/session/runtime-material",
-    hostDaemonRuntimeMaterialQuerySchema,
-    (context, query) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/runtime-material",
-        work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
-            sessionId: query.sessionId,
-          });
-
-          return context.json(
-            hostRuntimeMaterialSnapshotSchema.parse(
-              await readSandboxRuntimeMaterialSnapshotForVersion(deps, {
-                version: query.version,
-              }),
-            ),
           );
         },
       }),

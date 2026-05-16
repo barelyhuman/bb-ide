@@ -80,17 +80,6 @@ export type {
 } from "./automations.js";
 
 export {
-  deleteAppSandboxEnvVar,
-  getAppSandboxEnvVar,
-  listAppSandboxEnvVars,
-  upsertAppSandboxEnvVar,
-} from "./app-sandbox-env-vars.js";
-export type {
-  AppSandboxEnvVarRecord,
-  UpsertAppSandboxEnvVarArgs,
-} from "./app-sandbox-env-vars.js";
-
-export {
   createThread,
   countLiveThreadsInEnvironment,
   countNonDeletedAssignedChildThreads,
@@ -192,52 +181,9 @@ export type {
 } from "./environments.js";
 
 export {
-  getHostOperation,
-  getHostOperationByCommandId,
-  listHostOperations,
-  markHostOperationRecordCompleted,
-  markHostOperationRecordFailed,
-  markHostOperationRecordQueued,
-  resetHostOperationRecordToRequested,
-  upsertHostOperationRecord,
-} from "./host-operations.js";
-export type {
-  GetHostOperationArgs,
-  HostOperationRow,
-  ListHostOperationsArgs,
-  ResetHostOperationToRequestedArgs,
-  UpdateHostOperationStateArgs,
-  UpsertHostOperationInput,
-} from "./host-operations.js";
-
-export {
-  markHostResumed,
-  markHostSuspended,
-  markEphemeralHostActivity,
-} from "./host-lifecycle-state.js";
-export type {
-  MarkEphemeralHostActivityInput,
-  MarkHostResumedInput,
-  MarkHostSuspendedInput,
-} from "./host-lifecycle-state.js";
-
-export {
-  deleteSandboxProviderCredentialByProviderId,
-  getSandboxProviderCredentialByProviderId,
-  listSandboxProviderCredentials,
-  upsertSandboxProviderCredential,
-} from "./sandbox-provider-credentials.js";
-export type {
-  SandboxProviderCredentialRecord,
-  UpsertSandboxProviderCredentialArgs,
-} from "./sandbox-provider-credentials.js";
-
-export {
   upsertHost,
   getHost,
   getNonDestroyedHost,
-  isEphemeralHostPendingCleanup,
-  listEphemeralHostsPendingCleanup,
   listHosts,
   listHostsByIds,
   listNonDestroyedHostsByIds,
@@ -382,10 +328,8 @@ export {
   interruptPendingInteractionsForSessionIds,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
-  isThreadOnEphemeralHost,
   listPendingInteractionThreadIds,
   listPendingInteractionsByThread,
-  listPendingInteractionsOnEphemeralHosts,
   listPendingInteractionsByStatus,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
@@ -397,7 +341,6 @@ export type {
   InterruptPendingInteractionsForSessionIdsArgs,
   InterruptPendingInteractionsForThreadIdsArgs,
   InterruptPendingInteractionsForThreadsArgs,
-  IsThreadOnEphemeralHostArgs,
   ListPendingInteractionThreadIdsArgs,
   ListPendingInteractionsArgs,
   ListPendingInteractionsByStatusArgs,
@@ -465,8 +408,6 @@ export {
   pruneCompletedCommands,
   pruneCompletedCommandPayloads,
   truncateCompletedEventItemOutputs,
-  sweepEphemeralHostsPendingCleanup,
-  sweepIdleEphemeralHostsEligibleForSuspend,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepDestroyingEnvironments,

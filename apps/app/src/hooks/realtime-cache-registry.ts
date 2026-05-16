@@ -17,7 +17,6 @@ import {
 } from "./queries/query-cache";
 import {
   allProjectFilesQueryKeyPrefix,
-  allProjectGithubBranchesQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   allHostQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
@@ -33,7 +32,6 @@ import {
   hostsQueryKey,
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
-  projectGithubBranchesQueryKey,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
@@ -537,14 +535,12 @@ function dirtyProjectSourceDependentQueries({
       ...sharedKeys,
       allProjectFilesQueryKeyPrefix(),
       allProjectSourceBranchesQueryKeyPrefix(),
-      allProjectGithubBranchesQueryKeyPrefix(),
     ];
   }
   return [
     ...sharedKeys,
     projectFilesQueryKeyPrefix(projectId),
     projectSourceBranchesQueryKeyPrefix(projectId),
-    projectGithubBranchesQueryKey(projectId),
   ];
 }
 

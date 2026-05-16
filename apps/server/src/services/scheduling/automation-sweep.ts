@@ -58,8 +58,6 @@ function resolveAutomationHostId(
       }
       return environment.hostId;
     }
-    case "sandbox-host":
-      return null;
   }
 }
 
@@ -86,7 +84,6 @@ function resolveAutomationExecutionContext(
 async function runAutomation(
   deps: Pick<
     AppDeps,
-    | "cloudAuth"
     | "config"
     | "db"
     | "hostLifecycle"
@@ -94,8 +91,6 @@ async function runAutomation(
     | "lifecycleDedupers"
     | "logger"
     | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
   >,
   automation: AutomationRow,
   now: number,
@@ -169,7 +164,6 @@ async function runAutomation(
 export async function sweepDueAutomations(
   deps: Pick<
     AppDeps,
-    | "cloudAuth"
     | "config"
     | "db"
     | "hostLifecycle"
@@ -177,8 +171,6 @@ export async function sweepDueAutomations(
     | "lifecycleDedupers"
     | "logger"
     | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
   >,
   args: SweepDueAutomationsArgs = {},
 ): Promise<void> {

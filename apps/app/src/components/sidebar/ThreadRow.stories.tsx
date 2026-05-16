@@ -183,12 +183,12 @@ export function Overview() {
           />
         </SidebarStage>
       </StoryRow>
-      <StoryRow label="env: sandbox">
+      <StoryRow label="env: unmanaged worktree">
         <SidebarStage>
           <ThreadRow
             projectId="proj_demo"
             thread={makeThread({
-              environmentWorkspaceDisplayKind: "sandbox",
+              environmentWorkspaceDisplayKind: "unmanaged-worktree",
             })}
             isActive={false}
             options={defaultOption}

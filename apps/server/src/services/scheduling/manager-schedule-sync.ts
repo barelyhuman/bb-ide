@@ -13,7 +13,7 @@ import {
 } from "@bb/server-contract";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import {
   computeNextScheduledTime,
@@ -161,7 +161,7 @@ function toDesiredManagerThreadNudges(
 }
 
 export async function syncManagerThreadSchedules(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: SyncManagerThreadSchedulesArgs,
 ): Promise<void> {
   const thread = getThread(deps.db, args.threadId);

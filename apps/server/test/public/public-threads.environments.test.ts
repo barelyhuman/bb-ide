@@ -150,10 +150,6 @@ describe("public thread environment routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const sandboxHost = seedHost(harness.deps, {
-        id: "host-thread-list-sandbox",
-        type: "ephemeral",
-      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/thread-list-environment-kind",
@@ -170,12 +166,6 @@ describe("public thread environment routes", () => {
         projectId: project.id,
         workspaceProvisionType: "managed-worktree",
       });
-      const sandboxEnvironment = seedEnvironment(harness.deps, {
-        hostId: sandboxHost.id,
-        path: "/tmp/thread-list-environment-kind/sandbox",
-        projectId: project.id,
-        workspaceProvisionType: "managed-worktree",
-      });
       const directThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: directEnvironment.id,
@@ -184,11 +174,6 @@ describe("public thread environment routes", () => {
         projectId: project.id,
         environmentId: worktreeEnvironment.id,
       });
-      const sandboxThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: sandboxEnvironment.id,
-      });
-
       const response = await harness.app.request(
         `/api/v1/threads?projectId=${project.id}&archived=false`,
       );
@@ -207,12 +192,6 @@ describe("public thread environment routes", () => {
             environmentHostId: host.id,
             environmentBranchName: "bb/test",
             environmentWorkspaceDisplayKind: "managed-worktree",
-          }),
-          expect.objectContaining({
-            id: sandboxThread.id,
-            environmentHostId: sandboxHost.id,
-            environmentBranchName: "bb/test",
-            environmentWorkspaceDisplayKind: "sandbox",
           }),
         ]),
       );

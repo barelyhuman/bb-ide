@@ -133,8 +133,7 @@ export function toProvisionWorkspaceOptions(
         onProgress,
       };
     }
-    case "managed-worktree":
-    case "managed-clone": {
+    case "managed-worktree": {
       return {
         workspaceProvisionType: command.workspaceProvisionType,
         sourcePath: command.sourcePath,

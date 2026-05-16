@@ -112,60 +112,6 @@ describe("environment command dispatch", () => {
     ]);
   });
 
-  it("covers environment.provision in managed-clone mode", async () => {
-    const harness = createHarness({
-      workspacePath: "/tmp/clone",
-      isWorktree: false,
-    });
-    const sourcePath = await makeTempDir("bb-dispatch-clone-");
-
-    const result = await dispatchCommand(
-      {
-        type: "environment.provision",
-        environmentId: "env-clone",
-        initiator: null,
-        workspaceProvisionType: "managed-clone",
-        sourcePath,
-        targetPath: "/tmp/clone",
-        branchName: "bb/clone",
-        baseBranch: "main",
-        setupTimeoutMs: 900000,
-      },
-      makeDispatchOptions({ runtimeManager: harness.manager }),
-    );
-
-    expect(result).toMatchObject({
-      path: "/tmp/clone",
-      isGitRepo: true,
-      isWorktree: false,
-      branchName: "main",
-      defaultBranch: "main",
-    });
-    expect(result.transcript).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "workspace-path",
-          text: "Using workspace: /tmp/clone",
-        }),
-        expect.objectContaining({
-          key: "workspace-branch",
-          text: expect.stringContaining("Using branch: main"),
-        }),
-      ]),
-    );
-    expect(harness.provisions).toEqual([
-      {
-        workspaceProvisionType: "managed-clone",
-        sourcePath,
-        targetPath: "/tmp/clone",
-        branchName: "bb/clone",
-        baseBranch: "main",
-        timeoutMs: 900000,
-        onProgress: expect.any(Function),
-      },
-    ]);
-  });
-
   it("streams live events and flushes when initiator is provided", async () => {
     const harness = createHarness({ workspacePath: "/tmp/live-stream" });
     const sourcePath = await makeTempDir("bb-dispatch-stream-");

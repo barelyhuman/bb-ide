@@ -1,26 +1,14 @@
-import {
-  keepPreviousData,
-  useQuery,
-} from "@tanstack/react-query";
-import type { Host, SandboxBackendInfo } from "@bb/domain";
+import { useQuery } from "@tanstack/react-query";
+import type { Host } from "@bb/domain";
 import type {
-  CloudAuthAttemptResponse,
-  CloudAuthSettingsResponse,
-  GithubRepoInfo,
-  SandboxEnvVarsResponse,
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
-  cloudAuthAttemptQueryKey,
-  cloudAuthSettingsQueryKey,
   type HostQueryId,
   hostQueryKey,
   hostsQueryKey,
-  githubReposQueryKey,
-  sandboxBackendsQueryKey,
-  sandboxEnvVarsQueryKey,
   systemExecutionOptionsQueryKey,
   systemProvidersQueryKey,
 } from "./query-keys";
@@ -84,58 +72,6 @@ export function useSystemProviders(options?: QueryOptions) {
     queryKey: systemProvidersQueryKey(),
     queryFn: () => api.listSystemProviders(),
     enabled: options?.enabled ?? true,
-    staleTime: 60_000,
-  });
-}
-
-export function useSandboxBackends(enabled: boolean) {
-  return useQuery<SandboxBackendInfo[]>({
-    queryKey: sandboxBackendsQueryKey(),
-    queryFn: () => api.listSandboxBackends(),
-    enabled,
-    staleTime: 60_000,
-  });
-}
-
-export function useCloudAuthSettings(enabled: boolean) {
-  return useQuery<CloudAuthSettingsResponse>({
-    queryKey: cloudAuthSettingsQueryKey(),
-    queryFn: () => api.getCloudAuthSettings(),
-    enabled,
-    staleTime: 5_000,
-  });
-}
-
-export function useCloudAuthAttempt(
-  attemptId: string | null,
-  enabled: boolean,
-) {
-  return useQuery<CloudAuthAttemptResponse>({
-    queryKey: cloudAuthAttemptQueryKey(attemptId),
-    queryFn: () =>
-      api.getCloudAuthAttempt(requireQueryId(attemptId, "useCloudAuthAttempt")),
-    enabled: enabled && Boolean(attemptId),
-    refetchInterval: (query) =>
-      query.state.data?.status === "pending" ? 1_000 : false,
-    staleTime: 0,
-  });
-}
-
-export function useSandboxEnvVars(enabled: boolean) {
-  return useQuery<SandboxEnvVarsResponse>({
-    queryKey: sandboxEnvVarsQueryKey(),
-    queryFn: () => api.listSandboxEnvVars(),
-    enabled,
-    staleTime: 5_000,
-  });
-}
-
-export function useGithubRepos(enabled: boolean, q: string) {
-  return useQuery<GithubRepoInfo[]>({
-    queryKey: githubReposQueryKey(q),
-    queryFn: () => api.listGithubRepos(q || undefined),
-    enabled,
-    placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
 }

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
   availableModelSchema,
   getProjectPathValidationMessage,
@@ -18,7 +17,6 @@ import {
   providerInfoSchema,
   reasoningLevelSchema,
   resolvedThreadExecutionOptionsSchema,
-  sandboxBackendInfoSchema,
   serviceTierSchema,
   terminalSessionCloseReasonSchema,
   terminalSessionStatusSchema,
@@ -138,7 +136,7 @@ export const unmanagedWorkspaceSchema = z.object({
 });
 
 /**
- * Identifies the base branch a managed worktree/clone should be created from.
+ * Identifies the base branch a managed worktree should be created from.
  * `named` carries an explicit branch name; `default` defers to the source's
  * default branch (resolved server-side so the daemon always receives a real
  * branch name).
@@ -155,16 +153,9 @@ export const managedWorktreeWorkspaceSchema = z.object({
   baseBranch: baseBranchSpecSchema,
 });
 
-export const managedCloneWorkspaceSchema = z.object({
-  type: z.literal("managed-clone"),
-  /** Branch the new clone should check out from. */
-  baseBranch: baseBranchSpecSchema,
-});
-
 export const workspaceArgsSchema = z.discriminatedUnion("type", [
   unmanagedWorkspaceSchema,
   managedWorktreeWorkspaceSchema,
-  managedCloneWorkspaceSchema,
 ]);
 export type WorkspaceArgs = z.infer<typeof workspaceArgsSchema>;
 
@@ -179,17 +170,9 @@ export const hostEnvironmentSchema = z.object({
   workspace: workspaceArgsSchema,
 });
 
-export const sandboxHostEnvironmentSchema = z.object({
-  type: z.literal("sandbox-host"),
-  sandboxType: z.string().min(1),
-  /** Branch the new sandbox clone should be checked out at. */
-  baseBranch: baseBranchSpecSchema,
-});
-
 export const environmentArgsSchema = z.discriminatedUnion("type", [
   reuseEnvironmentSchema,
   hostEnvironmentSchema,
-  sandboxHostEnvironmentSchema,
 ]);
 export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
 
@@ -494,17 +477,8 @@ const createLocalPathProjectSourceRequestSchema = z
   })
   .strict();
 
-const createGitHubRepoProjectSourceRequestSchema = z
-  .object({
-    type: z.literal("github_repo"),
-    repoUrl: z.string().url(),
-  })
-  .strict();
-
-export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
-  createLocalPathProjectSourceRequestSchema,
-  createGitHubRepoProjectSourceRequestSchema,
-]);
+export const createProjectSourceRequestSchema =
+  createLocalPathProjectSourceRequestSchema;
 export type CreateProjectSourceRequest = z.infer<
   typeof createProjectSourceRequestSchema
 >;
@@ -530,19 +504,9 @@ const localHostJoinRequestSchema = z
   })
   .strict();
 
-const ephemeralHostJoinRequestSchema = z
-  .object({
-    externalId: z.string().min(1),
-    hostId: z.string().min(1).optional(),
-    hostType: z.literal("ephemeral"),
-    provider: z.string().min(1),
-  })
-  .strict();
-
 export const createHostJoinRequestSchema = z.union([
   localHostJoinRequestSchema,
   persistentHostJoinRequestSchema,
-  ephemeralHostJoinRequestSchema,
 ]);
 export type CreateHostJoinRequest = z.infer<typeof createHostJoinRequestSchema>;
 
@@ -638,14 +602,13 @@ export type ProjectBranchesQuery = z.infer<typeof projectBranchesQuerySchema>;
 export const projectBranchesResponseSchema = z.object({
   branches: z.array(z.string()),
   /**
-   * For host sources, the HEAD of the primary checkout. For GitHub sources,
-   * null (no working tree). Use this when the env will operate on the
-   * checkout in place (i.e., `host:local` threads).
+   * HEAD of the primary checkout. Use this when the environment will operate on
+   * the checkout in place.
    */
   current: z.string().nullable(),
   /**
-   * The repo's tracked default branch. Use this when the env will create a
-   * fresh workspace from the repo's default (host worktree or sandbox).
+   * The repo's tracked default branch. Use this when the environment will create
+   * a fresh worktree from the repo's default.
    */
   defaultBranch: z.string().nullable(),
 });
@@ -927,114 +890,6 @@ export const systemProvidersQuerySchema = z
   .partial();
 export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
 
-export const cloudAuthConnectionStatusSchema = z.enum([
-  "connected",
-  "invalid",
-  "missing",
-]);
-export type CloudAuthConnectionStatus = z.infer<
-  typeof cloudAuthConnectionStatusSchema
->;
-
-export const cloudAuthAttemptStatusSchema = z.enum([
-  "completed",
-  "expired",
-  "failed",
-  "pending",
-]);
-export type CloudAuthAttemptStatus = z.infer<
-  typeof cloudAuthAttemptStatusSchema
->;
-
-export const cloudAuthConnectionSchema = z
-  .object({
-    providerId: cloudAuthProviderIdSchema,
-    displayName: z.string().min(1),
-    status: cloudAuthConnectionStatusSchema,
-    label: z.string().nullable(),
-    connectedAt: z.number().nullable(),
-    expiresAt: z.number().nullable(),
-    lastRefreshedAt: z.number().nullable(),
-    errorMessage: z.string().nullable(),
-  })
-  .strict();
-export type CloudAuthConnection = z.infer<typeof cloudAuthConnectionSchema>;
-
-export const cloudAuthSettingsResponseSchema = z
-  .object({
-    connections: z.array(cloudAuthConnectionSchema),
-  })
-  .strict();
-export type CloudAuthSettingsResponse = z.infer<
-  typeof cloudAuthSettingsResponseSchema
->;
-
-export const cloudAuthConnectRequestSchema = z
-  .object({
-    appOrigin: z.string().url(),
-  })
-  .strict();
-export type CloudAuthConnectRequest = z.infer<
-  typeof cloudAuthConnectRequestSchema
->;
-
-export const cloudAuthConnectResponseSchema = z
-  .object({
-    attemptId: z.string().min(1),
-    authorizationUrl: z.string().url(),
-  })
-  .strict();
-export type CloudAuthConnectResponse = z.infer<
-  typeof cloudAuthConnectResponseSchema
->;
-
-export const cloudAuthAttemptResponseSchema = z
-  .object({
-    attemptId: z.string().min(1),
-    providerId: cloudAuthProviderIdSchema,
-    status: cloudAuthAttemptStatusSchema,
-    errorMessage: z.string().nullable(),
-  })
-  .strict();
-export type CloudAuthAttemptResponse = z.infer<
-  typeof cloudAuthAttemptResponseSchema
->;
-
-export const sandboxEnvVarNameSchema = z
-  .string()
-  .min(1)
-  .max(128)
-  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
-export type SandboxEnvVarName = z.infer<typeof sandboxEnvVarNameSchema>;
-
-export const sandboxEnvVarSchema = z
-  .object({
-    name: sandboxEnvVarNameSchema,
-    createdAt: z.number(),
-    updatedAt: z.number(),
-  })
-  .strict();
-export type SandboxEnvVar = z.infer<typeof sandboxEnvVarSchema>;
-
-export const sandboxEnvVarsResponseSchema = z
-  .object({
-    envVars: z.array(sandboxEnvVarSchema),
-  })
-  .strict();
-export type SandboxEnvVarsResponse = z.infer<
-  typeof sandboxEnvVarsResponseSchema
->;
-
-export const upsertSandboxEnvVarRequestSchema = z
-  .object({
-    name: sandboxEnvVarNameSchema,
-    value: z.string().max(16_384),
-  })
-  .strict();
-export type UpsertSandboxEnvVarRequest = z.infer<
-  typeof upsertSandboxEnvVarRequestSchema
->;
-
 export interface ProjectAttachmentUploadForm {
   [key: string]: string | Blob;
 }
@@ -1054,32 +909,15 @@ export const updateProjectRequestSchema = z
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
-const updateLocalPathProjectSourceRequestSchema = z
+export const updateProjectSourceRequestSchema = z
   .object({
     type: z.literal("local_path"),
     path: localProjectPathRequestSchema.optional(),
     isDefault: z.literal(true).optional(),
   })
-  .strict();
-
-const updateGitHubRepoProjectSourceRequestSchema = z
-  .object({
-    type: z.literal("github_repo"),
-    repoUrl: z.string().url().optional(),
-    isDefault: z.literal(true).optional(),
-  })
-  .strict();
-
-export const updateProjectSourceRequestSchema = z
-  .discriminatedUnion("type", [
-    updateLocalPathProjectSourceRequestSchema,
-    updateGitHubRepoProjectSourceRequestSchema,
-  ])
+  .strict()
   .refine(
-    (value) =>
-      ("path" in value && value.path !== undefined) ||
-      ("repoUrl" in value && value.repoUrl !== undefined) ||
-      value.isDefault !== undefined,
+    (value) => value.path !== undefined || value.isDefault !== undefined,
     "At least one field besides type must be provided",
   );
 export type UpdateProjectSourceRequest = z.infer<
@@ -1338,11 +1176,6 @@ export type ThreadTimelineResponse = z.infer<
 export { providerInfoSchema as systemProviderInfoSchema } from "@bb/domain";
 export type { ProviderInfo as SystemProviderInfo } from "@bb/domain";
 
-// SystemSandboxBackendInfo is the same shape as SandboxBackendInfo from domain.
-// Re-export with the API-facing name to match API naming conventions.
-export { sandboxBackendInfoSchema as systemSandboxBackendInfoSchema } from "@bb/domain";
-export type { SandboxBackendInfo as SystemSandboxBackendInfo } from "@bb/domain";
-
 export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),
 });
@@ -1393,32 +1226,10 @@ export type ProjectWithThreadsResponse = z.infer<
 
 export const systemConfigResponseSchema = z.object({
   featureFlags: featureFlagsSchema,
-  githubConnected: z.boolean(),
   hostDaemonPort: z.number().nullable(),
-  sandboxHostSupported: z.boolean(),
   voiceTranscriptionEnabled: z.boolean(),
 });
 export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
-
-export const systemSandboxBackendsResponseSchema = z.array(
-  sandboxBackendInfoSchema,
-);
-export type SystemSandboxBackendsResponse = z.infer<
-  typeof systemSandboxBackendsResponseSchema
->;
-
-export const githubRepoInfoSchema = z.object({
-  fullName: z.string(),
-  htmlUrl: z.string(),
-  defaultBranch: z.string(),
-  private: z.boolean(),
-});
-export type GithubRepoInfo = z.infer<typeof githubRepoInfoSchema>;
-
-export const githubReposQuerySchema = z.object({
-  q: z.string().max(256).optional(),
-});
-export type GithubReposQuery = z.infer<typeof githubReposQuerySchema>;
 
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(), // null for non-git environments

@@ -18,7 +18,6 @@ interface ProjectListCommandOptions {
 interface ProjectCreateCommandOptions {
   name: string;
   root?: string;
-  repoUrl?: string;
   host?: string;
   json?: boolean;
 }
@@ -42,14 +41,12 @@ interface ProjectSourceAddCommandOptions {
   host?: string;
   json?: boolean;
   path?: string;
-  repoUrl?: string;
 }
 
 interface ProjectSourceUpdateCommandOptions {
   default?: boolean;
   json?: boolean;
   path?: string;
-  repoUrl?: string;
 }
 
 interface ProjectSourceDeleteCommandOptions {
@@ -60,7 +57,6 @@ interface ProjectSourceDeleteCommandOptions {
 interface ProjectSourceInputOptions {
   host?: string;
   path?: string;
-  repoUrl?: string;
 }
 
 interface ProjectUpdateBody {
@@ -86,9 +82,6 @@ async function requireHostId(hostId: string | undefined): Promise<string> {
 async function buildProjectSourceFromOptions(
   args: ProjectSourceInputOptions,
 ): Promise<CreateProjectSourceRequest> {
-  if (args.path && args.repoUrl) {
-    throw new Error("Cannot combine --path with --repo-url.");
-  }
   if (args.path) {
     return {
       hostId: await requireHostId(args.host),
@@ -96,13 +89,7 @@ async function buildProjectSourceFromOptions(
       type: "local_path",
     };
   }
-  if (args.repoUrl) {
-    return {
-      repoUrl: args.repoUrl,
-      type: "github_repo",
-    };
-  }
-  throw new Error("Provide either --path or --repo-url.");
+  throw new Error("Provide --path.");
 }
 
 function requireProjectSource(
@@ -122,62 +109,30 @@ function buildProjectSourceUpdateRequest(
   source: ProjectSource,
   args: ProjectSourceUpdateCommandOptions,
 ): UpdateProjectSourceRequest {
-  if (args.path && args.repoUrl) {
-    throw new Error("Cannot combine --path with --repo-url.");
-  }
-
-  if (source.type === "local_path") {
-    if (args.repoUrl) {
-      throw new Error("Cannot update a local-path source with --repo-url.");
-    }
-    if (!args.path && !args.default) {
-      throw new Error("Provide --path and/or --default.");
-    }
-    return {
-      ...(args.default ? { isDefault: true } : {}),
-      ...(args.path ? { path: args.path } : {}),
-      type: "local_path",
-    };
-  }
-
-  if (args.path) {
-    throw new Error("Cannot update a GitHub source with --path.");
-  }
-  if (!args.repoUrl && !args.default) {
-    throw new Error("Provide --repo-url and/or --default.");
+  if (!args.path && !args.default) {
+    throw new Error("Provide --path and/or --default.");
   }
   return {
     ...(args.default ? { isDefault: true } : {}),
-    ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
-    type: "github_repo",
+    ...(args.path ? { path: args.path } : {}),
+    type: source.type,
   };
 }
 
 function buildDefaultProjectSourceUpdateRequest(
-  source: ProjectSource,
+  _source: ProjectSource,
 ): UpdateProjectSourceRequest {
-  return source.type === "local_path"
-    ? { isDefault: true, type: "local_path" }
-    : { isDefault: true, type: "github_repo" };
+  return { isDefault: true, type: "local_path" };
 }
 
 function printProjectSource(
   source: ProjectSource,
   localHostId: string | null,
 ): void {
-  if (source.type === "local_path") {
-    const local =
-      localHostId && source.hostId === localHostId ? " (local)" : "";
-    const defaultMarker = source.isDefault ? " [default]" : "";
-    console.log(
-      `${source.id}  ${source.hostId}${local}  ${source.type}  ${source.path}${defaultMarker}`,
-    );
-    return;
-  }
-
+  const local = localHostId && source.hostId === localHostId ? " (local)" : "";
   const defaultMarker = source.isDefault ? " [default]" : "";
   console.log(
-    `${source.id}  ${source.type}  ${source.repoUrl}${defaultMarker}`,
+    `${source.id}  ${source.hostId}${local}  ${source.type}  ${source.path}${defaultMarker}`,
   );
 }
 
@@ -217,7 +172,6 @@ export function registerProjectCommands(
     .description("Create a project")
     .requiredOption("--name <name>", "Project name")
     .option("--root <path>", "Project source path")
-    .option("--repo-url <url>", "GitHub repository source URL")
     .option(
       "--host <id>",
       "Host ID for the project source (auto-detected from daemon if omitted)",
@@ -229,7 +183,6 @@ export function registerProjectCommands(
         const source = await buildProjectSourceFromOptions({
           host: opts.host,
           path: opts.root,
-          repoUrl: opts.repoUrl,
         });
         const created = await unwrap<ProjectResponse>(
           client.api.v1.projects.$post({
@@ -320,7 +273,6 @@ export function registerProjectCommands(
     .command("add <projectId>")
     .description("Add a source to a project")
     .option("--path <path>", "Local path source")
-    .option("--repo-url <url>", "GitHub repository source URL")
     .option(
       "--host <id>",
       "Host ID for a local path source (auto-detected from daemon if omitted)",
@@ -334,7 +286,6 @@ export function registerProjectCommands(
           const createPayload = await buildProjectSourceFromOptions({
             host: opts.host,
             path: opts.path,
-            repoUrl: opts.repoUrl,
           });
           const created = await unwrap<ProjectSource>(
             client.api.v1.projects[":id"].sources.$post({
@@ -364,7 +315,6 @@ export function registerProjectCommands(
     .command("update <projectId> <sourceId>")
     .description("Update a project source")
     .option("--path <path>", "New local path for a local path source")
-    .option("--repo-url <url>", "New GitHub repository URL for a GitHub source")
     .option("--default", "Mark this source as default")
     .option("--json", "Print machine-readable JSON output")
     .action(
@@ -448,16 +398,11 @@ function printProject(
   if (project.sources.length > 0) {
     console.log("  Sources:");
     for (const source of project.sources) {
-      if (source.type === "local_path") {
-        const local =
-          localHostId && source.hostId === localHostId ? " (local)" : "";
-        console.log(
-          `    ${source.hostId}${local}  ${source.type}  ${source.path}`,
-        );
-        continue;
-      }
-
-      console.log(`    -  ${source.type}  ${source.repoUrl}`);
+      const local =
+        localHostId && source.hostId === localHostId ? " (local)" : "";
+      console.log(
+        `    ${source.hostId}${local}  ${source.type}  ${source.path}`,
+      );
     }
   }
   console.log("");

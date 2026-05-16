@@ -3,13 +3,11 @@ import { z } from "zod";
 import {
   archiveThread,
   createThread,
-  createProject,
   getProjectExecutionDefaults,
   getProject,
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
-  markHostSuspended,
   threads,
   upsertProjectExecutionDefaults,
   updateHost,
@@ -50,7 +48,6 @@ const projectResponseSchema = z.object({
       type: z.string(),
       hostId: z.string().nullable().optional(),
       path: z.string().nullable().optional(),
-      repoUrl: z.string().nullable().optional(),
     }),
   ),
 });
@@ -271,9 +268,10 @@ describe("public project and host routes", () => {
         (project) => project.id === secondProject.id,
       );
 
-      expect(firstProjectResponse?.threads.map((thread) => thread.id)).toEqual(
-        [newerThread.id, olderThread.id],
-      );
+      expect(firstProjectResponse?.threads.map((thread) => thread.id)).toEqual([
+        newerThread.id,
+        olderThread.id,
+      ]);
       expect(
         firstProjectResponse?.threads.some(
           (thread) => thread.id === archivedThread.id,
@@ -874,40 +872,6 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("creates a github repo project without a host-scoped source", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const response = await harness.app.request("/api/v1/projects", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          name: "GitHub Project",
-          source: {
-            type: "github_repo",
-            repoUrl: "https://github.com/example/github-project",
-          },
-        }),
-      });
-
-      expect(response.status).toBe(201);
-      const project = projectResponseSchema.parse(await readJson(response));
-      expect(project.name).toBe("GitHub Project");
-      expect(project.sources).toEqual([
-        expect.objectContaining({
-          type: "github_repo",
-          repoUrl: "https://github.com/example/github-project",
-          isDefault: true,
-        }),
-      ]);
-      expect(project.sources[0]).not.toHaveProperty("hostId");
-      expect(project.sources[0]).not.toHaveProperty("path");
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("supports project source CRUD and reassigns the default source on delete", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -968,48 +932,6 @@ describe("public project and host routes", () => {
       );
       expect(missingTypeResponse.status).toBe(400);
 
-      const createGitHubSourceResponse = await harness.app.request(
-        `/api/v1/projects/${project.id}/sources`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            type: "github_repo",
-            repoUrl: "https://github.com/example/project-sources",
-          }),
-        },
-      );
-      expect(createGitHubSourceResponse.status).toBe(201);
-      const githubSource = z
-        .object({
-          repoUrl: z.string(),
-          type: z.string(),
-        })
-        .parse(await readJson(createGitHubSourceResponse));
-      expect(githubSource).toMatchObject({
-        type: "github_repo",
-        repoUrl: "https://github.com/example/project-sources",
-      });
-      expect(githubSource).not.toHaveProperty("hostId");
-
-      const invalidGitHubSourceResponse = await harness.app.request(
-        `/api/v1/projects/${project.id}/sources`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            hostId: secondaryHost.id,
-            type: "github_repo",
-            repoUrl: "https://github.com/example/project-sources-extra-host",
-          }),
-        },
-      );
-      expect(invalidGitHubSourceResponse.status).toBe(400);
-
       const updateSourceResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/sources/${secondSource.id}`,
         {
@@ -1048,11 +970,6 @@ describe("public project and host routes", () => {
           id: secondSource.id,
           isDefault: true,
         }),
-        expect.objectContaining({
-          type: "github_repo",
-          isDefault: false,
-          repoUrl: "https://github.com/example/project-sources",
-        }),
       ]);
     } finally {
       await harness.cleanup();
@@ -1065,15 +982,6 @@ describe("public project and host routes", () => {
       const connected = seedHostSession(harness.deps, { id: "host-connected" });
       const disconnected = seedHost(harness.deps, { id: "host-disconnected" });
       const expired = seedHostSession(harness.deps, { id: "host-expired" });
-      const suspended = seedHost(harness.deps, { id: "host-suspended" });
-      const ephemeral = seedHostSession(harness.deps, {
-        id: "host-ephemeral",
-        type: "ephemeral",
-      });
-      const suspendedEphemeral = seedHost(harness.deps, {
-        id: "host-ephemeral-suspended",
-        type: "ephemeral",
-      });
       const destroyed = seedHostSession(harness.deps, { id: "host-destroyed" });
 
       harness.db
@@ -1083,14 +991,6 @@ describe("public project and host routes", () => {
         })
         .where(eq(hostDaemonSessions.id, expired.session.id))
         .run();
-      markHostSuspended(harness.db, {
-        hostId: suspended.id,
-        suspendedAt: Date.now(),
-      });
-      markHostSuspended(harness.db, {
-        hostId: suspendedEphemeral.id,
-        suspendedAt: Date.now(),
-      });
       updateHost(harness.db, harness.hub, destroyed.host.id, {
         destroyedAt: Date.now(),
       });
@@ -1114,15 +1014,10 @@ describe("public project and host routes", () => {
             id: expired.host.id,
             status: "disconnected",
           }),
-          expect.objectContaining({
-            id: suspended.id,
-            status: "suspended",
-          }),
         ]),
       );
       expect(hosts).not.toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: ephemeral.host.id }),
           expect.objectContaining({ id: destroyed.host.id }),
         ]),
       );
@@ -1135,28 +1030,6 @@ describe("public project and host routes", () => {
         id: connected.host.id,
         status: "connected",
       });
-
-      const ephemeralResponse = await harness.app.request(
-        `/api/v1/hosts/${ephemeral.host.id}`,
-      );
-      expect(ephemeralResponse.status).toBe(200);
-      await expect(readJson(ephemeralResponse)).resolves.toMatchObject({
-        id: ephemeral.host.id,
-        type: "ephemeral",
-        status: "connected",
-      });
-
-      const suspendedEphemeralResponse = await harness.app.request(
-        `/api/v1/hosts/${suspendedEphemeral.id}`,
-      );
-      expect(suspendedEphemeralResponse.status).toBe(200);
-      await expect(readJson(suspendedEphemeralResponse)).resolves.toMatchObject(
-        {
-          id: suspendedEphemeral.id,
-          type: "ephemeral",
-          status: "suspended",
-        },
-      );
 
       const destroyedResponse = await harness.app.request(
         `/api/v1/hosts/${destroyed.host.id}`,
@@ -1294,70 +1167,6 @@ describe("public project and host routes", () => {
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "project_not_found",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("requires GitHub auth configuration for github branch listing", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { project } = createProject(harness.db, harness.hub, {
-        name: "GitHub Project",
-        source: {
-          type: "github_repo",
-          repoUrl: "https://github.com/acme/widget",
-        },
-      });
-
-      const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/github-branches`,
-      );
-
-      expect(response.status).toBe(501);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "not_configured",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("returns 404 for github branch listing on a missing project", async () => {
-    const harness = await createTestAppHarness({ githubPat: "ghp_test" });
-    try {
-      const response = await harness.app.request(
-        "/api/v1/projects/proj_missing/github-branches",
-      );
-
-      expect(response.status).toBe(404);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "project_not_found",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects github branch listing for non-GitHub project sources", async () => {
-    const harness = await createTestAppHarness({ githubPat: "ghp_test" });
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-project-non-github-branches",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/project-non-github-branches",
-      });
-
-      const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/github-branches`,
-      );
-
-      expect(response.status).toBe(404);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
       });
     } finally {
       await harness.cleanup();
@@ -1555,7 +1364,7 @@ describe("public project and host routes", () => {
         path: "/tmp/already-destroyed",
         managed: true,
         status: "destroyed",
-        workspaceProvisionType: "managed-clone",
+        workspaceProvisionType: "managed-worktree",
       });
 
       // Unmanaged environment — should NOT get a destroy command.

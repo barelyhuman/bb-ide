@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@bb/core-ui";
-import type { CloudAuthProviderId } from "@bb/agent-providers";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
@@ -13,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { PageShell } from "@/components/ui/page-shell.js";
-import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 import {
   SettingsRow,
@@ -21,10 +18,6 @@ import {
   SettingsSection,
   SettingsWithControl,
 } from "@/components/ui/settings-section.js";
-import {
-  SandboxEnvVarsSection,
-  type EnvVarEntry,
-} from "@/components/settings/SandboxEnvVarsSection";
 import {
   HostDeleteDialog,
   type HostDeleteDialogTarget,
@@ -40,29 +33,16 @@ import {
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/useTheme";
-import {
-  useCloudAuthAttempt,
-  useCloudAuthSettings,
-  useSandboxEnvVars,
-} from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import {
-  invalidateCloudAuthSettings,
   invalidateHostDeleteDependentQueries,
-  invalidateSandboxEnvVars,
   invalidateHostAvailabilityQueries,
 } from "@/hooks/cache-effects";
-import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
 import { HttpError } from "@/lib/api";
 import { showMutationErrorToast } from "@/lib/mutation-errors";
 import type { CreateHostJoinResponse } from "@bb/server-contract";
 import { cn } from "@/lib/utils";
-
-interface CloudAuthAttemptState {
-  attemptId: string;
-  providerId: CloudAuthProviderId;
-}
 
 interface RenameHostMutationRequest {
   id: string;
@@ -76,13 +56,6 @@ interface DeleteHostMutationRequest {
 interface CancelHostJoinMutationRequest {
   id: string;
 }
-
-interface SaveEnvVarsMutationRequest {
-  toDelete: string[];
-  toUpsert: EnvVarEntry[];
-}
-
-type CloudAuthNoticeMap = Partial<Record<CloudAuthProviderId, string>>;
 
 interface ThemePreferenceOption {
   label: string;
@@ -104,11 +77,6 @@ const THEME_PREFERENCE_LABELS: Record<ThemePreference, string> = {
 export function AppSettingsView() {
   const themePreference = useThemePreference();
   const { data: hosts = [], isLoading: hostsLoading } = useEffectiveHosts();
-  const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
-  const { data: cloudAuthSettings, isLoading: cloudAuthLoading } =
-    useCloudAuthSettings(sandboxHostSupported);
-  const { data: sandboxEnvVars, isLoading: sandboxEnvLoading } =
-    useSandboxEnvVars(sandboxHostSupported);
   const queryClient = useQueryClient();
 
   const [renameTarget, setRenameTarget] =
@@ -120,16 +88,6 @@ export function AppSettingsView() {
   );
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [appUrlRequiredOpen, setAppUrlRequiredOpen] = useState(false);
-  const [activeCloudAuthAttempt, setActiveCloudAuthAttempt] =
-    useState<CloudAuthAttemptState | null>(null);
-  const [cloudAuthNotices, setCloudAuthNotices] = useState<CloudAuthNoticeMap>(
-    {},
-  );
-
-  const activeCloudAuthStatus = useCloudAuthAttempt(
-    activeCloudAuthAttempt?.attemptId ?? null,
-    activeCloudAuthAttempt !== null,
-  );
 
   const renameHost = useMutation({
     meta: {
@@ -192,81 +150,6 @@ export function AppSettingsView() {
     },
   });
 
-  const authPopupRef = useRef<Window | null>(null);
-
-  const startCloudAuthConnection = useMutation({
-    meta: {
-      errorMessage: "Failed to start cloud auth connection.",
-    },
-    mutationFn: (providerId: CloudAuthProviderId) =>
-      api.startCloudAuthConnection(providerId),
-    onSuccess: (result, providerId) => {
-      setActiveCloudAuthAttempt({
-        attemptId: result.attemptId,
-        providerId,
-      });
-      const popup = authPopupRef.current;
-      if (popup && !popup.closed) {
-        popup.location.href = result.authorizationUrl;
-      }
-    },
-    onError: () => {
-      const popup = authPopupRef.current;
-      if (popup && !popup.closed) {
-        popup.close();
-      }
-      authPopupRef.current = null;
-    },
-  });
-
-  function handleCloudAuthConnect(providerId: CloudAuthProviderId) {
-    const width = 500;
-    const height = 700;
-    const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
-    const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
-    authPopupRef.current = window.open(
-      "about:blank",
-      "cloud-auth",
-      `width=${width},height=${height},left=${left},top=${top},popup=1`,
-    );
-
-    startCloudAuthConnection.mutate(providerId);
-  }
-
-  const disconnectCloudAuth = useMutation({
-    meta: {
-      errorMessage: "Failed to remove cloud auth connection.",
-    },
-    mutationFn: (providerId: CloudAuthProviderId) =>
-      api.deleteCloudAuthProvider(providerId),
-    onSuccess: (_, providerId) => {
-      invalidateCloudAuthSettings({ queryClient });
-      setCloudAuthNotices((current) => ({
-        ...current,
-        [providerId]:
-          "Connection removed. The next sandbox sync will delete its auth material.",
-      }));
-      if (activeCloudAuthAttempt?.providerId === providerId) {
-        setActiveCloudAuthAttempt(null);
-      }
-    },
-  });
-
-  const saveEnvVars = useMutation({
-    meta: {
-      errorMessage: "Failed to save environment variables.",
-    },
-    mutationFn: async ({ toUpsert, toDelete }: SaveEnvVarsMutationRequest) => {
-      await Promise.all([
-        ...toUpsert.map((entry) => api.upsertSandboxEnvVar(entry)),
-        ...toDelete.map((name) => api.deleteSandboxEnvVar(name)),
-      ]);
-    },
-    onSuccess: () => {
-      invalidateSandboxEnvVars({ queryClient });
-    },
-  });
-
   const joinHost =
     joinTarget !== null
       ? (hosts.find((host) => host.id === joinTarget.hostId) ?? null)
@@ -317,27 +200,6 @@ export function AppSettingsView() {
     setJoinTarget(null);
     setJoinDialogOpen(false);
   }
-
-  useEffect(() => {
-    if (!activeCloudAuthAttempt || !activeCloudAuthStatus.data) {
-      return;
-    }
-
-    const attempt = activeCloudAuthStatus.data;
-    if (attempt.status === "pending") {
-      return;
-    }
-
-    invalidateCloudAuthSettings({ queryClient });
-    if (attempt.status !== "completed") {
-      setCloudAuthNotices((current) => ({
-        ...current,
-        [attempt.providerId]:
-          attempt.errorMessage ?? "Connection did not complete.",
-      }));
-    }
-    setActiveCloudAuthAttempt(null);
-  }, [activeCloudAuthAttempt, activeCloudAuthStatus.data, queryClient]);
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -466,42 +328,6 @@ export function AppSettingsView() {
             </SettingsRowList>
           )}
         </SettingsSection>
-
-        {sandboxHostSupported ? (
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold">Sandbox Hosts</h2>
-            <CloudAuthSettingsSection
-              activeAttemptProviderId={
-                activeCloudAuthAttempt?.providerId ?? null
-              }
-              connectPending={startCloudAuthConnection.isPending}
-              connections={cloudAuthSettings?.connections ?? []}
-              disconnectPending={disconnectCloudAuth.isPending}
-              isLoading={cloudAuthLoading}
-              notices={cloudAuthNotices}
-              onCancel={() => {
-                if (authPopupRef.current && !authPopupRef.current.closed) {
-                  authPopupRef.current.close();
-                }
-                authPopupRef.current = null;
-                setActiveCloudAuthAttempt(null);
-              }}
-              onConnect={handleCloudAuthConnect}
-              onDisconnect={(providerId) =>
-                disconnectCloudAuth.mutate(providerId)
-              }
-            />
-
-            <SandboxEnvVarsSection
-              envVars={sandboxEnvVars?.envVars ?? []}
-              isLoading={sandboxEnvLoading}
-              onSave={(toUpsert, toDelete) =>
-                saveEnvVars.mutate({ toUpsert, toDelete })
-              }
-              savePending={saveEnvVars.isPending}
-            />
-          </section>
-        ) : null}
       </div>
 
       <HostRenameDialog

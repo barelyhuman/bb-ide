@@ -62,7 +62,7 @@ export interface SeedTurnStartedArgs {
 
 export function seedHost(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: { id?: string; name?: string; type?: "persistent" | "ephemeral" } = {},
+  args: { id?: string; name?: string; type?: "persistent" } = {},
 ) {
   return upsertHost(deps.db, deps.hub, {
     id: args.id,
@@ -73,7 +73,7 @@ export function seedHost(
 
 export function seedHostSession(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: { id?: string; name?: string; type?: "persistent" | "ephemeral" } = {},
+  args: { id?: string; name?: string; type?: "persistent" } = {},
 ) {
   const host = seedHost(deps, args);
   const session = seedSession(deps, host.id);
@@ -119,7 +119,7 @@ export function seedEnvironment(
     path?: string;
     status?: EnvironmentStatus;
     managed?: boolean;
-    workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone";
+    workspaceProvisionType?: "unmanaged" | "managed-worktree";
     branchName?: string | null;
     baseBranch?: string | null;
     defaultBranch?: string | null;

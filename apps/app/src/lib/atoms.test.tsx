@@ -65,9 +65,7 @@ function installAtomFetchRoutes(state: SystemConfigRouteState) {
 
         return jsonResponse({
           featureFlags: nextConfig.featureFlags ?? defaultFeatureFlags,
-          githubConnected: false,
           hostDaemonPort: nextConfig.hostDaemonPort,
-          sandboxHostSupported: false,
           voiceTranscriptionEnabled: nextConfig.voiceTranscriptionEnabled,
         });
       },
@@ -322,9 +320,7 @@ describe("atoms", () => {
           voiceTranscriptionEnabled: false,
         },
       ],
-      daemonStatuses: [
-        null,
-      ],
+      daemonStatuses: [null],
     });
 
     const { FakeReconnectingWebSocket, localHostIdAtom, wsManager } =

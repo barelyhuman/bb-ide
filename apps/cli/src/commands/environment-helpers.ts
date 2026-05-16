@@ -51,8 +51,6 @@ export async function fetchEnvironmentInfo(args: {
         environment: env,
         isLocalHost: isLocal,
         hostName: host?.name,
-        hostType: host?.type,
-        hostProvider: host?.provider,
       }),
       hostId: env.hostId,
       hostName: host?.name ?? null,

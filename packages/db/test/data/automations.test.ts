@@ -58,7 +58,10 @@ function createScheduleAutomation(args: {
         environment: {
           type: "host",
           hostId: args.hostId,
-          workspace: { type: "managed-clone" },
+          workspace: {
+            type: "managed-worktree",
+            baseBranch: { kind: "default" },
+          },
         },
       },
     }),

@@ -84,6 +84,14 @@ describe("project-sources", () => {
 
   it("lists sources across project ids", () => {
     const { db, host, project } = setup();
+    const host2 = upsertHost(db, noopNotifier, {
+      name: "project-host-2",
+      type: "persistent",
+    });
+    const host3 = upsertHost(db, noopNotifier, {
+      name: "project-host-3",
+      type: "persistent",
+    });
     const { project: otherProject } = createProject(db, noopNotifier, {
       name: "other-project",
       source: {
@@ -94,13 +102,15 @@ describe("project-sources", () => {
     });
     createProjectSource(db, noopNotifier, {
       projectId: project.id,
-      type: "github_repo",
-      repoUrl: "https://github.com/example/repo-a",
+      type: "local_path",
+      hostId: host2.id,
+      path: "/tmp/repo-a",
     });
     createProjectSource(db, noopNotifier, {
       projectId: otherProject.id,
-      type: "github_repo",
-      repoUrl: "https://github.com/example/repo-b",
+      type: "local_path",
+      hostId: host3.id,
+      path: "/tmp/repo-b",
     });
 
     expect(listProjectSourcesByProjectIds(db, [project.id])).toHaveLength(2);
@@ -111,16 +121,21 @@ describe("project-sources", () => {
 
   it("returns the default source and preserves it when adding more sources", () => {
     const { db, project } = setup();
+    const secondaryHost = upsertHost(db, noopNotifier, {
+      name: "secondary-host",
+      type: "persistent",
+    });
     const initialDefault = getDefaultProjectSource(db, project.id);
     const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
-      type: "github_repo",
-      repoUrl: "https://github.com/example/repo",
+      type: "local_path",
+      hostId: secondaryHost.id,
+      path: "/tmp/secondary",
     });
 
     expect(source).toMatchObject({
-      type: "github_repo",
-      repoUrl: "https://github.com/example/repo",
+      type: "local_path",
+      path: "/tmp/secondary",
     });
     expect(getDefaultProjectSource(db, project.id)?.id).toBe(
       initialDefault!.id,
@@ -157,10 +172,15 @@ describe("project-sources", () => {
 
   it("gets project sources by id, by project, and by count", () => {
     const { db, project } = setup();
+    const secondaryHost = upsertHost(db, noopNotifier, {
+      name: "source-id-host",
+      type: "persistent",
+    });
     const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
-      type: "github_repo",
-      repoUrl: "https://github.com/example/repo",
+      type: "local_path",
+      hostId: secondaryHost.id,
+      path: "/tmp/source-id",
     });
 
     expect(
@@ -194,6 +214,10 @@ describe("project-sources", () => {
 
   it("enforces one default source per project at the database boundary", () => {
     const { db, project } = setup();
+    const conflictHost = upsertHost(db, noopNotifier, {
+      name: "default-conflict-host",
+      type: "persistent",
+    });
     const now = Date.now();
 
     expect(() =>
@@ -202,10 +226,9 @@ describe("project-sources", () => {
         .values({
           id: createProjectSourceId(),
           projectId: project.id,
-          type: "github_repo",
-          hostId: null,
-          path: null,
-          repoUrl: "https://github.com/example/default-conflict",
+          type: "local_path",
+          hostId: conflictHost.id,
+          path: "/tmp/default-conflict",
           isDefault: true,
           createdAt: now,
           updatedAt: now,

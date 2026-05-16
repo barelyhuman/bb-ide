@@ -34,7 +34,7 @@ const noBlockingChildProcessRules = {
 
 // The server must not access workspace filesystems directly — all workspace
 // interaction goes through daemon commands. This rule enforces the boundary so
-// it holds when the daemon runs on a remote host (Phase 8 sandbox).
+// it holds when the daemon runs on a remote host.
 const serverNoWorkspaceAccessRules = {
   "no-restricted-imports": [
     "error",

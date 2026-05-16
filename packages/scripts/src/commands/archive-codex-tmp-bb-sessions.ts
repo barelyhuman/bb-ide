@@ -12,7 +12,7 @@ const DEFAULT_TMP_BB_PATTERNS: readonly string[] = [
   "*/bb-standalone-*",
   "*/bb-integration-*",
   "*/bb-integ-*",
-  "*/bb-e2b-smoke-*",
+  "*/bb-qa-smoke-*",
 ];
 const DEFAULT_ARCHIVE_CONCURRENCY = 25;
 const DEFAULT_PROGRESS_INTERVAL = 100;
@@ -812,9 +812,7 @@ export async function main(
   }
 
   if (archiveResult.succeeded === 0) {
-    throw new Error(
-      `Archived 0 session(s), ${archiveResult.failed} failed.`,
-    );
+    throw new Error(`Archived 0 session(s), ${archiveResult.failed} failed.`);
   }
 
   process.stdout.write("\n");

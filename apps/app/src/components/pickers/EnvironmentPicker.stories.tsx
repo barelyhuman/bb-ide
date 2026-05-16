@@ -1,8 +1,4 @@
-import type {
-  Host,
-  ProjectSource,
-  SandboxBackendInfo,
-} from "@bb/domain";
+import type { Host, ProjectSource } from "@bb/domain";
 import { EnvironmentPickerUI } from "./EnvironmentPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { HOST_IDS, makeHost } from "../../../.ladle/story-fixtures";
@@ -21,35 +17,26 @@ const mockHosts: Host[] = [
   }),
 ];
 
-const mockSandboxBackends: SandboxBackendInfo[] = [
-  {
-    id: "e2b",
-    displayName: "E2B Sandbox",
-    capabilities: {
-      supportsManagedClone: true,
-      supportsManagedWorktree: true,
-      supportsSuspend: true,
-    },
-    available: true,
-  },
-];
+function makeSource(id: string, hostId: string, path: string): ProjectSource {
+  return {
+    id,
+    projectId: "proj_demo",
+    type: "local_path",
+    hostId,
+    path,
+    isDefault: id === "src_local",
+    createdAt: 0,
+    updatedAt: 0,
+  };
+}
 
 const localProjectSources: readonly ProjectSource[] = [
-  { type: "local_path", hostId: HOST_IDS.local, path: "/Users/michael/Projects/bb" },
+  makeSource("src_local", HOST_IDS.local, "/Users/michael/Projects/bb"),
 ];
 
 const multiHostSources: readonly ProjectSource[] = [
-  { type: "local_path", hostId: HOST_IDS.local, path: "/Users/michael/Projects/bb" },
-  {
-    type: "local_path",
-    hostId: "host_mac_mini",
-    path: "/Users/michael/projects/bb",
-  },
-];
-
-const githubProjectSources: readonly ProjectSource[] = [
-  ...localProjectSources,
-  { type: "github_repo", repoUrl: "https://github.com/example/bb" },
+  makeSource("src_local", HOST_IDS.local, "/Users/michael/Projects/bb"),
+  makeSource("src_remote", "host_mac_mini", "/Users/michael/projects/bb"),
 ];
 
 const isLocalHost = (id: string | null | undefined) => id === HOST_IDS.local;
@@ -60,50 +47,41 @@ export function Overview() {
     <StoryCard>
       <StoryRow label="local direct" hint="host: local + mode: local">
         <EnvironmentPickerUI
-          value="host:local:local"
+          value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
-          projectId="proj_demo"
           sources={localProjectSources}
           hosts={mockHosts}
-          sandboxBackends={[]}
-          sandboxHostSupported={false}
           isLocalHost={isLocalHost}
         />
       </StoryRow>
       <StoryRow label="muted" hint="prompt-box treatment">
         <EnvironmentPickerUI
-          value="host:local:local"
+          value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
-          projectId="proj_demo"
           sources={localProjectSources}
           hosts={mockHosts}
-          sandboxBackends={[]}
-          sandboxHostSupported={false}
           isLocalHost={isLocalHost}
           muted
         />
       </StoryRow>
       <StoryRow label="local worktree" hint="host: local + mode: worktree">
         <EnvironmentPickerUI
-          value="host:local:worktree"
+          value={`host:${HOST_IDS.local}:worktree`}
           onChange={noop}
-          projectId="proj_demo"
           sources={localProjectSources}
           hosts={mockHosts}
-          sandboxBackends={[]}
-          sandboxHostSupported={false}
           isLocalHost={isLocalHost}
         />
       </StoryRow>
-      <StoryRow label="remote host direct" hint="host: mac-mini-studio + mode: local">
+      <StoryRow
+        label="remote host direct"
+        hint="host: mac-mini-studio + mode: local"
+      >
         <EnvironmentPickerUI
-          value="host:mac-mini-studio:local"
+          value="host:host_mac_mini:local"
           onChange={noop}
-          projectId="proj_demo"
           sources={multiHostSources}
           hosts={mockHosts}
-          sandboxBackends={[]}
-          sandboxHostSupported={false}
           isLocalHost={isLocalHost}
         />
       </StoryRow>
@@ -112,37 +90,19 @@ export function Overview() {
         hint="host: mac-mini-studio + mode: worktree"
       >
         <EnvironmentPickerUI
-          value="host:mac-mini-studio:worktree"
+          value="host:host_mac_mini:worktree"
           onChange={noop}
-          projectId="proj_demo"
           sources={multiHostSources}
           hosts={mockHosts}
-          sandboxBackends={[]}
-          sandboxHostSupported={false}
-          isLocalHost={isLocalHost}
-        />
-      </StoryRow>
-      <StoryRow label="sandbox" hint="GitHub source + sandbox backend">
-        <EnvironmentPickerUI
-          value="sandbox:e2b"
-          onChange={noop}
-          projectId="proj_demo"
-          sources={githubProjectSources}
-          hosts={mockHosts}
-          sandboxBackends={mockSandboxBackends}
-          sandboxHostSupported
           isLocalHost={isLocalHost}
         />
       </StoryRow>
       <StoryRow label="open menu" hint="defaultOpen + modal=false">
         <EnvironmentPickerUI
-          value="host:local:local"
+          value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
-          projectId="proj_demo"
           sources={multiHostSources}
           hosts={mockHosts}
-          sandboxBackends={mockSandboxBackends}
-          sandboxHostSupported
           isLocalHost={isLocalHost}
           defaultOpen
           modal={false}

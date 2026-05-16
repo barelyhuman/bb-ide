@@ -35,24 +35,6 @@ function createInteractiveRequest(): PendingInteractionCreate {
 }
 
 describe("createServerClient", () => {
-  it("refuses to fetch runtime material over insecure non-loopback HTTP", async () => {
-    const fetchFn = vi.fn<typeof fetch>();
-    const client = createServerClient({
-      fetchFn,
-      getSessionId: () => "session-1",
-      hostKey: "host-key",
-      logger: createLogger(),
-      serverUrl: "http://bb.example.test",
-    });
-
-    await expect(
-      client.fetchRuntimeMaterial({
-        version: "runtime-version-1",
-      }),
-    ).rejects.toBeInstanceOf(AbortError);
-    expect(fetchFn).not.toHaveBeenCalled();
-  });
-
   it("refuses to fetch project attachments over insecure non-loopback HTTP", async () => {
     const fetchFn = vi.fn<typeof fetch>();
     const client = createServerClient({
@@ -93,64 +75,6 @@ describe("createServerClient", () => {
       }),
     ).rejects.toBeInstanceOf(AbortError);
     expect(fetchFn).not.toHaveBeenCalled();
-  });
-
-  it("fetches runtime material over HTTPS", async () => {
-    const fetchFn = vi.fn<typeof fetch>(async (input) => {
-      const url = String(input);
-      expect(url).toContain("/internal/session/runtime-material");
-      expect(url).toContain("sessionId=session-1");
-      expect(url).toContain("version=runtime-version-1");
-      return new Response(
-        JSON.stringify({
-          env: {
-            OPENAI_API_KEY: "test-openai-key",
-          },
-          files: [
-            {
-              contents: "{}\n",
-              managedBy: "bb-runtime-material",
-              mode: 0o600,
-              path: "~/.codex/auth.json",
-            },
-          ],
-          version: "runtime-version-1",
-        }),
-        {
-          headers: {
-            "content-type": "application/json",
-          },
-          status: 200,
-        },
-      );
-    });
-    const client = createServerClient({
-      fetchFn,
-      getSessionId: () => "session-1",
-      hostKey: "host-key",
-      logger: createLogger(),
-      serverUrl: "https://bb.example.test",
-    });
-
-    await expect(
-      client.fetchRuntimeMaterial({
-        version: "runtime-version-1",
-      }),
-    ).resolves.toEqual({
-      env: {
-        OPENAI_API_KEY: "test-openai-key",
-      },
-      files: [
-        {
-          contents: "{}\n",
-          managedBy: "bb-runtime-material",
-          mode: 0o600,
-          path: "~/.codex/auth.json",
-        },
-      ],
-      version: "runtime-version-1",
-    });
-    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
   it("fetches project attachment bytes over HTTPS", async () => {

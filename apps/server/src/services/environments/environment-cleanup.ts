@@ -33,10 +33,7 @@ import {
   type HostDaemonCommandResult,
 } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
-import type {
-  AppDeps,
-  LoggedSandboxWorkSessionDeps,
-} from "../../types.js";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 
@@ -109,7 +106,7 @@ function workspaceHasRiskyChanges(
 }
 
 async function workspaceCanBeSafelyCleaned(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   environmentId: string,
 ): Promise<boolean> {
   const environment = getEnvironment(deps.db, environmentId);
@@ -435,7 +432,7 @@ export function wouldCleanupEnvironment(
 }
 
 export async function advanceEnvironmentCleanup(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
   const environment = getEnvironment(deps.db, args.environmentId);
@@ -548,7 +545,7 @@ export async function advanceEnvironmentCleanup(
 }
 
 export async function runEnvironmentCleanupAdvance(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
   await deps.lifecycleDedupers.environmentCleanupAdvance.run(
@@ -560,7 +557,7 @@ export async function runEnvironmentCleanupAdvance(
 }
 
 export function requestEnvironmentCleanupAdvance(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: RequestEnvironmentCleanupAdvanceArgs,
 ): void {
   if (!args.environmentId) {

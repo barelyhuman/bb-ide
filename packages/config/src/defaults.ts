@@ -16,6 +16,4 @@ export const DEFAULTS = {
   devEnvPort: 9112,
   serverUrl: { prod: "http://localhost:38886", dev: "http://localhost:3334" },
   inferenceModel: "openai/gpt-4o-mini",
-  sandboxActivityExtensionDebounceMs: 30_000,
-  sandboxIdleThresholdMs: 300_000,
 } as const;

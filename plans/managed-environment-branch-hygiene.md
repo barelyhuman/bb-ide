@@ -335,7 +335,7 @@ status, and branch-ref state.
 `BranchCleanupReport` should be a discriminated union assembled by the server:
 
 - `{ kind: "not_applicable" }`: the environment has no local branch cleanup
-  target, such as unmanaged environments or managed clones.
+  target, such as unmanaged environments.
 - `{ kind: "not_tracked", environmentId, reason: "missing_branch_ref" }`: the
   environment is a managed worktree that may have a local branch, but BB has no
   branch ref row yet. This is audit/backfill-needed, not proof that cleanup is
@@ -883,7 +883,7 @@ API:
   ref.
 - Display derives from branch-ref existence plus the active or latest
   `delete_branch` operation:
-  - unmanaged environment, managed clone, or no local branch target:
+  - unmanaged environment or no local branch target:
     `not_applicable`
   - managed worktree with no branch ref row: `audit_needed`
   - branch ref row exists and no branch cleanup operation exists:

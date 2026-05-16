@@ -1,4 +1,4 @@
-import { envsafe, num, port, str } from "envsafe";
+import { envsafe, port, str } from "envsafe";
 import { commonConfig } from "./common.js";
 import { databaseConfig } from "./database.js";
 import { DEFAULTS } from "./defaults.js";
@@ -29,22 +29,7 @@ const rawServerConfig = envsafe({
     allowEmpty: true,
   }),
   BB_EXTERNAL_URL: str({
-    desc: "Internet-facing HTTPS base URL used by sandbox hosts and externally reachable auth flows. Does not control which host or port the server binds to.",
-    default: "",
-    allowEmpty: true,
-  }),
-  E2B_API_KEY: str({
-    desc: "E2B API key for ephemeral sandbox provisioning (optional)",
-    default: "",
-    allowEmpty: true,
-  }),
-  E2B_TEMPLATE: str({
-    desc: "E2B sandbox template ID (optional)",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_GITHUB_PAT: str({
-    desc: "GitHub personal access token used for authenticated repo clones in sandboxes",
+    desc: "Internet-facing HTTPS base URL used for generated public links. Does not control which host or port the server binds to.",
     default: "",
     allowEmpty: true,
   }),
@@ -58,22 +43,6 @@ const rawServerConfig = envsafe({
     default: "",
     allowEmpty: true,
     devDefault: "",
-  }),
-  ANTHROPIC_API_KEY: str({
-    desc: "Anthropic API key used for Claude-backed sandbox runtimes (optional)",
-    default: "",
-    allowEmpty: true,
-    devDefault: "",
-  }),
-  BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS: num({
-    desc: "Debounce window for extending ephemeral sandbox TTL on activity",
-    default: DEFAULTS.sandboxActivityExtensionDebounceMs,
-    devDefault: DEFAULTS.sandboxActivityExtensionDebounceMs,
-  }),
-  BB_SANDBOX_IDLE_THRESHOLD_MS: num({
-    desc: "Idle time before the server suspends an ephemeral sandbox",
-    default: DEFAULTS.sandboxIdleThresholdMs,
-    devDefault: DEFAULTS.sandboxIdleThresholdMs,
   }),
 });
 

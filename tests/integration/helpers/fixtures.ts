@@ -27,7 +27,6 @@ export interface ReadyHostThreadOptions {
   timeoutMs?: number;
   title?: string;
   workspace:
-    | { type: "managed-clone" }
     | { type: "managed-worktree" }
     | { path: string | null; type: "unmanaged" };
 }

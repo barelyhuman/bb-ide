@@ -6,7 +6,6 @@ import {
 import type { DbConnection, DbTransaction } from "../connection.js";
 import {
   environmentOperations,
-  hostOperations,
   projectOperations,
   threadOperations,
 } from "../schema.js";
@@ -16,7 +15,6 @@ export type LifecycleOperationWriteConnection = DbConnection | DbTransaction;
 
 type LifecycleOperationTable =
   | typeof environmentOperations
-  | typeof hostOperations
   | typeof projectOperations
   | typeof threadOperations;
 

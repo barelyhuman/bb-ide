@@ -1,10 +1,8 @@
 import {
   allProjectFilesQueryKeyPrefix,
-  allProjectGithubBranchesQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
-  projectGithubBranchesQueryKey,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
@@ -69,9 +67,6 @@ export function invalidateProjectSourceQueries({
     queryClient.invalidateQueries({
       queryKey: allProjectSourceBranchesQueryKeyPrefix(),
     });
-    queryClient.invalidateQueries({
-      queryKey: allProjectGithubBranchesQueryKeyPrefix(),
-    });
     return;
   }
   queryClient.invalidateQueries({
@@ -79,9 +74,6 @@ export function invalidateProjectSourceQueries({
   });
   queryClient.invalidateQueries({
     queryKey: projectSourceBranchesQueryKeyPrefix(projectId),
-  });
-  queryClient.invalidateQueries({
-    queryKey: projectGithubBranchesQueryKey(projectId),
   });
 }
 

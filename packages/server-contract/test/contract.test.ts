@@ -188,8 +188,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Project source PATCH requests omit isDefault when not changing the default source.",
   "updateProjectSourceRequestSchema.path":
     "Project source PATCH requests omit path when leaving it unchanged.",
-  "updateProjectSourceRequestSchema.repoUrl":
-    "Project source PATCH requests omit repo URL when leaving it unchanged.",
   "updateThreadRequestSchema.parentThreadId":
     "Thread PATCH requests omit parentThreadId when leaving it unchanged or use null to clear it.",
   "updateThreadRequestSchema.title":
@@ -364,7 +362,7 @@ describe("server-contract canonical schemas", () => {
               type: "host",
               hostId: "host_abc",
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },
@@ -396,7 +394,7 @@ describe("server-contract canonical schemas", () => {
               type: "host",
               hostId: "host_abc",
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },
@@ -464,25 +462,6 @@ describe("server-contract canonical schemas", () => {
       hostType: "persistent",
       joinMode: "local",
     });
-
-    expect(
-      createHostJoinRequestSchema.parse({
-        hostType: "ephemeral",
-        provider: "e2b",
-        externalId: "sandbox_123",
-      }),
-    ).toMatchObject({
-      hostType: "ephemeral",
-      provider: "e2b",
-      externalId: "sandbox_123",
-    });
-
-    expect(() =>
-      createHostJoinRequestSchema.parse({
-        hostType: "ephemeral",
-        externalId: "sandbox_missing_provider",
-      }),
-    ).toThrow(/provider/u);
 
     expect(
       createHostJoinResponseSchema.parse({
@@ -713,24 +692,6 @@ describe("server-contract canonical schemas", () => {
         path: "relative/project",
       }),
     ).toThrow("Project path must be an absolute path.");
-
-    expect(
-      createProjectSourceRequestSchema.parse({
-        type: "github_repo",
-        repoUrl: "https://github.com/example/repo",
-      }),
-    ).toMatchObject({
-      type: "github_repo",
-      repoUrl: "https://github.com/example/repo",
-    });
-
-    expect(() =>
-      createProjectSourceRequestSchema.parse({
-        hostId: "host_123",
-        type: "github_repo",
-        repoUrl: "https://github.com/example/repo",
-      }),
-    ).toThrow();
 
     expect(() =>
       contract.updateProjectSourceRequestSchema.parse({

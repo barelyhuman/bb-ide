@@ -1,6 +1,4 @@
 import { z } from "zod";
-import type { HostType } from "./host.js";
-
 export const environmentStatusValues = [
   "provisioning",
   "ready",
@@ -22,7 +20,6 @@ export type EnvironmentCleanupMode = z.infer<
 export const WORKSPACE_PROVISION_TYPES = [
   "unmanaged",
   "managed-worktree",
-  "managed-clone",
 ] as const;
 export const workspaceProvisionTypeSchema = z.enum(WORKSPACE_PROVISION_TYPES);
 export type WorkspaceProvisionType = z.infer<
@@ -30,7 +27,6 @@ export type WorkspaceProvisionType = z.infer<
 >;
 
 export const environmentWorkspaceDisplayKindValues = [
-  "sandbox",
   "managed-worktree",
   "unmanaged-worktree",
   "other",
@@ -47,17 +43,11 @@ export interface ResolveEnvironmentWorkspaceDisplayKindArgs {
     isWorktree: boolean | null;
     workspaceProvisionType: WorkspaceProvisionType | null;
   };
-  hostType: HostType | null;
 }
 
 export function resolveEnvironmentWorkspaceDisplayKind({
   environment,
-  hostType,
 }: ResolveEnvironmentWorkspaceDisplayKindArgs): EnvironmentWorkspaceDisplayKind {
-  if (hostType === "ephemeral") {
-    return "sandbox";
-  }
-
   if (environment.workspaceProvisionType === "managed-worktree") {
     return "managed-worktree";
   }

@@ -14,18 +14,15 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/agent-provider-auth": "workspace:*",
     "@bb/agent-providers": "workspace:*",
     "@bb/config": "workspace:*",
     "@bb/core-ui": "workspace:*",
     "@bb/db": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
-    "@bb/host-runtime-material": "workspace:*",
     "@bb/logger": "workspace:*",
     "@bb/process-utils": "workspace:*",
     "@bb/replay-capture": "workspace:*",
-    "@bb/sandbox-host": "workspace:*",
     "@bb/secret-storage": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",

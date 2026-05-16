@@ -9,11 +9,7 @@ import type { IconName } from "@/components/ui/icon.js";
  */
 export const PersistentHostIconName: IconName = "Laptop";
 
-/**
- * Icon name for a host based on its type. Persistent hosts get
- * PersistentHostIconName; ephemeral hosts (E2B sandboxes, etc.) get
- * "Container".
- */
-export function getHostIconName(host: Host | undefined | null): IconName {
-  return host?.type === "ephemeral" ? "Container" : PersistentHostIconName;
+/** Icon name for a persistent host. */
+export function getHostIconName(_host: Host | undefined | null): IconName {
+  return PersistentHostIconName;
 }

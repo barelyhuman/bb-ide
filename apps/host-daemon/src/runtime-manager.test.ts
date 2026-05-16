@@ -113,10 +113,8 @@ function createDeferred<T>() {
 
 function getProvisionWorkspacePath(args: ProvisionWorkspaceArgs): string {
   switch (args.workspaceProvisionType) {
-    case "managed-clone":
     case "managed-worktree":
       return args.targetPath;
-    case "reconnect-managed-clone":
     case "reconnect-managed-worktree":
     case "unmanaged":
       return args.path;

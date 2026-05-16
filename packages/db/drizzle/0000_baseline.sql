@@ -1,11 +1,3 @@
-CREATE TABLE `app_sandbox_env_vars` (
-	`name` text PRIMARY KEY NOT NULL,
-	`encrypted_value` text NOT NULL,
-	`created_at` integer NOT NULL,
-	`updated_at` integer NOT NULL
-);
---> statement-breakpoint
-CREATE INDEX `app_sandbox_env_vars_updated_at_idx` ON `app_sandbox_env_vars` (`updated_at`);--> statement-breakpoint
 CREATE TABLE `apikey` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text,
@@ -95,6 +87,7 @@ CREATE TABLE `environments` (
 	`is_git_repo` integer DEFAULT false NOT NULL,
 	`is_worktree` integer DEFAULT false NOT NULL,
 	`branch_name` text,
+	`base_branch` text,
 	`default_branch` text,
 	`merge_base_branch` text,
 	`cleanup_requested_at` integer,
@@ -122,6 +115,8 @@ CREATE TABLE `events` (
 	`type` text NOT NULL,
 	`item_id` text,
 	`item_kind` text,
+	`producer_event_id` text,
+	`producer_event_payload_hash` text,
 	`data` text DEFAULT '{}' NOT NULL,
 	`created_at` integer NOT NULL,
 	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade,
@@ -134,9 +129,12 @@ CREATE TABLE `events` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `events_thread_sequence_idx` ON `events` (`thread_id`,`sequence`);--> statement-breakpoint
+CREATE UNIQUE INDEX `events_producer_event_id_idx` ON `events` (`producer_event_id`);--> statement-breakpoint
 CREATE INDEX `events_thread_type_item_kind_sequence_idx` ON `events` (`thread_id`,`type`,`item_kind`,`sequence`);--> statement-breakpoint
-CREATE INDEX `events_thread_item_id_sequence_idx` ON `events` (`thread_id`,`item_id`,`sequence`);--> statement-breakpoint
+CREATE INDEX `events_thread_type_sequence_idx` ON `events` (`thread_id`,`type`,`sequence`);--> statement-breakpoint
+CREATE INDEX `events_thread_turn_type_item_sequence_idx` ON `events` (`thread_id`,`turn_id`,`type`,`item_id`,`sequence`);--> statement-breakpoint
 CREATE INDEX `events_environment_idx` ON `events` (`environment_id`);--> statement-breakpoint
+CREATE INDEX `events_completed_item_truncation_idx` ON `events` (`item_kind`,`created_at`,`id`) WHERE `type` = 'item/completed';--> statement-breakpoint
 CREATE TABLE `host_daemon_commands` (
 	`id` text PRIMARY KEY NOT NULL,
 	`host_id` text NOT NULL,
@@ -155,7 +153,11 @@ CREATE TABLE `host_daemon_commands` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `host_daemon_commands_host_cursor_idx` ON `host_daemon_commands` (`host_id`,`cursor`);--> statement-breakpoint
-CREATE INDEX `host_daemon_commands_host_state_idx` ON `host_daemon_commands` (`host_id`,`state`);--> statement-breakpoint
+CREATE INDEX `host_daemon_commands_host_state_cursor_idx` ON `host_daemon_commands` (`host_id`,`state`,`cursor`);--> statement-breakpoint
+CREATE INDEX `host_daemon_commands_state_fetched_at_idx` ON `host_daemon_commands` (`state`,`fetched_at`);--> statement-breakpoint
+CREATE INDEX `host_daemon_commands_payload_prune_idx` ON `host_daemon_commands` (`state`,`completed_at`) WHERE "host_daemon_commands"."completed_at" IS NOT NULL
+          AND ("host_daemon_commands"."payload" <> '{}' OR "host_daemon_commands"."result_payload" IS NOT NULL);--> statement-breakpoint
+CREATE INDEX `host_daemon_commands_completed_prune_idx` ON `host_daemon_commands` (`completed_at`) WHERE `completed_at` IS NOT NULL;--> statement-breakpoint
 CREATE TABLE `host_daemon_sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`host_id` text NOT NULL,
@@ -177,43 +179,47 @@ CREATE TABLE `host_daemon_sessions` (
 );
 --> statement-breakpoint
 CREATE INDEX `host_daemon_sessions_host_status_idx` ON `host_daemon_sessions` (`host_id`,`status`);--> statement-breakpoint
-CREATE TABLE `host_operations` (
-	`id` text PRIMARY KEY NOT NULL,
-	`host_id` text NOT NULL,
-	`kind` text NOT NULL,
-	`state` text NOT NULL,
-	`payload` text NOT NULL,
-	`command_id` text,
-	`requested_at` integer NOT NULL,
-	`queued_at` integer,
-	`completed_at` integer,
-	`failure_reason` text,
-	`created_at` integer NOT NULL,
-	`updated_at` integer NOT NULL,
-	FOREIGN KEY (`host_id`) REFERENCES `hosts`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`command_id`) REFERENCES `host_daemon_commands`(`id`) ON UPDATE no action ON DELETE set null
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `host_operations_host_kind_idx` ON `host_operations` (`host_id`,`kind`);--> statement-breakpoint
-CREATE UNIQUE INDEX `host_operations_command_idx` ON `host_operations` (`command_id`);--> statement-breakpoint
-CREATE INDEX `host_operations_state_idx` ON `host_operations` (`state`);--> statement-breakpoint
+CREATE INDEX `host_daemon_sessions_host_latest_idx` ON `host_daemon_sessions` (`host_id`,`updated_at`,`created_at`,`id`);--> statement-breakpoint
 CREATE TABLE `hosts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`type` text NOT NULL,
-	`provider` text,
-	`external_id` text,
-	`last_activity_at` integer,
-	`suspended_at` integer,
+	`command_cursor` integer DEFAULT 0 NOT NULL,
 	`destroyed_at` integer,
-	`last_seen_at` integer NOT NULL,
+	`last_seen_at` integer,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `hosts_last_activity_idx` ON `hosts` (`last_activity_at`);--> statement-breakpoint
 CREATE INDEX `hosts_last_seen_idx` ON `hosts` (`last_seen_at`);--> statement-breakpoint
-CREATE INDEX `hosts_suspended_idx` ON `hosts` (`suspended_at`);--> statement-breakpoint
+CREATE TABLE `terminal_sessions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`thread_id` text NOT NULL,
+	`environment_id` text NOT NULL,
+	`host_id` text NOT NULL,
+	`daemon_session_id` text,
+	`title` text NOT NULL,
+	`initial_cwd` text NOT NULL,
+	`current_cwd` text,
+	`cols` integer NOT NULL,
+	`rows` integer NOT NULL,
+	`status` text NOT NULL,
+	`exit_code` integer,
+	`close_reason` text,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	`last_connected_at` integer,
+	`exited_at` integer,
+	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`host_id`) REFERENCES `hosts`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`daemon_session_id`) REFERENCES `host_daemon_sessions`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `terminal_sessions_thread_status_updated_idx` ON `terminal_sessions` (`thread_id`,`status`,`updated_at`);--> statement-breakpoint
+CREATE INDEX `terminal_sessions_environment_status_idx` ON `terminal_sessions` (`environment_id`,`status`);--> statement-breakpoint
+CREATE INDEX `terminal_sessions_host_status_idx` ON `terminal_sessions` (`host_id`,`status`);--> statement-breakpoint
+CREATE INDEX `terminal_sessions_daemon_session_idx` ON `terminal_sessions` (`daemon_session_id`);--> statement-breakpoint
 CREATE TABLE `manager_thread_nudges` (
 	`id` text PRIMARY KEY NOT NULL,
 	`project_id` text NOT NULL,
@@ -233,6 +239,18 @@ CREATE TABLE `manager_thread_nudges` (
 CREATE INDEX `manager_thread_nudges_due_idx` ON `manager_thread_nudges` (`enabled`,`next_fire_at`);--> statement-breakpoint
 CREATE INDEX `manager_thread_nudges_project_idx` ON `manager_thread_nudges` (`project_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `manager_thread_nudges_sync_key_idx` ON `manager_thread_nudges` (`project_id`,`thread_id`,`name`);--> statement-breakpoint
+CREATE TABLE `maintenance_scan_cursors` (
+	`id` text PRIMARY KEY NOT NULL,
+	`policy` text NOT NULL,
+	`version` integer NOT NULL,
+	`item_kind` text NOT NULL,
+	`output_path` text NOT NULL,
+	`last_created_at` integer DEFAULT 0 NOT NULL,
+	`last_event_id` text DEFAULT '' NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `maintenance_scan_cursors_path_idx` ON `maintenance_scan_cursors` (`policy`,`version`,`item_kind`,`output_path`);--> statement-breakpoint
 CREATE TABLE `pending_interactions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`thread_id` text NOT NULL,
@@ -299,16 +317,13 @@ CREATE TABLE `project_sources` (
 	`type` text NOT NULL,
 	`host_id` text,
 	`path` text,
-	`repo_url` text,
 	`is_default` integer DEFAULT false NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`host_id`) REFERENCES `hosts`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "project_sources_shape_check" CHECK((
-        ("project_sources"."type" = 'local_path' AND "project_sources"."host_id" IS NOT NULL AND "project_sources"."path" IS NOT NULL AND "project_sources"."repo_url" IS NULL)
-        OR
-        ("project_sources"."type" = 'github_repo' AND "project_sources"."host_id" IS NULL AND "project_sources"."path" IS NULL AND "project_sources"."repo_url" IS NOT NULL)
+        "project_sources"."type" = 'local_path' AND "project_sources"."host_id" IS NOT NULL AND "project_sources"."path" IS NOT NULL
       ))
 );
 --> statement-breakpoint
@@ -326,6 +341,21 @@ CREATE TABLE `projects` (
 );
 --> statement-breakpoint
 CREATE INDEX `projects_updated_idx` ON `projects` (`updated_at`);--> statement-breakpoint
+CREATE TABLE `prompt_history_entries` (
+	`id` text PRIMARY KEY NOT NULL,
+	`project_id` text NOT NULL,
+	`thread_id` text NOT NULL,
+	`scope` text NOT NULL,
+	`request_sequence` integer NOT NULL,
+	`input` text NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `prompt_history_entries_thread_request_idx` ON `prompt_history_entries` (`thread_id`,`request_sequence`);--> statement-breakpoint
+CREATE INDEX `prompt_history_entries_project_scope_created_idx` ON `prompt_history_entries` (`project_id`,`scope`,`created_at`,`request_sequence`,`id`);--> statement-breakpoint
+CREATE INDEX `prompt_history_entries_thread_scope_created_idx` ON `prompt_history_entries` (`thread_id`,`scope`,`created_at`,`request_sequence`,`id`);--> statement-breakpoint
 CREATE TABLE `queued_thread_messages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`thread_id` text NOT NULL,
@@ -335,29 +365,13 @@ CREATE TABLE `queued_thread_messages` (
 	`permission_mode` text NOT NULL,
 	`service_tier` text NOT NULL,
 	`claimed_at` integer,
+	`claim_token` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
 	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `queued_thread_messages_thread_created_idx` ON `queued_thread_messages` (`thread_id`,`created_at`,`id`);--> statement-breakpoint
-CREATE TABLE `sandbox_provider_credentials` (
-	`id` text PRIMARY KEY NOT NULL,
-	`provider_id` text NOT NULL,
-	`encrypted_access_token` text NOT NULL,
-	`encrypted_refresh_token` text NOT NULL,
-	`encrypted_id_token` text,
-	`encrypted_metadata` text NOT NULL,
-	`label` text,
-	`expires_at` integer NOT NULL,
-	`last_refreshed_at` integer,
-	`last_error_message` text,
-	`created_at` integer NOT NULL,
-	`updated_at` integer NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `sandbox_provider_credentials_provider_id_idx` ON `sandbox_provider_credentials` (`provider_id`);--> statement-breakpoint
-CREATE INDEX `sandbox_provider_credentials_expires_at_idx` ON `sandbox_provider_credentials` (`expires_at`);--> statement-breakpoint
 CREATE TABLE `thread_operations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`thread_id` text NOT NULL,
@@ -410,8 +424,10 @@ CREATE TABLE `threads` (
 );
 --> statement-breakpoint
 CREATE INDEX `threads_project_updated_idx` ON `threads` (`project_id`,`updated_at`);--> statement-breakpoint
+CREATE INDEX `threads_project_archived_deleted_idx` ON `threads` (`project_id`,`archived_at`,`deleted_at`,`id`);--> statement-breakpoint
 CREATE INDEX `threads_environment_idx` ON `threads` (`environment_id`);--> statement-breakpoint
 CREATE INDEX `threads_automation_runtime_idx` ON `threads` (`automation_id`,`archived_at`,`deleted_at`,`status`);--> statement-breakpoint
 CREATE INDEX `threads_parent_idx` ON `threads` (`parent_thread_id`);--> statement-breakpoint
 CREATE INDEX `threads_archived_status_idx` ON `threads` (`archived_at`,`status`);--> statement-breakpoint
-CREATE INDEX `threads_environment_archived_deleted_idx` ON `threads` (`environment_id`,`archived_at`,`deleted_at`);
+CREATE INDEX `threads_environment_archived_deleted_idx` ON `threads` (`environment_id`,`archived_at`,`deleted_at`);--> statement-breakpoint
+CREATE INDEX `threads_active_maintenance_idx` ON `threads` (`status`) WHERE `deleted_at` IS NULL;

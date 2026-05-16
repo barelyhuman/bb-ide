@@ -23,15 +23,9 @@ import { defaultFeatureFlags, type FeatureFlags } from "@bb/domain";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
 import { createApp } from "../../../apps/server/src/server.js";
-import { createCloudAuthService } from "../../../apps/server/src/services/cloud-auth/service.js";
 import { createHostLifecycleService } from "../../../apps/server/src/services/hosts/host-lifecycle-service.js";
-import { createSandboxHostRegistry } from "../../../apps/server/src/services/hosts/sandbox-registry.js";
-import {
-  DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
-  PendingInteractionLifecycle,
-} from "../../../apps/server/src/services/interactions/pending-interactions.js";
+import { PendingInteractionLifecycle } from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
-import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
 import { TerminalSessionLifecycle } from "../../../apps/server/src/services/terminals/terminal-session-lifecycle.js";
 import type {
   ServerLogger,
@@ -223,7 +217,6 @@ async function startIntegrationServer(
     db,
     hub,
     logger: testLogger,
-    sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   const terminalSessions = new TerminalSessionLifecycle({
     attachTimeoutMs: 50,
@@ -233,22 +226,14 @@ async function startIntegrationServer(
     openTimeoutMs: 50,
   });
   pendingInteractions.start();
-  const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
     dataDir: serverDataDir,
-    e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",
-    e2bTemplate: process.env.E2B_TEMPLATE ?? "",
     featureFlags: resolveFeatureFlags(options.featureFlags),
-    githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
     appUrl: "https://bb.example.test",
-    externalUrl: "https://bb.example.test",
     serverPort: 0,
-    sandboxActivityExtensionDebounceMs: 30_000,
-    sandboxIdleThresholdMs: 300_000,
     isDevelopment: false,
   };
   const machineAuth = await createMachineAuthService({
@@ -257,19 +242,8 @@ async function startIntegrationServer(
     logger: testLogger,
   });
   await machineAuth.ensureReady();
-  const cloudAuth = await createCloudAuthService({
-    dataDir: serverDataDir,
-    db,
-    logger: testLogger,
-  });
-  const sandboxEnv = await createSandboxEnvService({
-    dataDir: serverDataDir,
-    db,
-    logger: testLogger,
-  });
   const lifecycleDedupers = createLifecycleDedupers();
   const { app, injectWebSocket } = createApp({
-    cloudAuth,
     config,
     db,
     hostLifecycle,
@@ -277,9 +251,7 @@ async function startIntegrationServer(
     lifecycleDedupers,
     logger: testLogger,
     machineAuth,
-    sandboxEnv,
     pendingInteractions,
-    sandboxRegistry,
     terminalSessions,
   });
 
@@ -315,7 +287,6 @@ async function startIntegrationServer(
     hub,
     machineAuth,
     async close(): Promise<void> {
-      await cloudAuth.dispose();
       hostLifecycle.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {

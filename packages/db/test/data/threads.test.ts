@@ -291,10 +291,6 @@ describe("threads", () => {
 
   it("lists thread environment workspace display kind without per-thread lookups", () => {
     const { db, host, project } = setup();
-    const sandboxHost = upsertHost(db, noopNotifier, {
-      name: "sandbox-host",
-      type: "ephemeral",
-    });
     const directEnvironment = createEnvironment(db, noopNotifier, {
       projectId: project.id,
       hostId: host.id,
@@ -310,13 +306,6 @@ describe("threads", () => {
       isWorktree: true,
       branchName: "bb/worktree",
     });
-    const sandboxEnvironment = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: sandboxHost.id,
-      workspaceProvisionType: "managed-worktree",
-      isWorktree: true,
-      branchName: "bb/sandbox",
-    });
     const directThread = createThread(db, noopNotifier, {
       projectId: project.id,
       environmentId: directEnvironment.id,
@@ -325,11 +314,6 @@ describe("threads", () => {
     const worktreeThread = createThread(db, noopNotifier, {
       projectId: project.id,
       environmentId: worktreeEnvironment.id,
-      providerId: "codex",
-    });
-    const sandboxThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      environmentId: sandboxEnvironment.id,
       providerId: "codex",
     });
 
@@ -343,7 +327,6 @@ describe("threads", () => {
     expect(displayKindsByThreadId.get(worktreeThread.id)).toBe(
       "managed-worktree",
     );
-    expect(displayKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
 
     const environmentIdentityByThreadId = new Map(
       listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(
@@ -364,10 +347,6 @@ describe("threads", () => {
     expect(environmentIdentityByThreadId.get(worktreeThread.id)).toEqual({
       environmentBranchName: "bb/worktree",
       environmentHostId: host.id,
-    });
-    expect(environmentIdentityByThreadId.get(sandboxThread.id)).toEqual({
-      environmentBranchName: "bb/sandbox",
-      environmentHostId: sandboxHost.id,
     });
   });
 

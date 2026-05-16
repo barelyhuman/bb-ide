@@ -1,4 +1,4 @@
-import { createAutomation, createProjectSource, getAutomation } from "@bb/db";
+import { createAutomation, getAutomation } from "@bb/db";
 import {
   automationSchema,
   AUTOMATION_NAME_MAX_LENGTH,
@@ -88,7 +88,7 @@ describe("public automation routes", () => {
                   type: "host",
                   hostId: host.id,
                   workspace: {
-                    type: "managed-clone",
+                    type: "managed-worktree",
                     baseBranch: { kind: "default" },
                   },
                 },
@@ -233,7 +233,7 @@ describe("public automation routes", () => {
                     type: "host",
                     hostId: host.id,
                     workspace: {
-                      type: "managed-clone",
+                      type: "managed-worktree",
                       baseBranch: { kind: "default" },
                     },
                   },
@@ -270,7 +270,7 @@ describe("public automation routes", () => {
               type: "host",
               hostId: host.id,
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },
@@ -359,7 +359,7 @@ describe("public automation routes", () => {
                     type: "host",
                     hostId: host.id,
                     workspace: {
-                      type: "managed-clone",
+                      type: "managed-worktree",
                       baseBranch: { kind: "default" },
                     },
                   },
@@ -404,7 +404,7 @@ describe("public automation routes", () => {
                   type: "host",
                   hostId: host.id,
                   workspace: {
-                    type: "managed-clone",
+                    type: "managed-worktree",
                     baseBranch: { kind: "default" },
                   },
                 },
@@ -430,7 +430,7 @@ describe("public automation routes", () => {
               type: "host",
               hostId: host.id,
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },
@@ -533,7 +533,7 @@ describe("public automation routes", () => {
                   type: "host",
                   hostId: foreignHost.id,
                   workspace: {
-                    type: "managed-clone",
+                    type: "managed-worktree",
                     baseBranch: { kind: "default" },
                   },
                 },
@@ -566,7 +566,7 @@ describe("public automation routes", () => {
                   type: "host",
                   hostId: primaryHost.id,
                   workspace: {
-                    type: "managed-clone",
+                    type: "managed-worktree",
                     baseBranch: { kind: "default" },
                   },
                 },
@@ -606,173 +606,6 @@ describe("public automation routes", () => {
         },
       );
       expect(updateResponse.status).toBe(409);
-    } finally {
-      vi.useRealTimers();
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects sandbox-host automations when the project has no cloneable source", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-automation-sandbox-missing-clone-source",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-
-      const createResponse = await harness.app.request(
-        `/api/v1/projects/${project.id}/automations`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            name: "Sandbox automation",
-            trigger: weekdayMorningTrigger,
-            action: {
-              actionType: "scheduled-thread",
-              threadRequest: {
-                providerId: "codex",
-                model: "gpt-5",
-                input: [{ type: "text", text: "Try to use a sandbox host" }],
-                environment: {
-                  type: "sandbox-host",
-                  sandboxType: "e2b",
-                  baseBranch: { kind: "default" },
-                },
-              },
-            },
-          }),
-        },
-      );
-      expect(createResponse.status).toBe(409);
-      await expect(readJson(createResponse)).resolves.toMatchObject({
-        code: "unsupported_operation",
-        message:
-          "Sandbox threads require a cloneable project source; local path sources are not supported yet",
-      });
-
-      const validAutomation = createAutomation(harness.db, harness.hub, {
-        projectId: project.id,
-        name: "Valid automation",
-        enabled: true,
-        triggerType: "schedule",
-        triggerConfig: JSON.stringify(weekdayMorningTrigger),
-        action: JSON.stringify({
-          actionType: "scheduled-thread",
-          threadRequest: {
-            providerId: "codex",
-            model: "gpt-5",
-            input: [{ type: "text", text: "Run on the configured host" }],
-            environment: {
-              type: "host",
-              hostId: host.id,
-              workspace: {
-                type: "managed-clone",
-                baseBranch: { kind: "default" },
-              },
-            },
-          },
-        }),
-        autoArchive: false,
-        nextRunAt: Date.now() + 60_000,
-      });
-
-      const updateResponse = await harness.app.request(
-        `/api/v1/projects/${project.id}/automations/${validAutomation.id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            action: {
-              actionType: "scheduled-thread",
-              threadRequest: {
-                providerId: "codex",
-                model: "gpt-5",
-                input: [{ type: "text", text: "Update to a sandbox host" }],
-                environment: {
-                  type: "sandbox-host",
-                  sandboxType: "e2b",
-                  baseBranch: { kind: "default" },
-                },
-              },
-            },
-          }),
-        },
-      );
-      expect(updateResponse.status).toBe(409);
-      await expect(readJson(updateResponse)).resolves.toMatchObject({
-        code: "unsupported_operation",
-        message:
-          "Sandbox threads require a cloneable project source; local path sources are not supported yet",
-      });
-    } finally {
-      vi.useRealTimers();
-      await harness.cleanup();
-    }
-  });
-
-  it("allows sandbox-host automations when a non-default cloneable source exists", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-automation-sandbox-secondary-clone-source",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      createProjectSource(harness.db, harness.hub, {
-        isDefault: false,
-        projectId: project.id,
-        repoUrl: "https://github.com/example/automation-secondary.git",
-        type: "github_repo",
-      });
-
-      const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/automations`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            name: "Sandbox automation",
-            trigger: weekdayMorningTrigger,
-            action: {
-              actionType: "scheduled-thread",
-              threadRequest: {
-                providerId: "codex",
-                model: "gpt-5",
-                input: [
-                  { type: "text", text: "Use the cloneable secondary source" },
-                ],
-                environment: {
-                  type: "sandbox-host",
-                  sandboxType: "e2b",
-                  baseBranch: { kind: "default" },
-                },
-              },
-            },
-          }),
-        },
-      );
-
-      expect(response.status).toBe(201);
-      expect(automationSchema.parse(await readJson(response))).toMatchObject({
-        action: {
-          actionType: "scheduled-thread",
-          threadRequest: {
-            environment: {
-              type: "sandbox-host",
-            },
-          },
-        },
-      });
     } finally {
       vi.useRealTimers();
       await harness.cleanup();
@@ -866,7 +699,7 @@ describe("public automation routes", () => {
               type: "host",
               hostId: host.id,
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },
@@ -1017,7 +850,7 @@ describe("public automation routes", () => {
               type: "host",
               hostId: host.id,
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },

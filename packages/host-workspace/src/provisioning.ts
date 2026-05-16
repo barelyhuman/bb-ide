@@ -33,7 +33,7 @@ type EmitStepArgs = {
 };
 
 export interface CreateWorkspaceArgs {
-  /** Local repo path for worktrees, or a clone URL for managed clones */
+  /** Local repo path for worktrees */
   sourcePath: string;
   targetPath: string;
   /** Name of the new branch to create on the workspace. */
@@ -60,13 +60,6 @@ export interface RemoveWorktreeArgs {
   force?: boolean;
 }
 
-const GITHUB_HOSTNAME = "github.com";
-const GITHUB_TOKEN_ENV_KEY = "GITHUB_TOKEN";
-// Git credential helpers are shell snippets. This one keeps the token in-memory and
-// only answers `get` requests for HTTPS clones against GitHub.
-const GITHUB_TOKEN_CREDENTIAL_HELPER =
-  '!f() { if test "$1" = get; then echo username=x-access-token; echo password=$GITHUB_TOKEN; fi; }; f';
-
 interface SetupScriptCommand {
   command: string;
   args: string[];
@@ -81,36 +74,6 @@ interface BuildSetupScriptCommandArgs {
 interface KillSetupScriptProcessArgs {
   child: PortableOutputChildProcess;
   signal: NodeJS.Signals;
-}
-
-function buildGitHubCloneEnv(
-  sourcePath: string,
-): NodeJS.ProcessEnv | undefined {
-  const githubToken = process.env[GITHUB_TOKEN_ENV_KEY]?.trim();
-  if (!githubToken) {
-    return undefined;
-  }
-
-  let sourceUrl: URL;
-  try {
-    sourceUrl = new URL(sourcePath);
-  } catch {
-    return undefined;
-  }
-
-  if (
-    sourceUrl.protocol !== "https:" ||
-    sourceUrl.hostname !== GITHUB_HOSTNAME
-  ) {
-    return undefined;
-  }
-
-  return {
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "credential.helper",
-    GIT_CONFIG_VALUE_0: GITHUB_TOKEN_CREDENTIAL_HELPER,
-    GIT_TERMINAL_PROMPT: "0",
-  };
 }
 
 function emitProgress(
@@ -320,112 +283,6 @@ export async function createWorktree(
       });
     }
     await removeWorktree({ path: args.targetPath, force: true });
-    throw error;
-  }
-}
-
-export async function createClone(
-  args: CreateWorkspaceArgs,
-): Promise<{ path: string }> {
-  if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
-    return { path: args.targetPath };
-  }
-
-  await ensureWorkspaceParentDirectory(args.targetPath);
-
-  const cloneArgs = ["clone", args.sourcePath, args.targetPath];
-  const cloneText = `git ${cloneArgs.join(" ")}`;
-  // When baseBranch is null, the clone leaves HEAD on the remote's default
-  // branch — just create the new branch from there. Otherwise base off the
-  // explicitly-named remote branch.
-  const checkoutArgs = args.baseBranch
-    ? ["checkout", "-B", args.branchName, `origin/${args.baseBranch}`]
-    : ["checkout", "-B", args.branchName];
-  const checkoutText = `git ${checkoutArgs.join(" ")}`;
-  const cloneEnv = buildGitHubCloneEnv(args.sourcePath);
-
-  const cloneStartedAt = Date.now();
-  emitStep({
-    onProgress: args.onProgress,
-    key: "git-clone-started",
-    text: "Cloning repository",
-    status: "started",
-    startedAt: cloneStartedAt,
-  });
-  emitOutput(args.onProgress, "git-clone-command", cloneText);
-  let cloneCompleted = false;
-  let checkoutCompleted = false;
-  let checkoutStartedAt: number | null = null;
-  try {
-    const cloneResult = await runGit(cloneArgs, {
-      cwd: path.dirname(args.targetPath),
-      ...(cloneEnv ? { env: cloneEnv } : {}),
-    });
-    emitGitOutput(args.onProgress, "git-clone", cloneResult);
-    emitStep({
-      onProgress: args.onProgress,
-      key: "git-clone-completed",
-      text: "Cloned repository",
-      status: "completed",
-      startedAt: cloneStartedAt,
-      metadata: { durationMs: Date.now() - cloneStartedAt },
-    });
-    cloneCompleted = true;
-
-    emitCwd({
-      onProgress: args.onProgress,
-      keySuffix: "target",
-      cwd: args.targetPath,
-    });
-    checkoutStartedAt = Date.now();
-    emitStep({
-      onProgress: args.onProgress,
-      key: "git-checkout-started",
-      text: "Checking out branch",
-      status: "started",
-      startedAt: checkoutStartedAt,
-    });
-    emitOutput(args.onProgress, "git-checkout-command", checkoutText);
-    const checkoutResult = await runGit(checkoutArgs, { cwd: args.targetPath });
-    emitGitOutput(args.onProgress, "git-checkout", checkoutResult);
-    emitStep({
-      onProgress: args.onProgress,
-      key: "git-checkout-completed",
-      text: "Checked out branch",
-      status: "completed",
-      startedAt: checkoutStartedAt,
-      metadata: { durationMs: Date.now() - checkoutStartedAt },
-    });
-    checkoutCompleted = true;
-
-    await runSetupScript({
-      workspacePath: args.targetPath,
-      timeoutMs: args.timeoutMs,
-      onProgress: args.onProgress,
-    });
-    return { path: args.targetPath };
-  } catch (error) {
-    if (!cloneCompleted) {
-      emitStep({
-        onProgress: args.onProgress,
-        key: "git-clone-failed",
-        text: "Clone failed",
-        status: "failed",
-        startedAt: cloneStartedAt,
-        metadata: { durationMs: Date.now() - cloneStartedAt },
-      });
-    } else if (!checkoutCompleted) {
-      const failedAt = checkoutStartedAt ?? Date.now();
-      emitStep({
-        onProgress: args.onProgress,
-        key: "git-checkout-failed",
-        text: "Checkout failed",
-        status: "failed",
-        startedAt: failedAt,
-        metadata: { durationMs: Date.now() - failedAt },
-      });
-    }
-    await removeDirectory({ path: args.targetPath });
     throw error;
   }
 }

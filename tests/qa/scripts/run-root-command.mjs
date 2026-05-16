@@ -6,10 +6,6 @@ const [, , command, ...args] = process.argv;
 const STANDALONE_PARENT_PID_ENV = "BB_STANDALONE_PARENT_PID";
 
 const commandConfig = {
-  "auth:e2b-smoke": {
-    packageScript: "auth:e2b-smoke",
-    turboChecks: [["typecheck", "--filter=@bb/qa"]],
-  },
   "standalone:start": {
     packageScript: "standalone:start",
     turboChecks: [

@@ -54,7 +54,6 @@ export function buildSpawnEnvironment(args: {
   environmentValue?: string;
   newEnvironmentKind?: string;
   hostId: string | null;
-  explicitHost?: boolean;
   baseBranch?: string;
 }): EnvironmentArgs {
   const environmentValue = args.environmentValue?.trim();
@@ -68,20 +67,6 @@ export function buildSpawnEnvironment(args: {
     throw new Error("Cannot combine --environment with --new-environment.");
   }
   if (newEnvironmentKind) {
-    if (newEnvironmentKind.startsWith("sandbox/")) {
-      const sandboxType = newEnvironmentKind.slice("sandbox/".length);
-      if (!sandboxType) {
-        throw new Error(
-          "Missing sandbox type after 'sandbox/'. Example: sandbox/e2b.",
-        );
-      }
-      if (args.explicitHost) {
-        throw new Error(
-          "Cannot combine --host with sandbox environments. Sandbox environments provision their own hosts.",
-        );
-      }
-      return { type: "sandbox-host", sandboxType, baseBranch };
-    }
     if (newEnvironmentKind === "worktree") {
       return {
         type: "host",
@@ -90,7 +75,7 @@ export function buildSpawnEnvironment(args: {
       };
     }
     throw new Error(
-      `Unknown environment kind '${newEnvironmentKind}'. Supported: worktree, sandbox/<type>.`,
+      `Unknown environment kind '${newEnvironmentKind}'. Supported: worktree.`,
     );
   }
   if (!environmentValue) {
@@ -131,11 +116,11 @@ export function registerSpawnCommand(
     )
     .option(
       "--new-environment <kind>",
-      "Create a new managed environment of the given kind (worktree, sandbox/e2b)",
+      "Create a new managed environment of the given kind (worktree)",
     )
     .option(
       "--base-branch <branch>",
-      "Base branch for new managed environments (worktree/sandbox). Defaults to the source's default branch.",
+      "Base branch for new managed environments (worktree). Defaults to the source's default branch.",
     )
     .option(
       "--parent-thread <id>",
@@ -180,7 +165,6 @@ export function registerSpawnCommand(
           environmentValue,
           newEnvironmentKind: opts.newEnvironment,
           hostId,
-          explicitHost: !!opts.host,
           baseBranch: opts.baseBranch,
         });
         const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);

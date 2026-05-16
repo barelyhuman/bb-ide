@@ -128,7 +128,7 @@ const untrackedOnlyStatus: WorkspaceStatus = {
         deletions: null,
       },
       {
-        path: "apps/app/scripts/dev-bb-sandbox.sh",
+        path: "apps/app/scripts/dev-bb-worktree.sh",
         status: "??",
         insertions: null,
         deletions: null,

@@ -145,8 +145,7 @@
     "template:build": {
       "dependsOn": [],
       "cache": false,
-      "outputs": [],
-      "passThroughEnv": ["E2B_API_KEY"]
+      "outputs": []
     },
     "@bb/app#dev": {
       "dependsOn": [],
@@ -233,16 +232,6 @@
         "$TURBO_ROOT$/apps/server/package.json",
         "$TURBO_ROOT$/apps/server/tsconfig.json",
         "$TURBO_ROOT$/apps/server/src/**"
-      ]
-    },
-    "test:e2b-smoke": {
-      "dependsOn": ["typecheck"],
-      "cache": false,
-      "passThroughEnv": [
-        "BB_CLOUD_AUTH_FIXTURE_PATH",
-        "BB_E2B_SMOKE_REQUIRE_FULL_AUTH",
-        "BB_E2B_TEMPLATE",
-        "E2B_API_KEY"
       ]
     },
     "bench": {

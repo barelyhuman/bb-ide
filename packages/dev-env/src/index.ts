@@ -1,9 +1,7 @@
-import { type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { devEnvConfig } from "@bb/config/dev-env";
-import { startCloudflared } from "./cloudflared.js";
 import {
   createDefaultDevEnvStatusDependencies,
   createDevEnvStatusApp,
@@ -18,7 +16,6 @@ interface StatusServer {
 
 interface ShutdownArgs {
   statusServer: StatusServer;
-  tunnel: ChildProcess | null;
 }
 
 type ShutdownSignal = "SIGINT" | "SIGTERM";
@@ -70,13 +67,12 @@ async function startStatusServer(
 
 function installShutdownHandlers(args: ShutdownArgs): void {
   let shuttingDown = false;
-  const shutdown = (signal: ShutdownSignal) => {
+  const shutdown = (_signal: ShutdownSignal) => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
     void (async () => {
-      args.tunnel?.kill(signal);
       try {
         await args.statusServer.close();
       } finally {
@@ -92,11 +88,8 @@ function installShutdownHandlers(args: ShutdownArgs): void {
 async function main(): Promise<void> {
   const dependencies = createDefaultDevEnvStatusDependencies({ repoRoot });
   const runtime = await createRuntime(dependencies);
-  const tunnel = startCloudflared({
-    tunnelToken: devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN,
-  });
   const statusServer = await startStatusServer(runtime, dependencies);
-  installShutdownHandlers({ statusServer, tunnel });
+  installShutdownHandlers({ statusServer });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

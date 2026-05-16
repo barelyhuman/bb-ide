@@ -4,18 +4,14 @@ import {
   events,
   getManagerThreadNudge,
   hostDaemonCommands,
-  markHostSuspended,
-  openSession,
   threads,
-  upsertHost,
   updateManagerThreadNudge,
 } from "@bb/db";
 import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
-  reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandError,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -30,41 +26,7 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
-const provisionHostMock = vi.fn();
-const resumeHostMock = vi.fn();
-type SandboxHostMockArgs = Array<object | string | undefined>;
-
-vi.mock("@bb/sandbox-host", () => ({
-  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
-  SANDBOX_DATA_DIR: "/tmp/bb-data",
-  provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
-  resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
-}));
-
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
-
-interface MockSandboxHost {
-  destroy: ReturnType<typeof vi.fn<() => Promise<void>>>;
-  extendTimeout: ReturnType<typeof vi.fn<(timeoutMs: number) => Promise<void>>>;
-  externalId: string;
-  hostId: string;
-  resume: ReturnType<typeof vi.fn<() => Promise<void>>>;
-  suspend: ReturnType<typeof vi.fn<() => Promise<void>>>;
-}
-
-function createMockSandboxHost(
-  hostId: string,
-  externalId = "sandbox-123",
-): MockSandboxHost {
-  return {
-    destroy: vi.fn().mockResolvedValue(undefined),
-    extendTimeout: vi.fn().mockResolvedValue(undefined),
-    externalId,
-    hostId,
-    resume: vi.fn().mockResolvedValue(undefined),
-    suspend: vi.fn().mockResolvedValue(undefined),
-  };
-}
 
 function seedRunnableManagerThread(args: {
   environmentId: string;
@@ -107,11 +69,6 @@ function seedRunnableManagerThread(args: {
 }
 
 describe("nudge sweep", () => {
-  beforeEach(() => {
-    provisionHostMock.mockReset();
-    resumeHostMock.mockReset();
-  });
-
   it("queues turn.submit for due manager nudges", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -184,113 +141,6 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("resumes suspended sandbox hosts before queueing due manager nudges", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const host = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-nudge-resume",
-        id: "host-nudge-resume",
-        name: "Nudge Resume Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      const sandboxHost = createMockSandboxHost(
-        host.id,
-        host.externalId ?? undefined,
-      );
-      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
-      const resumedSandboxHost = createMockSandboxHost(
-        host.id,
-        host.externalId ?? undefined,
-      );
-      resumeHostMock.mockResolvedValue(resumedSandboxHost);
-      markHostSuspended(harness.db, {
-        hostId: host.id,
-        suspendedAt: 1_000,
-      });
-
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/nudge-resume-environment",
-      });
-      const thread = seedRunnableManagerThread({
-        harness,
-        environmentId: environment.id,
-        projectId: project.id,
-      });
-      const now = Date.now();
-      createManagerThreadNudge(harness.db, harness.hub, {
-        projectId: project.id,
-        threadId: thread.id,
-        name: "resume-recap",
-        cron: "0 8 * * *",
-        timezone: "UTC",
-        enabled: true,
-        nextFireAt: now - 1,
-      });
-
-      setTimeout(() => {
-        openSession(harness.db, harness.hub, {
-          heartbeatIntervalMs: 5_000,
-          hostId: host.id,
-          hostName: host.name,
-          hostType: host.type,
-          instanceId: "instance-nudge-resume",
-          leaseTimeoutMs: 30_000,
-          protocolVersion: 2,
-          dataDir: `/tmp/bb-host-data/${host.id}`,
-        });
-      }, 10);
-
-      const sweepPromise = sweepDueNudges(harness.deps, { now });
-      await reportNextRuntimeMaterialSyncSuccess(harness, {
-        hostId: host.id,
-      });
-
-      const preferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
-      const readPreferences = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "host.read_file" && command.path === preferencesPath,
-      );
-      const preferencesResponse = await reportQueuedCommandError(
-        harness,
-        readPreferences,
-        {
-          errorCode: "ENOENT",
-          errorMessage: "File not found",
-        },
-      );
-      expect(preferencesResponse.status).toBe(200);
-
-      await sweepPromise;
-
-      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(
-        resumedSandboxHost,
-      );
-      const queuedTurnSubmit = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "turn.submit" && command.threadId === thread.id,
-      );
-      if (queuedTurnSubmit.command.type !== "turn.submit") {
-        throw new Error("Expected turn.submit command");
-      }
-      expect(queuedTurnSubmit.command.input).toEqual([
-        {
-          type: "text",
-          text: "[bb system] Scheduled nudge: resume-recap. Check ASYNC.md.",
-        },
-      ]);
     } finally {
       await harness.cleanup();
     }

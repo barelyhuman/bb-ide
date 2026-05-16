@@ -14,12 +14,7 @@ import {
   withCheckoutMutationAdmission,
   withCheckoutMutationLock,
 } from "./checkout-mutation-lock.js";
-import {
-  createWorktree,
-  createClone,
-  removeWorktree,
-  removeDirectory,
-} from "./provisioning.js";
+import { createWorktree, removeWorktree } from "./provisioning.js";
 import { detectGitRepo, pathExists, runGit, WorkspaceError } from "./git.js";
 import { resolveAdditionalWorkspaceWriteRoots } from "./workspace-write-roots.js";
 
@@ -71,28 +66,16 @@ export interface ManagedWorktreeOpts extends ManagedWorkspaceBaseOpts {
   workspaceProvisionType: "managed-worktree";
 }
 
-export interface ManagedCloneOpts extends ManagedWorkspaceBaseOpts {
-  workspaceProvisionType: "managed-clone";
-}
-
 export interface ReconnectManagedWorktreeOpts extends ProvisionBase {
   workspaceProvisionType: "reconnect-managed-worktree";
   /** Existing worktree path to reconnect */
   path: string;
 }
 
-export interface ReconnectManagedCloneOpts extends ProvisionBase {
-  workspaceProvisionType: "reconnect-managed-clone";
-  /** Existing clone path to reconnect */
-  path: string;
-}
-
 export type ProvisionWorkspaceArgs =
   | UnmanagedWorkspaceOpts
   | ManagedWorktreeOpts
-  | ManagedCloneOpts
-  | ReconnectManagedWorktreeOpts
-  | ReconnectManagedCloneOpts;
+  | ReconnectManagedWorktreeOpts;
 
 // ---------------------------------------------------------------------------
 // HostWorkspace interface
@@ -259,12 +242,8 @@ export async function provisionWorkspace(
       return provisionUnmanaged(opts);
     case "managed-worktree":
       return provisionWorktree(opts);
-    case "managed-clone":
-      return provisionClone(opts);
     case "reconnect-managed-worktree":
       return reconnectManagedWorktree(opts);
-    case "reconnect-managed-clone":
-      return reconnectManagedClone(opts);
   }
 }
 
@@ -435,25 +414,6 @@ async function provisionWorktree(
   });
 }
 
-async function provisionClone(opts: ManagedCloneOpts): Promise<HostWorkspace> {
-  const { path: wsPath } = await createClone({
-    sourcePath: opts.sourcePath,
-    targetPath: opts.targetPath,
-    branchName: opts.branchName,
-    baseBranch: opts.baseBranch,
-    timeoutMs: opts.timeoutMs,
-    onProgress: opts.onProgress,
-  });
-
-  return new ProvisionedHostWorkspace({
-    path: wsPath,
-    managed: true,
-    isGitRepo: true,
-    isWorktree: false,
-    destroyFn: () => removeDirectory({ path: wsPath }),
-  });
-}
-
 async function reconnectManaged(
   wsPath: string,
   destroyFn: () => Promise<void>,
@@ -482,13 +442,5 @@ async function reconnectManagedWorktree(
 ): Promise<HostWorkspace> {
   return reconnectManaged(opts.path, () =>
     removeWorktree({ path: opts.path, force: true }),
-  );
-}
-
-async function reconnectManagedClone(
-  opts: ReconnectManagedCloneOpts,
-): Promise<HostWorkspace> {
-  return reconnectManaged(opts.path, () =>
-    removeDirectory({ path: opts.path }),
   );
 }

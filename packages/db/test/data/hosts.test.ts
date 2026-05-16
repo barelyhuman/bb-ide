@@ -13,10 +13,6 @@ import {
   updateHost,
   upsertHost,
 } from "../../src/data/hosts.js";
-import {
-  markEphemeralHostActivity,
-  markHostSuspended,
-} from "../../src/data/host-lifecycle-state.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -58,29 +54,25 @@ describe("hosts", () => {
     expect(host2.lastSeenAt).toBe(1_000);
   });
 
-  it("preserves provider, externalId, and destroyedAt when omitted on update", () => {
+  it("preserves destroyedAt when omitted on update", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
       destroyedAt: 123,
-      externalId: "sandbox-existing",
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Disconnected Host",
+      type: "persistent",
     });
 
     const updated = upsertHost(db, noopNotifier, {
       id: host.id,
-      name: "Sandbox Host Reconnected",
-      type: "ephemeral",
+      name: "Disconnected Host Renamed",
+      type: "persistent",
     });
 
     expect(updated).toMatchObject({
       destroyedAt: 123,
       id: host.id,
-      name: "Sandbox Host Reconnected",
-      provider: "e2b",
-      externalId: "sandbox-existing",
-      type: "ephemeral",
+      name: "Disconnected Host Renamed",
+      type: "persistent",
     });
   });
 
@@ -97,19 +89,16 @@ describe("hosts", () => {
     };
     const host = upsertHost(db, notifier, {
       destroyedAt: 123,
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Persistent Host",
+      type: "persistent",
     });
     notifyHost.mockClear();
 
     upsertHost(db, notifier, {
       destroyedAt: null,
-      externalId: "sandbox-existing",
       id: host.id,
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Persistent Host",
+      type: "persistent",
     });
 
     expect(notifyHost).toHaveBeenCalledWith(host.id, ["host-connected"]);
@@ -127,17 +116,15 @@ describe("hosts", () => {
       notifyThread() {},
     };
     const host = upsertHost(db, notifier, {
-      externalId: "sandbox-existing",
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Persistent Host",
+      type: "persistent",
     });
     notifyHost.mockClear();
 
     upsertHost(db, notifier, {
       id: host.id,
-      name: "Sandbox Host Renamed",
-      type: "ephemeral",
+      name: "Persistent Host Renamed",
+      type: "persistent",
     });
 
     expect(notifyHost).not.toHaveBeenCalled();
@@ -158,13 +145,13 @@ describe("hosts", () => {
   it("lists all hosts", () => {
     const { db } = setup();
     upsertHost(db, noopNotifier, { name: "Host 1", type: "persistent" });
-    upsertHost(db, noopNotifier, { name: "Host 2", type: "ephemeral" });
+    upsertHost(db, noopNotifier, { name: "Host 2", type: "persistent" });
 
     const all = listHosts(db);
     expect(all).toHaveLength(2);
   });
 
-  it("lists only persistent non-destroyed hosts for the public inventory", () => {
+  it("lists only non-destroyed hosts for the public inventory", () => {
     const { db } = setup();
     const visibleHost = upsertHost(db, noopNotifier, {
       id: "host-visible",
@@ -176,12 +163,6 @@ describe("hosts", () => {
       name: "Destroyed Host",
       type: "persistent",
     });
-    upsertHost(db, noopNotifier, {
-      id: "host-ephemeral",
-      name: "Ephemeral Host",
-      type: "ephemeral",
-    });
-
     updateHost(db, noopNotifier, destroyedHost.id, { destroyedAt: 123 });
 
     expect(listPublicHosts(db).map((host) => host.id)).toEqual([
@@ -216,54 +197,19 @@ describe("hosts", () => {
   it("updates only the provided host fields", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
-      externalId: "sandbox-old",
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Persistent Host",
+      type: "persistent",
     });
 
     const updated = updateHost(db, noopNotifier, host.id, {
-      externalId: "sandbox-new",
+      name: "Persistent Host Renamed",
     });
 
     expect(updated).toMatchObject({
       id: host.id,
-      name: "Sandbox Host",
-      provider: "e2b",
-      externalId: "sandbox-new",
+      name: "Persistent Host Renamed",
     });
     expect(updated?.updatedAt).toBeGreaterThanOrEqual(host.updatedAt);
-  });
-
-  it("updates lifecycle state without changing lastSeenAt", () => {
-    const { db } = setup();
-    const host = upsertHost(db, noopNotifier, {
-      externalId: "sandbox-old",
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
-    });
-
-    const withActivity = markEphemeralHostActivity(db, {
-      hostId: host.id,
-      lastActivityAt: 123,
-    });
-    const updated = markHostSuspended(db, {
-      hostId: host.id,
-      suspendedAt: 456,
-    });
-
-    expect(withActivity).toMatchObject({
-      id: host.id,
-      lastActivityAt: 123,
-      suspendedAt: null,
-    });
-    expect(updated).toMatchObject({
-      id: host.id,
-      lastActivityAt: 123,
-      suspendedAt: 456,
-    });
-    expect(updated?.lastSeenAt).toBe(host.lastSeenAt);
   });
 
   it("notifies when updateHost changes host connection state", () => {
@@ -278,10 +224,8 @@ describe("hosts", () => {
       notifyThread() {},
     };
     const host = upsertHost(db, notifier, {
-      externalId: "sandbox-old",
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Persistent Host",
+      type: "persistent",
     });
     notifyHost.mockClear();
 
@@ -292,7 +236,6 @@ describe("hosts", () => {
     expect(notifyHost).toHaveBeenCalledWith(host.id, ["host-disconnected"]);
     expect(getHost(db, host.id)).toMatchObject({
       destroyedAt: 456,
-      externalId: "sandbox-old",
     });
   });
 
@@ -308,15 +251,13 @@ describe("hosts", () => {
       notifyThread() {},
     };
     const host = upsertHost(db, notifier, {
-      externalId: "sandbox-old",
-      name: "Sandbox Host",
-      provider: "e2b",
-      type: "ephemeral",
+      name: "Persistent Host",
+      type: "persistent",
     });
     notifyHost.mockClear();
 
     updateHost(db, notifier, host.id, {
-      name: "Sandbox Host Renamed",
+      name: "Persistent Host Renamed",
     });
 
     expect(notifyHost).not.toHaveBeenCalled();
@@ -335,7 +276,7 @@ describe("hosts", () => {
     };
     const host = upsertHost(db, notifier, {
       name: "Transient Host",
-      type: "ephemeral",
+      type: "persistent",
     });
     notifyHost.mockClear();
 

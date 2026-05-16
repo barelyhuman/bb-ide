@@ -8,14 +8,12 @@ import type { AvailableModel, ProviderInfo } from "@bb/domain";
 import type { BufferedEventInput } from "./event-buffer.js";
 import type {
   HostDaemonCommand,
-  HostRuntimeMaterialSnapshot,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import type {
   ReplayCaptureThreadMetadata,
   ReplayTurnRequestInput,
 } from "@bb/replay-capture/writer";
-import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
 import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 import type { TerminalManager } from "./terminals/terminal-manager.js";
@@ -45,11 +43,6 @@ export const noopEventSink: EventSink = {
 export interface CommandDispatchOptions {
   dataDir: string;
   fetchProjectAttachment: FetchProjectAttachment;
-  fetchRuntimeMaterial: (
-    version: string,
-  ) => Promise<HostRuntimeMaterialSnapshot>;
-  readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialState | null>;
-  persistRuntimeMaterial: (state: HostRuntimeMaterialState) => Promise<void>;
   runtimeManager: RuntimeManager;
   terminalManager?: Pick<TerminalManager, "closeEnvironmentTerminals">;
   eventSink: EventSink;

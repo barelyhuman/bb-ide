@@ -54,7 +54,6 @@ export interface CreateHostThreadOptions {
   providerId?: string;
   title?: string;
   workspace:
-    | { type: "managed-clone" }
     | { type: "managed-worktree" }
     | { path: string | null; type: "unmanaged" };
 }

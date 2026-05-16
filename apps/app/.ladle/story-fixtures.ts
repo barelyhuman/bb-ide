@@ -22,13 +22,11 @@ const noop = () => {};
 export const HOST_IDS = {
   local: "host_local",
   remote: "host_remote",
-  sandbox: "host_e2b",
 } as const;
 
 export const HOST_NAMES = {
   local: "Michael's MacBook Pro",
   remote: "michael-build-box",
-  sandbox: "e2b-sandbox-3a91",
 } as const;
 
 export const PROJECT_IDS = {

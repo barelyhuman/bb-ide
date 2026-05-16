@@ -50,21 +50,14 @@ vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
 
 function createCommitMessageDeps(): TestCommitMessageDeps {
   const config: ServerRuntimeConfig = {
-    anthropicApiKey: "",
     appUrl: "https://bb.example.test",
     dataDir: "/tmp/bb-commit-message-test",
-    e2bApiKey: "",
-    e2bTemplate: "",
-    externalUrl: "https://bb.example.test",
     featureFlags: defaultFeatureFlags,
-    githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     isDevelopment: true,
     openAiApiKey: "test-openai-key",
     serverPort: 3334,
-    sandboxActivityExtensionDebounceMs: 30_000,
-    sandboxIdleThresholdMs: 300_000,
   };
   const logger = {
     debug: vi.fn(),

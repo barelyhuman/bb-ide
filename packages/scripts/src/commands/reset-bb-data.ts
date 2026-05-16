@@ -91,7 +91,7 @@ export function renderHelpText(): string {
 
   ${dim("Notes")}
     Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}).
-    Does not touch provider auth/config managed by other tools.
+    Does not touch external provider config managed by other tools.
     Respects BB_DATA_DIR for single-directory resets.
 \n`;
 }

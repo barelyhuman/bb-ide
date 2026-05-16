@@ -14,20 +14,14 @@ import type {
 import type {
   EmptyInput,
   Endpoint,
-  PathAttemptId,
   PathId,
   PathProjectAutomationId,
   PathProjectId,
-  PathProviderId,
   PathThreadAndQueuedMessage,
   PathThreadAndTerminal,
 } from "./common.js";
 import type {
   Automation,
-  CloudAuthAttemptResponse,
-  CloudAuthConnectRequest,
-  CloudAuthConnectResponse,
-  CloudAuthSettingsResponse,
   CreateAutomationRequest,
   CreateHostJoinRequest,
   CreateHostJoinResponse,
@@ -68,15 +62,9 @@ import type {
   ThreadAssignedChildSummaryResponse,
   ThreadComposerBootstrapResponse,
   ThreadQueuedMessageListResponse,
-  GithubRepoInfo,
-  GithubReposQuery,
-  SandboxEnvVar,
-  SandboxEnvVarName,
-  SandboxEnvVarsResponse,
   SystemConfigResponse,
   SystemExecutionOptionsQuery,
   SystemExecutionOptionsResponse,
-  SystemSandboxBackendInfo,
   SystemProviderInfo,
   SystemProvidersQuery,
   SystemVoiceTranscriptionForm,
@@ -102,7 +90,6 @@ import type {
   UpdateProjectSourceRequest,
   UpdateThreadTerminalRequest,
   UpdateThreadRequest,
-  UpsertSandboxEnvVarRequest,
   UploadedPromptAttachment,
   ThreadStorageFileListResponse,
   WorkspaceFileListResponse,
@@ -214,15 +201,6 @@ export type PublicApiSchema = {
       PathProjectId & { query: ProjectBranchesQuery },
       ProjectBranchesResponse
     >;
-  };
-  "/projects/:id/github-branches": {
-    /**
-     * List branches for the project's GitHub source via the GitHub API. Used
-     * to populate the new-thread branch picker when the user picks a sandbox
-     * environment that will clone the GitHub repo. Returns `current` set to
-     * the repo's default branch so the picker can pre-select it.
-     */
-    $get: Endpoint<PathProjectId, ProjectBranchesResponse>;
   };
   "/projects/:id/attachments": {
     /** Upload a file attachment. Used to attach files to user messages. */
@@ -348,8 +326,7 @@ export type PublicApiSchema = {
      *
      * Environment type determines the flow:
      * - "reuse": attaches to an existing environment.
-     * - "host" + unmanaged/managed-worktree/managed-clone: provisions a new environment.
-     * - "sandbox-host": provisions a new ephemeral sandbox host for cloneable project sources.
+     * - "host" + unmanaged/managed-worktree: provisions a new environment.
      *
      * If input is provided, the thread starts automatically after provisioning.
      * A title is generated asynchronously if not provided.
@@ -555,47 +532,6 @@ export type PublicApiSchema = {
 
   "/system/config": {
     $get: Endpoint<EmptyInput, SystemConfigResponse>;
-  };
-  "/system/cloud-auth": {
-    /** Returns the current app-level cloud auth connection state for sandbox-compatible providers. */
-    $get: Endpoint<EmptyInput, CloudAuthSettingsResponse>;
-  };
-  "/system/cloud-auth/:providerId/connect": {
-    /**
-     * Starts an app-level OAuth flow for the requested provider and returns the
-     * authorization URL the UI should open in a browser.
-     */
-    $post: Endpoint<
-      PathProviderId & { json: CloudAuthConnectRequest },
-      CloudAuthConnectResponse,
-      201
-    >;
-  };
-  "/system/cloud-auth/attempts/:attemptId": {
-    /** Returns the status of a previously started cloud auth connection attempt. */
-    $get: Endpoint<PathAttemptId, CloudAuthAttemptResponse>;
-  };
-  "/system/cloud-auth/:providerId": {
-    /** Removes the saved app-level cloud auth connection for the provider. */
-    $delete: Endpoint<PathProviderId, { ok: true }>;
-  };
-  "/system/sandbox-env-vars": {
-    /** Returns metadata for app-level sandbox env vars without exposing plaintext values. */
-    $get: Endpoint<EmptyInput, SandboxEnvVarsResponse>;
-    /** Creates or updates an app-level sandbox env var. */
-    $post: Endpoint<{ json: UpsertSandboxEnvVarRequest }, SandboxEnvVar>;
-  };
-  "/system/sandbox-env-vars/:name": {
-    /** Deletes an app-level sandbox env var. */
-    $delete: Endpoint<{ param: { name: SandboxEnvVarName } }, { ok: true }>;
-  };
-  "/system/sandbox-backends": {
-    /** List sandbox backends supported by the server. */
-    $get: Endpoint<EmptyInput, SystemSandboxBackendInfo[]>;
-  };
-  "/system/github-repos": {
-    /** List GitHub repositories accessible via the configured PAT. */
-    $get: Endpoint<{ query?: GithubReposQuery }, GithubRepoInfo[]>;
   };
   "/system/execution-options": {
     /** List provider metadata and models for execution controls in one host lookup flow. */

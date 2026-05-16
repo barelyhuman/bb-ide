@@ -55,7 +55,7 @@ export function Overview() {
             Save changes
           </Button>
           <Button variant="outline" size="sm">
-            Connect GitHub repo
+            Add local path
             <Icon name="ArrowRight" />
           </Button>
         </StoryRow>

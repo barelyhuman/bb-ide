@@ -158,7 +158,7 @@ describe("db rebuild schema", () => {
         triggerConfig:
           '{"triggerType":"schedule","cron":"0 8 * * 1-5","timezone":"UTC"}',
         action:
-          '{"actionType":"scheduled-thread","threadRequest":{"providerId":"codex","model":"gpt-5","input":[{"type":"text","text":"Run daily sync"}],"environment":{"type":"host","hostId":"host_1","workspace":{"type":"managed-clone"}}}}',
+          '{"actionType":"scheduled-thread","threadRequest":{"providerId":"codex","model":"gpt-5","input":[{"type":"text","text":"Run daily sync"}],"environment":{"type":"host","hostId":"host_1","workspace":{"type":"managed-worktree","baseBranch":{"kind":"default"}}}}}',
         autoArchive: false,
         nextRunAt: now + 60_000,
         runCount: 0,
@@ -439,7 +439,7 @@ describe("db rebuild schema", () => {
         triggerConfig:
           '{"triggerType":"schedule","cron":"0 8 * * 1-5","timezone":"UTC"}',
         action:
-          '{"actionType":"scheduled-thread","threadRequest":{"providerId":"codex","model":"gpt-5","input":[{"type":"text","text":"Run daily sync"}],"environment":{"type":"host","hostId":"host_1","workspace":{"type":"managed-clone"}}}}',
+          '{"actionType":"scheduled-thread","threadRequest":{"providerId":"codex","model":"gpt-5","input":[{"type":"text","text":"Run daily sync"}],"environment":{"type":"host","hostId":"host_1","workspace":{"type":"managed-worktree","baseBranch":{"kind":"default"}}}}}',
         autoArchive: false,
         nextRunAt: now + 60_000,
         runCount: 0,

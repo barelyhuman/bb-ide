@@ -258,9 +258,7 @@ function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
       pathname: "/api/v1/system/config",
       handler: async () =>
         jsonResponse({
-          githubConnected: false,
           hostDaemonPort: 3001,
-          sandboxHostSupported: false,
           voiceTranscriptionEnabled: false,
         }),
     },

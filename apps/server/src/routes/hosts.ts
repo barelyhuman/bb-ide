@@ -87,12 +87,6 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
       id: hostId,
       name: hostName,
       type: hostType,
-      ...(payload.hostType === "ephemeral"
-        ? {
-            externalId: payload.externalId,
-            provider: payload.provider,
-          }
-        : {}),
     });
 
     const joinMaterial = await deps.machineAuth.issueHostEnrollKey({

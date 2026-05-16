@@ -127,8 +127,8 @@ const busyThread = makeThread({
 });
 const pendingThread = makeThread({
   id: "thr_pending",
-  title: "Diagnose Claude provider auth path",
-  titleFallback: "Diagnose Claude provider auth path",
+  title: "Diagnose Claude CLI auth path",
+  titleFallback: "Diagnose Claude CLI auth path",
   hasPendingInteraction: true,
 });
 const standardThread = makeThread({

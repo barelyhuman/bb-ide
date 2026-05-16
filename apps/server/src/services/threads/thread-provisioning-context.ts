@@ -27,14 +27,7 @@ const directManagedIntentSchema = z.object({
   hostId: z.string().min(1),
   sourcePath: z.string().min(1),
   baseBranch: baseBranchSpecSchema,
-  workspaceProvisionType: z.enum(["managed-worktree", "managed-clone"]),
-});
-
-const sandboxManagedIntentSchema = z.object({
-  type: z.literal("sandbox-managed"),
-  cloneRepoUrl: z.string().min(1),
-  baseBranch: baseBranchSpecSchema,
-  sandboxType: z.string().min(1),
+  workspaceProvisionType: z.literal("managed-worktree"),
 });
 
 const reuseIntentSchema = z.object({
@@ -44,12 +37,7 @@ const reuseIntentSchema = z.object({
 
 export const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion(
   "type",
-  [
-    directUnmanagedIntentSchema,
-    directManagedIntentSchema,
-    sandboxManagedIntentSchema,
-    reuseIntentSchema,
-  ],
+  [directUnmanagedIntentSchema, directManagedIntentSchema, reuseIntentSchema],
 );
 
 export const threadProvisionCommonPayloadSchema = z.object({

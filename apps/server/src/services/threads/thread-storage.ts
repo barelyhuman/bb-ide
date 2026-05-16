@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { SandboxWorkSessionDeps } from "../../types.js";
+import type { WorkSessionDeps } from "../../types.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 
 export interface RequireThreadStoragePathArgs {
@@ -8,7 +8,7 @@ export interface RequireThreadStoragePathArgs {
 }
 
 export async function requireThreadStoragePath(
-  deps: SandboxWorkSessionDeps,
+  deps: WorkSessionDeps,
   args: RequireThreadStoragePathArgs,
 ): Promise<string> {
   const session = await ensureHostSessionReadyForWork(deps, {

@@ -110,9 +110,7 @@ function installHostDaemonFetchRoutes(
       pathname: "/api/v1/system/config",
       handler: async () =>
         jsonResponse({
-          githubConnected: false,
           hostDaemonPort: state.hostDaemonPort,
-          sandboxHostSupported: false,
           voiceTranscriptionEnabled: false,
         }),
     },

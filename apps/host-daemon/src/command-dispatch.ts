@@ -17,7 +17,6 @@ import {
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { listHostBranches } from "./command-handlers/host-branches.js";
 import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
-import { syncRuntimeMaterial } from "./command-handlers/host-runtime-material.js";
 import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
 import {
   getReplayCapture,
@@ -234,10 +233,6 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "interactive.resolve" }>,
     options: CommandDispatchOptions,
   ) => resolveInteractiveRequest(command, options),
-  "host.sync_runtime_material": async (
-    command: Extract<HostDaemonCommand, { type: "host.sync_runtime_material" }>,
-    options: CommandDispatchOptions,
-  ) => syncRuntimeMaterial(command, options),
   "host.list_files": async (
     command: Extract<HostDaemonCommand, { type: "host.list_files" }>,
     _options: CommandDispatchOptions,

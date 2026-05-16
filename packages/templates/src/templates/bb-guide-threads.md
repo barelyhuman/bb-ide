@@ -21,7 +21,7 @@ Spawning:
     --model <model>                Model override
     --reasoning-level <level>      Reasoning level: low, medium, high, xhigh
     --environment <id-or-path>     Attach to an existing environment (UUID or workspace path)
-    --new-environment <kind>       Create a new environment (worktree, sandbox/e2b)
+    --new-environment <kind>       Create a new environment (worktree)
     --service-tier <tier>          Service tier: fast, default
     --permission-mode <mode>       Permission mode: full, workspace-write, or readonly
     --host <id>                    Host ID (defaults to local host)

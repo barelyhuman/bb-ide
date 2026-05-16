@@ -10,7 +10,6 @@ import {
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
   hostDaemonProjectAttachmentContentQuerySchema,
-  hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
@@ -19,7 +18,6 @@ import {
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
-  hostRuntimeMaterialSnapshotSchema,
   type HostDaemonCommandResultResponse,
   type HostDaemonInteractiveInterruptResponse,
   type HostDaemonInteractiveRequestResponse,
@@ -28,7 +26,6 @@ import {
   type HostDaemonCommandResultReportWithoutSession,
   type HostDaemonEventEnvelope,
   type HostDaemonEnvironmentChangePayload,
-  type HostRuntimeMaterialSnapshot,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
   type HostDaemonToolCallResponse,
@@ -217,9 +214,6 @@ export interface ServerClient {
     limit?: number;
     waitMs?: number;
   }): Promise<HostDaemonCommandEnvelope[]>;
-  fetchRuntimeMaterial(args: {
-    version: string;
-  }): Promise<HostRuntimeMaterialSnapshot>;
   fetchProjectAttachment(
     args: FetchProjectAttachmentArgs,
   ): Promise<FetchedProjectAttachment>;
@@ -547,32 +541,6 @@ export function createServerClient(
       await Promise.all(reportPromises);
 
       return accepted;
-    },
-
-    async fetchRuntimeMaterial(args): Promise<HostRuntimeMaterialSnapshot> {
-      if (!usesSecureInternalFetchTransport(options.serverUrl)) {
-        throw new AbortError(
-          `Refusing to fetch runtime material over insecure server URL: ${options.serverUrl}`,
-        );
-      }
-
-      const query = hostDaemonRuntimeMaterialQuerySchema.parse({
-        sessionId: requireSessionId(),
-        version: args.version,
-      });
-      const response = await fetchFn(
-        buildInternalUrl("/session/runtime-material", query),
-        {
-          method: "GET",
-          headers: headers(),
-        },
-      );
-
-      if (!response.ok) {
-        throw await createResponseError("fetch runtime material", response);
-      }
-
-      return hostRuntimeMaterialSnapshotSchema.parse(await response.json());
     },
 
     async fetchProjectAttachment(

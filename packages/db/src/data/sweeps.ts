@@ -2,7 +2,6 @@ import {
   eq,
   and,
   isNotNull,
-  isNull,
   sql,
   lt,
   ne,
@@ -13,14 +12,11 @@ import type { ThreadEventItemType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
-  hosts,
   hostDaemonCommands,
   hostDaemonSessions,
-  threads,
   environments,
   maintenanceScanCursors,
 } from "../schema.js";
-import { listEphemeralHostsPendingCleanup } from "./hosts.js";
 import { transitionThreadsToError } from "./threads.js";
 
 /** Standard command TTL: 60 seconds */
@@ -615,53 +611,6 @@ export function sweepManagedEnvironments(db: DbConnection) {
     .all();
 
   return rows;
-}
-
-export function sweepEphemeralHostsPendingCleanup(db: DbConnection) {
-  return listEphemeralHostsPendingCleanup(db);
-}
-
-export function sweepIdleEphemeralHostsEligibleForSuspend(
-  db: DbConnection,
-  args: {
-    hostId?: string;
-    inactiveBefore: number;
-  },
-) {
-  return db
-    .select()
-    .from(hosts)
-    .where(
-      and(
-        eq(hosts.type, "ephemeral"),
-        isNull(hosts.destroyedAt),
-        isNull(hosts.suspendedAt),
-        sql`${hosts.externalId} IS NOT NULL`,
-        // Both fields can be null; the EXISTS clause below restricts to hosts
-        // with an active session, which guarantees lastSeenAt is set on open.
-        sql`COALESCE(${hosts.lastActivityAt}, ${hosts.lastSeenAt}) <= ${args.inactiveBefore}`,
-        args.hostId ? eq(hosts.id, args.hostId) : undefined,
-        sql`EXISTS (
-          SELECT 1 FROM ${hostDaemonSessions}
-          WHERE ${hostDaemonSessions.hostId} = ${hosts.id}
-          AND ${hostDaemonSessions.status} = 'active'
-        )`,
-        sql`NOT EXISTS (
-          SELECT 1 FROM ${hostDaemonCommands}
-          WHERE ${hostDaemonCommands.hostId} = ${hosts.id}
-          AND ${hostDaemonCommands.state} IN ('pending', 'fetched')
-        )`,
-        sql`NOT EXISTS (
-          SELECT 1 FROM ${threads}
-          INNER JOIN ${environments}
-            ON ${threads.environmentId} = ${environments.id}
-          WHERE ${environments.hostId} = ${hosts.id}
-          AND ${threads.deletedAt} IS NULL
-          AND ${threads.status} IN ('active', 'provisioning')
-        )`,
-      ),
-    )
-    .all();
 }
 
 export function sweepDestroyingEnvironments(

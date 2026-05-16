@@ -5,9 +5,7 @@ export type {
   UnmanagedWorkspaceOpts,
   ManagedWorkspaceBaseOpts,
   ManagedWorktreeOpts,
-  ManagedCloneOpts,
   ReconnectManagedWorktreeOpts,
-  ReconnectManagedCloneOpts,
 } from "./provision.js";
 
 export type {

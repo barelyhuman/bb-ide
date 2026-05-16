@@ -36,8 +36,6 @@ The codebase still has protocol complexity in several adjacent areas:
 - pending interactions keyed by session id;
 - reliable retry machinery for environment change hints that only notify hub
   subscribers;
-- runtime material sync split across a durable command and separate snapshot
-  fetch;
 - dynamic tool calls with server side effects but no server-side idempotency key;
 - development replay commands mixed into the production daemon command union.
 
@@ -63,7 +61,6 @@ Durable job examples:
 - `environment.destroy`
 - `workspace.commit`
 - `workspace.squash_merge`
-- `host.sync_runtime_material` if it remains a durable mutation
 
 The daemon result must include both `jobId` and `attemptId`. The server accepts a
 result only for the current active attempt. Late results from older attempts are
@@ -137,10 +134,6 @@ identity, or provider-originated request identity.
 - `providerRunId` or `providerRequestScope`: daemon/provider-process-run
   identity. It scopes provider-originated pending interactions and dynamic tool
   calls across websocket reconnects, and changes on provider process restart.
-- `desiredRuntimeMaterialVersion`: server-owned content/version id for the
-  runtime material snapshot the host should apply.
-- `appliedRuntimeMaterialVersion`: daemon-reported content/version id that the
-  server records as currently applied host state.
 - `daemonInstanceId`: stable daemon installation/instance identity used to decide
   whether a replacement websocket session represents the same daemon instance.
   It is distinct from shorter provider-run/process identities.
@@ -362,7 +355,6 @@ Target:
 - Each durable command has an owner:
   - thread lifecycle owner;
   - environment lifecycle owner;
-  - host runtime material owner;
   - workspace mutation owner.
 - The result route calls the owner.
 - The owner validates the active attempt and, in one transaction:
@@ -553,39 +545,7 @@ Exit criteria:
 - Manual validation confirms workspace status/diff/file-list views refetch after
   a file change and after reconnect.
 
-### Phase 8: Normalize Runtime Material Sync
-
-After the RPC split, decide whether runtime material sync is a durable job or a
-direct online operation. The recommended model is content-addressed online sync
-with explicit desired version.
-
-Target:
-
-- Server computes desired runtime material snapshot/version.
-- Daemon asks for or receives the snapshot by version.
-- Daemon applies the snapshot and replies with `appliedVersion`.
-- Server records applied version as host state.
-- If daemon is offline, sync remains desired but no command is queued until the
-  next session opens.
-
-Exit criteria:
-
-- Runtime material sync no longer uses both a durable command and a separate
-  `/session/runtime-material` fetch unless the command is explicitly kept as a
-  durable host job with attempt identity.
-- `rg "host.sync_runtime_material|/session/runtime-material|fetchRuntimeMaterial" apps packages` has matches only in the chosen runtime-material sync path and its tests.
-- Session-open reconciliation has one owner function that compares
-  desired/applied versions and requests apply if needed.
-- `apps/server/test/hosts/sandbox-runtime-material.test.ts` covers offline
-  daemon, reconnect reconciliation, repeated desired-version requests, and
-  applied-version recording.
-- Host-daemon tests cover applying the same runtime material version twice
-  without rewriting state unnecessarily.
-- Tests assert structured logs/counters for desired/applied version mismatch,
-  repeated desired-version request dedupe, offline-daemon deferral, and stale
-  applied-version rejection.
-
-### Phase 9: Move Development Replay Out Of Production Commands
+### Phase 8: Move Development Replay Out Of Production Commands
 
 Replay capture commands are development tooling. They should not bloat the
 production daemon command protocol.
@@ -666,10 +626,7 @@ Required per-phase validation additions:
   response retry, mismatched payload, stale provider run, expired in-progress
   record, and completed-record GC.
 - Phase 7: websocket fan-out/auth tests and app-side refetch reconciliation.
-- Phase 8: sandbox runtime material offline-daemon behavior, reconnect
-  reconciliation, repeated desired-version requests, and applied-version
-  recording.
-- Phase 9: public/internal replay routes over dev-only RPC and host-daemon replay
+- Phase 8: public/internal replay routes over dev-only RPC and host-daemon replay
   handling outside the production command union.
 
 Manual validation on dev:

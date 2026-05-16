@@ -9,18 +9,10 @@ export {
 export {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
-  HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
-  hostRuntimeMaterialEnvSchema,
-  hostRuntimeMaterialManagedFileSchema,
-  hostRuntimeMaterialSnapshotSchema,
   normalizeServerUrl,
 } from "./local-state.js";
-export type {
-  HostAuthState,
-  HostRuntimeMaterialManagedFile,
-  HostRuntimeMaterialSnapshot,
-} from "./local-state.js";
+export type { HostAuthState } from "./local-state.js";
 
 export {
   createHostDaemonLocalClient,
@@ -68,7 +60,6 @@ export {
   HOST_DAEMON_PROTOCOL_VERSION,
   environmentDestroyCommandSchema,
   environmentProvisionCommandSchema,
-  hostSyncRuntimeMaterialCommandSchema,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandResultSchemaByType,
@@ -136,7 +127,6 @@ export {
   hostDaemonEventEnvelopeSchema,
   hostDaemonProjectAttachmentContentQuerySchema,
   hostDaemonRejectedEventSchema,
-  hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionCloseReasonSchema,
   hostDaemonSessionOpenRequestSchema,
@@ -170,7 +160,6 @@ export type {
   HostDaemonInternalSchema,
   HostDaemonProjectAttachmentContentQuery,
   HostDaemonRejectedEvent,
-  HostDaemonRuntimeMaterialQuery,
   HostDaemonServerWsMessage,
   HostDaemonSessionCloseReason,
   HostDaemonSessionOpenRequest,

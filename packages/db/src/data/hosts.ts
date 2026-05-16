@@ -1,8 +1,8 @@
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { HostChangeKind, HostType } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, hostDaemonSessions, hosts } from "../schema.js";
+import { hosts } from "../schema.js";
 import { createHostId } from "../ids.js";
 
 type HostWriteConnection = DbConnection | DbTransaction;
@@ -11,16 +11,12 @@ export interface UpsertHostInput {
   id?: string;
   name: string;
   type: HostType;
-  provider?: string | null;
-  externalId?: string | null;
   destroyedAt?: number | null;
 }
 
 export interface UpdateHostInput {
   destroyedAt?: number | null;
-  externalId?: string | null;
   name?: string;
-  provider?: string | null;
 }
 
 function notifyHostMutation(
@@ -44,17 +40,11 @@ function getHostConnectionChange(
   previous: NonNullable<ReturnType<typeof getHost>>,
   next: NonNullable<ReturnType<typeof getHost>>,
 ): HostChangeKind | null {
-  if (
-    (previous.destroyedAt === null && next.destroyedAt !== null) ||
-    (previous.externalId !== null && next.externalId === null)
-  ) {
+  if (previous.destroyedAt === null && next.destroyedAt !== null) {
     return "host-disconnected";
   }
 
-  if (
-    (previous.destroyedAt !== null && next.destroyedAt === null) ||
-    (previous.externalId === null && next.externalId !== null)
-  ) {
+  if (previous.destroyedAt !== null && next.destroyedAt === null) {
     return "host-connected";
   }
 
@@ -76,19 +66,11 @@ export function upsertHost(
       .set({
         name: input.name,
         type: input.type,
-        provider:
-          input.provider !== undefined ? input.provider : existing.provider,
         destroyedAt:
           input.destroyedAt !== undefined
             ? input.destroyedAt
             : existing.destroyedAt,
-        externalId:
-          input.externalId !== undefined
-            ? input.externalId
-            : existing.externalId,
-        lastActivityAt: existing.lastActivityAt,
         lastSeenAt: existing.lastSeenAt,
-        suspendedAt: existing.suspendedAt,
         updatedAt: now,
       })
       .where(eq(hosts.id, id))
@@ -103,12 +85,8 @@ export function upsertHost(
         id,
         name: input.name,
         type: input.type,
-        provider: input.provider ?? null,
         destroyedAt: input.destroyedAt ?? null,
-        externalId: input.externalId ?? null,
-        lastActivityAt: null,
         lastSeenAt: null,
-        suspendedAt: null,
         createdAt: now,
         updatedAt: now,
       })
@@ -183,40 +161,6 @@ export function listNonDestroyedHostsByIds(
     .all();
 }
 
-export function listEphemeralHostsPendingCleanup(
-  db: DbConnection,
-  hostId?: string,
-) {
-  return db
-    .select()
-    .from(hosts)
-    .where(
-      and(
-        eq(hosts.type, "ephemeral"),
-        isNull(hosts.destroyedAt),
-        isNotNull(hosts.externalId),
-        sql`EXISTS (
-          SELECT 1 FROM ${hostDaemonSessions}
-          WHERE ${hostDaemonSessions.hostId} = ${hosts.id}
-        )`,
-        hostId ? eq(hosts.id, hostId) : undefined,
-        sql`NOT EXISTS (
-          SELECT 1 FROM ${environments}
-          WHERE ${environments.hostId} = ${hosts.id}
-          AND ${environments.status} != 'destroyed'
-        )`,
-      ),
-    )
-    .all();
-}
-
-export function isEphemeralHostPendingCleanup(
-  db: DbConnection,
-  hostId: string,
-): boolean {
-  return listEphemeralHostsPendingCleanup(db, hostId).length > 0;
-}
-
 export function updateHost(
   db: DbConnection,
   notifier: DbNotifier,
@@ -235,10 +179,6 @@ export function updateHost(
         ? { destroyedAt: input.destroyedAt }
         : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.provider !== undefined ? { provider: input.provider } : {}),
-      ...(input.externalId !== undefined
-        ? { externalId: input.externalId }
-        : {}),
       updatedAt: now,
     })
     .where(eq(hosts.id, hostId))

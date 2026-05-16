@@ -6,15 +6,6 @@ describe("project source selection", () => {
     const source = findLocalPathProjectSourceForHost(
       [
         {
-          id: "src_github",
-          projectId: "proj_1",
-          type: "github_repo",
-          repoUrl: "https://github.com/example/repo",
-          isDefault: false,
-          createdAt: 1,
-          updatedAt: 1,
-        },
-        {
           id: "src_other",
           projectId: "proj_1",
           type: "local_path",

@@ -50,7 +50,7 @@ export const hostDaemonEntrypointConfig = envsafe({
     allowEmpty: true,
   }),
   BB_HOST_TYPE: optionalHostType({
-    desc: "Host type override for daemon bootstrap (persistent or ephemeral)",
+    desc: "Host type override for daemon bootstrap",
     default: undefined,
     allowEmpty: true,
     input: process.env.BB_HOST_TYPE ?? "",

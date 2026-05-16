@@ -60,7 +60,7 @@ const multipleMessages: readonly ThreadQueuedMessage[] = [
   }),
   makeQueuedMessage({
     id: "q_b",
-    text: "Confirm the env summary renders without the branch button on sandbox hosts.",
+    text: "Confirm the env summary renders without the branch button on unmanaged environments.",
   }),
   makeQueuedMessage({
     id: "q_c",

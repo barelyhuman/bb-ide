@@ -17,7 +17,7 @@ import type {
   TurnRequestTarget,
 } from "@bb/domain";
 import type { TurnSubmitTarget } from "@bb/host-daemon-contract";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import {
   appendClientTurnEventInTransaction,
   getActiveTurnId,
@@ -350,7 +350,7 @@ export function toDueManagerThreadNudgeCursor(
 }
 
 async function prepareDueNudge(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
   now: number,
@@ -559,7 +559,7 @@ function queueDueNudgeInTransaction(
 }
 
 export async function runDueNudge(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
   now: number,

@@ -35,7 +35,7 @@ const shortMessage = `Yes. As patched, it keeps the environment runtime entry an
 
 - explicit environment destroy
 - daemon shutdown
-- \`host.sync_runtime_material\`, which calls \`evictIdleEnvironments()\`
+- explicit environment cleanup after the watcher is no longer needed
 
 There is no regular idle sweep in the host daemon, so "forever for the daemon lifetime" is a fair concern.
 

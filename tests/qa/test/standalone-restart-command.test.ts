@@ -67,13 +67,12 @@ describe("standalone restart command", () => {
     expect(command).toContain(">> '/tmp/bb logs/host-daemon.log' 2>&1) &");
     expect(command).toContain("'http://127.0.0.1:3334/api/v1/hosts'");
     expect(command).toContain(
-      "'any(.[]; .id == \"host_123\" and .status == \"connected\")'",
+      '\'any(.[]; .id == "host_123" and .status == "connected")\'',
     );
     expect(command).toContain('[ "$connected" = 1 ]');
     expect(command).not.toContain("&;");
     expect(command).not.toContain("do; if");
     expect(command).not.toContain("OPENAI_API_KEY");
-    expect(command).not.toContain("ANTHROPIC_API_KEY");
   });
 
   it("uses a no-op env loader when no env file exists", () => {

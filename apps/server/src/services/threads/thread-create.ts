@@ -11,8 +11,6 @@ import { ApiError } from "../../errors.js";
 import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
-import { requireReachableExternalServerUrl } from "../hosts/external-server-url.js";
-import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import {
@@ -45,7 +43,6 @@ import {
 
 type ThreadCreateDeps = Pick<
   AppDeps,
-  | "cloudAuth"
   | "config"
   | "db"
   | "hostLifecycle"
@@ -53,8 +50,6 @@ type ThreadCreateDeps = Pick<
   | "lifecycleDedupers"
   | "logger"
   | "machineAuth"
-  | "sandboxEnv"
-  | "sandboxRegistry"
 >;
 
 interface ReuseEnvironmentIntentByHostPathArgs {
@@ -205,20 +200,6 @@ export async function createThreadFromRequest(
   let environmentIntent: ThreadProvisionEnvironmentIntent;
 
   switch (resolvedEnvironment.type) {
-    case "sandbox-host": {
-      requireReachableExternalServerUrl(deps.config);
-      assertSandboxProvisioningConfig(
-        resolvedEnvironment.sandboxType,
-        deps.config,
-      );
-      environmentIntent = {
-        type: "sandbox-managed",
-        cloneRepoUrl: resolvedEnvironment.cloneSource.repoUrl,
-        baseBranch: resolvedEnvironment.baseBranch,
-        sandboxType: resolvedEnvironment.sandboxType,
-      };
-      break;
-    }
     case "reuse": {
       const environment = resolvedEnvironment.environment;
       if (
@@ -294,7 +275,6 @@ export async function createThreadFromRequest(
 export async function ensureProjectSourceEnvironment(
   deps: Pick<
     AppDeps,
-    | "cloudAuth"
     | "config"
     | "db"
     | "hostLifecycle"
@@ -302,8 +282,6 @@ export async function ensureProjectSourceEnvironment(
     | "lifecycleDedupers"
     | "logger"
     | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
   >,
   args: EnsureProjectSourceEnvironmentArgs,
 ): Promise<Environment> {

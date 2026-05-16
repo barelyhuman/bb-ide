@@ -1,12 +1,10 @@
-import { getProjectSourceByHost, listProjectSources } from "@bb/db";
+import { getProjectSourceByHost } from "@bb/db";
 import {
-  isGitHubRepoProjectSource,
   type Environment,
-  type GitHubRepoProjectSource,
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import type { BaseBranchSpec, EnvironmentArgs } from "@bb/server-contract";
+import type { EnvironmentArgs } from "@bb/server-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import {
@@ -23,11 +21,6 @@ type ReuseThreadRequestEnvironment = Extract<
   ThreadRequestEnvironment,
   { type: "reuse" }
 >;
-type SandboxHostThreadRequestEnvironment = Extract<
-  ThreadRequestEnvironment,
-  { type: "sandbox-host" }
->;
-
 export interface ResolveStableThreadRequestEnvironmentArgs {
   environment: ThreadRequestEnvironment;
   projectId: string;
@@ -53,58 +46,9 @@ export interface ResolvedReuseThreadRequestEnvironment {
   type: "reuse";
 }
 
-export interface ResolvedSandboxHostThreadRequestEnvironment {
-  cloneSource: GitHubRepoProjectSource;
-  baseBranch: BaseBranchSpec;
-  sandboxType: SandboxHostThreadRequestEnvironment["sandboxType"];
-  type: "sandbox-host";
-}
-
 export type ResolvedStableThreadRequestEnvironment =
   | ResolvedHostThreadRequestEnvironment
-  | ResolvedReuseThreadRequestEnvironment
-  | ResolvedSandboxHostThreadRequestEnvironment;
-
-function compareSandboxCloneSourcePreference(
-  left: GitHubRepoProjectSource,
-  right: GitHubRepoProjectSource,
-): number {
-  if (left.isDefault !== right.isDefault) {
-    return left.isDefault ? -1 : 1;
-  }
-  if (left.createdAt !== right.createdAt) {
-    return left.createdAt - right.createdAt;
-  }
-  return left.id.localeCompare(right.id);
-}
-
-function selectSandboxCloneSource(
-  projectSources: readonly ProjectSource[],
-): GitHubRepoProjectSource | null {
-  const cloneSources = projectSources
-    .filter(isGitHubRepoProjectSource)
-    .sort(compareSandboxCloneSourcePreference);
-
-  return cloneSources[0] ?? null;
-}
-
-function resolveSandboxCloneSourceForProject(
-  deps: Pick<AppDeps, "db">,
-  args: { projectId: string },
-): GitHubRepoProjectSource {
-  const cloneSource = selectSandboxCloneSource(
-    listProjectSources(deps.db, args.projectId),
-  );
-  if (!cloneSource) {
-    throw new ApiError(
-      409,
-      "unsupported_operation",
-      "Sandbox threads require a cloneable project source; local path sources are not supported yet",
-    );
-  }
-
-  return cloneSource;
-}
+  | ResolvedReuseThreadRequestEnvironment;
 
 function requireExistingProjectHost(
   data: StableThreadRequestProjectData,
@@ -196,23 +140,6 @@ export function resolveStableThreadRequestEnvironmentFromProjectData(
         data,
         environment,
       );
-    case "sandbox-host": {
-      const cloneSource = selectSandboxCloneSource(data.projectSources);
-      if (!cloneSource) {
-        throw new ApiError(
-          409,
-          "unsupported_operation",
-          "Sandbox threads require a cloneable project source; local path sources are not supported yet",
-        );
-      }
-
-      return {
-        cloneSource,
-        baseBranch: environment.baseBranch,
-        sandboxType: environment.sandboxType,
-        type: "sandbox-host",
-      };
-    }
     default: {
       const exhaustiveCheck: never = environment;
       throw new Error(
@@ -304,15 +231,6 @@ export function resolveStableThreadRequestEnvironment(
         args.environment,
         args.projectId,
       );
-    case "sandbox-host":
-      return {
-        cloneSource: resolveSandboxCloneSourceForProject(deps, {
-          projectId: args.projectId,
-        }),
-        baseBranch: args.environment.baseBranch,
-        sandboxType: args.environment.sandboxType,
-        type: "sandbox-host",
-      };
     default: {
       const exhaustiveCheck: never = args.environment;
       throw new Error(

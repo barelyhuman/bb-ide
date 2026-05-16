@@ -32,9 +32,6 @@ interface EnvironmentLaneState {
 export interface CommandRouterOptions {
   dataDir: CommandDispatchOptions["dataDir"];
   fetchProjectAttachment: CommandDispatchOptions["fetchProjectAttachment"];
-  fetchRuntimeMaterial: CommandDispatchOptions["fetchRuntimeMaterial"];
-  readPersistedRuntimeMaterial: CommandDispatchOptions["readPersistedRuntimeMaterial"];
-  persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
   runtimeManager: RuntimeManager;
   terminalManager?: CommandDispatchOptions["terminalManager"];
   reportResult?: (result: CommandResultReport) => Promise<void>;
@@ -54,7 +51,6 @@ export class CommandRouter {
   private readonly logger;
   private readonly now;
   private readonly environmentLanes = new Map<string, EnvironmentLaneState>();
-  private hostRuntimeMaterialLane: Promise<void> = Promise.resolve();
   // Stale failed reports retry in the background after the current result is
   // reported, so one permanently failing result cannot block newer completions.
   private readonly pendingResults: PendingCommandResultReport[] = [];
@@ -78,11 +74,7 @@ export class CommandRouter {
   ): Promise<void> {
     let task: Promise<CommandResultReport>;
     const environmentLaneMode = this.getEnvironmentLaneMode(envelope.command);
-    if (envelope.command.type === "host.sync_runtime_material") {
-      task = this.runInHostRuntimeMaterialLane(() =>
-        this.executeCommand(envelope),
-      );
-    } else if (environmentLaneMode && "environmentId" in envelope.command) {
+    if (environmentLaneMode && "environmentId" in envelope.command) {
       const { environmentId } = envelope.command;
       if (!environmentId) {
         throw new Error(
@@ -114,15 +106,6 @@ export class CommandRouter {
         );
       });
     await this.reportingPromise;
-  }
-
-  private runInHostRuntimeMaterialLane<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.hostRuntimeMaterialLane.catch(() => undefined).then(work);
-    this.hostRuntimeMaterialLane = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
   }
 
   private schedulePendingResultRetry(): void {
@@ -192,10 +175,7 @@ export class CommandRouter {
 
     try {
       const result = await dispatchCommand(envelope.command, {
-        fetchRuntimeMaterial: this.options.fetchRuntimeMaterial,
         fetchProjectAttachment: this.options.fetchProjectAttachment,
-        readPersistedRuntimeMaterial: this.options.readPersistedRuntimeMaterial,
-        persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,
         terminalManager: this.options.terminalManager,
         dataDir: this.options.dataDir,

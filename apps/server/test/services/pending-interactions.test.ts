@@ -118,7 +118,6 @@ describe("pending interaction lifecycle", () => {
         db: harness.db,
         hub: harness.hub,
         logger,
-        sandboxInteractionExpiryMs: 20,
       });
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-corrupt-list",
@@ -1090,147 +1089,6 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
-  it("expires pending ephemeral-host interactions that are never resolved", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const pendingInteractions = new PendingInteractionLifecycle({
-        db: harness.db,
-        hub: harness.hub,
-        logger: harness.deps.logger,
-        sandboxInteractionExpiryMs: 20,
-      });
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-expiry",
-        type: "ephemeral",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      const created = registerPendingInteraction(
-        harness.deps,
-        pendingInteractions,
-        {
-          threadId: thread.id,
-          turnId: "turn-expiry",
-          providerId: "codex",
-          providerThreadId: "provider-thread-expiry",
-          providerRequestId: "request-expiry",
-          payload: createCommandApprovalPayload({
-            itemId: "item-expiry",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        session.id,
-      );
-      if (created.outcome === "rejected") {
-        throw new Error(
-          `Expected interaction registration to succeed: ${created.reason}`,
-        );
-      }
-
-      await sleep(50);
-
-      expect(
-        pendingInteractions.getThreadInteraction({
-          threadId: thread.id,
-          interactionId: created.interaction.id,
-        }),
-      ).toMatchObject({
-        id: created.interaction.id,
-        status: "expired",
-        statusReason:
-          "Pending interaction expired while waiting for a user response",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("hydrates pending interactions on ephemeral hosts and expires them after restart", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const originalLifecycle = new PendingInteractionLifecycle({
-        db: harness.db,
-        hub: harness.hub,
-        logger: harness.deps.logger,
-        sandboxInteractionExpiryMs: 60_000,
-      });
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-hydrate-expiry",
-        type: "ephemeral",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      const created = registerPendingInteraction(
-        harness.deps,
-        originalLifecycle,
-        {
-          threadId: thread.id,
-          turnId: "turn-hydrate-expiry",
-          providerId: "codex",
-          providerThreadId: "provider-thread-hydrate-expiry",
-          providerRequestId: "request-hydrate-expiry",
-          payload: createCommandApprovalPayload({
-            itemId: "item-hydrate-expiry",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        session.id,
-      );
-      if (created.outcome === "rejected") {
-        throw new Error(
-          `Expected interaction registration to succeed: ${created.reason}`,
-        );
-      }
-
-      const restartedLifecycle = new PendingInteractionLifecycle({
-        db: harness.db,
-        hub: harness.hub,
-        logger: harness.deps.logger,
-        sandboxInteractionExpiryMs: 20,
-      });
-      restartedLifecycle.start();
-      await sleep(50);
-
-      expect(
-        restartedLifecycle.getThreadInteraction({
-          threadId: thread.id,
-          interactionId: created.interaction.id,
-        }),
-      ).toMatchObject({
-        id: created.interaction.id,
-        status: "expired",
-        statusReason:
-          "Pending interaction expired while waiting for a user response",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("does not expire pending interactions on persistent hosts", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1238,7 +1096,6 @@ describe("pending interaction lifecycle", () => {
         db: harness.db,
         hub: harness.hub,
         logger: harness.deps.logger,
-        sandboxInteractionExpiryMs: 20,
       });
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-no-expiry",

@@ -19,9 +19,7 @@ const unavailableFeatureFlags: FeatureFlags = {
 
 const unavailableSystemConfig: SystemConfigResponse = {
   featureFlags: unavailableFeatureFlags,
-  githubConnected: false,
   hostDaemonPort: null,
-  sandboxHostSupported: false,
   voiceTranscriptionEnabled: false,
 };
 
@@ -166,20 +164,8 @@ export const hostDaemonPortAtom = atom<Promise<number | null>>(async (get) => {
   return config.hostDaemonPort;
 });
 
-/** Whether the server has a GitHub PAT configured. */
-export const githubConnectedAtom = atom<Promise<boolean>>(async (get) => {
-  const config = await get(systemConfigAtom);
-  return config.githubConnected;
-});
-
 /** Whether thread terminal sessions are enabled by the server. */
 export const terminalsEnabledAtom = atom<Promise<boolean>>(async (get) => {
   const config = await get(systemConfigAtom);
   return config.featureFlags.terminals;
-});
-
-/** Whether the server supports sandbox host provisioning. */
-export const sandboxHostSupportedAtom = atom<Promise<boolean>>(async (get) => {
-  const config = await get(systemConfigAtom);
-  return config.sandboxHostSupported;
 });

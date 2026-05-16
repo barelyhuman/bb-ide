@@ -7,7 +7,7 @@ import {
   type HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
 import type { CommandResultWaiterResponse } from "../../internal/command-result-response.js";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { roundDurationMs } from "../lib/duration.js";
 import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
@@ -99,7 +99,7 @@ const workspaceStatusCommandCache = new Map<
 >();
 
 function logSlowCommandWait(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: LogSlowCommandWaitArgs,
 ): void {
   if (args.durationMs < SLOW_HOST_COMMAND_WAIT_LOG_THRESHOLD_MS) {
@@ -261,7 +261,7 @@ function scheduleWorkspaceStatusCacheCleanup(
 }
 
 function queueWorkspaceStatusCommandAndWait(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueWorkspaceStatusCommandAndWaitArgs,
 ): Promise<HostDaemonCommandResult<"workspace.status">> {
   const now = Date.now();
@@ -294,11 +294,11 @@ function queueWorkspaceStatusCommandAndWait(
 }
 
 export function queueCommandAndWait<TType extends HostDaemonCommandType>(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueCommandAndWaitArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;
 export async function queueCommandAndWait(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
 ): Promise<HostDaemonCommandResult> {
   assertQueueCommandAndWaitAllowed(args);
@@ -315,11 +315,11 @@ export async function queueCommandAndWait(
 }
 
 function queueCommandAndWaitUncached<TType extends HostDaemonCommandType>(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueCommandAndWaitArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;
 async function queueCommandAndWaitUncached(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
 ): Promise<HostDaemonCommandResult> {
   const session = await ensureHostSessionReadyForWork(deps, {

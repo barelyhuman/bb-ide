@@ -68,10 +68,6 @@ Contract:
 - POSIX only — supported on macOS, Linux, and WSL2. Native Windows isn't
   supported.
 
-The same script also runs after a managed clone (used by ephemeral cloud
-sandbox hosts), so anything you put in `.bb-env-setup.sh` works in both
-places.
-
 ## Cleanup
 
 You don't need to clean up worktrees by hand — bb removes them when the

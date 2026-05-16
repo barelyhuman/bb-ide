@@ -37,7 +37,6 @@ describe("looksLikePath", () => {
 
   it("returns false for bare words", () => {
     expect(looksLikePath("worktree")).toBe(false);
-    expect(looksLikePath("e2b")).toBe(false);
     expect(looksLikePath("docker")).toBe(false);
   });
 });
@@ -68,13 +67,13 @@ describe("buildSpawnEnvironment", () => {
     });
   });
 
-  it("throws for bare e2b without sandbox/ prefix", () => {
+  it("throws for unsupported managed environment kinds", () => {
     expect(() =>
       buildSpawnEnvironment({
-        newEnvironmentKind: "e2b",
+        newEnvironmentKind: "docker",
         hostId: null,
       }),
-    ).toThrow("Unknown environment kind 'e2b'");
+    ).toThrow("Unknown environment kind 'docker'");
   });
 
   it("returns managed-worktree for --new-environment worktree with host", () => {
@@ -114,49 +113,6 @@ describe("buildSpawnEnvironment", () => {
     ).toThrow("Cannot reach local host daemon");
   });
 
-  it("returns sandbox for --new-environment sandbox/e2b", () => {
-    const result = buildSpawnEnvironment({
-      newEnvironmentKind: "sandbox/e2b",
-      hostId: null,
-    });
-    expect(result).toEqual({
-      type: "sandbox-host",
-      sandboxType: "e2b",
-      baseBranch: { kind: "default" },
-    });
-  });
-
-  it("returns sandbox for any sandbox/ prefix", () => {
-    const result = buildSpawnEnvironment({
-      newEnvironmentKind: "sandbox/daytona",
-      hostId: null,
-    });
-    expect(result).toEqual({
-      type: "sandbox-host",
-      sandboxType: "daytona",
-      baseBranch: { kind: "default" },
-    });
-  });
-
-  it("throws for sandbox/ with no type", () => {
-    expect(() =>
-      buildSpawnEnvironment({
-        newEnvironmentKind: "sandbox/",
-        hostId: HOST_ID,
-      }),
-    ).toThrow("Missing sandbox type after 'sandbox/'");
-  });
-
-  it("throws when combining --host with sandbox environment", () => {
-    expect(() =>
-      buildSpawnEnvironment({
-        newEnvironmentKind: "sandbox/e2b",
-        hostId: HOST_ID,
-        explicitHost: true,
-      }),
-    ).toThrow("Cannot combine --host with sandbox environments");
-  });
-
   it("throws for unknown --new-environment kind", () => {
     expect(() =>
       buildSpawnEnvironment({
@@ -170,7 +126,7 @@ describe("buildSpawnEnvironment", () => {
     expect(() =>
       buildSpawnEnvironment({
         environmentValue: "some-env-id",
-        newEnvironmentKind: "e2b",
+        newEnvironmentKind: "docker",
         hostId: HOST_ID,
       }),
     ).toThrow("Cannot combine --environment with --new-environment");
@@ -213,13 +169,16 @@ describe("buildSpawnEnvironment", () => {
 
   it("trims whitespace from environment values", () => {
     const result = buildSpawnEnvironment({
-      newEnvironmentKind: "  sandbox/e2b  ",
-      hostId: null,
+      newEnvironmentKind: "  worktree  ",
+      hostId: HOST_ID,
     });
     expect(result).toEqual({
-      type: "sandbox-host",
-      sandboxType: "e2b",
-      baseBranch: { kind: "default" },
+      type: "host",
+      hostId: HOST_ID,
+      workspace: {
+        type: "managed-worktree",
+        baseBranch: { kind: "default" },
+      },
     });
   });
 });

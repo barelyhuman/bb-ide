@@ -12,7 +12,6 @@ export type {
 export * from "./schema.js";
 export {
   createAutomationId,
-  createCloudAuthAttemptId,
   createQueuedThreadMessageClaimToken,
   createQueuedThreadMessageId,
   createEnvironmentId,
@@ -21,13 +20,11 @@ export {
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
-  createHostOperationId,
   createManagerThreadNudgeId,
   createPendingInteractionId,
   createProjectId,
   createPromptHistoryEntryId,
   createProjectSourceId,
-  createSandboxProviderCredentialId,
   createTerminalSessionId,
   createThreadId,
   createThreadProvisioningId,

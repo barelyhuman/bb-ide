@@ -1,11 +1,7 @@
 import type { Host } from "@bb/domain";
 import { HostPicker } from "./HostPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import {
-  HOST_IDS,
-  HOST_NAMES,
-  makeHost,
-} from "../../../.ladle/story-fixtures";
+import { HOST_IDS, HOST_NAMES, makeHost } from "../../../.ladle/story-fixtures";
 
 export default {
   title: "pickers/Host Picker",
@@ -16,17 +12,15 @@ const localOnly: Host[] = [makeHost()];
 const multipleHosts: Host[] = [
   makeHost(),
   makeHost({
-    id: "host_e2b_bb",
-    name: "bb-sandbox-thr_qfk8ksbxkk",
-    type: "ephemeral",
-    provider: "e2b",
+    id: "host_remote_build",
+    name: "remote-build-box",
+    type: "persistent",
   }),
   makeHost({
-    id: "host_e2b_stale",
-    name: "bb-sandbox-thr_5brannp925",
-    type: "ephemeral",
+    id: "host_remote_stale",
+    name: "remote-stale-box",
+    type: "persistent",
     status: "disconnected",
-    provider: "e2b",
   }),
 ];
 
@@ -45,11 +39,11 @@ export function Overview() {
           isLocalHost={isLocalHost}
         />
       </StoryRow>
-      <StoryRow label={`${HOST_NAMES.local}, remote sandbox selected`}>
+      <StoryRow label={`${HOST_NAMES.local}, remote host selected`}>
         <HostPicker
           hosts={multipleHosts}
           eligibleHosts={multipleHosts}
-          selectedHostId="host_e2b_bb"
+          selectedHostId="host_remote_build"
           onChange={noop}
           isLocalHost={isLocalHost}
         />
@@ -58,7 +52,7 @@ export function Overview() {
         <HostPicker
           hosts={multipleHosts}
           eligibleHosts={multipleHosts}
-          selectedHostId="host_e2b_stale"
+          selectedHostId="host_remote_stale"
           onChange={noop}
           isLocalHost={isLocalHost}
         />

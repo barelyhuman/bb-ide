@@ -9,7 +9,6 @@ import {
   getEnvironment,
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
-  getHost,
   queueCommand,
   threadOperations,
   threads,
@@ -34,11 +33,10 @@ import {
   threadScope,
 } from "@bb/domain";
 import { type HostDaemonCommand } from "@bb/host-daemon-contract";
-import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type {
   AppDeps,
-  LoggedSandboxWorkSessionDeps,
-  SandboxWorkSessionDeps,
+  LoggedWorkSessionDeps,
+  WorkSessionDeps,
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
@@ -59,14 +57,9 @@ import {
   buildDirectEnvironmentProvisionRequest,
   environmentProvisionRequestSchema,
   type EnvironmentProvisionRequest,
-  type SandboxHostEnvironmentProvisionRequest,
 } from "./environment-provision-request.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
-import {
-  destroyHost,
-  ensureHostSessionReadyForWork,
-  ensureSandboxHostSessionReady,
-} from "../hosts/host-lifecycle.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
 import {
   tryTransition,
@@ -245,43 +238,6 @@ function appendThreadProvisioningEventToEnvironmentThreadsInTransaction(
       eventTypes: ["system/thread-provisioning"],
     });
   }
-}
-
-function assertNeverSandboxHostProgressStage(value: never): never {
-  throw new Error(`Unsupported sandbox host progress stage: ${String(value)}`);
-}
-
-function sandboxHostProgressEntry(
-  event: SandboxHostProgressEvent,
-): ProvisioningTranscriptEntry {
-  const startedAt = Date.now();
-
-  switch (event.stage) {
-    case "host":
-      return {
-        type: "step",
-        key: `sandbox-host-${event.status}`,
-        text:
-          event.status === "completed"
-            ? "Sandbox host ready"
-            : "Preparing sandbox",
-        startedAt,
-        status: event.status,
-      };
-    case "daemon-start":
-      return {
-        type: "step",
-        key: `sandbox-daemon-${event.status}`,
-        text:
-          event.status === "completed"
-            ? "Sandbox daemon ready"
-            : "Starting sandbox daemon",
-        startedAt,
-        status: event.status,
-      };
-  }
-
-  return assertNeverSandboxHostProgressStage(event.stage);
 }
 
 function queueEnvironmentProvisionCommand(
@@ -593,7 +549,7 @@ export function recordEnvironmentProvisioningFailureInTransaction(
 }
 
 export async function failEnvironmentProvisioningDurably(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: FailEnvironmentProvisioningDurablyArgs,
 ): Promise<void> {
   const recorded = recordEnvironmentProvisioningFailure(deps, args);
@@ -624,94 +580,8 @@ export function requestEnvironmentProvision(
   }
 }
 
-async function bootstrapSandboxProvisioning(
-  deps: LoggedSandboxWorkSessionDeps,
-  args: {
-    environment: Environment;
-    operationKind: EnvironmentProvisionOperationKind;
-    request: SandboxHostEnvironmentProvisionRequest;
-  },
-): Promise<void> {
-  const operation = getActiveProvisionOperation(deps, args.environment.id);
-  if (!operation) {
-    throw new Error("Environment provision operation is no longer active");
-  }
-  const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
-  appendThreadProvisioningEventToEnvironmentThreads(deps, {
-    environmentId: args.environment.id,
-    fallbackProvisioningId: provisioningId,
-    status: "active",
-    entries: [
-      {
-        type: "step",
-        key: "sandbox-connect-started",
-        text: "Waiting for sandbox host to connect",
-        startedAt: Date.now(),
-        status: "started",
-      },
-    ],
-  });
-
-  try {
-    await ensureSandboxHostSessionReady(deps, {
-      hostId: args.environment.hostId,
-      progressCallbacks: {
-        onProgress: (event) => {
-          appendThreadProvisioningEventToEnvironmentThreads(deps, {
-            environmentId: args.environment.id,
-            fallbackProvisioningId: provisioningId,
-            status: "active",
-            entries: [sandboxHostProgressEntry(event)],
-          });
-        },
-      },
-    });
-
-    appendThreadProvisioningEventToEnvironmentThreads(deps, {
-      environmentId: args.environment.id,
-      fallbackProvisioningId: provisioningId,
-      status: "active",
-      entries: [
-        {
-          type: "step",
-          key: "sandbox-connect-completed",
-          text: "Sandbox host connected",
-          startedAt: Date.now(),
-          status: "completed",
-        },
-      ],
-    });
-
-    queueEnvironmentProvisionCommand(deps, {
-      command: args.request.command,
-      environment: args.environment,
-      kind: args.operationKind,
-    });
-  } catch (error) {
-    const failureReason =
-      error instanceof Error ? error.message : String(error);
-
-    await failEnvironmentProvisioningDurably(deps, {
-      environmentId: args.environment.id,
-      failureReason,
-      failureEntry: {
-        type: "step",
-        key: "sandbox-failed",
-        text: failureReason,
-        startedAt: Date.now(),
-        status: "failed",
-      },
-    });
-
-    const host = getHost(deps.db, args.environment.hostId);
-    if (host && host.destroyedAt === null) {
-      await destroyHost(deps, host.id).catch(() => undefined);
-    }
-  }
-}
-
 export async function advanceEnvironmentProvisioning(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: AdvanceEnvironmentProvisioningArgs,
 ): Promise<string | null> {
   if (!args.environmentId) {
@@ -736,23 +606,6 @@ export async function advanceEnvironmentProvisioning(
     operation.payload,
     environmentProvisionRequestSchema,
   );
-
-  if (request.mode === "sandbox-host") {
-    // Sandbox bootstrap is intentionally fire-and-forget here: failures are
-    // handled inside bootstrapSandboxProvisioning so the request path and
-    // sweeps both converge on the same async lifecycle.
-    void deps.lifecycleDedupers.sandboxBootstrap.run(
-      environment.id,
-      async () => {
-        await bootstrapSandboxProvisioning(deps, {
-          environment,
-          operationKind: operation.kind,
-          request,
-        });
-      },
-    );
-    return null;
-  }
 
   await ensureHostSessionReadyForWork(deps, {
     hostId: environment.hostId,
@@ -794,7 +647,7 @@ export function hasActiveManagedEnvironmentProvision(
 }
 
 export async function queueManagedEnvironmentReprovision(
-  deps: SandboxWorkSessionDeps,
+  deps: WorkSessionDeps,
   args: QueueManagedEnvironmentReprovisionArgs,
 ): Promise<ManagedReprovisionResult> {
   const provisionType = args.environment.workspaceProvisionType;

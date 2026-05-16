@@ -31,11 +31,10 @@ const mockHosts: Host[] = [
     updatedAt: 0,
   },
   {
-    id: "e2b-bb",
-    name: "bb-sandbox-thr_qfk8ksbxkk",
-    type: "ephemeral",
+    id: "remote-build",
+    name: "remote-build-box",
+    type: "persistent",
     status: "connected",
-    provider: "e2b",
     lastSeenAt: 0,
     createdAt: 0,
     updatedAt: 0,
@@ -52,9 +51,24 @@ const mockModelOptions = [
 const mockMergeBaseOptions = ["origin/main", "origin/develop"] as const;
 
 const mockChangedFiles: WorkspaceChangedFile[] = [
-  { path: "apps/app/src/components/ui/detail-card.tsx", status: "M", insertions: 18, deletions: 4 },
-  { path: "apps/app/src/components/HireManagerModal.tsx", status: "M", insertions: 7, deletions: 3 },
-  { path: "apps/app/src/components/thread/dialogs/ThreadGitActionDialog.tsx", status: "A", insertions: 56, deletions: 0 },
+  {
+    path: "apps/app/src/components/ui/detail-card.tsx",
+    status: "M",
+    insertions: 18,
+    deletions: 4,
+  },
+  {
+    path: "apps/app/src/components/HireManagerModal.tsx",
+    status: "M",
+    insertions: 7,
+    deletions: 3,
+  },
+  {
+    path: "apps/app/src/components/thread/dialogs/ThreadGitActionDialog.tsx",
+    status: "A",
+    insertions: 56,
+    deletions: 0,
+  },
 ];
 
 export function Overview() {
@@ -103,7 +117,10 @@ export function Overview() {
               <span className="truncate">
                 bb/implement-server-daemon-protocol-simplification-thr_qfk8ksbxkk
               </span>
-              <Icon name="Copy" className="size-3.5 shrink-0 text-muted-foreground" />
+              <Icon
+                name="Copy"
+                className="size-3.5 shrink-0 text-muted-foreground"
+              />
             </button>
           </DetailRow>
           <DetailRow label="Merge base" valueClassName="min-w-0 truncate">
@@ -120,7 +137,9 @@ export function Overview() {
               className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
               title="Modified 3 files, 1 staged"
             >
-              <span className="shrink-0 font-medium text-foreground">Modified</span>
+              <span className="shrink-0 font-medium text-foreground">
+                Modified
+              </span>
               <span className="min-w-0 truncate text-muted-foreground">
                 3 files, 1 staged
               </span>

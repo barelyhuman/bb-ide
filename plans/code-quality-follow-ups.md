@@ -1,41 +1,17 @@
 # Code Quality Follow-ups
 
-Selected items from the agent-provider, host-daemon, ui, server, and data-domain boundary cleanup reviews. Each phase is independent unless noted.
+Selected items from the host-daemon, ui, server, and data-domain boundary cleanup reviews. Each phase is independent unless noted.
 
 ## Current Status (2026-04-28)
 
-Source review shows no phase is fully complete yet. Phase 2 has some work landed, and Phase 6 has partial resolved-execution plumbing, but both still miss their exit criteria.
+Source review shows Phase 2 has some work landed, and Phase 6 has partial resolved-execution plumbing, but both still miss their exit criteria.
 
-- Phase 1: Open. Credential refresh/error fields still use ambiguous `| null`.
 - Phase 2: Partial. Diff byte limits and required dispatch `eventSink` exist; commit policy and file-list policy still need cleanup.
 - Phase 3: Open. Workspace watch state still lives in `apps/host-daemon`.
 - Phase 4: Open. `thread-view` projections still depend on `getEvent*` field-accessor helpers.
 - Phase 5: Complete. Projection state and assistant/reasoning buffering now live outside `build-event-projection.ts`; buffered-text identity is private to `thread-view`.
 - Phase 6: Partial. Resolved execution option types exist, but optional route/service inputs and service-side default resolution remain.
 - Phase 7: Open. At least one server route still imports `@bb/host-daemon-contract` directly.
-
-## Phase 1: Fix credential nullable ambiguity in `agent-provider-auth`
-
-**Goal:** Eliminate fields where `null` carries two different meanings.
-
-In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage: string | null` let `null` mean both "never attempted" and "attempted with no value." AGENTS.md §Contracts: _"Use `required + nullable` only when `null` has a distinct meaning."_ This is the forbidden pattern.
-
-**Status (2026-04-28):** Open. The nullable fields still exist in `packages/agent-provider-auth/src/types.ts`, and `apps/server/src/services/cloud-auth/service.ts` still reads/writes `null` for these states.
-
-**Changes:**
-
-- Update `CloudAuthResolvedCredential` (or its equivalent) in `packages/agent-provider-auth/src/types.ts`:
-  - Replace `lastRefreshedAt: number | null` with optional `lastRefreshedAt?: number`. Absence = "never refreshed"; presence = "refreshed at this time."
-  - Replace `lastErrorMessage: string | null` with either an optional field or an explicit `lastError?: { at: number; message: string }` struct.
-  - If state needs an explicit "failed last time" vs "never attempted" distinction, encode it in a `state` field with named variants — not by abusing nullable.
-- Update callers in `apps/server/src/services/cloud-auth/` and any consumers.
-- Add a test exercising the three states that previously collapsed to `null`: never-attempted, attempted-succeeded-no-message, attempted-failed.
-
-**Exit criteria:**
-
-- No field uses `| null` to mean both "unset" and "set to no value."
-- Callers handle the three states explicitly.
-- `pnpm exec turbo run typecheck --filter=@bb/agent-provider-auth --filter=@bb/server` passes.
 
 ## Phase 2: Move policy from host daemon to server
 

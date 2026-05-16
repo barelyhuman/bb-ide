@@ -109,11 +109,15 @@ describe("public authorization regressions", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-managed-check",
       });
+      const { host: sourceHost } = seedHostSession(harness.deps, {
+        id: "host-managed-check-source",
+      });
       const { project } = createProject(harness.db, harness.hub, {
-        name: "Project Without Local Source",
+        name: "Project Without Matching Host Source",
         source: {
-          type: "github_repo",
-          repoUrl: "https://github.com/test/repo",
+          type: "local_path",
+          hostId: sourceHost.id,
+          path: "/tmp/managed-check-source",
         },
       });
 

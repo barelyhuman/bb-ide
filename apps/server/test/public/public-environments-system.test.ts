@@ -1,11 +1,4 @@
-import {
-  createEnvironment,
-  hostDaemonCommands,
-  openSession,
-  updateHost,
-  upsertHost,
-} from "@bb/db";
-import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+import { createEnvironment, hostDaemonCommands, updateHost } from "@bb/db";
 import {
   makeWorkspaceMergeBase,
   makeWorkspaceStatus,
@@ -17,7 +10,6 @@ import {
   WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
 } from "../../src/constants.js";
 import {
-  reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -789,86 +781,9 @@ describe("public environment and system routes", () => {
           askUserQuestion: true,
           terminals: false,
         },
-        githubConnected: false,
         hostDaemonPort: 4010,
-        sandboxHostSupported: true,
         voiceTranscriptionEnabled: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("reports sandbox provisioning as disabled when BB_EXTERNAL_URL is unset", async () => {
-    const harness = await createTestAppHarness({
-      externalUrl: undefined,
-    });
-    try {
-      const response = await harness.app.request("/api/v1/system/config");
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        featureFlags: {
-          askUserQuestion: false,
-          terminals: false,
-        },
-        githubConnected: false,
-        hostDaemonPort: 3001,
-        sandboxHostSupported: false,
-        voiceTranscriptionEnabled: true,
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("lists sandbox backends and availability from GET /system/sandbox-backends", async () => {
-    const harness = await createTestAppHarness({
-      githubPat: "test-github-pat",
-    });
-    try {
-      const response = await harness.app.request(
-        "/api/v1/system/sandbox-backends",
-      );
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual([
-        {
-          available: true,
-          capabilities: {
-            supportsManagedClone: true,
-            supportsManagedWorktree: false,
-            supportsSuspend: true,
-          },
-          displayName: "E2B",
-          id: "e2b",
-        },
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("marks sandbox backends unavailable when BB_EXTERNAL_URL is unset", async () => {
-    const harness = await createTestAppHarness({
-      githubPat: "test-github-pat",
-      externalUrl: undefined,
-    });
-    try {
-      const response = await harness.app.request(
-        "/api/v1/system/sandbox-backends",
-      );
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual([
-        {
-          available: false,
-          capabilities: {
-            supportsManagedClone: true,
-            supportsManagedWorktree: false,
-            supportsSuspend: true,
-          },
-          displayName: "E2B",
-          id: "e2b",
-        },
-      ]);
     } finally {
       await harness.cleanup();
     }
@@ -1166,23 +1081,6 @@ describe("public environment and system routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-system-default-persistent",
       });
-      const sandboxHost = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-system-default",
-        id: "host-system-default-sandbox",
-        name: "Default Sandbox Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      openSession(harness.db, harness.hub, {
-        dataDir: "/tmp/bb-host-data/host-system-default-sandbox",
-        heartbeatIntervalMs: 5_000,
-        hostId: sandboxHost.id,
-        hostName: sandboxHost.name,
-        hostType: "ephemeral",
-        instanceId: "instance-system-default-sandbox",
-        leaseTimeoutMs: 30_000,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-      });
 
       const providersPromise = harness.app.request("/api/v1/system/providers");
       const providersCommand = await waitForQueuedCommand(
@@ -1223,101 +1121,9 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("allows explicit ephemeral host system provider lookups", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const sandboxHost = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-system-explicit",
-        id: "host-system-explicit-sandbox",
-        name: "Explicit Sandbox Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      openSession(harness.db, harness.hub, {
-        dataDir: "/tmp/bb-host-data/host-system-explicit-sandbox",
-        heartbeatIntervalMs: 5_000,
-        hostId: sandboxHost.id,
-        hostName: sandboxHost.name,
-        hostType: "ephemeral",
-        instanceId: "instance-system-explicit-sandbox",
-        leaseTimeoutMs: 30_000,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-      });
-      harness.deps.sandboxRegistry.set(sandboxHost.id, {
-        destroy: vi.fn().mockResolvedValue(undefined),
-        extendTimeout: vi.fn().mockResolvedValue(undefined),
-        externalId: sandboxHost.externalId ?? "sandbox-system-explicit",
-        hostId: sandboxHost.id,
-        resume: vi.fn().mockResolvedValue(undefined),
-        suspend: vi.fn().mockResolvedValue(undefined),
-      });
-
-      const providersPromise = harness.app.request(
-        `/api/v1/system/providers?hostId=${sandboxHost.id}`,
-      );
-      await reportNextRuntimeMaterialSyncSuccess(harness, {
-        hostId: sandboxHost.id,
-        hostType: "ephemeral",
-      });
-      const providersCommand = await waitForQueuedCommand(
-        harness,
-        (queued) =>
-          queued.command.type === "provider.list" &&
-          queued.row.hostId === sandboxHost.id,
-      );
-      await reportQueuedCommandSuccess(
-        harness,
-        providersCommand,
-        {
-          providers: [
-            {
-              id: "codex",
-              displayName: "Codex",
-              capabilities: {
-                supportsArchive: true,
-                supportsRename: true,
-                supportsServiceTier: true,
-                supportsUserQuestion: false,
-                supportedPermissionModes: [
-                  "full",
-                  "workspace-write",
-                  "readonly",
-                ],
-              },
-              available: true,
-            },
-          ],
-        },
-        { hostId: sandboxHost.id, hostType: "ephemeral" },
-      );
-
-      expect((await providersPromise).status).toBe(200);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("returns 502 when no persistent host is connected for default system provider lookup", async () => {
     const harness = await createTestAppHarness();
     try {
-      const sandboxHost = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-system-no-persistent",
-        id: "host-system-no-persistent-sandbox",
-        name: "Only Sandbox Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      openSession(harness.db, harness.hub, {
-        dataDir: "/tmp/bb-host-data/host-system-no-persistent-sandbox",
-        heartbeatIntervalMs: 5_000,
-        hostId: sandboxHost.id,
-        hostName: sandboxHost.name,
-        hostType: "ephemeral",
-        instanceId: "instance-system-no-persistent-sandbox",
-        leaseTimeoutMs: 30_000,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-      });
-
       const response = await harness.app.request("/api/v1/system/providers");
 
       expect(response.status).toBe(502);

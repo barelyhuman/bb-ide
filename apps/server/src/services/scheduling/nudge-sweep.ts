@@ -2,7 +2,7 @@ import {
   type DueManagerThreadNudgeCursor,
   listDueManagerThreadNudges,
 } from "@bb/db";
-import type { LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type { LoggedWorkSessionDeps } from "../../types.js";
 import {
   createNudgeSweepCache,
   DUE_NUDGE_BATCH_SIZE,
@@ -23,7 +23,7 @@ function nextDueNudgeCursor(
 }
 
 export async function sweepDueNudges(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: SweepDueNudgesArgs = {},
 ): Promise<void> {
   const now = args.now ?? Date.now();

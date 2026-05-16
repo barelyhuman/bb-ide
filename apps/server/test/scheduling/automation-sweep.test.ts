@@ -714,7 +714,7 @@ describe("automation sweep", () => {
               type: "host",
               hostId: host.id,
               workspace: {
-                type: "managed-clone",
+                type: "managed-worktree",
                 baseBranch: { kind: "default" },
               },
             },

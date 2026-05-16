@@ -1,16 +1,16 @@
-import {
-  isLocalPathProjectSource,
-  type LocalPathProjectSource,
-  type ProjectSource,
-} from "@bb/domain";
+import { type LocalPathProjectSource, type ProjectSource } from "@bb/domain";
 import { Icon } from "@/components/ui/icon.js";
 import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import { SettingsRow } from "@/components/ui/settings-section.js";
 import { Pill } from "@/components/ui/pill.js";
-import { GitHubIcon } from "@/components/icons/GitHubIcon";
 import { PersistentHostIconName } from "@/lib/host-display";
 import { Button } from "@/components/ui/button.js";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 
 interface ProjectSourceRowProps {
   source: ProjectSource;
@@ -33,27 +33,17 @@ export function ProjectSourceRow({
   onEditLocalPath,
   onRemove,
 }: ProjectSourceRowProps) {
-  const isLocalSource = isLocalPathProjectSource(source);
-
   return (
     <SettingsRow>
-      {isLocalSource ? (
-        <Icon
-          name={PersistentHostIconName}
-          className="size-4 shrink-0 text-muted-foreground"
-        />
-      ) : (
-        <GitHubIcon className="size-4 shrink-0" />
-      )}
+      <Icon
+        name={PersistentHostIconName}
+        className="size-4 shrink-0 text-muted-foreground"
+      />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="min-w-0 flex-shrink truncate">
-          {isLocalSource ? source.path : source.repoUrl}
+        <span className="min-w-0 flex-shrink truncate">{source.path}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {hostName}
         </span>
-        {isLocalSource ? (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {hostName}
-          </span>
-        ) : null}
         {isLocalhostSource ? (
           <span className="self-center">
             <LocalhostBadge />
@@ -75,7 +65,7 @@ export function ProjectSourceRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          {isLocalhostSource && isLocalSource ? (
+          {isLocalhostSource ? (
             <DropdownMenuItem
               disabled={isEditPending}
               onSelect={(event) => {

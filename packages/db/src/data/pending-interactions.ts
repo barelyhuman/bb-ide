@@ -1,13 +1,8 @@
-import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { PendingInteractionStatus } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import { createPendingInteractionId } from "../ids.js";
-import {
-  environments,
-  hosts,
-  pendingInteractions,
-  threads,
-} from "../schema.js";
+import { pendingInteractions } from "../schema.js";
 
 type PendingInteractionWriteConnection = DbConnection | DbTransaction;
 type PendingInteractionReadConnection = DbConnection | DbTransaction;
@@ -41,10 +36,6 @@ export interface ListPendingInteractionsByStatusArgs {
   limit?: number;
   offset?: number;
   statuses: readonly PendingInteractionStatus[];
-}
-
-export interface IsThreadOnEphemeralHostArgs {
-  threadId: string;
 }
 
 export interface SetPendingInteractionTerminalStateArgs {
@@ -289,51 +280,6 @@ export function listPendingInteractionsByStatus(
       : query.limit(args.limit);
 
   return limitedQuery.all();
-}
-
-export function listPendingInteractionsOnEphemeralHosts(
-  db: PendingInteractionReadConnection,
-  args: Omit<ListPendingInteractionsByStatusArgs, "statuses">,
-): PendingInteractionRow[] {
-  const query = db
-    .select(getTableColumns(pendingInteractions))
-    .from(pendingInteractions)
-    .innerJoin(threads, eq(threads.id, pendingInteractions.threadId))
-    .innerJoin(environments, eq(environments.id, threads.environmentId))
-    .innerJoin(hosts, eq(hosts.id, environments.hostId))
-    .where(
-      and(
-        eq(pendingInteractions.status, "pending"),
-        eq(hosts.type, "ephemeral"),
-      ),
-    )
-    .orderBy(desc(pendingInteractions.createdAt));
-
-  if (args.limit === undefined) {
-    return query.all();
-  }
-
-  const limitedQuery =
-    args.offset !== undefined
-      ? query.limit(args.limit).offset(args.offset)
-      : query.limit(args.limit);
-
-  return limitedQuery.all();
-}
-
-export function isThreadOnEphemeralHost(
-  db: PendingInteractionReadConnection,
-  args: IsThreadOnEphemeralHostArgs,
-): boolean {
-  const row = db
-    .select({ threadId: threads.id })
-    .from(threads)
-    .innerJoin(environments, eq(environments.id, threads.environmentId))
-    .innerJoin(hosts, eq(hosts.id, environments.hostId))
-    .where(and(eq(threads.id, args.threadId), eq(hosts.type, "ephemeral")))
-    .get();
-
-  return row !== undefined;
 }
 
 export function setPendingInteractionResolved(

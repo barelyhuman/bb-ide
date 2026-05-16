@@ -153,7 +153,7 @@ export async function startHostDaemon(
           component: "host-daemon",
           base: { serverUrl },
           dataDir,
-          transportMode: hostType === "ephemeral" ? "stream" : "worker",
+          transportMode: "worker",
         }),
       releaseLock,
       localApiConfig,

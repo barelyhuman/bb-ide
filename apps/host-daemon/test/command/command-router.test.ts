@@ -3,11 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
 import {
-  readRuntimeMaterialState,
-  writeRuntimeMaterialState,
-} from "@bb/host-runtime-material";
-import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
-import {
   encodeClientTurnRequestIdNumber,
   type ClientTurnRequestId,
 } from "@bb/domain";
@@ -283,87 +278,6 @@ describe("CommandRouter", () => {
     );
   });
 
-  it("applies runtime material with real state persistence and evicts idle environments", async () => {
-    const dataDir = await makeTempDir("bb-command-router-state-");
-    const homeDir = await makeTempDir("bb-command-router-home-");
-    vi.spyOn(os, "homedir").mockReturnValue(homeDir);
-
-    const workspace = createFakeWorkspace("/tmp/env-1");
-    const runtime = createFakeRuntime();
-    const manager = new RuntimeManager({
-      provisionWorkspace: async () => workspace,
-      createRuntime: () => runtime,
-    });
-    await manager.ensureEnvironment({
-      environmentId: "env-1",
-      workspacePath: "/tmp/env-1",
-    });
-
-    const snapshot: HostRuntimeMaterialSnapshot = {
-      env: {
-        PI_CODING_AGENT_DIR: "~/.pi/agent",
-      },
-      files: [
-        {
-          contents: "{}\n",
-          managedBy: "bb-runtime-material",
-          mode: 0o600,
-          path: "~/.codex/auth.json",
-        },
-      ],
-      version: "runtime-version-1",
-    };
-    const reportResult = vi.fn(async () => undefined);
-    const router = new CommandRouter({
-      dataDir: "/tmp/bb-test-data",
-      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: async () => snapshot,
-      readPersistedRuntimeMaterial: async () =>
-        readRuntimeMaterialState(dataDir),
-      persistRuntimeMaterial: async (nextSnapshot) =>
-        writeRuntimeMaterialState(dataDir, nextSnapshot),
-      reportResult,
-      runtimeManager: manager,
-      eventSink: noopEventSink,
-      threadStorageRootPath: "/tmp/bb-test-thread-storage",
-      logger: createLogger(),
-    });
-
-    expect(manager.get("env-1")).toBeDefined();
-
-    await router.handleCommands([
-      {
-        id: "runtime-sync",
-        cursor: 1,
-        command: {
-          type: "host.sync_runtime_material",
-          version: "runtime-version-1",
-        },
-      },
-    ]);
-
-    expect(manager.get("env-1")).toBeUndefined();
-    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
-    await expect(readRuntimeMaterialState(dataDir)).resolves.toEqual({
-      files: [
-        {
-          managedBy: "bb-runtime-material",
-          path: "~/.codex/auth.json",
-        },
-      ],
-      version: "runtime-version-1",
-    });
-    await expect(
-      fs.readFile(path.join(homeDir, ".codex", "auth.json"), "utf8"),
-    ).resolves.toBe("{}\n");
-    expect(reportResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        commandId: "runtime-sync",
-        ok: true,
-      }),
-    );
-  });
-
   it("does not flush unrelated buffered events before reporting read-only workspace command results", async () => {
     const calls: string[] = [];
     const flushDeferred = createDeferred<void>();
@@ -388,9 +302,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: async () => null,
-      persistRuntimeMaterial: async () => undefined,
       reportResult,
       runtimeManager: manager,
       eventSink,
@@ -426,9 +337,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: async () => null,
-      persistRuntimeMaterial: async () => undefined,
       reportResult,
       runtimeManager: new RuntimeManager({
         provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
@@ -471,9 +379,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: async () => null,
-      persistRuntimeMaterial: async () => undefined,
       reportResult,
       runtimeManager: new RuntimeManager({
         provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
@@ -527,9 +432,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: async () => null,
-      persistRuntimeMaterial: async () => undefined,
       reportResult,
       runtimeManager: new RuntimeManager({
         provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
@@ -561,78 +463,6 @@ describe("CommandRouter", () => {
     expect(eventSink.flush).toHaveBeenCalledTimes(1);
   });
 
-  it("serializes host runtime material commands", async () => {
-    const manager = new RuntimeManager({
-      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
-      createRuntime: () => createFakeRuntime(),
-    });
-    const firstFetch = createDeferred<{
-      env: Record<string, string>;
-      files: Array<{
-        contents: string;
-        managedBy: "bb-runtime-material";
-        mode: 0o600;
-        path: string;
-      }>;
-      version: string;
-    }>();
-    const fetchRuntimeMaterial = vi
-      .fn()
-      .mockReturnValueOnce(firstFetch.promise)
-      .mockResolvedValueOnce({
-        env: {},
-        files: [],
-        version: "runtime-version-2",
-      });
-    const router = new CommandRouter({
-      dataDir: "/tmp/bb-test-data",
-      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial,
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
-      runtimeManager: manager,
-      eventSink: noopEventSink,
-      threadStorageRootPath: "/tmp/bb-test-thread-storage",
-      logger: createLogger(),
-    });
-
-    const handling = router.handleCommands([
-      {
-        id: "runtime-sync-1",
-        cursor: 1,
-        command: {
-          type: "host.sync_runtime_material",
-          version: "runtime-version-1",
-        },
-      },
-      {
-        id: "runtime-sync-2",
-        cursor: 2,
-        command: {
-          type: "host.sync_runtime_material",
-          version: "runtime-version-2",
-        },
-      },
-    ]);
-
-    await vi.waitFor(() => {
-      expect(fetchRuntimeMaterial).toHaveBeenCalledTimes(1);
-    });
-    expect(fetchRuntimeMaterial).not.toHaveBeenCalledWith("runtime-version-2");
-
-    firstFetch.resolve({
-      env: {},
-      files: [],
-      version: "runtime-version-1",
-    });
-
-    await vi.waitFor(() => {
-      expect(fetchRuntimeMaterial).toHaveBeenCalledWith("runtime-version-2");
-    });
-
-    await handling;
-  });
-
   it("waits for an in-flight write before starting a read for the same environment", async () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const commitDeferred = createDeferred<{
@@ -653,9 +483,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -721,9 +548,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -811,9 +635,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -920,9 +741,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1034,9 +852,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1114,9 +929,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1214,9 +1026,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1310,9 +1119,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1395,9 +1201,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1454,9 +1257,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -1527,9 +1327,6 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      fetchRuntimeMaterial: vi.fn(),
-      readPersistedRuntimeMaterial: vi.fn(async () => null),
-      persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
       eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",

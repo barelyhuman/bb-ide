@@ -7,9 +7,9 @@ function makeHost(overrides: Partial<Host> = {}): Host {
     createdAt: 1,
     id: "host-1",
     lastSeenAt: 1,
-    name: "Sandbox Host",
+    name: "Host",
     status: "connected",
-    type: "ephemeral",
+    type: "persistent",
     updatedAt: 1,
     ...overrides,
   };
@@ -34,12 +34,12 @@ describe("getEffectiveHost", () => {
     ).toBe("disconnected");
   });
 
-  it("preserves non-connected host statuses while reconnecting", () => {
+  it("preserves disconnected hosts while reconnecting", () => {
     expect(
       getEffectiveHost({
-        host: makeHost({ status: "suspended" }),
+        host: makeHost({ status: "disconnected" }),
         serverConnectionState: "reconnecting",
       }).status,
-    ).toBe("suspended");
+    ).toBe("disconnected");
   });
 });

@@ -2,7 +2,6 @@ import { and, eq } from "drizzle-orm";
 import {
   events,
   getEnvironment,
-  getHost,
   listStoredThreadProvisioningRowsByProvisioningId,
   getThread,
   getThreadOperation,
@@ -39,12 +38,6 @@ import {
   hasActiveEnvironmentProvisionOperationForCommand,
   recordEnvironmentProvisioningFailureInTransaction,
 } from "../services/environments/environment-provisioning.js";
-import { destroyEphemeralHostIfReady } from "../services/hosts/host-lifecycle.js";
-import {
-  completeSandboxRuntimeMaterialSyncForCommand,
-  failSandboxRuntimeMaterialSyncForCommand,
-  hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
-} from "../services/hosts/sandbox-runtime-material-operation.js";
 import { queueThreadRenameCommandInTransaction } from "../services/threads/thread-commands.js";
 import {
   appendThreadProvisioningEventInTransaction,
@@ -525,33 +518,6 @@ function handleEnvironmentDestroyResult(
         environmentId: environment.id,
       }),
   });
-
-  const host = getHost(args.deps.db, environment.hostId);
-  if (host?.type !== "ephemeral") {
-    return { postCommitActions };
-  }
-
-  postCommitActions.push({
-    name: "Ephemeral sandbox host cleanup after environment destroy",
-    context: {
-      environmentId: environment.id,
-      hostId: host.id,
-    },
-    run: async (deps) => {
-      try {
-        await destroyEphemeralHostIfReady(deps, host.id);
-      } catch (error) {
-        deps.logger.warn(
-          {
-            environmentId: environment.id,
-            err: error,
-            hostId: host.id,
-          },
-          "Ephemeral sandbox host cleanup failed after environment destroy",
-        );
-      }
-    },
-  });
   return { postCommitActions };
 }
 
@@ -735,42 +701,12 @@ function handleWorkspaceMutationResult(
   deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 }
 
-function handleSandboxRuntimeMaterialResult(
-  args: ApplyCommandResultSideEffectsArgs<"host.sync_runtime_material">,
-): void {
-  if (
-    !hasActiveSandboxRuntimeMaterialSyncOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return;
-  }
-
-  if (!args.report.ok) {
-    failSandboxRuntimeMaterialSyncForCommand(args.deps, {
-      commandId: args.commandRow.id,
-      completedAt: args.report.completedAt,
-      failureReason: args.report.errorMessage,
-    });
-    return;
-  }
-
-  completeSandboxRuntimeMaterialSyncForCommand(args.deps, {
-    appliedVersion: args.report.result.appliedVersion,
-    commandId: args.commandRow.id,
-    completedAt: args.report.completedAt,
-  });
-}
-
 const commandResultOwners: CommandResultOwnerRegistry = {
   "environment.destroy": defineCommandResultOwner({
     applySideEffects: handleEnvironmentDestroyResult,
   }),
   "environment.provision": defineCommandResultOwner({
     applySideEffects: handleProvisionCommandResult,
-  }),
-  "host.sync_runtime_material": defineCommandResultOwner({
-    applySideEffects: handleSandboxRuntimeMaterialResult,
   }),
   "host.list_branches": null,
   "host.list_files": null,

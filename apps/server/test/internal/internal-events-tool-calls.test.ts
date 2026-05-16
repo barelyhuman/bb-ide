@@ -1,10 +1,7 @@
 import { eq } from "drizzle-orm";
-import { events, getHost, openSession, threads, upsertHost } from "@bb/db";
+import { events, threads } from "@bb/db";
 import { turnScope } from "@bb/domain";
-import {
-  HOST_DAEMON_PROTOCOL_VERSION,
-  type HostDaemonEventEnvelope,
-} from "@bb/host-daemon-contract";
+import type { HostDaemonEventEnvelope } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
@@ -280,69 +277,6 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
-  it("marks ephemeral sandbox hosts active when they send event batches", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const host = upsertHost(harness.db, harness.hub, {
-        id: "host-event-activity",
-        name: "Event Activity Host",
-        type: "ephemeral",
-      });
-      const session = openSession(harness.db, harness.hub, {
-        heartbeatIntervalMs: 5_000,
-        hostId: host.id,
-        hostName: host.name,
-        hostType: host.type,
-        instanceId: "instance-event-activity",
-        leaseTimeoutMs: 30_000,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        dataDir: "/tmp/bb-test-data",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness, {
-          hostId: host.id,
-          hostType: "ephemeral",
-        }),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              producerEventId: "hdevt_23456789abcdefghijks",
-              threadId: thread.id,
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-event-activity",
-                scope: turnScope("turn-event-activity"),
-              },
-            },
-          ],
-        }),
-      });
-
-      expect(response.status).toBe(200);
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
-        expect.any(Number),
-      );
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("does not reactivate a thread when a started/completed batch is replayed", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -415,20 +349,8 @@ describe("internal event and tool-call routes", () => {
   it("rejects unsupported tool calls", async () => {
     const harness = await createTestAppHarness();
     try {
-      const host = upsertHost(harness.db, harness.hub, {
-        id: "host-tool-call-activity",
-        name: "Tool Call Host",
-        type: "ephemeral",
-      });
-      const session = openSession(harness.db, harness.hub, {
-        heartbeatIntervalMs: 5_000,
-        hostId: host.id,
-        hostName: host.name,
-        hostType: host.type,
-        instanceId: "instance-tool-call-activity",
-        leaseTimeoutMs: 30_000,
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        dataDir: "/tmp/bb-test-data",
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-tool-call-unsupported",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -467,10 +389,6 @@ describe("internal event and tool-call routes", () => {
           { type: "inputText", text: "Unsupported tool: spawn_thread" },
         ],
       });
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
-        expect.any(Number),
-      );
-
       const childThreads = harness.db
         .select()
         .from(threads)

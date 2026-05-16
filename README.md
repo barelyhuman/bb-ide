@@ -140,7 +140,7 @@ These reset commands prompt for confirmation before deleting anything.
 | Component       | Role                                                                                                                                                                                                                                                                                                                      |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Server**      | Central hub. Stores all state in a SQLite database, exposes an HTTP API, and pushes change notifications over WebSocket. Stateless itself — the DB is the source of truth. Routes work to hosts by queuing commands.                                                                                                      |
-| **Host daemon** | Runs on each machine (your laptop, a cloud sandbox, a remote server). Connects to the server, picks up commands, provisions workspaces, runs agent provider processes, and streams events back. Exposes a local HTTP API for the app and CLI to do machine-local things (open editor, pick folders, check daemon status). |
+| **Host daemon** | Runs on each machine (your laptop or a remote server). Connects to the server, picks up commands, provisions workspaces, runs agent provider processes, and streams events back. Exposes a local HTTP API for the app and CLI to do machine-local things (open editor, pick folders, check daemon status). |
 | **App**         | Web UI for inspecting projects and threads, following progress, and steering work.                                                                                                                                                                                                                                        |
 | **CLI** (`bb`)  | First-class interface for both users and agents. Same capabilities as the app, scriptable.                                                                                                                                                                                                                                |
 
@@ -152,13 +152,13 @@ WebSocket connections never carry data payloads. They send lightweight change hi
 
 The core entities and how they relate:
 
-**Project** — the top-level container, usually mapped to a repository. A project has one or more **sources** that say where its code lives — either a local path on a specific host, or a GitHub repository URL.
+**Project** — the top-level container, usually mapped to a repository. A project has one or more **sources** that say where its code lives: local paths on specific hosts.
 
 **Thread** — the unit of work. Each thread tracks a conversation with an agent provider, has lifecycle state, and produces an append-only stream of **events** (messages, tool calls, file changes, etc.). Threads can be **standard** (does work directly) or **manager** (coordinates other threads). Threads can own child threads for delegation.
 
 **Environment** — the execution context for a thread. It binds a workspace (a directory on disk) to a host. An environment can be **unmanaged** (point at an existing directory), or **managed**. Environments managed by bb will be cleaned up when there are no longer any unarchived threads using it. Multiple threads can share an environment.
 
-**Host** — a machine that runs a daemon. **Persistent** hosts are long-lived (your laptop, remote server etc). **Ephemeral** hosts are cloud sandboxes (eg. E2B / Daytona etc) that the server provisions on demand and can suspend/resume/destroy.
+**Host** — a long-lived machine that runs a daemon, such as your laptop or a remote server.
 
 **Commands and events** — the server talks to daemons by queuing commands (provision an environment, start a thread, stop a thread). Daemons report back by posting events. This is an asynchronous command/event protocol — the server queues work, the daemon picks it up, results flow back as events.
 

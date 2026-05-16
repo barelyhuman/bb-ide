@@ -31,8 +31,7 @@ const USAGE: Partial<Record<IconName, string>> = {
     "Thread row busy spinner, manager-children busy section indicator",
   CircleX: "Auth callback failure state",
   Columns2: "Git diff toolbar “split view”",
-  Container:
-    "Sandbox/ephemeral host icon (resolved via getHostIconName / environment helpers)",
+  Container: "Container icon",
   Copy: "CopyButton, metadata-value copy buttons",
   CornerDownLeft: "Mod+Enter submit hint in prompt footer",
   CornerDownRight:
@@ -40,10 +39,8 @@ const USAGE: Partial<Record<IconName, string>> = {
   Edit: "Rename project, edit queued message, edit project source",
   ExternalLink: "FilePathLink external indicator",
   FileDiff: "Secondary panel diff tab, thread changes banner section",
-  FileQuestion:
-    "FilePreview empty state (passed via local iconName variable)",
-  FileX2:
-    "FilePreview missing-file state (passed via local iconName variable)",
+  FileQuestion: "FilePreview empty state (passed via local iconName variable)",
+  FileX2: "FilePreview missing-file state (passed via local iconName variable)",
   Folder: "EmptyState “no projects”, sidebar project row when collapsed",
   FolderOpen: "Sidebar project row when expanded",
   FolderPlus: "(currently unused — was Add local path in project actions menu)",
@@ -71,8 +68,7 @@ const USAGE: Partial<Record<IconName, string>> = {
   Settings: "App settings link in sidebar, project settings link in header",
   Spinner: "All loading / pending states",
   Square: "Stop button while running, in-progress and pending todo glyphs",
-  Trash2:
-    "Delete queued message, remove project source, delete replay capture",
+  Trash2: "Delete queued message, remove project source, delete replay capture",
   UserRound:
     "Manager indicator in sidebar, “Managed by” indicators in prompt banner",
   UserRoundPlus: "“New Manager” button in sidebar",

@@ -21,7 +21,6 @@ import {
   hostDaemonCommandEnvelopeSchema,
   workspaceContextSchema,
 } from "./commands.js";
-import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
 const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
 export const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
@@ -94,14 +93,6 @@ export const hostDaemonCommandsQuerySchema = z.object({
 });
 export type HostDaemonCommandsQuery = z.infer<
   typeof hostDaemonCommandsQuerySchema
->;
-
-export const hostDaemonRuntimeMaterialQuerySchema = z.object({
-  sessionId: z.string().min(1),
-  version: hostRuntimeMaterialSnapshotSchema.shape.version,
-});
-export type HostDaemonRuntimeMaterialQuery = z.infer<
-  typeof hostDaemonRuntimeMaterialQuerySchema
 >;
 
 export const hostDaemonProjectAttachmentContentQuerySchema = z.object({
@@ -484,14 +475,6 @@ export type HostDaemonInternalSchema = {
           200
         >
       | Endpoint<{ query: HostDaemonCommandsQuery }, undefined, 204>;
-  };
-  "/session/runtime-material": {
-    /** Used by the daemon to fetch the current authoritative runtime material snapshot for an expected version. */
-    $get: Endpoint<
-      { query: HostDaemonRuntimeMaterialQuery },
-      z.infer<typeof hostRuntimeMaterialSnapshotSchema>,
-      200
-    >;
   };
   "/session/project-attachment-content": {
     /** Used by the daemon to fetch uploaded prompt attachment bytes for a specific thread. */

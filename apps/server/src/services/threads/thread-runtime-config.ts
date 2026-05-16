@@ -20,10 +20,7 @@ import type {
 import { renderTemplate } from "@bb/templates";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
-import type {
-  AppDeps,
-  LoggedSandboxWorkSessionDeps,
-} from "../../types.js";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
@@ -129,7 +126,7 @@ function requireWorkspacePath(
 }
 
 async function readManagerPreferences(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: ReadManagerPreferencesArgs,
 ): Promise<string> {
   try {
@@ -245,7 +242,7 @@ export async function resolveExecutionOptions(
 }
 
 export async function resolveThreadRuntimeCommandConfig(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: ResolveThreadRuntimeCommandConfigArgs,
 ): Promise<ResolvedThreadRuntimeCommandConfig> {
   const workspacePath = requireWorkspacePath(args.environment);

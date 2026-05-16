@@ -16,12 +16,10 @@ import {
   allThreadStorageFilePreviewQueryKeyPrefix,
   allThreadStorageFilesQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
-  cloudAuthSettingsQueryKey,
   hostsQueryKey,
   localPathExistenceQueryKeyPrefix,
   projectsQueryKey,
   replayCapturesQueryKey,
-  sandboxEnvVarsQueryKey,
   systemProvidersQueryKey,
   threadsQueryKey,
 } from "./queries/query-keys";
@@ -75,18 +73,6 @@ export function invalidateHostDeleteDependentQueries({
 }: QueryClientArg): void {
   invalidateHostAvailabilityQueries({ queryClient });
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-}
-
-export function invalidateCloudAuthSettings({
-  queryClient,
-}: QueryClientArg): void {
-  queryClient.invalidateQueries({ queryKey: cloudAuthSettingsQueryKey() });
-}
-
-export function invalidateSandboxEnvVars({
-  queryClient,
-}: QueryClientArg): void {
-  queryClient.invalidateQueries({ queryKey: sandboxEnvVarsQueryKey() });
 }
 
 export function invalidateReplayCaptures({

@@ -17,15 +17,10 @@ const localHostTarget: ProjectSourceDeleteDialogTarget = {
   label: HOST_NAMES.local,
 };
 
-const githubTarget: ProjectSourceDeleteDialogTarget = {
-  id: "src_github",
-  label: "https://github.com/anthropics/bb",
-};
-
 const longTarget: ProjectSourceDeleteDialogTarget = {
   id: "src_long",
   label:
-    "https://github.com/anthropics/internal-tooling-ingest-pipeline-rewrite-2026",
+    "/Users/michael/projects/internal-tooling-ingest-pipeline-rewrite-2026",
 };
 
 export function Overview() {
@@ -44,20 +39,8 @@ export function Overview() {
         </DialogStage>
       </StoryRow>
       <StoryRow
-        label="github source"
-        hint="github_repo source — label is the repo URL"
-      >
-        <DialogStage>
-          <ProjectSourceDeleteDialogContent
-            target={githubTarget}
-            pending={false}
-            onDelete={noop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
         label="long label"
-        hint="quoted URL expands inline inside the description"
+        hint="long local path expands inline inside the description"
       >
         <DialogStage>
           <ProjectSourceDeleteDialogContent
@@ -70,7 +53,7 @@ export function Overview() {
       <StoryRow label="pending" hint="destructive button disabled">
         <DialogStage>
           <ProjectSourceDeleteDialogContent
-            target={githubTarget}
+            target={localHostTarget}
             pending
             onDelete={noop}
           />

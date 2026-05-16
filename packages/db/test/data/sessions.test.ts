@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
@@ -15,7 +16,6 @@ import {
 } from "../../src/data/sessions.js";
 import { getHost, upsertHost } from "../../src/data/hosts.js";
 import { hostDaemonSessions } from "../../src/schema.js";
-import { eq } from "drizzle-orm";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -339,44 +339,6 @@ describe("sessions", () => {
 
     expect(listConnectedHostIds(db)).toEqual([otherHost.id]);
     expect(getMostRecentlyUpdatedConnectedHostId(db)).toBe(otherHost.id);
-  });
-
-  it("can restrict the most recently updated connected host by host type", () => {
-    const { db, host } = setup();
-    const sandboxHost = upsertHost(db, noopNotifier, {
-      name: "sandbox-host",
-      type: "ephemeral",
-    });
-
-    openSession(db, noopNotifier, {
-      hostId: host.id,
-      instanceId: "inst-persistent",
-      hostName: "test-host",
-      hostType: "persistent",
-      dataDir: "/tmp/test-host-data",
-      protocolVersion: 1,
-      heartbeatIntervalMs: 10_000,
-      leaseTimeoutMs: 30_000,
-    });
-    const sandboxSession = openSession(db, noopNotifier, {
-      hostId: sandboxHost.id,
-      instanceId: "inst-sandbox",
-      hostName: "sandbox-host",
-      hostType: "ephemeral",
-      dataDir: "/tmp/test-sandbox-data",
-      protocolVersion: 1,
-      heartbeatIntervalMs: 10_000,
-      leaseTimeoutMs: 30_000,
-    });
-    db.update(hostDaemonSessions)
-      .set({ updatedAt: sandboxSession.updatedAt + 1_000 })
-      .where(eq(hostDaemonSessions.id, sandboxSession.id))
-      .run();
-
-    expect(getMostRecentlyUpdatedConnectedHostId(db)).toBe(sandboxHost.id);
-    expect(
-      getMostRecentlyUpdatedConnectedHostId(db, { hostType: "persistent" }),
-    ).toBe(host.id);
   });
 
   it("does not overwrite an already closed session", () => {

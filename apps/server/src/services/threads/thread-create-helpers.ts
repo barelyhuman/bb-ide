@@ -107,7 +107,7 @@ export type EnvironmentProvisionCommandArgs =
       checkout?: UnmanagedCheckoutCommand;
     }
   | {
-      workspaceProvisionType: "managed-worktree" | "managed-clone";
+      workspaceProvisionType: "managed-worktree";
       environmentId: string;
       hostId: string;
       initiator: EnvironmentProvisionCommandInitiator;

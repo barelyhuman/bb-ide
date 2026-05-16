@@ -7,7 +7,6 @@ import {
   getDefaultProjectSource,
   getProjectSourceByHost,
   getProjectSourceForProject,
-  listProjectSources,
   listPublicProjects,
   listProjectSourcesByProjectIds,
   listThreads,
@@ -63,7 +62,6 @@ import {
   beginProjectDeletion,
   requestProjectDeletionAdvance,
 } from "../services/projects/project-deletion.js";
-import { fetchGithubBranches } from "../services/github/branches.js";
 import { listProjectPromptHistory } from "../services/prompt-history.js";
 
 function buildProjectResponses(
@@ -345,15 +343,10 @@ export function registerProjectRoutes(app: Hono, deps: ServerAppDeps): void {
         deps.db,
         deps.hub,
         context.req.param("sourceId"),
-        payload.type === "local_path"
-          ? {
-              ...(payload.path ? { path: payload.path } : {}),
-              ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
-            }
-          : {
-              ...(payload.repoUrl ? { repoUrl: payload.repoUrl } : {}),
-              ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
-            },
+        {
+          ...(payload.path ? { path: payload.path } : {}),
+          ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
+        },
       );
       if (!source) {
         throw new ApiError(404, "invalid_request", "Project source not found");
@@ -458,34 +451,6 @@ export function registerProjectRoutes(app: Hono, deps: ServerAppDeps): void {
       });
     },
   );
-
-  get("/projects/:id/github-branches", async (context) => {
-    const projectId = context.req.param("id");
-    requirePublicProject(deps.db, projectId);
-
-    if (!deps.config.githubPat) {
-      throw new ApiError(
-        501,
-        "not_configured",
-        "GitHub PAT is not configured",
-      );
-    }
-
-    const githubSource = listProjectSources(deps.db, projectId).find(
-      (source) => source.type === "github_repo",
-    );
-    if (!githubSource || githubSource.type !== "github_repo") {
-      throw new ApiError(
-        404,
-        "invalid_request",
-        "Project has no GitHub source",
-      );
-    }
-
-    return context.json(
-      await fetchGithubBranches(deps.config.githubPat, githubSource.repoUrl),
-    );
-  });
 
   post("/projects/:id/attachments", async (context) => {
     requirePublicProject(deps.db, context.req.param("id"));

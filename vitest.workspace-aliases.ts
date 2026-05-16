@@ -8,10 +8,6 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/agent-providers/src/index.ts",
   ),
-  "@bb/agent-provider-auth": path.resolve(
-    repoRoot,
-    "packages/agent-provider-auth/src/index.ts",
-  ),
   "@bb/secret-storage": path.resolve(
     repoRoot,
     "packages/secret-storage/src/index.ts",
@@ -64,10 +60,6 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/host-daemon-contract/src/index.ts",
   ),
-  "@bb/host-runtime-material": path.resolve(
-    repoRoot,
-    "packages/host-runtime-material/src/index.ts",
-  ),
   "@bb/host-workspace": path.resolve(
     repoRoot,
     "packages/host-workspace/src/index.ts",
@@ -90,10 +82,6 @@ export const workspaceTestAliases = {
   "@bb/agent-fixtures/load-browser": path.resolve(
     repoRoot,
     "packages/agent-fixtures/src/load-browser.ts",
-  ),
-  "@bb/sandbox-host": path.resolve(
-    repoRoot,
-    "packages/sandbox-host/src/index.ts",
   ),
   "@bb/config/server": path.resolve(repoRoot, "packages/config/src/server.ts"),
   "@bb/server-contract": path.resolve(

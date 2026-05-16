@@ -1,9 +1,6 @@
 import type { HostType } from "@bb/domain";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
 import {
-  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
-  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
-  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
   DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
@@ -33,18 +30,8 @@ export interface ResolveHostDaemonLocalApiConfigArgs {
 }
 
 function getHostDaemonLocalApiDefaults(
-  hostType: HostType,
+  _hostType: HostType,
 ): HostDaemonLocalApiConfig {
-  if (hostType === "ephemeral") {
-    return {
-      bindHost: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
-      healthPath: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
-      healthValue: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
-      mode: "health-only",
-      port: DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
-    };
-  }
-
   return {
     bindHost: DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
     healthPath: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,

@@ -11,15 +11,9 @@ import {
 } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
-import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
-import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
-import {
-  DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
-  PendingInteractionLifecycle,
-} from "../../src/services/interactions/pending-interactions.js";
+import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
-import { createSandboxEnvService } from "../../src/services/sandbox-env/service.js";
 import { TerminalSessionLifecycle } from "../../src/services/terminals/terminal-session-lifecycle.js";
 import { createLifecycleDedupers } from "../../src/lifecycle-dedupers.js";
 import type { ServerAppDeps, ServerRuntimeConfig } from "../../src/types.js";
@@ -77,10 +71,7 @@ function decodeTestDaemonKey(token: string): TestDaemonKeyParts | null {
 
   const hostType = parts[1];
   const hostId = parts[2];
-  if (
-    (hostType !== "persistent" && hostType !== "ephemeral") ||
-    hostId.length === 0
-  ) {
+  if (hostType !== "persistent" || hostId.length === 0) {
     return null;
   }
 
@@ -121,7 +112,6 @@ export async function createTestAppHarness(
     db,
     hub,
     logger: testLogger,
-    sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   const terminalSessions = new TerminalSessionLifecycle({
     attachTimeoutMs: 50,
@@ -131,7 +121,6 @@ export async function createTestAppHarness(
     openTimeoutMs: 50,
   });
   pendingInteractions.start();
-  const sandboxRegistry = createSandboxHostRegistry();
   const lifecycleDedupers = createLifecycleDedupers();
   const machineAuth = await createMachineAuthService({
     dataDir,
@@ -152,36 +141,18 @@ export async function createTestAppHarness(
       return machineAuth.verifyDaemonHostKey(token);
     },
   };
-  const cloudAuth = await createCloudAuthService({
-    dataDir,
-    db,
-    logger: testLogger,
-  });
-  const sandboxEnv = await createSandboxEnvService({
-    dataDir,
-    db,
-    logger: testLogger,
-  });
   const config: ServerRuntimeConfig = {
-    anthropicApiKey: "",
     dataDir,
-    e2bApiKey: "test-e2b-api-key",
-    e2bTemplate: "test-e2b-template",
     featureFlags: resolveTestFeatureFlags(featureFlagOverrides),
-    githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     isDevelopment: true,
     openAiApiKey: "test-openai-key",
     serverPort: 3334,
     appUrl: "https://bb.example.test",
-    externalUrl: "https://bb.example.test",
-    sandboxActivityExtensionDebounceMs: 30_000,
-    sandboxIdleThresholdMs: 300_000,
     ...configOverrides,
   };
   const deps: ServerAppDeps = {
-    cloudAuth,
     config,
     db,
     hostLifecycle,
@@ -189,9 +160,7 @@ export async function createTestAppHarness(
     lifecycleDedupers,
     logger: testLogger,
     machineAuth: testMachineAuth,
-    sandboxEnv,
     pendingInteractions,
-    sandboxRegistry,
     terminalSessions,
   };
   const { app } = createApp(deps);
@@ -203,7 +172,6 @@ export async function createTestAppHarness(
     deps,
     hub,
     async cleanup(): Promise<void> {
-      await cloudAuth.dispose();
       hostLifecycle.dispose();
       await rm(dataDir, { recursive: true, force: true });
     },

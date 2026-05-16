@@ -4,13 +4,13 @@ import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 
 export interface ThreadEnvironmentSummaryProps {
-  /** Mode label (e.g. "Working locally" / "Worktree" / "E2B Sandbox"). Never truncates. */
+  /** Mode label (e.g. "Working locally" / "Worktree"). Never truncates. */
   environmentLabel?: string;
   /** Remote host name shown after the mode label as a muted suffix. Hidden below `lg`. */
   environmentHostLabel?: string;
   /** Whether the host backing the environment is connected. */
   environmentHostConnected?: boolean;
-  /** Icon for the environment (e.g. monitor / container). */
+  /** Icon for the environment (e.g. monitor / git branch). */
   environmentIcon?: IconName;
   /** Branch name if the environment runs on a worktree. Renders a copy-to-clipboard button. */
   environmentBranchName?: string;

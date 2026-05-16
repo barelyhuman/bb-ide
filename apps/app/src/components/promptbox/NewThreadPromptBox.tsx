@@ -1,11 +1,5 @@
-import { useAtomValue } from "jotai";
 import { useRef } from "react";
-import {
-  isGitHubRepoProjectSource,
-  type Host,
-  type ProjectSource,
-  type SandboxBackendInfo,
-} from "@bb/domain";
+import type { Host, ProjectSource } from "@bb/domain";
 import {
   ExecutionControls,
   type ExecutionControlsProps,
@@ -27,18 +21,13 @@ import {
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
-import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 
 export interface NewThreadEnvironmentConfig {
   value: string;
   onChange: (value: string) => void;
-  projectId: string | null;
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
-  sandboxBackends: readonly SandboxBackendInfo[];
-  sandboxHostSupported: boolean;
   isLocalHost: EnvironmentPickerUIProps["isLocalHost"];
 }
 
@@ -52,7 +41,7 @@ export interface NewThreadBranchConfig {
   onOpenChange?: (open: boolean) => void;
   /**
    * When provided, the picker exposes a "Create new branch" item. Only set
-   * for `host:local` (work locally / remotely) — managed-worktree and sandbox
+   * for `host:local` (work locally / remotely) — managed-worktree
    * select an existing branch to use as the merge base.
    */
   onCreate?: () => void;
@@ -105,10 +94,7 @@ export function NewThreadPromptBoxUI({
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
   const parsedEnvironment = parseEnvironmentValue(environment.value);
-  const showBranchPicker =
-    parsedEnvironment?.type === "host" ||
-    (parsedEnvironment?.type === "sandbox" &&
-      environment.sources.some(isGitHubRepoProjectSource));
+  const showBranchPicker = parsedEnvironment?.type === "host";
   return (
     <>
       <PromptBoxInternal
@@ -139,11 +125,8 @@ export function NewThreadPromptBoxUI({
           <EnvironmentPickerUI
             value={environment.value}
             onChange={environment.onChange}
-            projectId={environment.projectId}
             sources={environment.sources}
             hosts={environment.hosts}
-            sandboxBackends={environment.sandboxBackends}
-            sandboxHostSupported={environment.sandboxHostSupported}
             isLocalHost={environment.isLocalHost}
             muted
           />
@@ -176,7 +159,6 @@ export function NewThreadPromptBoxUI({
 export interface NewThreadConnectedEnvironmentConfig {
   value: string;
   onChange: (value: string) => void;
-  projectId: string | null;
   sources: readonly ProjectSource[];
 }
 
@@ -202,7 +184,7 @@ export interface NewThreadPromptBoxProps extends Omit<
 
 /**
  * The composed prompt area for creating a new thread in a project — used by
- * ProjectMainView. Wires the host/sandbox environment-picker queries, then
+ * ProjectMainView. Wires the host environment-picker queries, then
  * forwards everything to NewThreadPromptBoxUI.
  */
 export function NewThreadPromptBox({
@@ -212,16 +194,13 @@ export function NewThreadPromptBox({
 }: NewThreadPromptBoxProps) {
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useEffectiveHosts();
-  const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
-  const { data: sandboxBackends = [] } =
-    useSandboxBackends(sandboxHostSupported);
 
   const parsedEnvironment = parseEnvironmentValue(environment.value);
   const isHostMode = parsedEnvironment?.type === "host";
 
   // Create-new-branch is only meaningful for host:local (work locally /
   // remotely) — the server checks out a fresh branch in the primary checkout
-  // before the thread starts. Worktree/sandbox env modes use the picked
+  // before the thread starts. Worktree env modes use the picked
   // branch as a merge base instead, so we omit onCreate there.
   const allowCreate = isHostMode && parsedEnvironment.mode === "local";
   const branchPickerValue = branch.value ?? branch.current;
@@ -233,8 +212,6 @@ export function NewThreadPromptBox({
       environment={{
         ...environment,
         hosts,
-        sandboxBackends,
-        sandboxHostSupported,
         isLocalHost,
       }}
       branch={{

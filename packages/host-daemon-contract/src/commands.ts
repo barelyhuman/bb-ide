@@ -20,7 +20,6 @@ import {
   replaySpeedSchema,
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
-import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
 export const HOST_DAEMON_PROTOCOL_VERSION = 15 as const;
 
@@ -36,7 +35,6 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.unarchive",
   "thread.deleted",
   "interactive.resolve",
-  "host.sync_runtime_material",
   "host.list_files",
   "host.list_branches",
   "host.read_file",
@@ -221,15 +219,6 @@ export const interactiveResolveCommandSchema =
   });
 
 /**
- * Request that the daemon replace its managed runtime material with the
- * server's authoritative snapshot for this version.
- */
-export const hostSyncRuntimeMaterialCommandSchema = z.object({
-  type: z.literal("host.sync_runtime_material"),
-  version: hostRuntimeMaterialSnapshotSchema.shape.version,
-});
-
-/**
  * Read a file from an absolute host path. When `rootPath` is provided, the
  * daemon enforces that the resolved file stays under that declared absolute
  * root. When `rootPath` is omitted, the daemon reads the explicit absolute
@@ -341,11 +330,6 @@ const managedWorktreeEnvironmentProvisionCommandSchema =
     .merge(managedEnvironmentProvisionFieldsSchema)
     .extend({ workspaceProvisionType: z.literal("managed-worktree") });
 
-const managedCloneEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema
-    .merge(managedEnvironmentProvisionFieldsSchema)
-    .extend({ workspaceProvisionType: z.literal("managed-clone") });
-
 /**
  * Provision a workspace for an environment.
  *
@@ -354,9 +338,6 @@ const managedCloneEnvironmentProvisionCommandSchema =
  *   isWorktree, branchName). Does NOT create anything.
  * - `managed-worktree`: creates a git worktree at `targetPath` from
  *   `sourcePath`, runs setup script if present.
- * - `managed-clone`: clones repo from `sourcePath` to `targetPath`, where
- *   `sourcePath` may be a local repo path or a remote clone URL, then runs
- *   setup script if present.
  *
  * Idempotent — if path already exists and is valid, reports success.
  * Rolls back partial state on failure.
@@ -371,7 +352,6 @@ export const environmentProvisionCommandSchema = z.discriminatedUnion(
   [
     unmanagedEnvironmentProvisionCommandSchema,
     managedWorktreeEnvironmentProvisionCommandSchema,
-    managedCloneEnvironmentProvisionCommandSchema,
   ],
 );
 export type EnvironmentProvisionCommand = z.infer<
@@ -423,7 +403,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   replayCaptureDeleteCommandSchema,
   replayRunCommandSchema,
   interactiveResolveCommandSchema,
-  hostSyncRuntimeMaterialCommandSchema,
   hostListFilesCommandSchema,
   hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
@@ -456,7 +435,6 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "host.list_branches":
     case "host.list_files":
     case "host.read_file":
-    case "host.sync_runtime_material":
     case "provider.list":
     case "provider.list_models":
     case "replay.capture_delete":
@@ -505,9 +483,6 @@ export const hostDaemonCommandResultSchemaByType = {
   "replay.capture_delete": z.object({}),
   "replay.run": z.object({}),
   "interactive.resolve": z.object({}),
-  "host.sync_runtime_material": z.object({
-    appliedVersion: z.string().min(1),
-  }),
   "host.list_files": fileListResultSchema,
   "host.list_branches": z.object({
     branches: z.array(z.string()),

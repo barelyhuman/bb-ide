@@ -7,7 +7,6 @@ import {
 const projectId = "proj_123";
 const hostWorktreeEnvironmentValue = "host:host_123:worktree";
 const hostLocalEnvironmentValue = "host:host_123:local";
-const sandboxEnvironmentValue = "sandbox:e2b";
 
 function selectedBranch(name: string): ProjectMainSelectedBranch {
   return { name, isNew: false };
@@ -77,20 +76,6 @@ describe("resolveProjectMainThreadEnvironment", () => {
         type: "managed-worktree",
         baseBranch: { kind: "named", name: "develop" },
       },
-    });
-  });
-
-  it("sends a named base branch for non-default sandbox branch picks", () => {
-    expect(
-      resolveProjectMainThreadEnvironment({
-        environmentValue: sandboxEnvironmentValue,
-        projectId,
-        currentBranch: "main",
-        selectedBranch: selectedBranch("release/2026-05"),
-      }),
-    ).toMatchObject({
-      type: "sandbox-host",
-      baseBranch: { kind: "named", name: "release/2026-05" },
     });
   });
 });

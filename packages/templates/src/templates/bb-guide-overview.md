@@ -11,9 +11,9 @@ Core concepts:
 
 - Project — maps to a repository. All threads belong to a project.
 - Thread — a single agent conversation. The fundamental unit of work.
-- Environment — where a thread runs. Kinds: project checkout, isolated worktree, or cloud sandbox. Multiple threads can share an environment.
+- Environment — where a thread runs. Kinds: project checkout or isolated worktree. Multiple threads can share an environment.
 - Provider — the agent backend powering a thread (e.g., codex, claude-code). Each provider supports different models.
-- Host — where environments run. Persistent hosts are local machines. Ephemeral hosts are cloud sandboxes provisioned on demand.
+- Host — where environments run. Hosts are long-lived local or remote machines.
 
 Thread types:
 

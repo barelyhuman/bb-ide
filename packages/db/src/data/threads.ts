@@ -11,7 +11,6 @@ import {
 } from "drizzle-orm";
 import type {
   EnvironmentWorkspaceDisplayKind,
-  HostType,
   ThreadChangeKind,
   ThreadStatus,
   ThreadType,
@@ -22,7 +21,6 @@ import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
   environments,
-  hosts,
   pendingInteractions,
   threads,
 } from "../schema.js";
@@ -146,7 +144,6 @@ interface ThreadWithPendingInteractionStateRow extends ThreadRow {
   environmentHostId: string | null;
   environmentIsWorktree: boolean | null;
   environmentWorkspaceProvisionType: WorkspaceProvisionType | null;
-  hostType: HostType | null;
   pendingInteractionCount: number;
 }
 
@@ -296,7 +293,6 @@ function toThreadWithPendingInteractionState(
     environmentWorkspaceProvisionType,
     environmentBranchName,
     environmentHostId,
-    hostType,
     pendingInteractionCount,
     ...thread
   } = row;
@@ -309,7 +305,6 @@ function toThreadWithPendingInteractionState(
         isWorktree: environmentIsWorktree,
         workspaceProvisionType: environmentWorkspaceProvisionType,
       },
-      hostType,
     }),
     hasPendingInteraction: pendingInteractionCount > 0,
   };
@@ -342,12 +337,10 @@ export function listThreadsWithPendingInteractionState(
       environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
       environmentWorkspaceProvisionType: environments.workspaceProvisionType,
-      hostType: hosts.type,
       pendingInteractionCount: count(pendingInteractions.id),
     })
     .from(threads)
     .leftJoin(environments, eq(threads.environmentId, environments.id))
-    .leftJoin(hosts, eq(environments.hostId, hosts.id))
     .leftJoin(
       pendingInteractions,
       and(
@@ -385,12 +378,10 @@ export function listThreadsWithPendingInteractionStateForProjects(
       environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
       environmentWorkspaceProvisionType: environments.workspaceProvisionType,
-      hostType: hosts.type,
       pendingInteractionCount: count(pendingInteractions.id),
     })
     .from(threads)
     .leftJoin(environments, eq(threads.environmentId, environments.id))
-    .leftJoin(hosts, eq(environments.hostId, hosts.id))
     .leftJoin(
       pendingInteractions,
       and(

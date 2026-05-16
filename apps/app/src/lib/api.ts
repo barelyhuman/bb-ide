@@ -1,5 +1,4 @@
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
-import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   Environment,
   Host,
@@ -7,7 +6,6 @@ import type {
   Project,
   ProjectSource,
   ResolvedThreadExecutionOptions,
-  SandboxBackendInfo,
   ThreadType,
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
@@ -16,11 +14,7 @@ import type {
 } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
-  CloudAuthAttemptResponse,
-  CloudAuthConnectResponse,
-  CloudAuthSettingsResponse,
   CreateHostJoinResponse,
-  GithubRepoInfo,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateQueuedMessageRequest,
@@ -43,8 +37,6 @@ import type {
   SystemProviderInfo,
   ManagerTimelineView,
   TimelinePaginationCursor,
-  SandboxEnvVar,
-  SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
   ThreadAssignedChildSummaryResponse,
   ThreadComposerBootstrapResponse,
@@ -67,7 +59,6 @@ import type {
   UpdateThreadTerminalRequest,
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
-  UpsertSandboxEnvVarRequest,
   ThreadStorageFileListResponse,
   WorkspaceFileListResponse,
   ReplayCaptureListResponse,
@@ -565,16 +556,6 @@ export async function getProjectSourceBranches(
     apiClient.projects[":id"].branches.$get({
       param: { id: projectId },
       query: { hostId },
-    }),
-  );
-}
-
-export async function getProjectGithubBranches(
-  projectId: string,
-): Promise<ProjectBranchesResponse> {
-  return request<ProjectBranchesResponse>(
-    apiClient.projects[":id"]["github-branches"].$get({
-      param: { id: projectId },
     }),
   );
 }
@@ -1212,77 +1193,4 @@ export async function updateHost(
 
 export async function deleteHost(id: string): Promise<void> {
   await requestVoid(apiClient.hosts[":id"].$delete({ param: { id } }));
-}
-
-export async function listSandboxBackends(): Promise<SandboxBackendInfo[]> {
-  return request<SandboxBackendInfo[]>(
-    apiClient.system["sandbox-backends"].$get(),
-  );
-}
-
-export async function getCloudAuthSettings(): Promise<CloudAuthSettingsResponse> {
-  return request<CloudAuthSettingsResponse>(
-    apiClient.system["cloud-auth"].$get(),
-  );
-}
-
-export async function startCloudAuthConnection(
-  providerId: CloudAuthProviderId,
-): Promise<CloudAuthConnectResponse> {
-  return request<CloudAuthConnectResponse>(
-    apiClient.system["cloud-auth"][":providerId"].connect.$post({
-      param: { providerId },
-      json: { appOrigin: window.location.origin },
-    }),
-  );
-}
-
-export async function getCloudAuthAttempt(
-  attemptId: string,
-): Promise<CloudAuthAttemptResponse> {
-  return request<CloudAuthAttemptResponse>(
-    apiClient.system["cloud-auth"].attempts[":attemptId"].$get({
-      param: { attemptId },
-    }),
-  );
-}
-
-export async function deleteCloudAuthProvider(
-  providerId: CloudAuthProviderId,
-): Promise<void> {
-  await requestVoid(
-    apiClient.system["cloud-auth"][":providerId"].$delete({
-      param: { providerId },
-    }),
-  );
-}
-
-export async function listSandboxEnvVars(): Promise<SandboxEnvVarsResponse> {
-  return request<SandboxEnvVarsResponse>(
-    apiClient.system["sandbox-env-vars"].$get(),
-  );
-}
-
-export async function upsertSandboxEnvVar(
-  requestBody: UpsertSandboxEnvVarRequest,
-): Promise<SandboxEnvVar> {
-  return request<SandboxEnvVar>(
-    apiClient.system["sandbox-env-vars"].$post({
-      json: requestBody,
-    }),
-  );
-}
-
-export async function deleteSandboxEnvVar(name: string): Promise<void> {
-  await requestVoid(
-    apiClient.system["sandbox-env-vars"][":name"].$delete({
-      param: { name },
-    }),
-  );
-}
-
-export async function listGithubRepos(q?: string): Promise<GithubRepoInfo[]> {
-  return request<GithubRepoInfo[]>(
-    apiClient.system["github-repos"].$get({ query: q ? { q } : undefined }),
-  );
 }

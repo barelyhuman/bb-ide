@@ -9,7 +9,6 @@ import type {
 import * as api from "@/lib/api";
 import {
   projectFilesQueryKey,
-  projectGithubBranchesQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
@@ -89,23 +88,6 @@ export function useProjectSourceBranches(
     enabled,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
-  });
-}
-
-export function useProjectGithubBranches(
-  projectId: string | undefined,
-  options?: QueryOptions,
-) {
-  const enabled = (options?.enabled ?? true) && Boolean(projectId);
-  return useQuery<ProjectBranchesResponse>({
-    queryKey: projectGithubBranchesQueryKey(projectId ?? ""),
-    queryFn: () =>
-      api.getProjectGithubBranches(
-        requireProjectId(projectId, "useProjectGithubBranches"),
-      ),
-    enabled,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
   });
 }
 

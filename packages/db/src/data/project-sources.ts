@@ -15,50 +15,22 @@ export interface CreateLocalPathProjectSourceInput {
   isDefault?: boolean;
 }
 
-export interface CreateGitHubRepoProjectSourceInput {
-  projectId: string;
-  type: "github_repo";
-  repoUrl: string;
-  isDefault?: boolean;
-}
-export type CreateProjectSourceInput =
-  | CreateLocalPathProjectSourceInput
-  | CreateGitHubRepoProjectSourceInput;
+export type CreateProjectSourceInput = CreateLocalPathProjectSourceInput;
 
 export function toProjectSource(row: ProjectSourceRow): ProjectSource {
-  switch (row.type) {
-    case "local_path":
-      if (!row.hostId || !row.path || row.repoUrl) {
-        throw new Error(`Invalid local_path project source row: ${row.id}`);
-      }
-      return {
-        id: row.id,
-        projectId: row.projectId,
-        type: "local_path",
-        hostId: row.hostId,
-        path: row.path,
-        isDefault: row.isDefault,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
-    case "github_repo":
-      if (row.hostId || row.path || !row.repoUrl) {
-        throw new Error(`Invalid github_repo project source row: ${row.id}`);
-      }
-      return {
-        id: row.id,
-        projectId: row.projectId,
-        type: "github_repo",
-        repoUrl: row.repoUrl,
-        isDefault: row.isDefault,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
-    default: {
-      const _exhaustive: never = row.type;
-      return _exhaustive;
-    }
+  if (!row.hostId || !row.path) {
+    throw new Error(`Invalid local_path project source row: ${row.id}`);
   }
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    type: "local_path",
+    hostId: row.hostId,
+    path: row.path,
+    isDefault: row.isDefault,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 export function createProjectSource(
@@ -90,9 +62,8 @@ export function createProjectSource(
         id,
         projectId: input.projectId,
         type: input.type,
-        hostId: input.type === "local_path" ? input.hostId : null,
-        path: input.type === "local_path" ? input.path : null,
-        repoUrl: input.type === "github_repo" ? input.repoUrl : null,
+        hostId: input.hostId,
+        path: input.path,
         isDefault: shouldBeDefault,
         createdAt: now,
         updatedAt: now,
@@ -171,18 +142,10 @@ export function countProjectSources(
 
 export interface UpdateLocalPathProjectSourceInput {
   path?: string;
-  repoUrl?: never;
   isDefault?: true;
 }
 
-export interface UpdateGitHubRepoProjectSourceInput {
-  path?: never;
-  repoUrl?: string;
-  isDefault?: true;
-}
-export type UpdateProjectSourceInput =
-  | UpdateLocalPathProjectSourceInput
-  | UpdateGitHubRepoProjectSourceInput;
+export type UpdateProjectSourceInput = UpdateLocalPathProjectSourceInput;
 
 export function updateProjectSource(
   db: DbConnection,

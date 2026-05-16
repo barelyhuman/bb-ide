@@ -346,13 +346,6 @@ export function createHarness(
         dataDir: overrides.dataDir ?? "/tmp/bb-test-data",
         eventSink: noopEventSink,
         fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-        fetchRuntimeMaterial: async () => ({
-          env: {},
-          files: [],
-          version: "test-runtime-version",
-        }),
-        readPersistedRuntimeMaterial: async () => null,
-        persistRuntimeMaterial: async () => undefined,
         runtimeManager: manager,
         threadStorageRootPath:
           overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",
@@ -370,13 +363,6 @@ export function makeDispatchOptions(
     dataDir: "/tmp/bb-test-data",
     eventSink: noopEventSink,
     fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-    fetchRuntimeMaterial: async () => ({
-      env: {},
-      files: [],
-      version: "test-runtime-version",
-    }),
-    readPersistedRuntimeMaterial: async () => null,
-    persistRuntimeMaterial: async () => undefined,
     threadStorageRootPath: "/tmp/bb-test-thread-storage",
     ...overrides,
   };

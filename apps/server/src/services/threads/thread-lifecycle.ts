@@ -43,9 +43,9 @@ import {
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
-  LoggedSandboxWorkSessionDeps,
+  LoggedWorkSessionDeps,
   PendingInteractionWorkSessionDeps,
-  SandboxWorkSessionDeps,
+  WorkSessionDeps,
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
@@ -462,7 +462,7 @@ export function failThreadStopForCommand(
 }
 
 async function advanceActiveThreadStartIfPresent(
-  deps: SandboxWorkSessionDeps,
+  deps: WorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<boolean> {
   const operation = getThreadOperation(deps.db, {
@@ -543,7 +543,7 @@ function requestThreadStartHandoff(
 }
 
 export async function requestThreadStart(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
   await threadStartRequestDeduper.run(args.thread.id, () =>
@@ -552,7 +552,7 @@ export async function requestThreadStart(
 }
 
 async function requestThreadStartOnce(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
   if (await advanceActiveThreadStartIfPresent(deps, args)) {
@@ -583,7 +583,7 @@ async function requestThreadStartOnce(
 }
 
 export async function advanceThreadStart(
-  deps: SandboxWorkSessionDeps,
+  deps: WorkSessionDeps,
   args: AdvanceThreadOperationArgs,
 ): Promise<string | null> {
   const operation = getThreadOperation(deps.db, {
@@ -621,7 +621,7 @@ export async function advanceThreadStart(
 }
 
 export async function queueReadyThreadTurnCommand(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   args: QueueReadyThreadTurnCommandArgs,
 ): Promise<QueueReadyThreadTurnCommandResult> {
   const providerThreadId = getLastProviderThreadId(deps, args.thread.id);

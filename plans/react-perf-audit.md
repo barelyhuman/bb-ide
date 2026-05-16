@@ -268,12 +268,12 @@ the affected rows/projects.
 
 These are still real cleanup items, but they are not the first perf wins:
 
-- `AppSettingsView.tsx:105-113` still owns modal/cloud-auth state in the full
-  settings page. Extracting dialog controllers or colocating state in dialog
-  components would reduce settings-page rerenders, but this is not a hot path.
-- `ProjectSettingsView.tsx:73-78` still owns delete/repo picker state plus
-  `repoSearch`. Extracting a repo-picker component would isolate debounced
-  search rerenders, but route-level splitting is higher leverage first.
+- `AppSettingsView.tsx:105-113` still owns modal state in the full settings
+  page. Extracting dialog controllers or colocating state in dialog components
+  would reduce settings-page rerenders, but this is not a hot path.
+- `ProjectSettingsView.tsx:73-78` still owns delete-dialog state. Extracting a
+  local-path picker component would isolate picker rerenders, but route-level
+  splitting is higher leverage first.
 - `ThreadTimelinePane.tsx:163-180` still contains a local delayed loading
   indicator. Extract only if a second call site appears.
 - `AppLayout.tsx:334-396` still owns sidebar drag-resize side effects inline.

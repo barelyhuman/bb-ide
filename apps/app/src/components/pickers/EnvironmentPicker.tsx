@@ -1,20 +1,24 @@
-import { useAtomValue } from "jotai";
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
+import type { Host, ProjectSource } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
-import {
-  findLocalPathProjectSourceForHost,
-  isGitHubRepoProjectSource,
-} from "@bb/domain";
+import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
-import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS, COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS, COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
+import {
+  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
-import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import {
   HostStatusBadge,
@@ -29,7 +33,6 @@ import {
 } from "./OptionPicker";
 import {
   encodeHostValue,
-  encodeSandboxValue,
   parseEnvironmentValue,
 } from "./environment-picker-value";
 
@@ -86,11 +89,8 @@ interface SelectedEnvironment {
 export interface EnvironmentPickerUIProps {
   value: string;
   onChange: (value: string) => void;
-  projectId: string | null;
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
-  sandboxBackends: readonly SandboxBackendInfo[];
-  sandboxHostSupported: boolean;
   isLocalHost: (hostId: string | null | undefined) => boolean;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
@@ -103,11 +103,8 @@ export interface EnvironmentPickerUIProps {
 export function EnvironmentPickerUI({
   value,
   onChange,
-  projectId,
   sources,
   hosts,
-  sandboxBackends,
-  sandboxHostSupported,
   isLocalHost,
   muted,
   defaultOpen,
@@ -143,12 +140,8 @@ export function EnvironmentPickerUI({
         hostConnected: host?.status === "connected",
       };
     }
-    const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
-    return {
-      modeLabel: backend?.displayName ?? "Sandbox",
-      icon: getEnvironmentWorkspaceLabelIconName("sandbox"),
-    };
-  }, [value, hosts, sandboxBackends, isLocalHost]);
+    return { modeLabel: "Environment", icon: "Laptop" as const };
+  }, [value, hosts, isLocalHost]);
 
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
@@ -209,16 +202,6 @@ export function EnvironmentPickerUI({
             />
           );
         })}
-
-        {sandboxHostSupported && sandboxBackends.some((b) => b.available) ? (
-          <SandboxSection
-            backends={sandboxBackends}
-            hasGitHubSource={sources.some(isGitHubRepoProjectSource)}
-            projectId={projectId}
-            value={value}
-            onChange={onChange}
-          />
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -233,7 +216,6 @@ export function EnvironmentPickerUI({
 export interface EnvironmentPickerProps {
   value: string;
   onChange: (value: string) => void;
-  projectId: string | null;
   sources: readonly ProjectSource[];
   muted?: boolean;
 }
@@ -241,25 +223,18 @@ export interface EnvironmentPickerProps {
 export function EnvironmentPicker({
   value,
   onChange,
-  projectId,
   sources,
   muted,
 }: EnvironmentPickerProps) {
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useEffectiveHosts();
-  const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
-  const { data: sandboxBackends = [] } =
-    useSandboxBackends(sandboxHostSupported);
 
   return (
     <EnvironmentPickerUI
       value={value}
       onChange={onChange}
-      projectId={projectId}
       sources={sources}
       hosts={hosts}
-      sandboxBackends={sandboxBackends}
-      sandboxHostSupported={sandboxHostSupported}
       isLocalHost={isLocalHost}
       muted={muted}
     />
@@ -321,63 +296,6 @@ function HostSectionGroup({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sandbox section
-// ---------------------------------------------------------------------------
-
-interface SandboxSectionProps {
-  backends: readonly SandboxBackendInfo[];
-  hasGitHubSource: boolean;
-  projectId: string | null;
-  value: string;
-  onChange: (value: string) => void;
-}
-
-function SandboxSection({
-  backends,
-  hasGitHubSource,
-  projectId,
-  value,
-  onChange,
-}: SandboxSectionProps) {
-  const navigate = useNavigate();
-
-  return (
-    <DropdownMenuGroup>
-      <DropdownMenuLabel>Sandbox</DropdownMenuLabel>
-      {hasGitHubSource ? (
-        backends
-          .filter((backend) => backend.available)
-          .map((backend) => (
-            <EnvironmentMenuItem
-              key={backend.id}
-              label={backend.displayName}
-              icon={getEnvironmentWorkspaceLabelIconName("sandbox")}
-              itemValue={encodeSandboxValue(backend.id)}
-              selectedValue={value}
-              onSelect={onChange}
-            />
-          ))
-      ) : (
-        <div className="px-2 pb-1.5">
-          <button
-            type="button"
-            className="text-xs text-muted-foreground underline"
-            onClick={() => {
-              if (projectId) {
-                navigate(`/projects/${projectId}/settings`);
-              }
-            }}
-          >
-            Connect project to GitHub
-          </button>
-        </div>
-      )}
-    </DropdownMenuGroup>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Shared menu item
 // ---------------------------------------------------------------------------
 

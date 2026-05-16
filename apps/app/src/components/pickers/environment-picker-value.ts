@@ -6,25 +6,13 @@ export interface ParsedHostEnvironmentValue {
   mode: EnvironmentHostMode;
 }
 
-export interface ParsedSandboxEnvironmentValue {
-  type: "sandbox";
-  backendId: string;
-}
-
-export type ParsedEnvironmentValue =
-  | ParsedHostEnvironmentValue
-  | ParsedSandboxEnvironmentValue
-  | null;
+export type ParsedEnvironmentValue = ParsedHostEnvironmentValue | null;
 
 export function encodeHostValue(
   hostId: string,
   mode: EnvironmentHostMode,
 ): string {
   return `host:${hostId}:${mode}`;
-}
-
-export function encodeSandboxValue(backendId: string): string {
-  return `sandbox:${backendId}`;
 }
 
 export function parseEnvironmentValue(value: string): ParsedEnvironmentValue {
@@ -34,12 +22,6 @@ export function parseEnvironmentValue(value: string): ParsedEnvironmentValue {
     const mode = parts[2];
     if (hostId && (mode === "local" || mode === "worktree")) {
       return { type: "host", hostId, mode };
-    }
-  }
-  if (value.startsWith("sandbox:")) {
-    const backendId = value.slice("sandbox:".length);
-    if (backendId) {
-      return { type: "sandbox", backendId };
     }
   }
   return null;

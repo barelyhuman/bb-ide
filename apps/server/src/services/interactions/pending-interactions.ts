@@ -9,11 +9,8 @@ import {
   getThread,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
-  isThreadOnEphemeralHost,
   listPendingInteractionsByThread,
-  listPendingInteractionsOnEphemeralHosts,
   queueCommandInTransaction,
-  setPendingInteractionExpired,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
   setPendingInteractionResolving,
@@ -172,24 +169,7 @@ function buildInteractiveResolveCommand(
   };
 }
 
-export const DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS = 10 * 60 * 1000;
-const PENDING_INTERACTION_HYDRATE_BATCH_SIZE = 200;
-
-type PendingInteractionTimeoutHandle = ReturnType<typeof setTimeout>;
-
-interface PendingInteractionExpiryTimer {
-  timeout: PendingInteractionTimeoutHandle;
-}
-
-interface PendingInteractionLifecycleArgs extends CreateLifecycleDeps {
-  sandboxInteractionExpiryMs: number;
-  now?: () => number;
-}
-
-interface ExpirePendingInteractionArgs {
-  interactionId: string;
-  reason: string;
-}
+type PendingInteractionLifecycleArgs = CreateLifecycleDeps;
 
 function buildInteractionChangeMetadata({
   db,
@@ -224,31 +204,18 @@ function notifyInteractionChanged({
 
 /**
  * Owns the server-side pending interaction lifecycle: registration, resolution
- * command queuing, terminal state transitions, timeline events, and restart
- * hydration for ephemeral-host expiries.
+ * command queuing, terminal state transitions, and timeline events.
  */
 export class PendingInteractionLifecycle {
   private readonly deps: CreateLifecycleDeps;
-  private readonly sandboxInteractionExpiryMs: number;
-  private readonly now: () => number;
-  private readonly expiryTimers = new Map<
-    string,
-    PendingInteractionExpiryTimer
-  >();
   private started = false;
 
   constructor(args: PendingInteractionLifecycleArgs) {
-    if (args.sandboxInteractionExpiryMs <= 0) {
-      throw new Error("Pending interaction expiry must be positive");
-    }
-
     this.deps = {
       db: args.db,
       hub: args.hub,
       logger: args.logger,
     };
-    this.sandboxInteractionExpiryMs = args.sandboxInteractionExpiryMs;
-    this.now = args.now ?? Date.now;
   }
 
   start(): void {
@@ -256,7 +223,6 @@ export class PendingInteractionLifecycle {
       return;
     }
     this.started = true;
-    this.hydratePendingInteractions();
   }
 
   listThreadInteractions(threadId: string): PendingInteraction[] {
@@ -369,7 +335,6 @@ export class PendingInteractionLifecycle {
     }
 
     const pendingInteraction = toPendingInteraction(registered.row);
-    this.scheduleInteractionExpiry(pendingInteraction);
 
     if (registered.outcome === "created") {
       appendPendingInteractionTimelineEvent(this.deps, pendingInteraction);
@@ -665,115 +630,9 @@ export class PendingInteractionLifecycle {
     return interaction;
   }
 
-  private hydratePendingInteractions(): void {
-    let offset = 0;
-    while (true) {
-      const pendingInteractions = this.parseListRows(
-        listPendingInteractionsOnEphemeralHosts(this.deps.db, {
-          limit: PENDING_INTERACTION_HYDRATE_BATCH_SIZE,
-          offset,
-        }),
-      );
-
-      for (const interaction of pendingInteractions) {
-        this.scheduleInteractionExpiryWithMs(
-          interaction,
-          this.sandboxInteractionExpiryMs,
-        );
-      }
-
-      if (pendingInteractions.length < PENDING_INTERACTION_HYDRATE_BATCH_SIZE) {
-        return;
-      }
-      offset += PENDING_INTERACTION_HYDRATE_BATCH_SIZE;
-    }
-  }
-
-  private resolveInteractionExpiryMs(
-    interaction: PendingInteraction,
-  ): number | null {
-    if (
-      !isThreadOnEphemeralHost(this.deps.db, { threadId: interaction.threadId })
-    ) {
-      return null;
-    }
-
-    return this.sandboxInteractionExpiryMs;
-  }
-
-  private scheduleInteractionExpiry(interaction: PendingInteraction): void {
-    const interactionExpiryMs = this.resolveInteractionExpiryMs(interaction);
-    if (interactionExpiryMs === null) {
-      return;
-    }
-
-    this.scheduleInteractionExpiryWithMs(interaction, interactionExpiryMs);
-  }
-
-  private scheduleInteractionExpiryWithMs(
-    interaction: PendingInteraction,
-    interactionExpiryMs: number,
-  ): void {
-    this.clearExpiryTimer(interaction.id);
-
-    if (interaction.status !== "pending") {
-      return;
-    }
-
-    const expiresAt = interaction.createdAt + interactionExpiryMs;
-    const delayMs = expiresAt - this.now();
-    if (delayMs <= 0) {
-      this.expirePendingInteraction({
-        interactionId: interaction.id,
-        reason: "Pending interaction expired while waiting for a user response",
-      });
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      this.expiryTimers.delete(interaction.id);
-      this.expirePendingInteraction({
-        interactionId: interaction.id,
-        reason: "Pending interaction expired while waiting for a user response",
-      });
-    }, delayMs);
-    timeout.unref();
-
-    this.expiryTimers.set(interaction.id, {
-      timeout,
-    });
-  }
-
-  private clearExpiryTimer(interactionId: string): void {
-    const timer = this.expiryTimers.get(interactionId);
-    if (!timer) {
-      return;
-    }
-
-    clearTimeout(timer.timeout);
-    this.expiryTimers.delete(interactionId);
-  }
-
-  private expirePendingInteraction(
-    args: ExpirePendingInteractionArgs,
-  ): PendingInteraction | null {
-    const updated = setPendingInteractionExpired(this.deps.db, {
-      id: args.interactionId,
-      statusReason: args.reason,
-    });
-    if (!updated) {
-      return null;
-    }
-
-    const interaction = toPendingInteraction(updated);
-    this.settleInteractionTerminalState(interaction);
-    return interaction;
-  }
-
   private settleInteractionTerminalState(
     interaction: PendingInteraction,
   ): void {
-    this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEvent(this.deps, interaction);
     notifyInteractionChanged({
       deps: this.deps,
@@ -786,7 +645,6 @@ export class PendingInteractionLifecycle {
     deps: PendingInteractionTransactionDeps,
     interaction: PendingInteraction,
   ): void {
-    this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEventInTransaction(deps, interaction);
     notifyInteractionChanged({
       deps,

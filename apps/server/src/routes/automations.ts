@@ -214,8 +214,6 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
         case "reuse":
           environmentIds.add(action.threadRequest.environment.environmentId);
           break;
-        case "sandbox-host":
-          break;
         default: {
           const exhaustiveCheck: never = action.threadRequest.environment;
           throw new Error(

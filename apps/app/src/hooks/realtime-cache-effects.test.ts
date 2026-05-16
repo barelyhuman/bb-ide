@@ -13,7 +13,6 @@ import {
   environmentWorkStatusQueryKey,
   localPathExistenceQueryKey,
   projectFilesQueryKey,
-  projectGithubBranchesQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
@@ -737,18 +736,12 @@ describe("createRealtimeCacheEffects", () => {
       "project-2",
       "host-1",
     );
-    const firstProjectGithubBranchesKey =
-      projectGithubBranchesQueryKey("project-1");
-    const secondProjectGithubBranchesKey =
-      projectGithubBranchesQueryKey("project-2");
     queryClient.setQueryData(projectsKey, []);
     queryClient.setQueryData(localPathKey, []);
     queryClient.setQueryData(firstProjectFilesKey, []);
     queryClient.setQueryData(secondProjectFilesKey, []);
     queryClient.setQueryData(firstProjectSourceBranchesKey, []);
     queryClient.setQueryData(secondProjectSourceBranchesKey, []);
-    queryClient.setQueryData(firstProjectGithubBranchesKey, []);
-    queryClient.setQueryData(secondProjectGithubBranchesKey, []);
 
     effects.handleChanged({
       type: "changed",
@@ -766,16 +759,10 @@ describe("createRealtimeCacheEffects", () => {
       queryClient.getQueryState(firstProjectSourceBranchesKey)?.isInvalidated,
     ).toBe(true);
     expect(
-      queryClient.getQueryState(firstProjectGithubBranchesKey)?.isInvalidated,
-    ).toBe(true);
-    expect(
       queryClient.getQueryState(secondProjectFilesKey)?.isInvalidated,
     ).not.toBe(true);
     expect(
       queryClient.getQueryState(secondProjectSourceBranchesKey)?.isInvalidated,
-    ).not.toBe(true);
-    expect(
-      queryClient.getQueryState(secondProjectGithubBranchesKey)?.isInvalidated,
     ).not.toBe(true);
 
     effects.dispose();

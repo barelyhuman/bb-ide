@@ -739,8 +739,6 @@ export function ThreadDetailView() {
         environment,
         isLocalHost: threadEnvironmentIsLocal,
         hostName: environmentHost?.name,
-        hostType: environmentHost?.type,
-        hostProvider: environmentHost?.provider,
       })
     : undefined;
   const threadEnvironmentIcon = threadEnvironmentDisplay

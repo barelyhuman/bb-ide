@@ -17,7 +17,7 @@ import {
   type ThreadComposerBootstrapResponse,
   type ThreadTimelineQuery,
 } from "@bb/server-contract";
-import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type { AppDeps, WorkSessionDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import {
@@ -199,7 +199,7 @@ function parseThreadTimelinePage(
 }
 
 async function requireThreadStorageTarget(
-  deps: SandboxWorkSessionDeps,
+  deps: WorkSessionDeps,
   args: RequireThreadStorageTargetArgs,
 ): Promise<ThreadStorageTarget> {
   const thread = requirePublicThread(deps.db, args.threadId);

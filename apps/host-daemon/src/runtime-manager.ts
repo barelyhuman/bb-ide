@@ -62,11 +62,6 @@ function lazyProvisionOpts(
         workspaceProvisionType: "reconnect-managed-worktree",
         path: workspacePath,
       };
-    case "managed-clone":
-      return {
-        workspaceProvisionType: "reconnect-managed-clone",
-        path: workspacePath,
-      };
   }
 }
 

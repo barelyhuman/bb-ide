@@ -32,7 +32,7 @@ Windows support means the Linux stack runs entirely inside WSL2:
 - app + server + host-daemon startup on supported persistent-host OSes
 - local-path project creation and update in the app
 - unmanaged environments
-- managed clone/worktree environments
+- managed worktree environments
 - provider runtime startup where the provider itself supports the host
   environment
 - `npx bb-app` package startup on supported npm package runtimes
@@ -67,7 +67,6 @@ Windows support means the Linux stack runs entirely inside WSL2:
 
 - workspace-owned QA helpers under [`tests/qa/`](../tests/qa/)
 - dev restart internals that are not part of the shipped product path
-- sandbox execution on Windows
 - native Windows PowerShell, CMD, and host-daemon runtime flows
 
 ## Dependency Policy

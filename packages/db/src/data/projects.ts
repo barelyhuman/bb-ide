@@ -11,13 +11,7 @@ export interface CreateProjectLocalPathSourceInput {
   path: string;
 }
 
-export interface CreateProjectGitHubRepoSourceInput {
-  type: "github_repo";
-  repoUrl: string;
-}
-export type CreateProjectSourceInput =
-  | CreateProjectLocalPathSourceInput
-  | CreateProjectGitHubRepoSourceInput;
+export type CreateProjectSourceInput = CreateProjectLocalPathSourceInput;
 
 export interface CreateProjectInput {
   name: string;
@@ -50,10 +44,8 @@ export function createProject(
         id: sourceId,
         projectId,
         type: input.source.type,
-        hostId: input.source.type === "local_path" ? input.source.hostId : null,
-        path: input.source.type === "local_path" ? input.source.path : null,
-        repoUrl:
-          input.source.type === "github_repo" ? input.source.repoUrl : null,
+        hostId: input.source.hostId,
+        path: input.source.path,
         isDefault: true,
         createdAt: now,
         updatedAt: now,

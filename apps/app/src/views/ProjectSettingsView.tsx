@@ -1,11 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useAtomValue } from "jotai";
-import { useDebounceValue } from "usehooks-ts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   findLocalPathProjectSourceForHost,
-  isGitHubRepoProjectSource,
   isLocalPathProjectSource,
   type LocalPathProjectSource,
   type ProjectSource,
@@ -13,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
-import { ProjectConnectGithubDialog } from "@/components/dialogs/ProjectConnectGithubDialog";
 import {
   ProjectSourceDeleteDialog,
   type ProjectSourceDeleteDialogTarget,
@@ -40,9 +36,7 @@ import {
   useSidebarBootstrap,
 } from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
-import { useGithubRepos } from "@/hooks/queries/system-queries";
 import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
-import { githubConnectedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
 
 interface DeleteProjectSourceMutationRequest {
@@ -53,10 +47,7 @@ function sourceLabel(
   source: ProjectSource,
   hostNameById: Map<string, string>,
 ): string {
-  if (isLocalPathProjectSource(source)) {
-    return hostNameById.get(source.hostId) ?? source.hostId;
-  }
-  return source.repoUrl;
+  return hostNameById.get(source.hostId) ?? source.hostId;
 }
 
 export function ProjectSettingsView() {
@@ -69,12 +60,9 @@ export function ProjectSettingsView() {
   const isLoading = sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
   const { data: hosts = [] } = useEffectiveHosts();
   const queryClient = useQueryClient();
-  const githubConnected = useAtomValue(githubConnectedAtom);
 
   const [deleteTarget, setDeleteTarget] =
     useState<ProjectSourceDeleteDialogTarget | null>(null);
-  const [repoPickerOpen, setRepoPickerOpen] = useState(false);
-  const [repoSearch, setRepoSearch] = useState("");
 
   const deleteSource = useMutation({
     meta: {
@@ -93,57 +81,13 @@ export function ProjectSettingsView() {
   const addLocalSource = useAddLocalProjectSource();
   const updateLocalSource = useUpdateLocalProjectSource();
 
-  const addGitHubSource = useMutation({
-    mutationFn: async (repoUrl: string) => {
-      if (!projectId) return;
-      await api.addProjectSource(projectId, {
-        type: "github_repo",
-        repoUrl,
-      });
-    },
-    onSuccess: () => {
-      invalidateProjectSourceQueries({ projectId, queryClient });
-      setRepoPickerOpen(false);
-      setRepoSearch("");
-    },
-  });
-
-  const [debouncedSearch] = useDebounceValue(repoSearch, 300);
-  const {
-    data: githubRepos = [],
-    isLoading: reposLoading,
-    isFetching: reposFetching,
-  } = useGithubRepos(repoPickerOpen, debouncedSearch);
-
-  const visibleRepos = useMemo(() => {
-    if (!repoSearch) return githubRepos;
-    // Don't client-side filter URLs/owner-repo — let the server resolve them
-    if (
-      repoSearch.includes("github.com/") ||
-      /^[^/\s]+\/[^/\s]+$/.test(repoSearch.trim())
-    ) {
-      return githubRepos;
-    }
-    const q = repoSearch.toLowerCase();
-    return githubRepos.filter((r) => r.fullName.toLowerCase().includes(q));
-  }, [githubRepos, repoSearch]);
-
   const project = projects?.find((p) => p.id === projectId);
   const projectSources = project?.sources;
-  const sources = useMemo(
-    () =>
-      [...(projectSources ?? [])].sort((a, b) => {
-        const aGh = isGitHubRepoProjectSource(a) ? 0 : 1;
-        const bGh = isGitHubRepoProjectSource(b) ? 0 : 1;
-        return aGh - bGh;
-      }),
-    [projectSources],
-  );
+  const sources = useMemo(() => projectSources ?? [], [projectSources]);
   const hostNameById = useMemo(
     () => new Map(hosts.map((h) => [h.id, h.name])),
     [hosts],
   );
-  const hasGitHubSource = sources.some(isGitHubRepoProjectSource);
 
   const projectName = project?.name ?? "";
   const localSourcePickerPending =
@@ -210,32 +154,19 @@ export function ProjectSettingsView() {
   const showAddLocalSourceButton =
     localHostId != null &&
     !findLocalPathProjectSourceForHost(sources, localHostId);
-  const showAddGitHubSourceButton = githubConnected && !hasGitHubSource;
 
-  const addSourceButtons =
-    showAddLocalSourceButton || showAddGitHubSourceButton ? (
-      <div className="mt-2 flex gap-2">
-        {showAddGitHubSourceButton && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setRepoPickerOpen(true)}
-          >
-            Connect GitHub repo
-          </Button>
-        )}
-        {showAddLocalSourceButton && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={addLocalSource.isPending}
-            onClick={openAddLocalSourcePicker}
-          >
-            Add local path
-          </Button>
-        )}
-      </div>
-    ) : null;
+  const addSourceButtons = showAddLocalSourceButton ? (
+    <div className="mt-2 flex gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={addLocalSource.isPending}
+        onClick={openAddLocalSourcePicker}
+      >
+        Add local path
+      </Button>
+    </div>
+  ) : null;
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -296,21 +227,6 @@ export function ProjectSettingsView() {
         platform={localSourcePicker.platform}
         onOpenChange={localSourcePicker.projectPathDialog.onOpenChange}
         onSubmit={localSourcePicker.submitProjectPath}
-      />
-
-      <ProjectConnectGithubDialog
-        open={repoPickerOpen}
-        search={repoSearch}
-        repos={visibleRepos}
-        isLoading={reposLoading}
-        isFetching={reposFetching}
-        isAddPending={addGitHubSource.isPending}
-        onOpenChange={(open) => {
-          setRepoPickerOpen(open);
-          if (!open) setRepoSearch("");
-        }}
-        onSearchChange={setRepoSearch}
-        onSelectRepo={(repoUrl) => addGitHubSource.mutate(repoUrl)}
       />
 
       <ProjectSourceDeleteDialog

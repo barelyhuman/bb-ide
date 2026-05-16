@@ -13,7 +13,6 @@ import type {
   EnvironmentOperationKind,
   EnvironmentCleanupMode,
   EnvironmentStatus,
-  HostOperationKind,
   HostType,
   PendingInteractionStatus,
   LifecycleOperationState,
@@ -85,62 +84,19 @@ export const authApiKeys = sqliteTable(
   ],
 );
 
-export const sandboxProviderCredentials = sqliteTable(
-  "sandbox_provider_credentials",
-  {
-    id: text("id").primaryKey(),
-    providerId: text("provider_id").notNull(),
-    encryptedAccessToken: text("encrypted_access_token").notNull(),
-    encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
-    encryptedIdToken: text("encrypted_id_token"),
-    encryptedMetadata: text("encrypted_metadata").notNull(),
-    label: text("label"),
-    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-    lastRefreshedAt: integer("last_refreshed_at", { mode: "timestamp_ms" }),
-    lastErrorMessage: text("last_error_message"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-  },
-  (table) => [
-    uniqueIndex("sandbox_provider_credentials_provider_id_idx").on(
-      table.providerId,
-    ),
-    index("sandbox_provider_credentials_expires_at_idx").on(table.expiresAt),
-  ],
-);
-
-export const appSandboxEnvVars = sqliteTable(
-  "app_sandbox_env_vars",
-  {
-    name: text("name").primaryKey(),
-    encryptedValue: text("encrypted_value").notNull(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-  },
-  (table) => [index("app_sandbox_env_vars_updated_at_idx").on(table.updatedAt)],
-);
-
 export const hosts = sqliteTable(
   "hosts",
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     type: text("type").$type<HostType>().notNull(),
-    provider: text("provider"),
-    externalId: text("external_id"),
-    lastActivityAt: integer("last_activity_at"),
     commandCursor: integer("command_cursor").notNull().default(0),
-    suspendedAt: integer("suspended_at"),
     destroyedAt: integer("destroyed_at"),
     lastSeenAt: integer("last_seen_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (table) => [
-    index("hosts_last_activity_idx").on(table.lastActivityAt),
-    index("hosts_last_seen_idx").on(table.lastSeenAt),
-    index("hosts_suspended_idx").on(table.suspendedAt),
-  ],
+  (table) => [index("hosts_last_seen_idx").on(table.lastSeenAt)],
 );
 
 export const projects = sqliteTable(
@@ -187,7 +143,6 @@ export const projectSources = sqliteTable(
     type: text("type").$type<ProjectSourceType>().notNull(),
     hostId: text("host_id").references(() => hosts.id, { onDelete: "cascade" }),
     path: text("path"),
-    repoUrl: text("repo_url"),
     isDefault: integer("is_default", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -204,9 +159,7 @@ export const projectSources = sqliteTable(
     check(
       "project_sources_shape_check",
       sql`(
-        (${table.type} = 'local_path' AND ${table.hostId} IS NOT NULL AND ${table.path} IS NOT NULL AND ${table.repoUrl} IS NULL)
-        OR
-        (${table.type} = 'github_repo' AND ${table.hostId} IS NULL AND ${table.path} IS NULL AND ${table.repoUrl} IS NOT NULL)
+        ${table.type} = 'local_path' AND ${table.hostId} IS NOT NULL AND ${table.path} IS NOT NULL
       )`,
     ),
     // NOTE: Drizzle does not support partial/filtered unique indexes.
@@ -760,33 +713,6 @@ export const environmentOperations = sqliteTable(
     uniqueIndex("environment_operations_command_idx").on(table.commandId),
     index("environment_operations_state_idx").on(table.state),
     index("environment_operations_environment_idx").on(table.environmentId),
-  ],
-);
-
-export const hostOperations = sqliteTable(
-  "host_operations",
-  {
-    id: text("id").primaryKey(),
-    hostId: text("host_id")
-      .notNull()
-      .references(() => hosts.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<HostOperationKind>().notNull(),
-    state: text("state").$type<LifecycleOperationState>().notNull(),
-    payload: text("payload").notNull(),
-    commandId: text("command_id").references(() => hostDaemonCommands.id, {
-      onDelete: "set null",
-    }),
-    requestedAt: integer("requested_at").notNull(),
-    queuedAt: integer("queued_at"),
-    completedAt: integer("completed_at"),
-    failureReason: text("failure_reason"),
-    createdAt: integer("created_at").notNull(),
-    updatedAt: integer("updated_at").notNull(),
-  },
-  (table) => [
-    uniqueIndex("host_operations_host_kind_idx").on(table.hostId, table.kind),
-    uniqueIndex("host_operations_command_idx").on(table.commandId),
-    index("host_operations_state_idx").on(table.state),
   ],
 );
 

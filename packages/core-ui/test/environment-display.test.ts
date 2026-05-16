@@ -114,45 +114,4 @@ describe("formatEnvironmentDisplay", () => {
       expect(result.location).toBe("remote");
     });
   });
-
-  describe("ephemeral (sandbox) host", () => {
-    it("uses sandbox provider name as modeLabel", () => {
-      const result = formatEnvironmentDisplay({
-        environment: makeEnvironment(),
-        isLocalHost: false,
-        hostType: "ephemeral",
-        hostProvider: "e2b",
-      });
-      expect(result).toEqual({
-        modeLabel: "E2B Sandbox",
-        hostLabel: null,
-        id: "env_test",
-        location: "cloud",
-        mode: "direct",
-        workspaceDisplayKind: "sandbox",
-      });
-    });
-
-    it("falls back to 'Sandbox' when provider name is missing", () => {
-      const result = formatEnvironmentDisplay({
-        environment: makeEnvironment(),
-        isLocalHost: false,
-        hostType: "ephemeral",
-      });
-      expect(result.modeLabel).toBe("Sandbox");
-      expect(result.location).toBe("cloud");
-    });
-
-    it("reports worktree mode for sandbox worktrees", () => {
-      const result = formatEnvironmentDisplay({
-        environment: makeEnvironment({ isWorktree: true }),
-        isLocalHost: false,
-        hostType: "ephemeral",
-        hostProvider: "e2b",
-      });
-      expect(result.mode).toBe("worktree");
-      expect(result.modeLabel).toBe("E2B Sandbox");
-      expect(result.workspaceDisplayKind).toBe("sandbox");
-    });
-  });
 });

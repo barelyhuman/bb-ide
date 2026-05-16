@@ -17,9 +17,9 @@ const target: HostDeleteDialogTarget = {
   name: HOST_NAMES.remote,
 };
 
-const sandboxTarget: HostDeleteDialogTarget = {
-  id: HOST_IDS.sandbox,
-  name: HOST_NAMES.sandbox,
+const longNameTarget: HostDeleteDialogTarget = {
+  id: "host_remote_build_001",
+  name: "michael-remote-build-box-001",
 };
 
 export function Overview() {
@@ -35,12 +35,12 @@ export function Overview() {
         </DialogStage>
       </StoryRow>
       <StoryRow
-        label="sandbox name"
-        hint="long sandbox identifier in the description"
+        label="long name"
+        hint="long host identifier in the description"
       >
         <DialogStage>
           <HostDeleteDialogContent
-            target={sandboxTarget}
+            target={longNameTarget}
             pending={false}
             onDelete={noop}
           />

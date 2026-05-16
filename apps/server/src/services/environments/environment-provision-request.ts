@@ -15,34 +15,14 @@ export type DirectEnvironmentProvisionRequest = z.infer<
   typeof directEnvironmentProvisionRequestSchema
 >;
 
-export const sandboxHostEnvironmentProvisionRequestSchema =
-  environmentProvisionRequestBaseSchema.extend({
-    mode: z.literal("sandbox-host"),
-    sandboxType: z.string(),
-    command: environmentProvisionCommandSchema,
-  });
-export type SandboxHostEnvironmentProvisionRequest = z.infer<
-  typeof sandboxHostEnvironmentProvisionRequestSchema
->;
+export const environmentProvisionRequestSchema =
+  directEnvironmentProvisionRequestSchema;
 
-export const environmentProvisionRequestSchema = z.discriminatedUnion("mode", [
-  directEnvironmentProvisionRequestSchema,
-  sandboxHostEnvironmentProvisionRequestSchema,
-]);
-
-export type EnvironmentProvisionRequest =
-  | DirectEnvironmentProvisionRequest
-  | SandboxHostEnvironmentProvisionRequest;
+export type EnvironmentProvisionRequest = DirectEnvironmentProvisionRequest;
 
 export interface BuildDirectEnvironmentProvisionRequestArgs {
   command: EnvironmentProvisionCommand;
   provisioningId: string;
-}
-
-export interface BuildSandboxHostEnvironmentProvisionRequestArgs {
-  command: EnvironmentProvisionCommand;
-  provisioningId: string;
-  sandboxType: string;
 }
 
 export function buildDirectEnvironmentProvisionRequest(
@@ -52,16 +32,5 @@ export function buildDirectEnvironmentProvisionRequest(
     mode: "direct",
     command: args.command,
     provisioningId: args.provisioningId,
-  };
-}
-
-export function buildSandboxHostEnvironmentProvisionRequest(
-  args: BuildSandboxHostEnvironmentProvisionRequestArgs,
-): SandboxHostEnvironmentProvisionRequest {
-  return {
-    mode: "sandbox-host",
-    command: args.command,
-    provisioningId: args.provisioningId,
-    sandboxType: args.sandboxType,
   };
 }

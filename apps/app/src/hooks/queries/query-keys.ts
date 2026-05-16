@@ -12,7 +12,6 @@ export const HOST_QUERY_KEY = "host";
 export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
-export const PROJECT_GITHUB_BRANCHES_QUERY_KEY = "projectGithubBranches";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
 export const SIDEBAR_BOOTSTRAP_QUERY_KEY = "sidebarBootstrap";
 export const THREADS_QUERY_KEY = "threads";
@@ -40,11 +39,6 @@ export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
 export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
-export const SANDBOX_BACKENDS_QUERY_KEY = "sandboxBackends";
-export const CLOUD_AUTH_SETTINGS_QUERY_KEY = "cloudAuthSettings";
-export const CLOUD_AUTH_ATTEMPT_QUERY_KEY = "cloudAuthAttempt";
-export const SANDBOX_ENV_VARS_QUERY_KEY = "sandboxEnvVars";
-export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
 export const CONVERSATION_MANAGER_TIMELINE_VIEW =
@@ -87,9 +81,6 @@ export type ProjectSourceBranchesQueryKeyPrefix = readonly [
   typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
   string,
 ];
-export type AllProjectGithubBranchesQueryKeyPrefix = readonly [
-  typeof PROJECT_GITHUB_BRANCHES_QUERY_KEY,
-];
 export type ProjectPromptHistoryQueryKeyPrefix = readonly [
   typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
 ];
@@ -111,10 +102,6 @@ export type ProjectFilesQueryKeyPrefix = readonly [
 export type ProjectSourceBranchesQueryKey = readonly [
   typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
   string,
-  string,
-];
-export type ProjectGithubBranchesQueryKey = readonly [
-  typeof PROJECT_GITHUB_BRANCHES_QUERY_KEY,
   string,
 ];
 export type SidebarBootstrapQueryKey = readonly [
@@ -320,24 +307,6 @@ export type SystemExecutionOptionsEnvironmentQueryKeyPrefix = readonly [
   typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
   string | null,
 ];
-export type SandboxBackendsQueryKey = readonly [
-  typeof SANDBOX_BACKENDS_QUERY_KEY,
-];
-export type CloudAuthSettingsQueryKey = readonly [
-  typeof CLOUD_AUTH_SETTINGS_QUERY_KEY,
-];
-export type CloudAuthAttemptId = string | null;
-export type CloudAuthAttemptQueryKey = readonly [
-  typeof CLOUD_AUTH_ATTEMPT_QUERY_KEY,
-  CloudAuthAttemptId,
-];
-export type SandboxEnvVarsQueryKey = readonly [
-  typeof SANDBOX_ENV_VARS_QUERY_KEY,
-];
-export type GithubReposQueryKey = readonly [
-  typeof GITHUB_REPOS_QUERY_KEY,
-  string,
-];
 export type LocalPathExistenceQueryKey = readonly [
   typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
   string,
@@ -410,16 +379,6 @@ export function projectSourceBranchesQueryKeyPrefix(
   projectId: string,
 ): ProjectSourceBranchesQueryKeyPrefix {
   return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId];
-}
-
-export function projectGithubBranchesQueryKey(
-  projectId: string,
-): ProjectGithubBranchesQueryKey {
-  return [PROJECT_GITHUB_BRANCHES_QUERY_KEY, projectId];
-}
-
-export function allProjectGithubBranchesQueryKeyPrefix(): AllProjectGithubBranchesQueryKeyPrefix {
-  return [PROJECT_GITHUB_BRANCHES_QUERY_KEY];
 }
 
 export function sidebarBootstrapQueryKey(): SidebarBootstrapQueryKey {
@@ -768,28 +727,6 @@ export function systemExecutionOptionsEnvironmentQueryKeyPrefix(
   environmentId: string | null,
 ): SystemExecutionOptionsEnvironmentQueryKeyPrefix {
   return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY, environmentId];
-}
-
-export function sandboxBackendsQueryKey(): SandboxBackendsQueryKey {
-  return [SANDBOX_BACKENDS_QUERY_KEY];
-}
-
-export function cloudAuthSettingsQueryKey(): CloudAuthSettingsQueryKey {
-  return [CLOUD_AUTH_SETTINGS_QUERY_KEY];
-}
-
-export function cloudAuthAttemptQueryKey(
-  attemptId: CloudAuthAttemptId,
-): CloudAuthAttemptQueryKey {
-  return [CLOUD_AUTH_ATTEMPT_QUERY_KEY, attemptId];
-}
-
-export function sandboxEnvVarsQueryKey(): SandboxEnvVarsQueryKey {
-  return [SANDBOX_ENV_VARS_QUERY_KEY];
-}
-
-export function githubReposQueryKey(q: string): GithubReposQueryKey {
-  return [GITHUB_REPOS_QUERY_KEY, q];
 }
 
 export function localPathExistenceQueryKey(

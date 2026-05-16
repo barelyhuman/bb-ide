@@ -1,11 +1,10 @@
 import { eq } from "drizzle-orm";
-import { events, getHost, getThread, upsertHost } from "@bb/db";
+import { events, getThread } from "@bb/db";
 import { threadScope } from "@bb/domain";
 import {
   hostDaemonEventBatchResponseSchema,
   type HostDaemonEventEnvelope,
 } from "@bb/host-daemon-contract";
-import type { SandboxHost } from "@bb/sandbox-host";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
@@ -20,17 +19,13 @@ import { createTestAppHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
 
 interface SeedEventRouteArgs {
-  hostType?: "persistent" | "ephemeral";
+  hostType?: "persistent";
 }
 
 interface PostEventBatchArgs {
   harness: TestAppHarness;
   sessionId: string;
   events: HostDaemonEventEnvelope[];
-}
-
-interface MockSandboxHost extends SandboxHost {
-  extendTimeout: ReturnType<typeof vi.fn<(timeoutMs: number) => Promise<void>>>;
 }
 
 async function postEventBatch(args: PostEventBatchArgs): Promise<Response> {
@@ -42,20 +37,6 @@ async function postEventBatch(args: PostEventBatchArgs): Promise<Response> {
       events: args.events,
     }),
   });
-}
-
-function createMockSandboxHost(
-  hostId: string,
-  externalId: string,
-): MockSandboxHost {
-  return {
-    destroy: vi.fn().mockResolvedValue(undefined),
-    extendTimeout: vi.fn().mockResolvedValue(undefined),
-    externalId,
-    hostId,
-    resume: vi.fn().mockResolvedValue(undefined),
-    suspend: vi.fn().mockResolvedValue(undefined),
-  };
 }
 
 function setupEventRoute(args: SeedEventRouteArgs = {}) {
@@ -504,133 +485,6 @@ describe("internal event append ownership", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("does not mark sandbox activity for all-rejected event batches", async () => {
-    const { harness, host, session } = await setupEventRoute({
-      hostType: "ephemeral",
-    });
-    const sandboxHost = createMockSandboxHost(
-      host.id,
-      "sandbox-events-all-rejected",
-    );
-    try {
-      upsertHost(harness.db, harness.hub, {
-        externalId: sandboxHost.externalId,
-        id: host.id,
-        name: host.name,
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
-
-      const response = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: "thr_missing",
-            event: {
-              type: "system/error",
-              threadId: "thr_missing",
-              scope: threadScope(),
-              message: "stale daemon event",
-            },
-          },
-        ],
-      });
-
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        acceptedEvents: [],
-        rejectedEvents: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            reason: "thread_not_owned_by_host",
-            threadId: "thr_missing",
-          },
-        ],
-      });
-      expect(harness.db.select().from(events).all()).toHaveLength(0);
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toBeNull();
-      expect(sandboxHost.extendTimeout).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("marks sandbox activity for mixed event batches with accepted rows", async () => {
-    const { harness, host, session, thread } = await setupEventRoute({
-      hostType: "ephemeral",
-    });
-    const sandboxHost = createMockSandboxHost(
-      host.id,
-      "sandbox-events-mixed",
-    );
-    try {
-      upsertHost(harness.db, harness.hub, {
-        externalId: sandboxHost.externalId,
-        id: host.id,
-        name: host.name,
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
-
-      const response = await postEventBatch({
-        harness,
-        sessionId: session.id,
-        events: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            threadId: "thr_missing",
-            event: {
-              type: "system/error",
-              threadId: "thr_missing",
-              scope: threadScope(),
-              message: "stale daemon event",
-            },
-          },
-          {
-            producerEventId: "hdevt_23456789abcdefghijkn",
-            threadId: thread.id,
-            event: {
-              type: "system/error",
-              threadId: thread.id,
-              scope: threadScope(),
-              message: "owned daemon event",
-            },
-          },
-        ],
-      });
-
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        acceptedEvents: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkn",
-            threadId: thread.id,
-            sequence: 1,
-          },
-        ],
-        rejectedEvents: [
-          {
-            producerEventId: "hdevt_23456789abcdefghijkm",
-            reason: "thread_not_owned_by_host",
-            threadId: "thr_missing",
-          },
-        ],
-      });
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
-        expect.any(Number),
-      );
-      await vi.waitFor(() => {
-        expect(sandboxHost.extendTimeout).toHaveBeenCalledTimes(1);
-      });
     } finally {
       await harness.cleanup();
     }

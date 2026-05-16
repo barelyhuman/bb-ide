@@ -11,7 +11,6 @@ import {
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
   getDatabaseCompactionStats,
   getDatabaseMaintenanceActivity,
-  getActiveSession,
   getEnvironment,
   getThread,
   isDatabaseMaintenanceIdle,
@@ -23,8 +22,6 @@ import {
   pruneCompletedCommands,
   pruneCompletedCommandPayloads,
   shouldCompactDatabase,
-  sweepEphemeralHostsPendingCleanup,
-  sweepIdleEphemeralHostsEligibleForSuspend,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
@@ -35,8 +32,8 @@ import { activeLifecycleOperationStates } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
-  LoggedSandboxWorkSessionDeps,
   ServerAppDeps,
+  LoggedWorkSessionDeps,
 } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
 import { advanceEnvironmentCleanup } from "../environments/environment-cleanup.js";
@@ -45,10 +42,6 @@ import {
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
 import { handleExpiredCommands } from "../hosts/expired-commands.js";
-import {
-  destroyHost,
-  maybeSuspendIdleSandbox,
-} from "../hosts/host-lifecycle.js";
 import { sweepDueNudges } from "../scheduling/nudge-sweep.js";
 import {
   advanceProjectDeletion,
@@ -65,7 +58,6 @@ import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
-export type DestroyHostFn = typeof destroyHost;
 export type DatabaseMaintenanceSweepDeps = Pick<AppDeps, "db" | "logger">;
 
 const DATABASE_MAINTENANCE_CHECK_INTERVAL_MS = 60 * 60_000;
@@ -126,7 +118,7 @@ export function runDatabaseMaintenanceSweep(
 }
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedWorkSessionDeps,
   evaluateCleanup: EvaluateManagedEnvironmentArchiveCleanupFn,
 ): Promise<void> {
   for (const environment of sweepManagedEnvironments(deps.db)) {
@@ -146,46 +138,9 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
   }
 }
 
-export async function runEphemeralHostCleanupSweep(
-  deps: Pick<
-    AppDeps,
-    | "cloudAuth"
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "logger"
-    | "sandboxEnv"
-    | "sandboxRegistry"
-  >,
-  destroySandboxHost: DestroyHostFn,
-): Promise<void> {
-  for (const host of sweepEphemeralHostsPendingCleanup(deps.db)) {
-    if (host.suspendedAt !== null) {
-      continue;
-    }
-    if (getActiveSession(deps.db, host.id)) {
-      continue;
-    }
-
-    try {
-      await destroySandboxHost(deps, host.id);
-    } catch (error) {
-      deps.logger.warn(
-        {
-          err: error,
-          hostId: host.id,
-        },
-        "Ephemeral host cleanup sweep failed",
-      );
-    }
-  }
-}
-
 export async function runProjectDeletionSweep(
   deps: Pick<
     ServerAppDeps,
-    | "cloudAuth"
     | "config"
     | "db"
     | "hostLifecycle"
@@ -194,8 +149,6 @@ export async function runProjectDeletionSweep(
     | "logger"
     | "machineAuth"
     | "pendingInteractions"
-    | "sandboxEnv"
-    | "sandboxRegistry"
     | "terminalSessions"
   >,
 ): Promise<void> {
@@ -217,7 +170,6 @@ export async function runProjectDeletionSweep(
 export async function runEnvironmentProvisioningSweep(
   deps: Pick<
     AppDeps,
-    | "cloudAuth"
     | "config"
     | "db"
     | "hostLifecycle"
@@ -225,8 +177,6 @@ export async function runEnvironmentProvisioningSweep(
     | "lifecycleDedupers"
     | "logger"
     | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
   >,
 ): Promise<void> {
   const seenEnvironmentIds = new Set<string>();
@@ -262,38 +212,6 @@ export async function runEnvironmentProvisioningSweep(
           operationKind: operation.kind,
         },
         "Environment provisioning sweep failed",
-      );
-    }
-  }
-}
-
-export async function runIdleSandboxSuspendSweep(
-  deps: Pick<
-    AppDeps,
-    | "cloudAuth"
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "logger"
-    | "sandboxEnv"
-    | "sandboxRegistry"
-  >,
-): Promise<void> {
-  for (const host of sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
-    inactiveBefore: Date.now() - deps.config.sandboxIdleThresholdMs,
-  })) {
-    try {
-      await maybeSuspendIdleSandbox(deps, {
-        hostId: host.id,
-      });
-    } catch (error) {
-      deps.logger.warn(
-        {
-          err: error,
-          hostId: host.id,
-        },
-        "Idle sandbox suspend sweep failed",
       );
     }
   }
@@ -394,7 +312,6 @@ export async function runThreadLifecycleSweep(
 export async function runPeriodicSweeps(
   deps: Pick<
     ServerAppDeps,
-    | "cloudAuth"
     | "config"
     | "db"
     | "hostLifecycle"
@@ -403,8 +320,6 @@ export async function runPeriodicSweeps(
     | "logger"
     | "machineAuth"
     | "pendingInteractions"
-    | "sandboxEnv"
-    | "sandboxRegistry"
     | "terminalSessions"
   >,
 ): Promise<void> {
@@ -456,13 +371,11 @@ export async function runPeriodicSweeps(
     await runEnvironmentProvisioningSweep(deps);
     await runThreadLifecycleSweep(deps);
     await runQueuedMessageAutoSendSweep(deps);
-    await runIdleSandboxSuspendSweep(deps);
     await runManagedEnvironmentArchiveCleanupSweep(
       deps,
       advanceEnvironmentCleanup,
     );
     await runProjectDeletionSweep(deps);
-    await runEphemeralHostCleanupSweep(deps, destroyHost);
     runDatabaseMaintenanceSweep(deps, now);
   } catch (error) {
     deps.logger.error({ err: error }, "Periodic sweep failed");

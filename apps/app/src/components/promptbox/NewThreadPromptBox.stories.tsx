@@ -77,20 +77,22 @@ const localHost: Host = {
 
 const localSources: readonly ProjectSource[] = [
   {
+    id: "src_local",
+    projectId: "proj_demo",
     type: "local_path",
     hostId: localHostId,
     path: "/Users/michael/Projects/bb",
+    isDefault: true,
+    createdAt: 0,
+    updatedAt: 0,
   },
 ];
 
 const baseEnvironment: NewThreadEnvironmentConfig = {
   value: `host:${localHostId}:local`,
   onChange: noop,
-  projectId: "proj_demo",
   sources: localSources,
   hosts: [localHost],
-  sandboxBackends: [],
-  sandboxHostSupported: false,
   isLocalHost: (hostId) => hostId === localHostId,
 };
 
@@ -258,7 +260,10 @@ function FullAccessRow() {
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow label="default" hint="codex + workspace-write + local-direct env">
+      <StoryRow
+        label="default"
+        hint="codex + workspace-write + local-direct env"
+      >
         <DefaultRow />
       </StoryRow>
       <StoryRow label="submitting" hint="create-thread mutation in flight">
