@@ -270,11 +270,12 @@ export const GitDiffCard = memo(function GitDiffCard({
   );
   const [hasBodyEnteredViewport, setHasBodyEnteredViewport] = useState(false);
   const [hasLoadedDeletedDiff, setHasLoadedDeletedDiff] = useState(false);
-  // Reset cached enrichment when the card swaps to a different file.
+  // Reset cached enrichment when the card swaps to different diff contents.
+  // Keep the viewport-entry flag: an already-visible sentinel does not emit
+  // another intersection change when only the diff hunk identity changes.
   useEffect(() => {
     enrichmentStatusRef.current = "idle";
     setEnrichment({ status: "idle" });
-    setHasBodyEnteredViewport(false);
     setHasLoadedDeletedDiff(false);
   }, [fileContentPlan.identity]);
   useEffect(() => {

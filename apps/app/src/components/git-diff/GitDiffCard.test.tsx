@@ -94,6 +94,18 @@ const MODIFIED_FILE_DIFF = [
   "",
 ].join("\n");
 
+const MODIFIED_FILE_DIFF_WITH_EXTRA_LINE = [
+  "diff --git a/src/modified-file.ts b/src/modified-file.ts",
+  "index 1111111..3333333 100644",
+  "--- a/src/modified-file.ts",
+  "+++ b/src/modified-file.ts",
+  "@@ -1 +1,2 @@",
+  "-export const value = 1;",
+  "+export const value = 2;",
+  "+export const extra = true;",
+  "",
+].join("\n");
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -150,6 +162,40 @@ describe("GitDiffCard", () => {
         "/Users/me/project/src/modified-file.ts",
       );
     });
+  });
+
+  it("keeps rendering an already-visible diff when its hunk identity changes", () => {
+    const modifiedFile = parseGitDiffFiles(MODIFIED_FILE_DIFF)[0];
+    const updatedModifiedFile = parseGitDiffFiles(
+      MODIFIED_FILE_DIFF_WITH_EXTRA_LINE,
+    )[0];
+    expect(modifiedFile).toBeDefined();
+    expect(updatedModifiedFile).toBeDefined();
+    if (!modifiedFile || !updatedModifiedFile) return;
+
+    const { rerender } = render(
+      <GitDiffCard
+        fileDiff={modifiedFile}
+        diffViewOptions={{}}
+        isCollapsed={false}
+        onToggleCollapsed={() => {}}
+        isRendering={false}
+      />,
+    );
+
+    expect(screen.getByTestId("diff-view")).toBeTruthy();
+
+    rerender(
+      <GitDiffCard
+        fileDiff={updatedModifiedFile}
+        diffViewOptions={{}}
+        isCollapsed={false}
+        onToggleCollapsed={() => {}}
+        isRendering={false}
+      />,
+    );
+
+    expect(screen.getByTestId("diff-view")).toBeTruthy();
   });
 
   it("gates deleted file rendering and content loading behind an explicit load action", async () => {
