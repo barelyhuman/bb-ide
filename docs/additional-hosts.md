@@ -54,6 +54,10 @@ npx bb-app config BB_SERVER_URL http://<server>.<tailnet>.ts.net:38886
 npx --package bb-app bb host list
 ```
 
+`BB_SERVER_URL` is stored on the machine where you run the command. It points
+standalone `bb` CLI and `host-daemon` commands at an existing server; it does
+not change where full `npx bb-app` starts its own local server.
+
 ## Point a project at the new host
 
 A project can only run on a host if it has a local-path source for that host.

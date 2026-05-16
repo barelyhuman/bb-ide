@@ -8,10 +8,12 @@ time:
 npx bb-app config OPENAI_API_KEY <key>
 npx bb-app config BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
 npx bb-app config list
+npx bb-app config unset OPENAI_API_KEY
 npx bb-app config refresh
 ```
 
 `bb-app config list` redacts secret values and shows whether they are set.
+Use `unset` to remove a stored value.
 
 ## Precedence
 
@@ -32,9 +34,9 @@ next start. If you edit `config.json` by hand, run `npx bb-app config refresh`
 to apply the file to a running server.
 
 The live reload applies runtime keys such as `OPENAI_API_KEY`, `BB_APP_URL`,
-and `BB_INFERENCE_MODEL`. `BB_LOG_LEVEL` applies the next time bb starts.
-Feature flags remain source/deployment environment variables rather than
-`bb-app config` keys.
+and `BB_INFERENCE_MODEL`. Startup-only values such as `BB_LOG_LEVEL` apply the
+next time bb starts. Feature flags remain source/deployment environment
+variables rather than `bb-app config` keys.
 
 When targeting a non-default running instance, pass the same `--data-dir` and
 `--server-port` to `bb-app config` commands so they write the right config file
@@ -50,12 +52,18 @@ starts.
 | `OPENAI_API_KEY`     | Recommended             | Generated thread titles, branch names, commit messages, and voice transcription.                           |
 | `BB_APP_URL`         | Optional for remote use | Human-facing app URL used for generated links and allowed browser origins. Leave empty for local-only use. |
 | `BB_INFERENCE_MODEL` | Optional                | Server-side helper model in `provider/model` format.                                                       |
+| `BB_SERVER_URL`      | Remote CLI/host use     | Server URL for standalone `bb` CLI and `host-daemon` commands on the current machine.                      |
+| `BB_LOG_LEVEL`       | Debugging               | Log level for the next bb start: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.                    |
 
 `OPENAI_API_KEY` is the main key most users should set for the best default
 experience. bb's server-side helper model defaults to
 `BB_INFERENCE_MODEL=openai/gpt-4o-mini`; without an OpenAI key, those helper
 calls return no result. Core threads can still run when the selected provider
 CLI is authenticated, such as `codex login` or a logged-in Claude Code install.
+
+`BB_SERVER_URL` does not change where full `npx bb-app` startup binds locally.
+It is for commands that need to target an already-running server, such as the
+bundled `bb` CLI or a standalone host daemon.
 
 ## Startup Flags
 

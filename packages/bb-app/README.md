@@ -67,6 +67,17 @@ local host daemon, and serves the web app. It stores bb-managed state under
 From the app, add or open a project, start a thread, and choose the provider
 you want that thread to use.
 
+For the best default experience, set the helper API key once:
+
+```bash
+npx bb-app config OPENAI_API_KEY <key>
+```
+
+Core agent threads use the selected provider CLI's own authentication, so this
+key is not required for a logged-in Codex, Claude Code, or Pi thread. bb uses
+`OPENAI_API_KEY` for server-side helpers such as generated thread titles,
+branch names, commit messages, and voice transcription.
+
 ## Provider Credentials
 
 bb uses whichever providers you have configured. If you need to set one up:
@@ -77,26 +88,22 @@ bb uses whichever providers you have configured. If you need to set one up:
 | `claude-code` | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and authenticate per its docs.                                                   |
 | `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Run `pi` and then `/login` for interactive setup. |
 
-`OPENAI_API_KEY` is recommended for the best default experience. bb uses it for
-server-side helpers such as generated thread titles, branch names, commit
-messages, and voice transcription. Core agent threads can still run when the
-selected provider CLI is authenticated, such as `codex login` or a logged-in
-Claude Code install.
+## Configuration
+
+Use `bb-app config` for persistent package settings under `~/.bb/config.json`:
 
 ```bash
 npx bb-app config OPENAI_API_KEY <key>
-```
-
-## Configuration
-
-Use `bb-app config` for persistent settings:
-
-```bash
+npx bb-app config BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
 npx bb-app config list
+npx bb-app config unset OPENAI_API_KEY
 npx bb-app config refresh
 ```
 
-For config keys, precedence, startup flags, and source-development `.env`
+`config list` redacts secrets. Config writes ask a running local bb server to
+reload; if bb is stopped, the values apply on the next start.
+
+For all config keys, precedence, startup flags, and source-development `.env`
 behavior, see the
 [configuration docs](https://github.com/ymichael/bb/blob/main/docs/configuration.md).
 
