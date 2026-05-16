@@ -1,0 +1,179 @@
+name: Publish bb-app
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm_tag:
+        description: npm dist-tag to apply during npm publish.
+        required: true
+        type: choice
+        default: latest
+        options:
+          - alpha
+          - beta
+          - latest
+      allow_prerelease_latest:
+        description: Allow publishing a prerelease version with the latest tag.
+        required: true
+        type: boolean
+        default: false
+      dry_run:
+        description: Run validation and npm publish --dry-run only.
+        required: true
+        type: boolean
+        default: true
+
+run-name: Publish bb-app (${{ inputs.npm_tag }}${{ inputs.dry_run && ', dry run' || '' }})
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-bb-app-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish bb-app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm-release
+
+    steps:
+      - name: Require main branch
+        if: ${{ github.ref_name != 'main' }}
+        run: |
+          echo "::error::Publish bb-app must run from main, got ${GITHUB_REF_NAME}."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Ensure npm supports trusted publishing
+        run: |
+          npm_version="$(npm --version)"
+          node - "$npm_version" <<'NODE' || npm install --global npm@latest
+          const version = process.argv[2];
+          const [major, minor, patch] = version.split(".").map(Number);
+          const supported =
+            major > 11 ||
+            (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+          process.exit(supported ? 0 : 1);
+          NODE
+          npm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate release inputs
+        id: release
+        env:
+          ALLOW_PRERELEASE_LATEST: ${{ inputs.allow_prerelease_latest }}
+          NPM_TAG: ${{ inputs.npm_tag }}
+        run: |
+          node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const { appendFileSync, readFileSync } = require("node:fs");
+
+          function fail(message) {
+            console.error(`::error::${message}`);
+            process.exit(1);
+          }
+
+          const pkg = JSON.parse(
+            readFileSync("packages/bb-app/package.json", "utf8"),
+          );
+          const version = pkg.version;
+          const npmTag = process.env.NPM_TAG;
+          const allowPrereleaseLatest =
+            process.env.ALLOW_PRERELEASE_LATEST === "true";
+          const isPrerelease = version.includes("-");
+          const isAlpha = /-alpha\.\d+$/u.test(version);
+          const isBeta = /-beta\.\d+$/u.test(version);
+          const versionsRaw = execFileSync(
+            "npm",
+            ["view", "bb-app", "versions", "--json"],
+            { encoding: "utf8" },
+          );
+          const parsedVersions = JSON.parse(versionsRaw);
+          const publishedVersions = Array.isArray(parsedVersions)
+            ? parsedVersions
+            : [parsedVersions];
+
+          if (publishedVersions.includes(version)) {
+            fail(`bb-app@${version} already exists on npm.`);
+          }
+          if (npmTag === "alpha" && !isAlpha) {
+            fail(`npm_tag=alpha requires an alpha prerelease, got ${version}.`);
+          }
+          if (npmTag === "beta" && !isBeta) {
+            fail(`npm_tag=beta requires a beta prerelease, got ${version}.`);
+          }
+          if (npmTag === "latest" && isPrerelease && !allowPrereleaseLatest) {
+            fail(
+              `Refusing to publish prerelease ${version} with latest unless allow_prerelease_latest=true.`,
+            );
+          }
+
+          appendFileSync(process.env.GITHUB_ENV, `PACKAGE_VERSION=${version}\n`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
+          console.log(`Preparing bb-app@${version} with npm tag ${npmTag}.`);
+          NODE
+
+      - name: Build, typecheck, and test focused packages
+        run: pnpm exec turbo run typecheck test --filter=@bb/config --filter=@bb/server --filter=bb-app --output-logs=new-only
+
+      - name: Smoke bb-app tarball
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --force --output-logs=new-only
+
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Preview npm package
+        working-directory: packages/bb-app
+        run: npm pack --dry-run
+
+      - name: npm publish dry run
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/bb-app
+        env:
+          NPM_TAG: ${{ inputs.npm_tag }}
+        run: npm publish --dry-run --tag "$NPM_TAG"
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/bb-app
+        env:
+          NPM_TAG: ${{ inputs.npm_tag }}
+        run: npm publish --tag "$NPM_TAG"
+
+      - name: Verify npm release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          sleep 5
+          npm view "bb-app@$PACKAGE_VERSION" version --json
+          npm view bb-app version dist-tags --json
+
+      - name: Summarize release
+        run: |
+          {
+            echo "## bb-app release"
+            echo
+            echo "- version: \`$PACKAGE_VERSION\`"
+            echo "- npm tag: \`${{ inputs.npm_tag }}\`"
+            echo "- dry run: \`${{ inputs.dry_run }}\`"
+            echo "- commit: \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
