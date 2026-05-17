@@ -50,7 +50,16 @@ function applyHeight(
   snap: boolean,
   state: SnapState,
 ): void {
-  if (snap) {
+  // Snap on decrease: easing a shrink draws attention to content going away
+  // and lets the parent scroll container chase the receding bottom edge.
+  // Only growth animates.
+  const currentHeightPx = parseFloat(target.style.height);
+  const nextHeightPx = parseFloat(nextHeight);
+  const heightDecreasing =
+    Number.isFinite(currentHeightPx) &&
+    Number.isFinite(nextHeightPx) &&
+    nextHeightPx < currentHeightPx;
+  if (snap || heightDecreasing) {
     enterSnapMode(target, state);
     scheduleRestore(target, state);
   }
