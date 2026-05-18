@@ -235,6 +235,7 @@ async function startIntegrationServer(
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
     appUrl: "https://bb.example.test",
     serverPort: 0,
+    transcriptionModel: "test/mock-transcription",
     isDevelopment: false,
   };
   const machineAuth = await createMachineAuthService({

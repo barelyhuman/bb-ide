@@ -11,6 +11,9 @@ describe("integration harness", () => {
       repoDir = harness.repoDir;
       const host = await waitForHostConnected(harness.api);
       expect(host.id).toBe(harness.hostId);
+      expect(harness.server.config.transcriptionModel).toBe(
+        "test/mock-transcription",
+      );
 
       await fs.access(harness.repoDir);
     });
@@ -32,7 +35,7 @@ describe("integration harness", () => {
   it("reloads bb-app managed config through the integration server", async () => {
     await withHarness(async (harness) => {
       await fs.writeFile(
-        path.join(harness.server.config.dataDir, "config.json"),
+        path.join(harness.server.config.dataDir, "env.json"),
         `${JSON.stringify({ env: { OPENAI_API_KEY: "stored-openai-key" } })}\n`,
         "utf8",
       );
