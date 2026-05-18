@@ -225,7 +225,7 @@ type TimelineRowsListItem =
     }
   | {
       kind: "unread-divider";
-      id: "manager-unread-divider";
+      id: "thread-unread-divider";
     };
 
 interface ConversationRowProps {
@@ -572,7 +572,7 @@ function TimelineUnreadDivider() {
       role="separator"
       aria-label="New messages"
       className="flex items-center gap-2 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-foreground"
-      data-testid="manager-unread-divider"
+      data-testid="thread-unread-divider"
     >
       <span className="shrink-0">New</span>
       <span className="h-px min-w-0 flex-1 bg-border" aria-hidden />
@@ -973,7 +973,7 @@ function buildTimelineRowsListItems({
 
   for (const [index, row] of rows.entries()) {
     if (index === dividerIndex) {
-      items.push({ kind: "unread-divider", id: "manager-unread-divider" });
+      items.push({ kind: "unread-divider", id: "thread-unread-divider" });
     }
     items.push({ kind: "row", row });
   }

@@ -25,13 +25,12 @@ const baseProps = {
 };
 
 // ---------------------------------------------------------------------------
-// Manager threads are user/assistant conversation only (no work rows), so the
-// fixtures below are plain conversation rows. `createdAt` values are spaced a
-// minute apart so the `after-cutoff` placement has a clean millisecond
-// boundary to land on.
+// Keep these fixtures to plain conversation rows so the divider placement is
+// easy to scan. `createdAt` values are spaced a minute apart so the
+// `after-cutoff` placement has a clean millisecond boundary to land on.
 // ---------------------------------------------------------------------------
 
-const THREAD_ID = "thr_managerUnreadDivider";
+const THREAD_ID = "thr_threadUnreadDivider";
 const TURN_PREFIX = "019dd000-0000-7000-aa00-00000000000";
 
 function userRow(args: {

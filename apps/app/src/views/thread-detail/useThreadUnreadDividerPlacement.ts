@@ -2,27 +2,66 @@ import { useEffect, useState } from "react";
 import type { ThreadTimelineUnreadDividerPlacement } from "@/components/thread/timeline";
 import type { ThreadType } from "@bb/domain";
 
-interface ManagerUnreadDividerThreadState {
+interface ThreadUnreadDividerThreadState {
   id: string;
   lastReadAt: number | null;
   latestAttentionAt: number;
   type: ThreadType;
 }
 
-interface ManagerUnreadDividerSnapshot {
+interface ThreadUnreadDividerSnapshot {
   attentionAt: number;
   placement: ThreadTimelineUnreadDividerPlacement | null;
   threadId: string;
 }
 
-export interface UseManagerUnreadDividerPlacementArgs {
+interface ShouldTrackThreadUnreadDividerArgs {
   routeThreadId: string | undefined;
-  thread: ManagerUnreadDividerThreadState | undefined;
+  threadId: string | undefined;
+  threadType: ThreadType | undefined;
   useStandardManagerTimeline: boolean;
 }
 
+interface IsThreadUnreadArgs {
+  lastReadAt: number | null | undefined;
+  latestAttentionAt: number | undefined;
+}
+
+export interface UseThreadUnreadDividerPlacementArgs {
+  routeThreadId: string | undefined;
+  thread: ThreadUnreadDividerThreadState | undefined;
+  useStandardManagerTimeline: boolean;
+}
+
+function shouldTrackThreadUnreadDivider({
+  routeThreadId,
+  threadId,
+  threadType,
+  useStandardManagerTimeline,
+}: ShouldTrackThreadUnreadDividerArgs): boolean {
+  if (
+    threadId === undefined ||
+    threadType === undefined ||
+    routeThreadId !== threadId
+  ) {
+    return false;
+  }
+
+  return !(threadType === "manager" && useStandardManagerTimeline);
+}
+
+function isThreadUnread({
+  lastReadAt,
+  latestAttentionAt,
+}: IsThreadUnreadArgs): boolean {
+  if (lastReadAt === undefined || latestAttentionAt === undefined) {
+    return false;
+  }
+  return lastReadAt === null || lastReadAt < latestAttentionAt;
+}
+
 function buildUnreadDividerPlacement(
-  thread: ManagerUnreadDividerThreadState,
+  thread: ThreadUnreadDividerThreadState,
 ): ThreadTimelineUnreadDividerPlacement | null {
   if (thread.lastReadAt === null) {
     return { kind: "before-first" };
@@ -33,13 +72,14 @@ function buildUnreadDividerPlacement(
   return null;
 }
 
-export function useManagerUnreadDividerPlacement({
+export function useThreadUnreadDividerPlacement({
   routeThreadId,
   thread,
   useStandardManagerTimeline,
-}: UseManagerUnreadDividerPlacementArgs): ThreadTimelineUnreadDividerPlacement | null {
-  const [snapshot, setSnapshot] =
-    useState<ManagerUnreadDividerSnapshot | null>(null);
+}: UseThreadUnreadDividerPlacementArgs): ThreadTimelineUnreadDividerPlacement | null {
+  const [snapshot, setSnapshot] = useState<ThreadUnreadDividerSnapshot | null>(
+    null,
+  );
   const threadId = thread?.id;
   const threadLastReadAt = thread?.lastReadAt;
   const threadLatestAttentionAt = thread?.latestAttentionAt;
@@ -51,15 +91,18 @@ export function useManagerUnreadDividerPlacement({
       threadLastReadAt === undefined ||
       threadLatestAttentionAt === undefined ||
       threadType === undefined ||
-      routeThreadId !== threadId ||
-      threadType !== "manager" ||
-      useStandardManagerTimeline
+      !shouldTrackThreadUnreadDivider({
+        routeThreadId,
+        threadId,
+        threadType,
+        useStandardManagerTimeline,
+      })
     ) {
       setSnapshot(null);
       return;
     }
 
-    const threadState: ManagerUnreadDividerThreadState = {
+    const threadState: ThreadUnreadDividerThreadState = {
       id: threadId,
       lastReadAt: threadLastReadAt,
       latestAttentionAt: threadLatestAttentionAt,
@@ -97,12 +140,19 @@ export function useManagerUnreadDividerPlacement({
   ]);
 
   if (
-    threadId === undefined ||
-    routeThreadId !== threadId ||
-    threadType !== "manager" ||
-    useStandardManagerTimeline ||
-    snapshot?.threadId !== threadId ||
-    snapshot.attentionAt !== threadLatestAttentionAt
+    !shouldTrackThreadUnreadDivider({
+      routeThreadId,
+      threadId,
+      threadType,
+      useStandardManagerTimeline,
+    }) ||
+    snapshot === null ||
+    snapshot.threadId !== threadId ||
+    (snapshot.attentionAt !== threadLatestAttentionAt &&
+      !isThreadUnread({
+        lastReadAt: threadLastReadAt,
+        latestAttentionAt: threadLatestAttentionAt,
+      }))
   ) {
     return null;
   }
