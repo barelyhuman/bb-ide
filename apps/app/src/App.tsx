@@ -1,14 +1,10 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuthCallbackView } from "./views/AuthCallbackView";
 import { MainView } from "./views/MainView";
 import { ProjectMainView } from "./views/ProjectMainView";
 import { NewManagerView } from "./views/NewManagerView";
-import { ProjectArchivedThreadsView } from "./views/ProjectArchivedThreadsView";
-import { AppSettingsView } from "./views/AppSettingsView";
-import { ProjectSettingsView } from "./views/ProjectSettingsView";
-import { ThreadDetailView } from "./views/thread-detail/ThreadDetailView";
-import { InternalReplayListView } from "./views/InternalReplayListView";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { useWebSocket } from "./hooks/useWebSocket";
 import {
@@ -23,37 +19,66 @@ import {
   THREAD_DETAIL_ROUTE_PATH,
 } from "./lib/app-route-paths";
 
+const ThreadDetailRoute = lazy(
+  () => import("./views/thread-detail/ThreadDetailRoute"),
+);
+const AppSettingsView = lazy(() =>
+  import("./views/AppSettingsView").then((m) => ({
+    default: m.AppSettingsView,
+  })),
+);
+const ProjectSettingsView = lazy(() =>
+  import("./views/ProjectSettingsView").then((m) => ({
+    default: m.ProjectSettingsView,
+  })),
+);
+const ProjectArchivedThreadsView = lazy(() =>
+  import("./views/ProjectArchivedThreadsView").then((m) => ({
+    default: m.ProjectArchivedThreadsView,
+  })),
+);
+const InternalReplayListView = lazy(() =>
+  import("./views/InternalReplayListView").then((m) => ({
+    default: m.InternalReplayListView,
+  })),
+);
+
 function AppRoutes() {
   return (
     <AppLayout>
-      <Routes>
-        <Route path={APP_ROOT_ROUTE_PATH} element={<MainView />} />
-        <Route path={APP_SETTINGS_ROUTE_PATH} element={<AppSettingsView />} />
-        {import.meta.env.DEV ? (
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path={APP_ROOT_ROUTE_PATH} element={<MainView />} />
+          <Route path={APP_SETTINGS_ROUTE_PATH} element={<AppSettingsView />} />
+          {import.meta.env.DEV ? (
+            <Route
+              path={DEVELOPMENT_REPLAY_ROUTE_PATH}
+              element={<InternalReplayListView />}
+            />
+          ) : null}
+          <Route path={PROJECT_MAIN_ROUTE_PATH} element={<ProjectMainView />} />
           <Route
-            path={DEVELOPMENT_REPLAY_ROUTE_PATH}
-            element={<InternalReplayListView />}
+            path={PROJECT_NEW_MANAGER_ROUTE_PATH}
+            element={<NewManagerView />}
           />
-        ) : null}
-        <Route path={PROJECT_MAIN_ROUTE_PATH} element={<ProjectMainView />} />
-        <Route
-          path={PROJECT_NEW_MANAGER_ROUTE_PATH}
-          element={<NewManagerView />}
-        />
-        <Route
-          path={PROJECT_SETTINGS_ROUTE_PATH}
-          element={<ProjectSettingsView />}
-        />
-        <Route
-          path={PROJECT_ARCHIVED_ROUTE_PATH}
-          element={<ProjectArchivedThreadsView />}
-        />
-        <Route path={THREAD_DETAIL_ROUTE_PATH} element={<ThreadDetailView />} />
-        <Route
-          path="*"
-          element={<Navigate to={APP_ROOT_ROUTE_PATH} replace />}
-        />
-      </Routes>
+          <Route
+            path={PROJECT_SETTINGS_ROUTE_PATH}
+            element={<ProjectSettingsView />}
+          />
+          <Route
+            path={PROJECT_ARCHIVED_ROUTE_PATH}
+            element={<ProjectArchivedThreadsView />}
+          />
+          <Route
+            path={THREAD_DETAIL_ROUTE_PATH}
+            element={<ThreadDetailRoute />}
+          />
+          <Route
+            path="*"
+            element={<Navigate to={APP_ROOT_ROUTE_PATH} replace />}
+          />
+        </Routes>
+      </Suspense>
     </AppLayout>
   );
 }

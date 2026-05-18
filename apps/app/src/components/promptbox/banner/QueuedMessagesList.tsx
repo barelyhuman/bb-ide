@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import type { ThreadQueuedMessage } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -16,6 +17,111 @@ export interface QueuedMessagesListProps {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }
+
+interface QueuedMessageRowProps {
+  queuedMessage: ThreadQueuedMessage;
+  index: number;
+  isProcessing: boolean;
+  sendDisabled: boolean;
+  actionDisabled: boolean;
+  onSendImmediately: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const QueuedMessageRow = memo(function QueuedMessageRow({
+  queuedMessage,
+  index,
+  isProcessing,
+  sendDisabled,
+  actionDisabled,
+  onSendImmediately,
+  onEdit,
+  onDelete,
+}: QueuedMessageRowProps) {
+  const preview = useMemo(
+    () => formatQueuedMessagePreview(queuedMessage.content),
+    [queuedMessage.content],
+  );
+  const attachmentCount = useMemo(
+    () => countQueuedMessageAttachments(queuedMessage.content),
+    [queuedMessage.content],
+  );
+
+  return (
+    <li className="px-2.5 py-0.5">
+      <div className="flex items-center gap-1.5">
+        <div className="p-0.5 text-muted-foreground">
+          <Icon name="CornerDownRight" className="size-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
+            <p
+              className="min-w-0 truncate text-foreground"
+              title={preview}
+            >
+              {preview}
+            </p>
+            {attachmentCount > 0 ? (
+              <>
+                <span className="shrink-0 text-muted-foreground">.</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {attachmentCount === 1
+                    ? "1 attachment"
+                    : `${attachmentCount} attachments`}
+                </span>
+              </>
+            ) : null}
+            {isProcessing ? (
+              <>
+                <span className="shrink-0 text-muted-foreground">.</span>
+                <span className="shrink-0 text-muted-foreground">
+                  Sending...
+                </span>
+              </>
+            ) : null}
+          </div>
+        </div>
+        <div className="ml-1 flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="link"
+            className="h-auto px-0 pr-1 text-xs text-muted-foreground underline"
+            disabled={sendDisabled || isProcessing}
+            onClick={() => onSendImmediately(queuedMessage.id)}
+          >
+            {isProcessing ? "Sending..." : "Send now"}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7 text-muted-foreground"
+            disabled={actionDisabled || isProcessing}
+            onClick={() => onEdit(queuedMessage.id)}
+            aria-label={`Edit queued message ${index + 1}`}
+            title="Edit queued message"
+          >
+            <Icon name="Edit" className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7 text-muted-foreground hover:text-destructive"
+            disabled={actionDisabled || isProcessing}
+            onClick={() => onDelete(queuedMessage.id)}
+            aria-label={`Delete queued message ${index + 1}`}
+            title="Delete queued message"
+          >
+            <Icon name="Trash2" className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
+});
 
 export function QueuedMessagesList({
   queuedMessages,
@@ -36,90 +142,19 @@ export function QueuedMessagesList({
         </p>
       </div>
       <ul>
-        {queuedMessages.map((queuedMessage, index) => {
-          const preview = formatQueuedMessagePreview(queuedMessage.content);
-          const attachmentCount = countQueuedMessageAttachments(
-            queuedMessage.content,
-          );
-          const isProcessing = processingMessageId === queuedMessage.id;
-          return (
-            <li key={queuedMessage.id} className="px-2.5 py-0.5">
-              <div className="flex items-center gap-1.5">
-                <div className="p-0.5 text-muted-foreground">
-                  <Icon name="CornerDownRight" className="size-3.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
-                    <p
-                      className="min-w-0 truncate text-foreground"
-                      title={preview}
-                    >
-                      {preview}
-                    </p>
-                    {attachmentCount > 0 ? (
-                      <>
-                        <span className="shrink-0 text-muted-foreground">
-                          .
-                        </span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {attachmentCount === 1
-                            ? "1 attachment"
-                            : `${attachmentCount} attachments`}
-                        </span>
-                      </>
-                    ) : null}
-                    {isProcessing ? (
-                      <>
-                        <span className="shrink-0 text-muted-foreground">
-                          .
-                        </span>
-                        <span className="shrink-0 text-muted-foreground">
-                          Sending...
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="ml-1 flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="link"
-                    className="h-auto px-0 pr-1 text-xs text-muted-foreground underline"
-                    disabled={sendDisabled || isProcessing}
-                    onClick={() => onSendImmediately(queuedMessage.id)}
-                  >
-                    {isProcessing ? "Sending..." : "Send now"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground"
-                    disabled={actionDisabled || isProcessing}
-                    onClick={() => onEdit(queuedMessage.id)}
-                    aria-label={`Edit queued message ${index + 1}`}
-                    title="Edit queued message"
-                  >
-                    <Icon name="Edit" className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground hover:text-destructive"
-                    disabled={actionDisabled || isProcessing}
-                    onClick={() => onDelete(queuedMessage.id)}
-                    aria-label={`Delete queued message ${index + 1}`}
-                    title="Delete queued message"
-                  >
-                    <Icon name="Trash2" className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </li>
-          );
-        })}
+        {queuedMessages.map((queuedMessage, index) => (
+          <QueuedMessageRow
+            key={queuedMessage.id}
+            queuedMessage={queuedMessage}
+            index={index}
+            isProcessing={processingMessageId === queuedMessage.id}
+            sendDisabled={sendDisabled}
+            actionDisabled={actionDisabled}
+            onSendImmediately={onSendImmediately}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
       </ul>
     </PromptStackCard>
   );

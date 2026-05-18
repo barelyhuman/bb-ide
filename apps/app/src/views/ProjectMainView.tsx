@@ -229,17 +229,7 @@ export function ProjectMainView() {
     [projectId, promptDraft, uploadPromptAttachment],
   );
 
-  if (!projectId) {
-    return (
-      <PageShell contentClassName="min-h-full items-center justify-center">
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Select a project.
-        </p>
-      </PageShell>
-    );
-  }
-
-  const submitPrompt = async () => {
+  const submitPrompt = useCallback(async () => {
     const submittedDraft = {
       text: promptDraft.text,
       attachments: promptDraft.attachments,
@@ -250,7 +240,8 @@ export function ProjectMainView() {
       createThread.isPending ||
       !selectedEnvironment ||
       !selectedProviderId ||
-      !selectedThreadModel
+      !selectedThreadModel ||
+      !projectId
     ) {
       return;
     }
@@ -272,7 +263,18 @@ export function ProjectMainView() {
     } catch {
       // Global mutation error handling already surfaced the failure.
     }
-  };
+  }, [
+    createThread,
+    permissionMode,
+    projectId,
+    promptDraft,
+    reasoningLevel,
+    selectedEnvironment,
+    selectedProviderId,
+    selectedThreadModel,
+    serviceTier,
+    supportsServiceTier,
+  ]);
 
   const isSubmitDisabled =
     createThread.isPending ||
@@ -280,6 +282,152 @@ export function ProjectMainView() {
     !selectedEnvironment ||
     !selectedProviderId ||
     !selectedThreadModel;
+
+  const currentPromptDraft = useMemo(
+    () => ({
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    }),
+    [promptDraft.attachments, promptDraft.text],
+  );
+  const historyConfig = useMemo(
+    () => ({
+      currentDraft: currentPromptDraft,
+      entries: promptHistoryDrafts,
+      onSelectEntry: promptDraft.setDraft,
+      resetKey: projectId,
+    }),
+    [currentPromptDraft, projectId, promptDraft.setDraft, promptHistoryDrafts],
+  );
+  const mentionsConfig = useMemo(
+    () => ({
+      suggestions: promptMentions.suggestions,
+      isLoading: promptMentions.isLoading,
+      isError: promptMentions.isError,
+      onQueryChange: promptMentions.setQuery,
+    }),
+    [
+      promptMentions.isError,
+      promptMentions.isLoading,
+      promptMentions.setQuery,
+      promptMentions.suggestions,
+    ],
+  );
+  const attachmentsConfig = useMemo(
+    () => ({
+      items: promptDraft.attachments,
+      projectId: projectId ?? "",
+      onAttachFiles: handleAttachFiles,
+      onRemove: promptDraft.removeAttachment,
+      isAttaching: uploadPromptAttachment.isPending,
+      error: attachmentError,
+    }),
+    [
+      attachmentError,
+      handleAttachFiles,
+      projectId,
+      promptDraft.attachments,
+      promptDraft.removeAttachment,
+      uploadPromptAttachment.isPending,
+    ],
+  );
+  const executionConfig = useMemo(
+    () => ({
+      provider: {
+        options: providerOptions,
+        selectedId: selectedProviderId,
+        onChange: setSelectedProviderId,
+        hasMultiple: hasMultipleProviders,
+      },
+      model: {
+        active: activeModel,
+        selected: selectedModel,
+        options: modelOptions,
+        onChange: setSelectedModel,
+      },
+      serviceTier: {
+        value: serviceTier,
+        onChange: setServiceTier,
+        supported: supportsServiceTier,
+        supportByProvider: serviceTierSupportByProvider,
+      },
+      reasoning: {
+        value: reasoningLevel,
+        options: reasoningOptions,
+        onChange: setReasoningLevel,
+      },
+    }),
+    [
+      activeModel,
+      hasMultipleProviders,
+      modelOptions,
+      providerOptions,
+      reasoningLevel,
+      reasoningOptions,
+      selectedModel,
+      selectedProviderId,
+      serviceTier,
+      serviceTierSupportByProvider,
+      setReasoningLevel,
+      setSelectedModel,
+      setSelectedProviderId,
+      setServiceTier,
+      supportsServiceTier,
+    ],
+  );
+  const environmentConfig = useMemo(
+    () => ({
+      value: effectiveEnvironmentValue,
+      onChange: setEnvironmentSelectionValue,
+      sources: projectSources,
+    }),
+    [effectiveEnvironmentValue, projectSources, setEnvironmentSelectionValue],
+  );
+  const branchConfig = useMemo(
+    () => ({
+      value: selectedBranch?.name ?? null,
+      current: effectiveCurrentBranch,
+      isNew: selectedBranch?.isNew ?? false,
+      options: branchOptions,
+      loading: activeBranchesQuery.isLoading,
+      placeholder: "Default branch",
+      onChange: handleBranchChange,
+      onCreate: handleCreateBranch,
+    }),
+    [
+      activeBranchesQuery.isLoading,
+      branchOptions,
+      effectiveCurrentBranch,
+      handleBranchChange,
+      handleCreateBranch,
+      selectedBranch?.isNew,
+      selectedBranch?.name,
+    ],
+  );
+  const permissionConfig = useMemo(
+    () => ({
+      value: permissionMode,
+      options: permissionModeOptions,
+      onChange: setPermissionMode,
+      supported: supportsPermissionModeSelection,
+    }),
+    [
+      permissionMode,
+      permissionModeOptions,
+      setPermissionMode,
+      supportsPermissionModeSelection,
+    ],
+  );
+
+  if (!projectId) {
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Select a project.
+        </p>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -305,75 +453,13 @@ export function ProjectMainView() {
           isSubmitting={createThread.isPending}
           disabled={isSubmitDisabled}
           zenModeStorageKey={projectMainZenModeStorageKey}
-          history={{
-            currentDraft: {
-              text: promptDraft.text,
-              attachments: promptDraft.attachments,
-            },
-            entries: promptHistoryDrafts,
-            onSelectEntry: promptDraft.setDraft,
-            resetKey: projectId,
-          }}
-          mentions={{
-            suggestions: promptMentions.suggestions,
-            isLoading: promptMentions.isLoading,
-            isError: promptMentions.isError,
-            onQueryChange: promptMentions.setQuery,
-          }}
-          attachments={{
-            items: promptDraft.attachments,
-            projectId,
-            onAttachFiles: handleAttachFiles,
-            onRemove: promptDraft.removeAttachment,
-            isAttaching: uploadPromptAttachment.isPending,
-            error: attachmentError,
-          }}
-          execution={{
-            provider: {
-              options: providerOptions,
-              selectedId: selectedProviderId,
-              onChange: setSelectedProviderId,
-              hasMultiple: hasMultipleProviders,
-            },
-            model: {
-              active: activeModel,
-              selected: selectedModel,
-              options: modelOptions,
-              onChange: setSelectedModel,
-            },
-            serviceTier: {
-              value: serviceTier,
-              onChange: setServiceTier,
-              supported: supportsServiceTier,
-              supportByProvider: serviceTierSupportByProvider,
-            },
-            reasoning: {
-              value: reasoningLevel,
-              options: reasoningOptions,
-              onChange: setReasoningLevel,
-            },
-          }}
-          environment={{
-            value: effectiveEnvironmentValue,
-            onChange: setEnvironmentSelectionValue,
-            sources: projectSources,
-          }}
-          branch={{
-            value: selectedBranch?.name ?? null,
-            current: effectiveCurrentBranch,
-            isNew: selectedBranch?.isNew ?? false,
-            options: branchOptions,
-            loading: activeBranchesQuery.isLoading,
-            placeholder: "Default branch",
-            onChange: handleBranchChange,
-            onCreate: handleCreateBranch,
-          }}
-          permission={{
-            value: permissionMode,
-            options: permissionModeOptions,
-            onChange: setPermissionMode,
-            supported: supportsPermissionModeSelection,
-          }}
+          history={historyConfig}
+          mentions={mentionsConfig}
+          attachments={attachmentsConfig}
+          execution={executionConfig}
+          environment={environmentConfig}
+          branch={branchConfig}
+          permission={permissionConfig}
         />
       </div>
     </PageShell>

@@ -169,6 +169,10 @@ function buildProjectThreadQueryAggregation({
   };
 }
 
+const EMPTY_PROJECT_THREAD_LIST_STATE: ProjectThreadListState = {
+  status: "loading",
+};
+
 function getProjectThreadListState({
   status,
   threads,
@@ -183,7 +187,7 @@ function getProjectThreadListState({
       return { status: "unavailable" };
     case "loading":
     case undefined:
-      return { status: "loading" };
+      return EMPTY_PROJECT_THREAD_LIST_STATE;
   }
 }
 
@@ -439,6 +443,21 @@ function ProjectListComponent({
     return grouped;
   }, [threads]);
 
+  // Pre-build per-project list state once per inputs so each ProjectRow can
+  // bail out of memo when none of its data changed.
+  const threadListStatesByProjectId = useMemo(() => {
+    const map = new Map<string, ProjectThreadListState>();
+    for (const project of projects ?? []) {
+      const status = threadStatesByProjectId.get(project.id)?.status;
+      const projectThreads = threadsByProject.get(project.id);
+      map.set(
+        project.id,
+        getProjectThreadListState({ status, threads: projectThreads }),
+      );
+    }
+    return map;
+  }, [projects, threadStatesByProjectId, threadsByProject]);
+
   const toggleProjectCollapsed = useCallback(
     (projectId: string) => {
       setCollapsedProjectIdList((current) => {
@@ -483,11 +502,9 @@ function ProjectListComponent({
         </>
       ) : projects && projects.length > 0 ? (
         projects.map((project) => {
-          const threadState = threadStatesByProjectId.get(project.id);
-          const threadListState = getProjectThreadListState({
-            status: threadState?.status,
-            threads: threadsByProject.get(project.id),
-          });
+          const threadListState =
+            threadListStatesByProjectId.get(project.id) ??
+            EMPTY_PROJECT_THREAD_LIST_STATE;
           const localSourcePath = localSourcePathsByProjectId.get(project.id);
           const isLocalPathInvalid = isLocalPathMissing(
             pathExistence,

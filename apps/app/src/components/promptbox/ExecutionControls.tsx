@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { PermissionMode, ReasoningLevel, ServiceTier } from "@bb/domain";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
@@ -50,7 +51,7 @@ export interface ExecutionControlsProps {
   reasoning: ExecutionReasoningConfig;
 }
 
-export function ExecutionControls({
+export const ExecutionControls = memo(function ExecutionControls({
   provider,
   model,
   serviceTier,
@@ -113,4 +114,4 @@ export function ExecutionControls({
       ) : null}
     </>
   );
-}
+});

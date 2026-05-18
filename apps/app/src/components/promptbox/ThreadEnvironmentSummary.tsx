@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { OptionDisplay } from "@/components/pickers/OptionPicker";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
@@ -27,7 +28,7 @@ export interface ThreadEnvironmentSummaryProps {
  * - Remote host suffix hidden below `lg` (1024px).
  * - Branch chip hidden below `md` (768px), truncates within its space above.
  */
-export function ThreadEnvironmentSummary({
+export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   environmentLabel,
   environmentHostLabel,
   environmentHostConnected,
@@ -88,4 +89,4 @@ export function ThreadEnvironmentSummary({
       ) : null}
     </div>
   );
-}
+});

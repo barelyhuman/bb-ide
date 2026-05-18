@@ -91,11 +91,14 @@ export interface ThreadTimelineRowsProps {
   workspaceRootPath: string | undefined;
 }
 
-interface TimelineRendererContextValue {
-  autoExpandedRowIds: ReadonlySet<string>;
+/**
+ * Stable renderer config: callbacks, theme, project/workspace identity. These
+ * values change only when the parent's identity changes, so consumers that
+ * read from this context do not rerender when an individual turn summary
+ * loads.
+ */
+interface TimelineRendererStaticContextValue {
   getViewRows: GetTimelineViewRows;
-  loadingTurnSummaryIds: ReadonlySet<string>;
-  erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
   onTitleAction: TimelineTitleActionResolver | undefined;
@@ -103,8 +106,19 @@ interface TimelineRendererContextValue {
   resolveSegmentLinkHref: TimelineTitleLinkResolver | undefined;
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
-  turnSummaryRowsById: Record<string, TimelineRow[]>;
   workspaceRootPath: string | undefined;
+}
+
+/**
+ * Volatile row/turn state. Changes when a turn summary loads, errors, or
+ * auto-expansion is recomputed. Only consumed by row components that need
+ * these flags so other rows do not rerender on unrelated turn updates.
+ */
+interface TimelineTurnStateContextValue {
+  autoExpandedRowIds: ReadonlySet<string>;
+  loadingTurnSummaryIds: ReadonlySet<string>;
+  erroredTurnSummaryIds: ReadonlySet<string>;
+  turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
 interface TimelineRowsListProps {
@@ -226,13 +240,23 @@ interface TurnRowBodyProps {
 const NESTED_ROWS_GROUP_LINE_CLASS =
   "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-foreground/15 before:content-['']";
 
-const TimelineRendererContext =
-  createContext<TimelineRendererContextValue | null>(null);
+const TimelineRendererStaticContext =
+  createContext<TimelineRendererStaticContextValue | null>(null);
+const TimelineTurnStateContext =
+  createContext<TimelineTurnStateContextValue | null>(null);
 
-function useTimelineRendererContext(): TimelineRendererContextValue {
-  const context = useContext(TimelineRendererContext);
+function useTimelineRendererStaticContext(): TimelineRendererStaticContextValue {
+  const context = useContext(TimelineRendererStaticContext);
   if (!context) {
     throw new Error("Thread timeline renderer context is missing");
+  }
+  return context;
+}
+
+function useTimelineTurnStateContext(): TimelineTurnStateContextValue {
+  const context = useContext(TimelineTurnStateContext);
+  if (!context) {
+    throw new Error("Thread timeline turn-state context is missing");
   }
   return context;
 }
@@ -485,7 +509,7 @@ function timelineRowsListGapClassName(
 
 function ConversationRow({ row }: ConversationRowProps) {
   const { onOpenLocalFileLink, projectId, resolveUserAttachmentImageSrc } =
-    useTimelineRendererContext();
+    useTimelineRendererStaticContext();
   if (row.role === "user") {
     return (
       <ConversationMessageContent
@@ -598,7 +622,7 @@ function TimelineExpandableBody({
     resolveUserAttachmentImageSrc,
     themeType,
     workspaceRootPath,
-  } = useTimelineRendererContext();
+  } = useTimelineRendererStaticContext();
 
   switch (row.kind) {
     case "bundle-summary":
@@ -709,13 +733,10 @@ function TimelineExpandableBody({
 }
 
 function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
-  const {
-    getViewRows,
-    loadingTurnSummaryIds,
-    erroredTurnSummaryIds,
-    onLoadTurnSummaryRows,
-    turnSummaryRowsById,
-  } = useTimelineRendererContext();
+  const { getViewRows, onLoadTurnSummaryRows } =
+    useTimelineRendererStaticContext();
+  const { loadingTurnSummaryIds, erroredTurnSummaryIds, turnSummaryRowsById } =
+    useTimelineTurnStateContext();
   const loadedRows = turnSummaryRowsById[row.id];
   const hasInlineChildren = row.children !== null;
   const hasLoadedRows = loadedRows !== undefined;
@@ -795,7 +816,7 @@ function TimelineRowView({
   spacing,
 }: TimelineRowViewProps) {
   const { onTitleAction, resolveSegmentLinkHref } =
-    useTimelineRendererContext();
+    useTimelineRendererStaticContext();
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const titleState = useTimelineRowTitleRenderState({
     activeLatestBundleId,
@@ -862,15 +883,14 @@ function TimelineExpandableRowView({
   horizontalPadding,
   row,
 }: TimelineExpandableRowViewProps) {
+  const { onLoadTurnSummaryRows, onTitleAction, resolveSegmentLinkHref } =
+    useTimelineRendererStaticContext();
   const {
     autoExpandedRowIds,
     loadingTurnSummaryIds,
     erroredTurnSummaryIds,
-    onLoadTurnSummaryRows,
-    onTitleAction,
-    resolveSegmentLinkHref,
     turnSummaryRowsById,
-  } = useTimelineRendererContext();
+  } = useTimelineTurnStateContext();
 
   const handleBeforeExpand = useCallback((): void => {
     if (
@@ -1077,12 +1097,9 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       }
     };
   }, [projectId]);
-  const rendererContextValue = useMemo<TimelineRendererContextValue>(
+  const staticContextValue = useMemo<TimelineRendererStaticContextValue>(
     () => ({
-      autoExpandedRowIds,
       getViewRows,
-      loadingTurnSummaryIds,
-      erroredTurnSummaryIds,
       onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
@@ -1090,38 +1107,49 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       resolveSegmentLinkHref,
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
       themeType,
-      turnSummaryRowsById: props.turnSummaryRowsById,
       workspaceRootPath: props.workspaceRootPath,
     }),
     [
-      autoExpandedRowIds,
-      erroredTurnSummaryIds,
       getViewRows,
       handleLoadTurnSummaryRows,
-      loadingTurnSummaryIds,
       props.onOpenLocalFileLink,
       props.onTitleAction,
       projectId,
       resolveSegmentLinkHref,
       props.resolveUserAttachmentImageSrc,
-      props.turnSummaryRowsById,
       props.workspaceRootPath,
       themeType,
     ],
   );
+  const turnStateContextValue = useMemo<TimelineTurnStateContextValue>(
+    () => ({
+      autoExpandedRowIds,
+      erroredTurnSummaryIds,
+      loadingTurnSummaryIds,
+      turnSummaryRowsById: props.turnSummaryRowsById,
+    }),
+    [
+      autoExpandedRowIds,
+      erroredTurnSummaryIds,
+      loadingTurnSummaryIds,
+      props.turnSummaryRowsById,
+    ],
+  );
 
   return (
-    <TimelineRendererContext.Provider value={rendererContextValue}>
-      <AutoHeightContainer>
-        <TimelineRowsList
-          rows={rows}
-          scopeActive={scopeActive}
-          compactActivityIntents={false}
-          spacing="top-level"
-          unreadDividerPlacement={props.unreadDividerPlacement ?? null}
-        />
-      </AutoHeightContainer>
-    </TimelineRendererContext.Provider>
+    <TimelineRendererStaticContext.Provider value={staticContextValue}>
+      <TimelineTurnStateContext.Provider value={turnStateContextValue}>
+        <AutoHeightContainer>
+          <TimelineRowsList
+            rows={rows}
+            scopeActive={scopeActive}
+            compactActivityIntents={false}
+            spacing="top-level"
+            unreadDividerPlacement={props.unreadDividerPlacement ?? null}
+          />
+        </AutoHeightContainer>
+      </TimelineTurnStateContext.Provider>
+    </TimelineRendererStaticContext.Provider>
   );
 }
 

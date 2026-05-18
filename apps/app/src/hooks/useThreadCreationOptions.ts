@@ -54,6 +54,8 @@ const PERMISSION_MODE_OPTIONS: PickerOption<PermissionMode>[] = [
   },
 ];
 
+const DEFAULT_SUPPORTED_PERMISSION_MODES: readonly PermissionMode[] = ["full"];
+
 interface PickerOption<T extends string> {
   value: T;
   label: string;
@@ -406,8 +408,16 @@ export function useThreadCreationOptions(
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;
   const supportedPermissionModes: readonly PermissionMode[] =
-    activeProviderCapabilities?.supportedPermissionModes ?? ["full"];
+    activeProviderCapabilities?.supportedPermissionModes ??
+    DEFAULT_SUPPORTED_PERMISSION_MODES;
   const supportsPermissionModeSelection = supportedPermissionModes.length > 1;
+  const permissionModeOptions = useMemo(
+    () =>
+      PERMISSION_MODE_OPTIONS.filter((option) =>
+        supportedPermissionModes.includes(option.value),
+      ),
+    [supportedPermissionModes],
+  );
 
   const serviceTierSupportByProvider = useMemo(() => {
     const supportByProvider: Record<string, boolean> = {};
@@ -676,9 +686,7 @@ export function useThreadCreationOptions(
     activeModel,
     modelOptions,
     reasoningOptions,
-    permissionModeOptions: PERMISSION_MODE_OPTIONS.filter((option) =>
-      supportedPermissionModes.includes(option.value),
-    ),
+    permissionModeOptions,
     supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,

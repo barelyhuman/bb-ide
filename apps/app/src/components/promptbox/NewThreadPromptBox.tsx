@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import type { Host, ProjectSource } from "@bb/domain";
 import {
   ExecutionControls,
@@ -75,7 +75,7 @@ export interface NewThreadPromptBoxUIProps {
  * Prop-only variant. Stories render this directly with mock host data; the
  * connected NewThreadPromptBox below wires up the real hooks.
  */
-export function NewThreadPromptBoxUI({
+export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   id,
   value,
   onChange,
@@ -154,7 +154,7 @@ export function NewThreadPromptBoxUI({
       </div>
     </>
   );
-}
+});
 
 export interface NewThreadConnectedEnvironmentConfig {
   value: string;
@@ -206,26 +206,44 @@ export function NewThreadPromptBox({
   const branchPickerValue = branch.value ?? branch.current;
   const canCreate = allowCreate && branchPickerValue !== null;
 
+  const uiEnvironment = useMemo(
+    () => ({
+      ...environment,
+      hosts,
+      isLocalHost,
+    }),
+    [environment, hosts, isLocalHost],
+  );
+  const uiBranch = useMemo(
+    () => ({
+      value: branchPickerValue,
+      isNew: allowCreate && branch.isNew,
+      options: branch.options,
+      loading: branch.loading,
+      placeholder: branch.placeholder,
+      onChange: branch.onChange,
+      onOpenChange: branch.onOpenChange,
+      ...(canCreate ? { onCreate: branch.onCreate } : {}),
+    }),
+    [
+      allowCreate,
+      branch.isNew,
+      branch.loading,
+      branch.onChange,
+      branch.onCreate,
+      branch.onOpenChange,
+      branch.options,
+      branch.placeholder,
+      branchPickerValue,
+      canCreate,
+    ],
+  );
+
   return (
     <NewThreadPromptBoxUI
       {...rest}
-      environment={{
-        ...environment,
-        hosts,
-        isLocalHost,
-      }}
-      branch={{
-        value: branchPickerValue,
-        // isNew is only meaningful when create-new is allowed; suppress
-        // stale state when the user flips to a mode that uses baseBranch.
-        isNew: allowCreate && branch.isNew,
-        options: branch.options,
-        loading: branch.loading,
-        placeholder: branch.placeholder,
-        onChange: branch.onChange,
-        onOpenChange: branch.onOpenChange,
-        ...(canCreate ? { onCreate: branch.onCreate } : {}),
-      }}
+      environment={uiEnvironment}
+      branch={uiBranch}
     />
   );
 }

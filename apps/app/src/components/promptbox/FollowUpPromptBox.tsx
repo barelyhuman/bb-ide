@@ -1,4 +1,5 @@
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -147,7 +148,7 @@ export interface FollowUpPromptBoxProps {
   zenModeResetKey: string | number;
 }
 
-export function FollowUpPromptBox({
+export const FollowUpPromptBox = memo(function FollowUpPromptBox({
   attachments,
   stack,
   composer,
@@ -271,4 +272,4 @@ export function FollowUpPromptBox({
       </div>
     </>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink } from "react-router-dom";
@@ -13,12 +13,20 @@ import {
 import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { cn } from "@/lib/utils";
-import { ThreadRow } from "./ThreadRow";
-import { buildProjectThreadGroups } from "./projectThreadGroups";
+import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
+import {
+  buildProjectThreadGroups,
+  type ManagerThreadGroup,
+} from "./projectThreadGroups";
 import {
   SIDEBAR_MANAGER_GROUP_LINE_CLASS,
   SIDEBAR_PROJECT_GROUP_LINE_CLASS,
 } from "./sidebarRowClasses";
+
+const THREAD_ROW_DEFAULT_OPTIONS: ThreadRowOptions = { kind: "default" };
+const THREAD_ROW_MANAGED_CHILD_OPTIONS: ThreadRowOptions = {
+  kind: "managed-child",
+};
 
 export type ProjectThreadListState =
   | {
@@ -47,7 +55,67 @@ interface ProjectRowProps {
 
 const EMPTY_PROJECT_THREADS: ThreadListEntry[] = [];
 
-export function ProjectRow({
+interface ManagerThreadGroupRowProps {
+  projectId: string;
+  managerThreadGroup: ManagerThreadGroup;
+  selectedThreadId?: string;
+  isManagerCollapsed: boolean;
+  onProjectSelect?: () => void;
+  onToggleManagerCollapsed: (threadId: string) => void;
+}
+
+const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
+  projectId,
+  managerThreadGroup,
+  selectedThreadId,
+  isManagerCollapsed,
+  onProjectSelect,
+  onToggleManagerCollapsed,
+}: ManagerThreadGroupRowProps) {
+  const { managerThread, managedThreads, stats } = managerThreadGroup;
+  const managerOptions = useMemo<ThreadRowOptions>(
+    () => ({
+      kind: "manager",
+      isCollapsed: isManagerCollapsed,
+      managedChildCount: stats.managedChildCount,
+      onToggleCollapsed: onToggleManagerCollapsed,
+    }),
+    [isManagerCollapsed, onToggleManagerCollapsed, stats.managedChildCount],
+  );
+  const showManagedChildren = !isManagerCollapsed && managedThreads.length > 0;
+  return (
+    <div className="space-y-0.5">
+      <ThreadRow
+        projectId={projectId}
+        thread={managerThread}
+        isActive={selectedThreadId === managerThread.id}
+        onProjectSelect={onProjectSelect}
+        options={managerOptions}
+      />
+      {showManagedChildren ? (
+        <div
+          className={cn(
+            "relative space-y-px",
+            SIDEBAR_MANAGER_GROUP_LINE_CLASS,
+          )}
+        >
+          {managedThreads.map((managedThread) => (
+            <ThreadRow
+              key={managedThread.id}
+              projectId={projectId}
+              thread={managedThread}
+              isActive={selectedThreadId === managedThread.id}
+              onProjectSelect={onProjectSelect}
+              options={THREAD_ROW_MANAGED_CHILD_OPTIONS}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
+function ProjectRowComponent({
   project,
   threadListState,
   selectedThreadId,
@@ -189,52 +257,19 @@ export function ProjectRow({
               SIDEBAR_PROJECT_GROUP_LINE_CLASS,
             )}
           >
-            {managerThreadGroups.map((managerThreadGroup) => {
-              const { managerThread, managedThreads, stats } =
-                managerThreadGroup;
-              const managedChildCount = stats.managedChildCount;
-              const isManagerCollapsed = collapsedManagerIds.has(
-                managerThread.id,
-              );
-              const showManagedChildren =
-                !isManagerCollapsed && managedThreads.length > 0;
-
-              return (
-                <div key={managerThread.id} className="space-y-0.5">
-                  <ThreadRow
-                    projectId={project.id}
-                    thread={managerThread}
-                    isActive={selectedThreadId === managerThread.id}
-                    onProjectSelect={onProjectSelect}
-                    options={{
-                      kind: "manager",
-                      isCollapsed: isManagerCollapsed,
-                      managedChildCount,
-                      onToggleCollapsed: onToggleManagerCollapsed,
-                    }}
-                  />
-                  {showManagedChildren ? (
-                    <div
-                      className={cn(
-                        "relative space-y-px",
-                        SIDEBAR_MANAGER_GROUP_LINE_CLASS,
-                      )}
-                    >
-                      {managedThreads.map((managedThread) => (
-                        <ThreadRow
-                          key={managedThread.id}
-                          projectId={project.id}
-                          thread={managedThread}
-                          isActive={selectedThreadId === managedThread.id}
-                          onProjectSelect={onProjectSelect}
-                          options={{ kind: "managed-child" }}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+            {managerThreadGroups.map((managerThreadGroup) => (
+              <ManagerThreadGroupRow
+                key={managerThreadGroup.managerThread.id}
+                projectId={project.id}
+                managerThreadGroup={managerThreadGroup}
+                selectedThreadId={selectedThreadId}
+                isManagerCollapsed={collapsedManagerIds.has(
+                  managerThreadGroup.managerThread.id,
+                )}
+                onProjectSelect={onProjectSelect}
+                onToggleManagerCollapsed={onToggleManagerCollapsed}
+              />
+            ))}
             {unmanagedStandardThreads.map((thread) => (
               <ThreadRow
                 key={thread.id}
@@ -242,7 +277,7 @@ export function ProjectRow({
                 thread={thread}
                 isActive={selectedThreadId === thread.id}
                 onProjectSelect={onProjectSelect}
-                options={{ kind: "default" }}
+                options={THREAD_ROW_DEFAULT_OPTIONS}
               />
             ))}
           </div>
@@ -261,3 +296,56 @@ export function ProjectRow({
     </SidebarMenuItem>
   );
 }
+
+function areProjectRowPropsEqual(
+  prev: ProjectRowProps,
+  next: ProjectRowProps,
+): boolean {
+  if (
+    prev.project !== next.project ||
+    prev.threadListState !== next.threadListState ||
+    prev.isActive !== next.isActive ||
+    prev.isCollapsed !== next.isCollapsed ||
+    prev.isLocalPathInvalid !== next.isLocalPathInvalid ||
+    prev.onProjectSelect !== next.onProjectSelect ||
+    prev.onToggleProjectCollapsed !== next.onToggleProjectCollapsed ||
+    prev.onToggleManagerCollapsed !== next.onToggleManagerCollapsed
+  ) {
+    return false;
+  }
+  // selectedThreadId is a shared sidebar prop; only projects containing the
+  // previously- or newly-selected thread need to re-render.
+  if (prev.selectedThreadId !== next.selectedThreadId) {
+    if (prev.threadListState.status !== "ready") {
+      return false;
+    }
+    for (const thread of prev.threadListState.threads) {
+      if (
+        thread.id === prev.selectedThreadId ||
+        thread.id === next.selectedThreadId
+      ) {
+        return false;
+      }
+    }
+  }
+  if (prev.collapsedManagerIds === next.collapsedManagerIds) {
+    return true;
+  }
+  // collapsedManagerIds is a shared sidebar prop; only invalidate if this
+  // project's manager collapse state actually changed.
+  if (prev.threadListState.status !== "ready") {
+    return true;
+  }
+  for (const thread of prev.threadListState.threads) {
+    if (thread.type !== "manager") continue;
+    if (
+      prev.collapsedManagerIds.has(thread.id) !==
+      next.collapsedManagerIds.has(thread.id)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export const ProjectRow = memo(ProjectRowComponent, areProjectRowPropsEqual);

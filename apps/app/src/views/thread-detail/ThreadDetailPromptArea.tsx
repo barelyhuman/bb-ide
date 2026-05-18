@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
 import { assertNever } from "@bb/core-ui";
 import type {
@@ -7,6 +7,7 @@ import type {
   PromptInput,
   ReasoningLevel,
   ServiceTier,
+  ThreadQueuedMessage,
   ThreadRuntimeDisplayStatus,
   ThreadTimelinePendingTodos,
   ThreadWithRuntime,
@@ -177,6 +178,18 @@ export function ThreadDetailPromptArea({
     refetchOnMount: composerQueriesRefetchOnMount,
     staleTime: composerQueriesStaleTime,
   });
+  // Ref-backed lookup keeps queued-message action handlers stable across
+  // queue refetches so memoized rows do not rerender on unrelated queue updates.
+  const queuedMessagesByIdRef = useRef<ReadonlyMap<string, ThreadQueuedMessage>>(
+    new Map(),
+  );
+  queuedMessagesByIdRef.current = useMemo(() => {
+    const next = new Map<string, ThreadQueuedMessage>();
+    for (const message of queuedMessages) {
+      next.set(message.id, message);
+    }
+    return next;
+  }, [queuedMessages]);
   const { data: promptHistoryEntries = [] } = useThreadPromptHistory(
     thread.id,
     {
@@ -262,7 +275,10 @@ export function ThreadDetailPromptArea({
     isEnvironmentActionPending ||
     createQueuedMessage.isPending ||
     isSteerBatchSending;
-  const submitMode: FollowUpSubmitMode = (() => {
+  const handleStopThread = useCallback(() => {
+    stopThread.mutate(thread.id);
+  }, [stopThread, thread.id]);
+  const submitMode: FollowUpSubmitMode = useMemo(() => {
     if (isStopRequested) {
       return { kind: "blocked", reason: "stopping" };
     }
@@ -273,16 +289,24 @@ export function ThreadDetailPromptArea({
       return { kind: "blocked", reason: "provisioning" };
     }
     if (isWaitingForHost) {
-      return { kind: "stop-only", onStop: () => stopThread.mutate(thread.id) };
+      return { kind: "stop-only", onStop: handleStopThread };
     }
     if (
       runtimeDisplayStatus === "active" ||
       runtimeDisplayStatus === "host-reconnecting"
     ) {
-      return { kind: "queue", onStop: () => stopThread.mutate(thread.id) };
+      return { kind: "queue", onStop: handleStopThread };
     }
     return { kind: "ready" };
-  })();
+  }, [
+    handleStopThread,
+    hasPendingInteraction,
+    isCreated,
+    isProvisioning,
+    isStopRequested,
+    isWaitingForHost,
+    runtimeDisplayStatus,
+  ]);
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
     : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
@@ -481,10 +505,7 @@ export function ThreadDetailPromptArea({
 
   const handleSendQueuedImmediately = useCallback(
     (messageId: string) => {
-      const queuedMessage = queuedMessages.find(
-        (candidate) => candidate.id === messageId,
-      );
-      if (!queuedMessage) {
+      if (!queuedMessagesByIdRef.current.has(messageId)) {
         return;
       }
 
@@ -512,14 +533,12 @@ export function ThreadDetailPromptArea({
           );
         });
     },
-    [queuedMessages, sendQueuedMessage, thread.id],
+    [sendQueuedMessage, thread.id],
   );
 
   const handleEditQueuedMessage = useCallback(
     (messageId: string) => {
-      const queuedMessage = queuedMessages.find(
-        (candidate) => candidate.id === messageId,
-      );
+      const queuedMessage = queuedMessagesByIdRef.current.get(messageId);
       if (!queuedMessage) {
         return;
       }
@@ -549,7 +568,7 @@ export function ThreadDetailPromptArea({
           );
         });
     },
-    [deleteQueuedMessage, promptDraft, queuedMessages, thread.id],
+    [deleteQueuedMessage, promptDraft, thread.id],
   );
 
   const handleDeleteQueuedMessage = useCallback(
@@ -584,6 +603,164 @@ export function ThreadDetailPromptArea({
     [onChangedFileClick],
   );
 
+  const handleToggleBannerSection = useCallback(
+    (section: ThreadPromptContextBannerExpandedSection | null) => {
+      setExpandedBannerSection((previous) =>
+        previous === section ? null : section,
+      );
+    },
+    [],
+  );
+
+  const attachmentsConfig = useMemo(
+    () => ({
+      items: promptDraft.attachments,
+      projectId,
+      isAttaching: uploadPromptAttachment.isPending,
+      error: attachmentError,
+      onAttachFiles: handleAttachFiles,
+      onRemove: promptDraft.removeAttachment,
+    }),
+    [
+      attachmentError,
+      handleAttachFiles,
+      projectId,
+      promptDraft.attachments,
+      promptDraft.removeAttachment,
+      uploadPromptAttachment.isPending,
+    ],
+  );
+
+  const composerConfig = useMemo(
+    () => ({
+      history: {
+        currentDraft: currentPromptDraft,
+        entries: promptHistoryDrafts,
+        onSelectEntry: promptDraft.setDraft,
+        resetKey: thread.id,
+      },
+      isFollowUpSubmitting,
+      message: promptDraft.text,
+      onChangeMessage: promptDraft.setText,
+      onSteerSubmit: handleSteerSend,
+      onSubmit: handleSend,
+      promptPlaceholder,
+      canSteerSubmit,
+      submitMode,
+      threadRuntimeDisplayStatus: runtimeDisplayStatus,
+    }),
+    [
+      canSteerSubmit,
+      currentPromptDraft,
+      handleSend,
+      handleSteerSend,
+      isFollowUpSubmitting,
+      promptDraft.setDraft,
+      promptDraft.setText,
+      promptDraft.text,
+      promptHistoryDrafts,
+      promptPlaceholder,
+      runtimeDisplayStatus,
+      submitMode,
+      thread.id,
+    ],
+  );
+
+  const executionConfig = useMemo(
+    () => ({
+      provider: {
+        options: providerOptions,
+        selectedId: selectedProviderId,
+        hasMultiple: hasMultipleProviders,
+        displayName: selectedProviderDisplayName,
+      },
+      model: {
+        active: activeModel,
+        selected: selectedModel,
+        options: modelOptions,
+        onChange: setSelectedModel,
+      },
+      serviceTier: {
+        value: serviceTier,
+        onChange: setServiceTier,
+        supported: supportsServiceTier,
+        supportByProvider: serviceTierSupportByProvider,
+      },
+      reasoning: {
+        value: reasoningLevel,
+        options: reasoningOptions,
+        onChange: setReasoningLevel,
+      },
+    }),
+    [
+      activeModel,
+      hasMultipleProviders,
+      modelOptions,
+      providerOptions,
+      reasoningLevel,
+      reasoningOptions,
+      selectedModel,
+      selectedProviderDisplayName,
+      selectedProviderId,
+      serviceTier,
+      serviceTierSupportByProvider,
+      setReasoningLevel,
+      setSelectedModel,
+      setServiceTier,
+      supportsServiceTier,
+    ],
+  );
+
+  const permissionConfig = useMemo(
+    () => ({
+      value: permissionMode,
+      options: permissionModeOptions,
+      onChange: setPermissionMode,
+      supported: supportsPermissionModeSelection,
+    }),
+    [
+      permissionMode,
+      permissionModeOptions,
+      setPermissionMode,
+      supportsPermissionModeSelection,
+    ],
+  );
+
+  const mentionsConfig = useMemo(
+    () => ({
+      suggestions: promptMentions.suggestions,
+      isLoading: promptMentions.isLoading,
+      isError: promptMentions.isError,
+      onQueryChange: promptMentions.setQuery,
+    }),
+    [
+      promptMentions.isError,
+      promptMentions.isLoading,
+      promptMentions.setQuery,
+      promptMentions.suggestions,
+    ],
+  );
+
+  const environmentSummary = useMemo(
+    () =>
+      environmentLabel || environmentHostConnected !== undefined ? (
+        <ThreadEnvironmentSummary
+          environmentLabel={environmentLabel}
+          environmentHostLabel={environmentHostLabel}
+          environmentHostConnected={environmentHostConnected}
+          environmentIcon={environmentIcon}
+          environmentBranchName={environmentBranchName}
+        />
+      ) : null,
+    [
+      environmentBranchName,
+      environmentHostConnected,
+      environmentHostLabel,
+      environmentIcon,
+      environmentLabel,
+    ],
+  );
+
   if (activePendingInteraction) {
     return (
       <ThreadPendingInteractionBanner
@@ -595,14 +772,7 @@ export function ThreadDetailPromptArea({
 
   return (
     <FollowUpPromptBox
-      attachments={{
-        items: promptDraft.attachments,
-        projectId,
-        isAttaching: uploadPromptAttachment.isPending,
-        error: attachmentError,
-        onAttachFiles: handleAttachFiles,
-        onRemove: promptDraft.removeAttachment,
-      }}
+      attachments={attachmentsConfig}
       stack={
         <>
           <ThreadPromptContextBanner
@@ -631,11 +801,7 @@ export function ThreadDetailPromptArea({
             }
             gitSectionPending={workspaceStatusPending}
             expandedSection={expandedBannerSection}
-            onToggleSection={(section) => {
-              setExpandedBannerSection((previous) =>
-                previous === section ? null : section,
-              );
-            }}
+            onToggleSection={handleToggleBannerSection}
           />
           <QueuedMessagesList
             queuedMessages={queuedMessages}
@@ -652,76 +818,13 @@ export function ThreadDetailPromptArea({
           />
         </>
       }
-      composer={{
-        history: {
-          currentDraft: {
-            text: promptDraft.text,
-            attachments: promptDraft.attachments,
-          },
-          entries: promptHistoryDrafts,
-          onSelectEntry: promptDraft.setDraft,
-          resetKey: thread.id,
-        },
-        isFollowUpSubmitting,
-        message: promptDraft.text,
-        onChangeMessage: promptDraft.setText,
-        onSteerSubmit: handleSteerSend,
-        onSubmit: handleSend,
-        promptPlaceholder,
-        canSteerSubmit,
-        submitMode,
-        threadRuntimeDisplayStatus: runtimeDisplayStatus,
-      }}
+      composer={composerConfig}
       zenModeResetKey={thread.id}
-      environmentSummary={
-        environmentLabel || environmentHostConnected !== undefined ? (
-          <ThreadEnvironmentSummary
-            environmentLabel={environmentLabel}
-            environmentHostLabel={environmentHostLabel}
-            environmentHostConnected={environmentHostConnected}
-            environmentIcon={environmentIcon}
-            environmentBranchName={environmentBranchName}
-          />
-        ) : null
-      }
+      environmentSummary={environmentSummary}
       contextWindowUsage={contextWindowUsage ?? null}
-      execution={{
-        provider: {
-          options: providerOptions,
-          selectedId: selectedProviderId,
-          hasMultiple: hasMultipleProviders,
-          displayName: selectedProviderDisplayName,
-        },
-        model: {
-          active: activeModel,
-          selected: selectedModel,
-          options: modelOptions,
-          onChange: setSelectedModel,
-        },
-        serviceTier: {
-          value: serviceTier,
-          onChange: setServiceTier,
-          supported: supportsServiceTier,
-          supportByProvider: serviceTierSupportByProvider,
-        },
-        reasoning: {
-          value: reasoningLevel,
-          options: reasoningOptions,
-          onChange: setReasoningLevel,
-        },
-      }}
-      permission={{
-        value: permissionMode,
-        options: permissionModeOptions,
-        onChange: setPermissionMode,
-        supported: supportsPermissionModeSelection,
-      }}
-      mentions={{
-        suggestions: promptMentions.suggestions,
-        isLoading: promptMentions.isLoading,
-        isError: promptMentions.isError,
-        onQueryChange: promptMentions.setQuery,
-      }}
+      execution={executionConfig}
+      permission={permissionConfig}
+      mentions={mentionsConfig}
     />
   );
 }
