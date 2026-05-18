@@ -15,6 +15,12 @@ import type {
   UpdateThreadTerminalRequest,
 } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  EMPTY_FIXED_PANEL_TABS_STATE,
+  getFixedPanelTabsStateStorageKey,
+  parseFixedPanelTabsState,
+  type FixedPanelTabsState,
+} from "@/lib/fixed-panel-tabs-state";
 import { useSetThreadTerminalPanelOpen } from "@/lib/thread-terminal-panel";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ThreadTerminalPanel } from "./ThreadTerminalPanel";
@@ -88,6 +94,20 @@ function makeTerminalSession(
     updatedAt: 1,
     ...overrides,
   };
+}
+
+function terminalTabId(terminalId: string): string {
+  return `terminal:${encodeURIComponent(terminalId)}`;
+}
+
+function readFixedPanelTabsState(): FixedPanelTabsState {
+  return parseFixedPanelTabsState({
+    initialValue: EMPTY_FIXED_PANEL_TABS_STATE,
+    now: Date.now(),
+    storedValue: window.localStorage.getItem(
+      getFixedPanelTabsStateStorageKey({ threadId: THREAD_ID }),
+    ),
+  });
 }
 
 async function listTerminals(): Promise<ThreadTerminalListResponse> {
@@ -238,6 +258,35 @@ describe("ThreadTerminalPanel", () => {
         },
       );
     });
+  });
+
+  it("removes the fixed bottom tab when a clean terminal auto-closes", async () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByText("Show panel"));
+    expect(await screen.findByText("Terminal 1")).toBeTruthy();
+    await waitFor(() => {
+      expect(readFixedPanelTabsState().bottom.activeTabId).toBe(
+        terminalTabId("term_1"),
+      );
+    });
+
+    fireEvent.click(screen.getByText("Hide panel"));
+
+    await waitFor(() => {
+      expect(apiMocks.closeThreadTerminal).toHaveBeenCalledWith(
+        THREAD_ID,
+        "term_1",
+        {
+          mode: "if-clean",
+          reason: "user",
+        },
+      );
+    });
+    await waitFor(() => {
+      expect(readFixedPanelTabsState().bottom.tabs).toEqual([]);
+    });
+    expect(readFixedPanelTabsState().bottom.activeTabId).toBeNull();
   });
 
   it("keeps a panel-created terminal after user input", async () => {

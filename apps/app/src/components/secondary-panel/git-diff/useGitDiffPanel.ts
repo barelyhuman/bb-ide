@@ -1,33 +1,33 @@
 import { useCallback, useEffect } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEnvironmentMergeBaseBranches } from "../../../hooks/queries/environment-queries";
-import {
-  useActiveSecondaryPanel,
-  useSetThreadSecondaryPanel,
-  type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
-} from "@/lib/thread-secondary-panel";
+import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
   pendingGitDiffScrollPathAtom,
   selectedMergeBaseBranchAtom,
 } from "../threadSecondaryPanelAtoms";
 
+type ThreadSecondaryPanelSetter = (
+  panel: ThreadSecondaryPanelTab | null,
+) => void;
+
 interface UseGitDiffPanelParams {
+  activeSecondaryPanel: ThreadSecondaryPanelTab | null;
   clearActiveFileTabs: () => void;
   defaultMergeBaseBranch?: string;
   environmentId?: string;
   mergeBaseBranchOptionsEnabled?: boolean;
-  threadId: string | null | undefined;
+  setThreadSecondaryPanel: ThreadSecondaryPanelSetter;
 }
 
 export function useGitDiffPanel({
+  activeSecondaryPanel,
   clearActiveFileTabs,
   defaultMergeBaseBranch,
   environmentId,
   mergeBaseBranchOptionsEnabled = false,
-  threadId,
+  setThreadSecondaryPanel,
 }: UseGitDiffPanelParams) {
-  const applyThreadSecondaryPanel = useSetThreadSecondaryPanel(threadId);
-  const activeSecondaryPanel = useActiveSecondaryPanel(threadId);
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const setSelectedMergeBaseBranch = useSetAtom(selectedMergeBaseBranchAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
@@ -47,13 +47,6 @@ export function useGitDiffPanel({
     setSelectedMergeBaseBranch(undefined);
   }, [environmentId, setSelectedMergeBaseBranch]);
 
-  const setThreadSecondaryPanel = useCallback(
-    (panel: ThreadSecondaryPanelTab | null) => {
-      applyThreadSecondaryPanel(panel);
-    },
-    [applyThreadSecondaryPanel],
-  );
-
   const openThreadSecondaryPanel = useCallback(
     (panel: ThreadSecondaryPanelTab) => {
       setThreadSecondaryPanel(panel);
@@ -65,26 +58,20 @@ export function useGitDiffPanel({
     openThreadSecondaryPanel("git-diff");
   }, [openThreadSecondaryPanel]);
 
-  const toggleThreadSecondaryPanel = useCallback(
-    () => {
-      if (activeSecondaryPanel !== null) {
-        setThreadSecondaryPanel(null);
-        return;
-      }
-      setThreadSecondaryPanel("thread-info");
-    },
-    [activeSecondaryPanel, setThreadSecondaryPanel],
-  );
-
-  const closeThreadSecondaryPanel = useCallback(
-    () => {
-      if (activeSecondaryPanel === null) {
-        return;
-      }
+  const toggleThreadSecondaryPanel = useCallback(() => {
+    if (activeSecondaryPanel !== null) {
       setThreadSecondaryPanel(null);
-    },
-    [activeSecondaryPanel, setThreadSecondaryPanel],
-  );
+      return;
+    }
+    setThreadSecondaryPanel("thread-info");
+  }, [activeSecondaryPanel, setThreadSecondaryPanel]);
+
+  const closeThreadSecondaryPanel = useCallback(() => {
+    if (activeSecondaryPanel === null) {
+      return;
+    }
+    setThreadSecondaryPanel(null);
+  }, [activeSecondaryPanel, setThreadSecondaryPanel]);
 
   const openDiffFile = useCallback(
     (path: string) => {

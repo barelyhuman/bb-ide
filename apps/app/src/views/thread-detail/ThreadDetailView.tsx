@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import {
   useThreadSecondaryPanelState,
   useThreadSecondaryPanelStorageMaintenance,
-  useThreadSecondaryPanelUrlSync,
   useTouchThreadSecondaryPanelState,
   type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
 } from "@/lib/thread-secondary-panel";
@@ -20,7 +19,6 @@ import {
   useToggleThreadTerminalPanel,
   useUpdateThreadTerminalPanelState,
 } from "@/lib/thread-terminal-panel";
-import { getActiveStorageFilePath } from "@/lib/thread-secondary-panel-state";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
@@ -30,7 +28,6 @@ import { useSendThreadMessage } from "../../hooks/mutations/thread-runtime-mutat
 import { useUpdateEnvironment } from "../../hooks/mutations/environment-mutations";
 import {
   useEnvironment,
-  useEnvironmentFilePreview,
   useEnvironmentWorkStatus,
 } from "../../hooks/queries/environment-queries";
 import {
@@ -38,7 +35,6 @@ import {
   useThread,
   useThreadComposerBootstrap,
   useThreadDetailBootstrap,
-  useThreadHostFilePreview,
   useThreadPendingInteractions,
   useThreads,
 } from "../../hooks/queries/thread-queries";
@@ -78,9 +74,11 @@ import { useThreadSecondaryPanelVisibility } from "./useThreadSecondaryPanelVisi
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "@/components/secondary-panel/useThreadStorageViewer";
 import {
-  SecondaryPanelFilePreview,
-  ThreadStorageFilePreview,
-} from "@/components/secondary-panel/ThreadStorageFilePreview";
+  HostFilePreviewTabContent,
+  ThreadStorageFilePreviewTabContent,
+  WorkspaceFilePreviewTabContent,
+} from "@/components/secondary-panel/ThreadSecondaryPanelTabContent";
+import { MANAGER_STATUS_MARKDOWN_FILE_PATH } from "@/components/secondary-panel/managerStorage";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
@@ -98,11 +96,24 @@ import {
 } from "./threadWorkspaceOpenPath";
 import { resolveThreadLocalFileLink } from "@/lib/thread-local-file-links";
 import {
+  useFixedPanelTabsSecondaryPanelUrlSync,
+  useFixedPanelTabsState,
+  useFixedPanelTabsStorageMaintenance,
+  useTouchFixedPanelTabsState,
+  useUpdateFixedPanelTabsState,
+} from "@/lib/fixed-panel-tabs";
+import { createFixedPanelTabsStateFromLegacyPanels } from "@/lib/fixed-panel-tabs-state";
+import {
   buildManagerSelectorOptions,
   isUnassignedStandardThread,
 } from "./threadManagerSelectorOptions";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 import { ThreadTerminalPanel } from "@/components/thread/terminal/ThreadTerminalPanel";
+import {
+  getActiveFixedSecondaryTab,
+  getActiveThreadSecondaryPanel,
+  useSetThreadSecondaryPanelSelection,
+} from "./threadSecondaryPanelSelection";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 
@@ -136,14 +147,35 @@ export function ThreadDetailView() {
     projectId: string;
     threadId: string;
   }>();
+  useFixedPanelTabsStorageMaintenance(threadId);
   useThreadSecondaryPanelStorageMaintenance(threadId);
-  useThreadSecondaryPanelUrlSync(threadId);
   useThreadTerminalPanelStorageMaintenance(threadId);
+  const fixedPanelTabsState = useFixedPanelTabsState(threadId);
+  const updateFixedPanelTabsState = useUpdateFixedPanelTabsState(threadId);
   const secondaryPanelState = useThreadSecondaryPanelState(threadId);
   const terminalPanelState = useThreadTerminalPanelState(threadId);
-  const activeSecondaryPanel = secondaryPanelState.activePanel;
+  const activeFixedSecondaryTab = getActiveFixedSecondaryTab({
+    fixedPanelTabsState,
+  });
+  const activeSecondaryPanel = getActiveThreadSecondaryPanel({
+    activeFixedSecondaryTab,
+    legacyActivePanel: secondaryPanelState.activePanel,
+  });
   const renderSecondaryPanelAsDrawer = useIsCompactViewport();
   const touchSecondaryPanelState = useTouchThreadSecondaryPanelState(threadId);
+  const touchFixedPanelTabsState = useTouchFixedPanelTabsState(threadId);
+  const setThreadSecondaryPanel = useSetThreadSecondaryPanelSelection(threadId);
+  const setThreadSecondaryPanelFromUrl =
+    useCallback<SecondaryPanelChangeHandler>(
+      (panel) => {
+        setThreadSecondaryPanel(panel);
+      },
+      [setThreadSecondaryPanel],
+    );
+  useFixedPanelTabsSecondaryPanelUrlSync(
+    threadId,
+    setThreadSecondaryPanelFromUrl,
+  );
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "");
   const hasThreadDetailBootstrapSettled =
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
@@ -190,6 +222,33 @@ export function ThreadDetailView() {
     getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
   const canUseGitUi = thread?.type === "standard";
+  useEffect(() => {
+    if (thread?.type === undefined) {
+      return;
+    }
+    updateFixedPanelTabsState((current) => {
+      if (
+        current.lastUsedAt !== 0 ||
+        current.secondary.tabs.length > 0 ||
+        current.bottom.tabs.length > 0
+      ) {
+        return current;
+      }
+      return createFixedPanelTabsStateFromLegacyPanels({
+        isManagerThread,
+        now: Date.now(),
+        pinnedStorageFilePath: MANAGER_STATUS_MARKDOWN_FILE_PATH,
+        secondaryPanelState,
+        terminalPanelState,
+      });
+    });
+  }, [
+    isManagerThread,
+    secondaryPanelState,
+    terminalPanelState,
+    thread?.type,
+    updateFixedPanelTabsState,
+  ]);
   const [
     storedUseStandardManagerTimeline,
     setStoredUseStandardManagerTimeline,
@@ -209,21 +268,15 @@ export function ThreadDetailView() {
   const isSecondaryPanelActive = activeSecondaryPanel !== null;
   const shouldLoadManagerStorageFiles =
     isSecondaryPanelActive && isManagerThread;
-  const activeStorageFilePathForViewer = isManagerThread
-    ? getActiveStorageFilePath(secondaryPanelState)
-    : null;
   const {
-    isThreadStorageFilePreviewLoading,
     isThreadStorageFilesLoading,
-    threadStorageFilePreview,
-    threadStorageFilePreviewError,
     threadStorageFiles,
     threadStorageFilesError,
     threadStorageRootPath,
   } = useThreadStorageViewer({
-    activePath: activeStorageFilePathForViewer,
+    activePath: null,
     fileListEnabled: shouldLoadManagerStorageFiles,
-    filePreviewEnabled: isSecondaryPanelActive,
+    filePreviewEnabled: false,
     threadId,
     threadType: thread?.type,
   });
@@ -326,27 +379,6 @@ export function ThreadDetailView() {
   const environmentMergeBaseBranch =
     environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined;
   const {
-    data: workspaceFilePreview,
-    error: workspaceFilePreviewError,
-    isLoading: isWorkspaceFilePreviewLoading,
-  } = useEnvironmentFilePreview(
-    thread?.environmentId,
-    activeWorkspaceFilePath,
-    activeWorkspaceFileSource,
-  );
-  const {
-    data: hostFilePreview,
-    error: hostFilePreviewError,
-    isLoading: isHostFilePreviewLoading,
-  } = useThreadHostFilePreview(
-    thread?.id ?? "",
-    thread?.environmentId,
-    activeHostFilePath,
-    {
-      enabled: isSecondaryPanelActive && activeHostFilePath !== null,
-    },
-  );
-  const {
     closeThreadSecondaryPanel,
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
     isLoadingMergeBaseBranchOptions,
@@ -358,13 +390,14 @@ export function ThreadDetailView() {
     setSelectedMergeBaseBranch,
     toggleThreadSecondaryPanel: togglePersistedSecondaryPanel,
   } = useGitDiffPanel({
+    activeSecondaryPanel,
     clearActiveFileTabs,
     defaultMergeBaseBranch: environmentMergeBaseBranch,
     environmentId: canUseGitUi
       ? (thread?.environmentId ?? undefined)
       : undefined,
     mergeBaseBranchOptionsEnabled: hasRequestedMergeBaseOptions,
-    threadId,
+    setThreadSecondaryPanel,
   });
   const {
     closePanel: closeSecondaryPanel,
@@ -399,6 +432,10 @@ export function ThreadDetailView() {
     },
     [clearActiveFileTabs, openSecondaryPanel],
   );
+  const handleSecondaryPanelFocus = useCallback(() => {
+    touchSecondaryPanelState();
+    touchFixedPanelTabsState();
+  }, [touchFixedPanelTabsState, touchSecondaryPanelState]);
   const handleTerminalPanelResize = useCallback(
     (sizePercent: number) => {
       const panelHeightPercent = Math.round(sizePercent);
@@ -930,35 +967,31 @@ export function ThreadDetailView() {
       })
     : null;
   const fileTabContent = activeWorkspaceFilePath ? (
-    <SecondaryPanelFilePreview
+    <WorkspaceFilePreviewTabContent
       activePath={activeWorkspaceFilePath}
       copyPath={workspaceFileCopyPath}
-      error={workspaceFilePreviewError}
-      filePreview={workspaceFilePreview}
-      isLoading={isWorkspaceFilePreviewLoading}
+      environmentId={thread.environmentId}
       lineNumber={activeWorkspaceFileLineNumber}
       onOpenInEditor={handleOpenFileInEditor}
+      source={activeWorkspaceFileSource}
       statusLabel={activeWorkspaceFileStatusLabel}
     />
   ) : activeHostFilePath ? (
-    <SecondaryPanelFilePreview
+    <HostFilePreviewTabContent
       activePath={activeHostFilePath}
-      error={hostFilePreviewError}
-      filePreview={hostFilePreview}
-      isLoading={isHostFilePreviewLoading}
+      environmentId={thread.environmentId}
       lineNumber={activeHostFileLineNumber}
       onOpenInEditor={handleOpenHostFileInEditor}
-      statusLabel={null}
+      threadId={thread.id}
     />
   ) : activeStorageFilePath ? (
-    <ThreadStorageFilePreview
+    <ThreadStorageFilePreviewTabContent
       activePath={activeStorageFilePath}
       copyPath={storageFileCopyPath}
-      error={threadStorageFilePreviewError}
-      filePreview={threadStorageFilePreview}
-      isLoading={isThreadStorageFilePreviewLoading}
+      isManagerThread={isManagerThread}
       onOpenInEditor={handleOpenStorageFileInEditor}
       pinnedPath={pinnedStorageFilePath}
+      threadId={thread.id}
     />
   ) : undefined;
 
@@ -1011,7 +1044,7 @@ export function ThreadDetailView() {
               statusLabel: null,
             });
           },
-          onPanelFocus: touchSecondaryPanelState,
+          onPanelFocus: handleSecondaryPanelFocus,
           onPanelChange: handleSecondaryPanelChange,
           showGitDiffTab: canUseGitUi,
         }}

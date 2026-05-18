@@ -1,25 +1,13 @@
-import {
-  type FocusEvent,
-  type ReactNode,
-  memo,
-  useCallback,
-  useMemo,
-} from "react";
+import { type FocusEvent, type ReactNode, useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { Icon } from "@/components/ui/icon.js";
-import { Skeleton } from "@/components/ui/skeleton.js";
 import { TabPill } from "@/components/ui/tab-pill";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/lib/utils";
 import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
-import {
-  GIT_DIFF_VIEW_BASE_OPTIONS,
-  GitDiffCard,
-  type RequestDiffFileContents,
-} from "../git-diff/GitDiffCard";
-import type { ParsedGitDiffFile } from "../git-diff/git-diff-parsing";
+import { GIT_DIFF_VIEW_BASE_OPTIONS } from "../git-diff/GitDiffCard";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useGitDiffPanelState } from "./git-diff/useGitDiffPanelState";
 import { useResponsiveGitDiffPanelDisplay } from "./git-diff/useResponsiveGitDiffPanelDisplay";
@@ -29,6 +17,10 @@ import {
   threadSecondaryPanelResizingAtom,
 } from "./threadSecondaryPanelAtoms";
 import { GitDiffToolbar } from "./GitDiffToolbar";
+import {
+  GitDiffTabContent,
+  ThreadInfoTabContent,
+} from "./ThreadSecondaryPanelTabContent";
 export type {
   GitDiffDisplayMode,
   GitDiffSelectionOption,
@@ -36,98 +28,10 @@ export type {
 
 const THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT = 24;
 const THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT = 70;
-const GIT_DIFF_SKELETON_FILE_COUNT = 3;
 const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
   "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
 const PANEL_SCROLL_SLOT_CLASS =
   "min-h-0 flex-1 overflow-x-hidden overflow-y-auto";
-
-function ThreadDiffSkeleton({
-  count = GIT_DIFF_SKELETON_FILE_COUNT,
-}: {
-  count?: number;
-}) {
-  return (
-    <div className="space-y-2 pt-2">
-      {Array.from({ length: count }).map((_, index) => (
-        <div
-          key={`git-diff-skeleton-${index}`}
-          className="rounded-lg border border-border/70 bg-background/70"
-        >
-          <div className="border-b border-border/70 bg-card/70 px-3 py-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <Skeleton className="size-4 shrink-0 rounded-sm" />
-                <Skeleton className="h-3 w-48 max-w-full rounded-sm" />
-              </div>
-              <Skeleton className="h-3 w-14 shrink-0 rounded-sm" />
-            </div>
-          </div>
-          <div className="space-y-1.5 px-2.5 py-2">
-            <Skeleton className="h-3 w-full rounded-sm" />
-            <Skeleton className="h-3 w-[94%] rounded-sm" />
-            <Skeleton className="h-3 w-[90%] rounded-sm" />
-            <Skeleton className="h-3 w-[86%] rounded-sm" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-interface GitDiffFileCardContainerProps {
-  fileKey: string;
-  fileDiff: ParsedGitDiffFile;
-  diffViewOptions: Record<string, string | boolean | number>;
-  filePathRoot?: string | null;
-  onOpenFileInEditor?: (path: string) => void;
-  onOpenFilePreview?: (path: string) => void;
-  isCollapsed: boolean;
-  isRendering: boolean;
-  setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
-  toggleGitDiffFileCollapsed: (fileKey: string) => void;
-  onRequestFileContents?: RequestDiffFileContents;
-}
-
-const GitDiffFileCardContainer = memo(function GitDiffFileCardContainer({
-  fileKey,
-  fileDiff,
-  diffViewOptions,
-  filePathRoot,
-  onOpenFileInEditor,
-  onOpenFilePreview,
-  isCollapsed,
-  isRendering,
-  setGitDiffFileRef,
-  toggleGitDiffFileCollapsed,
-  onRequestFileContents,
-}: GitDiffFileCardContainerProps) {
-  const handleToggleCollapsed = useCallback(() => {
-    toggleGitDiffFileCollapsed(fileKey);
-  }, [fileKey, toggleGitDiffFileCollapsed]);
-  const handleCardRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      setGitDiffFileRef(fileKey, element);
-    },
-    [fileKey, setGitDiffFileRef],
-  );
-
-  return (
-    <GitDiffCard
-      fileDiff={fileDiff}
-      diffViewOptions={diffViewOptions}
-      filePathRoot={filePathRoot}
-      onOpenFileInEditor={onOpenFileInEditor}
-      onOpenFilePreview={onOpenFilePreview}
-      isCollapsed={isCollapsed}
-      onToggleCollapsed={handleToggleCollapsed}
-      stickyHeader
-      isRendering={isRendering}
-      cardRef={handleCardRef}
-      onRequestFileContents={onRequestFileContents}
-    />
-  );
-});
 
 export interface SecondaryPanelFileTab {
   id: string;
@@ -223,7 +127,6 @@ export function ThreadSecondaryPanel({
     isDiffPanelActive,
     defaultMergeBaseBranch,
   });
-  const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
   const collapsedGitDiffFileKeys = useAtomValue(gitDiffCollapsedFileKeysAtom);
   const loadingGitDiffFileKeys = useAtomValue(gitDiffLoadingFileKeysAtom);
   const areAllGitDiffFilesCollapsed = useMemo(
@@ -353,75 +256,32 @@ export function ThreadSecondaryPanel({
             )}
           </div>
         ) : isDiffPanelActive ? (
-          <div className={cn(PANEL_SCROLL_SLOT_CLASS, "px-4 pb-3")}>
-            {isPreparingGitDiff ? (
-              <ThreadDiffSkeleton />
-            ) : gitDiffError ? (
-              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                {gitDiffError instanceof Error
-                  ? gitDiffError.message
-                  : "Failed to load git diff"}
-              </p>
-            ) : threadGitDiff && hasCurrentGitDiff ? (
-              <>
-                {parsedGitDiffFileEntries.length > 0 ? (
-                  <div className="space-y-2">
-                    {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
-                      const isCollapsed = collapsedGitDiffFileKeys.has(key);
-                      const hasQueuedFileRender =
-                        queuedGitDiffFileRenderKeys.has(key);
-                      const isRendering =
-                        !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
-
-                      return (
-                        <GitDiffFileCardContainer
-                          key={key}
-                          fileKey={key}
-                          fileDiff={fileDiff}
-                          diffViewOptions={gitDiffViewOptions}
-                          filePathRoot={workspaceRootPath}
-                          onOpenFileInEditor={onOpenFileInEditor}
-                          onOpenFilePreview={onOpenFilePreview}
-                          isCollapsed={isCollapsed}
-                          isRendering={isRendering}
-                          setGitDiffFileRef={setGitDiffFileRef}
-                          toggleGitDiffFileCollapsed={
-                            toggleGitDiffFileCollapsed
-                          }
-                          onRequestFileContents={onRequestFileContents}
-                        />
-                      );
-                    })}
-                    {isParsingGitDiffFiles ? (
-                      <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
-                        <div className="space-y-1.5">
-                          <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
-                          <Skeleton className="h-3 w-5/6 rounded-sm" />
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground">
-                    {threadGitDiff.diff}
-                  </pre>
-                )}
-                {threadGitDiff.truncated ? (
-                  <p className="pt-2 text-xs text-muted-foreground">
-                    Diff output was truncated for display.
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-                No diff to display.
-              </p>
-            )}
-          </div>
+          <GitDiffTabContent
+            collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
+            currentGitDiff={currentGitDiff}
+            gitDiffError={
+              gitDiffError instanceof Error
+                ? gitDiffError
+                : gitDiffError
+                  ? new Error("Failed to load git diff")
+                  : null
+            }
+            gitDiffViewOptions={gitDiffViewOptions}
+            isParsingGitDiffFiles={isParsingGitDiffFiles}
+            isPreparingGitDiff={isPreparingGitDiff}
+            loadingGitDiffFileKeys={loadingGitDiffFileKeys}
+            onOpenFileInEditor={onOpenFileInEditor}
+            onOpenFilePreview={onOpenFilePreview}
+            onRequestFileContents={onRequestFileContents}
+            parsedGitDiffFileEntries={parsedGitDiffFileEntries}
+            queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeys}
+            setGitDiffFileRef={setGitDiffFileRef}
+            threadGitDiff={threadGitDiff}
+            toggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
+            workspaceRootPath={workspaceRootPath}
+          />
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col px-4 pb-3">
-            {metadataContent}
-          </div>
+          <ThreadInfoTabContent metadataContent={metadataContent} />
         )}
       </div>
     </aside>

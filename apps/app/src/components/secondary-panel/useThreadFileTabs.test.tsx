@@ -11,12 +11,20 @@ import type {
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
 import {
-  createEmptyThreadSecondaryPanelState,
+  createEmptyFixedPanelTabsState,
+  getFixedPanelTabsStateStorageKey,
+  parseFixedPanelTabsState,
+  serializeFixedPanelTabsState,
+  type FixedPanelTab,
+  type FixedPanelTabsState,
+  type HostFilePreviewFixedPanelTab,
+  type ThreadStorageFilePreviewFixedPanelTab,
+  type WorkspaceFilePreviewFixedPanelTab,
+} from "@/lib/fixed-panel-tabs-state";
+import {
   EMPTY_THREAD_SECONDARY_PANEL_STATE,
   getThreadSecondaryPanelStateStorageKey,
   parseThreadSecondaryPanelState,
-  serializeThreadSecondaryPanelState,
-  type ThreadSecondaryPanelState,
   type WorkspaceFileTabState,
 } from "@/lib/thread-secondary-panel-state";
 import {
@@ -29,6 +37,11 @@ const NOW = 1_700_000_000_000;
 const WORKING_TREE_SOURCE: EnvironmentFilePreviewSource = {
   kind: "working-tree",
 };
+const MERGE_BASE_SOURCE: EnvironmentFilePreviewSource = {
+  kind: "merge-base",
+  ref: "abc1234",
+};
+const DELETED_STATUS_LABEL: WorkspaceFilePreviewStatusLabel = "deleted";
 
 interface TestWrapperProps {
   children: ReactNode;
@@ -77,7 +90,69 @@ function renderThreadFileTabsHook(initialProps: HookProps) {
   });
 }
 
-function readStoredState(threadId: string): ThreadSecondaryPanelState {
+function isWorkspaceFilePreviewTab(
+  tab: FixedPanelTab,
+): tab is WorkspaceFilePreviewFixedPanelTab {
+  return tab.kind === "workspace-file-preview";
+}
+
+function isHostFilePreviewTab(
+  tab: FixedPanelTab,
+): tab is HostFilePreviewFixedPanelTab {
+  return tab.kind === "host-file-preview";
+}
+
+function isStorageFilePreviewTab(
+  tab: FixedPanelTab,
+): tab is ThreadStorageFilePreviewFixedPanelTab {
+  return tab.kind === "thread-storage-file-preview";
+}
+
+function workspaceFileTabId(path: string): string {
+  return `workspace-file-preview:${encodeURIComponent(path)}`;
+}
+
+function storageFileTabId(path: string): string {
+  return `thread-storage-file-preview:${encodeURIComponent(path)}`;
+}
+
+function createStoredWorkspaceTab(
+  environmentId: string | null,
+  tab: WorkspaceFileTabState,
+): WorkspaceFilePreviewFixedPanelTab {
+  return {
+    environmentId,
+    id: workspaceFileTabId(tab.path),
+    kind: "workspace-file-preview",
+    lineNumber: tab.lineNumber,
+    path: tab.path,
+    source: tab.source,
+    statusLabel: tab.statusLabel,
+  };
+}
+
+function createStoredStorageTab(
+  path: string,
+): ThreadStorageFilePreviewFixedPanelTab {
+  return {
+    id: storageFileTabId(path),
+    isPinned: path === "STATUS.md",
+    kind: "thread-storage-file-preview",
+    path,
+  };
+}
+
+function readStoredState(threadId: string): FixedPanelTabsState {
+  return parseFixedPanelTabsState({
+    initialValue: createEmptyFixedPanelTabsState(),
+    now: Date.now(),
+    storedValue: window.localStorage.getItem(
+      getFixedPanelTabsStateStorageKey({ threadId }),
+    ),
+  });
+}
+
+function readLegacySecondaryState(threadId: string) {
   return parseThreadSecondaryPanelState({
     initialValue: EMPTY_THREAD_SECONDARY_PANEL_STATE,
     now: Date.now(),
@@ -87,14 +162,28 @@ function readStoredState(threadId: string): ThreadSecondaryPanelState {
   });
 }
 
-function seedStoredState(
-  threadId: string,
-  state: ThreadSecondaryPanelState,
-): void {
+function seedStoredState(threadId: string, state: FixedPanelTabsState): void {
   window.localStorage.setItem(
-    getThreadSecondaryPanelStateStorageKey({ threadId }),
-    serializeThreadSecondaryPanelState({ state }),
+    getFixedPanelTabsStateStorageKey({ threadId }),
+    serializeFixedPanelTabsState({ state }),
   );
+}
+
+function getStoredWorkspaceTabs(
+  state: FixedPanelTabsState,
+): WorkspaceFileTabState[] {
+  return state.secondary.tabs.filter(isWorkspaceFilePreviewTab).map((tab) => ({
+    lineNumber: tab.lineNumber,
+    path: tab.path,
+    source: tab.source,
+    statusLabel: tab.statusLabel,
+  }));
+}
+
+function getStoredStoragePaths(state: FixedPanelTabsState): string[] {
+  return state.secondary.tabs
+    .filter(isStorageFilePreviewTab)
+    .map((tab) => tab.path);
 }
 
 afterEach(() => {
@@ -126,10 +215,10 @@ describe("useThreadFileTabs", () => {
       WORKING_TREE_SOURCE,
     );
     expect(result.current.activeWorkspaceFileStatusLabel).toBeNull();
-    expect(readStoredState("thr-one").fileTabs.workspace).toEqual([
+    expect(getStoredWorkspaceTabs(readStoredState("thr-one"))).toEqual([
       workspaceTab,
     ]);
-    expect(readStoredState("thr-one").activePanel).toBe("thread-info");
+    expect(readLegacySecondaryState("thr-one").activePanel).toBe("thread-info");
   });
 
   it("keeps file tabs isolated by thread id", () => {
@@ -223,7 +312,9 @@ describe("useThreadFileTabs", () => {
     expect(result.current.openHostFileTabs).toEqual([firstTab, secondTab]);
     expect(result.current.activeHostFilePath).toBe(secondTab.path);
     expect(result.current.activeHostFileLineNumber).toBeNull();
-    expect(readStoredState("thr-host-files").activePanel).toBe("thread-info");
+    expect(readLegacySecondaryState("thr-host-files").activePanel).toBe(
+      "thread-info",
+    );
 
     act(() => {
       result.current.activateHostFileTab(firstTab.path);
@@ -396,12 +487,13 @@ describe("useThreadFileTabs", () => {
     const threadId = "thr-manager-cold-load";
     seedStoredState(
       threadId,
-      createEmptyThreadSecondaryPanelState({
-        fileTabs: {
-          workspace: [],
-          storage: ["STATUS.md", "notes.md"],
-          hostFiles: [],
-          active: { type: "storage", path: "notes.md" },
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [
+            createStoredStorageTab("STATUS.md"),
+            createStoredStorageTab("notes.md"),
+          ],
+          activeTabId: storageFileTabId("notes.md"),
         },
         lastUsedAt: NOW,
       }),
@@ -414,14 +506,13 @@ describe("useThreadFileTabs", () => {
     });
 
     expect(result.current.openStorageFilePaths).toEqual([]);
-    expect(readStoredState(threadId).fileTabs.storage).toEqual([
+    expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
       "STATUS.md",
       "notes.md",
     ]);
-    expect(readStoredState(threadId).fileTabs.active).toEqual({
-      type: "storage",
-      path: "notes.md",
-    });
+    expect(readStoredState(threadId).secondary.activeTabId).toBe(
+      storageFileTabId("notes.md"),
+    );
 
     rerender({
       environmentId: null,
@@ -448,13 +539,10 @@ describe("useThreadFileTabs", () => {
     });
     seedStoredState(
       threadId,
-      createEmptyThreadSecondaryPanelState({
-        environmentId: "env-one",
-        fileTabs: {
-          workspace: [workspaceTab],
-          storage: [],
-          hostFiles: [],
-          active: { type: "workspace", path: "src/app.ts" },
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [createStoredWorkspaceTab("env-one", workspaceTab)],
+          activeTabId: workspaceFileTabId("src/app.ts"),
         },
         lastUsedAt: NOW,
       }),
@@ -467,13 +555,12 @@ describe("useThreadFileTabs", () => {
     });
 
     expect(result.current.openWorkspaceFileTabs).toEqual([]);
-    expect(readStoredState(threadId).fileTabs.workspace).toEqual([
+    expect(getStoredWorkspaceTabs(readStoredState(threadId))).toEqual([
       workspaceTab,
     ]);
-    expect(readStoredState(threadId).fileTabs.active).toEqual({
-      type: "workspace",
-      path: "src/app.ts",
-    });
+    expect(readStoredState(threadId).secondary.activeTabId).toBe(
+      workspaceFileTabId("src/app.ts"),
+    );
 
     rerender({
       environmentId: "env-one",
@@ -493,12 +580,10 @@ describe("useThreadFileTabs", () => {
     const threadId = "thr-manager-seeded-active";
     seedStoredState(
       threadId,
-      createEmptyThreadSecondaryPanelState({
-        fileTabs: {
-          workspace: [],
-          storage: ["notes.md"],
-          hostFiles: [],
-          active: { type: "storage", path: "notes.md" },
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [createStoredStorageTab("notes.md")],
+          activeTabId: storageFileTabId("notes.md"),
         },
         lastUsedAt: NOW,
       }),
@@ -544,12 +629,13 @@ describe("useThreadFileTabs", () => {
     const threadId = "thr-manager-pinned-omitted";
     seedStoredState(
       threadId,
-      createEmptyThreadSecondaryPanelState({
-        fileTabs: {
-          workspace: [],
-          storage: ["STATUS.md", "notes.md"],
-          hostFiles: [],
-          active: { type: "storage", path: "STATUS.md" },
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [
+            createStoredStorageTab("STATUS.md"),
+            createStoredStorageTab("notes.md"),
+          ],
+          activeTabId: storageFileTabId("STATUS.md"),
         },
         lastUsedAt: NOW,
       }),
@@ -568,7 +654,85 @@ describe("useThreadFileTabs", () => {
       ]);
     });
     expect(result.current.activeStorageFilePath).toBe("STATUS.md");
-    expect(readStoredState(threadId).fileTabs.storage).toEqual([
+    expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
+      "STATUS.md",
+      "notes.md",
+    ]);
+  });
+
+  it("does not rewrite workspace tabs for no-op callbacks", () => {
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
+    const threadId = "thr-workspace-no-op";
+    const workspaceTab = buildWorkspaceFileTab({
+      lineNumber: 3,
+      path: "src/app.ts",
+      source: MERGE_BASE_SOURCE,
+      statusLabel: DELETED_STATUS_LABEL,
+    });
+    seedStoredState(
+      threadId,
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [createStoredWorkspaceTab("env-one", workspaceTab)],
+          activeTabId: workspaceFileTabId("src/app.ts"),
+        },
+        lastUsedAt: NOW,
+      }),
+    );
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "standard",
+      storageFiles: undefined,
+      threadId,
+    });
+    dateNowSpy.mockReturnValue(NOW + 60_000);
+
+    act(() => {
+      result.current.openWorkspaceFile(workspaceTab);
+      result.current.activateWorkspaceFileTab("src/app.ts");
+      result.current.closeWorkspaceFileTab("src/missing.ts");
+    });
+
+    expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
+    expect(result.current.openWorkspaceFileTabs).toEqual([workspaceTab]);
+  });
+
+  it("does not rewrite manager storage tabs for no-op callbacks", async () => {
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
+    const threadId = "thr-storage-no-op";
+    seedStoredState(
+      threadId,
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [
+            createStoredStorageTab("STATUS.md"),
+            createStoredStorageTab("notes.md"),
+          ],
+          activeTabId: storageFileTabId("notes.md"),
+        },
+        lastUsedAt: NOW,
+      }),
+    );
+    const { result } = renderThreadFileTabsHook({
+      environmentId: null,
+      threadType: "manager",
+      storageFiles: [{ path: "STATUS.md" }, { path: "notes.md" }],
+      threadId,
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeStorageFilePath).toBe("notes.md");
+    });
+    dateNowSpy.mockReturnValue(NOW + 60_000);
+
+    act(() => {
+      result.current.openStorageFile("notes.md");
+      result.current.activateStorageFileTab("notes.md");
+      result.current.closeStorageFileTab("STATUS.md");
+    });
+
+    expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
+    expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
       "STATUS.md",
       "notes.md",
     ]);
@@ -576,18 +740,14 @@ describe("useThreadFileTabs", () => {
 
   it("ignores stored storage tabs for standard threads", async () => {
     const threadId = "thr-standard";
-    window.localStorage.setItem(
-      getThreadSecondaryPanelStateStorageKey({ threadId }),
-      serializeThreadSecondaryPanelState({
-        state: createEmptyThreadSecondaryPanelState({
-          fileTabs: {
-            workspace: [],
-            storage: ["STATUS.md"],
-            hostFiles: [],
-            active: { type: "storage", path: "STATUS.md" },
-          },
-          lastUsedAt: Date.now(),
-        }),
+    seedStoredState(
+      threadId,
+      createEmptyFixedPanelTabsState({
+        secondary: {
+          tabs: [createStoredStorageTab("STATUS.md")],
+          activeTabId: storageFileTabId("STATUS.md"),
+        },
+        lastUsedAt: Date.now(),
       }),
     );
 
@@ -602,6 +762,6 @@ describe("useThreadFileTabs", () => {
       expect(result.current.openStorageFilePaths).toEqual([]);
     });
     expect(result.current.activeStorageFilePath).toBeNull();
-    expect(readStoredState(threadId).fileTabs.storage).toEqual([]);
+    expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([]);
   });
 });
