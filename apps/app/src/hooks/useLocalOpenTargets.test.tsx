@@ -4,9 +4,7 @@ import { Suspense, useEffect, type ReactNode } from "react";
 import {
   act,
   cleanup,
-  fireEvent,
   render,
-  screen,
   waitFor,
 } from "@testing-library/react";
 import {
@@ -46,24 +44,25 @@ interface LocalOpenTargetsFetchState {
   workspaceOpenTargetsStatus: number;
 }
 
-interface LocalOpenTargetsSnapshot {
-  hasDaemon: boolean;
-  preferredTargetLabel: string | null;
-  workspaceOpenTargets: WorkspaceOpenTarget[];
-}
-
 interface LocalOpenTargetsModules {
   useHostDaemon: typeof import("./useHostDaemon").useHostDaemon;
   useLocalOpenTargets: typeof import("./useLocalOpenTargets").useLocalOpenTargets;
 }
 
-interface LocalOpenTargetsProbeProps {
-  enabled: boolean;
-  onSnapshot: (snapshot: LocalOpenTargetsSnapshot) => void;
-}
-
 interface SuspenseWrapperProps {
   children: ReactNode;
+}
+
+interface LocalOpenTargetsSnapshot {
+  hostDaemon: ReturnType<LocalOpenTargetsModules["useHostDaemon"]>;
+  localOpenTargets: ReturnType<
+    LocalOpenTargetsModules["useLocalOpenTargets"]
+  >;
+}
+
+interface LocalOpenTargetsCaptureProps {
+  modules: LocalOpenTargetsModules;
+  onSnapshot: (snapshot: LocalOpenTargetsSnapshot) => void;
 }
 
 function createSuspenseWrapper() {
@@ -75,60 +74,27 @@ function createSuspenseWrapper() {
     });
 }
 
-function createLocalOpenTargetsProbe(
-  useLocalOpenTargets: LocalOpenTargetsModules["useLocalOpenTargets"],
-  useHostDaemon: LocalOpenTargetsModules["useHostDaemon"],
-) {
-  return function LocalOpenTargetsProbe({
-    enabled,
-    onSnapshot,
-  }: LocalOpenTargetsProbeProps) {
-    const value = useLocalOpenTargets({ enabled });
-    const hostDaemon = useHostDaemon();
+function LocalOpenTargetsCapture({
+  modules,
+  onSnapshot,
+}: LocalOpenTargetsCaptureProps) {
+  const hostDaemon = modules.useHostDaemon();
+  const localOpenTargets = modules.useLocalOpenTargets({ enabled: true });
 
-    useEffect(() => {
-      onSnapshot({
-        hasDaemon: hostDaemon.hasDaemon,
-        preferredTargetLabel: value.preferredTarget?.label ?? null,
-        workspaceOpenTargets: value.workspaceOpenTargets,
-      });
-    }, [
-      hostDaemon.hasDaemon,
-      onSnapshot,
-      value.preferredTarget?.label,
-      value.workspaceOpenTargets,
-    ]);
+  useEffect(() => {
+    onSnapshot({ hostDaemon, localOpenTargets });
+  }, [hostDaemon, localOpenTargets, onSnapshot]);
 
-    return (
-      <div>
-        <div data-testid="preferred-target">
-          {value.preferredTarget?.label ?? "none"}
-        </div>
-        <button
-          onClick={() => {
-            void value.openPathInPreferredTarget({
-              lineNumber: 27,
-              path: "/tmp/workspace/file.ts",
-            });
-          }}
-        >
-          open preferred
-        </button>
-        <button
-          onClick={() => {
-            void value.openPathInTarget({
-              lineNumber: null,
-              path: "/tmp/workspace/file.ts",
-              rememberTarget: true,
-              targetId: "finder",
-            });
-          }}
-        >
-          open finder
-        </button>
-      </div>
-    );
-  };
+  return null;
+}
+
+function requireLocalOpenTargetsSnapshot(
+  snapshot: LocalOpenTargetsSnapshot | null,
+): LocalOpenTargetsSnapshot {
+  if (!snapshot) {
+    throw new Error("Expected local open targets hook snapshot.");
+  }
+  return snapshot;
 }
 
 function installLocalOpenTargetsFetchRoutes(
@@ -221,20 +187,14 @@ describe("useLocalOpenTargets", () => {
       ReturnType<typeof openInTargetRequestSchema.parse>
     > = [];
     installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
     const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
       current: null,
     };
-    const { useHostDaemon, useLocalOpenTargets } =
-      await importFreshLocalOpenTargetsModules();
-    const LocalOpenTargetsProbe = createLocalOpenTargetsProbe(
-      useLocalOpenTargets,
-      useHostDaemon,
-    );
-
     await act(async () => {
       render(
-        <LocalOpenTargetsProbe
-          enabled={true}
+        <LocalOpenTargetsCapture
+          modules={modules}
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
@@ -244,10 +204,20 @@ describe("useLocalOpenTargets", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("preferred-target").textContent).toBe("Finder");
+      expect(
+        requireLocalOpenTargetsSnapshot(latestSnapshot.current).localOpenTargets
+          .preferredTarget?.label,
+      ).toBe("Finder");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "open preferred" }));
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInPreferredTarget({
+        lineNumber: 27,
+        path: "/tmp/workspace/file.ts",
+      });
+    });
 
     await waitFor(() => {
       expect(openTargetRequests).toEqual([
@@ -258,7 +228,6 @@ describe("useLocalOpenTargets", () => {
         },
       ]);
     });
-    expect(latestSnapshot.current?.preferredTargetLabel).toBe("Finder");
   });
 
   it("stores an explicitly selected target for future opens", async () => {
@@ -282,20 +251,39 @@ describe("useLocalOpenTargets", () => {
       ReturnType<typeof openInTargetRequestSchema.parse>
     > = [];
     installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
-    const { useHostDaemon, useLocalOpenTargets } =
-      await importFreshLocalOpenTargetsModules();
-    const LocalOpenTargetsProbe = createLocalOpenTargetsProbe(
-      useLocalOpenTargets,
-      useHostDaemon,
-    );
-
+    const modules = await importFreshLocalOpenTargetsModules();
+    const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
+      current: null,
+    };
     await act(async () => {
-      render(<LocalOpenTargetsProbe enabled={true} onSnapshot={() => {}} />, {
-        wrapper: createSuspenseWrapper(),
-      });
+      render(
+        <LocalOpenTargetsCapture
+          modules={modules}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "open finder" }));
+    await waitFor(() => {
+      expect(
+        requireLocalOpenTargetsSnapshot(latestSnapshot.current).localOpenTargets
+          .workspaceOpenTargets,
+      ).toHaveLength(2);
+    });
+
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInTarget({
+        lineNumber: null,
+        path: "/tmp/workspace/file.ts",
+        rememberTarget: true,
+        targetId: "finder",
+      });
+    });
 
     await waitFor(() => {
       expect(openTargetRequests).toEqual([
@@ -329,20 +317,14 @@ describe("useLocalOpenTargets", () => {
       ReturnType<typeof openInTargetRequestSchema.parse>
     > = [];
     installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
     const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
       current: null,
     };
-    const { useHostDaemon, useLocalOpenTargets } =
-      await importFreshLocalOpenTargetsModules();
-    const LocalOpenTargetsProbe = createLocalOpenTargetsProbe(
-      useLocalOpenTargets,
-      useHostDaemon,
-    );
-
     await act(async () => {
       render(
-        <LocalOpenTargetsProbe
-          enabled={true}
+        <LocalOpenTargetsCapture
+          modules={modules}
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
@@ -351,7 +333,14 @@ describe("useLocalOpenTargets", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "open preferred" }));
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInPreferredTarget({
+        lineNumber: 27,
+        path: "/tmp/workspace/file.ts",
+      });
+    });
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith("Failed to open file locally", {
@@ -379,20 +368,14 @@ describe("useLocalOpenTargets", () => {
       ReturnType<typeof openInTargetRequestSchema.parse>
     > = [];
     installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
     const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
       current: null,
     };
-    const { useHostDaemon, useLocalOpenTargets } =
-      await importFreshLocalOpenTargetsModules();
-    const LocalOpenTargetsProbe = createLocalOpenTargetsProbe(
-      useLocalOpenTargets,
-      useHostDaemon,
-    );
-
     await act(async () => {
       render(
-        <LocalOpenTargetsProbe
-          enabled={true}
+        <LocalOpenTargetsCapture
+          modules={modules}
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
@@ -402,10 +385,20 @@ describe("useLocalOpenTargets", () => {
     });
 
     await waitFor(() => {
-      expect(latestSnapshot.current?.hasDaemon).toBe(true);
+      expect(
+        requireLocalOpenTargetsSnapshot(latestSnapshot.current).hostDaemon
+          .hasDaemon,
+      ).toBe(true);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "open preferred" }));
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInPreferredTarget({
+        lineNumber: 27,
+        path: "/tmp/workspace/file.ts",
+      });
+    });
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith("Failed to open file locally", {

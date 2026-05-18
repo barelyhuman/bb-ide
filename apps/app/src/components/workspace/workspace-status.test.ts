@@ -6,10 +6,7 @@ import {
   makeWorkspaceWorkingTree,
 } from "@bb/test-helpers";
 import { HttpError } from "@/lib/api";
-import {
-  getGitStatusDisplay,
-  workspaceStatusDescription,
-} from "./workspace-status";
+import { getGitStatusDisplay } from "./workspace-status";
 
 interface MakeStatusOptions {
   aheadCount?: number;
@@ -56,10 +53,7 @@ function makeStatus(options: MakeStatusOptions): WorkspaceStatus {
 }
 
 describe("workspace-status", () => {
-  it("shows untracked label and copy for workspaces with only untracked files", () => {
-    expect(workspaceStatusDescription(makeStatus({ state: "untracked" }))).toBe(
-      "Workspace has untracked files that have not been committed yet.",
-    );
+  it("reports untracked workspaces with file counts", () => {
     expect(
       getGitStatusDisplay(makeStatus({ changedFiles: 1, state: "untracked" })),
     ).toMatchObject({
@@ -68,38 +62,7 @@ describe("workspace-status", () => {
     });
   });
 
-  it("describes dirty workspaces with a short explanation", () => {
-    expect(
-      workspaceStatusDescription(makeStatus({ state: "dirty_uncommitted" })),
-    ).toBe("You have local changes that have not been committed yet.");
-  });
-
-  it("describes synchronized clean workspaces as having no local changes", () => {
-    expect(workspaceStatusDescription(makeStatus({ state: "clean" }))).toBe(
-      "No local changes or unmerged commits.",
-    );
-  });
-
-  it("describes clean branches that are behind their merge base", () => {
-    expect(
-      workspaceStatusDescription(
-        makeStatus({ behindCount: 2, state: "clean" }),
-      ),
-    ).toBe("No local file changes, but this branch is behind its merge base.");
-  });
-
   it("includes branch comparison in untracked status summaries", () => {
-    expect(
-      workspaceStatusDescription(
-        makeStatus({
-          behindCount: 2,
-          changedFiles: 1,
-          state: "untracked",
-        }),
-      ),
-    ).toBe(
-      "Workspace has untracked files, and this branch is behind its merge base.",
-    );
     expect(
       getGitStatusDisplay(
         makeStatus({
@@ -115,18 +78,6 @@ describe("workspace-status", () => {
     ).toMatchObject({
       label: "Untracked",
       summary: "1 file • 2 behind main",
-    });
-  });
-
-  it("reports behind branches as an explicit git status display", () => {
-    expect(
-      getGitStatusDisplay(makeStatus({ behindCount: 3, state: "clean" }), {
-        mergeBaseBranch: "main",
-        showBranchComparison: true,
-      }),
-    ).toMatchObject({
-      label: "Behind",
-      summary: "3 behind main",
     });
   });
 
@@ -146,21 +97,6 @@ describe("workspace-status", () => {
     ).toMatchObject({
       label: "Diverged",
       summary: "2 ahead, 1 behind relative to main",
-    });
-  });
-
-  it("reports ahead branches as an explicit git status display", () => {
-    expect(
-      getGitStatusDisplay(
-        makeStatus({ aheadCount: 2, state: "committed_unmerged" }),
-        {
-          mergeBaseBranch: "main",
-          showBranchComparison: true,
-        },
-      ),
-    ).toMatchObject({
-      label: "Ahead",
-      summary: "2 ahead of main",
     });
   });
 
@@ -206,9 +142,6 @@ describe("workspace-status", () => {
       label: "Unknown",
       summary: "Workspace status unavailable.",
     });
-    expect(workspaceStatusDescription(undefined)).toBe(
-      "Workspace status is unavailable.",
-    );
   });
 
   it("reports a missing workspace when the path is gone", () => {

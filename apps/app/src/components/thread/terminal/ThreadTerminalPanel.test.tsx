@@ -26,12 +26,6 @@ const apiMocks = vi.hoisted(() => ({
   renameThreadTerminal: vi.fn(),
 }));
 
-const terminalTitleFixtures = vi.hoisted(() => ({
-  normalizedShellAutoTitle: ".../worktrees/env_gj4ep9emi8/bb",
-  shellAutoTitle:
-    "michael@Michaels-MacBook-Pro:~/.bb-dev/worktrees/env_gj4ep9emi8/bb",
-}));
-
 vi.mock("@/lib/api", () => apiMocks);
 
 interface MockThreadTerminalViewProps {
@@ -53,12 +47,6 @@ vi.mock("./ThreadTerminalView", () => ({
         </button>
         <button type="button" onClick={() => onTitleChange?.("Edited title")}>
           Title {session.id}
-        </button>
-        <button
-          type="button"
-          onClick={() => onTitleChange?.(terminalTitleFixtures.shellAutoTitle)}
-        >
-          Shell title {session.id}
         </button>
       </>
     );
@@ -331,28 +319,5 @@ describe("ThreadTerminalPanel", () => {
       );
     });
     expect(await screen.findByText("Edited title")).toBeTruthy();
-  });
-
-  it("collapses shell path auto-titles before renaming the active tab", async () => {
-    serverSessions = [makeTerminalSession()];
-    renderPanel();
-
-    fireEvent.click(screen.getByText("Show panel"));
-    expect(await screen.findByText("Terminal 1")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("Shell title term_1"));
-
-    await waitFor(() => {
-      expect(apiMocks.renameThreadTerminal).toHaveBeenCalledWith(
-        THREAD_ID,
-        "term_1",
-        {
-          title: terminalTitleFixtures.normalizedShellAutoTitle,
-        },
-      );
-    });
-    expect(
-      await screen.findByText(terminalTitleFixtures.normalizedShellAutoTitle),
-    ).toBeTruthy();
   });
 });

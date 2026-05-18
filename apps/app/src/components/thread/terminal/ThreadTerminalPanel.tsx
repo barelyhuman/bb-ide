@@ -16,12 +16,11 @@ import {
   useUpdateThreadTerminalPanelState,
 } from "@/lib/thread-terminal-panel";
 import { ThreadTerminalView } from "./ThreadTerminalView";
+import { normalizeTerminalTitle } from "./thread-terminal-title";
 
 const DEFAULT_TERMINAL_COLS = 100;
 const DEFAULT_TERMINAL_ROWS = 30;
 const EMPTY_TERMINAL_SESSIONS: readonly TerminalSession[] = [];
-const TERMINAL_TITLE_MAX_LENGTH = 200;
-const TERMINAL_TITLE_PATH_SEGMENT_COUNT = 3;
 const TERMINAL_TITLE_RENAME_DEBOUNCE_MS = 250;
 
 interface ThreadTerminalPanelProps {
@@ -37,93 +36,16 @@ interface TerminalTabProps {
   session: TerminalSession;
 }
 
-interface NormalizeTerminalTitleArgs {
-  title: string;
-}
-
-interface FormatTerminalPathTitleArgs {
-  path: string;
-}
-
-interface IsPathLikeTerminalTitlePathArgs {
-  path: string;
-}
-
-interface ParseShellPathTitleArgs {
-  title: string;
-}
-
-interface ShellPathTitleParts {
-  path: string;
-}
-
 interface TerminalTitleRenameRequest {
   terminalId: string;
   title: string;
 }
 
-type NormalizedTerminalTitle = string | null;
 type TerminalTitleChangeHandler = (title: string) => void;
 type TerminalTitleRenameTimeout = number;
 
 function isVisibleTerminalSession(session: TerminalSession): boolean {
   return session.status !== "exited";
-}
-
-function normalizeTerminalTitle({
-  title,
-}: NormalizeTerminalTitleArgs): NormalizedTerminalTitle {
-  const trimmedTitle = title.trim();
-  if (!trimmedTitle) {
-    return null;
-  }
-
-  const pathTitle = parseShellPathTitle({ title: trimmedTitle });
-  if (pathTitle !== null) {
-    return formatTerminalPathTitle({
-      path: pathTitle.path,
-    }).slice(0, TERMINAL_TITLE_MAX_LENGTH);
-  }
-
-  return trimmedTitle.slice(0, TERMINAL_TITLE_MAX_LENGTH);
-}
-
-function parseShellPathTitle({
-  title,
-}: ParseShellPathTitleArgs): ShellPathTitleParts | null {
-  const match = /^[^@\s:]+@[^:\s]+:(.+)$/u.exec(title);
-  const path = match?.[1];
-  if (!path || !isPathLikeTerminalTitlePath({ path })) {
-    return null;
-  }
-  return { path };
-}
-
-function isPathLikeTerminalTitlePath({
-  path,
-}: IsPathLikeTerminalTitlePathArgs): boolean {
-  return (
-    path === "~" ||
-    path === "." ||
-    path.startsWith("~/") ||
-    path.startsWith("/") ||
-    path.startsWith("./")
-  );
-}
-
-function formatTerminalPathTitle({
-  path,
-}: FormatTerminalPathTitleArgs): string {
-  if (path === "/" || path === "~" || path === ".") {
-    return path;
-  }
-
-  const segments = path.split("/").filter((segment) => segment.length > 0);
-  if (segments.length <= TERMINAL_TITLE_PATH_SEGMENT_COUNT) {
-    return path;
-  }
-
-  return `.../${segments.slice(-TERMINAL_TITLE_PATH_SEGMENT_COUNT).join("/")}`;
 }
 
 function pickActiveTerminalId(

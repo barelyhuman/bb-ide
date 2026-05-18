@@ -7,16 +7,22 @@ import {
 } from "./file-preview";
 
 describe("file-preview", () => {
-  it("builds text previews for declared text mime types", () => {
-    const preview = buildFilePreview({
+  it("builds text previews from declared text mime types or detected UTF-8 content", () => {
+    const declaredTextPreview = buildFilePreview({
       contentBytes: new TextEncoder().encode("export const value = 1;\n"),
       mimeType: "text/plain",
       name: "notes.txt",
       path: "notes.txt",
       url: "/files/notes.txt",
     });
+    const detectedUtf8Preview = buildFilePreview({
+      contentBytes: new TextEncoder().encode('{"ok":true}\n'),
+      mimeType: "application/octet-stream",
+      path: "result.log",
+      url: "/files/result.log",
+    });
 
-    expect(preview).toEqual({
+    expect(declaredTextPreview).toEqual({
       kind: "text",
       mimeType: "text/plain",
       name: "notes.txt",
@@ -24,17 +30,7 @@ describe("file-preview", () => {
       url: "/files/notes.txt",
       content: "export const value = 1;\n",
     });
-  });
-
-  it("builds text previews for utf8 content without a text mime type", () => {
-    const preview = buildFilePreview({
-      contentBytes: new TextEncoder().encode('{"ok":true}\n'),
-      mimeType: "application/octet-stream",
-      path: "result.log",
-      url: "/files/result.log",
-    });
-
-    expect(preview).toEqual({
+    expect(detectedUtf8Preview).toEqual({
       kind: "text",
       mimeType: "application/octet-stream",
       path: "result.log",
@@ -61,31 +57,27 @@ describe("file-preview", () => {
     });
   });
 
-  it("rejects declared text files with null bytes", () => {
-    const preview = buildFilePreview({
+  it("marks null-byte text and non-text binary files as unsupported", () => {
+    const textWithNullBytePreview = buildFilePreview({
       contentBytes: Uint8Array.from([97, 0, 98]),
       mimeType: "text/plain",
       path: "broken.txt",
       url: "/files/broken.txt",
     });
-
-    expect(preview).toEqual({
-      kind: "unsupported",
-      mimeType: "text/plain",
-      path: "broken.txt",
-      url: "/files/broken.txt",
-    });
-  });
-
-  it("marks non-text, non-image files as unsupported", () => {
-    const preview = buildFilePreview({
+    const binaryPreview = buildFilePreview({
       contentBytes: Uint8Array.from([0, 1, 2, 3]),
       mimeType: "application/octet-stream",
       path: "archive.bin",
       url: "/files/archive.bin",
     });
 
-    expect(preview).toEqual({
+    expect(textWithNullBytePreview).toEqual({
+      kind: "unsupported",
+      mimeType: "text/plain",
+      path: "broken.txt",
+      url: "/files/broken.txt",
+    });
+    expect(binaryPreview).toEqual({
       kind: "unsupported",
       mimeType: "application/octet-stream",
       path: "archive.bin",

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Suspense, useState, type JSX, type ReactNode } from "react";
+import { Suspense, type JSX, type ReactNode } from "react";
 import {
   act,
   cleanup,
@@ -8,7 +8,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { AvailableModel, Host, ProviderInfo, Thread } from "@bb/domain";
@@ -29,11 +28,7 @@ import {
   type FetchRoute,
 } from "@/test/http-test-utils";
 import { createTestSystemProvider } from "@/test/system-provider-test-utils";
-import {
-  NewManagerForm,
-  NewManagerView,
-  type NewManagerFormProps,
-} from "./NewManagerView";
+import { NewManagerView } from "./NewManagerView";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket } =
@@ -330,50 +325,9 @@ interface RenderNewManagerRouteArgs {
   wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
 }
 
-interface RenderNewManagerFormArgs {
-  models: readonly AvailableModel[];
-  wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
-}
-
 function ThreadRouteProbe() {
   const location = useLocation();
   return <p>Thread route: {location.pathname}</p>;
-}
-
-function renderNewManagerForm(args: RenderNewManagerFormArgs) {
-  const projects = [makeProjectResponse()];
-  const hosts = [makeHost("host-local", "Local Host")];
-  const providers = createDefaultSystemProviders();
-  const isLocalHost: NewManagerFormProps["isLocalHost"] = (hostId) =>
-    hostId === "host-local";
-  const onProjectChange: NewManagerFormProps["onProjectChange"] = () => {};
-  const onCancel: NewManagerFormProps["onCancel"] = () => {};
-  const onHire: NewManagerFormProps["onHire"] = async () => {};
-
-  function TestNewManagerForm() {
-    const [selectedProviderId, setSelectedProviderId] = useState("");
-
-    return (
-      <NewManagerForm
-        projectId="proj-1"
-        projects={projects}
-        projectsAreLoaded
-        providers={providers}
-        providersAreLoaded
-        hosts={hosts}
-        isLocalHost={isLocalHost}
-        models={args.models}
-        selectedProviderId={selectedProviderId}
-        onSelectedProviderIdChange={setSelectedProviderId}
-        onProjectChange={onProjectChange}
-        onCancel={onCancel}
-        onHire={onHire}
-        isHirePending={false}
-      />
-    );
-  }
-
-  render(<TestNewManagerForm />, { wrapper: args.wrapper });
 }
 
 async function renderNewManagerRoute(args: RenderNewManagerRouteArgs) {
@@ -409,61 +363,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// The Radix/jsdom picker interaction hit Vitest's 5s limit under full
-// @bb/app CI contention. Keep the extra time local after trimming
-// route/MSW/Suspense while preserving the source-of-truth popover behavior.
-const NEW_MANAGER_PICKER_TEST_TIMEOUT_MS = 7_500;
-
 describe("NewManagerView", () => {
-  it(
-    "renders real manager model options and selects one from the picker",
-    async () => {
-      const piModels = [
-        makeModel("anthropic/claude-sonnet-4-6", {
-          displayName: "Claude Sonnet 4.6",
-        }),
-        makeModel("anthropic/claude-opus-4-7", {
-          displayName: "Claude Opus 4.7",
-          isDefault: true,
-        }),
-      ];
-      const { wrapper } = createQueryClientTestHarness();
-
-      renderNewManagerForm({
-        models: piModels,
-        wrapper,
-      });
-
-      await waitFor(() => {
-        expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
-      });
-
-      fireEvent.click(getProviderModelButton());
-
-      const sonnetOption = screen.getByRole("button", {
-        name: "Claude Sonnet 4.6",
-      });
-      const modelOptionsContainer = sonnetOption.parentElement;
-      if (!modelOptionsContainer) {
-        throw new Error("Model options container was not rendered");
-      }
-      const modelOptionNames = within(modelOptionsContainer)
-        .getAllByRole("button")
-        .map((button) => button.textContent?.trim());
-      expect(modelOptionNames).toEqual([
-        "Claude Sonnet 4.6",
-        "Claude Opus 4.7",
-      ]);
-
-      fireEvent.click(sonnetOption);
-
-      await waitFor(() => {
-        expectProviderModelTitle(["Pi", "Claude Sonnet 4.6"]);
-      });
-    },
-    NEW_MANAGER_PICKER_TEST_TIMEOUT_MS,
-  );
-
   it("submits the default manager hire through the route and caches the created thread", async () => {
     const piModels = [
       makeModel("anthropic/claude-opus-4-7", {

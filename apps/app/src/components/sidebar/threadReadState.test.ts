@@ -29,12 +29,4 @@ describe("getThreadReadToggleAction", () => {
     ).toBe("mark_unread");
   });
 
-  it("keeps the unread action when lastReadAt is ahead of latestAttentionAt", () => {
-    expect(
-      getThreadReadToggleAction({
-        lastReadAt: 12,
-        latestAttentionAt: 10,
-      }),
-    ).toBe("mark_unread");
-  });
 });

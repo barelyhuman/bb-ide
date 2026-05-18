@@ -38,15 +38,4 @@ describe("shouldSyncSelectedMergeBaseBranch", () => {
     ).toBe(false);
   });
 
-  it("does not resync when the same persisted value is already selected", () => {
-    expect(
-      shouldSyncSelectedMergeBaseBranch({
-        previousStateKey: "env-1",
-        nextStateKey: "env-1",
-        persistedMergeBaseBranch: null,
-        selectedMergeBaseBranch: undefined,
-        updatePending: false,
-      }),
-    ).toBe(false);
-  });
 });

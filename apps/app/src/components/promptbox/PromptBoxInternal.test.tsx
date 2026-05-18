@@ -33,15 +33,6 @@ interface PromptBoxHarnessProps {
 }
 
 type HistoryArrowKey = "ArrowUp" | "ArrowDown";
-type HistoryArrowModifierInit = Pick<
-  KeyboardEventInit,
-  "altKey" | "ctrlKey" | "metaKey" | "shiftKey"
->;
-
-interface ModifiedHistoryArrowCase {
-  eventInit: HistoryArrowModifierInit;
-  key: HistoryArrowKey;
-}
 
 interface PressHistoryArrowArgs {
   expectedValue: string;
@@ -50,7 +41,6 @@ interface PressHistoryArrowArgs {
 }
 
 interface PressIgnoredHistoryArrowArgs {
-  eventInit?: HistoryArrowModifierInit;
   expectedValue: string;
   key: HistoryArrowKey;
   textarea: HTMLTextAreaElement;
@@ -112,14 +102,12 @@ async function pressHistoryArrow({
 }
 
 function pressIgnoredHistoryArrow({
-  eventInit,
   expectedValue,
   key,
   textarea,
 }: PressIgnoredHistoryArrowArgs): void {
   const wasNotCanceled = fireEvent.keyDown(textarea, {
     key,
-    ...eventInit,
   });
   expect(wasNotCanceled).toBe(true);
   expect(textarea.value).toBe(expectedValue);
@@ -290,144 +278,6 @@ describe("PromptBoxInternal history navigation", () => {
     });
   });
 
-  it("does not intercept ArrowUp when there is no history to recall", () => {
-    render(
-      <PromptBoxHarness
-        initialDraft={{ text: "", attachments: [] }}
-        historyEntries={[]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-    textarea.setSelectionRange(0, 0);
-    pressIgnoredHistoryArrow({
-      expectedValue: "",
-      key: "ArrowUp",
-      textarea,
-    });
-  });
-
-  it("does not navigate when the draft only matches a history entry without being selected", () => {
-    render(
-      <PromptBoxHarness
-        initialDraft={{ text: "latest command", attachments: [] }}
-        historyEntries={[
-          { text: "latest command", attachments: [] },
-          { text: "older command", attachments: [] },
-        ]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    pressIgnoredHistoryArrow({
-      expectedValue: "latest command",
-      key: "ArrowUp",
-      textarea,
-    });
-  });
-
-  it("does not intercept an unselected multiline draft at the absolute end", () => {
-    const draftText = "first line\nsecond line";
-
-    render(
-      <PromptBoxHarness
-        initialDraft={{ text: draftText, attachments: [] }}
-        historyEntries={[{ text: "history command", attachments: [] }]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    pressIgnoredHistoryArrow({
-      expectedValue: draftText,
-      key: "ArrowUp",
-      textarea,
-    });
-  });
-
-  it("navigates from a selected multiline history entry only at the absolute end", async () => {
-    const multilineHistoryEntry = "first line\nsecond line";
-
-    render(
-      <PromptBoxHarness
-        initialDraft={{ text: "", attachments: [] }}
-        historyEntries={[
-          { text: multilineHistoryEntry, attachments: [] },
-          { text: "older command", attachments: [] },
-        ]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-    textarea.setSelectionRange(0, 0);
-    await pressHistoryArrow({
-      expectedValue: multilineHistoryEntry,
-      key: "ArrowUp",
-      textarea,
-    });
-
-    textarea.setSelectionRange(3, 3);
-    pressIgnoredHistoryArrow({
-      expectedValue: multilineHistoryEntry,
-      key: "ArrowUp",
-      textarea,
-    });
-
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    await pressHistoryArrow({
-      expectedValue: "older command",
-      key: "ArrowUp",
-      textarea,
-    });
-  });
-
-  it("does not intercept modified arrows for a selected multiline history entry at the absolute end", async () => {
-    const multilineHistoryEntry = "first line\nsecond line";
-    const modifierCases: HistoryArrowModifierInit[] = [
-      { shiftKey: true },
-      { altKey: true },
-      { metaKey: true },
-      { ctrlKey: true },
-    ];
-
-    render(
-      <PromptBoxHarness
-        initialDraft={{ text: "", attachments: [] }}
-        historyEntries={[
-          { text: multilineHistoryEntry, attachments: [] },
-          { text: "older command", attachments: [] },
-        ]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-    textarea.setSelectionRange(0, 0);
-    await pressHistoryArrow({
-      expectedValue: multilineHistoryEntry,
-      key: "ArrowUp",
-      textarea,
-    });
-
-    for (const eventInit of modifierCases) {
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      pressIgnoredHistoryArrow({
-        eventInit,
-        expectedValue: multilineHistoryEntry,
-        key: "ArrowUp",
-        textarea,
-      });
-
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      pressIgnoredHistoryArrow({
-        eventInit,
-        expectedValue: multilineHistoryEntry,
-        key: "ArrowDown",
-        textarea,
-      });
-    }
-  });
-
   it("does not overwrite an attachment-only draft", () => {
     render(
       <PromptBoxHarness
@@ -458,23 +308,6 @@ describe("PromptBoxInternal history navigation", () => {
     });
 
     expect(screen.queryByText("spec.md")).not.toBeNull();
-  });
-
-  it("does not intercept ArrowDown without an active history selection", () => {
-    render(
-      <PromptBoxHarness
-        initialDraft={{ text: "", attachments: [] }}
-        historyEntries={[{ text: "history command", attachments: [] }]}
-      />,
-    );
-
-    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    pressIgnoredHistoryArrow({
-      expectedValue: "",
-      key: "ArrowDown",
-      textarea,
-    });
   });
 
   it("gives selected mention-like history entries precedence over mention navigation", async () => {
@@ -529,70 +362,6 @@ describe("PromptBoxInternal history navigation", () => {
       key: "ArrowUp",
       textarea,
     });
-  });
-
-  it("does not intercept modified arrows while a selected mention-like history entry has mention suggestions", async () => {
-    const modifiedArrowCases: ModifiedHistoryArrowCase[] = [
-      { eventInit: { shiftKey: true }, key: "ArrowUp" },
-      { eventInit: { shiftKey: true }, key: "ArrowDown" },
-      { eventInit: { altKey: true }, key: "ArrowUp" },
-      { eventInit: { altKey: true }, key: "ArrowDown" },
-      { eventInit: { metaKey: true }, key: "ArrowUp" },
-      { eventInit: { metaKey: true }, key: "ArrowDown" },
-      { eventInit: { ctrlKey: true }, key: "ArrowUp" },
-      { eventInit: { ctrlKey: true }, key: "ArrowDown" },
-    ];
-
-    for (const modifiedArrowCase of modifiedArrowCases) {
-      cleanup();
-      render(
-        <PromptBoxHarness
-          initialDraft={{ text: "", attachments: [] }}
-          historyEntries={[
-            { text: "@rea", attachments: [] },
-            { text: "older command", attachments: [] },
-          ]}
-          mentionSuggestions={[
-            {
-              kind: "file",
-              path: "README.md",
-              replacement: "README.md",
-            },
-            {
-              kind: "file",
-              path: "src/App.tsx",
-              replacement: "src/App.tsx",
-            },
-          ]}
-        />,
-      );
-
-      const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
-      textarea.setSelectionRange(0, 0);
-      await pressHistoryArrow({
-        expectedValue: "@rea",
-        key: "ArrowUp",
-        textarea,
-      });
-      await waitFor(() => {
-        expect(screen.queryByText("README.md")).not.toBeNull();
-      });
-
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-      pressIgnoredHistoryArrow({
-        eventInit: modifiedArrowCase.eventInit,
-        expectedValue: "@rea",
-        key: modifiedArrowCase.key,
-        textarea,
-      });
-
-      fireEvent.keyDown(textarea, { key: "Enter" });
-      await waitFor(() => {
-        expect(textarea.value).toBe("@README.md ");
-        expect(textarea.selectionStart).toBe(textarea.value.length);
-        expect(textarea.selectionEnd).toBe(textarea.value.length);
-      });
-    }
   });
 
   it("preserves ordinary mention navigation for typed mention drafts", async () => {

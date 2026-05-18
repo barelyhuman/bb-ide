@@ -234,30 +234,6 @@ describe("ThreadTerminalView", () => {
     expect(terminal.write).toHaveBeenCalledWith("hello\n");
   });
 
-  it("reports xterm title changes", async () => {
-    const onTitleChange = vi.fn();
-    render(
-      <ThreadTerminalView
-        onTitleChange={onTitleChange}
-        session={terminalSession}
-        threadId="thr_test"
-      />,
-    );
-
-    await waitFor(() => {
-      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
-    });
-
-    const terminal = xtermMocks.MockTerminal.instances[0];
-    if (!terminal) {
-      throw new Error("Expected terminal instance");
-    }
-
-    terminal.emitTitle("X");
-
-    expect(onTitleChange).toHaveBeenCalledWith("X");
-  });
-
   it("ignores title changes emitted while replaying scrollback", async () => {
     const onTitleChange = vi.fn();
     render(

@@ -16,28 +16,16 @@ function makeHost(overrides: Partial<Host> = {}): Host {
 }
 
 describe("getEffectiveHost", () => {
-  it("keeps raw host status before the initial server websocket connects", () => {
+  it("uses raw host status before the first connection and marks connected hosts disconnected while reconnecting", () => {
     expect(
       getEffectiveHost({
         host: makeHost({ status: "connected" }),
         serverConnectionState: "connecting",
       }).status,
     ).toBe("connected");
-  });
-
-  it("treats cached connected hosts as disconnected while reconnecting", () => {
     expect(
       getEffectiveHost({
         host: makeHost({ status: "connected" }),
-        serverConnectionState: "reconnecting",
-      }).status,
-    ).toBe("disconnected");
-  });
-
-  it("preserves disconnected hosts while reconnecting", () => {
-    expect(
-      getEffectiveHost({
-        host: makeHost({ status: "disconnected" }),
         serverConnectionState: "reconnecting",
       }).status,
     ).toBe("disconnected");

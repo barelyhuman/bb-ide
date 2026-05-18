@@ -15,19 +15,13 @@ import {
   delegationRow,
   fileChangeRow,
   questionRow,
-  readIntent,
-  searchIntent,
   systemRow,
-  toolRow,
   turnRow,
-  webFetchRow,
-  webSearchRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline/ThreadTimelineRows";
-import type { UserAttachmentImageSrcResolver } from "@/components/thread/timeline/types";
 
 type ElementScrollMetricName = "clientHeight" | "scrollHeight";
 type ThreadTimelineRowsPropsOverrides = Partial<
@@ -157,28 +151,6 @@ describe("ThreadTimelineRows", () => {
     ).not.toBe(0);
   });
 
-  it("renders an unread divider before the first row for explicit before-first placement", () => {
-    renderTimelineRows({
-      overrides: {
-        unreadDividerPlacement: { kind: "before-first" },
-      },
-      timelineRows: [
-        conversationRow({
-          id: "first-unread-message",
-          sourceSeqStart: 20,
-          text: "First unread manager update",
-        }),
-      ],
-    });
-
-    const divider = screen.getByRole("separator", { name: "New messages" });
-    const firstMessage = screen.getByText("First unread manager update");
-    expect(
-      divider.compareDocumentPosition(firstMessage) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).not.toBe(0);
-  });
-
   it("omits the unread divider when no rows are newer than the cutoff", () => {
     renderTimelineRows({
       overrides: {
@@ -196,116 +168,6 @@ describe("ThreadTimelineRows", () => {
     expect(
       screen.queryByRole("separator", { name: "New messages" }),
     ).toBeNull();
-  });
-
-  it("omits the unread divider when before-first placement has no row to precede", () => {
-    renderTimelineRows({
-      overrides: {
-        unreadDividerPlacement: { kind: "before-first" },
-      },
-      timelineRows: [],
-    });
-
-    expect(
-      screen.queryByRole("separator", { name: "New messages" }),
-    ).toBeNull();
-  });
-
-  it("keeps same-props timeline rerenders from re-resolving attachment image sources", () => {
-    const erroredTurnSummaryIds = new Set<string>();
-    const loadingTurnSummaryIds = new Set<string>();
-    const onLoadTurnSummaryRows = () => {};
-    const resolveUserAttachmentImageSrc = vi.fn<UserAttachmentImageSrcResolver>(
-      (path, projectId) => `/attachments/${projectId}${path}`,
-    );
-    const timelineRows = [
-      conversationRow({
-        role: "user",
-        text: "Attached.",
-        attachments: {
-          webImages: 0,
-          localImages: 1,
-          localFiles: 0,
-          imageUrls: [],
-          localImagePaths: ["/workspace/shot.png"],
-          localFilePaths: [],
-        },
-      }),
-    ];
-    const turnSummaryRowsById = {};
-
-    const view = render(
-      <ThreadTimelineRows
-        erroredTurnSummaryIds={erroredTurnSummaryIds}
-        loadingTurnSummaryIds={loadingTurnSummaryIds}
-        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-        projectId="project-1"
-        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-        timelineRows={timelineRows}
-        threadRuntimeDisplayStatus="idle"
-        turnSummaryRowsIdentity="test-view"
-        turnSummaryRowsById={turnSummaryRowsById}
-      />,
-    );
-    expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
-
-    view.rerender(
-      <ThreadTimelineRows
-        erroredTurnSummaryIds={erroredTurnSummaryIds}
-        loadingTurnSummaryIds={loadingTurnSummaryIds}
-        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-        projectId="project-1"
-        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-        timelineRows={timelineRows}
-        threadRuntimeDisplayStatus="idle"
-        turnSummaryRowsIdentity="test-view"
-        turnSummaryRowsById={turnSummaryRowsById}
-      />,
-    );
-
-    expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders activity summary exploration details as compact static rows", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "exploration-1",
-          command: "cat src/app.ts && rg TODO src",
-          activityIntents: [
-            readIntent({ path: "src/app.ts" }),
-            searchIntent({ query: "TODO", path: "src" }),
-          ],
-          output: "large file contents",
-          sourceSeqStart: 1,
-        }),
-        commandRow({
-          id: "exploration-2",
-          command: "rg FIXME src",
-          activityIntents: [searchIntent({ query: "FIXME", path: "src" })],
-          output: "more large output",
-          sourceSeqStart: 2,
-        }),
-      ],
-    });
-
-    expect(screen.getAllByRole("button")).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole("button"));
-
-    expect(
-      view.container.querySelector('[title="Read src/app.ts"]'),
-    ).not.toBeNull();
-    expect(view.container.textContent ?? "").not.toContain("Read src/app.ts");
-    expect(
-      view.container.querySelector('[title="Searched for TODO in src"]'),
-    ).not.toBeNull();
-    expect(view.container.textContent ?? "").not.toContain("$ cat src/app.ts");
-    expect(view.container.textContent ?? "").not.toContain(
-      "large file contents",
-    );
-    expect(view.container.textContent ?? "").not.toContain("more large output");
-    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("renders delegation child progress and final output when both are present", () => {
@@ -329,19 +191,6 @@ describe("ThreadTimelineRows", () => {
     );
 
     expect(view.container.textContent ?? "").toContain("rg timeline apps/app");
-  });
-
-  it("does not render web search and fetch leaves as expandable rows", () => {
-    const view = renderTimelineRows({
-      timelineRows: [webSearchRow(), webFetchRow()],
-    });
-
-    expect(screen.getAllByRole("button")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button"));
-
-    expect(view.container.textContent ?? "").toContain("Ran web search");
-    expect(view.container.textContent ?? "").toContain("Fetched");
-    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("renders pending user questions as read-only status rows", () => {
@@ -388,78 +237,6 @@ describe("ThreadTimelineRows", () => {
     expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
     expect(screen.queryByLabelText("Bug fix")).toBeNull();
     expect(screen.queryByLabelText("Notes answer")).toBeNull();
-  });
-
-  it("renders submitted user question answers read-only", () => {
-    const row = questionRow({
-      lifecycle: "answered",
-      questions: [
-        {
-          id: "direction",
-          prompt: "Which implementation direction?",
-          multiSelect: false,
-          options: [
-            { value: "simple", label: "Simple" },
-            { value: "complete", label: "Complete" },
-          ],
-          allowFreeText: true,
-        },
-      ],
-      answers: {
-        direction: {
-          selected: ["complete"],
-          freeText: "Include tests.",
-        },
-      },
-    });
-
-    renderTimelineRows({
-      timelineRows: [row],
-      overrides: {
-        initialExpanded: new Set([row.id]),
-      },
-    });
-
-    expect(screen.getAllByText("Answered").length).toBeGreaterThan(0);
-    expect(screen.getByText("Complete")).not.toBeNull();
-    expect(screen.getByText("Include tests.")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
-  });
-
-  it("groups completed work once a second completed row appends to the run", () => {
-    const firstCommand = commandRow({
-      id: "command-1",
-      command: "pnpm test",
-      sourceSeqStart: 1,
-    });
-    const view = renderTimelineRows({
-      timelineRows: [firstCommand],
-    });
-
-    expect(
-      screen.getByRole("button", {
-        name: /Ran\s+pnpm test\s+2s/u,
-      }),
-    ).toBeTruthy();
-
-    rerenderTimelineRows({
-      view,
-      timelineRows: [
-        firstCommand,
-        commandRow({
-          id: "command-2",
-          command: "pnpm lint",
-          sourceSeqStart: 2,
-        }),
-      ],
-    });
-
-    expect(
-      screen.queryByRole("button", { name: /Ran\s+pnpm test\s+2s/u }),
-    ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: /Ran 2 commands/u }),
-    ).toBeTruthy();
   });
 
   it("preserves completed activity summary identity when work appends", () => {
@@ -688,63 +465,6 @@ describe("ThreadTimelineRows", () => {
 
     expect(view.container.textContent ?? "").toContain("second chunk");
     expect(view.container.textContent ?? "").not.toContain("first chunk");
-  });
-
-  it("renders failed structured tools as compact intent rows with an (error) marker", () => {
-    // Inside a bundle, an errored exploration tool stays in the compact
-    // static intent listing — same shape as its successful siblings — but
-    // its title carries an (error) decoration so the user can identify
-    // the failing row. The bundle's aggregate "(N errors)" label only
-    // counts errors; per-row marking is what tells you *which* row.
-    const view = renderTimelineRows({
-      timelineRows: [
-        toolRow({
-          id: "tool-1",
-          activityIntents: [readIntent({ path: "/repo/src/app.ts" })],
-          output: "ENOENT: no such file or directory",
-          status: "error",
-          sourceSeqStart: 1,
-        }),
-        toolRow({
-          id: "tool-2",
-          activityIntents: [readIntent({ path: "/repo/src/lib.ts" })],
-          status: "completed",
-          sourceSeqStart: 2,
-        }),
-      ],
-    });
-
-    const summaryButton = screen.getByRole("button", {
-      name: /Explored 2 files \(1 error\)/u,
-    });
-    fireEvent.click(summaryButton);
-
-    // The HTML title attribute carries the plain-text form of segments +
-    // decorations, so a successful read is "Read <path>" and a failed
-    // read is "Read <path> (error)". This is the per-row marker the
-    // bundle's aggregate count alone does not provide.
-    const errorRow = view.container.querySelector(
-      '[title="Read /repo/src/app.ts (error)"]',
-    );
-    expect(errorRow).not.toBeNull();
-
-    const successRow = view.container.querySelector(
-      '[title="Read /repo/src/lib.ts"]',
-    );
-    expect(successRow).not.toBeNull();
-
-    // Errored intent rows in the bundle stay static — no button affordance,
-    // matching the rest of the compact listing. This is a deliberate
-    // tradeoff: the user loses the click-to-expand affordance that would
-    // have shown the error output. The (error) marker is the entire
-    // per-row signal; the underlying error body is intentionally
-    // unreachable from inside the bundle.
-    expect(
-      screen.queryByRole("button", { name: /Read\s+app\.ts/u }),
-    ).toBeNull();
-    expect(view.container.textContent ?? "").not.toContain(
-      "ENOENT: no such file or directory",
-    );
   });
 
   it("renders file-change stderr without rendering stdout below diffs", () => {

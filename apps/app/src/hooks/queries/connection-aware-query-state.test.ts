@@ -13,52 +13,53 @@ const baseArgs: ConnectionAwareQueryStateArgs = {
 };
 
 describe("getConnectionAwareQueryState", () => {
-  it("returns loading while the initial fetch is in flight", () => {
-    expect(
-      getConnectionAwareQueryState({ ...baseArgs, isFetching: true }).status,
-    ).toBe("loading");
-  });
+  it("resolves loading, unavailable, and ready states from fetch and connection state", () => {
+    const cases = [
+      {
+        args: { ...baseArgs, isFetching: true },
+        status: "loading",
+      },
+      {
+        args: {
+          ...baseArgs,
+          isLoadingError: true,
+          serverConnectionState: "connecting",
+          connectionGracePeriodElapsed: false,
+        },
+        status: "loading",
+      },
+      {
+        args: {
+          ...baseArgs,
+          isLoadingError: true,
+          serverConnectionState: "connecting",
+          connectionGracePeriodElapsed: true,
+        },
+        status: "unavailable",
+      },
+      {
+        args: {
+          ...baseArgs,
+          isLoadingError: true,
+          serverConnectionState: "connected",
+          connectionGracePeriodElapsed: false,
+        },
+        status: "unavailable",
+      },
+      {
+        args: {
+          ...baseArgs,
+          hasResolvedData: true,
+          serverConnectionState: "connected",
+        },
+        status: "ready",
+      },
+    ];
 
-  it("returns loading when errored within the WS grace period", () => {
-    expect(
-      getConnectionAwareQueryState({
-        ...baseArgs,
-        isLoadingError: true,
-        serverConnectionState: "connecting",
-        connectionGracePeriodElapsed: false,
-      }).status,
-    ).toBe("loading");
-  });
-
-  it("flips to unavailable once the grace period elapses without a WS connection", () => {
-    expect(
-      getConnectionAwareQueryState({
-        ...baseArgs,
-        isLoadingError: true,
-        serverConnectionState: "connecting",
-        connectionGracePeriodElapsed: true,
-      }).status,
-    ).toBe("unavailable");
-  });
-
-  it("returns unavailable when errored after the WS has connected", () => {
-    expect(
-      getConnectionAwareQueryState({
-        ...baseArgs,
-        isLoadingError: true,
-        serverConnectionState: "connected",
-        connectionGracePeriodElapsed: false,
-      }).status,
-    ).toBe("unavailable");
-  });
-
-  it("returns ready once data has resolved", () => {
-    expect(
-      getConnectionAwareQueryState({
-        ...baseArgs,
-        hasResolvedData: true,
-        serverConnectionState: "connected",
-      }).status,
-    ).toBe("ready");
+    for (const testCase of cases) {
+      expect(getConnectionAwareQueryState(testCase.args).status).toBe(
+        testCase.status,
+      );
+    }
   });
 });

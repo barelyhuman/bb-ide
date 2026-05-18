@@ -4,7 +4,6 @@ import { Suspense, type ReactNode } from "react";
 import {
   act,
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
@@ -28,9 +27,8 @@ import {
 } from "@/hooks/queries/query-keys";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
-import { SidebarMenuItem } from "@/components/ui/sidebar.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProjectList, ProjectListShell } from "./ProjectList";
+import { ProjectList } from "./ProjectList";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket: FakeSocket } =
@@ -174,28 +172,6 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
-  it("keeps project creation behind the project options menu", async () => {
-    const onNewProject = vi.fn();
-
-    render(
-      <ProjectListShell onNewProject={onNewProject}>
-        <SidebarMenuItem>Project row</SidebarMenuItem>
-      </ProjectListShell>,
-    );
-
-    const trigger = screen.getByRole("button", { name: "Project options" });
-    expect(trigger.querySelector('[data-icon="MoreHorizontal"]')).toBeTruthy();
-    expect(trigger.querySelector('[data-icon="Plus"]')).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "Add project" })).toBeNull();
-
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
-    fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Add project" }),
-    );
-
-    await waitFor(() => expect(onNewProject).toHaveBeenCalledTimes(1));
-  });
-
   it("primes project and thread-list caches from the sidebar bootstrap", async () => {
     let includeProjectRequestCount = 0;
     let leanProjectRequestCount = 0;
@@ -265,7 +241,7 @@ describe("ProjectList", () => {
     expect(threadRequestCount).toBe(0);
   });
 
-  it("keeps showing project skeletons when the project request fails before the websocket connects", async () => {
+  it("does not show project error or empty states before the websocket connects", async () => {
     const fetchMock = installFetchRoutes([
       {
         pathname: "/api/v1/projects",
@@ -287,7 +263,7 @@ describe("ProjectList", () => {
 
     wsManager.connect();
 
-    const { container, queryClient } = await renderProjectList();
+    const { queryClient } = await renderProjectList();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalled();
@@ -295,9 +271,6 @@ describe("ProjectList", () => {
         "error",
       );
     });
-    expect(
-      container.querySelectorAll('[data-sidebar="menu-skeleton"]').length,
-    ).toBeGreaterThan(0);
     expect(screen.queryByText("Projects unavailable")).toBeNull();
     expect(screen.queryByText("No projects")).toBeNull();
   });

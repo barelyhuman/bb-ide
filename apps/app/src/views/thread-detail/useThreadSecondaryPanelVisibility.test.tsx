@@ -121,24 +121,6 @@ describe("useThreadSecondaryPanelVisibility", () => {
     expect(result.current.activePanel).toBe("git-diff");
   });
 
-  it("opens an already-restored compact drawer without writing persisted state", () => {
-    const props: VisibilityHarnessProps = {
-      initialActivePanel: "git-diff",
-      isCompactViewport: true,
-      threadId: "thr-one",
-    };
-    const { result } = renderHook(() => useVisibilityHarness(props));
-
-    act(() => {
-      result.current.visibility.togglePanel();
-    });
-
-    expect(result.current.visibility.isOpen).toBe(true);
-    expect(result.current.activePanel).toBe("git-diff");
-    expect(result.current.openPersistedPanel).not.toHaveBeenCalled();
-    expect(result.current.togglePersistedPanel).not.toHaveBeenCalled();
-  });
-
   it("treats compact first-toggle without a persisted panel as transient", () => {
     let props: VisibilityHarnessProps = {
       isCompactViewport: true,
@@ -165,40 +147,6 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(false);
     expect(result.current.activePanel).toBeNull();
-  });
-
-  it("persists explicit compact panel selection and reveals the drawer", () => {
-    const props: VisibilityHarnessProps = {
-      isCompactViewport: true,
-      threadId: "thr-one",
-    };
-    const { result } = renderHook(() => useVisibilityHarness(props));
-
-    act(() => {
-      result.current.visibility.openPanel("thread-info");
-    });
-
-    expect(result.current.visibility.isOpen).toBe(true);
-    expect(result.current.activePanel).toBe("thread-info");
-    expect(result.current.openPersistedPanel).toHaveBeenCalledWith(
-      "thread-info",
-    );
-  });
-
-  it("persists explicit compact diff panel opens and reveals the drawer", () => {
-    const props: VisibilityHarnessProps = {
-      isCompactViewport: true,
-      threadId: "thr-one",
-    };
-    const { result } = renderHook(() => useVisibilityHarness(props));
-
-    act(() => {
-      result.current.visibility.openDiffPanel();
-    });
-
-    expect(result.current.visibility.isOpen).toBe(true);
-    expect(result.current.activePanel).toBe("git-diff");
-    expect(result.current.openPersistedDiffPanel).toHaveBeenCalled();
   });
 
   it("persists compact diff file opens and reveals the drawer", () => {

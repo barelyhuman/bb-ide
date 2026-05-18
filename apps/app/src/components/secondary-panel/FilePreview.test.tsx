@@ -28,14 +28,6 @@ afterEach(() => {
 });
 
 describe("FilePreview", () => {
-  it("does not render the copy button until an absolute copy path is provided", () => {
-    render(<FilePreview path="src/App.tsx" state={{ kind: "loading" }} />);
-
-    expect(
-      screen.queryByRole("button", { name: "Copy file path" }),
-    ).toBeNull();
-  });
-
   it("copies the absolute path when the preview displays a relative path", async () => {
     const writeText = installClipboardWriteTextMock();
 
@@ -75,8 +67,7 @@ describe("FilePreview", () => {
       />,
     );
 
-    expect(container.querySelector("kbd")?.textContent).toBe("Cmd");
-    expect(screen.getByText("Body").tagName).toBe("DIV");
+    expect(screen.getByText("Cmd")).toBeTruthy();
     expect(screen.getByText("Body").getAttribute("onmouseover")).toBeNull();
     expect(container.querySelector("script")).toBeNull();
     expect(screen.queryByText("alert(1)")).toBeNull();

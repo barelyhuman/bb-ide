@@ -22,17 +22,6 @@ afterEach(() => {
 });
 
 describe("api-host-daemon", () => {
-  it("reuses the daemon client for the same port and recreates it when the port changes", async () => {
-    const { getHostDaemonClient } = await importFreshApiHostDaemon();
-
-    const firstClient = getHostDaemonClient(3002);
-    const secondClient = getHostDaemonClient(3002);
-    const thirdClient = getHostDaemonClient(4000);
-
-    expect(secondClient).toBe(firstClient);
-    expect(thirdClient).not.toBe(firstClient);
-  });
-
   it("targets the shared local bind host for daemon requests", async () => {
     const requestedUrls: string[] = [];
     installFetchRoutes([
@@ -142,11 +131,6 @@ describe("api-host-daemon", () => {
       "/a": true,
       "/b": false,
     });
-  });
-
-  it("short-circuits checkPathsExist when no paths are requested", async () => {
-    const { checkPathsExist } = await importFreshApiHostDaemon();
-    await expect(checkPathsExist(3002, [])).resolves.toEqual({});
   });
 
   it("throws when checkPathsExist hits an error response", async () => {

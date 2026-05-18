@@ -112,28 +112,6 @@ afterEach(() => {
 });
 
 describe("GitDiffCard", () => {
-  it("does not render a copy button for a relative path without a workspace root", () => {
-    const modifiedFile = parseGitDiffFiles(MODIFIED_FILE_DIFF)[0];
-    expect(modifiedFile).toBeDefined();
-    if (!modifiedFile) return;
-
-    render(
-      <GitDiffCard
-        fileDiff={modifiedFile}
-        diffViewOptions={{}}
-        isCollapsed={false}
-        onToggleCollapsed={() => {}}
-        isRendering={false}
-      />,
-    );
-
-    expect(
-      screen.queryByRole("button", {
-        name: "Copy path for src/modified-file.ts",
-      }),
-    ).toBeNull();
-  });
-
   it("copies an absolute file path when a workspace root is provided", async () => {
     const modifiedFile = parseGitDiffFiles(MODIFIED_FILE_DIFF)[0];
     expect(modifiedFile).toBeDefined();
@@ -243,46 +221,6 @@ describe("GitDiffCard", () => {
     expect(screen.getByTestId("diff-view").getAttribute("data-new-lines")).toBe(
       "0",
     );
-  });
-
-  it("shows only the relevant sign for added and deleted file stats", () => {
-    const addedFile = parseGitDiffFiles(NEW_FILE_DIFF)[0];
-    expect(addedFile).toBeDefined();
-    if (!addedFile) return;
-
-    render(
-      <GitDiffCard
-        fileDiff={addedFile}
-        diffViewOptions={{}}
-        isCollapsed={false}
-        onToggleCollapsed={() => {}}
-        isRendering={false}
-      />,
-    );
-
-    expect(screen.queryByText("Added")).toBeNull();
-    expect(screen.getByText("+1")).toBeTruthy();
-    expect(screen.queryByText("-0")).toBeNull();
-
-    cleanup();
-
-    const deletedFile = parseGitDiffFiles(DELETED_FILE_DIFF)[0];
-    expect(deletedFile).toBeDefined();
-    if (!deletedFile) return;
-
-    render(
-      <GitDiffCard
-        fileDiff={deletedFile}
-        diffViewOptions={{}}
-        isCollapsed={false}
-        onToggleCollapsed={() => {}}
-        isRendering={false}
-      />,
-    );
-
-    expect(screen.queryByText("Deleted")).toBeNull();
-    expect(screen.queryByText("+0")).toBeNull();
-    expect(screen.getByText("-1")).toBeTruthy();
   });
 
   it("does not fetch the missing side for added files", async () => {

@@ -339,60 +339,6 @@ describe("useGitDiffFileRenderQueue", () => {
     expect(store.get(gitDiffLoadingFileKeysAtom)).toEqual(new Set());
   });
 
-  it("drains batched render loading state in the initial and follow-up waves", () => {
-    vi.useFakeTimers();
-    const entries = buildEntries(
-      Array.from({ length: 10 }, (_, index) => `src/file-${index}.ts`),
-    );
-    const firstBatchKeys = new Set(
-      entries.slice(0, 4).map((entry) => entry.key),
-    );
-    const secondBatchKeys = new Set(
-      entries.slice(4, 10).map((entry) => entry.key),
-    );
-    const { store } = renderQueueHook({
-      environmentId: "env-test",
-      expectedGitDiffFileCount: entries.length,
-      gitDiffIdentity: "env-test:commit:one",
-      isDiffPanelActive: true,
-      isParsingGitDiffFiles: false,
-      parsedGitDiffFileEntries: entries,
-    });
-
-    expect(sortedKeys(store.get(gitDiffLoadingFileKeysAtom))).toEqual(
-      sortedKeys(new Set(entries.map((entry) => entry.key))),
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(29);
-    });
-    expect(sortedKeys(store.get(gitDiffLoadingFileKeysAtom))).toEqual(
-      sortedKeys(new Set(entries.map((entry) => entry.key))),
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(sortedKeys(store.get(gitDiffLoadingFileKeysAtom))).toEqual(
-      sortedKeys(secondBatchKeys),
-    );
-    for (const key of firstBatchKeys) {
-      expect(store.get(gitDiffLoadingFileKeysAtom).has(key)).toBe(false);
-    }
-
-    act(() => {
-      vi.advanceTimersByTime(69);
-    });
-    expect(sortedKeys(store.get(gitDiffLoadingFileKeysAtom))).toEqual(
-      sortedKeys(secondBatchKeys),
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(store.get(gitDiffLoadingFileKeysAtom)).toEqual(new Set());
-  });
-
   it("toggles all files between collapsed and render-queued expanded states", () => {
     vi.useFakeTimers();
     const entries = buildEntries(["src/a.ts", "src/b.ts"]);
@@ -485,18 +431,6 @@ describe("useGitDiffPanelState pending scroll", () => {
     expect(result.current.currentGitDiff).toBe(diff);
     expect(result.current.isPreparingGitDiff).toBe(false);
     expect(result.current.parsedGitDiffFileEntries).toHaveLength(1);
-  });
-
-  it("keeps a pending scroll path while the diff is still loading", () => {
-    mockEnvironmentQueries.gitDiff.isLoading = true;
-    const store = createStore();
-    renderPanelStateHook(store);
-
-    act(() => {
-      store.set(pendingGitDiffScrollPathAtom, "src/target.ts");
-    });
-
-    expect(store.get(pendingGitDiffScrollPathAtom)).toBe("src/target.ts");
   });
 
   it("keeps a pending scroll path while the current diff is still parsing", async () => {

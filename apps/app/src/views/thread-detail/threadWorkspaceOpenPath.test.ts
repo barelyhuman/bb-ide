@@ -64,15 +64,6 @@ function makeWorkspaceChangedFilesSection(
 }
 
 describe("resolveThreadWorkspaceOpenPath", () => {
-  it("resolves the ready local workspace root path", () => {
-    expect(
-      resolveThreadLocalWorkspaceRootPath({
-        environment: makeEnvironment(),
-        threadEnvironmentIsLocal: true,
-      }),
-    ).toBe("/tmp/workspace");
-  });
-
   it("returns the ready local environment path when the capability is available", () => {
     expect(
       resolveThreadWorkspaceOpenPath({
@@ -84,7 +75,7 @@ describe("resolveThreadWorkspaceOpenPath", () => {
     ).toBe("/tmp/workspace");
   });
 
-  it("hides when the environment is remote", () => {
+  it("hides when local workspace open preconditions are missing", () => {
     expect(
       resolveThreadLocalWorkspaceRootPath({
         environment: makeEnvironment(),
@@ -97,6 +88,30 @@ describe("resolveThreadWorkspaceOpenPath", () => {
         environment: makeEnvironment(),
         hasWorkspaceOpenTargets: true,
         threadEnvironmentIsLocal: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveThreadWorkspaceOpenPath({
+        canOpenWorkspace: true,
+        environment: makeEnvironment({ path: null }),
+        hasWorkspaceOpenTargets: true,
+        threadEnvironmentIsLocal: true,
+      }),
+    ).toBeNull();
+    expect(
+      resolveThreadWorkspaceOpenPath({
+        canOpenWorkspace: false,
+        environment: makeEnvironment(),
+        hasWorkspaceOpenTargets: true,
+        threadEnvironmentIsLocal: true,
+      }),
+    ).toBeNull();
+    expect(
+      resolveThreadWorkspaceOpenPath({
+        canOpenWorkspace: true,
+        environment: makeEnvironment(),
+        hasWorkspaceOpenTargets: false,
+        threadEnvironmentIsLocal: true,
       }),
     ).toBeNull();
   });
@@ -116,39 +131,6 @@ describe("resolveThreadWorkspaceOpenPath", () => {
         threadEnvironmentIsLocal: true,
       }),
     ).toBe("/tmp/workspace");
-  });
-
-  it("hides when the environment has no path", () => {
-    expect(
-      resolveThreadWorkspaceOpenPath({
-        canOpenWorkspace: true,
-        environment: makeEnvironment({ path: null }),
-        hasWorkspaceOpenTargets: true,
-        threadEnvironmentIsLocal: true,
-      }),
-    ).toBeNull();
-  });
-
-  it("hides when the daemon capability is unavailable", () => {
-    expect(
-      resolveThreadWorkspaceOpenPath({
-        canOpenWorkspace: false,
-        environment: makeEnvironment(),
-        hasWorkspaceOpenTargets: true,
-        threadEnvironmentIsLocal: true,
-      }),
-    ).toBeNull();
-  });
-
-  it("hides when there are no available targets", () => {
-    expect(
-      resolveThreadWorkspaceOpenPath({
-        canOpenWorkspace: true,
-        environment: makeEnvironment(),
-        hasWorkspaceOpenTargets: false,
-        threadEnvironmentIsLocal: true,
-      }),
-    ).toBeNull();
   });
 });
 

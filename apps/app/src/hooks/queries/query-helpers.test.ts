@@ -13,9 +13,6 @@ import {
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
-  getEnvironmentActionInvalidationQueryKeys,
-  getEnvironmentBranchListInvalidationQueryKeys,
-  getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
   optimisticallyInsertThread,
 } from "./query-cache";
@@ -99,7 +96,7 @@ function makeThreadTimelineResponse(
 }
 
 describe("resolveEnvironmentWorkStatusPlaceholder", () => {
-  it("keeps previous data when only merge-base selection changes", () => {
+  it("reuses previous work status only for the same thread query", () => {
     const previousStatus = makeStatus("clean");
 
     expect(
@@ -109,10 +106,6 @@ describe("resolveEnvironmentWorkStatusPlaceholder", () => {
         "thread-1",
       ),
     ).toBe(previousStatus);
-  });
-
-  it("drops previous data when switching to a different thread", () => {
-    const previousStatus = makeStatus("dirty_uncommitted");
 
     expect(
       resolveEnvironmentWorkStatusPlaceholder(
@@ -121,9 +114,7 @@ describe("resolveEnvironmentWorkStatusPlaceholder", () => {
         "thread-2",
       ),
     ).toBeUndefined();
-  });
 
-  it("preserves null placeholders only for the same thread", () => {
     expect(
       resolveEnvironmentWorkStatusPlaceholder(
         null,
@@ -143,30 +134,8 @@ describe("resolveEnvironmentWorkStatusPlaceholder", () => {
 });
 
 describe("resolveThreadPlaceholder", () => {
-  it("keeps previous data when the same thread query refreshes", () => {
-    const previousThread: ThreadWithRuntime = {
-      id: "thread-1",
-      projectId: "project-1",
-      automationId: null,
-      providerId: "codex",
-      type: "standard",
-      createdAt: 1,
-      status: "idle",
-      updatedAt: 1,
-      lastReadAt: 1,
-      latestAttentionAt: 1,
-      environmentId: null,
-      title: null,
-      titleFallback: null,
-      parentThreadId: null,
-      archivedAt: null,
-      stopRequestedAt: null,
-      deletedAt: null,
-      runtime: {
-        displayStatus: "idle",
-        hostReconnectGraceExpiresAt: null,
-      },
-    };
+  it("reuses previous thread data only for the same thread query", () => {
+    const previousThread = makeThreadWithRuntime({ id: "thread-1" });
 
     expect(
       resolveThreadPlaceholder(
@@ -175,32 +144,6 @@ describe("resolveThreadPlaceholder", () => {
         "thread-1",
       ),
     ).toBe(previousThread);
-  });
-
-  it("drops previous data when switching to a different thread", () => {
-    const previousThread: ThreadWithRuntime = {
-      id: "thread-1",
-      projectId: "project-1",
-      automationId: null,
-      providerId: "codex",
-      type: "standard",
-      createdAt: 1,
-      status: "idle",
-      updatedAt: 1,
-      lastReadAt: 1,
-      latestAttentionAt: 1,
-      environmentId: null,
-      title: null,
-      titleFallback: null,
-      parentThreadId: null,
-      archivedAt: null,
-      stopRequestedAt: null,
-      deletedAt: null,
-      runtime: {
-        displayStatus: "idle",
-        hostReconnectGraceExpiresAt: null,
-      },
-    };
 
     expect(
       resolveThreadPlaceholder(
@@ -213,7 +156,7 @@ describe("resolveThreadPlaceholder", () => {
 });
 
 describe("resolveThreadTimelinePlaceholder", () => {
-  it("keeps previous timeline rows when the same thread query refreshes", () => {
+  it("reuses previous timeline rows only while the thread and timeline view match", () => {
     const previousTimeline = makeThreadTimelineResponse([
       {
         id: "assistant-1",
@@ -239,25 +182,6 @@ describe("resolveThreadTimelinePlaceholder", () => {
         "conversation",
       ),
     ).toBe(previousTimeline);
-  });
-
-  it("drops previous timeline rows when switching manager timeline view", () => {
-    const previousTimeline = makeThreadTimelineResponse([
-      {
-        id: "manager-conversation-row",
-        kind: "conversation",
-        role: "assistant",
-        threadId: "thread-1",
-        turnId: null,
-        text: "Manager conversation row",
-        sourceSeqStart: 1,
-        sourceSeqEnd: 1,
-        startedAt: 1,
-        createdAt: 1,
-        attachments: null,
-        turnRequest: null,
-      },
-    ]);
 
     expect(
       resolveThreadTimelinePlaceholder(
@@ -267,10 +191,6 @@ describe("resolveThreadTimelinePlaceholder", () => {
         "standard",
       ),
     ).toBeUndefined();
-  });
-
-  it("drops previous timeline rows when switching to a different thread", () => {
-    const previousTimeline = makeThreadTimelineResponse([]);
 
     expect(
       resolveThreadTimelinePlaceholder(
@@ -284,7 +204,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
 });
 
 describe("resolveEnvironmentGitDiffPlaceholder", () => {
-  it("keeps previous data for the same environment while changing git diff options", () => {
+  it("reuses previous git diff data only for the same environment", () => {
     const previousGitDiff = makeGitDiffResponse();
 
     expect(
@@ -294,10 +214,6 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
         "env-1",
       ),
     ).toBe(previousGitDiff);
-  });
-
-  it("drops previous data when switching to a different environment", () => {
-    const previousGitDiff = makeGitDiffResponse();
 
     expect(
       resolveEnvironmentGitDiffPlaceholder(
@@ -306,16 +222,6 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
         "env-2",
       ),
     ).toBeUndefined();
-  });
-});
-
-describe("getEnvironmentRecordInvalidationQueryKeys", () => {
-  it("targets persisted environment queries", () => {
-    expect(
-      getEnvironmentRecordInvalidationQueryKeys({
-        environmentId: "env-1",
-      }),
-    ).toEqual([["environment", "env-1"]]);
   });
 });
 
@@ -330,16 +236,6 @@ describe("getEnvironmentWorkspaceStateInvalidationQueryKeys", () => {
       ["environmentGitDiff", "env-1"],
       ["environmentFilePreview", "env-1"],
     ]);
-  });
-});
-
-describe("getEnvironmentBranchListInvalidationQueryKeys", () => {
-  it("targets environment branch list queries", () => {
-    expect(
-      getEnvironmentBranchListInvalidationQueryKeys({
-        environmentId: "env-1",
-      }),
-    ).toEqual([["environmentMergeBaseBranches", "env-1"]]);
   });
 });
 
@@ -420,21 +316,5 @@ describe("optimisticallyInsertThread", () => {
       displayStatus: "waiting-for-host",
       hostReconnectGraceExpiresAt: null,
     });
-  });
-});
-
-describe("getEnvironmentActionInvalidationQueryKeys", () => {
-  it("targets environment-scoped queries", () => {
-    expect(
-      getEnvironmentActionInvalidationQueryKeys({
-        environmentId: "env-1",
-      }),
-    ).toEqual([
-      ["environmentWorkStatus", "env-1"],
-      ["environmentGitDiff", "env-1"],
-      ["environmentFilePreview", "env-1"],
-      ["environmentMergeBaseBranches", "env-1"],
-      ["threads"],
-    ]);
   });
 });

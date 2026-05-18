@@ -1,28 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { findLocalPathProjectSourceForHost } from "@bb/domain";
+import { findLocalPathProjectSourceForHost } from "../src/project.js";
 
-describe("project source selection", () => {
-  it("reuses only the local_path source for the requested host", () => {
+describe("project sources", () => {
+  it("finds the local_path source for the requested host", () => {
     const source = findLocalPathProjectSourceForHost(
       [
         {
+          createdAt: 1,
+          hostId: "host_other",
           id: "src_other",
+          isDefault: false,
+          path: "/tmp/other",
           projectId: "proj_1",
           type: "local_path",
-          hostId: "host_other",
-          path: "/tmp/other",
-          isDefault: false,
-          createdAt: 1,
           updatedAt: 1,
         },
         {
+          createdAt: 1,
+          hostId: "host_local",
           id: "src_local",
+          isDefault: true,
+          path: "/tmp/local",
           projectId: "proj_1",
           type: "local_path",
-          hostId: "host_local",
-          path: "/tmp/local",
-          isDefault: true,
-          createdAt: 1,
           updatedAt: 1,
         },
       ],
@@ -30,10 +30,10 @@ describe("project source selection", () => {
     );
 
     expect(source).toMatchObject({
-      id: "src_local",
-      type: "local_path",
       hostId: "host_local",
+      id: "src_local",
       path: "/tmp/local",
+      type: "local_path",
     });
   });
 });

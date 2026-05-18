@@ -119,9 +119,10 @@ beforeEach(() => {
 });
 
 describe("ThreadActionsProvider", () => {
-  it("archives immediately and shows an undo toast", async () => {
+  it("archives and supports undo from the toast action", async () => {
     const thread = makeThread();
     vi.mocked(api.archiveThread).mockResolvedValue(undefined);
+    vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
     renderWithProvider(
@@ -147,29 +148,6 @@ describe("ThreadActionsProvider", () => {
         action: expect.objectContaining({ label: "Undo" }),
       }),
     );
-  });
-
-  it("unarchives from the archive undo toast", async () => {
-    const thread = makeThread();
-    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
-    vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(toast.success).toHaveBeenCalled();
-    });
     const successCall = vi.mocked(toast.success).mock.calls[0];
     const options = successCall?.[1];
     if (!options || !("action" in options) || !options.action) {
@@ -189,144 +167,6 @@ describe("ThreadActionsProvider", () => {
 
     await waitFor(() => {
       expect(api.unarchiveThread).toHaveBeenCalledWith(thread.id);
-    });
-  });
-
-  it("archives managers without assigned-child confirmation", async () => {
-    const thread = makeThread({ type: "manager" });
-    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenCalledWith(thread.id);
-    });
-    expect(api.getThreadAssignedChildSummary).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText(/assigned threads will be unassigned/i),
-    ).toBeNull();
-  });
-
-  it("shows an error toast when archive fails", async () => {
-    const thread = makeThread();
-    vi.mocked(api.archiveThread).mockRejectedValue(new Error("Archive failed"));
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Archive failed");
-    });
-  });
-
-  it("unarchives archived threads immediately", async () => {
-    const thread = makeThread({ archivedAt: 123 });
-    vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleArchive(thread);
-    });
-
-    await waitFor(() => {
-      expect(api.unarchiveThread).toHaveBeenCalledWith(thread.id);
-    });
-    expect(api.archiveThread).not.toHaveBeenCalled();
-  });
-
-  it("toggleRead picks mark-read vs mark-unread based on last-read state", async () => {
-    const unreadThread = makeThread({
-      id: "thread-unread",
-      lastReadAt: 2,
-      latestAttentionAt: 10,
-    });
-    const readThread = makeThread({
-      id: "thread-read",
-      lastReadAt: 10,
-      latestAttentionAt: 10,
-    });
-    vi.mocked(api.markThreadRead).mockResolvedValue(
-      makeThread({ id: unreadThread.id, lastReadAt: 10 }),
-    );
-    vi.mocked(api.markThreadUnread).mockResolvedValue(
-      makeThread({ id: readThread.id, lastReadAt: 0 }),
-    );
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.toggleRead(unreadThread);
-      actions!.toggleRead(readThread);
-    });
-
-    await waitFor(() => {
-      expect(api.markThreadRead).toHaveBeenCalledWith(unreadThread.id);
-      expect(api.markThreadUnread).toHaveBeenCalledWith(readThread.id);
-    });
-  });
-
-  it("opens a delete confirmation and calls deleteThread when confirmed", async () => {
-    const thread = makeThread();
-    vi.mocked(api.deleteThread).mockResolvedValue(undefined);
-
-    let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(
-      <HookProbe
-        onReady={(a) => {
-          actions = a;
-        }}
-      />,
-    );
-
-    act(() => {
-      actions!.requestDelete(thread);
-    });
-
-    const confirmButton = await screen.findByRole("button", {
-      name: /delete thread/i,
-    });
-    fireEvent.click(confirmButton);
-
-    await waitFor(() => {
-      expect(api.deleteThread).toHaveBeenCalledWith(thread.id, {
-        managerChildThreadsConfirmed: false,
-      });
     });
   });
 

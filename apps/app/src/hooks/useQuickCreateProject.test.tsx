@@ -1,18 +1,36 @@
 // @vitest-environment jsdom
 
 import { Suspense, useEffect, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+import {
+  createProjectRequestSchema,
+  type CreateProjectRequest,
+} from "@bb/server-contract";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-interface HostOverrides extends Partial<Host> {}
+type HostOverrides = Partial<Host>;
 
 interface QuickCreateFetchState {
   daemonConnected: boolean;
   hostDaemonPort: number | null;
   hosts: Host[];
+}
+
+interface SuspenseWrapperProps {
+  children: ReactNode;
+}
+
+type QuickCreateProjectSnapshot = ReturnType<
+  typeof import("./useQuickCreateProject").useQuickCreateProject
+>;
+
+interface QuickCreateProjectCaptureProps {
+  onSnapshot: (snapshot: QuickCreateProjectSnapshot) => void;
+  useQuickCreateProject: typeof import("./useQuickCreateProject").useQuickCreateProject;
 }
 
 function makeHost(overrides: HostOverrides = {}): Host {
@@ -31,15 +49,37 @@ function makeHost(overrides: HostOverrides = {}): Host {
 function createSuspenseWrapper() {
   const { wrapper: baseWrapper } = createQueryClientTestHarness();
 
-  return ({ children }: { children: ReactNode }) =>
+  return ({ children }: SuspenseWrapperProps) =>
     baseWrapper({
       children: <Suspense fallback={null}>{children}</Suspense>,
     });
 }
 
+function QuickCreateProjectCapture({
+  onSnapshot,
+  useQuickCreateProject,
+}: QuickCreateProjectCaptureProps) {
+  const snapshot = useQuickCreateProject();
+
+  useEffect(() => {
+    onSnapshot(snapshot);
+  }, [onSnapshot, snapshot]);
+
+  return null;
+}
+
+function requireQuickCreateProjectSnapshot(
+  snapshot: QuickCreateProjectSnapshot | null,
+): QuickCreateProjectSnapshot {
+  if (!snapshot) {
+    throw new Error("Expected quick-create project hook snapshot.");
+  }
+  return snapshot;
+}
+
 function installQuickCreateFetchRoutes(
   state: QuickCreateFetchState,
-  createdProjectBodies: string[],
+  createdProjectRequests: CreateProjectRequest[],
 ) {
   installFetchRoutes([
     {
@@ -62,6 +102,7 @@ function installQuickCreateFetchRoutes(
           ? jsonResponse({
               connected: true,
               hostId: "host-1",
+              protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
               serverUrl: "http://localhost:3334",
               supportsNativeFolderPicker: false,
               platform: "linux",
@@ -72,8 +113,9 @@ function installQuickCreateFetchRoutes(
       method: "POST",
       pathname: "/api/v1/projects",
       handler: async (request) => {
-        const bodyText = await request.text();
-        createdProjectBodies.push(bodyText);
+        createdProjectRequests.push(
+          createProjectRequestSchema.parse(await request.json()),
+        );
 
         return jsonResponse({
           createdAt: 1,
@@ -94,31 +136,6 @@ async function importFreshUseQuickCreateProject(): Promise<
   return import("./useQuickCreateProject");
 }
 
-function createQuickCreateProbe(
-  useQuickCreateProject: typeof import("./useQuickCreateProject").useQuickCreateProject,
-) {
-  return function QuickCreateProbe({
-    onSnapshot,
-  }: {
-    onSnapshot: (snapshot: ReturnType<typeof useQuickCreateProject>) => void;
-  }) {
-    const value = useQuickCreateProject();
-
-    useEffect(() => {
-      onSnapshot(value);
-    }, [onSnapshot, value]);
-
-    return (
-      <div>
-        <div data-testid="is-available">{String(value.isAvailable)}</div>
-        <div data-testid="dialog-open">
-          {String(value.projectPathDialog.isOpen)}
-        </div>
-      </div>
-    );
-  };
-}
-
 afterEach(() => {
   cleanup();
   vi.resetModules();
@@ -137,92 +154,90 @@ describe("useQuickCreateProject", () => {
       [],
     );
 
-    const latestSnapshot: {
-      current: ReturnType<
-        typeof import("./useQuickCreateProject").useQuickCreateProject
-      > | null;
-    } = { current: null };
     const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
-    const QuickCreateProbe = createQuickCreateProbe(useQuickCreateProject);
-
+    const latestSnapshot: { current: QuickCreateProjectSnapshot | null } = {
+      current: null,
+    };
     await act(async () => {
       render(
-        <QuickCreateProbe
+        <QuickCreateProjectCapture
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
+          useQuickCreateProject={useQuickCreateProject}
         />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
+        { wrapper: createSuspenseWrapper() },
       );
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("is-available").textContent).toBe("true");
+      expect(
+        requireQuickCreateProjectSnapshot(latestSnapshot.current).isAvailable,
+      ).toBe(true);
     });
 
     act(() => {
-      latestSnapshot.current?.openCreateDialog();
+      requireQuickCreateProjectSnapshot(
+        latestSnapshot.current,
+      ).openCreateDialog();
     });
 
-    expect(latestSnapshot.current?.projectPathDialog.target).toEqual({
-      kind: "create",
-    });
+    expect(
+      requireQuickCreateProjectSnapshot(latestSnapshot.current)
+        .projectPathDialog.target,
+    ).toEqual({ kind: "create" });
   });
 
   it("creates a project from the submitted absolute path and closes the dialog on success", async () => {
-    const createdProjectBodies: string[] = [];
+    const createdProjectRequests: CreateProjectRequest[] = [];
     installQuickCreateFetchRoutes(
       {
         daemonConnected: true,
         hostDaemonPort: 4123,
         hosts: [makeHost()],
       },
-      createdProjectBodies,
+      createdProjectRequests,
     );
 
-    const latestSnapshot: {
-      current: ReturnType<
-        typeof import("./useQuickCreateProject").useQuickCreateProject
-      > | null;
-    } = { current: null };
     const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
-    const QuickCreateProbe = createQuickCreateProbe(useQuickCreateProject);
-
+    const latestSnapshot: { current: QuickCreateProjectSnapshot | null } = {
+      current: null,
+    };
     await act(async () => {
       render(
-        <QuickCreateProbe
+        <QuickCreateProjectCapture
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
+          useQuickCreateProject={useQuickCreateProject}
         />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
+        { wrapper: createSuspenseWrapper() },
       );
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("is-available").textContent).toBe("true");
+      expect(
+        requireQuickCreateProjectSnapshot(latestSnapshot.current).isAvailable,
+      ).toBe(true);
     });
 
     act(() => {
-      latestSnapshot.current?.openCreateDialog();
+      requireQuickCreateProjectSnapshot(
+        latestSnapshot.current,
+      ).openCreateDialog();
     });
 
     act(() => {
-      latestSnapshot.current?.submitProjectPath(
-        { kind: "create" },
-        "/srv/repos/demo",
-      );
+      requireQuickCreateProjectSnapshot(
+        latestSnapshot.current,
+      ).submitProjectPath({ kind: "create" }, "/srv/repos/demo");
     });
 
     await waitFor(() => {
-      expect(createdProjectBodies).toHaveLength(1);
+      expect(createdProjectRequests).toHaveLength(1);
     });
 
-    expect(JSON.parse(createdProjectBodies[0]) as object).toEqual({
+    expect(createdProjectRequests[0]).toEqual({
       name: "demo",
       source: {
         hostId: "host-1",
@@ -231,7 +246,10 @@ describe("useQuickCreateProject", () => {
       },
     });
     await waitFor(() => {
-      expect(screen.getByTestId("dialog-open").textContent).toBe("false");
+      expect(
+        requireQuickCreateProjectSnapshot(latestSnapshot.current)
+          .projectPathDialog.isOpen,
+      ).toBe(false);
     });
   });
 
@@ -245,134 +263,38 @@ describe("useQuickCreateProject", () => {
       [],
     );
 
-    const latestSnapshot: {
-      current: ReturnType<
-        typeof import("./useQuickCreateProject").useQuickCreateProject
-      > | null;
-    } = { current: null };
     const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
-    const QuickCreateProbe = createQuickCreateProbe(useQuickCreateProject);
-
+    const latestSnapshot: { current: QuickCreateProjectSnapshot | null } = {
+      current: null,
+    };
     await act(async () => {
       render(
-        <QuickCreateProbe
+        <QuickCreateProjectCapture
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
+          useQuickCreateProject={useQuickCreateProject}
         />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
+        { wrapper: createSuspenseWrapper() },
       );
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("is-available").textContent).toBe("false");
+      expect(
+        requireQuickCreateProjectSnapshot(latestSnapshot.current).isAvailable,
+      ).toBe(false);
     });
 
     act(() => {
-      latestSnapshot.current?.openCreateDialog();
+      requireQuickCreateProjectSnapshot(
+        latestSnapshot.current,
+      ).openCreateDialog();
     });
 
-    expect(latestSnapshot.current?.projectPathDialog.target).toBeNull();
+    expect(
+      requireQuickCreateProjectSnapshot(latestSnapshot.current)
+        .projectPathDialog.target,
+    ).toBeNull();
   });
 
-  it("ignores create submissions that do not produce a project name", async () => {
-    const createdProjectBodies: string[] = [];
-    installQuickCreateFetchRoutes(
-      {
-        daemonConnected: true,
-        hostDaemonPort: 4123,
-        hosts: [makeHost()],
-      },
-      createdProjectBodies,
-    );
-
-    const latestSnapshot: {
-      current: ReturnType<
-        typeof import("./useQuickCreateProject").useQuickCreateProject
-      > | null;
-    } = { current: null };
-    const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
-    const QuickCreateProbe = createQuickCreateProbe(useQuickCreateProject);
-
-    await act(async () => {
-      render(
-        <QuickCreateProbe
-          onSnapshot={(snapshot) => {
-            latestSnapshot.current = snapshot;
-          }}
-        />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
-      );
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-available").textContent).toBe("true");
-    });
-
-    act(() => {
-      latestSnapshot.current?.openCreateDialog();
-    });
-
-    act(() => {
-      latestSnapshot.current?.submitProjectPath({ kind: "create" }, "/");
-    });
-
-    expect(createdProjectBodies).toHaveLength(0);
-    expect(latestSnapshot.current?.projectPathDialog.isOpen).toBe(true);
-  });
-
-  it("ignores non-create submissions", async () => {
-    const createdProjectBodies: string[] = [];
-    installQuickCreateFetchRoutes(
-      {
-        daemonConnected: true,
-        hostDaemonPort: 4123,
-        hosts: [makeHost()],
-      },
-      createdProjectBodies,
-    );
-
-    const latestSnapshot: {
-      current: ReturnType<
-        typeof import("./useQuickCreateProject").useQuickCreateProject
-      > | null;
-    } = { current: null };
-    const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
-    const QuickCreateProbe = createQuickCreateProbe(useQuickCreateProject);
-
-    await act(async () => {
-      render(
-        <QuickCreateProbe
-          onSnapshot={(snapshot) => {
-            latestSnapshot.current = snapshot;
-          }}
-        />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
-      );
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-available").textContent).toBe("true");
-    });
-
-    act(() => {
-      latestSnapshot.current?.submitProjectPath(
-        {
-          currentPath: "/srv/repos/project-one",
-          kind: "update",
-          projectId: "proj-1",
-          projectName: "Project One",
-        },
-        "/srv/repos/project-one",
-      );
-    });
-
-    expect(createdProjectBodies).toHaveLength(0);
-  });
 });

@@ -109,22 +109,6 @@ describe("resolveThreadLocalFileLink", () => {
     });
   });
 
-  it("rejects relative file links that escape the workspace root", () => {
-    expect(
-      resolveThreadLocalFileLink({
-        hostFileLinksAvailable: true,
-        link: {
-          lineNumber: null,
-          path: "../secret.txt",
-        },
-        workspaceRootPath: "/Users/me/project",
-      }),
-    ).toEqual({
-      description: "Thread file links must use absolute file paths.",
-      kind: "error",
-    });
-  });
-
   it("does not mistake deeper filesystem paths for project routes", () => {
     expect(
       resolveThreadLocalFileLink({

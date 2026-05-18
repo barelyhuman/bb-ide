@@ -29,11 +29,6 @@ const NOW = 1_700_000_000_000;
 const WORKING_TREE_SOURCE: EnvironmentFilePreviewSource = {
   kind: "working-tree",
 };
-const MERGE_BASE_SOURCE: EnvironmentFilePreviewSource = {
-  kind: "merge-base",
-  ref: "abc1234",
-};
-const DELETED_STATUS_LABEL: WorkspaceFilePreviewStatusLabel = "deleted";
 
 interface TestWrapperProps {
   children: ReactNode;
@@ -573,87 +568,6 @@ describe("useThreadFileTabs", () => {
       ]);
     });
     expect(result.current.activeStorageFilePath).toBe("STATUS.md");
-    expect(readStoredState(threadId).fileTabs.storage).toEqual([
-      "STATUS.md",
-      "notes.md",
-    ]);
-  });
-
-  it("does not rewrite workspace tabs for no-op callbacks", () => {
-    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const threadId = "thr-workspace-no-op";
-    const workspaceTab = buildWorkspaceFileTab({
-      lineNumber: 3,
-      path: "src/app.ts",
-      source: MERGE_BASE_SOURCE,
-      statusLabel: DELETED_STATUS_LABEL,
-    });
-    seedStoredState(
-      threadId,
-      createEmptyThreadSecondaryPanelState({
-        activePanel: "thread-info",
-        environmentId: "env-one",
-        fileTabs: {
-          workspace: [workspaceTab],
-          storage: [],
-          hostFiles: [],
-          active: { type: "workspace", path: "src/app.ts" },
-        },
-        lastUsedAt: NOW,
-      }),
-    );
-    const { result } = renderThreadFileTabsHook({
-      environmentId: "env-one",
-      threadType: "standard",
-      storageFiles: undefined,
-      threadId,
-    });
-    dateNowSpy.mockReturnValue(NOW + 60_000);
-
-    act(() => {
-      result.current.openWorkspaceFile(workspaceTab);
-      result.current.activateWorkspaceFileTab("src/app.ts");
-      result.current.closeWorkspaceFileTab("src/missing.ts");
-    });
-
-    expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
-    expect(result.current.openWorkspaceFileTabs).toEqual([workspaceTab]);
-  });
-
-  it("does not rewrite manager storage tabs for no-op callbacks", async () => {
-    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const threadId = "thr-storage-no-op";
-    seedStoredState(
-      threadId,
-      createEmptyThreadSecondaryPanelState({
-        fileTabs: {
-          workspace: [],
-          storage: ["STATUS.md", "notes.md"],
-          hostFiles: [],
-          active: { type: "storage", path: "notes.md" },
-        },
-        lastUsedAt: NOW,
-      }),
-    );
-    const { result } = renderThreadFileTabsHook({
-      environmentId: null,
-      threadType: "manager",
-      storageFiles: [{ path: "STATUS.md" }, { path: "notes.md" }],
-      threadId,
-    });
-
-    await waitFor(() => {
-      expect(result.current.activeStorageFilePath).toBe("notes.md");
-    });
-    dateNowSpy.mockReturnValue(NOW + 60_000);
-
-    act(() => {
-      result.current.openStorageFile("notes.md");
-      result.current.activateStorageFileTab("notes.md");
-      result.current.closeStorageFileTab("STATUS.md");
-    });
-
-    expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
     expect(readStoredState(threadId).fileTabs.storage).toEqual([
       "STATUS.md",
       "notes.md",

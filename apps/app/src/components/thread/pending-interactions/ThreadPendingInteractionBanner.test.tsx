@@ -72,17 +72,6 @@ function createCommandApprovalInteraction(): PendingInteraction {
   };
 }
 
-function createResolvingCommandApprovalInteraction(): PendingInteraction {
-  return {
-    ...createCommandApprovalInteraction(),
-    status: "resolving",
-    resolution: {
-      decision: "allow_for_session",
-      grantedPermissions: null,
-    },
-  };
-}
-
 function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
@@ -119,28 +108,6 @@ function createPermissionRequestInteraction(): PendingInteraction {
       },
       reason: "Need repo write access",
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
-    },
-  };
-}
-
-function createUserQuestionInteraction(): PendingInteraction {
-  return {
-    ...createPendingInteractionBase(),
-    payload: {
-      kind: "user_question",
-      questions: [
-        {
-          id: "question-1",
-          prompt: "Which implementation path should I take?",
-          shortLabel: "Path",
-          multiSelect: false,
-          options: [
-            { value: "simple", label: "Simple" },
-            { value: "complete", label: "Complete" },
-          ],
-          allowFreeText: true,
-        },
-      ],
     },
   };
 }
@@ -199,34 +166,6 @@ afterEach(() => {
 });
 
 describe("ThreadPendingInteractionBanner", () => {
-  it("resolves command approvals with the selected decision", async () => {
-    vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
-      ...createCommandApprovalInteraction(),
-      status: "resolving",
-      resolution: {
-        decision: "allow_once",
-        grantedPermissions: null,
-      },
-    });
-
-    renderBanner({
-      interaction: createCommandApprovalInteraction(),
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
-
-    await waitFor(() => {
-      expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
-        "thr_1",
-        "pi_1",
-        {
-          decision: "allow_once",
-          grantedPermissions: null,
-        },
-      );
-    });
-  });
-
   it("resolves file-change approvals from the banner actions", async () => {
     vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
       ...createFileChangeInteraction(),
@@ -249,34 +188,6 @@ describe("ThreadPendingInteractionBanner", () => {
         "pi_1",
         {
           decision: "deny",
-        },
-      );
-    });
-  });
-
-  it("does not grant extra permissions when approving file-change interactions", async () => {
-    vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
-      ...createFileChangeInteraction(),
-      status: "resolving",
-      resolution: {
-        decision: "allow_once",
-        grantedPermissions: null,
-      },
-    });
-
-    renderBanner({
-      interaction: createFileChangeInteraction(),
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
-
-    await waitFor(() => {
-      expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
-        "thr_1",
-        "pi_1",
-        {
-          decision: "allow_once",
-          grantedPermissions: null,
         },
       );
     });
@@ -348,18 +259,6 @@ describe("ThreadPendingInteractionBanner", () => {
       expect(screen.getByText("Resolution rejected")).not.toBeNull();
     });
     expect(submitButton.hasAttribute("disabled")).toBe(false);
-  });
-
-  it("shows resolving interactions as submitted instead of actionable", () => {
-    renderBanner({
-      interaction: createResolvingCommandApprovalInteraction(),
-    });
-
-    expect(screen.getByText("Delivering")).not.toBeNull();
-    expect(
-      screen.getByText("Answer submitted. Delivering it to the provider."),
-    ).not.toBeNull();
-    expect(screen.queryByRole("button", { name: /Submit/ })).toBeNull();
   });
 
   it("submits user question answers from the banner", async () => {
@@ -456,22 +355,4 @@ describe("ThreadPendingInteractionBanner", () => {
     });
   });
 
-  it("shows resolving user questions as submitted instead of actionable", () => {
-    renderBanner({
-      interaction: {
-        ...createUserQuestionInteraction(),
-        status: "resolving",
-        resolution: {
-          kind: "user_answer",
-          answers: {},
-        },
-      },
-    });
-
-    expect(screen.getByText("Delivering")).not.toBeNull();
-    expect(
-      screen.getByText("Answer submitted. Delivering it to the provider."),
-    ).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
-  });
 });

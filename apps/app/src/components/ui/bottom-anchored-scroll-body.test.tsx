@@ -121,12 +121,10 @@ function BottomAnchorProbe() {
   const targetRef = useRef<HTMLDivElement>(null);
   return (
     <div>
-      <output data-testid="bottom-state">
+      <output aria-label="Bottom state">
         {bottomAnchor ? (bottomAnchor.isAtBottom ? "bottom" : "away") : "null"}
       </output>
-      <div ref={targetRef} data-testid="scroll-target">
-        Scroll target
-      </div>
+      <div ref={targetRef}>Scroll target</div>
       {bottomAnchor ? (
         <>
           <button type="button" onClick={bottomAnchor.scrollToBottom}>
@@ -155,10 +153,9 @@ function renderBody() {
     <>
       <textarea aria-label="Prompt" />
       <BottomAnchoredScrollBody
-        footer={<div data-testid="footer" />}
+        footer={<div>Footer</div>}
         maxWidthClassName="max-w-none"
         scrollAreaClassName="scroll-area"
-        contentClassName="scroll-content"
       >
         <div>Timeline row</div>
         <BottomAnchorProbe />
@@ -170,11 +167,12 @@ function renderBody() {
     scrollArea: requireHTMLElement(
       view.container.querySelector(".scroll-area"),
     ),
-    content: requireHTMLElement(
-      view.container.querySelector(".scroll-content"),
-    ),
     unmount: view.unmount,
   };
+}
+
+function getBottomState() {
+  return screen.getByRole("status", { name: "Bottom state" }).textContent;
 }
 
 beforeEach(() => {
@@ -191,7 +189,7 @@ afterEach(() => {
 
 describe("BottomAnchoredScrollBody", () => {
   it("keeps bottom state when non-bottom scroll is not user initiated", () => {
-    const { scrollArea, content } = renderBody();
+    const { scrollArea } = renderBody();
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_000,
       clientHeight: 100,
@@ -200,14 +198,11 @@ describe("BottomAnchoredScrollBody", () => {
 
     fireEvent.scroll(scrollArea);
 
-    expect(screen.getByTestId("bottom-state").textContent).toBe("bottom");
-    expect(content.classList.contains("scroll-bottom-anchor-content")).toBe(
-      true,
-    );
+    expect(getBottomState()).toBe("bottom");
   });
 
   it("leaves bottom state only when non-bottom scroll follows user intent", () => {
-    const { scrollArea, content } = renderBody();
+    const { scrollArea } = renderBody();
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_000,
       clientHeight: 100,
@@ -217,10 +212,7 @@ describe("BottomAnchoredScrollBody", () => {
     fireEvent.wheel(scrollArea);
     fireEvent.scroll(scrollArea);
 
-    expect(screen.getByTestId("bottom-state").textContent).toBe("away");
-    expect(content.classList.contains("scroll-bottom-anchor-content")).toBe(
-      false,
-    );
+    expect(getBottomState()).toBe("away");
   });
 
   it("ignores scroll-intent keys typed into editable controls", () => {
@@ -235,7 +227,7 @@ describe("BottomAnchoredScrollBody", () => {
     fireEvent.keyDown(textarea, { key: "End" });
     fireEvent.scroll(scrollArea);
 
-    expect(screen.getByTestId("bottom-state").textContent).toBe("bottom");
+    expect(getBottomState()).toBe("bottom");
   });
 
   it("scrolls to the maximum offset and restores bottom state", () => {
@@ -251,12 +243,12 @@ describe("BottomAnchoredScrollBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Scroll to bottom" }));
 
     expect(scrollArea.scrollTop).toBe(900);
-    expect(screen.getByTestId("bottom-state").textContent).toBe("bottom");
+    expect(getBottomState()).toBe("bottom");
   });
 
   it("keeps bottom state when scrolling an already visible element into view", () => {
-    const { scrollArea, content } = renderBody();
-    const target = screen.getByTestId("scroll-target");
+    const { scrollArea } = renderBody();
+    const target = screen.getByText("Scroll target");
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_000,
       clientHeight: 100,
@@ -287,10 +279,7 @@ describe("BottomAnchoredScrollBody", () => {
       screen.getByRole("button", { name: "Scroll target into view" }),
     );
 
-    expect(screen.getByTestId("bottom-state").textContent).toBe("bottom");
-    expect(content.classList.contains("scroll-bottom-anchor-content")).toBe(
-      true,
-    );
+    expect(getBottomState()).toBe("bottom");
   });
 
   it("restores bottom after observed layout changes while sticking", () => {

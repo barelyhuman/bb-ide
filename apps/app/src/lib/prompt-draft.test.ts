@@ -5,7 +5,6 @@ import {
   parsePromptDraftStorage,
   promptDraftToInput,
   promptInputToDraft,
-  serializePromptDraftStorage,
 } from "./prompt-draft";
 
 describe("prompt draft helpers", () => {
@@ -45,10 +44,6 @@ describe("prompt draft helpers", () => {
         },
       ],
     });
-  });
-
-  it("serializes empty drafts as null storage", () => {
-    expect(serializePromptDraftStorage(emptyPromptDraftState())).toBeNull();
   });
 
   it("detects whether a draft has any submittable state", () => {

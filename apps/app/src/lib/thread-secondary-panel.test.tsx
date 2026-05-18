@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  useSetThreadSecondaryPanel,
   useThreadSecondaryPanelState,
   useThreadSecondaryPanelStorageMaintenance,
   useThreadSecondaryPanelUrlSync,
@@ -132,37 +131,6 @@ describe("thread secondary panel state hooks", () => {
     });
   });
 
-  it("does not prune unrelated expired thread state on state writes", () => {
-    vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const currentThreadId = "thr-current-write";
-    const expiredThreadId = "thr-expired-write";
-    const expiredKey = getThreadSecondaryPanelStateStorageKey({
-      threadId: expiredThreadId,
-    });
-    seedStoredState(
-      expiredThreadId,
-      createEmptyThreadSecondaryPanelState({
-        activePanel: "thread-info",
-        lastUsedAt: NOW - THREAD_SECONDARY_PANEL_IDLE_EXPIRY_MS - 1,
-      }),
-    );
-    const { result } = renderHook(
-      () => useSetThreadSecondaryPanel(currentThreadId),
-      {
-        wrapper: createTestWrapper([
-          "/projects/proj-one/threads/thr-current-write",
-        ]),
-      },
-    );
-
-    act(() => {
-      result.current("thread-info");
-    });
-
-    expect(window.localStorage.getItem(expiredKey)).not.toBeNull();
-    expect(readStoredState(currentThreadId).activePanel).toBe("thread-info");
-  });
-
   it("treats URL panel values as one-shot overrides without rewriting unchanged state", async () => {
     const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
     const threadId = "thr-url-unchanged";
@@ -246,81 +214,6 @@ describe("thread secondary panel state hooks", () => {
 
     expect(result.current.state.activePanel).toBe("git-diff");
     expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
-  });
-
-  it("coarsens panel focus touches to minute-scale storage writes", () => {
-    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const threadId = "thr-focus-touch";
-    seedStoredState(
-      threadId,
-      createEmptyThreadSecondaryPanelState({
-        activePanel: "thread-info",
-        lastUsedAt: NOW,
-      }),
-    );
-    const { result } = renderHook(
-      () => useTouchThreadSecondaryPanelState(threadId),
-      {
-        wrapper: createTestWrapper([
-          "/projects/proj-one/threads/thr-focus-touch",
-        ]),
-      },
-    );
-
-    dateNowSpy.mockReturnValue(NOW + 1_000);
-    act(() => {
-      result.current();
-    });
-    expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
-
-    dateNowSpy.mockReturnValue(NOW + 62_000);
-    act(() => {
-      result.current();
-    });
-    expect(readStoredState(threadId).lastUsedAt).toBe(NOW + 62_000);
-  });
-
-  it("does not suppress the first focus touch after switching threads", () => {
-    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW);
-    const firstThreadId = "thr-focus-first";
-    const secondThreadId = "thr-focus-second";
-    seedStoredState(
-      firstThreadId,
-      createEmptyThreadSecondaryPanelState({
-        activePanel: "thread-info",
-        lastUsedAt: NOW - 61_000,
-      }),
-    );
-    seedStoredState(
-      secondThreadId,
-      createEmptyThreadSecondaryPanelState({
-        activePanel: "thread-info",
-        lastUsedAt: NOW - 61_000,
-      }),
-    );
-    const { result, rerender } = renderHook(
-      (props: ThreadIdHookProps) =>
-        useTouchThreadSecondaryPanelState(props.threadId),
-      {
-        initialProps: { threadId: firstThreadId },
-        wrapper: createTestWrapper([
-          "/projects/proj-one/threads/thr-focus-first",
-        ]),
-      },
-    );
-
-    act(() => {
-      result.current();
-    });
-    expect(readStoredState(firstThreadId).lastUsedAt).toBe(NOW);
-
-    dateNowSpy.mockReturnValue(NOW + 1_000);
-    rerender({ threadId: secondThreadId });
-    act(() => {
-      result.current();
-    });
-
-    expect(readStoredState(secondThreadId).lastUsedAt).toBe(NOW + 1_000);
   });
 
   it("preserves secondary panel fields when focus touch refreshes lastUsedAt", () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveStoredStandardManagerTimelinePreference } from "./manager-timeline-view-preference";
 
 describe("resolveStoredStandardManagerTimelinePreference", () => {
-  it("uses the current preference when present", () => {
+  it("prefers the current key, migrates the legacy key, and falls back for invalid values", () => {
     expect(
       resolveStoredStandardManagerTimelinePreference({
         currentValue: "false",
@@ -10,9 +10,6 @@ describe("resolveStoredStandardManagerTimelinePreference", () => {
         initialValue: true,
       }),
     ).toBe(false);
-  });
-
-  it("does not read the legacy preference when the current key is present", () => {
     expect(
       resolveStoredStandardManagerTimelinePreference({
         currentValue: "invalid",
@@ -20,9 +17,6 @@ describe("resolveStoredStandardManagerTimelinePreference", () => {
         initialValue: false,
       }),
     ).toBe(false);
-  });
-
-  it("falls back to the legacy show-all-events preference", () => {
     expect(
       resolveStoredStandardManagerTimelinePreference({
         currentValue: null,
@@ -30,9 +24,6 @@ describe("resolveStoredStandardManagerTimelinePreference", () => {
         initialValue: false,
       }),
     ).toBe(true);
-  });
-
-  it("keeps the initial value when stored values are invalid", () => {
     expect(
       resolveStoredStandardManagerTimelinePreference({
         currentValue: null,

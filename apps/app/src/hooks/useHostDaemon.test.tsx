@@ -4,9 +4,7 @@ import { Suspense, useEffect, type ReactNode } from "react";
 import {
   act,
   cleanup,
-  fireEvent,
   render,
-  screen,
   waitFor,
 } from "@testing-library/react";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
@@ -52,8 +50,9 @@ interface SuspenseWrapperProps {
   children: ReactNode;
 }
 
-interface HostDaemonProbeProps {
+interface HostDaemonCaptureProps {
   onSnapshot: (snapshot: HostDaemonSnapshot) => void;
+  useHostDaemon: HostDaemonModules["useHostDaemon"];
 }
 
 function createSuspenseWrapper() {
@@ -65,40 +64,26 @@ function createSuspenseWrapper() {
     });
 }
 
-function createHostDaemonProbe(
-  useHostDaemon: HostDaemonModules["useHostDaemon"],
-) {
-  return function HostDaemonProbe({ onSnapshot }: HostDaemonProbeProps) {
-    const value = useHostDaemon();
+function HostDaemonCapture({
+  onSnapshot,
+  useHostDaemon,
+}: HostDaemonCaptureProps) {
+  const snapshot = useHostDaemon();
 
-    useEffect(() => {
-      onSnapshot(value);
-    }, [onSnapshot, value]);
+  useEffect(() => {
+    onSnapshot(snapshot);
+  }, [onSnapshot, snapshot]);
 
-    return (
-      <div>
-        <div data-testid="local-host-id">{value.localHostId ?? "null"}</div>
-        <div data-testid="has-daemon">{String(value.hasDaemon)}</div>
-        <div data-testid="supports-folder-picker">
-          {String(value.supportsNativeFolderPicker)}
-        </div>
-        <div data-testid="is-local-host-1">
-          {String(value.isLocalHost("host-1"))}
-        </div>
-        <div data-testid="is-local-host-2">
-          {String(value.isLocalHost("host-2"))}
-        </div>
-        <button
-          disabled={value.pickFolder == null}
-          onClick={() => {
-            void value.pickFolder?.();
-          }}
-        >
-          pick folder
-        </button>
-      </div>
-    );
-  };
+  return null;
+}
+
+function requireHostDaemonSnapshot(
+  snapshot: HostDaemonSnapshot | null,
+): HostDaemonSnapshot {
+  if (!snapshot) {
+    throw new Error("Expected host daemon hook snapshot.");
+  }
+  return snapshot;
 }
 
 function installHostDaemonFetchRoutes(
@@ -178,37 +163,37 @@ describe("useHostDaemon", () => {
     const pickFolderRequests: number[] = [];
     installHostDaemonFetchRoutes(state, pickFolderRequests);
 
+    const { useHostDaemon } = await importFreshHostDaemonModules();
     const latestSnapshot: { current: HostDaemonSnapshot | null } = {
       current: null,
     };
-    const { useHostDaemon } = await importFreshHostDaemonModules();
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
-
     await act(async () => {
       render(
-        <HostDaemonProbe
+        <HostDaemonCapture
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
+          useHostDaemon={useHostDaemon}
         />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
+        { wrapper: createSuspenseWrapper() },
       );
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("local-host-id").textContent).toBe("host-1");
+      expect(requireHostDaemonSnapshot(latestSnapshot.current).localHostId).toBe(
+        "host-1",
+      );
     });
 
-    expect(screen.getByTestId("has-daemon").textContent).toBe("true");
-    expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
-      "true",
-    );
-    expect(screen.getByTestId("is-local-host-1").textContent).toBe("true");
-    expect(screen.getByTestId("is-local-host-2").textContent).toBe("false");
+    const snapshot = requireHostDaemonSnapshot(latestSnapshot.current);
+    expect(snapshot.hasDaemon).toBe(true);
+    expect(snapshot.supportsNativeFolderPicker).toBe(true);
+    expect(snapshot.isLocalHost("host-1")).toBe(true);
+    expect(snapshot.isLocalHost("host-2")).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "pick folder" }));
+    await act(async () => {
+      await requireHostDaemonSnapshot(latestSnapshot.current).pickFolder?.();
+    });
 
     await waitFor(() => {
       expect(pickFolderRequests).toEqual([1]);
@@ -223,39 +208,32 @@ describe("useHostDaemon", () => {
     };
     installHostDaemonFetchRoutes(state, []);
 
+    const { useHostDaemon } = await importFreshHostDaemonModules();
     const latestSnapshot: { current: HostDaemonSnapshot | null } = {
       current: null,
     };
-    const { useHostDaemon } = await importFreshHostDaemonModules();
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
-
     await act(async () => {
       render(
-        <HostDaemonProbe
+        <HostDaemonCapture
           onSnapshot={(snapshot) => {
             latestSnapshot.current = snapshot;
           }}
+          useHostDaemon={useHostDaemon}
         />,
-        {
-          wrapper: createSuspenseWrapper(),
-        },
+        { wrapper: createSuspenseWrapper() },
       );
     });
 
-    expect((await screen.findByTestId("local-host-id")).textContent).toBe(
-      "null",
-    );
-    expect(screen.getByTestId("has-daemon").textContent).toBe("false");
-    expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
-      "false",
-    );
-    expect(screen.getByTestId("is-local-host-1").textContent).toBe("false");
-    expect(
-      screen
-        .getByRole("button", { name: "pick folder" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
-    expect(latestSnapshot.current?.pickFolder).toBeNull();
+    await waitFor(() => {
+      expect(
+        requireHostDaemonSnapshot(latestSnapshot.current).localHostId,
+      ).toBeNull();
+    });
+    const snapshot = requireHostDaemonSnapshot(latestSnapshot.current);
+    expect(snapshot.hasDaemon).toBe(false);
+    expect(snapshot.supportsNativeFolderPicker).toBe(false);
+    expect(snapshot.isLocalHost("host-1")).toBe(false);
+    expect(snapshot.pickFolder).toBeNull();
   });
 
   it("re-probes daemon capabilities after websocket reconnects", async () => {
@@ -275,17 +253,27 @@ describe("useHostDaemon", () => {
 
     const { FakeReconnectingWebSocket, useHostDaemon, wsManager } =
       await importFreshHostDaemonModules();
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
-
+    const latestSnapshot: { current: HostDaemonSnapshot | null } = {
+      current: null,
+    };
     await act(async () => {
-      render(<HostDaemonProbe onSnapshot={() => {}} />, {
-        wrapper: createSuspenseWrapper(),
-      });
+      render(
+        <HostDaemonCapture
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+          useHostDaemon={useHostDaemon}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
     });
 
-    expect(
-      (await screen.findByTestId("supports-folder-picker")).textContent,
-    ).toBe("false");
+    await waitFor(() => {
+      expect(
+        requireHostDaemonSnapshot(latestSnapshot.current)
+          .supportsNativeFolderPicker,
+      ).toBe(false);
+    });
 
     wsManager.connect();
     const socket = FakeReconnectingWebSocket.latest();
@@ -302,9 +290,10 @@ describe("useHostDaemon", () => {
     socket.open();
 
     await waitFor(() => {
-      expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
-        "true",
-      );
+      expect(
+        requireHostDaemonSnapshot(latestSnapshot.current)
+          .supportsNativeFolderPicker,
+      ).toBe(true);
     });
 
     wsManager.disconnect();

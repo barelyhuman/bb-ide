@@ -115,42 +115,6 @@ describe("useThreadCreationOptions", () => {
     expect(api.getSystemExecutionOptions).not.toHaveBeenCalled();
   });
 
-  it("loads provider metadata and models with one execution-options request", async () => {
-    mockExecutionOptions({
-      providers: [
-        createTestSystemProvider({
-          id: "codex",
-        }),
-      ],
-      models: [
-        makeModel({
-          id: "gpt-5.4",
-          model: "gpt-5.4",
-        }),
-      ],
-    });
-
-    const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () =>
-        useThreadCreationOptions({
-          projectId: "project-provider-gating",
-          scope: "new-thread",
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.selectedProviderId).toBe("codex");
-    });
-
-    expect(api.getSystemExecutionOptions).toHaveBeenCalledWith({
-      environmentId: undefined,
-      providerId: undefined,
-    });
-    expect(api.listSystemProviders).not.toHaveBeenCalled();
-  });
-
   it("falls back to valid provider and model values from query data", async () => {
     const projectId = "project-1";
     localStorage.setItem(

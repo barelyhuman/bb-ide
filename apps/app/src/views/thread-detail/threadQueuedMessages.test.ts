@@ -6,42 +6,31 @@ import {
 } from "./threadQueuedMessages";
 
 describe("threadQueuedMessages", () => {
-  it("formats text previews from queued inputs", () => {
+  it("formats queued-message previews from text or attachment-only inputs", () => {
     const input: PromptInput[] = [
       { type: "text", text: "  First line  " },
       { type: "text", text: "Second line" },
     ];
 
     expect(formatQueuedMessagePreview(input)).toBe("First line\n\nSecond line");
-  });
-
-  it("falls back to attachment summaries when no text is present", () => {
-    const input: PromptInput[] = [
-      {
-        type: "localFile",
-        path: "/tmp/notes.md",
-        name: "notes.md",
-        sizeBytes: 10,
-      },
-    ];
-
-    expect(formatQueuedMessagePreview(input)).toBe(
-      "Attachment only (notes.md)",
-    );
-  });
-
-  it("preserves the attachment fallback for blank paths", () => {
-    const input: PromptInput[] = [
-      {
-        type: "localImage",
-        path: "  ",
-      },
-    ];
-
-    expect(formatQueuedMessagePreview(input)).toBe(
-      "Attachment only (Attachment)",
-    );
-    expect(queuedInputToDraft(input).attachments[0]?.name).toBe("Attachment");
+    expect(
+      formatQueuedMessagePreview([
+        {
+          type: "localFile",
+          path: "/tmp/notes.md",
+          name: "notes.md",
+          sizeBytes: 10,
+        },
+      ]),
+    ).toBe("Attachment only (notes.md)");
+    expect(
+      formatQueuedMessagePreview([
+        {
+          type: "localImage",
+          path: "  ",
+        },
+      ]),
+    ).toBe("Attachment only (Attachment)");
   });
 
   it("restores editable drafts from queued messages", () => {
@@ -50,6 +39,12 @@ describe("threadQueuedMessages", () => {
       {
         type: "localImage",
         path: "/tmp/image.png",
+      },
+    ]);
+    const attachmentOnlyDraft = queuedInputToDraft([
+      {
+        type: "localImage",
+        path: "  ",
       },
     ]);
 
@@ -64,5 +59,6 @@ describe("threadQueuedMessages", () => {
         },
       ],
     });
+    expect(attachmentOnlyDraft.attachments[0]?.name).toBe("Attachment");
   });
 });

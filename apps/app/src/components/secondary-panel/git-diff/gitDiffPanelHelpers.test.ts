@@ -4,7 +4,6 @@ import {
   buildGitDiffParsePlan,
   buildGitDiffSelectionOptions,
   buildGitDiffTarget,
-  GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD,
   GIT_DIFF_PARSE_BATCH_THRESHOLD,
   reconcileGitDiffCollapsedFileKeys,
   resolveGitDiffPreparationState,
@@ -72,10 +71,6 @@ function buildEntries(diff: string): ParsedGitDiffFileEntry[] {
 }
 
 describe("gitDiffPanelHelpers", () => {
-  it("uses a conservative threshold before auto-collapsing many files", () => {
-    expect(GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD).toBe(10);
-  });
-
   it("builds git diff targets from commit, uncommitted, and merge-base selections", () => {
     expect(buildGitDiffTarget("commit-sha", "main")).toEqual({
       sha: "commit-sha",
@@ -94,7 +89,7 @@ describe("gitDiffPanelHelpers", () => {
     expect(buildGitDiffTarget(null, undefined)).toBeUndefined();
   });
 
-  it("builds selection options and resets missing commit selections", () => {
+  it("builds selection options and resets stale selections", () => {
     const commits = [
       makeCommit({
         sha: "abc123",
@@ -113,33 +108,23 @@ describe("gitDiffPanelHelpers", () => {
       { value: "abc123", label: "Initial change", monoPrefix: "abc123" },
       { value: "def456", label: "Follow-up", monoPrefix: "def456" },
     ]);
-    expect(shouldResetSelectedGitDiffCommit("missing", commits)).toBe(true);
-    expect(shouldResetSelectedGitDiffCommit("abc123", commits)).toBe(false);
-    expect(shouldResetSelectedGitDiffCommit(null, commits)).toBe(false);
-  });
-
-  it("inserts an uncommitted option when the working tree is dirty", () => {
-    const commits = [
-      makeCommit({ sha: "abc123", shortSha: "abc123", subject: "Feature" }),
-    ];
-
     expect(
       buildGitDiffSelectionOptions(commits, { hasUncommittedChanges: true }),
     ).toEqual([
       { value: "all", label: "All changes" },
       { value: "uncommitted", label: "Uncommitted changes" },
-      { value: "abc123", label: "Feature", monoPrefix: "abc123" },
+      { value: "abc123", label: "Initial change", monoPrefix: "abc123" },
+      { value: "def456", label: "Follow-up", monoPrefix: "def456" },
     ]);
-
     expect(
       buildGitDiffSelectionOptions([], { hasUncommittedChanges: true }),
     ).toEqual([
       { value: "all", label: "All changes" },
       { value: "uncommitted", label: "Uncommitted changes" },
     ]);
-  });
-
-  it("resets an uncommitted selection once the working tree becomes clean", () => {
+    expect(shouldResetSelectedGitDiffCommit("missing", commits)).toBe(true);
+    expect(shouldResetSelectedGitDiffCommit("abc123", commits)).toBe(false);
+    expect(shouldResetSelectedGitDiffCommit(null, commits)).toBe(false);
     expect(
       shouldResetSelectedGitDiffCommit("uncommitted", [], {
         hasUncommittedChanges: true,
@@ -152,8 +137,16 @@ describe("gitDiffPanelHelpers", () => {
     ).toBe(true);
   });
 
-  it("tracks when a diff is still preparing for the current parse key", () => {
+  it("tracks preparation while prerequisites and parse results are pending", () => {
     const currentGitDiff = buildPatchDiff(2);
+    const awaitingPrerequisitesState = resolveGitDiffPreparationState({
+      currentGitDiff: "",
+      isAwaitingPrerequisites: true,
+      isGitDiffLoading: false,
+      isParsingGitDiffFiles: false,
+      lastParsedGitDiffKey: "",
+      parsedGitDiffFileCount: 0,
+    });
     const state = resolveGitDiffPreparationState({
       currentGitDiff,
       isAwaitingPrerequisites: false,
@@ -163,6 +156,7 @@ describe("gitDiffPanelHelpers", () => {
       parsedGitDiffFileCount: 0,
     });
 
+    expect(awaitingPrerequisitesState.isPreparingGitDiff).toBe(true);
     expect(state.hasCurrentGitDiff).toBe(true);
     expect(state.isAwaitingCurrentGitDiffParse).toBe(true);
     expect(state.isPreparingGitDiff).toBe(true);
@@ -178,19 +172,6 @@ describe("gitDiffPanelHelpers", () => {
 
     expect(readyState.hasParsedGitDiffFiles).toBe(true);
     expect(readyState.isPreparingGitDiff).toBe(false);
-  });
-
-  it("keeps preparing while prerequisites resolve, even with no diff payload yet", () => {
-    const state = resolveGitDiffPreparationState({
-      currentGitDiff: "",
-      isAwaitingPrerequisites: true,
-      isGitDiffLoading: false,
-      isParsingGitDiffFiles: false,
-      lastParsedGitDiffKey: "",
-      parsedGitDiffFileCount: 0,
-    });
-
-    expect(state.isPreparingGitDiff).toBe(true);
   });
 
   it("chooses reset, immediate, and batched parse plans from diff shape", () => {
@@ -238,7 +219,7 @@ describe("gitDiffPanelHelpers", () => {
     expect(
       shouldCollapseGitDiffFileByDefault({
         entry: modifiedEntry,
-        expectedFileCount: GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD + 1,
+        expectedFileCount: 11,
       }),
     ).toBe(true);
   });

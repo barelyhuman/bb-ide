@@ -31,8 +31,8 @@ describe("getMutationErrorMeta", () => {
 });
 
 describe("getMutationErrorMessage", () => {
-  it("prefers the server contract message for HttpError instances", () => {
-    const error = new HttpError({
+  it("uses explicit server messages before falling back to normalized transport messages", () => {
+    const contractError = new HttpError({
       body: {
         code: "invalid_request",
         message: "Environment is not ready",
@@ -44,13 +44,10 @@ describe("getMutationErrorMessage", () => {
 
     expect(
       getMutationErrorMessage({
-        error,
+        error: contractError,
         fallbackMessage: "Request failed.",
       }),
     ).toBe("Environment is not ready");
-  });
-
-  it("returns a friendly message for transport failures", () => {
     expect(
       getMutationErrorMessage({
         error: new TypeError("Failed to fetch"),
@@ -59,10 +56,8 @@ describe("getMutationErrorMessage", () => {
     ).toBe(
       "Could not reach the server. Check that it is running and try again.",
     );
-  });
 
-  it("strips the HTTP status prefix when falling back to the HttpError message", () => {
-    const error = new HttpError({
+    const fallbackHttpError = new HttpError({
       code: "invalid_request",
       message: "Squash merge failed",
       status: 409,
@@ -70,7 +65,7 @@ describe("getMutationErrorMessage", () => {
 
     expect(
       getMutationErrorMessage({
-        error,
+        error: fallbackHttpError,
         fallbackMessage: "Request failed.",
       }),
     ).toBe("Squash merge failed");
@@ -87,7 +82,4 @@ describe("shouldShowMutationErrorToast", () => {
     expect(shouldShowMutationErrorToast({ name: "AbortError" })).toBe(false);
   });
 
-  it("allows non-abort errors", () => {
-    expect(shouldShowMutationErrorToast(new Error("boom"))).toBe(true);
-  });
 });

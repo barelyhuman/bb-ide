@@ -3,10 +3,6 @@ import type { IconName } from "@/components/ui/icon.js";
 import { assertNever } from "@bb/core-ui";
 import type {
   PendingInteraction,
-  PermissionMode,
-  PromptInput,
-  ReasoningLevel,
-  ServiceTier,
   ThreadQueuedMessage,
   ThreadRuntimeDisplayStatus,
   ThreadTimelinePendingTodos,
@@ -53,15 +49,14 @@ import {
 } from "@/components/promptbox/FollowUpPromptBox";
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
-
-interface SendFollowUpInputParams {
-  input: PromptInput[];
-  mode: "auto" | "steer";
-  model?: string;
-  permissionMode?: PermissionMode;
-  reasoningLevel?: ReasoningLevel;
-  serviceTier?: ServiceTier;
-}
+import {
+  buildAutoFollowUpRequest,
+  buildCreateQueuedFollowUpRequest,
+  buildQueuedSteerRequests,
+  buildSteerFollowUpRequest,
+  canSubmitSteerBatch,
+  shouldQueueFollowUpMessage,
+} from "./threadDetailPromptSubmission";
 
 type ComposerQueryRefetchOnMount = boolean | "always";
 
@@ -132,12 +127,6 @@ function getPromptPlaceholder(
     default:
       return assertNever(displayStatus);
   }
-}
-
-function shouldQueueFollowUpMessage(
-  displayStatus: ThreadRuntimeDisplayStatus,
-): boolean {
-  return displayStatus === "active" || displayStatus === "host-reconnecting";
 }
 
 export function ThreadDetailPromptArea({
@@ -322,50 +311,14 @@ export function ThreadDetailPromptArea({
     [currentPromptDraft],
   );
   const hasPromptDraftInput = currentPromptDraftInput.length > 0;
-  const canSteerSubmit =
-    runtimeDisplayStatus === "active" &&
-    submitMode.kind === "queue" &&
-    !isFollowUpSubmitting &&
-    !isQueueMutationPending &&
-    (queuedMessages.length > 0 || hasPromptDraftInput);
-  const sendFollowUpInput = useCallback(
-    async ({
-      input,
-      mode,
-      model,
-      serviceTier: executionServiceTier,
-      reasoningLevel: executionReasoningLevel,
-      permissionMode: executionPermissionMode,
-    }: SendFollowUpInputParams) => {
-      if (input.length === 0) {
-        return;
-      }
-
-      const executionOptions =
-        mode === "steer"
-          ? {}
-          : {
-              ...(model ? { model } : {}),
-              ...(executionServiceTier
-                ? { serviceTier: executionServiceTier }
-                : {}),
-              ...(executionReasoningLevel
-                ? { reasoningLevel: executionReasoningLevel }
-                : {}),
-              ...(executionPermissionMode
-                ? { permissionMode: executionPermissionMode }
-                : {}),
-            };
-
-      await sendMessage.mutateAsync({
-        id: thread.id,
-        input,
-        mode,
-        ...executionOptions,
-      });
-    },
-    [sendMessage, thread.id],
-  );
+  const canSteerSubmit = canSubmitSteerBatch({
+    hasPromptDraftInput,
+    isFollowUpSubmitting,
+    isQueueMutationPending,
+    queuedMessageCount: queuedMessages.length,
+    runtimeDisplayStatus,
+    submitModeKind: submitMode.kind,
+  });
 
   const handleAttachFiles = useCallback(
     async (files: File[]) => {
@@ -406,23 +359,31 @@ export function ThreadDetailPromptArea({
     const isQueuingMessage = shouldQueueFollowUpMessage(runtimeDisplayStatus);
     try {
       if (isQueuingMessage) {
-        await createQueuedMessage.mutateAsync({
-          id: thread.id,
+        const request = buildCreateQueuedFollowUpRequest({
+          threadId: thread.id,
           input: submittedInput,
           model: activeModel?.model ?? selectedModel,
-          ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
+          supportsServiceTier,
+          serviceTier,
           reasoningLevel,
           permissionMode,
         });
+        if (request) {
+          await createQueuedMessage.mutateAsync(request);
+        }
       } else {
-        await sendFollowUpInput({
+        const request = buildAutoFollowUpRequest({
+          threadId: thread.id,
           input: submittedInput,
-          mode: "auto",
           model: activeModel?.model ?? selectedModel,
-          ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
+          supportsServiceTier,
+          serviceTier,
           reasoningLevel,
           permissionMode,
         });
+        if (request) {
+          await sendMessage.mutateAsync(request);
+        }
       }
     } catch (nextError) {
       promptDraft.restoreIfEmpty(submittedDraft);
@@ -444,7 +405,7 @@ export function ThreadDetailPromptArea({
     reasoningLevel,
     permissionMode,
     selectedModel,
-    sendFollowUpInput,
+    sendMessage,
     serviceTier,
     supportsServiceTier,
     thread.id,
@@ -469,18 +430,20 @@ export function ThreadDetailPromptArea({
     setAttachmentError(null);
 
     try {
-      for (const queuedMessage of queuedMessages) {
-        await sendQueuedMessage.mutateAsync({
-          id: thread.id,
-          mode: "steer",
-          queuedMessageId: queuedMessage.id,
-        });
+      for (const request of buildQueuedSteerRequests({
+        queuedMessages,
+        threadId: thread.id,
+      })) {
+        await sendQueuedMessage.mutateAsync(request);
       }
 
-      await sendFollowUpInput({
+      const request = buildSteerFollowUpRequest({
         input: submittedInput,
-        mode: "steer",
+        threadId: thread.id,
       });
+      if (request) {
+        await sendMessage.mutateAsync(request);
+      }
     } catch (nextError) {
       promptDraft.restoreIfEmpty(submittedDraft);
       toast.error(
@@ -498,8 +461,8 @@ export function ThreadDetailPromptArea({
     currentPromptDraftInput,
     promptDraft,
     queuedMessages,
+    sendMessage,
     sendQueuedMessage,
-    sendFollowUpInput,
     thread.id,
   ]);
 

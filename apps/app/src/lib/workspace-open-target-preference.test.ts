@@ -16,7 +16,7 @@ const TARGETS: WorkspaceOpenTarget[] = [
 ];
 
 describe("resolvePreferredWorkspaceOpenTarget", () => {
-  it("uses the stored target when it is available", () => {
+  it("chooses a stored target, then an editor, then the first available target", () => {
     expect(
       resolvePreferredWorkspaceOpenTarget({
         preferredTargetId: "finder",
@@ -27,9 +27,6 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
       kind: "file-browser",
       label: "Finder",
     });
-  });
-
-  it("falls back to an editor target when no preference is stored", () => {
     expect(
       resolvePreferredWorkspaceOpenTarget({
         preferredTargetId: null,
@@ -40,22 +37,6 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
       kind: "editor",
       label: "VS Code",
     });
-  });
-
-  it("falls back to an editor without requiring the unavailable preference to be rewritten", () => {
-    expect(
-      resolvePreferredWorkspaceOpenTarget({
-        preferredTargetId: "cursor",
-        targets: TARGETS,
-      }),
-    ).toEqual({
-      id: "vscode",
-      kind: "editor",
-      label: "VS Code",
-    });
-  });
-
-  it("falls back to the first target when no editor target is available", () => {
     expect(
       resolvePreferredWorkspaceOpenTarget({
         preferredTargetId: null,
