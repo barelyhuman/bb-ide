@@ -125,6 +125,57 @@ function pressIgnoredHistoryArrow({
   expect(textarea.value).toBe(expectedValue);
 }
 
+function waitForAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      resolve();
+    });
+  });
+}
+
+describe("PromptBoxInternal mentions", () => {
+  it("hides mention results after applying a mention before existing text", async () => {
+    render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "Please check @readme-file and update tests",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        mentionSuggestions={[
+          {
+            kind: "file",
+            path: "a.md",
+            replacement: "a.md",
+          },
+        ]}
+      />,
+    );
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    const mentionEnd = "Please check @readme-file".length;
+    textarea.focus();
+    textarea.setSelectionRange(mentionEnd, mentionEnd);
+    fireEvent.click(textarea);
+
+    const mentionButton = await screen.findByRole("button", {
+      name: /a\.md/,
+    });
+    fireEvent.mouseDown(mentionButton);
+    await waitForAnimationFrame();
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("Please check @a.md and update tests");
+      expect(textarea.selectionStart).toBe("Please check @a.md".length);
+      expect(textarea.selectionEnd).toBe("Please check @a.md".length);
+    });
+
+    fireEvent.click(textarea);
+
+    expect(screen.queryByRole("button", { name: /a\.md/ })).toBeNull();
+  });
+});
+
 describe("PromptBoxInternal history navigation", () => {
   it("recalls the newest history entry when the input is empty", async () => {
     render(
@@ -565,8 +616,9 @@ describe("PromptBoxInternal history navigation", () => {
     );
 
     const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    textarea.focus();
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    fireEvent.select(textarea);
+    fireEvent.click(textarea);
     await waitFor(() => {
       expect(screen.queryByText("README.md")).not.toBeNull();
     });

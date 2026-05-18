@@ -237,6 +237,7 @@ export function PromptBoxInternal({
   });
   const mentionKeyRef = useRef("");
   const dismissedMentionRef = useRef<DismissedMentionRange | null>(null);
+  const isRestoringAppliedMentionRef = useRef(false);
   const [activeMention, setActiveMention] = useState<ActiveFileMention | null>(
     null,
   );
@@ -390,8 +391,10 @@ export function PromptBoxInternal({
     (textarea: HTMLTextAreaElement) => {
       const caretPosition = textarea.selectionStart ?? textarea.value.length;
       const dismissedMention = dismissedMentionRef.current;
+      const isRestoringAppliedMention =
+        isRestoringAppliedMentionRef.current && dismissedMention !== null;
 
-      if (dismissedMention) {
+      if (dismissedMention && !isRestoringAppliedMention) {
         const isWithinDismissedRange =
           caretPosition >= dismissedMention.start &&
           caretPosition <= dismissedMention.end;
@@ -408,9 +411,10 @@ export function PromptBoxInternal({
 
       const shouldSuppressMention = Boolean(
         dismissedMentionRef.current &&
-        caretPosition >= dismissedMentionRef.current.start &&
-        caretPosition <= dismissedMentionRef.current.end &&
-        !dismissedMentionRef.current.hasLeftRange,
+        !dismissedMentionRef.current.hasLeftRange &&
+        (isRestoringAppliedMention ||
+          (caretPosition >= dismissedMentionRef.current.start &&
+            caretPosition <= dismissedMentionRef.current.end)),
       );
 
       const nextMention = shouldSuppressMention
@@ -470,20 +474,24 @@ export function PromptBoxInternal({
         activeMention,
         item.replacement,
       );
-      onChange(replacement.value);
       mentionKeyRef.current = "";
       dismissedMentionRef.current = {
         start: mentionStart,
         end: mentionStart + replacement.insertedLength,
         hasLeftRange: false,
       };
+      isRestoringAppliedMentionRef.current = true;
+      onChange(replacement.value);
       setActiveMention(null);
       setSelectedMentionIndex(0);
       onMentionQueryChange(null);
 
       requestAnimationFrame(() => {
         const nextTextarea = textareaRef.current;
-        if (!nextTextarea) return;
+        if (!nextTextarea) {
+          isRestoringAppliedMentionRef.current = false;
+          return;
+        }
         nextTextarea.focus();
         nextTextarea.setSelectionRange(
           replacement.caretPosition,
@@ -494,6 +502,8 @@ export function PromptBoxInternal({
         } else {
           resizeTextarea(nextTextarea);
         }
+        syncMentionState(nextTextarea);
+        isRestoringAppliedMentionRef.current = false;
       });
     },
     [
@@ -502,6 +512,7 @@ export function PromptBoxInternal({
       onChange,
       onMentionQueryChange,
       resizeTextarea,
+      syncMentionState,
       value,
     ],
   );
