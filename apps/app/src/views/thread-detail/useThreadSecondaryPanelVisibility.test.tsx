@@ -12,48 +12,54 @@ import {
 
 interface VisibilityHarnessProps {
   initialActivePanel?: ThreadSecondaryPanel | null;
+  initialPersistedOpen?: boolean;
   isCompactViewport: boolean;
   threadId: string | undefined;
 }
 
 function useVisibilityHarness({
   initialActivePanel = null,
+  initialPersistedOpen = initialActivePanel !== null,
   isCompactViewport,
   threadId,
 }: VisibilityHarnessProps) {
   const [activePanel, setActivePanel] =
     useState<ThreadSecondaryPanel | null>(initialActivePanel);
+  const [isPersistedOpen, setIsPersistedOpen] =
+    useState(initialPersistedOpen);
   const [closePersistedPanel] = useState(() =>
     vi.fn(() => {
-      setActivePanel(null);
+      setIsPersistedOpen(false);
     }),
   );
   const [openPersistedPanel] = useState(() =>
     vi.fn<ThreadSecondaryPanelOpenHandler>((panel) => {
       setActivePanel(panel);
+      setIsPersistedOpen(true);
     }),
   );
   const [openPersistedDiffPanel] = useState(() =>
     vi.fn(() => {
       setActivePanel("git-diff");
+      setIsPersistedOpen(true);
     }),
   );
   const [openPersistedDiffFile] = useState(() =>
     vi.fn<ThreadSecondaryPanelDiffFileOpenHandler>(() => {
       setActivePanel("git-diff");
+      setIsPersistedOpen(true);
     }),
   );
   const [togglePersistedPanel] = useState(() =>
     vi.fn(() => {
-      setActivePanel((current) =>
-        current === null ? "thread-info" : null,
-      );
+      setIsPersistedOpen((current) => !current);
+      setActivePanel((current) => current ?? "thread-info");
     }),
   );
 
   const visibility = useThreadSecondaryPanelVisibility({
-    activePanel,
     closePersistedPanel,
+    isPersistedOpen,
     isCompactViewport,
     openPersistedDiffFile,
     openPersistedDiffPanel,
@@ -65,6 +71,7 @@ function useVisibilityHarness({
   return {
     activePanel,
     closePersistedPanel,
+    isPersistedOpen,
     openPersistedDiffFile,
     openPersistedDiffPanel,
     openPersistedPanel,
@@ -84,6 +91,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(false);
     expect(result.current.activePanel).toBe("thread-info");
+    expect(result.current.isPersistedOpen).toBe(true);
     expect(result.current.closePersistedPanel).not.toHaveBeenCalled();
   });
 
@@ -107,6 +115,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(false);
     expect(result.current.activePanel).toBe("git-diff");
+    expect(result.current.isPersistedOpen).toBe(true);
     expect(result.current.closePersistedPanel).not.toHaveBeenCalled();
     expect(result.current.openPersistedPanel).not.toHaveBeenCalled();
     expect(result.current.togglePersistedPanel).not.toHaveBeenCalled();
@@ -119,6 +128,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(true);
     expect(result.current.activePanel).toBe("git-diff");
+    expect(result.current.isPersistedOpen).toBe(true);
   });
 
   it("treats compact first-toggle without a persisted panel as transient", () => {
@@ -136,6 +146,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(true);
     expect(result.current.activePanel).toBeNull();
+    expect(result.current.isPersistedOpen).toBe(false);
     expect(result.current.openPersistedPanel).not.toHaveBeenCalled();
     expect(result.current.togglePersistedPanel).not.toHaveBeenCalled();
 
@@ -147,6 +158,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(false);
     expect(result.current.activePanel).toBeNull();
+    expect(result.current.isPersistedOpen).toBe(false);
   });
 
   it("persists compact diff file opens and reveals the drawer", () => {
@@ -162,6 +174,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(true);
     expect(result.current.activePanel).toBe("git-diff");
+    expect(result.current.isPersistedOpen).toBe(true);
     expect(result.current.openPersistedDiffFile).toHaveBeenCalledWith(
       "src/app.ts",
     );
@@ -186,6 +199,7 @@ describe("useThreadSecondaryPanelVisibility", () => {
 
     expect(result.current.visibility.isOpen).toBe(false);
     expect(result.current.activePanel).toBe("thread-info");
+    expect(result.current.isPersistedOpen).toBe(true);
     expect(result.current.closePersistedPanel).not.toHaveBeenCalled();
   });
 
@@ -239,7 +253,8 @@ describe("useThreadSecondaryPanelVisibility", () => {
       result.current.visibility.closePanel();
     });
     expect(result.current.visibility.isOpen).toBe(false);
-    expect(result.current.activePanel).toBeNull();
+    expect(result.current.activePanel).toBe("thread-info");
+    expect(result.current.isPersistedOpen).toBe(false);
     expect(result.current.closePersistedPanel).toHaveBeenCalled();
 
     act(() => {

@@ -58,14 +58,6 @@ export function useGitDiffPanel({
     openThreadSecondaryPanel("git-diff");
   }, [openThreadSecondaryPanel]);
 
-  const toggleThreadSecondaryPanel = useCallback(() => {
-    if (activeSecondaryPanel !== null) {
-      setThreadSecondaryPanel(null);
-      return;
-    }
-    setThreadSecondaryPanel("thread-info");
-  }, [activeSecondaryPanel, setThreadSecondaryPanel]);
-
   const closeThreadSecondaryPanel = useCallback(() => {
     if (activeSecondaryPanel === null) {
       return;
@@ -92,6 +84,5 @@ export function useGitDiffPanel({
     openThreadSecondaryPanel,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
-    toggleThreadSecondaryPanel,
   };
 }

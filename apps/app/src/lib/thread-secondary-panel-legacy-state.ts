@@ -1,17 +1,22 @@
 import { z } from "zod";
+import type {
+  EnvironmentFilePreviewSource,
+  HostFileTabState,
+  WorkspaceFilePreviewStatusLabel,
+  WorkspaceFileTabState,
+} from "./file-preview";
 import {
   areEnvironmentFilePreviewSourcesEqual,
-  type EnvironmentFilePreviewSource,
-  type WorkspaceFilePreviewStatusLabel,
 } from "./file-preview";
 import type { ThreadSecondaryPanel } from "./thread-secondary-panel";
 
 export const LEGACY_THREAD_SECONDARY_PANEL_STORAGE_KEY =
   "bb.thread.secondaryPanel";
-export const THREAD_SECONDARY_PANEL_STATE_STORAGE_PREFIX =
+export const LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_PREFIX =
   "bb.thread.secondaryPanelState";
-export const THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION = 1;
-export const THREAD_SECONDARY_PANEL_IDLE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
+export const LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION = 1;
+export const LEGACY_THREAD_SECONDARY_PANEL_IDLE_EXPIRY_MS =
+  14 * 24 * 60 * 60 * 1000;
 
 const threadSecondaryPanelSchema = z.enum(["git-diff", "thread-info"]);
 const environmentFilePreviewSourceSchema: z.ZodType<EnvironmentFilePreviewSource> =
@@ -49,85 +54,79 @@ const hostFileTabStateSchema = z
     path: z.string().min(1),
   })
   .strict();
-const threadSecondaryPanelFileTabV1RefSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      type: z.literal("workspace"),
-      path: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("storage"),
-      path: z.string().min(1),
-    })
-    .strict(),
-]);
-const threadSecondaryPanelFileTabRefSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      type: z.literal("workspace"),
-      path: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("storage"),
-      path: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("host-file"),
-      path: z.string().min(1),
-    })
-    .strict(),
-]);
-const threadSecondaryPanelFileTabsStateSchema = z
+const legacyThreadSecondaryPanelFileTabV1RefSchema = z.discriminatedUnion(
+  "type",
+  [
+    z
+      .object({
+        type: z.literal("workspace"),
+        path: z.string().min(1),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("storage"),
+        path: z.string().min(1),
+      })
+      .strict(),
+  ],
+);
+const legacyThreadSecondaryPanelFileTabRefSchema = z.discriminatedUnion(
+  "type",
+  [
+    z
+      .object({
+        type: z.literal("workspace"),
+        path: z.string().min(1),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("storage"),
+        path: z.string().min(1),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("host-file"),
+        path: z.string().min(1),
+      })
+      .strict(),
+  ],
+);
+const legacyThreadSecondaryPanelFileTabsStateSchema = z
   .object({
     workspace: z.array(workspaceFileTabStateSchema),
     storage: z.array(z.string().min(1)),
     hostFiles: z.array(hostFileTabStateSchema),
-    active: threadSecondaryPanelFileTabRefSchema.nullable(),
+    active: legacyThreadSecondaryPanelFileTabRefSchema.nullable(),
   })
   .strict();
-const threadSecondaryPanelFileTabsV1StateSchema = z
+const legacyThreadSecondaryPanelFileTabsV1StateSchema = z
   .object({
     workspace: z.array(workspaceFileTabStateSchema),
     storage: z.array(z.string().min(1)),
-    active: threadSecondaryPanelFileTabV1RefSchema.nullable(),
+    active: legacyThreadSecondaryPanelFileTabV1RefSchema.nullable(),
   })
   .strict();
-const threadSecondaryPanelStateSchema = z
+const legacyThreadSecondaryPanelStateSchema = z
   .object({
-    version: z.literal(THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION),
+    version: z.literal(LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION),
     activePanel: threadSecondaryPanelSchema.nullable(),
     environmentId: z.string().min(1).nullable(),
-    fileTabs: threadSecondaryPanelFileTabsStateSchema,
+    fileTabs: legacyThreadSecondaryPanelFileTabsStateSchema,
     lastUsedAt: z.number().int().nonnegative(),
   })
   .strict();
-const threadSecondaryPanelV1StateSchema = z
+const legacyThreadSecondaryPanelV1StateSchema = z
   .object({
-    version: z.literal(THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION),
+    version: z.literal(LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION),
     activePanel: threadSecondaryPanelSchema.nullable(),
     environmentId: z.string().min(1).nullable(),
-    fileTabs: threadSecondaryPanelFileTabsV1StateSchema,
+    fileTabs: legacyThreadSecondaryPanelFileTabsV1StateSchema,
     lastUsedAt: z.number().int().nonnegative(),
   })
   .strict();
-
-export interface WorkspaceFileTabState {
-  lineNumber: number | null;
-  path: string;
-  source: EnvironmentFilePreviewSource;
-  statusLabel: WorkspaceFilePreviewStatusLabel | null;
-}
-
-export interface HostFileTabState {
-  lineNumber: number | null;
-  path: string;
-}
 
 interface ActiveWorkspaceFileTabRef {
   type: "workspace";
@@ -144,76 +143,69 @@ interface ActiveHostFileTabRef {
   path: string;
 }
 
-export type ThreadSecondaryPanelFileTabRef =
+export type LegacyThreadSecondaryPanelFileTabRef =
   | ActiveWorkspaceFileTabRef
   | ActiveStorageFileTabRef
   | ActiveHostFileTabRef;
 
-export interface ThreadSecondaryPanelFileTabsState {
+export interface LegacyThreadSecondaryPanelFileTabsState {
   workspace: readonly WorkspaceFileTabState[];
   storage: readonly string[];
   hostFiles: readonly HostFileTabState[];
-  active: ThreadSecondaryPanelFileTabRef | null;
+  active: LegacyThreadSecondaryPanelFileTabRef | null;
 }
 
-export interface ThreadSecondaryPanelState {
-  version: typeof THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION;
+export interface LegacyThreadSecondaryPanelState {
+  version: typeof LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION;
   activePanel: ThreadSecondaryPanel | null;
   environmentId: string | null;
-  fileTabs: ThreadSecondaryPanelFileTabsState;
+  fileTabs: LegacyThreadSecondaryPanelFileTabsState;
   lastUsedAt: number;
 }
 
-interface ThreadSecondaryPanelStorageKeyArgs {
+interface LegacyThreadSecondaryPanelStorageKeyArgs {
   threadId: string;
 }
 
-interface ParseThreadSecondaryPanelStateArgs {
-  initialValue: ThreadSecondaryPanelState;
+interface CreateLegacyThreadSecondaryPanelStateArgs {
+  activePanel?: ThreadSecondaryPanel | null;
+  environmentId?: string | null;
+  fileTabs?: LegacyThreadSecondaryPanelFileTabsState;
+  lastUsedAt?: number;
+}
+
+interface ParseLegacyThreadSecondaryPanelStateArgs {
+  initialValue: LegacyThreadSecondaryPanelState;
   now: number;
   storedValue: string | null;
 }
 
-interface ParseThreadSecondaryPanelStateForStorageResult {
+interface ParseLegacyThreadSecondaryPanelStateForStorageResult {
   shouldPrune: boolean;
-  state: ThreadSecondaryPanelState;
+  state: LegacyThreadSecondaryPanelState;
 }
 
-interface SerializeThreadSecondaryPanelStateArgs {
-  state: ThreadSecondaryPanelState;
-}
-
-interface IsThreadSecondaryPanelStateExpiredArgs {
+interface IsLegacyThreadSecondaryPanelStateExpiredArgs {
   now: number;
-  state: ThreadSecondaryPanelState;
+  state: LegacyThreadSecondaryPanelState;
 }
 
-interface PruneThreadSecondaryPanelStorageArgs {
+interface NormalizeLegacyThreadSecondaryPanelStateArgs {
+  isManagerThread: boolean;
+  state: LegacyThreadSecondaryPanelState;
+}
+
+interface ReadLegacyThreadSecondaryPanelStateArgs {
   now: number;
+  threadId: string;
 }
 
-interface NormalizeThreadSecondaryPanelStateArgs {
-  isManagerThread: boolean;
-  state: ThreadSecondaryPanelState;
+interface RemoveLegacyThreadSecondaryPanelStateArgs {
+  threadId: string;
 }
 
-interface ClearWorkspaceTabsForEnvironmentArgs {
-  environmentId: string | null | undefined;
-  state: ThreadSecondaryPanelState;
-}
-
-interface PruneStorageFileTabsArgs {
-  isManagerThread: boolean;
-  pinnedStorageFilePath: string;
-  state: ThreadSecondaryPanelState;
-  storageFiles: readonly { path: string }[];
-}
-
-interface CreateThreadSecondaryPanelStateArgs {
-  activePanel?: ThreadSecondaryPanel | null;
-  environmentId?: string | null;
-  fileTabs?: ThreadSecondaryPanelFileTabsState;
-  lastUsedAt?: number;
+interface PruneLegacyThreadSecondaryPanelStorageArgs {
+  now: number;
 }
 
 function getLocalStorage(): Storage | null {
@@ -281,8 +273,8 @@ function areHostFileTabsEqual(
 }
 
 function areActiveFileTabsEqual(
-  a: ThreadSecondaryPanelFileTabRef | null,
-  b: ThreadSecondaryPanelFileTabRef | null,
+  a: LegacyThreadSecondaryPanelFileTabRef | null,
+  b: LegacyThreadSecondaryPanelFileTabRef | null,
 ): boolean {
   if (a === null || b === null) {
     return a === b;
@@ -342,9 +334,9 @@ function dedupeHostFileTabs(
 }
 
 function normalizeActiveFileTab(
-  fileTabs: ThreadSecondaryPanelFileTabsState,
+  fileTabs: LegacyThreadSecondaryPanelFileTabsState,
   isManagerThread: boolean,
-): ThreadSecondaryPanelFileTabRef | null {
+): LegacyThreadSecondaryPanelFileTabRef | null {
   const active = fileTabs.active;
   if (active === null) return null;
   if (active.type === "workspace") {
@@ -361,11 +353,11 @@ function normalizeActiveFileTab(
   return fileTabs.storage.includes(active.path) ? active : null;
 }
 
-export function createEmptyThreadSecondaryPanelState(
-  args: CreateThreadSecondaryPanelStateArgs = {},
-): ThreadSecondaryPanelState {
+export function createEmptyLegacyThreadSecondaryPanelState(
+  args: CreateLegacyThreadSecondaryPanelStateArgs = {},
+): LegacyThreadSecondaryPanelState {
   return {
-    version: THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION,
+    version: LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION,
     activePanel: args.activePanel ?? null,
     environmentId: args.environmentId ?? null,
     fileTabs: args.fileTabs ?? {
@@ -378,48 +370,36 @@ export function createEmptyThreadSecondaryPanelState(
   };
 }
 
-export const EMPTY_THREAD_SECONDARY_PANEL_STATE =
-  createEmptyThreadSecondaryPanelState();
+export const EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE =
+  createEmptyLegacyThreadSecondaryPanelState();
 
-export function getThreadSecondaryPanelStateStorageKey({
+export function getLegacyThreadSecondaryPanelStateStorageKey({
   threadId,
-}: ThreadSecondaryPanelStorageKeyArgs): string {
-  return `${THREAD_SECONDARY_PANEL_STATE_STORAGE_PREFIX}-${normalizeStorageSegment(
+}: LegacyThreadSecondaryPanelStorageKeyArgs): string {
+  return `${LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_PREFIX}-${normalizeStorageSegment(
     threadId,
-  )}-${THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION}`;
+  )}-${LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION}`;
 }
 
-export function isThreadSecondaryPanelStateStorageKey(key: string): boolean {
+function isLegacyThreadSecondaryPanelStateStorageKey(key: string): boolean {
   return (
-    key.startsWith(`${THREAD_SECONDARY_PANEL_STATE_STORAGE_PREFIX}-`) &&
-    key.endsWith(`-${THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION}`)
+    key.startsWith(`${LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_PREFIX}-`) &&
+    key.endsWith(`-${LEGACY_THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION}`)
   );
 }
 
-export function isThreadSecondaryPanelStateExpired({
+function isLegacyThreadSecondaryPanelStateExpired({
   now,
   state,
-}: IsThreadSecondaryPanelStateExpiredArgs): boolean {
-  return now - state.lastUsedAt > THREAD_SECONDARY_PANEL_IDLE_EXPIRY_MS;
+}: IsLegacyThreadSecondaryPanelStateExpiredArgs): boolean {
+  return now - state.lastUsedAt > LEGACY_THREAD_SECONDARY_PANEL_IDLE_EXPIRY_MS;
 }
 
-export function parseThreadSecondaryPanelState({
+function parseLegacyThreadSecondaryPanelStateForStorage({
   initialValue,
   now,
   storedValue,
-}: ParseThreadSecondaryPanelStateArgs): ThreadSecondaryPanelState {
-  return parseThreadSecondaryPanelStateForStorage({
-    initialValue,
-    now,
-    storedValue,
-  }).state;
-}
-
-function parseThreadSecondaryPanelStateForStorage({
-  initialValue,
-  now,
-  storedValue,
-}: ParseThreadSecondaryPanelStateArgs): ParseThreadSecondaryPanelStateForStorageResult {
+}: ParseLegacyThreadSecondaryPanelStateArgs): ParseLegacyThreadSecondaryPanelStateForStorageResult {
   if (storedValue === null) {
     return {
       shouldPrune: false,
@@ -437,9 +417,15 @@ function parseThreadSecondaryPanelStateForStorage({
     };
   }
 
-  const stateResult = threadSecondaryPanelStateSchema.safeParse(parsedValue);
+  const stateResult =
+    legacyThreadSecondaryPanelStateSchema.safeParse(parsedValue);
   if (stateResult.success) {
-    if (isThreadSecondaryPanelStateExpired({ now, state: stateResult.data })) {
+    if (
+      isLegacyThreadSecondaryPanelStateExpired({
+        now,
+        state: stateResult.data,
+      })
+    ) {
       return {
         shouldPrune: true,
         state: initialValue,
@@ -453,7 +439,7 @@ function parseThreadSecondaryPanelStateForStorage({
   }
 
   const legacyStateResult =
-    threadSecondaryPanelV1StateSchema.safeParse(parsedValue);
+    legacyThreadSecondaryPanelV1StateSchema.safeParse(parsedValue);
   if (!legacyStateResult.success) {
     return {
       shouldPrune: true,
@@ -461,7 +447,7 @@ function parseThreadSecondaryPanelStateForStorage({
     };
   }
 
-  const migratedState: ThreadSecondaryPanelState = {
+  const migratedState: LegacyThreadSecondaryPanelState = {
     ...legacyStateResult.data,
     fileTabs: {
       ...legacyStateResult.data.fileTabs,
@@ -469,7 +455,7 @@ function parseThreadSecondaryPanelStateForStorage({
     },
   };
 
-  if (isThreadSecondaryPanelStateExpired({ now, state: migratedState })) {
+  if (isLegacyThreadSecondaryPanelStateExpired({ now, state: migratedState })) {
     return {
       shouldPrune: true,
       state: initialValue,
@@ -482,22 +468,34 @@ function parseThreadSecondaryPanelStateForStorage({
   };
 }
 
-export function serializeThreadSecondaryPanelState({
-  state,
-}: SerializeThreadSecondaryPanelStateArgs): string {
+export function parseLegacyThreadSecondaryPanelState({
+  initialValue,
+  now,
+  storedValue,
+}: ParseLegacyThreadSecondaryPanelStateArgs): LegacyThreadSecondaryPanelState {
+  return parseLegacyThreadSecondaryPanelStateForStorage({
+    initialValue,
+    now,
+    storedValue,
+  }).state;
+}
+
+export function serializeLegacyThreadSecondaryPanelState(
+  state: LegacyThreadSecondaryPanelState,
+): string {
   return JSON.stringify(state);
 }
 
-export function normalizeThreadSecondaryPanelState({
+export function normalizeLegacyThreadSecondaryPanelState({
   isManagerThread,
   state,
-}: NormalizeThreadSecondaryPanelStateArgs): ThreadSecondaryPanelState {
+}: NormalizeLegacyThreadSecondaryPanelStateArgs): LegacyThreadSecondaryPanelState {
   const workspace = dedupeWorkspaceFileTabs(state.fileTabs.workspace);
   const storage = isManagerThread
     ? dedupeStorageFileTabs(state.fileTabs.storage)
     : [];
   const hostFiles = dedupeHostFileTabs(state.fileTabs.hostFiles);
-  const fileTabs: ThreadSecondaryPanelFileTabsState = {
+  const fileTabs: LegacyThreadSecondaryPanelFileTabsState = {
     workspace,
     storage,
     hostFiles,
@@ -527,120 +525,42 @@ export function normalizeThreadSecondaryPanelState({
   };
 }
 
-export function getActiveWorkspaceFileTab(
-  state: ThreadSecondaryPanelState,
-): WorkspaceFileTabState | null {
-  const active = state.fileTabs.active;
-  if (active?.type !== "workspace") {
-    return null;
-  }
-  return findWorkspaceFileTab(state.fileTabs.workspace, active.path);
-}
-
-export function getActiveStorageFilePath(
-  state: ThreadSecondaryPanelState,
-): string | null {
-  const active = state.fileTabs.active;
-  if (active?.type !== "storage") {
-    return null;
-  }
-  return state.fileTabs.storage.includes(active.path) ? active.path : null;
-}
-
-export function getActiveHostFileTab(
-  state: ThreadSecondaryPanelState,
-): HostFileTabState | null {
-  const active = state.fileTabs.active;
-  if (active?.type !== "host-file") {
-    return null;
-  }
-  return findHostFileTab(state.fileTabs.hostFiles, active.path);
-}
-
-export function clearActiveFileTab(
-  state: ThreadSecondaryPanelState,
-): ThreadSecondaryPanelState {
-  if (state.fileTabs.active === null) {
-    return state;
-  }
-  return {
-    ...state,
-    fileTabs: {
-      ...state.fileTabs,
-      active: null,
-    },
-  };
-}
-
-export function clearWorkspaceTabsForEnvironment({
-  environmentId,
-  state,
-}: ClearWorkspaceTabsForEnvironmentArgs): ThreadSecondaryPanelState {
-  const nextEnvironmentId = environmentId ?? null;
-  const hasWorkspaceState =
-    state.fileTabs.workspace.length > 0 ||
-    state.fileTabs.active?.type === "workspace";
-  if (!hasWorkspaceState) {
-    return state;
-  }
-  if (state.environmentId === nextEnvironmentId) {
-    return state;
-  }
-  return {
-    ...state,
-    environmentId: nextEnvironmentId,
-    fileTabs: {
-      ...state.fileTabs,
-      workspace: [],
-      active:
-        state.fileTabs.active?.type === "workspace"
-          ? null
-          : state.fileTabs.active,
-    },
-  };
-}
-
-export function pruneStorageFileTabs({
-  isManagerThread,
-  pinnedStorageFilePath,
-  state,
-  storageFiles,
-}: PruneStorageFileTabsArgs): ThreadSecondaryPanelState {
-  if (!isManagerThread) {
-    return normalizeThreadSecondaryPanelState({ isManagerThread, state });
-  }
-
-  const knownPaths = new Set([
-    pinnedStorageFilePath,
-    ...storageFiles.map((file) => file.path),
-  ]);
-  const storage = state.fileTabs.storage.filter((path) => knownPaths.has(path));
-  const active =
-    state.fileTabs.active?.type === "storage" &&
-    !knownPaths.has(state.fileTabs.active.path)
-      ? null
-      : state.fileTabs.active;
-
-  if (
-    areStorageFileTabsEqual(storage, state.fileTabs.storage) &&
-    areActiveFileTabsEqual(active, state.fileTabs.active)
-  ) {
-    return state;
-  }
-
-  return {
-    ...state,
-    fileTabs: {
-      ...state.fileTabs,
-      storage,
-      active,
-    },
-  };
-}
-
-export function pruneThreadSecondaryPanelStorage({
+export function readLegacyThreadSecondaryPanelState({
   now,
-}: PruneThreadSecondaryPanelStorageArgs): void {
+  threadId,
+}: ReadLegacyThreadSecondaryPanelStateArgs): LegacyThreadSecondaryPanelState | null {
+  const localStorage = getLocalStorage();
+  if (!localStorage) return null;
+
+  const storageKey = getLegacyThreadSecondaryPanelStateStorageKey({ threadId });
+  const storedValue = localStorage.getItem(storageKey);
+  const result = parseLegacyThreadSecondaryPanelStateForStorage({
+    initialValue: EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE,
+    now,
+    storedValue,
+  });
+  if (storedValue !== null && result.shouldPrune) {
+    localStorage.removeItem(storageKey);
+  }
+  if (storedValue === null || result.shouldPrune) {
+    return null;
+  }
+  return result.state;
+}
+
+export function removeLegacyThreadSecondaryPanelState({
+  threadId,
+}: RemoveLegacyThreadSecondaryPanelStateArgs): void {
+  const localStorage = getLocalStorage();
+  if (!localStorage) return;
+  localStorage.removeItem(
+    getLegacyThreadSecondaryPanelStateStorageKey({ threadId }),
+  );
+}
+
+export function pruneLegacyThreadSecondaryPanelStorage({
+  now,
+}: PruneLegacyThreadSecondaryPanelStorageArgs): void {
   const localStorage = getLocalStorage();
   if (!localStorage) return;
 
@@ -649,9 +569,9 @@ export function pruneThreadSecondaryPanelStorage({
   const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
-    if (!key || !isThreadSecondaryPanelStateStorageKey(key)) continue;
-    const parseResult = parseThreadSecondaryPanelStateForStorage({
-      initialValue: EMPTY_THREAD_SECONDARY_PANEL_STATE,
+    if (!key || !isLegacyThreadSecondaryPanelStateStorageKey(key)) continue;
+    const parseResult = parseLegacyThreadSecondaryPanelStateForStorage({
+      initialValue: EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE,
       now,
       storedValue: localStorage.getItem(key),
     });

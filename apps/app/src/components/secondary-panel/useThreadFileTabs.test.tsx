@@ -8,6 +8,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   EnvironmentFilePreviewSource,
+  WorkspaceFileTabState,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
 import {
@@ -21,12 +22,6 @@ import {
   type ThreadStorageFilePreviewFixedPanelTab,
   type WorkspaceFilePreviewFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
-import {
-  EMPTY_THREAD_SECONDARY_PANEL_STATE,
-  getThreadSecondaryPanelStateStorageKey,
-  parseThreadSecondaryPanelState,
-  type WorkspaceFileTabState,
-} from "@/lib/thread-secondary-panel-state";
 import {
   MANAGER_STATUS_HTML_FILE_PATH,
   MANAGER_STATUS_MARKDOWN_FILE_PATH,
@@ -152,16 +147,6 @@ function readStoredState(threadId: string): FixedPanelTabsState {
   });
 }
 
-function readLegacySecondaryState(threadId: string) {
-  return parseThreadSecondaryPanelState({
-    initialValue: EMPTY_THREAD_SECONDARY_PANEL_STATE,
-    now: Date.now(),
-    storedValue: window.localStorage.getItem(
-      getThreadSecondaryPanelStateStorageKey({ threadId }),
-    ),
-  });
-}
-
 function seedStoredState(threadId: string, state: FixedPanelTabsState): void {
   window.localStorage.setItem(
     getFixedPanelTabsStateStorageKey({ threadId }),
@@ -218,7 +203,7 @@ describe("useThreadFileTabs", () => {
     expect(getStoredWorkspaceTabs(readStoredState("thr-one"))).toEqual([
       workspaceTab,
     ]);
-    expect(readLegacySecondaryState("thr-one").activePanel).toBe("thread-info");
+    expect(readStoredState("thr-one").secondary.isOpen).toBe(true);
   });
 
   it("keeps file tabs isolated by thread id", () => {
@@ -312,9 +297,7 @@ describe("useThreadFileTabs", () => {
     expect(result.current.openHostFileTabs).toEqual([firstTab, secondTab]);
     expect(result.current.activeHostFilePath).toBe(secondTab.path);
     expect(result.current.activeHostFileLineNumber).toBeNull();
-    expect(readLegacySecondaryState("thr-host-files").activePanel).toBe(
-      "thread-info",
-    );
+    expect(readStoredState("thr-host-files").secondary.isOpen).toBe(true);
 
     act(() => {
       result.current.activateHostFileTab(firstTab.path);
@@ -406,7 +389,7 @@ describe("useThreadFileTabs", () => {
     await waitFor(() => {
       expect(result.current.openStorageFilePaths).toEqual(["STATUS.md"]);
     });
-    expect(result.current.activeStorageFilePath).toBeNull();
+    expect(result.current.activeStorageFilePath).toBe("STATUS.md");
   });
 
   it("prefers STATUS.html for the pinned manager storage tab when present", async () => {
@@ -494,6 +477,7 @@ describe("useThreadFileTabs", () => {
             createStoredStorageTab("notes.md"),
           ],
           activeTabId: storageFileTabId("notes.md"),
+          isOpen: true,
         },
         lastUsedAt: NOW,
       }),
@@ -543,6 +527,7 @@ describe("useThreadFileTabs", () => {
         secondary: {
           tabs: [createStoredWorkspaceTab("env-one", workspaceTab)],
           activeTabId: workspaceFileTabId("src/app.ts"),
+          isOpen: true,
         },
         lastUsedAt: NOW,
       }),
@@ -584,6 +569,7 @@ describe("useThreadFileTabs", () => {
         secondary: {
           tabs: [createStoredStorageTab("notes.md")],
           activeTabId: storageFileTabId("notes.md"),
+          isOpen: true,
         },
         lastUsedAt: NOW,
       }),
@@ -624,6 +610,32 @@ describe("useThreadFileTabs", () => {
     expect(result.current.activeStorageFilePath).toBe("STATUS.md");
   });
 
+  it("returns to the pinned manager storage tab when the active storage tab closes", async () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: null,
+      threadType: "manager",
+      storageFiles: [{ path: "STATUS.md" }, { path: "notes.md" }],
+      threadId: "thr-manager-close-active",
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeStorageFilePath).toBe("STATUS.md");
+    });
+
+    act(() => {
+      result.current.openStorageFile("notes.md");
+    });
+    expect(result.current.activeStorageFilePath).toBe("notes.md");
+
+    act(() => {
+      result.current.closeStorageFileTab("notes.md");
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeStorageFilePath).toBe("STATUS.md");
+    });
+  });
+
   it("keeps the pinned manager storage tab when the file list omits it", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW);
     const threadId = "thr-manager-pinned-omitted";
@@ -636,6 +648,7 @@ describe("useThreadFileTabs", () => {
             createStoredStorageTab("notes.md"),
           ],
           activeTabId: storageFileTabId("STATUS.md"),
+          isOpen: true,
         },
         lastUsedAt: NOW,
       }),
@@ -675,6 +688,7 @@ describe("useThreadFileTabs", () => {
         secondary: {
           tabs: [createStoredWorkspaceTab("env-one", workspaceTab)],
           activeTabId: workspaceFileTabId("src/app.ts"),
+          isOpen: true,
         },
         lastUsedAt: NOW,
       }),
@@ -709,6 +723,7 @@ describe("useThreadFileTabs", () => {
             createStoredStorageTab("notes.md"),
           ],
           activeTabId: storageFileTabId("notes.md"),
+          isOpen: true,
         },
         lastUsedAt: NOW,
       }),
@@ -746,6 +761,7 @@ describe("useThreadFileTabs", () => {
         secondary: {
           tabs: [createStoredStorageTab("STATUS.md")],
           activeTabId: storageFileTabId("STATUS.md"),
+          isOpen: true,
         },
         lastUsedAt: Date.now(),
       }),

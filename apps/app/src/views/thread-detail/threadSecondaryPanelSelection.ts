@@ -1,16 +1,14 @@
 import { useCallback } from "react";
 import {
-  useClearFixedSecondaryPanelActiveTab,
+  useCloseFixedSecondaryPanel,
   useSetFixedSecondaryPanelTab,
+  useToggleFixedSecondaryPanel,
 } from "@/lib/fixed-panel-tabs";
 import type {
   FixedPanelTab,
   FixedPanelTabsState,
 } from "@/lib/fixed-panel-tabs-state";
-import {
-  useSetThreadSecondaryPanel,
-  type ThreadSecondaryPanel,
-} from "@/lib/thread-secondary-panel";
+import type { ThreadSecondaryPanel } from "@/lib/thread-secondary-panel";
 
 type ThreadSecondaryPanelThreadId = string | null | undefined;
 type ActiveFixedPanelTab = FixedPanelTab | null;
@@ -22,9 +20,13 @@ interface GetActiveFixedSecondaryTabArgs {
   fixedPanelTabsState: FixedPanelTabsState;
 }
 
-interface GetActiveThreadSecondaryPanelArgs {
+interface GetSelectedThreadSecondaryPanelArgs {
   activeFixedSecondaryTab: ActiveFixedPanelTab;
-  legacyActivePanel: ActiveThreadSecondaryPanel;
+}
+
+interface GetActiveThreadSecondaryPanelArgs {
+  fixedPanelTabsState: FixedPanelTabsState;
+  selectedSecondaryPanel: ActiveThreadSecondaryPanel;
 }
 
 export function getActiveFixedSecondaryTab({
@@ -60,37 +62,39 @@ function getSecondaryPanelForFixedTab(
   }
 }
 
-export function getActiveThreadSecondaryPanel({
+export function getSelectedThreadSecondaryPanel({
   activeFixedSecondaryTab,
-  legacyActivePanel,
+}: GetSelectedThreadSecondaryPanelArgs): ActiveThreadSecondaryPanel {
+  return getSecondaryPanelForFixedTab(activeFixedSecondaryTab);
+}
+
+export function getActiveThreadSecondaryPanel({
+  fixedPanelTabsState,
+  selectedSecondaryPanel,
 }: GetActiveThreadSecondaryPanelArgs): ActiveThreadSecondaryPanel {
-  return (
-    getSecondaryPanelForFixedTab(activeFixedSecondaryTab) ?? legacyActivePanel
-  );
+  return fixedPanelTabsState.secondary.isOpen ? selectedSecondaryPanel : null;
 }
 
 export function useSetThreadSecondaryPanelSelection(
   threadId: ThreadSecondaryPanelThreadId,
 ): NullableSecondaryPanelSetter {
-  const clearFixedSecondaryPanelActiveTab =
-    useClearFixedSecondaryPanelActiveTab(threadId);
+  const closeFixedSecondaryPanel = useCloseFixedSecondaryPanel(threadId);
   const setFixedSecondaryPanelTab = useSetFixedSecondaryPanelTab(threadId);
-  const setLegacySecondaryPanel = useSetThreadSecondaryPanel(threadId);
 
   return useCallback<NullableSecondaryPanelSetter>(
     (panel) => {
       if (panel === null) {
-        clearFixedSecondaryPanelActiveTab();
-        setLegacySecondaryPanel(null);
+        closeFixedSecondaryPanel();
         return;
       }
       setFixedSecondaryPanelTab(panel);
-      setLegacySecondaryPanel(panel);
     },
-    [
-      clearFixedSecondaryPanelActiveTab,
-      setFixedSecondaryPanelTab,
-      setLegacySecondaryPanel,
-    ],
+    [closeFixedSecondaryPanel, setFixedSecondaryPanelTab],
   );
+}
+
+export function useToggleThreadSecondaryPanelSelection(
+  threadId: ThreadSecondaryPanelThreadId,
+): () => void {
+  return useToggleFixedSecondaryPanel(threadId);
 }

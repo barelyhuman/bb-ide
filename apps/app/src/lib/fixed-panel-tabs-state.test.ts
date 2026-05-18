@@ -14,9 +14,11 @@ import {
   type FixedPanelTabsState,
 } from "./fixed-panel-tabs-state";
 import {
-  createEmptyThreadSecondaryPanelState,
-  type ThreadSecondaryPanelState,
-} from "./thread-secondary-panel-state";
+  createEmptyLegacyThreadSecondaryPanelState,
+  getLegacyThreadSecondaryPanelStateStorageKey,
+  readLegacyThreadSecondaryPanelState,
+  type LegacyThreadSecondaryPanelState,
+} from "./thread-secondary-panel-legacy-state";
 import {
   createEmptyThreadTerminalPanelState,
   type ThreadTerminalPanelState,
@@ -64,6 +66,7 @@ function makeFixedPanelTabsState(
         },
       ],
       activeTabId: workspaceFileTabId("src/app.ts"),
+      isOpen: true,
     },
     bottom: {
       tabs: [
@@ -81,9 +84,9 @@ function makeFixedPanelTabsState(
 }
 
 function makeSecondaryPanelState(
-  overrides: Partial<ThreadSecondaryPanelState> = {},
-): ThreadSecondaryPanelState {
-  return createEmptyThreadSecondaryPanelState({
+  overrides: Partial<LegacyThreadSecondaryPanelState> = {},
+): LegacyThreadSecondaryPanelState {
+  return createEmptyLegacyThreadSecondaryPanelState({
     activePanel: "thread-info",
     environmentId: "env-current",
     fileTabs: {
@@ -262,6 +265,7 @@ describe("fixed panel tabs normalization", () => {
             },
           ],
           activeTabId: "missing",
+          isOpen: true,
         },
         bottom: {
           tabs: [
@@ -295,6 +299,7 @@ describe("fixed panel tabs normalization", () => {
       },
     ]);
     expect(normalized.secondary.activeTabId).toBeNull();
+    expect(normalized.secondary.isOpen).toBe(true);
     expect(normalized.bottom.tabs).toEqual([
       {
         id: terminalTabId("term_1"),
@@ -307,6 +312,70 @@ describe("fixed panel tabs normalization", () => {
 });
 
 describe("fixed panel tabs legacy migration", () => {
+  it("migrates v1 secondary panel storage without host files through the read path", () => {
+    const threadId = "thr-legacy-v1";
+    window.localStorage.setItem(
+      getLegacyThreadSecondaryPanelStateStorageKey({ threadId }),
+      JSON.stringify({
+        version: 1,
+        activePanel: "thread-info",
+        environmentId: "env-current",
+        fileTabs: {
+          workspace: [
+            {
+              lineNumber: 12,
+              path: "src/app.ts",
+              source: { kind: "working-tree" },
+              statusLabel: null,
+            },
+          ],
+          storage: ["notes.md"],
+          active: { type: "workspace", path: "src/app.ts" },
+        },
+        lastUsedAt: NOW - 10,
+      }),
+    );
+
+    const secondaryPanelState = readLegacyThreadSecondaryPanelState({
+      now: NOW,
+      threadId,
+    });
+    if (secondaryPanelState === null) {
+      throw new Error("Expected legacy secondary panel state to parse");
+    }
+
+    expect(secondaryPanelState.fileTabs.hostFiles).toEqual([]);
+
+    const migrated = createFixedPanelTabsStateFromLegacyPanels({
+      isManagerThread: false,
+      now: NOW,
+      pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
+      secondaryPanelState,
+      terminalPanelState: makeTerminalPanelState({
+        activeTerminalId: null,
+        isOpen: false,
+      }),
+    });
+
+    expect(migrated.secondary.tabs).toEqual([
+      { id: "thread-info", kind: "thread-info" },
+      { id: "git-diff", kind: "git-diff" },
+      {
+        environmentId: "env-current",
+        id: workspaceFileTabId("src/app.ts"),
+        kind: "workspace-file-preview",
+        lineNumber: 12,
+        path: "src/app.ts",
+        source: { kind: "working-tree" },
+        statusLabel: null,
+      },
+    ]);
+    expect(migrated.secondary.activeTabId).toBe(
+      workspaceFileTabId("src/app.ts"),
+    );
+    expect(migrated.secondary.isOpen).toBe(true);
+  });
+
   it("migrates current secondary file tabs and bottom active terminal", () => {
     const migrated = createFixedPanelTabsStateFromLegacyPanels({
       isManagerThread: false,
@@ -338,6 +407,7 @@ describe("fixed panel tabs legacy migration", () => {
     expect(migrated.secondary.activeTabId).toBe(
       workspaceFileTabId("src/app.ts"),
     );
+    expect(migrated.secondary.isOpen).toBe(true);
     expect(migrated.bottom.tabs).toEqual([
       {
         id: terminalTabId("term_1"),
@@ -364,6 +434,7 @@ describe("fixed panel tabs legacy migration", () => {
     expect(migrated.secondary.activeTabId).toBe(
       workspaceFileTabId("src/app.ts"),
     );
+    expect(migrated.secondary.isOpen).toBe(true);
     expect(migrated.bottom.tabs).toEqual([
       {
         id: terminalTabId("term_1"),
@@ -412,5 +483,6 @@ describe("fixed panel tabs legacy migration", () => {
     expect(migrated.secondary.activeTabId).toBe(
       storageFileTabId(PINNED_STORAGE_FILE_PATH),
     );
+    expect(migrated.secondary.isOpen).toBe(true);
   });
 });

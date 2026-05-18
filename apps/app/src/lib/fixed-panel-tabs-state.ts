@@ -2,15 +2,15 @@ import { z } from "zod";
 import {
   areEnvironmentFilePreviewSourcesEqual,
   type EnvironmentFilePreviewSource,
+  type HostFileTabState,
   type WorkspaceFilePreviewStatusLabel,
+  type WorkspaceFileTabState,
 } from "./file-preview";
 import {
-  normalizeThreadSecondaryPanelState,
-  type HostFileTabState,
-  type ThreadSecondaryPanelFileTabRef,
-  type ThreadSecondaryPanelState,
-  type WorkspaceFileTabState,
-} from "./thread-secondary-panel-state";
+  normalizeLegacyThreadSecondaryPanelState,
+  type LegacyThreadSecondaryPanelFileTabRef,
+  type LegacyThreadSecondaryPanelState,
+} from "./thread-secondary-panel-legacy-state";
 import type { ThreadTerminalPanelState } from "./thread-terminal-panel-state";
 
 export const FIXED_PANEL_TABS_STATE_STORAGE_PREFIX =
@@ -102,6 +102,13 @@ const secondaryFixedPanelTabGroupStateSchema = z
   .object({
     tabs: z.array(secondaryFixedPanelTabSchema),
     activeTabId: z.string().min(1).nullable(),
+    isOpen: z.boolean(),
+  })
+  .strict();
+const legacySecondaryFixedPanelTabGroupStateSchema = z
+  .object({
+    tabs: z.array(secondaryFixedPanelTabSchema),
+    activeTabId: z.string().min(1).nullable(),
   })
   .strict();
 const bottomFixedPanelTabGroupStateSchema = z
@@ -114,6 +121,14 @@ const fixedPanelTabsStateSchema = z
   .object({
     version: z.literal(FIXED_PANEL_TABS_STATE_STORAGE_VERSION),
     secondary: secondaryFixedPanelTabGroupStateSchema,
+    bottom: bottomFixedPanelTabGroupStateSchema,
+    lastUsedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+const legacyFixedPanelTabsStateSchema = z
+  .object({
+    version: z.literal(FIXED_PANEL_TABS_STATE_STORAGE_VERSION),
+    secondary: legacySecondaryFixedPanelTabGroupStateSchema,
     bottom: bottomFixedPanelTabGroupStateSchema,
     lastUsedAt: z.number().int().nonnegative(),
   })
@@ -177,9 +192,14 @@ export interface FixedPanelTabGroupState {
   activeTabId: string | null;
 }
 
+export interface FixedSecondaryPanelTabGroupState
+  extends FixedPanelTabGroupState {
+  isOpen: boolean;
+}
+
 export interface FixedPanelTabsState {
   version: typeof FIXED_PANEL_TABS_STATE_STORAGE_VERSION;
-  secondary: FixedPanelTabGroupState;
+  secondary: FixedSecondaryPanelTabGroupState;
   bottom: FixedPanelTabGroupState;
   lastUsedAt: number;
 }
@@ -191,7 +211,7 @@ interface FixedPanelTabsStorageKeyArgs {
 interface CreateFixedPanelTabsStateArgs {
   bottom?: FixedPanelTabGroupState;
   lastUsedAt?: number;
-  secondary?: FixedPanelTabGroupState;
+  secondary?: FixedSecondaryPanelTabGroupState;
 }
 
 interface ParseFixedPanelTabsStateArgs {
@@ -222,7 +242,7 @@ interface CreateFixedPanelTabsStateFromLegacyPanelsArgs {
   isManagerThread: boolean;
   now: number;
   pinnedStorageFilePath: string;
-  secondaryPanelState: ThreadSecondaryPanelState;
+  secondaryPanelState: LegacyThreadSecondaryPanelState;
   terminalPanelState: ThreadTerminalPanelState;
 }
 
@@ -250,14 +270,14 @@ interface CreateTerminalFixedPanelTabArgs {
 }
 
 interface GetActiveLegacyFileTabIdArgs {
-  active: ThreadSecondaryPanelFileTabRef | null;
+  active: LegacyThreadSecondaryPanelFileTabRef | null;
   tabs: readonly FixedPanelTab[];
 }
 
 interface BuildLegacySecondaryTabGroupArgs {
   isManagerThread: boolean;
   pinnedStorageFilePath: string;
-  secondaryPanelState: ThreadSecondaryPanelState;
+  secondaryPanelState: LegacyThreadSecondaryPanelState;
 }
 
 function getLocalStorage(): Storage | null {
@@ -370,15 +390,24 @@ function normalizeFixedPanelTabGroupState({
   };
 }
 
+function normalizeFixedSecondaryPanelTabGroupState(
+  group: FixedSecondaryPanelTabGroupState,
+): FixedSecondaryPanelTabGroupState {
+  return {
+    ...normalizeFixedPanelTabGroupState({
+      group,
+      region: "secondary",
+    }),
+    isOpen: group.isOpen,
+  };
+}
+
 export function normalizeFixedPanelTabsState({
   state,
 }: NormalizeFixedPanelTabsStateArgs): FixedPanelTabsState {
   return {
     ...state,
-    secondary: normalizeFixedPanelTabGroupState({
-      group: state.secondary,
-      region: "secondary",
-    }),
+    secondary: normalizeFixedSecondaryPanelTabGroupState(state.secondary),
     bottom: normalizeFixedPanelTabGroupState({
       group: state.bottom,
       region: "bottom",
@@ -395,6 +424,7 @@ export function createEmptyFixedPanelTabsState(
       secondary: args.secondary ?? {
         tabs: [],
         activeTabId: null,
+        isOpen: false,
       },
       bottom: args.bottom ?? {
         tabs: [],
@@ -464,15 +494,38 @@ function parseFixedPanelTabsStateForStorage({
   }
 
   const stateResult = fixedPanelTabsStateSchema.safeParse(parsedValue);
-  if (!stateResult.success) {
+  if (stateResult.success) {
+    const normalizedState = normalizeFixedPanelTabsState({
+      state: stateResult.data,
+    });
+    if (isFixedPanelTabsStateExpired({ now, state: normalizedState })) {
+      return {
+        shouldPrune: true,
+        state: initialValue,
+      };
+    }
+
+    return {
+      shouldPrune: false,
+      state: normalizedState,
+    };
+  }
+
+  const legacyStateResult = legacyFixedPanelTabsStateSchema.safeParse(parsedValue);
+  if (!legacyStateResult.success) {
     return {
       shouldPrune: true,
       state: initialValue,
     };
   }
-
   const normalizedState = normalizeFixedPanelTabsState({
-    state: stateResult.data,
+    state: {
+      ...legacyStateResult.data,
+      secondary: {
+        ...legacyStateResult.data.secondary,
+        isOpen: legacyStateResult.data.secondary.activeTabId !== null,
+      },
+    },
   });
   if (isFixedPanelTabsStateExpired({ now, state: normalizedState })) {
     return {
@@ -548,8 +601,8 @@ function buildLegacySecondaryTabGroup({
   isManagerThread,
   pinnedStorageFilePath,
   secondaryPanelState,
-}: BuildLegacySecondaryTabGroupArgs): FixedPanelTabGroupState {
-  const normalizedState = normalizeThreadSecondaryPanelState({
+}: BuildLegacySecondaryTabGroupArgs): FixedSecondaryPanelTabGroupState {
+  const normalizedState = normalizeLegacyThreadSecondaryPanelState({
     isManagerThread,
     state: secondaryPanelState,
   });
@@ -593,12 +646,10 @@ function buildLegacySecondaryTabGroup({
   });
   const activeTabId = activeFileTabId ?? normalizedState.activePanel;
 
-  return normalizeFixedPanelTabGroupState({
-    group: {
-      tabs,
-      activeTabId,
-    },
-    region: "secondary",
+  return normalizeFixedSecondaryPanelTabGroupState({
+    tabs,
+    activeTabId,
+    isOpen: activeTabId !== null,
   });
 }
 

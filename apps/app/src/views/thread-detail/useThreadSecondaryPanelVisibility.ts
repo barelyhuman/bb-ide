@@ -9,9 +9,9 @@ export type ThreadSecondaryPanelOpenHandler = (
 export type ThreadSecondaryPanelDiffFileOpenHandler = (path: string) => void;
 
 export interface UseThreadSecondaryPanelVisibilityArgs {
-  activePanel: ThreadSecondaryPanel | null;
   closePersistedPanel: () => void;
   isCompactViewport: boolean;
+  isPersistedOpen: boolean;
   openPersistedDiffFile: ThreadSecondaryPanelDiffFileOpenHandler;
   openPersistedDiffPanel: () => void;
   openPersistedPanel: ThreadSecondaryPanelOpenHandler;
@@ -33,9 +33,9 @@ function hasThreadId(threadId: ThreadSecondaryPanelThreadId): threadId is string
 }
 
 export function useThreadSecondaryPanelVisibility({
-  activePanel,
   closePersistedPanel,
   isCompactViewport,
+  isPersistedOpen,
   openPersistedDiffFile,
   openPersistedDiffPanel,
   openPersistedPanel,
@@ -71,8 +71,7 @@ export function useThreadSecondaryPanelVisibility({
 
   const isDrawerVisible =
     hasThreadId(threadId) && openDrawerThreadId === threadId;
-  const hasPersistedPanel = activePanel !== null;
-  const isOpen = isCompactViewport ? isDrawerVisible : hasPersistedPanel;
+  const isOpen = isCompactViewport ? isDrawerVisible : isPersistedOpen;
 
   const openPanel = useCallback<ThreadSecondaryPanelOpenHandler>(
     (panel) => {

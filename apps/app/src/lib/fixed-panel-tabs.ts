@@ -23,6 +23,7 @@ import {
   withThreadSecondaryPanel,
   type ThreadSecondaryPanel,
 } from "./thread-secondary-panel";
+import { pruneLegacyThreadSecondaryPanelStorage } from "./thread-secondary-panel-legacy-state";
 
 const FIXED_PANEL_TABS_TOUCH_THROTTLE_MS = 60 * 1000;
 
@@ -38,7 +39,8 @@ interface LastFixedPanelTabsTouch {
 }
 
 type FixedPanelSecondaryPanelSetter = (panel: ThreadSecondaryPanel) => void;
-type FixedPanelActiveTabClearer = () => void;
+type FixedPanelSecondaryPanelCloser = () => void;
+type FixedPanelSecondaryPanelToggler = () => void;
 type FixedPanelTerminalIdSetter = (terminalId: string | null) => void;
 type FixedPanelTerminalIdRemover = (terminalId: string) => void;
 
@@ -142,11 +144,66 @@ function ensureSecondaryPanelTab(
     : [...tabs, buildSecondaryPanelTab(panel)];
 }
 
+function hasSecondaryPanelTab(
+  tabs: readonly FixedPanelTab[],
+  activeTabId: string | null,
+): boolean {
+  return activeTabId !== null && tabs.some((tab) => tab.id === activeTabId);
+}
+
+function openFixedSecondaryPanelState(
+  current: FixedPanelTabsState,
+): FixedPanelTabsState {
+  if (
+    hasSecondaryPanelTab(current.secondary.tabs, current.secondary.activeTabId)
+  ) {
+    if (current.secondary.isOpen) {
+      return current;
+    }
+    return {
+      ...current,
+      secondary: {
+        ...current.secondary,
+        isOpen: true,
+      },
+    };
+  }
+
+  const panel: ThreadSecondaryPanel = "thread-info";
+  const tabs = ensureSecondaryPanelTab(current.secondary.tabs, panel);
+  const activeTabId = getSecondaryPanelTabId(panel);
+  return {
+    ...current,
+    secondary: {
+      tabs,
+      activeTabId,
+      isOpen: true,
+    },
+  };
+}
+
+function closeFixedSecondaryPanelState(
+  current: FixedPanelTabsState,
+): FixedPanelTabsState {
+  if (!current.secondary.isOpen) {
+    return current;
+  }
+  return {
+    ...current,
+    secondary: {
+      ...current.secondary,
+      isOpen: false,
+    },
+  };
+}
+
 export function useFixedPanelTabsStorageMaintenance(
   threadId: FixedPanelTabsThreadId,
 ): void {
   useEffect(() => {
-    pruneFixedPanelTabsStorage({ now: Date.now() });
+    const now = Date.now();
+    pruneFixedPanelTabsStorage({ now });
+    pruneLegacyThreadSecondaryPanelStorage({ now });
   }, [threadId]);
 }
 
@@ -196,6 +253,7 @@ export function useTouchFixedPanelTabsState(
     };
     updateState((current) => {
       if (
+        !current.secondary.isOpen &&
         current.secondary.tabs.length === 0 &&
         current.bottom.tabs.length === 0
       ) {
@@ -220,7 +278,8 @@ export function useSetFixedSecondaryPanelTab(
         const activeTabId = getSecondaryPanelTabId(panel);
         if (
           tabs === current.secondary.tabs &&
-          current.secondary.activeTabId === activeTabId
+          current.secondary.activeTabId === activeTabId &&
+          current.secondary.isOpen
         ) {
           return current;
         }
@@ -229,6 +288,7 @@ export function useSetFixedSecondaryPanelTab(
           secondary: {
             tabs,
             activeTabId,
+            isOpen: true,
           },
         };
       });
@@ -237,23 +297,25 @@ export function useSetFixedSecondaryPanelTab(
   );
 }
 
-export function useClearFixedSecondaryPanelActiveTab(
+export function useCloseFixedSecondaryPanel(
   threadId: string | null | undefined,
-): FixedPanelActiveTabClearer {
+): FixedPanelSecondaryPanelCloser {
   const updateState = useUpdateFixedPanelTabsState(threadId);
   return useCallback(() => {
-    updateState((current) => {
-      if (current.secondary.activeTabId === null) {
-        return current;
-      }
-      return {
-        ...current,
-        secondary: {
-          ...current.secondary,
-          activeTabId: null,
-        },
-      };
-    });
+    updateState(closeFixedSecondaryPanelState);
+  }, [updateState]);
+}
+
+export function useToggleFixedSecondaryPanel(
+  threadId: string | null | undefined,
+): FixedPanelSecondaryPanelToggler {
+  const updateState = useUpdateFixedPanelTabsState(threadId);
+  return useCallback(() => {
+    updateState((current) =>
+      current.secondary.isOpen
+        ? closeFixedSecondaryPanelState(current)
+        : openFixedSecondaryPanelState(current),
+    );
   }, [updateState]);
 }
 

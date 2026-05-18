@@ -58,6 +58,18 @@ export type EnvironmentFilePreviewSource =
 
 export type WorkspaceFilePreviewStatusLabel = "deleted";
 
+export interface WorkspaceFileTabState {
+  lineNumber: number | null;
+  path: string;
+  source: EnvironmentFilePreviewSource;
+  statusLabel: WorkspaceFilePreviewStatusLabel | null;
+}
+
+export interface HostFileTabState {
+  lineNumber: number | null;
+  path: string;
+}
+
 export function areEnvironmentFilePreviewSourcesEqual(
   a: EnvironmentFilePreviewSource,
   b: EnvironmentFilePreviewSource,

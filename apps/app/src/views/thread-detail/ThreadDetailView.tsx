@@ -7,12 +7,7 @@ import type {
 } from "@/components/thread/timeline";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
-import {
-  useThreadSecondaryPanelState,
-  useThreadSecondaryPanelStorageMaintenance,
-  useTouchThreadSecondaryPanelState,
-  type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
-} from "@/lib/thread-secondary-panel";
+import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
   useThreadTerminalPanelState,
   useThreadTerminalPanelStorageMaintenance,
@@ -104,6 +99,11 @@ import {
 } from "@/lib/fixed-panel-tabs";
 import { createFixedPanelTabsStateFromLegacyPanels } from "@/lib/fixed-panel-tabs-state";
 import {
+  EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE,
+  readLegacyThreadSecondaryPanelState,
+  removeLegacyThreadSecondaryPanelState,
+} from "@/lib/thread-secondary-panel-legacy-state";
+import {
   buildManagerSelectorOptions,
   isUnassignedStandardThread,
 } from "./threadManagerSelectorOptions";
@@ -112,7 +112,9 @@ import { ThreadTerminalPanel } from "@/components/thread/terminal/ThreadTerminal
 import {
   getActiveFixedSecondaryTab,
   getActiveThreadSecondaryPanel,
+  getSelectedThreadSecondaryPanel,
   useSetThreadSecondaryPanelSelection,
+  useToggleThreadSecondaryPanelSelection,
 } from "./threadSecondaryPanelSelection";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
@@ -148,23 +150,25 @@ export function ThreadDetailView() {
     threadId: string;
   }>();
   useFixedPanelTabsStorageMaintenance(threadId);
-  useThreadSecondaryPanelStorageMaintenance(threadId);
   useThreadTerminalPanelStorageMaintenance(threadId);
   const fixedPanelTabsState = useFixedPanelTabsState(threadId);
   const updateFixedPanelTabsState = useUpdateFixedPanelTabsState(threadId);
-  const secondaryPanelState = useThreadSecondaryPanelState(threadId);
   const terminalPanelState = useThreadTerminalPanelState(threadId);
   const activeFixedSecondaryTab = getActiveFixedSecondaryTab({
     fixedPanelTabsState,
   });
-  const activeSecondaryPanel = getActiveThreadSecondaryPanel({
+  const selectedSecondaryPanel = getSelectedThreadSecondaryPanel({
     activeFixedSecondaryTab,
-    legacyActivePanel: secondaryPanelState.activePanel,
+  });
+  const activeSecondaryPanel = getActiveThreadSecondaryPanel({
+    fixedPanelTabsState,
+    selectedSecondaryPanel,
   });
   const renderSecondaryPanelAsDrawer = useIsCompactViewport();
-  const touchSecondaryPanelState = useTouchThreadSecondaryPanelState(threadId);
   const touchFixedPanelTabsState = useTouchFixedPanelTabsState(threadId);
   const setThreadSecondaryPanel = useSetThreadSecondaryPanelSelection(threadId);
+  const toggleDefaultPersistedSecondaryPanel =
+    useToggleThreadSecondaryPanelSelection(threadId);
   const setThreadSecondaryPanelFromUrl =
     useCallback<SecondaryPanelChangeHandler>(
       (panel) => {
@@ -223,9 +227,14 @@ export function ThreadDetailView() {
   const isManagerThread = thread?.type === "manager";
   const canUseGitUi = thread?.type === "standard";
   useEffect(() => {
-    if (thread?.type === undefined) {
+    if (!threadId || thread?.type === undefined) {
       return;
     }
+    const now = Date.now();
+    const legacySecondaryPanelState = readLegacyThreadSecondaryPanelState({
+      now,
+      threadId,
+    });
     updateFixedPanelTabsState((current) => {
       if (
         current.lastUsedAt !== 0 ||
@@ -234,18 +243,29 @@ export function ThreadDetailView() {
       ) {
         return current;
       }
+      if (
+        legacySecondaryPanelState === null &&
+        terminalPanelState.activeTerminalId === null
+      ) {
+        return current;
+      }
       return createFixedPanelTabsStateFromLegacyPanels({
         isManagerThread,
-        now: Date.now(),
+        now,
         pinnedStorageFilePath: MANAGER_STATUS_MARKDOWN_FILE_PATH,
-        secondaryPanelState,
+        secondaryPanelState:
+          legacySecondaryPanelState ??
+          EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE,
         terminalPanelState,
       });
     });
+    if (legacySecondaryPanelState !== null) {
+      removeLegacyThreadSecondaryPanelState({ threadId });
+    }
   }, [
     isManagerThread,
-    secondaryPanelState,
     terminalPanelState,
+    threadId,
     thread?.type,
     updateFixedPanelTabsState,
   ]);
@@ -313,6 +333,25 @@ export function ThreadDetailView() {
     onSelectPath: openStorageFile,
     selectedPath: activeStorageFilePath,
   });
+  const togglePersistedSecondaryPanel = useCallback(() => {
+    if (fixedPanelTabsState.secondary.isOpen) {
+      setThreadSecondaryPanel(null);
+      return;
+    }
+    if (isManagerThread && activeFixedSecondaryTab === null) {
+      openStorageFile(pinnedStorageFilePath);
+      return;
+    }
+    toggleDefaultPersistedSecondaryPanel();
+  }, [
+    activeFixedSecondaryTab,
+    fixedPanelTabsState.secondary.isOpen,
+    isManagerThread,
+    openStorageFile,
+    pinnedStorageFilePath,
+    setThreadSecondaryPanel,
+    toggleDefaultPersistedSecondaryPanel,
+  ]);
   const handleUseStandardManagerTimelineChange = useCallback(
     (checked: boolean) => {
       if (!isManagerThread) {
@@ -388,7 +427,6 @@ export function ThreadDetailView() {
     openThreadSecondaryPanel: openPersistedSecondaryPanel,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
-    toggleThreadSecondaryPanel: togglePersistedSecondaryPanel,
   } = useGitDiffPanel({
     activeSecondaryPanel,
     clearActiveFileTabs,
@@ -407,8 +445,8 @@ export function ThreadDetailView() {
     openPanel: openSecondaryPanel,
     togglePanel: toggleSecondaryPanel,
   } = useThreadSecondaryPanelVisibility({
-    activePanel: activeSecondaryPanel,
     closePersistedPanel: closeThreadSecondaryPanel,
+    isPersistedOpen: fixedPanelTabsState.secondary.isOpen,
     isCompactViewport: renderSecondaryPanelAsDrawer,
     openPersistedDiffFile,
     openPersistedDiffPanel,
@@ -433,9 +471,8 @@ export function ThreadDetailView() {
     [clearActiveFileTabs, openSecondaryPanel],
   );
   const handleSecondaryPanelFocus = useCallback(() => {
-    touchSecondaryPanelState();
     touchFixedPanelTabsState();
-  }, [touchFixedPanelTabsState, touchSecondaryPanelState]);
+  }, [touchFixedPanelTabsState]);
   const handleTerminalPanelResize = useCallback(
     (sizePercent: number) => {
       const panelHeightPercent = Math.round(sizePercent);
@@ -1025,7 +1062,7 @@ export function ThreadDetailView() {
           onChangedFileClick: canUseGitUi ? handleChangedFileClick : undefined,
         }}
         secondaryPanel={{
-          activePanel: activeSecondaryPanel,
+          activePanel: selectedSecondaryPanel,
           canUseGitUi,
           defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
           environmentId: thread.environmentId ?? undefined,
