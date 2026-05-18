@@ -9,6 +9,7 @@ import {
   formatChangeSummary,
   formatWorkspaceFileStatus,
   selectWorkspaceChangedFilesSection,
+  selectWorkspaceChangedFilesSections,
 } from "./workspace-change-summary";
 
 function makeWorkspaceFileStatus(
@@ -58,7 +59,7 @@ describe("workspace-change-summary", () => {
 
     expect(section).toMatchObject({
       kind: "uncommitted",
-      label: "Uncommitted files",
+      label: "Uncommitted",
       files: [file],
       mergeBaseRef: null,
       stats: {
@@ -83,7 +84,7 @@ describe("workspace-change-summary", () => {
 
     expect(section).toMatchObject({
       kind: "untracked",
-      label: "Untracked files",
+      label: "Untracked",
       files: [file],
       mergeBaseRef: null,
       stats: {
@@ -109,5 +110,76 @@ describe("workspace-change-summary", () => {
       kind: "committed",
       mergeBaseRef: "abc1234",
     });
+  });
+
+  it("returns both buckets when working tree is dirty and commits are unmerged", () => {
+    const uncommittedFile = makeWorkspaceFileStatus("M");
+    const committedFile = makeWorkspaceFileStatus("A");
+    const sections = selectWorkspaceChangedFilesSections(
+      makeWorkspaceStatus({
+        workingTree: makeWorkspaceWorkingTree({
+          files: [uncommittedFile],
+          hasUncommittedChanges: true,
+          state: "dirty_and_committed_unmerged",
+          insertions: 5,
+          deletions: 2,
+        }),
+        mergeBase: makeWorkspaceMergeBase({
+          files: [committedFile],
+          insertions: 30,
+          deletions: 10,
+          baseRef: "abc1234",
+          aheadCount: 2,
+          hasCommittedUnmergedChanges: true,
+        }),
+      }),
+    );
+
+    expect(sections).toHaveLength(2);
+    expect(sections[0]).toMatchObject({
+      kind: "uncommitted",
+      files: [uncommittedFile],
+      stats: { insertions: 5, deletions: 2 },
+    });
+    expect(sections[1]).toMatchObject({
+      kind: "committed",
+      files: [committedFile],
+      stats: { insertions: 30, deletions: 10 },
+      mergeBaseRef: "abc1234",
+    });
+  });
+
+  it("singular helper returns the primary bucket when both exist", () => {
+    const sections = selectWorkspaceChangedFilesSections(
+      makeWorkspaceStatus({
+        workingTree: makeWorkspaceWorkingTree({
+          files: [makeWorkspaceFileStatus("M")],
+          hasUncommittedChanges: true,
+          state: "dirty_and_committed_unmerged",
+        }),
+        mergeBase: makeWorkspaceMergeBase({
+          files: [makeWorkspaceFileStatus("A")],
+          aheadCount: 1,
+          hasCommittedUnmergedChanges: true,
+        }),
+      }),
+    );
+    const section = selectWorkspaceChangedFilesSection(
+      makeWorkspaceStatus({
+        workingTree: makeWorkspaceWorkingTree({
+          files: [makeWorkspaceFileStatus("M")],
+          hasUncommittedChanges: true,
+          state: "dirty_and_committed_unmerged",
+        }),
+        mergeBase: makeWorkspaceMergeBase({
+          files: [makeWorkspaceFileStatus("A")],
+          aheadCount: 1,
+          hasCommittedUnmergedChanges: true,
+        }),
+      }),
+    );
+
+    expect(sections[0]?.kind).toBe("uncommitted");
+    expect(section?.kind).toBe("uncommitted");
   });
 });

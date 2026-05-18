@@ -37,9 +37,9 @@ import {
   getMergeBaseBranchCandidates,
 } from "@/components/pickers/BranchPicker";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
-import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
+import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
 import {
-  selectWorkspaceChangedFilesSection,
+  selectWorkspaceChangedFilesSections,
   type WorkspaceChangedFileSelection,
 } from "@/components/workspace/workspace-change-summary";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
@@ -496,26 +496,15 @@ export function ChangedFilesRow({
   workspaceStatus,
   onChangedFileClick,
 }: ChangedFilesRowProps) {
-  const canUseGitUi = thread.type !== "manager";
-  const section = selectWorkspaceChangedFilesSection(workspaceStatus);
-  if (!canUseGitUi || section === null) return null;
+  if (thread.type === "manager") return null;
   return (
-    <DetailRow
-      label={section.label ?? "Changed files"}
-      orientation="vertical"
-      className="min-h-0 flex-1"
-      valueClassName="min-h-0 flex-1"
-    >
-      <WorkspaceChangesList
-        files={section.files}
-        className="h-full"
-        onFileClick={
-          onChangedFileClick
-            ? (file) => onChangedFileClick({ file, section })
-            : undefined
-        }
-      />
-    </DetailRow>
+    <ChangedFilesDetailRow
+      sections={selectWorkspaceChangedFilesSections(workspaceStatus)}
+      onFileClick={onChangedFileClick}
+      rowClassName="min-h-0 flex-1"
+      rowValueClassName="min-h-0 flex-1"
+      listClassName="h-full"
+    />
   );
 }
 
@@ -620,10 +609,10 @@ export function hasAnyThreadMetadata({
       isWorkspaceDeleted) &&
     !(thread.archivedAt != null && environment?.managed !== true);
   const branchName = workspaceStatus?.branch.currentBranch ?? null;
-  const workspaceChangedFilesSection =
-    selectWorkspaceChangedFilesSection(workspaceStatus);
+  const workspaceChangedFilesSections =
+    selectWorkspaceChangedFilesSections(workspaceStatus);
   const showThreadChangedFiles =
-    canUseGitUi && workspaceChangedFilesSection !== null;
+    canUseGitUi && workspaceChangedFilesSections.length > 0;
 
   return Boolean(
     isManagerThread ||
@@ -689,7 +678,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
   const hasFlexibleHeight =
     storage !== undefined ||
     (thread.type !== "manager" &&
-      selectWorkspaceChangedFilesSection(workspaceStatus) !== null);
+      selectWorkspaceChangedFilesSections(workspaceStatus).length > 0);
 
   return (
     <ThreadMetadataCard hasFlexibleHeight={hasFlexibleHeight}>

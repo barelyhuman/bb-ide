@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
-import type { ThreadType, WorkspaceStatus } from "@bb/domain";
+import type { ThreadType } from "@bb/domain";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
-import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
+import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
+import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { FormError } from "@/components/ui/form-error.js";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
@@ -21,7 +22,7 @@ interface ThreadGitActionDialogProps {
   target: ThreadGitActionDialogTarget | null;
   branchName?: string;
   gitStatusDisplay?: ThreadGitStatusDisplay;
-  changedFiles?: WorkspaceStatus["workingTree"]["files"];
+  changedFilesSection?: WorkspaceChangedFilesSection | null;
   threadId?: string;
   threadType?: ThreadType;
   showMergeBaseDetails?: boolean;
@@ -70,7 +71,7 @@ export function ThreadGitActionDialog({
   target,
   branchName,
   gitStatusDisplay,
-  changedFiles,
+  changedFilesSection,
   threadId,
   threadType,
   showMergeBaseDetails = false,
@@ -96,7 +97,7 @@ export function ThreadGitActionDialog({
             target={target}
             branchName={branchName}
             gitStatusDisplay={gitStatusDisplay}
-            changedFiles={changedFiles}
+            changedFilesSection={changedFilesSection}
             threadId={threadId}
             threadType={threadType}
             showMergeBaseDetails={showMergeBaseDetails}
@@ -125,7 +126,7 @@ export function ThreadGitActionDialogContent({
   target,
   branchName,
   gitStatusDisplay,
-  changedFiles,
+  changedFilesSection,
   threadId,
   threadType,
   showMergeBaseDetails,
@@ -154,7 +155,7 @@ export function ThreadGitActionDialogContent({
     showMergeBaseDetails === true &&
     (canSelectMergeBase || Boolean(selectedMergeBaseBranch));
   const shouldShowChangedFilesRow = Boolean(
-    changedFiles && changedFiles.length > 0,
+    changedFilesSection && changedFilesSection.files.length > 0,
   );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -245,17 +246,12 @@ export function ThreadGitActionDialogContent({
                 )}
               </DetailRow>
             ) : null}
-            {shouldShowChangedFilesRow ? (
-              <DetailRow
-                label="Changed files"
-                orientation="vertical"
-                valueClassName="pt-0.5"
-              >
-                <WorkspaceChangesList
-                  files={changedFiles ?? []}
-                  className="max-h-40"
-                />
-              </DetailRow>
+            {shouldShowChangedFilesRow && changedFilesSection ? (
+              <ChangedFilesDetailRow
+                sections={[changedFilesSection]}
+                rowValueClassName="pt-0.5"
+                listClassName="max-h-40"
+              />
             ) : null}
           </DetailCard>
         ) : null}

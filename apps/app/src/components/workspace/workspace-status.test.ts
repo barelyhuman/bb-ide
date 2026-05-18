@@ -53,12 +53,12 @@ function makeStatus(options: MakeStatusOptions): WorkspaceStatus {
 }
 
 describe("workspace-status", () => {
-  it("reports untracked workspaces with file counts", () => {
+  it("reports untracked workspaces without echoing working-tree file counts", () => {
     expect(
       getGitStatusDisplay(makeStatus({ changedFiles: 1, state: "untracked" })),
     ).toMatchObject({
       label: "Untracked",
-      summary: "1 file",
+      summary: "",
     });
   });
 
@@ -77,7 +77,7 @@ describe("workspace-status", () => {
       ),
     ).toMatchObject({
       label: "Untracked",
-      summary: "1 file • 2 behind main",
+      summary: "2 behind main",
     });
   });
 
@@ -100,7 +100,7 @@ describe("workspace-status", () => {
     });
   });
 
-  it("reports dirty work with a change summary", () => {
+  it("reports dirty work without echoing the working-tree diff stats", () => {
     expect(
       getGitStatusDisplay(
         makeStatus({
@@ -112,11 +112,11 @@ describe("workspace-status", () => {
       ),
     ).toMatchObject({
       label: "Dirty",
-      summary: "3 files, +8 -2",
+      summary: "",
     });
   });
 
-  it("reports dirty committed work with file and branch summaries", () => {
+  it("reports dirty committed work with only the branch comparison summary", () => {
     expect(
       getGitStatusDisplay(
         makeStatus({
@@ -133,7 +133,7 @@ describe("workspace-status", () => {
       ),
     ).toMatchObject({
       label: "Dirty",
-      summary: "3 files, +8 -2 • 2 ahead of main",
+      summary: "2 ahead of main",
     });
   });
 

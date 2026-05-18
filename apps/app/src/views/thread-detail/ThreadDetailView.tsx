@@ -490,12 +490,20 @@ export function ThreadDetailView() {
   const workspaceStatus = workspaceStatusError
     ? undefined
     : (workStatus ?? undefined);
-  const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
   const workspaceChangedFilesSection = useMemo(
     () => selectWorkspaceChangedFilesSection(workspaceStatus),
     [workspaceStatus],
   );
+  const workingTreeChangedFilesSection = useMemo(() => {
+    if (
+      workspaceChangedFilesSection === null ||
+      workspaceChangedFilesSection.kind === "committed"
+    ) {
+      return null;
+    }
+    return workspaceChangedFilesSection;
+  }, [workspaceChangedFilesSection]);
   const { isLocalHost } = useHostDaemon();
   const threadEnvironmentIsLocal = environment
     ? isLocalHost(environment.hostId)
@@ -1057,7 +1065,7 @@ export function ThreadDetailView() {
           target={gitActions.threadGitActionDialog.target}
           branchName={threadBranchName}
           gitStatusDisplay={threadGitStatusDisplay}
-          changedFiles={workspaceWorkingTree?.files}
+          changedFilesSection={workingTreeChangedFilesSection}
           threadId={thread.id}
           threadType={thread.type}
           showMergeBaseDetails={showBranchComparisonUi}

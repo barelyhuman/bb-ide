@@ -646,6 +646,66 @@ export function ChangedFiles() {
           />
         </RowStage>
       </StoryRow>
+      <StoryRow label="uncommitted + committed">
+        <RowStage>
+          <ChangedFilesRow
+            thread={makeThread()}
+            workspaceStatus={makeWorkspaceStatus({
+              workingTree: {
+                hasUncommittedChanges: true,
+                state: "dirty_and_committed_unmerged",
+                insertions: 47,
+                deletions: 21,
+                files: [
+                  {
+                    path: "apps/app/src/components/sidebar/ProjectRow.tsx",
+                    status: "M",
+                    insertions: 18,
+                    deletions: 9,
+                  },
+                  {
+                    path: "apps/app/src/components/sidebar/ThreadRow.tsx",
+                    status: "M",
+                    insertions: 5,
+                    deletions: 12,
+                  },
+                  {
+                    path: "apps/app/src/components/sidebar/ProjectRow.stories.tsx",
+                    status: "A",
+                    insertions: 24,
+                    deletions: 0,
+                  },
+                ],
+              },
+              mergeBase: {
+                mergeBaseBranch: "main",
+                baseRef: "main",
+                aheadCount: 2,
+                behindCount: 0,
+                hasCommittedUnmergedChanges: true,
+                commits: [],
+                insertions: 110,
+                deletions: 24,
+                files: [
+                  {
+                    path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.tsx",
+                    status: "M",
+                    insertions: 38,
+                    deletions: 12,
+                  },
+                  {
+                    path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.fixtures.tsx",
+                    status: "A",
+                    insertions: 72,
+                    deletions: 0,
+                  },
+                ],
+              },
+            })}
+            onChangedFileClick={noop}
+          />
+        </RowStage>
+      </StoryRow>
     </StoryCard>
   );
 }

@@ -4,6 +4,7 @@ import {
   type ThreadGitActionDialogTarget,
 } from "./ThreadGitActionDialog";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
+import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { BRANCH_NAMES } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { DialogStage } from "../../../.ladle/story-dialog-stage";
@@ -47,10 +48,22 @@ const changedFiles: WorkspaceFileStatus[] = [
   },
 ];
 
+const changedFilesSection: WorkspaceChangedFilesSection = {
+  kind: "uncommitted",
+  label: "Uncommitted",
+  files: changedFiles,
+  mergeBaseRef: null,
+  stats: {
+    files: changedFiles,
+    insertions: 106,
+    deletions: 17,
+  },
+};
+
 const dirtyGitStatus: ThreadGitStatusDisplay = {
   label: "Dirty",
-  summary: "4 changed files • +312 -47",
-  summaryContent: "4 changed files • +312 -47",
+  summary: "",
+  summaryContent: "",
 };
 
 const aheadGitStatus: ThreadGitStatusDisplay = {
@@ -73,7 +86,7 @@ export function Overview() {
             target={commitTarget}
             branchName={BRANCH_NAMES.feature}
             gitStatusDisplay={dirtyGitStatus}
-            changedFiles={changedFiles}
+            changedFilesSection={changedFilesSection}
             onOpenChange={noop}
             onCommit={asyncNoop}
             onSquashMerge={asyncNoop}
@@ -89,7 +102,7 @@ export function Overview() {
             target={commitAndSquashTarget}
             branchName={BRANCH_NAMES.feature}
             gitStatusDisplay={dirtyGitStatus}
-            changedFiles={changedFiles}
+            changedFilesSection={changedFilesSection}
             showMergeBaseDetails
             mergeBaseBranch="origin/main"
             mergeBaseBranchOptions={mergeBaseOptions}
@@ -145,7 +158,7 @@ export function Overview() {
             target={commitAndSquashTarget}
             branchName={BRANCH_NAMES.feature}
             gitStatusDisplay={dirtyGitStatus}
-            changedFiles={changedFiles}
+            changedFilesSection={changedFilesSection}
             showMergeBaseDetails
             mergeBaseBranch="origin/main"
             mergeBaseBranchOptions={[]}

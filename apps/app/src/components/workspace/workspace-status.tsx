@@ -2,11 +2,6 @@ import type { ReactNode } from "react";
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
 import { HttpError } from "@/lib/api";
-import {
-  formatChangeSummary,
-  renderChangeSummary,
-  toChangeTally,
-} from "@/components/workspace/workspace-change-summary";
 
 export interface ThreadGitStatusDisplay {
   label:
@@ -49,23 +44,6 @@ function formatComparisonSummary(
     : `${behindCount} behind`;
 }
 
-function joinStatusSummary(parts: Array<string | null>): string {
-  const filteredParts = parts.filter(
-    (part) => part !== null && part.length > 0,
-  );
-  return filteredParts.join(" • ");
-}
-
-function joinSummaryNodes(nodes: Array<ReactNode | null>): ReactNode {
-  const filtered = nodes.filter((node): node is ReactNode => node !== null);
-  return filtered.map((node, index) => (
-    <span key={index}>
-      {index > 0 ? " • " : null}
-      {node}
-    </span>
-  ));
-}
-
 function plainDisplay(
   label: ThreadGitStatusDisplay["label"],
   summary: string,
@@ -73,6 +51,14 @@ function plainDisplay(
   return { label, summary, summaryContent: summary };
 }
 
+/**
+ * Builds the one-line status pill rendered in the info tab and the git-action
+ * dialog. The summary intentionally omits working-tree file/diff aggregates —
+ * those are surfaced by `ChangedFilesRow` (info tab) and the dialog's own
+ * Changed files row, so echoing them here would just duplicate the same numbers.
+ * The summary only carries the merge-base comparison (ahead/behind) or a
+ * fallback sentence when there is no comparison to show.
+ */
 export function getGitStatusDisplay(
   status: WorkspaceStatus | undefined,
   options?: {
@@ -96,17 +82,6 @@ export function getGitStatusDisplay(
     options?.mergeBaseBranch ?? status.mergeBase?.mergeBaseBranch;
   const comparisonSummary = options?.showBranchComparison
     ? formatComparisonSummary(status, resolvedMergeBaseBranch)
-    : null;
-  const workspaceTally = toChangeTally(status.workingTree);
-  const hasWorkspaceChanges =
-    workspaceTally.filesCount > 0 ||
-    workspaceTally.insertions > 0 ||
-    workspaceTally.deletions > 0;
-  const workspaceSummary = hasWorkspaceChanges
-    ? formatChangeSummary(workspaceTally)
-    : null;
-  const workspaceSummaryContent: ReactNode = hasWorkspaceChanges
-    ? renderChangeSummary(workspaceTally)
     : null;
 
   switch (status.workingTree.state) {
@@ -140,26 +115,9 @@ export function getGitStatusDisplay(
       );
     }
     case "untracked":
-      return {
-        label: "Untracked",
-        summary: joinStatusSummary([workspaceSummary, comparisonSummary]),
-        summaryContent: joinSummaryNodes([
-          workspaceSummaryContent,
-          comparisonSummary,
-        ]),
-      };
+      return plainDisplay("Untracked", comparisonSummary ?? "");
     case "dirty_uncommitted":
-      return {
-        label: "Dirty",
-        summary: joinStatusSummary([
-          workspaceSummary ?? "Local changes pending commit.",
-          comparisonSummary,
-        ]),
-        summaryContent: joinSummaryNodes([
-          workspaceSummaryContent ?? "Local changes pending commit.",
-          comparisonSummary,
-        ]),
-      };
+      return plainDisplay("Dirty", comparisonSummary ?? "");
     case "committed_unmerged":
       if (
         (status.mergeBase?.aheadCount ?? 0) > 0 &&
@@ -181,18 +139,7 @@ export function getGitStatusDisplay(
         comparisonSummary ?? "Local commits pending merge.",
       );
     case "dirty_and_committed_unmerged":
-      return {
-        label: "Dirty",
-        summary: joinStatusSummary([
-          workspaceSummary ?? "Local changes and commits pending merge.",
-          comparisonSummary,
-        ]),
-        summaryContent: joinSummaryNodes([
-          workspaceSummaryContent ??
-            "Local changes and commits pending merge.",
-          comparisonSummary,
-        ]),
-      };
+      return plainDisplay("Dirty", comparisonSummary ?? "");
     default:
       return assertNever(status.workingTree.state);
   }

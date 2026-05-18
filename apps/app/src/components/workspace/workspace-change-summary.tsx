@@ -87,42 +87,55 @@ export interface WorkspaceChangedFileSelection {
 }
 
 /**
- * Picks the changed-files group to surface in metadata surfaces that only
- * display one list. Priority: modified/staged files, then untracked-only,
- * then committed-unmerged. Untracked is split from "uncommitted" because
- * untracked files aren't staged or modified — the label should reflect that.
+ * Returns every changed-files group worth surfacing, in display order:
+ * working-tree changes first (modified/staged or untracked), then
+ * committed-unmerged commits if present. The two coexist only in the
+ * `dirty_and_committed_unmerged` working-tree state; in every other state
+ * the result has at most one entry.
  *
- * Returns the resolved stats object alongside the files so callers never have
- * to re-derive which bucket the numbers came from. Untracked-only state
- * surfaces working-tree stats (insertions/deletions are expected to be 0
- * there — git diff doesn't count untracked content).
+ * Each section carries its own stats so callers don't have to re-derive
+ * which bucket the numbers came from. Untracked-only state surfaces
+ * working-tree stats (insertions/deletions are expected to be 0 there —
+ * git diff doesn't count untracked content).
+ */
+export function selectWorkspaceChangedFilesSections(
+  workspaceStatus: WorkspaceStatus | undefined,
+): WorkspaceChangedFilesSection[] {
+  if (!workspaceStatus) return [];
+  const sections: WorkspaceChangedFilesSection[] = [];
+  const workingTree = workspaceStatus.workingTree;
+  if (workingTree.files.length > 0) {
+    const isUntrackedOnly = workingTree.state === "untracked";
+    sections.push({
+      kind: isUntrackedOnly ? "untracked" : "uncommitted",
+      label: isUntrackedOnly ? "Untracked" : "Uncommitted",
+      files: workingTree.files,
+      mergeBaseRef: null,
+      stats: workingTree,
+    });
+  }
+  const mergeBase = workspaceStatus.mergeBase;
+  if (mergeBase && mergeBase.files.length > 0) {
+    sections.push({
+      kind: "committed",
+      label: "Committed",
+      files: mergeBase.files,
+      mergeBaseRef: mergeBase.baseRef,
+      stats: mergeBase,
+    });
+  }
+  return sections;
+}
+
+/**
+ * Single-bucket convenience for surfaces (context banner, follow-up prompt)
+ * that only show one list. Returns the primary section per
+ * `selectWorkspaceChangedFilesSections` ordering.
  */
 export function selectWorkspaceChangedFilesSection(
   workspaceStatus: WorkspaceStatus | undefined,
 ): WorkspaceChangedFilesSection | null {
-  if (!workspaceStatus) return null;
-  const workingTree = workspaceStatus.workingTree;
-  if (workingTree.files.length > 0) {
-    const isUntrackedOnly = workingTree.state === "untracked";
-    return {
-      kind: isUntrackedOnly ? "untracked" : "uncommitted",
-      label: isUntrackedOnly ? "Untracked files" : "Uncommitted files",
-      files: workingTree.files,
-      mergeBaseRef: null,
-      stats: workingTree,
-    };
-  }
-  const mergeBase = workspaceStatus.mergeBase;
-  if (mergeBase && mergeBase.files.length > 0) {
-    return {
-      kind: "committed",
-      label: "Committed files",
-      files: mergeBase.files,
-      mergeBaseRef: mergeBase.baseRef,
-      stats: mergeBase,
-    };
-  }
-  return null;
+  return selectWorkspaceChangedFilesSections(workspaceStatus)[0] ?? null;
 }
 
 export function formatWorkspaceFileStatus(status: string): string {
