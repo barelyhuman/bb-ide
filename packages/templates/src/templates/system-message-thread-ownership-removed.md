@@ -7,6 +7,8 @@ editingNotes: Keep the thread label on its own line for readability in the agent
 variables:
   threadLabel: "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
 ---
-[bb system]: The following thread is no longer assigned to you:
+[bb system]
+
+The following thread is no longer assigned to you:
 {{threadLabel}}
 Stop treating it as one of your active managed threads unless it is assigned back later.

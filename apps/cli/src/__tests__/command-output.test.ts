@@ -107,7 +107,9 @@ function makePendingSteerTimelineRow(): TimelineUserConversationRow {
     role: "user",
     text: "Please switch to the safer plan",
     attachments: null,
-    userRequest: { kind: "steer", status: "pending" },
+    initiator: "user",
+    senderThreadId: null,
+    turnRequest: { kind: "steer", status: "pending" },
   };
 }
 
@@ -3057,7 +3059,9 @@ describe("CLI JSON output contracts", () => {
           role: "user",
           text: "Say hello",
           attachments: null,
-          userRequest: { kind: "message", status: "accepted" },
+          initiator: "user",
+          senderThreadId: null,
+          turnRequest: { kind: "message", status: "accepted" },
         },
         {
           ...makeTimelineBase({
@@ -3084,7 +3088,7 @@ describe("CLI JSON output contracts", () => {
           role: "assistant",
           text: "Hello!",
           attachments: null,
-          userRequest: null,
+          turnRequest: null,
         },
       ]),
     );

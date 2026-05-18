@@ -7,6 +7,8 @@ editingNotes: Keep the thread label on its own line for readability in the agent
 variables:
   threadLabel: "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
 ---
-[bb system]: The following thread is now assigned to you for management:
+[bb system]
+
+The following thread is now assigned to you for management:
 {{threadLabel}}
 Inspect it and decide whether to monitor it, message the user, or send a follow-up.

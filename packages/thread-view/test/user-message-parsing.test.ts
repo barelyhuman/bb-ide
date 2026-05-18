@@ -4,13 +4,12 @@ import {
   type TimelineEventFactory,
 } from "./timeline-test-harness.js";
 import { decodeThreadEventRow } from "../src/event-decode.js";
-import type {
-  BuildEventProjectionMessagesOptions,
-} from "../src/event-projection-types.js";
+import type { BuildEventProjectionMessagesOptions } from "../src/event-projection-types.js";
 import {
   type AcceptedClientRequest,
   parseAcceptedSteerFromClientRequest,
   parsePendingSteerFromClientRequest,
+  parseUserFromClientRequest,
 } from "../src/user-message-parsing.js";
 
 type ClientTurnRequestedEventRow = ReturnType<
@@ -18,6 +17,7 @@ type ClientTurnRequestedEventRow = ReturnType<
 >;
 
 const AGENT_STEER_TEXT = "Please account for the restart";
+const SENDER_THREAD_ID = "thr_sender";
 
 const standardVisibilityOptions: BuildEventProjectionMessagesOptions = {
   systemClientRequestVisibility: "hidden",
@@ -31,7 +31,7 @@ const managerConversationVisibilityOptions: BuildEventProjectionMessagesOptions 
     threadType: "manager",
   };
 
-const managerDebugVisibilityOptions: BuildEventProjectionMessagesOptions = {
+const managerStandardVisibilityOptions: BuildEventProjectionMessagesOptions = {
   systemClientRequestVisibility: "visible",
   threadStatus: "active",
   threadType: "manager",
@@ -41,8 +41,47 @@ function agentSteerRequest(): ClientTurnRequestedEventRow {
   const event = createTimelineEventFactory({ threadId: "thread-1" });
   return event.clientTurnRequested({
     initiator: "agent",
+    senderThreadId: SENDER_THREAD_ID,
     target: { kind: "auto", expectedTurnId: "turn-1" },
     text: AGENT_STEER_TEXT,
+  });
+}
+
+function systemSteerRequest(): ClientTurnRequestedEventRow {
+  const event = createTimelineEventFactory({ threadId: "thread-1" });
+  return event.clientTurnRequested({
+    initiator: "system",
+    senderThreadId: null,
+    target: { kind: "auto", expectedTurnId: "turn-1" },
+    text: "[bb system] Mid-turn nudge",
+  });
+}
+
+function systemMessageRequest(): ClientTurnRequestedEventRow {
+  const event = createTimelineEventFactory({ threadId: "thread-1" });
+  return event.clientTurnRequested({
+    initiator: "system",
+    senderThreadId: null,
+    target: { kind: "new-turn" },
+    text: "[bb system] Scheduled nudge: daily. Check ASYNC.md.",
+  });
+}
+
+function userMessageRequest(): ClientTurnRequestedEventRow {
+  const event = createTimelineEventFactory({ threadId: "thread-1" });
+  return event.clientTurnRequested({
+    initiator: "user",
+    target: { kind: "new-turn" },
+    text: "Hello",
+  });
+}
+
+function userSteerRequest(): ClientTurnRequestedEventRow {
+  const event = createTimelineEventFactory({ threadId: "thread-1" });
+  return event.clientTurnRequested({
+    initiator: "user",
+    target: { kind: "auto", expectedTurnId: "turn-1" },
+    text: "Mid-turn steer",
   });
 }
 
@@ -58,52 +97,137 @@ function acceptedClientRequest(): AcceptedClientRequest {
 }
 
 describe("user message parsing", () => {
-  it("hides agent-originated pending steers from manager conversation visibility", () => {
-    const { event, meta } = decodeThreadEventRow(agentSteerRequest());
+  it("populates initiator, senderThreadId, and turnRequest for user-initiated messages", () => {
+    const { event, meta } = decodeThreadEventRow(userMessageRequest());
 
-    expect(
-      parsePendingSteerFromClientRequest({
-        acceptedClientRequest: undefined,
-        decoded: event,
-        meta,
-        options: managerConversationVisibilityOptions,
-      }),
-    ).toBeNull();
-
-    expect(
-      parsePendingSteerFromClientRequest({
-        acceptedClientRequest: undefined,
-        decoded: event,
-        meta,
-        options: standardVisibilityOptions,
-      }),
-    ).toMatchObject({
-      kind: "user",
-      request: { kind: "steer", status: "pending" },
-      text: AGENT_STEER_TEXT,
+    const message = parseUserFromClientRequest({
+      decoded: event,
+      meta,
+      options: standardVisibilityOptions,
     });
 
-    expect(
-      parsePendingSteerFromClientRequest({
-        acceptedClientRequest: undefined,
-        decoded: event,
-        meta,
-        options: managerDebugVisibilityOptions,
-      }),
-    ).toMatchObject({
+    expect(message).toMatchObject({
       kind: "user",
-      request: { kind: "steer", status: "pending" },
-      text: AGENT_STEER_TEXT,
+      initiator: "user",
+      senderThreadId: null,
+      turnRequest: { kind: "message", status: "pending" },
+      text: "Hello",
     });
   });
 
-  it("hides agent-originated accepted steers from manager conversation visibility", () => {
+  it("populates initiator, senderThreadId, and turnRequest for agent-initiated messages", () => {
+    const factory = createTimelineEventFactory({ threadId: "thread-1" });
+    const agentText =
+      "[bb message from thread:thr_sender; reply with …]\n\nHi";
+    const row = factory.clientTurnRequested({
+      initiator: "agent",
+      senderThreadId: SENDER_THREAD_ID,
+      target: { kind: "new-turn" },
+      text: agentText,
+    });
+    const { event, meta } = decodeThreadEventRow(row);
+
+    const message = parseUserFromClientRequest({
+      decoded: event,
+      meta,
+      options: standardVisibilityOptions,
+    });
+
+    expect(message).toMatchObject({
+      kind: "user",
+      initiator: "agent",
+      senderThreadId: SENDER_THREAD_ID,
+      turnRequest: { kind: "message", status: "pending" },
+      // Text passes through unchanged — the renderer mutes the `[bb …]`
+      // prefix at display time; the projection never slices.
+      text: agentText,
+    });
+  });
+
+  it("populates initiator for system-initiated messages with a turnRequest", () => {
+    const { event, meta } = decodeThreadEventRow(systemMessageRequest());
+
+    const message = parseUserFromClientRequest({
+      decoded: event,
+      meta,
+      options: managerStandardVisibilityOptions,
+    });
+
+    expect(message).toMatchObject({
+      kind: "user",
+      initiator: "system",
+      senderThreadId: null,
+      turnRequest: { kind: "message", status: "pending" },
+    });
+  });
+
+  it("treats steers as steer requests regardless of initiator", () => {
+    for (const row of [
+      userSteerRequest(),
+      agentSteerRequest(),
+      systemSteerRequest(),
+    ]) {
+      const { event, meta } = decodeThreadEventRow(row);
+      if (event.type !== "client/turn/requested") {
+        throw new Error("Expected client/turn/requested event");
+      }
+      const visibilityOptions =
+        event.initiator === "system"
+          ? managerStandardVisibilityOptions
+          : standardVisibilityOptions;
+      const expectedText = event.input
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+      const accepted = acceptedClientRequest();
+
+      expect(
+        parsePendingSteerFromClientRequest({
+          acceptedClientRequest: undefined,
+          decoded: event,
+          meta,
+          options: visibilityOptions,
+        }),
+      ).toMatchObject({
+        kind: "user",
+        turnRequest: { kind: "steer", status: "pending" },
+        // Pending steers anchor at the request's own meta — there is no
+        // accept event yet to route to.
+        text: expectedText,
+        sourceSeqStart: meta.seq,
+      });
+      expect(
+        parseAcceptedSteerFromClientRequest({
+          acceptedClientRequest: accepted,
+          decoded: event,
+          meta,
+          options: visibilityOptions,
+        }),
+      ).toMatchObject({
+        kind: "user",
+        turnRequest: { kind: "steer", status: "accepted" },
+        // Accepted steers anchor at the accept event's seq, not the request's,
+        // so they land at the right point in the timeline once accepted.
+        text: expectedText,
+        sourceSeqStart: accepted.meta.seq,
+      });
+      // Steers flow through the steer-specific parsers — parseUser short-circuits.
+      expect(
+        parseUserFromClientRequest({
+          decoded: event,
+          meta,
+          options: visibilityOptions,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("hides agent-originated steers from manager conversation visibility", () => {
     const { event, meta } = decodeThreadEventRow(agentSteerRequest());
-    const acceptedRequest = acceptedClientRequest();
 
     expect(
-      parseAcceptedSteerFromClientRequest({
-        acceptedClientRequest: acceptedRequest,
+      parsePendingSteerFromClientRequest({
+        acceptedClientRequest: undefined,
         decoded: event,
         meta,
         options: managerConversationVisibilityOptions,
@@ -112,30 +236,23 @@ describe("user message parsing", () => {
 
     expect(
       parseAcceptedSteerFromClientRequest({
-        acceptedClientRequest: acceptedRequest,
+        acceptedClientRequest: acceptedClientRequest(),
+        decoded: event,
+        meta,
+        options: managerConversationVisibilityOptions,
+      }),
+    ).toBeNull();
+  });
+
+  it("hides system-originated turns in non-manager-standard views", () => {
+    const { event, meta } = decodeThreadEventRow(systemMessageRequest());
+
+    expect(
+      parseUserFromClientRequest({
         decoded: event,
         meta,
         options: standardVisibilityOptions,
       }),
-    ).toMatchObject({
-      kind: "user",
-      request: { kind: "steer", status: "accepted" },
-      sourceSeqStart: acceptedRequest.meta.seq,
-      text: AGENT_STEER_TEXT,
-    });
-
-    expect(
-      parseAcceptedSteerFromClientRequest({
-        acceptedClientRequest: acceptedRequest,
-        decoded: event,
-        meta,
-        options: managerDebugVisibilityOptions,
-      }),
-    ).toMatchObject({
-      kind: "user",
-      request: { kind: "steer", status: "accepted" },
-      sourceSeqStart: acceptedRequest.meta.seq,
-      text: AGENT_STEER_TEXT,
-    });
+    ).toBeNull();
   });
 });

@@ -120,6 +120,7 @@ describe("thread provisioning operation state", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         provisioningId: createThreadProvisioningId(),
       },
     );

@@ -78,7 +78,7 @@ export type TurnRequestTarget = z.infer<typeof turnRequestTargetSchema>;
 export const clientTurnLifecycleEventDataSchema = z.object({
   direction: z.literal("outbound"),
   source: z.enum(["spawn", "tell"]),
-  initiator: threadTurnInitiatorSchema.optional(),
+  initiator: threadTurnInitiatorSchema,
   request: z.object({
     method: z.enum(["thread/start", "turn/start"]),
     params: z.record(z.string(), z.unknown()),
@@ -92,7 +92,12 @@ export const turnRequestEventDataSchema = z.object({
   direction: z.literal("outbound"),
   requestId: clientTurnRequestIdSchema,
   source: z.enum(["spawn", "tell"]),
-  initiator: threadTurnInitiatorSchema.optional(),
+  initiator: threadTurnInitiatorSchema,
+  // Non-null only when initiator === "agent". The invariant is enforced by
+  // writer typings rather than a schema refine so legacy persisted events
+  // (initiator: "agent", senderThreadId: null from before the field
+  // existed) still parse — the stored variant defaults both fields.
+  senderThreadId: z.string().nullable(),
   input: z.array(promptInputSchema),
   target: turnRequestTargetSchema,
   request: z.object({

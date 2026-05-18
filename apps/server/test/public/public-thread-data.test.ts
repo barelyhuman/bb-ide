@@ -464,6 +464,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -681,6 +682,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "thread/start",
             params: {},
@@ -707,6 +709,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -766,6 +769,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -786,6 +790,7 @@ describe("public thread data routes", () => {
           requestId: encodeClientTurnRequestIdNumber({ value: 302 }),
           input: [{ type: "text", text: "Malformed latest request" }],
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -893,6 +898,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -1106,6 +1112,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -1297,6 +1304,7 @@ describe("public thread data routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},

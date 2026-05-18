@@ -332,6 +332,7 @@ export function registerDevelopmentOnlyReplayRoutes(
           input: replayTurn.userInput,
           execution: manifest.execution,
           initiator: "user",
+          senderThreadId: null,
           requestMethod:
             manifest.kind === "thread-start" ? "thread/start" : "turn/start",
           source: "tell",

@@ -227,7 +227,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
         startedAt: 1,
         createdAt: 1,
         attachments: null,
-        userRequest: null,
+        turnRequest: null,
       },
     ]);
 
@@ -255,7 +255,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
         startedAt: 1,
         createdAt: 1,
         attachments: null,
-        userRequest: null,
+        turnRequest: null,
       },
     ]);
 

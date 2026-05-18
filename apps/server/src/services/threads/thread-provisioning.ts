@@ -59,6 +59,7 @@ export interface RequestThreadReprovisionArgs {
   input: PromptInput[];
   initiator: ThreadTurnInitiator;
   provisioningId: string;
+  senderThreadId: string | null;
   thread: Thread;
 }
 
@@ -166,6 +167,7 @@ export function requestThreadProvision(
     input: args.input,
     execution: args.execution,
     initiator,
+    senderThreadId: null,
     requestMethod: "thread/start",
     source: "spawn",
     target,
@@ -209,6 +211,7 @@ export function requestThreadReprovision(
     input: args.input,
     execution: args.execution,
     initiator: args.initiator,
+    senderThreadId: args.senderThreadId,
     requestMethod: "turn/start",
     source: "tell",
     target: { kind: "new-turn" },

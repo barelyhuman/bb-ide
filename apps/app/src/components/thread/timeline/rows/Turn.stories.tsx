@@ -57,7 +57,7 @@ const assistantOpener: TimelineRow = {
   role: "assistant",
   text: "I’m moving the active-thinking state into the main projection pass so we stop reconstructing it from events afterward. After that I’ll short-circuit the manager path and stop recomputing active-thinking inside the turn-summary-details loop.",
   attachments: null,
-  userRequest: null,
+  turnRequest: null,
 };
 
 const commandSedAssistantStream: TimelineRow = {
@@ -162,7 +162,7 @@ const assistantPlanning: TimelineRow = {
   role: "assistant",
   text: "I’ve got the shape of the refactor now. The key is to make the flat projection pass return both durable messages and ephemeral `activeThinking`, then use that one result everywhere instead of rebuilding lifecycle from raw events afterward.",
   attachments: null,
-  userRequest: null,
+  turnRequest: null,
 };
 
 const fileChangeAssistantStream: TimelineRow = {

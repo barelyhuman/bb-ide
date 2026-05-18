@@ -526,10 +526,10 @@ describe("timeline CLI rendering snapshots", () => {
       > =>
         row.kind === "conversation" &&
         row.role === "user" &&
-        row.userRequest?.status === "pending",
+        row.turnRequest.status === "pending",
     );
     expect(pendingSteerRow?.sourceSeqStart).toBe(3);
-    expect(pendingSteerRow?.userRequest).toEqual({
+    expect(pendingSteerRow?.turnRequest).toEqual({
       kind: "steer",
       status: "pending",
     });
@@ -584,7 +584,7 @@ describe("timeline CLI rendering snapshots", () => {
       (message) => message.kind === "user",
     );
     expect(steerMessage?.sourceSeqStart).toBe(4);
-    expect(steerMessage?.request).toEqual({
+    expect(steerMessage?.turnRequest).toEqual({
       kind: "steer",
       status: "accepted",
     });
@@ -593,14 +593,14 @@ describe("timeline CLI rendering snapshots", () => {
         (row) =>
           row.kind === "conversation" &&
           row.role === "user" &&
-          row.userRequest.status === "pending",
+          row.turnRequest.status === "pending",
       ),
     ).toHaveLength(0);
     const steerRow = timeline.rows.find(
       (row) => row.kind === "conversation" && row.role === "user",
     );
     expect(steerRow?.sourceSeqStart).toBe(4);
-    expect(steerRow?.userRequest).toEqual({
+    expect(steerRow?.turnRequest).toEqual({
       kind: "steer",
       status: "accepted",
     });
@@ -676,7 +676,7 @@ describe("timeline CLI rendering snapshots", () => {
       "First task",
       "Follow-up task",
     ]);
-    expect(userMessages.map((message) => message.request)).toEqual([
+    expect(userMessages.map((message) => message.turnRequest)).toEqual([
       { kind: "message", status: "accepted" },
       { kind: "message", status: "accepted" },
     ]);

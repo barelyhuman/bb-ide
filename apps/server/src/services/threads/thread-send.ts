@@ -234,6 +234,7 @@ export async function sendThreadMessage(
       execution,
       initiator,
       input,
+      senderThreadId,
       thread,
     })
   ) {
@@ -257,6 +258,7 @@ export async function sendThreadMessage(
     input,
     execution,
     initiator,
+    senderThreadId,
     requestMethod: "turn/start",
     source: "tell",
     target,

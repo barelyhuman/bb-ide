@@ -205,16 +205,16 @@ interface BuildOptimisticUserMessageRowParams {
   threadStatus: ThreadWithRuntime["status"] | null;
 }
 
-type OptimisticUserRequestKind = "message" | "steer";
-type OptimisticUserRequestKindArgs = Pick<
+type OptimisticTurnRequestKind = "message" | "steer";
+type OptimisticTurnRequestKindArgs = Pick<
   BuildOptimisticUserMessageRowParams,
   "mode" | "threadStatus"
 >;
 
-function optimisticUserRequestKind({
+function optimisticTurnRequestKind({
   mode,
   threadStatus,
-}: OptimisticUserRequestKindArgs): OptimisticUserRequestKind {
+}: OptimisticTurnRequestKindArgs): OptimisticTurnRequestKind {
   if (mode === "steer") {
     return "steer";
   }
@@ -263,8 +263,10 @@ function buildOptimisticUserMessageRow({
     createdAt,
     text,
     attachments: timelineAttachments,
-    userRequest: {
-      kind: optimisticUserRequestKind({ mode, threadStatus }),
+    initiator: "user",
+    senderThreadId: null,
+    turnRequest: {
+      kind: optimisticTurnRequestKind({ mode, threadStatus }),
       status: "pending",
     },
   };

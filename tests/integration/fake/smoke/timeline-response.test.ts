@@ -17,7 +17,7 @@ const ASSISTANT_ROW = {
   role: "assistant",
   text: "Done",
   attachments: null,
-  userRequest: null,
+  turnRequest: null,
 } satisfies TimelineRow;
 
 const USER_ROW = {
@@ -32,7 +32,9 @@ const USER_ROW = {
   role: "user",
   text: "Hello",
   attachments: null,
-  userRequest: { kind: "message", status: "accepted" },
+  initiator: "user",
+  senderThreadId: null,
+  turnRequest: { kind: "message", status: "accepted" },
 } satisfies TimelineRow;
 
 function makeTimelineResponse(

@@ -54,6 +54,7 @@ describe("internal authorization regressions", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         requestMethod: "thread/start",
         source: "spawn",
       });

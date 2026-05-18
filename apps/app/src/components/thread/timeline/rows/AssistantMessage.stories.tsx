@@ -161,7 +161,7 @@ export function Overview() {
             role="assistant"
             text={shortMessage}
             attachments={null}
-            userRequest={null}
+            turnRequest={null}
           />
         </TimelineStage>
       </StoryRow>
@@ -174,7 +174,7 @@ export function Overview() {
             role="assistant"
             text={longMessage}
             attachments={null}
-            userRequest={null}
+            turnRequest={null}
           />
         </TimelineStage>
       </StoryRow>

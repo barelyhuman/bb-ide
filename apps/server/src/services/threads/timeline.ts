@@ -375,7 +375,7 @@ function isTimelineSegmentAnchorRow(row: TimelineRow): boolean {
   return (
     row.kind === "conversation" &&
     row.role === "user" &&
-    row.userRequest.kind === "message"
+    row.turnRequest.kind === "message"
   );
 }
 

@@ -428,10 +428,10 @@ function formatTurnTitle(
 function formatConversationRequestLabel(
   row: TimelineConversationViewRow,
 ): string | null {
-  if (row.role !== "user" || row.userRequest.kind !== "steer") {
+  if (row.role !== "user" || row.turnRequest.kind !== "steer") {
     return null;
   }
-  return row.userRequest.status === "pending" ? "steer pending" : "steer";
+  return row.turnRequest.status === "pending" ? "steer pending" : "steer";
 }
 
 function formatRow(

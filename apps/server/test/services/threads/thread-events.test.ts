@@ -344,6 +344,7 @@ describe("thread event appends", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         requestMethod: "turn/start",
         source: "tell",
       });
@@ -392,6 +393,7 @@ describe("thread event appends", () => {
           source: "client/turn/requested",
         },
         initiator: "agent",
+        senderThreadId: "thr_sender",
         requestMethod: "turn/start",
         source: "tell",
       });

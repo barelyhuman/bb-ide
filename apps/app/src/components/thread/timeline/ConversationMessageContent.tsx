@@ -8,8 +8,8 @@ import {
 } from "react";
 import type {
   TimelineConversationAttachments,
-  TimelineConversationRow,
-  TimelineConversationUserRequest,
+  TimelineConversationTurnRequest,
+  TimelineUserConversationRow,
 } from "@bb/server-contract";
 import { fileNameFromPath } from "@bb/thread-view";
 import { ImageLightbox, getWrappedImageIndex } from "../../ui/image-lightbox.js";
@@ -18,20 +18,43 @@ import { cn } from "@/lib/utils";
 import { buildProjectAttachmentContentUrl } from "@/lib/file-content-urls";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
 import { Icon } from "@/components/ui/icon.js";
+import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
 
-export interface ConversationMessageContentProps {
+interface ConversationMessageContentBaseProps {
   attachments: TimelineConversationAttachments | null;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
-  role: TimelineConversationRow["role"];
   text: string;
-  userRequest: TimelineConversationRow["userRequest"];
 }
+
+export interface ConversationMessageContentUserProps
+  extends ConversationMessageContentBaseProps {
+  role: "user";
+  initiator: TimelineUserConversationRow["initiator"];
+  turnRequest: TimelineUserConversationRow["turnRequest"];
+}
+
+export interface ConversationMessageContentAssistantProps
+  extends ConversationMessageContentBaseProps {
+  role: "assistant";
+  turnRequest: null;
+}
+
+/**
+ * Discriminated on `role` so the user variant carries `initiator` +
+ * non-null `turnRequest` while the assistant variant requires neither.
+ * Avoids optional-with-default props (AGENTS.md: "do not use optional
+ * fields to hide defaults") and lets the renderer drop optional-chain
+ * defenses on contract-required fields.
+ */
+export type ConversationMessageContentProps =
+  | ConversationMessageContentUserProps
+  | ConversationMessageContentAssistantProps;
 
 interface ConversationImageItem {
   alt: string;
@@ -49,22 +72,24 @@ interface ConversationAttachmentsProps extends ConversationAttachmentItems {
   projectId?: string;
 }
 
-interface UserConversationMessageProps extends Omit<
-  ConversationMessageContentProps,
-  "role"
-> {
+interface UserConversationMessageProps
+  extends Omit<ConversationMessageContentUserProps, "role"> {
   attachmentItems: ConversationAttachmentItems;
 }
 
-interface AssistantConversationMessageProps extends Omit<
-  ConversationMessageContentProps,
-  "role"
-> {
+interface AssistantConversationMessageProps
+  extends Omit<ConversationMessageContentAssistantProps, "role"> {
   attachmentItems: ConversationAttachmentItems;
 }
 
 interface CollapsibleMessageTextProps {
   text: string;
+  /**
+   * When set, the first `mutePrefixLength` characters of `text` are rendered
+   * inside a muted, max-width-truncated pill — used for `[bb …]` prefixes on
+   * agent/system-initiated messages.
+   */
+  mutePrefixLength?: number;
 }
 
 interface ProjectAttachmentHrefArgs {
@@ -103,13 +128,13 @@ function projectAttachmentHref({
   return buildProjectAttachmentContentUrl(projectId, path);
 }
 
-function userRequestLabel(
-  userRequest: TimelineConversationUserRequest | null,
+function turnRequestLabel(
+  turnRequest: TimelineConversationTurnRequest,
 ): string | null {
-  if (userRequest?.kind !== "steer") {
+  if (turnRequest.kind !== "steer") {
     return null;
   }
-  return userRequest.status === "pending" ? "steer pending" : "steer";
+  return turnRequest.status === "pending" ? "steer pending" : "steer";
 }
 
 function buildAttachmentItems({
@@ -338,28 +363,49 @@ function useIsOverflowing(
   return isOverflowing;
 }
 
-function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
+function CollapsibleMessageText({
+  text,
+  mutePrefixLength,
+}: CollapsibleMessageTextProps) {
+  // The prefix is computed off the full source text; if it would consume
+  // everything we'd show (or extend past the text — e.g. char-cap truncates
+  // before the closing `]`), fall back to plain rendering.
+  const showMutedPrefix =
+    typeof mutePrefixLength === "number" &&
+    mutePrefixLength > 0 &&
+    mutePrefixLength < text.length;
+  const prefixText = showMutedPrefix ? text.slice(0, mutePrefixLength) : null;
+  const bodyText = showMutedPrefix ? text.slice(mutePrefixLength) : text;
+
   const [isExpanded, setIsExpanded] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
-  const isTruncated = text.length > USER_MESSAGE_CHAR_CAP;
-  const cappedText = isTruncated
-    ? text.slice(0, USER_MESSAGE_CHAR_CAP)
-    : text;
-  const lines = splitPreWrappedLines(cappedText);
+  const isTruncated = bodyText.length > USER_MESSAGE_CHAR_CAP;
+  const cappedBody = isTruncated
+    ? bodyText.slice(0, USER_MESSAGE_CHAR_CAP)
+    : bodyText;
+  const lines = splitPreWrappedLines(cappedBody);
   const exceedsCollapsedLineCount = lines.length > COLLAPSED_MESSAGE_LINE_COUNT;
   // Collapsed view hands only the visible-by-line-clamp lines to the DOM;
   // expanded view hands the (already-capped) full text. Both stay below the
   // hard char cap so a megabyte paste can't dominate window-resize reflow.
-  const renderedText =
+  const renderedBody =
     isExpanded || !exceedsCollapsedLineCount
-      ? cappedText
+      ? cappedBody
       : lines.slice(0, COLLAPSED_MESSAGE_LINE_COUNT).join("\n");
-  const isOverflowing = useIsOverflowing(textRef, !isExpanded, renderedText);
+  const isOverflowing = useIsOverflowing(textRef, !isExpanded, renderedBody);
   const showToggle =
     isExpanded || exceedsCollapsedLineCount || isOverflowing;
 
   return (
     <>
+      {prefixText !== null ? (
+        <span
+          className="line-clamp-1 text-muted-foreground/70"
+          title={prefixText.trimEnd()}
+        >
+          {prefixText}
+        </span>
+      ) : null}
       <p
         ref={textRef}
         className={cn(
@@ -367,7 +413,7 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
           !isExpanded && "line-clamp-[15]",
         )}
       >
-        {renderedText}
+        {renderedBody}
         {isExpanded && isTruncated ? (
           <span className="text-muted-foreground"> [truncated]</span>
         ) : null}
@@ -390,15 +436,20 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
 
 function UserConversationMessage({
   attachmentItems,
+  initiator,
   onOpenLocalFileLink,
   projectId,
   text,
-  userRequest,
+  turnRequest,
 }: UserConversationMessageProps) {
+  const mutePrefixLength = useMemo(
+    () => computeMutedPrefixLength(initiator, text),
+    [initiator, text],
+  );
   const messageText = text.trim();
-  const requestLabel = userRequestLabel(userRequest);
+  const requestLabel = turnRequestLabel(turnRequest);
   const isPendingSteer =
-    userRequest?.kind === "steer" && userRequest.status === "pending";
+    turnRequest.kind === "steer" && turnRequest.status === "pending";
   const showToolbar = requestLabel !== null || messageText.length > 0;
 
   return (
@@ -406,7 +457,10 @@ function UserConversationMessage({
       <div className="ml-auto w-fit max-w-[80%]">
         <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
           {messageText ? (
-            <CollapsibleMessageText text={text} />
+            <CollapsibleMessageText
+              text={text}
+              mutePrefixLength={mutePrefixLength || undefined}
+            />
           ) : (
             <p className="text-muted-foreground">Sent attachments</p>
           )}
@@ -432,7 +486,7 @@ function UserConversationMessage({
               </span>
             ) : null}
             {messageText ? (
-              <CopyButton text={messageText} label="Copy message" />
+              <CopyButton text={text} label="Copy message" />
             ) : null}
           </div>
         ) : null}
@@ -463,15 +517,11 @@ function AssistantConversationMessage({
   );
 }
 
-export function ConversationMessageContent({
-  attachments,
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  role,
-  text,
-  userRequest,
-}: ConversationMessageContentProps) {
+export function ConversationMessageContent(
+  props: ConversationMessageContentProps,
+) {
+  const { attachments, onOpenLocalFileLink, projectId, resolveUserAttachmentImageSrc, text } =
+    props;
   const attachmentItems = useMemo(
     () =>
       buildAttachmentItems({
@@ -482,16 +532,17 @@ export function ConversationMessageContent({
     [attachments, projectId, resolveUserAttachmentImageSrc],
   );
 
-  if (role === "user") {
+  if (props.role === "user") {
     return (
       <UserConversationMessage
         attachmentItems={attachmentItems}
         attachments={attachments}
+        initiator={props.initiator}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         text={text}
-        userRequest={userRequest}
+        turnRequest={props.turnRequest}
       />
     );
   }
@@ -504,7 +555,7 @@ export function ConversationMessageContent({
       projectId={projectId}
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       text={text}
-      userRequest={userRequest}
+      turnRequest={props.turnRequest}
     />
   );
 }

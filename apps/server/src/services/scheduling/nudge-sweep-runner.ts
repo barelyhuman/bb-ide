@@ -37,8 +37,7 @@ import {
   ScheduleValidationError,
 } from "./schedule-helpers.js";
 import { tryTransition } from "../threads/thread-transitions.js";
-
-const SCHEDULED_NUDGE_PREFIX = "[bb system] Scheduled nudge:";
+import { renderTemplate } from "@bb/templates";
 
 export const DUE_NUDGE_BATCH_SIZE = 100;
 export type DueManagerThreadNudgeRow = ReturnType<
@@ -127,7 +126,7 @@ function buildScheduledNudgeInput(name: string): PromptInput[] {
   return [
     {
       type: "text",
-      text: `${SCHEDULED_NUDGE_PREFIX} ${name}. Check ASYNC.md.`,
+      text: renderTemplate("systemMessageScheduledNudge", { name }),
     },
   ];
 }
@@ -541,6 +540,7 @@ function queueDueNudgeInTransaction(
     input: args.preparation.input,
     execution: args.preparation.execution,
     initiator: "system",
+    senderThreadId: null,
     requestMethod: "turn/start",
     source: "tell",
     target: renderNudgeTurnRequestTarget(args.preparation.targetIntent),

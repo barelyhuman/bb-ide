@@ -3,7 +3,7 @@ import {
   parseStoredThreadEvent,
   parseThreadEventRow,
 } from "../src/stored-thread-event.js";
-import { turnScope } from "../src/thread-event-scope.js";
+import { threadScope, turnScope } from "../src/thread-event-scope.js";
 
 describe("parseStoredThreadEvent", () => {
   it("rejects assistant deltas without an itemId", () => {
@@ -31,6 +31,40 @@ describe("parseStoredThreadEvent", () => {
         createdAt: 1,
       }),
     ).toThrow(/scope/);
+  });
+
+  it("defaults missing senderThreadId on pre-existing client/turn/requested rows", () => {
+    // senderThreadId was added after threads were already being persisted, so
+    // the stored variant defaults it to null at read time. initiator was
+    // always written explicitly, so it does not need a default — passing it
+    // here matches what every pre-change writer was already doing.
+    const event = parseStoredThreadEvent({
+      type: "client/turn/requested",
+      threadId: "thread-1",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789ab",
+        source: "tell",
+        initiator: "user",
+        input: [{ type: "text", text: "pre-existing message" }],
+        target: { kind: "new-turn" },
+        request: { method: "turn/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+
+    expect(event).toMatchObject({
+      type: "client/turn/requested",
+      initiator: "user",
+      senderThreadId: null,
+    });
   });
 
   it("drops legacy data turnId and uses stored scope as ground truth", () => {

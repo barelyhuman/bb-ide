@@ -56,7 +56,9 @@ function userRow(text: string): TimelineConversationRow {
     role: "user",
     text,
     attachments: null,
-    userRequest: { kind: "message", status: "accepted" },
+    initiator: "user",
+    senderThreadId: null,
+    turnRequest: { kind: "message", status: "accepted" },
   };
 }
 
@@ -67,7 +69,7 @@ function assistantRow(text: string): TimelineConversationRow {
     role: "assistant",
     text,
     attachments: null,
-    userRequest: null,
+    turnRequest: null,
   };
 }
 
@@ -324,7 +326,9 @@ describe("findTimelineFrontierRow", () => {
         role: "user",
         text: "Keep this in mind",
         attachments: null,
-        userRequest: { kind: "steer", status: "pending" },
+        initiator: "user",
+        senderThreadId: null,
+        turnRequest: { kind: "steer", status: "pending" },
       },
     ]);
 

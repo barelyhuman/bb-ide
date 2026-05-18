@@ -189,7 +189,7 @@ function buildOptimisticUserRow(id: string): TimelineRow {
     role: "user",
     text: OPTIMISTIC_USER_PROMPT_TEXT,
     attachments: null,
-    userRequest: { kind: "message", status: "accepted" },
+    turnRequest: { kind: "message", status: "accepted" },
   };
 }
 
@@ -298,13 +298,13 @@ function conversationRowFromStep(
     return {
       ...base,
       role: "user",
-      userRequest: { kind: "message", status: "accepted" },
+      turnRequest: { kind: "message", status: "accepted" },
     };
   }
   return {
     ...base,
     role: "assistant",
-    userRequest: null,
+    turnRequest: null,
   };
 }
 
@@ -438,7 +438,7 @@ function AssistantContentStreaming({
     role: "user",
     text: ASSISTANT_STREAMING_USER_PROMPT.text,
     attachments: null,
-    userRequest: { kind: "message", status: "accepted" },
+    turnRequest: { kind: "message", status: "accepted" },
   };
   const assistantText = ASSISTANT_STREAMING_CHUNKS.slice(0, step).join("");
   const assistantRow: TimelineRow = {
@@ -453,7 +453,7 @@ function AssistantContentStreaming({
     role: "assistant",
     text: assistantText,
     attachments: null,
-    userRequest: null,
+    turnRequest: null,
   };
   const rows: TimelineRow[] = [userRow];
   if (step > 0) {

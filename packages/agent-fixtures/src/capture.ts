@@ -625,6 +625,7 @@ function buildClientRequestRows(args: {
         requestId: encodeClientTurnRequestIdNumber({ value: index + 1 }),
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         input: turn.userInput,
         target: isFirstTurn ? { kind: "thread-start" } : { kind: "new-turn" },
         request: {

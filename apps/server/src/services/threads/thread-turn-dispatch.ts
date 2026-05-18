@@ -31,6 +31,7 @@ export interface QueueTurnDuringReprovisionArgs {
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   onQueued?: () => void;
+  senderThreadId: string | null;
   thread: Thread;
 }
 
@@ -132,6 +133,7 @@ export async function queueTurnDuringReprovision(
     execution: args.execution,
     initiator: args.initiator,
     provisioningId,
+    senderThreadId: args.senderThreadId,
   });
   args.onQueued?.();
   return true;

@@ -62,6 +62,7 @@ interface SeedTimelineClientTurnRequestedArgs {
   environmentId: string;
   initiator?: TimelineClientTurnRequestInitiator;
   requestId: string;
+  senderThreadId?: string | null;
   sequence: number;
   target: TimelineClientTurnRequestTarget;
   text: string;
@@ -109,7 +110,7 @@ function extractProjectedTimelineSegmentAnchorRows(
     if (
       row.kind !== "conversation" ||
       row.role !== "user" ||
-      row.userRequest.kind !== "message"
+      row.turnRequest.kind !== "message"
     ) {
       continue;
     }
@@ -220,6 +221,12 @@ function seedTimelineClientTurnRequested(
       requestId: args.requestId,
       source: "tell",
       initiator: args.initiator ?? "user",
+      senderThreadId:
+        args.senderThreadId !== undefined
+          ? args.senderThreadId
+          : (args.initiator ?? "user") === "agent"
+            ? "thr_sender"
+            : null,
       request: { method: "turn/start", params: {} },
       input: [{ type: "text", text: args.text }],
       target: args.target,
@@ -322,6 +329,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ab",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "First request" }],
         target: { kind: "thread-start" },
@@ -421,6 +429,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_3456789abc",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "Second request" }],
         target: { kind: "new-turn" },
@@ -648,7 +657,7 @@ describe("buildThreadTimeline", () => {
       kind: "conversation",
       role: "user",
       text: "Initial request",
-      userRequest: {
+      turnRequest: {
         kind: "message",
         status: "accepted",
       },
@@ -657,7 +666,7 @@ describe("buildThreadTimeline", () => {
       "Initial request",
       "Accepted steer",
     ]);
-    expect(userRows.map((row) => row.userRequest)).toEqual([
+    expect(userRows.map((row) => row.turnRequest)).toEqual([
       { kind: "message", status: "accepted" },
       { kind: "steer", status: "accepted" },
     ]);
@@ -840,7 +849,7 @@ describe("buildThreadTimeline", () => {
       kind: "conversation",
       role: "user",
       text: "Initial request",
-      userRequest: {
+      turnRequest: {
         kind: "message",
         status: "accepted",
       },
@@ -849,7 +858,7 @@ describe("buildThreadTimeline", () => {
       "Initial request",
       "Pending steer",
     ]);
-    expect(userRows.map((row) => row.userRequest)).toEqual([
+    expect(userRows.map((row) => row.turnRequest)).toEqual([
       { kind: "message", status: "accepted" },
       { kind: "steer", status: "pending" },
     ]);
@@ -2262,6 +2271,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ab",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "Follow-up" }],
         target: { kind: "new-turn" },
@@ -2388,6 +2398,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ad",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "Queued follow-up" }],
         target: { kind: "new-turn" },
@@ -2530,6 +2541,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ae",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "Requested-turn follow-up" }],
         target: { kind: "new-turn" },
@@ -2553,6 +2565,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789af",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "Later-turn follow-up" }],
         target: { kind: "new-turn" },
@@ -2712,6 +2725,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ac",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         request: { method: "turn/start", params: {} },
         input: [{ type: "text", text: "Follow-up" }],
         target: { kind: "new-turn" },
@@ -3155,7 +3169,8 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ab",
         source: "spawn",
         initiator: "system",
-        input: [{ type: "text", text: "[bb system] Welcome!" }],
+        senderThreadId: null,
+        input: [{ type: "text", text: "[bb system]\n\nWelcome!" }],
         target: { kind: "thread-start" },
         request: { method: "thread/start", params: {} },
         execution: {
@@ -3288,6 +3303,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ad",
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         input: [{ type: "text", text: "Thanks, do the thing" }],
         target: { kind: "new-turn" },
         request: { method: "turn/start", params: {} },
@@ -3318,6 +3334,7 @@ describe("buildThreadTimeline", () => {
         requestId: "creq_23456789ae",
         source: "tell",
         initiator: "agent",
+        senderThreadId: "thr_sender123",
         input: [{ type: "text", text: agentThreadMessageText }],
         target: { kind: "new-turn" },
         request: { method: "turn/start", params: {} },
@@ -3362,7 +3379,7 @@ describe("buildThreadTimeline", () => {
     expect(
       defaultSourceRows.some(
         (row) =>
-          row.kind === "conversation" && row.text === "[bb system] Welcome!",
+          row.kind === "conversation" && row.text === "[bb system]\n\nWelcome!",
       ),
     ).toBe(false);
     expect(
@@ -3409,7 +3426,7 @@ describe("buildThreadTimeline", () => {
       expect.objectContaining({
         kind: "conversation",
         role: "user",
-        text: "[bb system] Welcome!",
+        text: "[bb system]\n\nWelcome!",
       }),
     );
     expect(standardSourceRows).toContainEqual(
@@ -3456,6 +3473,7 @@ describe("buildThreadTimeline", () => {
           requestId: "creq_23456789ab",
           source: "tell",
           initiator: "system",
+          senderThreadId: null,
           input: [{ type: "text", text: "system-start-message" }],
           target: { kind: "thread-start" },
           request: { method: "thread/start", params: {} },
@@ -3595,6 +3613,7 @@ describe("buildThreadTimeline", () => {
           requestId: "creq_23456789ab",
           source: "tell",
           initiator: "system",
+          senderThreadId: null,
           input: [{ type: "text", text: "system-pending-steer" }],
           target: { kind: "auto", expectedTurnId: "turn-1" },
           request: { method: "turn/start", params: {} },
@@ -3634,14 +3653,16 @@ describe("buildThreadTimeline", () => {
       (row) =>
         row.kind === "conversation" &&
         row.role === "user" &&
-        row.userRequest.kind === "steer" &&
-        row.userRequest.status === "pending",
+        row.turnRequest.kind === "steer" &&
+        row.turnRequest.status === "pending",
     );
     expect(managerStandardPendingSteerRows).toHaveLength(1);
     expect(managerStandardPendingSteerRows[0]).toMatchObject({
       role: "user",
       text: "system-pending-steer",
-      userRequest: {
+      initiator: "system",
+      senderThreadId: null,
+      turnRequest: {
         kind: "steer",
         status: "pending",
       },

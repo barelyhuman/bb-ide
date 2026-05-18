@@ -466,7 +466,9 @@ function convertMessage(
           role: "user",
           text: message.text,
           attachments: toConversationAttachments(message.attachments),
-          userRequest: message.request,
+          initiator: message.initiator,
+          senderThreadId: message.senderThreadId,
+          turnRequest: message.turnRequest,
         },
       ];
     case "assistant-text":
@@ -477,7 +479,7 @@ function convertMessage(
           role: "assistant",
           text: message.text,
           attachments: null,
-          userRequest: null,
+          turnRequest: null,
         },
       ];
     case "command":
@@ -684,7 +686,7 @@ function convertPendingSteerMessage(
   message: EventProjectionMessage,
   rowIdPrefix: string,
 ): TimelineUserConversationRow {
-  if (message.kind !== "user" || message.request.kind !== "steer") {
+  if (message.kind !== "user" || message.turnRequest.kind !== "steer") {
     throw new Error(`Expected pending steer message, received ${message.kind}`);
   }
   return {
@@ -693,7 +695,9 @@ function convertPendingSteerMessage(
     role: "user",
     text: message.text,
     attachments: toConversationAttachments(message.attachments),
-    userRequest: message.request,
+    initiator: message.initiator,
+    senderThreadId: message.senderThreadId,
+    turnRequest: message.turnRequest,
   };
 }
 

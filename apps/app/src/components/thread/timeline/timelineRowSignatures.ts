@@ -223,8 +223,8 @@ function computeTimelineRowRenderSignature(row: ThreadTimelineViewRow): string {
       return joinSignatureParts([
         baseSignature,
         row.role,
-        row.userRequest?.kind,
-        row.userRequest?.status,
+        row.turnRequest?.kind,
+        row.turnRequest?.status,
         row.attachments?.localFiles,
         row.attachments?.localImages,
         row.attachments?.webImages,

@@ -6,6 +6,7 @@ import type {
   Thread,
   ThreadEventRow,
   ThreadEventScope,
+  ThreadTurnInitiator,
 } from "@bb/domain";
 import type { EventProjection } from "./event-projection.js";
 
@@ -64,28 +65,30 @@ export interface EventProjectionMessageBase {
   parentToolCallId?: string;
 }
 
-export const eventProjectionUserRequestKindValues = [
+export const eventProjectionTurnRequestKindValues = [
   "message",
   "steer",
 ] as const;
-export type EventProjectionUserRequestKind =
-  (typeof eventProjectionUserRequestKindValues)[number];
+export type EventProjectionTurnRequestKind =
+  (typeof eventProjectionTurnRequestKindValues)[number];
 
-export const eventProjectionUserRequestStatusValues = [
+export const eventProjectionTurnRequestStatusValues = [
   "pending",
   "accepted",
 ] as const;
-export type EventProjectionUserRequestStatus =
-  (typeof eventProjectionUserRequestStatusValues)[number];
+export type EventProjectionTurnRequestStatus =
+  (typeof eventProjectionTurnRequestStatusValues)[number];
 
-export interface EventProjectionUserRequest {
-  kind: EventProjectionUserRequestKind;
-  status: EventProjectionUserRequestStatus;
+export interface EventProjectionTurnRequest {
+  kind: EventProjectionTurnRequestKind;
+  status: EventProjectionTurnRequestStatus;
 }
 
 export interface EventProjectionUserMessage extends EventProjectionMessageBase {
   kind: "user";
-  request: EventProjectionUserRequest;
+  initiator: ThreadTurnInitiator;
+  senderThreadId: string | null;
+  turnRequest: EventProjectionTurnRequest;
   text: string;
   attachments?: {
     webImages: number;

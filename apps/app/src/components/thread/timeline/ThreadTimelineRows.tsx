@@ -486,15 +486,29 @@ function timelineRowsListGapClassName(
 function ConversationRow({ row }: ConversationRowProps) {
   const { onOpenLocalFileLink, projectId, resolveUserAttachmentImageSrc } =
     useTimelineRendererContext();
+  if (row.role === "user") {
+    return (
+      <ConversationMessageContent
+        attachments={row.attachments}
+        initiator={row.initiator}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+        role="user"
+        text={row.text}
+        turnRequest={row.turnRequest}
+      />
+    );
+  }
   return (
     <ConversationMessageContent
       attachments={row.attachments}
       onOpenLocalFileLink={onOpenLocalFileLink}
       projectId={projectId}
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-      role={row.role}
+      role="assistant"
       text={row.text}
-      userRequest={row.userRequest}
+      turnRequest={row.turnRequest}
     />
   );
 }
@@ -661,7 +675,7 @@ function TimelineExpandableBody({
                   resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                   role="assistant"
                   text={row.output}
-                  userRequest={null}
+                  turnRequest={null}
                 />
               ) : null}
             </div>

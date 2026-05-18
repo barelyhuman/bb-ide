@@ -416,8 +416,8 @@ function isPendingSteerRow(
   return (
     row.kind === "conversation" &&
     row.role === "user" &&
-    row.userRequest.kind === "steer" &&
-    row.userRequest.status === "pending"
+    row.turnRequest.kind === "steer" &&
+    row.turnRequest.status === "pending"
   );
 }
 

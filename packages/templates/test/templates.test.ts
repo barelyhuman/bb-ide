@@ -35,6 +35,18 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("hooks/pre-commit exited with status 1");
   });
 
+  it("renders scheduled nudges in block form so the [bb system] prefix sits on its own line", () => {
+    const rendered = renderTemplate("systemMessageScheduledNudge", {
+      name: "daily-recap",
+    });
+
+    expect(rendered).toBe(
+      ["[bb system]", "", "Scheduled nudge: daily-recap. Check ASYNC.md."].join(
+        "\n",
+      ),
+    );
+  });
+
   it("renders agent thread messages with inline reply guidance", () => {
     const rendered = renderTemplate("agentThreadMessage", {
       senderThreadId: "thr_sender",

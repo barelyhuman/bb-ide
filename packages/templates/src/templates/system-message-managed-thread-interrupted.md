@@ -8,7 +8,9 @@ variables:
   threadId: The interrupted worker thread's ID.
   titleSuffix?: "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
 ---
-[bb system] Managed thread interrupted: {{threadId}}{{titleSuffix}}
+[bb system]
+
+Managed thread interrupted: {{threadId}}{{titleSuffix}}
 Inspect the managed thread directly before taking action. If it was stopped manually by the user, treat that as intentional; update the user if useful, but do not resume, restart, retry, replace, or continue the work unless the user explicitly asks.
 Otherwise decide whether to resume it, redirect it, or update the user.
 Do not reapply its edits into the manager checkout unless the user explicitly asked for that.

@@ -1544,6 +1544,7 @@ describe("events", () => {
         direction: "outbound",
         source: "spawn",
         initiator: "user",
+        senderThreadId: null,
         requestId: "creq_runtime",
         input: [{ type: "text", text: "start" }],
         target: { kind: "thread-start" },

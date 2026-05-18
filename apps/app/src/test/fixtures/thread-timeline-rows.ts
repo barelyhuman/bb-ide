@@ -5,7 +5,7 @@ import type {
   TimelineCommandWorkRow,
   TimelineConversationAttachments,
   TimelineConversationRow,
-  TimelineConversationUserRequest,
+  TimelineConversationTurnRequest,
   TimelineDelegationWorkRow,
   TimelineDiffStats,
   TimelineFileChange,
@@ -23,6 +23,7 @@ import type {
   TimelineWebFetchWorkRow,
   TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
+import type { ThreadTurnInitiator } from "@bb/domain";
 
 export interface BaseRowArgs {
   id: string;
@@ -35,13 +36,15 @@ export interface BaseRowArgs {
 export interface ConversationRowArgs {
   attachments?: TimelineConversationAttachments | null;
   id?: string;
+  initiator?: ThreadTurnInitiator;
   role?: TimelineConversationRow["role"];
+  senderThreadId?: string | null;
   seq?: number;
   sourceSeqEnd?: number;
   sourceSeqStart?: number;
   text: string;
   turnId?: string | null;
-  userRequest?: TimelineConversationUserRequest;
+  turnRequest?: TimelineConversationTurnRequest;
 }
 
 export interface CommandRowArgs {
@@ -346,32 +349,43 @@ export function baseRow({
 export function conversationRow({
   attachments = null,
   id = DEFAULT_CONVERSATION_ID,
+  initiator,
   role = "assistant",
+  senderThreadId,
   seq,
   sourceSeqEnd,
   sourceSeqStart,
   text,
   turnId,
-  userRequest,
+  turnRequest,
 }: ConversationRowArgs): TimelineConversationRow {
   const rowBase = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
-  return role === "user"
-    ? {
-        ...rowBase,
-        kind: "conversation",
-        role,
-        text,
-        attachments,
-        userRequest: userRequest ?? { kind: "message", status: "accepted" },
-      }
-    : {
-        ...rowBase,
-        kind: "conversation",
-        role,
-        text,
-        attachments,
-        userRequest: null,
-      };
+  if (role === "user") {
+    const resolvedInitiator: ThreadTurnInitiator = initiator ?? "user";
+    return {
+      ...rowBase,
+      kind: "conversation",
+      role,
+      text,
+      attachments,
+      initiator: resolvedInitiator,
+      senderThreadId:
+        senderThreadId !== undefined
+          ? senderThreadId
+          : resolvedInitiator === "agent"
+            ? "thr_sender"
+            : null,
+      turnRequest: turnRequest ?? { kind: "message", status: "accepted" },
+    };
+  }
+  return {
+    ...rowBase,
+    kind: "conversation",
+    role,
+    text,
+    attachments,
+    turnRequest: null,
+  };
 }
 
 export function readIntent({ path }: ReadIntentArgs): TimelineActivityIntent {

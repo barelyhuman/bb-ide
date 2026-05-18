@@ -223,6 +223,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
         initiator: "user",
         input: payload.input,
         requestMethod: "turn/start",
+        senderThreadId: null,
         source: "tell",
         target: { kind: "new-turn" },
         threadId: thread.id,

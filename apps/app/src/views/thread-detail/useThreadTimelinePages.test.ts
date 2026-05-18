@@ -40,7 +40,7 @@ function userRow(args: TimelineTestRowArgs): TimelineUserConversationRow {
     role: "user",
     text: args.id,
     attachments: null,
-    userRequest: { kind: "message", status: "accepted" },
+    turnRequest: { kind: "message", status: "accepted" },
   };
 }
 

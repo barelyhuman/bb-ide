@@ -79,9 +79,10 @@ export function Overview() {
         <TimelineStage>
           <ConversationMessageContent
             role="user"
+            initiator="user"
             text="Walk me through how ThreadDetailView wires the prompt context banner."
             attachments={null}
-            userRequest={acceptedMessage}
+            turnRequest={acceptedMessage}
           />
         </TimelineStage>
       </StoryRow>
@@ -89,22 +90,24 @@ export function Overview() {
         <TimelineStage>
           <ConversationMessageContent
             role="user"
+            initiator="user"
             text={longMarkdownText}
             attachments={null}
-            userRequest={acceptedMessage}
+            turnRequest={acceptedMessage}
           />
         </TimelineStage>
       </StoryRow>
       <StoryRow
         label="pending"
-        hint="userRequest.kind = steer, status = pending — interruption mid-turn"
+        hint="turnRequest.kind = steer, status = pending — interruption mid-turn"
       >
         <TimelineStage>
           <ConversationMessageContent
             role="user"
+            initiator="user"
             text="Hold on — also include the queue API in that audit, please."
             attachments={null}
-            userRequest={pendingSteer}
+            turnRequest={pendingSteer}
           />
         </TimelineStage>
       </StoryRow>
@@ -115,9 +118,10 @@ export function Overview() {
         <TimelineStage>
           <ConversationMessageContent
             role="user"
+            initiator="user"
             text="Hold on — also include the queue API in that audit, please."
             attachments={null}
-            userRequest={acceptedSteer}
+            turnRequest={acceptedSteer}
           />
         </TimelineStage>
       </StoryRow>
@@ -125,9 +129,10 @@ export function Overview() {
         <TimelineStage>
           <ConversationMessageContent
             role="user"
+            initiator="user"
             text="Repro of the layout regression in the prompt context banner."
             attachments={singleImageAttachments}
-            userRequest={acceptedMessage}
+            turnRequest={acceptedMessage}
             resolveUserAttachmentImageSrc={resolveImageSrc}
           />
         </TimelineStage>
@@ -139,11 +144,60 @@ export function Overview() {
         <TimelineStage>
           <ConversationMessageContent
             role="user"
+            initiator="user"
             text="Three screenshots from the design review and the spec doc."
             attachments={mixedAttachments}
-            userRequest={acceptedMessage}
+            turnRequest={acceptedMessage}
             resolveUserAttachmentImageSrc={resolveImageSrc}
             onOpenLocalFileLink={noop}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="agent-initiated"
+        hint="[bb message from thread:…] prefix renders as a muted, line-clamped header"
+      >
+        <TimelineStage>
+          <ConversationMessageContent
+            role="user"
+            initiator="agent"
+            text={
+              '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union.'
+            }
+            attachments={null}
+            turnRequest={acceptedMessage}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="system-initiated (scheduled nudge)"
+        hint="[bb system] prefix on its own line, body below"
+      >
+        <TimelineStage>
+          <ConversationMessageContent
+            role="user"
+            initiator="system"
+            text={
+              "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md."
+            }
+            attachments={null}
+            turnRequest={acceptedMessage}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="system-initiated (welcome)"
+        hint="multi-line block-form body after the [bb system] header"
+      >
+        <TimelineStage>
+          <ConversationMessageContent
+            role="user"
+            initiator="system"
+            text={
+              "[bb system]\n\nWelcome!\nStart with a short meet-and-greet via `message_user`."
+            }
+            attachments={null}
+            turnRequest={acceptedMessage}
           />
         </TimelineStage>
       </StoryRow>

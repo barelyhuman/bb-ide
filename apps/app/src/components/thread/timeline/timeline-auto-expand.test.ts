@@ -217,7 +217,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
         id: "pending-steer-1",
         role: "user",
         text: "Keep this in mind",
-        userRequest: { kind: "steer", status: "pending" },
+        turnRequest: { kind: "steer", status: "pending" },
       }),
     ]);
 

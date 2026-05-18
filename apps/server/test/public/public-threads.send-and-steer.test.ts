@@ -217,6 +217,7 @@ describe("public thread send and steer routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -253,6 +254,7 @@ describe("public thread send and steer routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},
@@ -880,6 +882,7 @@ describe("public thread send and steer routes", () => {
             source: "client/turn/requested",
           },
           initiator: "user",
+          senderThreadId: null,
           request: {
             method: "turn/start",
             params: {},

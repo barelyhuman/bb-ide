@@ -130,6 +130,7 @@ describe("internal command result idempotency", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         requestMethod: "thread/start",
         source: "spawn",
       });
@@ -380,6 +381,7 @@ describe("internal command result idempotency", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         requestMethod: "thread/start",
         source: "spawn",
       });
@@ -638,6 +640,7 @@ describe("internal command result idempotency", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         requestMethod: "thread/start",
         source: "spawn",
       });
@@ -776,6 +779,7 @@ describe("internal command result idempotency", () => {
           source: "client/turn/requested",
         },
         initiator: "user",
+        senderThreadId: null,
         requestMethod: "thread/start",
         source: "spawn",
       });

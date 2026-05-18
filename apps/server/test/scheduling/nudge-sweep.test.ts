@@ -62,6 +62,7 @@ function seedRunnableManagerThread(args: {
       source: "client/turn/requested",
     },
     initiator: "user",
+    senderThreadId: null,
     requestMethod: "thread/start",
     source: "spawn",
   });
@@ -130,7 +131,7 @@ describe("nudge sweep", () => {
       expect(queuedTurnSubmit.command.input).toEqual([
         {
           type: "text",
-          text: "[bb system] Scheduled nudge: daily-recap. Check ASYNC.md.",
+          text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
         },
       ]);
       expect(
@@ -472,7 +473,7 @@ describe("nudge sweep", () => {
         input: [
           {
             type: "text",
-            text: "[bb system] Scheduled nudge: active-check. Check ASYNC.md.",
+            text: "[bb system]\n\nScheduled nudge: active-check. Check ASYNC.md.",
           },
         ],
         target: {

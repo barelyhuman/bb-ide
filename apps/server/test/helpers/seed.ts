@@ -299,6 +299,7 @@ export function seedThreadRuntimeState(
         source: "client/turn/requested",
       },
       initiator: "user",
+      senderThreadId: null,
       request: {
         method: "turn/start",
         params: {},

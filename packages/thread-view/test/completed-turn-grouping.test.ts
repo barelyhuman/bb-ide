@@ -43,7 +43,9 @@ function userMessage(args: MessageBaseArgs): EventProjectionUserMessage {
   return {
     ...messageBase(args),
     kind: "user",
-    request: {
+    initiator: "user",
+    senderThreadId: null,
+    turnRequest: {
       kind: "message",
       status: "accepted",
     },

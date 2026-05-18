@@ -3,6 +3,7 @@ import {
   jsonValueSchema,
   pendingInteractionUserAnswerSchema,
   pendingInteractionUserQuestionQuestionSchema,
+  threadTurnInitiatorSchema,
   type JsonObject,
 } from "@bb/domain";
 
@@ -76,20 +77,20 @@ export type TimelineConversationAttachments = z.infer<
   typeof timelineConversationAttachmentsSchema
 >;
 
-export const timelineConversationUserRequestKindValues = [
+export const timelineConversationTurnRequestKindValues = [
   "message",
   "steer",
 ] as const;
-export const timelineConversationUserRequestStatusValues = [
+export const timelineConversationTurnRequestStatusValues = [
   "pending",
   "accepted",
 ] as const;
-export const timelineConversationUserRequestSchema = z.object({
-  kind: z.enum(timelineConversationUserRequestKindValues),
-  status: z.enum(timelineConversationUserRequestStatusValues),
+export const timelineConversationTurnRequestSchema = z.object({
+  kind: z.enum(timelineConversationTurnRequestKindValues),
+  status: z.enum(timelineConversationTurnRequestStatusValues),
 });
-export type TimelineConversationUserRequest = z.infer<
-  typeof timelineConversationUserRequestSchema
+export type TimelineConversationTurnRequest = z.infer<
+  typeof timelineConversationTurnRequestSchema
 >;
 
 const timelineConversationRowBaseSchema = timelineRowBaseSchema.extend({
@@ -101,7 +102,9 @@ const timelineConversationRowBaseSchema = timelineRowBaseSchema.extend({
 export const timelineUserConversationRowSchema =
   timelineConversationRowBaseSchema.extend({
     role: z.literal("user"),
-    userRequest: timelineConversationUserRequestSchema,
+    initiator: threadTurnInitiatorSchema,
+    senderThreadId: z.string().nullable(),
+    turnRequest: timelineConversationTurnRequestSchema,
   });
 export type TimelineUserConversationRow = z.infer<
   typeof timelineUserConversationRowSchema
@@ -110,7 +113,7 @@ export type TimelineUserConversationRow = z.infer<
 export const timelineAssistantConversationRowSchema =
   timelineConversationRowBaseSchema.extend({
     role: z.literal("assistant"),
-    userRequest: z.null(),
+    turnRequest: z.null(),
   });
 export type TimelineAssistantConversationRow = z.infer<
   typeof timelineAssistantConversationRowSchema

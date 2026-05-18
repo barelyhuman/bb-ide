@@ -58,6 +58,7 @@ async function queueReadyManagerSystemMessage(
     input: args.input,
     execution: args.execution,
     initiator: "system",
+    senderThreadId: null,
     requestMethod: "turn/start",
     source: MANAGER_SYSTEM_MESSAGE_SOURCE,
     target:
@@ -155,6 +156,7 @@ export async function queueManagerSystemMessage(
       execution,
       initiator: "system",
       input,
+      senderThreadId: null,
       thread: managerThread,
     })
   ) {

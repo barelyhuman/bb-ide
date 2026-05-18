@@ -8,8 +8,8 @@ import type { EventMeta } from "./event-decode.js";
 import type {
   BuildEventProjectionMessagesOptions,
   EventProjectionAssistantTextMessage,
+  EventProjectionTurnRequest,
   EventProjectionUserMessage,
-  EventProjectionUserRequest,
 } from "./event-projection-types.js";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
@@ -228,10 +228,10 @@ export function isSteerRequest(decoded: ClientTurnRequestedEvent): boolean {
   }
 }
 
-function buildUserRequest(
+function buildTurnRequest(
   decoded: ClientTurnRequestedEvent,
-  status: EventProjectionUserRequest["status"],
-): EventProjectionUserRequest {
+  status: EventProjectionTurnRequest["status"],
+): EventProjectionTurnRequest {
   return {
     kind: isSteerRequest(decoded) ? "steer" : "message",
     status,
@@ -256,7 +256,7 @@ interface BuildClientUserMessageArgs {
   decoded: ClientTurnRequestedEvent;
   meta: EventMeta;
   parsedInput: NonNullable<ReturnType<typeof parsePromptInput>>;
-  requestStatus: EventProjectionUserRequest["status"];
+  requestStatus: EventProjectionTurnRequest["status"];
 }
 
 function buildClientUserMessage({
@@ -285,7 +285,9 @@ function buildClientUserMessage({
     ...(targetTurnId
       ? eventProjectionMessageTurnScopeFields(targetTurnId)
       : { scope: decoded.scope }),
-    request: buildUserRequest(decoded, requestStatus),
+    initiator: decoded.initiator,
+    senderThreadId: decoded.senderThreadId,
+    turnRequest: buildTurnRequest(decoded, requestStatus),
     text: parsedInput.text,
     attachments: buildAttachments(parsedInput),
   };
@@ -308,6 +310,9 @@ export function parseUserFromClientRequest(
     return null;
   }
 
+  // Steers flow through parsePendingSteer / parseAcceptedSteer regardless of
+  // initiator — the steer-vs-message distinction is about turn shape, not who
+  // initiated it.
   if (isSteerRequest(decoded)) {
     return null;
   }

@@ -51,7 +51,7 @@ function userRow(args: {
     role: "user",
     text: args.text,
     attachments: null,
-    userRequest: { kind: "message", status: "accepted" },
+    turnRequest: { kind: "message", status: "accepted" },
   };
 }
 
@@ -72,7 +72,7 @@ function assistantRow(args: {
     role: "assistant",
     text: args.text,
     attachments: null,
-    userRequest: null,
+    turnRequest: null,
   };
 }
 

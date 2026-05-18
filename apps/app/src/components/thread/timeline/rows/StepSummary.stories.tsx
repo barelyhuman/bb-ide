@@ -65,7 +65,7 @@ const closingAssistantMessage: TimelineRow = {
   role: "assistant",
   text: "—",
   attachments: null,
-  userRequest: null,
+  turnRequest: null,
 };
 
 // ---- Commands: real turbo build/test commands from the same turn ----------

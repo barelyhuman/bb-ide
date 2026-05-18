@@ -72,7 +72,7 @@ function detailRow(text: string): TimelineRow {
     turnId: "turn-1",
     text,
     attachments: null,
-    userRequest: null,
+    turnRequest: null,
     sourceSeqStart: 2,
     sourceSeqEnd: 2,
     startedAt: 2,

@@ -672,7 +672,7 @@ function isSummarizableWorkRow(
  */
 export function isTimelineStepBoundary(row: ThreadTimelineViewRow): boolean {
   if (row.kind !== "conversation") return false;
-  if (row.role === "user" && row.userRequest.status === "pending") {
+  if (row.role === "user" && row.turnRequest.status === "pending") {
     return false;
   }
   return true;

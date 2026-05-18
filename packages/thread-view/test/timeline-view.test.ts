@@ -51,7 +51,7 @@ function assistantRow({
     role: "assistant",
     text,
     attachments: null,
-    userRequest: null,
+    turnRequest: null,
   };
 }
 

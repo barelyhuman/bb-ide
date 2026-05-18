@@ -1274,6 +1274,7 @@ describe("internal event side effects", () => {
       );
       expect(managerTurnRequest).toMatchObject({
         initiator: "system",
+        senderThreadId: null,
         request: {
           method: "turn/start",
           params: {},

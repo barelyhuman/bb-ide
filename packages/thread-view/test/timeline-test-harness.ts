@@ -84,6 +84,7 @@ type ClientTurnRequestedArgs = EventFactoryRowOptions & {
   input?: PromptInput[];
   requestId?: ClientTurnRequestId;
   requestMethod?: "thread/start" | "turn/start";
+  senderThreadId?: string | null;
   source?: "spawn" | "tell";
   target?: TurnRequestTarget;
   text: string;
@@ -555,6 +556,13 @@ export function createTimelineEventFactory(
     },
     clientTurnRequested(args) {
       const base = nextThreadScopedRowBase("client-turn-requested", args);
+      const initiator = args.initiator ?? "user";
+      const senderThreadId =
+        args.senderThreadId !== undefined
+          ? args.senderThreadId
+          : initiator === "agent"
+            ? "thr_sender"
+            : null;
       return {
         ...base,
         type: "client/turn/requested",
@@ -562,7 +570,8 @@ export function createTimelineEventFactory(
           direction: "outbound",
           requestId: args.requestId ?? clientRequestIdForSequence(base.seq),
           source: args.source ?? "tell",
-          initiator: args.initiator ?? "user",
+          initiator,
+          senderThreadId,
           input: args.input ?? [{ type: "text", text: args.text }],
           target: args.target ?? { kind: "new-turn" },
           request: {

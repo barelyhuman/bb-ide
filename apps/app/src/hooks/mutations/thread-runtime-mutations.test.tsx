@@ -381,7 +381,7 @@ describe("thread runtime mutations", () => {
       kind: "conversation",
       role: "user",
       text: "Keep this in mind",
-      userRequest: {
+      turnRequest: {
         kind: "steer",
         status: "pending",
       },

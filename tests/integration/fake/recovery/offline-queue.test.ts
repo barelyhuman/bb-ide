@@ -68,6 +68,7 @@ describe.sequential("fake provider offline queue recovery integration", () => {
         requestId,
         source: "tell",
         initiator: "user",
+        senderThreadId: null,
         input: [{ type: "text", text: "queued while offline" }],
         target: { kind: "new-turn" },
         request: { method: "turn/start", params: {} },

@@ -8,6 +8,8 @@ variables:
   threadId: The completed worker thread's ID.
   titleSuffix?: "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
 ---
-[bb system] Managed thread complete: {{threadId}}{{titleSuffix}}
+[bb system]
+
+Managed thread complete: {{threadId}}{{titleSuffix}}
 Review that thread's result and decide whether to update the user or delegate a follow-up.
 Fresh managed child work usually lives in that thread's own worktree unless the manager explicitly reused an environment; do not reapply its edits into the manager checkout unless the user explicitly asked for that.

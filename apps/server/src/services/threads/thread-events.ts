@@ -60,6 +60,7 @@ export interface ClientTurnRequestedEventArgs {
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
+  senderThreadId: string | null;
   source: "spawn" | "tell";
   target: TurnRequestTarget;
   threadId: string;
@@ -221,6 +222,7 @@ function buildClientTurnRequestedEventData(
   return {
     ...buildClientTurnBaseEventData(args),
     requestId,
+    senderThreadId: args.senderThreadId,
     input: args.input,
     target: args.target,
     execution: args.execution,
@@ -613,7 +615,8 @@ export function parseStoredTurnRequestEvent(
       direction: event.direction,
       requestId: event.requestId,
       source: event.source,
-      ...(event.initiator ? { initiator: event.initiator } : {}),
+      initiator: event.initiator,
+      senderThreadId: event.senderThreadId,
       input: event.input,
       target: event.target,
       request: event.request,

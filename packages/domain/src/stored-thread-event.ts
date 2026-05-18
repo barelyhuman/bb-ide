@@ -93,7 +93,13 @@ const LEGACY_TURN_REQUEST_TARGET = {
   kind: "new-turn",
 } satisfies TurnRequestTarget;
 
+// Read path: `senderThreadId` is a new field, so every pre-change persisted
+// `client/turn/requested` row lacks it — defaulting to null here lets old
+// rows load without a backfill migration. `initiator` was already always
+// written by every call site (the prior `.optional()` was schema slack),
+// so it does not need a default.
 const storedTurnRequestEventDataSchema = turnRequestEventDataSchema.extend({
+  senderThreadId: z.string().nullable().default(null),
   target: turnRequestTargetSchema.default(LEGACY_TURN_REQUEST_TARGET),
   execution: resolvedThreadExecutionOptionsSchema,
 });
