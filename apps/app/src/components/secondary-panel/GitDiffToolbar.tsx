@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useResizeObserver } from "usehooks-ts";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
@@ -8,6 +10,8 @@ import {
 } from "@/components/workspace/workspace-change-summary";
 import { cn } from "@/lib/utils";
 import type { GitDiffStats } from "../git-diff/git-diff-parsing";
+
+const GIT_DIFF_SELECTOR_MENU_MIN_WIDTH = "20rem";
 
 export type GitDiffDisplayMode = "unified" | "split";
 
@@ -23,6 +27,8 @@ interface GitDiffSelectorProps {
   options: readonly GitDiffSelectionOption[];
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Width of the surrounding diff panel, used to cap the open menu's width. */
+  panelWidthPx: number;
 }
 
 function GitDiffSelector({
@@ -30,6 +36,7 @@ function GitDiffSelector({
   options,
   onChange,
   disabled,
+  panelWidthPx,
 }: GitDiffSelectorProps) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedLabel = selectedOption?.label ?? value;
@@ -61,10 +68,13 @@ function GitDiffSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        // Cap at viewport so we don't overflow; otherwise grow to content.
-        // Bigger than the trigger so commit-label rows can breathe and match
-        // the width of the diff cards rendered below the selector.
-        className="min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[var(--radix-popper-available-width)]"
+        // Match the panel width so the menu lines up with the diff cards below,
+        // but stay at least GIT_DIFF_SELECTOR_MENU_MIN_WIDTH so labels stay
+        // readable when the panel is narrow. Viewport-capped as a safety net.
+        className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
+        style={{
+          maxWidth: `min(var(--radix-popper-available-width), max(${GIT_DIFF_SELECTOR_MENU_MIN_WIDTH}, ${panelWidthPx}px))`,
+        }}
       >
         {options.map((option) => (
           <DropdownMenuItem
@@ -134,8 +144,14 @@ export function GitDiffToolbar({
   displayMode,
   onDisplayModeChange,
 }: GitDiffToolbarProps) {
+  const rootRef = useRef<HTMLDivElement>(null!);
+  const { width: rootWidth = 0 } = useResizeObserver({
+    ref: rootRef,
+    box: "content-box",
+  });
+
   return (
-    <div className="px-4 pb-3">
+    <div ref={rootRef} className="px-4 pb-3">
       <div className="flex min-w-0 items-center gap-3">
         <div className="min-w-0 flex-1">
           <GitDiffSelector
@@ -143,6 +159,7 @@ export function GitDiffToolbar({
             options={selectionOptions}
             onChange={onSelectionChange}
             disabled={isSelectorDisabled}
+            panelWidthPx={rootWidth}
           />
         </div>
         <span
