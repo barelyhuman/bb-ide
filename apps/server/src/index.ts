@@ -47,10 +47,11 @@ async function main(): Promise<void> {
     dataDir: commonConfig.BB_DATA_DIR,
     featureFlags: serverConfig.featureFlags,
     hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
-    inferenceModel: serverConfig.BB_INFERENCE_MODEL,
+    inferenceModel: serverConfig.BB_INFERENCE,
     isDevelopment: !isProduction,
     openAiApiKey: serverConfig.OPENAI_API_KEY,
     serverPort: serverConfig.BB_SERVER_PORT,
+    transcriptionModel: serverConfig.BB_TRANSCRIPTION,
   };
 
   if (appUrl !== undefined) {

@@ -59,9 +59,14 @@ type DelayResult = "timeout";
 
 const invalidConfigCommandCases: InvalidConfigCommandCase[] = [
   {
-    expectedError: /BB_INFERENCE_MODEL must use provider\/model format/u,
-    key: "BB_INFERENCE_MODEL",
+    expectedError: /BB_INFERENCE must use provider\/model format/u,
+    key: "BB_INFERENCE",
     value: "gpt-4o-mini",
+  },
+  {
+    expectedError: /BB_TRANSCRIPTION must use provider\/model format/u,
+    key: "BB_TRANSCRIPTION",
+    value: "gpt-4o-mini-transcribe",
   },
   {
     expectedError: /BB_APP_URL must be a valid URL/u,
@@ -182,6 +187,7 @@ describe("bb-app launcher", () => {
 
     expect(context.dataDir).toBe("/home/tester/.bb");
     expect(context.configFile).toBe("/home/tester/.bb/config.json");
+    expect(context.envFile).toBe("/home/tester/.bb/env.json");
     expect(context.serverPort).toBe(38886);
     expect(context.daemonPort).toBe(38887);
     expect(context.serverUrl).toBe("http://127.0.0.1:38886");
@@ -276,10 +282,19 @@ describe("bb-app launcher", () => {
 
   it("resolves config commands", () => {
     expect(
-      resolveBbAppCommand(["config", "OPENAI_API_KEY", "test-key"]),
+      resolveBbAppCommand(["config", "set", "BB_APP_URL", "https://bb.test"]),
     ).toEqual({
-      args: ["OPENAI_API_KEY", "test-key"],
+      args: ["set", "BB_APP_URL", "https://bb.test"],
       kind: "config",
+    });
+  });
+
+  it("resolves env commands", () => {
+    expect(
+      resolveBbAppCommand(["env", "set", "OPENAI_API_KEY", "test-key"]),
+    ).toEqual({
+      args: ["set", "OPENAI_API_KEY", "test-key"],
+      kind: "env",
     });
   });
 
@@ -380,9 +395,17 @@ describe("bb-app launcher", () => {
     writeFileSync(
       join(dataDir, "config.json"),
       JSON.stringify({
-        env: {
+        config: {
           BB_APP_URL: "https://bb.example.test",
           BB_LOG_LEVEL: "debug",
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(dataDir, "env.json"),
+      JSON.stringify({
+        env: {
           OPENAI_API_KEY: "stored-openai-key",
         },
       }),
@@ -401,7 +424,7 @@ describe("bb-app launcher", () => {
     expect(runtime.env.BB_LOG_LEVEL).toBe("debug");
     expect(runtime.env.OPENAI_API_KEY).toBe("stored-openai-key");
     expect(runtime.serverEnv.BB_LOG_LEVEL).toBe("debug");
-    expect(runtime.serverEnv.OPENAI_API_KEY).toBe("ambient-openai-key");
+    expect(runtime.serverEnv.OPENAI_API_KEY).toBe("stored-openai-key");
   });
 
   it("uses launcher flags over managed config and ambient server URL", async () => {
@@ -437,26 +460,99 @@ describe("bb-app launcher", () => {
       "--data-dir",
       dataDir,
       "config",
-      "OPENAI_API_KEY",
-      "test-openai-key",
+      "set",
+      "BB_APP_URL",
+      "https://bb.example.test",
     ]);
     await runBbApp([
       "--data-dir",
       dataDir,
-      "config",
-      "BB_APP_URL",
-      "https://bb.example.test",
+      "env",
+      "set",
+      "OPENAI_API_KEY",
+      "test-openai-key",
     ]);
 
     expect(
       JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
     ).toEqual({
-      env: {
+      config: {
         BB_APP_URL: "https://bb.example.test",
-        OPENAI_API_KEY: "test-openai-key",
       },
     });
+    expect(JSON.parse(readFileSync(join(dataDir, "env.json"), "utf8"))).toEqual(
+      {
+        env: {
+          OPENAI_API_KEY: "test-openai-key",
+        },
+      },
+    );
     expect(statSync(join(dataDir, "config.json")).mode & 0o777).toBe(0o600);
+    expect(statSync(join(dataDir, "env.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("keeps secrets out of the config command", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-secret-config-"));
+
+    await expect(
+      runBbApp([
+        "--data-dir",
+        dataDir,
+        "config",
+        "set",
+        "OPENAI_API_KEY",
+        "test-openai-key",
+      ]),
+    ).rejects.toThrow(/bb-app env set OPENAI_API_KEY/u);
+  });
+
+  it("stores managed env values from the env command", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-env-command-"));
+
+    await runBbApp([
+      "--data-dir",
+      dataDir,
+      "env",
+      "set",
+      "ANTHROPIC_API_KEY",
+      "test-anthropic-key",
+    ]);
+
+    expect(JSON.parse(readFileSync(join(dataDir, "env.json"), "utf8"))).toEqual(
+      {
+        env: {
+          ANTHROPIC_API_KEY: "test-anthropic-key",
+        },
+      },
+    );
+    expect(statSync(join(dataDir, "env.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("rejects invalid env key names", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-invalid-env-"));
+
+    await expect(
+      runBbApp(["--data-dir", dataDir, "env", "set", "1BAD", "value"]),
+    ).rejects.toThrow(/Invalid env key/u);
+  });
+
+  it("unsets managed env values", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-env-unset-"));
+    writeFileSync(
+      join(dataDir, "env.json"),
+      JSON.stringify({
+        env: {
+          OPENAI_API_KEY: "test-openai-key",
+        },
+      }),
+      "utf8",
+    );
+
+    await runBbApp(["--data-dir", dataDir, "env", "unset", "OPENAI_API_KEY"]);
+
+    expect(JSON.parse(readFileSync(join(dataDir, "env.json"), "utf8"))).toEqual(
+      {},
+    );
   });
 
   it("rejects invalid managed config values before writing or reloading", async () => {
@@ -466,8 +562,8 @@ describe("bb-app launcher", () => {
         const dataDir = mkdtempSync(join(tmpdir(), "bb-app-invalid-config-"));
         const configPath = join(dataDir, "config.json");
         const initialConfig = {
-          env: {
-            OPENAI_API_KEY: "existing-openai-key",
+          config: {
+            BB_APP_URL: "https://existing.example.test",
           },
         };
         writeFileSync(
@@ -483,6 +579,7 @@ describe("bb-app launcher", () => {
             "--server-port",
             String(server.port),
             "config",
+            "set",
             testCase.key,
             testCase.value,
           ]),
@@ -510,8 +607,9 @@ describe("bb-app launcher", () => {
         "--server-port",
         String(server.port),
         "config",
-        "OPENAI_API_KEY",
-        "test-openai-key",
+        "set",
+        "BB_APP_URL",
+        "https://bb.example.test",
       ]);
 
       expect(server.reloadRequests()).toEqual([
@@ -576,14 +674,16 @@ describe("bb-app launcher", () => {
         "--data-dir",
         dataDir,
         "config",
+        "set",
         "BB_SERVER_URL",
         server.url,
       ]);
 
-      expect(JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")))
-        .toEqual({
-          serverUrl: server.url,
-        });
+      expect(
+        JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
+      ).toEqual({
+        serverUrl: server.url,
+      });
       expect(server.reloadRequests()).toEqual([]);
 
       await runBbApp(["--data-dir", dataDir, "config", "refresh"]);
@@ -608,6 +708,7 @@ describe("bb-app launcher", () => {
         "--data-dir",
         dataDir,
         "config",
+        "set",
         "BB_SERVER_URL",
         configServer.url,
       ]);

@@ -711,6 +711,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "host.list_branches": null,
   "host.list_files": null,
   "host.read_file": null,
+  "codex.inference.complete": null,
   "interactive.resolve": defineCommandResultOwner({
     applySideEffects: handleInteractiveResolveResult,
   }),
@@ -738,6 +739,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
       return emptyCommandResultSideEffects();
     },
   }),
+  "codex.voice.transcribe": null,
   "workspace.commit": defineCommandResultOwner({
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);

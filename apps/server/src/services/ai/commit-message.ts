@@ -1,13 +1,16 @@
 import { renderTemplate } from "@bb/templates";
-import type { AppDeps } from "../../types.js";
+import type { LoggedWorkSessionDeps } from "../../types.js";
 import { Type } from "@mariozechner/pi-ai";
-import { InferenceTimeoutError, inferenceComplete } from "./inference.js";
+import {
+  InferenceTimeoutError,
+  inferenceComplete,
+} from "./inference.js";
 
 const commitMessageSchema = Type.Object({
   message: Type.String({ minLength: 1 }),
 });
 
-type CommitMessageGenerationDeps = Pick<AppDeps, "config" | "logger">;
+type CommitMessageGenerationDeps = LoggedWorkSessionDeps;
 type CommitMessageGenerationReason = "failed" | "no-result" | "timeout";
 
 interface GenerateCommitMessageArgs {

@@ -320,6 +320,97 @@ describe("host-daemon command schemas", () => {
         decision: "allow_for_session",
       },
     });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "codex.inference.complete",
+        model: "gpt-5.4-mini",
+        prompt: "Return a JSON object with a short title.",
+        outputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title"],
+          properties: {
+            title: { type: "string" },
+          },
+        },
+        timeoutMs: 10000,
+      }),
+    ).toMatchObject({
+      type: "codex.inference.complete",
+      model: "gpt-5.4-mini",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "codex.voice.transcribe",
+        model: "gpt-4o-mini-transcribe",
+        audioBase64: Buffer.from("audio").toString("base64"),
+        mimeType: "audio/webm",
+        filename: "prompt.webm",
+        prompt: null,
+        timeoutMs: 30000,
+      }),
+    ).toMatchObject({
+      type: "codex.voice.transcribe",
+      model: "gpt-4o-mini-transcribe",
+      mimeType: "audio/webm",
+    });
+  });
+
+  it("rejects old provider-agnostic AI command names", () => {
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "inference.complete",
+        model: "gpt-5.4-mini",
+        prompt: "Return a title",
+        outputSchema: { type: "object" },
+        timeoutMs: 10000,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "voice.transcribe",
+        model: "gpt-4o-mini-transcribe",
+        audioBase64: Buffer.from("audio").toString("base64"),
+        mimeType: "audio/webm",
+        filename: "prompt.webm",
+        prompt: null,
+        timeoutMs: 30000,
+      }),
+    ).toThrow();
+  });
+
+  it("requires Codex inference schemas and results to be JSON objects", () => {
+    for (const outputSchema of [null, "object", ["object"]]) {
+      expect(() =>
+        hostDaemonCommandSchema.parse({
+          type: "codex.inference.complete",
+          model: "gpt-5.4-mini",
+          prompt: "Return a title",
+          outputSchema,
+          timeoutMs: 10000,
+        }),
+      ).toThrow();
+    }
+
+    expect(() =>
+      hostDaemonCommandResultSchemaByType["codex.inference.complete"].parse({
+        model: "gpt-5.4-mini",
+        value: null,
+      }),
+    ).toThrow();
+
+    expect(
+      hostDaemonCommandResultSchemaByType["codex.inference.complete"].parse({
+        model: "gpt-5.4-mini",
+        value: { title: "Short title" },
+      }),
+    ).toEqual({
+      model: "gpt-5.4-mini",
+      value: { title: "Short title" },
+    });
   });
 
   it("rejects malformed environment.provision commands at parse time", () => {

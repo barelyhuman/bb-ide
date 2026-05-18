@@ -411,7 +411,7 @@ export type {
   ThreadEventRowOfType,
 } from "./stored-thread-event.js";
 
-export { jsonValueSchema } from "./json-value.js";
+export { jsonObjectSchema, jsonValueSchema } from "./json-value.js";
 export type { JsonObject, JsonValue } from "./json-value.js";
 
 export {

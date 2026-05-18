@@ -1,10 +1,17 @@
 import { readFile } from "node:fs/promises";
 import {
   bbAppManagedConfigSchema,
+  bbAppManagedEnvFileSchema,
   formatBbAppConfigPath,
+  formatBbAppEnvPath,
   type BbAppManagedConfig,
+  type BbAppManagedEnvConfig,
+  type BbAppManagedEnvFile,
 } from "@bb/config/bb-app-managed-config";
-import { validateInferenceModel } from "@bb/config/inference-model";
+import {
+  validateInferenceModel,
+  validateTranscriptionModel,
+} from "@bb/config/inference-model";
 import { validateOptionalUrl } from "@bb/config/public-url";
 import type { ServerLogger, ServerRuntimeConfig } from "../../types.js";
 import type { NotificationHub } from "../../ws/hub.js";
@@ -12,11 +19,16 @@ import type { NotificationHub } from "../../ws/hub.js";
 export interface ApplyBbAppManagedConfigArgs {
   baseConfig: ServerRuntimeConfig;
   managedConfig: BbAppManagedConfig;
+  managedEnvFile: BbAppManagedEnvFile;
   targetConfig: ServerRuntimeConfig;
 }
 
 export interface ReadBbAppManagedConfigArgs {
   configPath: string;
+}
+
+export interface ReadBbAppManagedEnvArgs {
+  envPath: string;
 }
 
 export interface CreateBbAppManagedConfigReloaderArgs {
@@ -31,6 +43,12 @@ export interface ReloadBbAppManagedConfigArgs {
 
 export interface BbAppManagedConfigReloader {
   reload(args: ReloadBbAppManagedConfigArgs): Promise<void>;
+}
+
+interface ApplyManagedProcessEnvArgs {
+  baseEnv: NodeJS.ProcessEnv;
+  managedEnv: BbAppManagedEnvConfig;
+  managedKeys: Set<string>;
 }
 
 function cloneRuntimeConfig(config: ServerRuntimeConfig): ServerRuntimeConfig {
@@ -58,22 +76,44 @@ function setOptionalAppUrl(
   config.appUrl = value;
 }
 
+function applyManagedProcessEnv(args: ApplyManagedProcessEnvArgs): void {
+  for (const key of args.managedKeys) {
+    const baseValue = args.baseEnv[key];
+    if (baseValue === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = baseValue;
+    }
+  }
+
+  args.managedKeys.clear();
+  for (const [key, value] of Object.entries(args.managedEnv)) {
+    process.env[key] = value;
+    args.managedKeys.add(key);
+  }
+}
+
 export function applyBbAppManagedConfig(
   args: ApplyBbAppManagedConfigArgs,
 ): void {
-  const managedEnv = args.managedConfig.env ?? {};
+  const managedConfig = args.managedConfig.config ?? {};
+  const managedEnv = args.managedEnvFile.env ?? {};
 
   args.targetConfig.inferenceModel =
-    managedEnv.BB_INFERENCE_MODEL !== undefined
-      ? validateInferenceModel(managedEnv.BB_INFERENCE_MODEL)
+    managedConfig.BB_INFERENCE !== undefined
+      ? validateInferenceModel(managedConfig.BB_INFERENCE)
       : args.baseConfig.inferenceModel;
+  args.targetConfig.transcriptionModel =
+    managedConfig.BB_TRANSCRIPTION !== undefined
+      ? validateTranscriptionModel(managedConfig.BB_TRANSCRIPTION)
+      : args.baseConfig.transcriptionModel;
   args.targetConfig.openAiApiKey =
     managedEnv.OPENAI_API_KEY ?? args.baseConfig.openAiApiKey;
 
   setOptionalAppUrl(
     args.targetConfig,
-    managedEnv.BB_APP_URL !== undefined
-      ? validateOptionalUrl("BB_APP_URL", managedEnv.BB_APP_URL)
+    managedConfig.BB_APP_URL !== undefined
+      ? validateOptionalUrl("BB_APP_URL", managedConfig.BB_APP_URL)
       : args.baseConfig.appUrl,
   );
 }
@@ -92,21 +132,45 @@ export async function readBbAppManagedConfig(
   }
 }
 
+export async function readBbAppManagedEnv(
+  args: ReadBbAppManagedEnvArgs,
+): Promise<BbAppManagedEnvFile> {
+  try {
+    const rawConfig = await readFile(args.envPath, "utf8");
+    return bbAppManagedEnvFileSchema.parse(JSON.parse(rawConfig));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {};
+    }
+    throw error;
+  }
+}
+
 export async function createBbAppManagedConfigReloader(
   args: CreateBbAppManagedConfigReloaderArgs,
 ): Promise<BbAppManagedConfigReloader> {
   const baseConfig = cloneRuntimeConfig(args.config);
+  const baseEnv = { ...process.env };
   const configPath = formatBbAppConfigPath(args.config.dataDir);
+  const envPath = formatBbAppEnvPath(args.config.dataDir);
+  const managedEnvKeys = new Set<string>();
 
   async function reload(
     reloadArgs: ReloadBbAppManagedConfigArgs,
   ): Promise<void> {
     const managedConfig = await readBbAppManagedConfig({ configPath });
+    const managedEnvFile = await readBbAppManagedEnv({ envPath });
     const nextConfig = cloneRuntimeConfig(args.config);
     applyBbAppManagedConfig({
       baseConfig,
       managedConfig,
+      managedEnvFile,
       targetConfig: nextConfig,
+    });
+    applyManagedProcessEnv({
+      baseEnv,
+      managedEnv: managedEnvFile.env ?? {},
+      managedKeys: managedEnvKeys,
     });
     replaceRuntimeConfig(args.config, nextConfig);
     if (reloadArgs.notify) {

@@ -25,6 +25,10 @@ import {
   runReplay,
 } from "./command-handlers/replay.js";
 import {
+  completeCodexInference,
+  transcribeCodexVoice,
+} from "./codex-chatgpt-client.js";
+import {
   ensureThreadRuntime,
   handleThreadDeleted,
   startThread,
@@ -233,6 +237,14 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "interactive.resolve" }>,
     options: CommandDispatchOptions,
   ) => resolveInteractiveRequest(command, options),
+  "codex.inference.complete": async (
+    command: Extract<HostDaemonCommand, { type: "codex.inference.complete" }>,
+    _options: CommandDispatchOptions,
+  ) => completeCodexInference(command),
+  "codex.voice.transcribe": async (
+    command: Extract<HostDaemonCommand, { type: "codex.voice.transcribe" }>,
+    _options: CommandDispatchOptions,
+  ) => transcribeCodexVoice(command),
   "host.list_files": async (
     command: Extract<HostDaemonCommand, { type: "host.list_files" }>,
     _options: CommandDispatchOptions,

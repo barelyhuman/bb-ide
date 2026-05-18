@@ -66,17 +66,6 @@ local host daemon, and serves the web app. It stores bb-managed state under
 From the app, add or open a project, start a thread, and choose the provider
 you want that thread to use.
 
-For the best default experience, set the helper API key once:
-
-```bash
-npx bb-app config OPENAI_API_KEY <key>
-```
-
-Core agent threads use the selected provider CLI's own authentication, so this
-key is not required for a logged-in Codex, Claude Code, or Pi thread. bb uses
-`OPENAI_API_KEY` for server-side helpers such as generated thread titles,
-branch names, commit messages, and voice transcription.
-
 ## Provider Credentials
 
 bb uses whichever providers you have configured. If you need to set one up:
@@ -89,18 +78,27 @@ bb uses whichever providers you have configured. If you need to set one up:
 
 ## Configuration
 
-Use `bb-app config` for persistent package settings under `~/.bb/config.json`:
+Use `bb-app config` for persistent non-secret package settings under
+`~/.bb/config.json`:
 
 ```bash
-npx bb-app config OPENAI_API_KEY <key>
-npx bb-app config BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
+npx bb-app config set BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
+npx bb-app config set BB_INFERENCE codex/gpt-5.4-mini
+npx bb-app config set BB_TRANSCRIPTION codex/gpt-4o-mini-transcribe
 npx bb-app config list
-npx bb-app config unset OPENAI_API_KEY
 npx bb-app config refresh
 ```
 
-`config list` redacts secrets. Config writes ask a running local bb server to
-reload; if bb is stopped, the values apply on the next start.
+Use `bb-app env` for provider credentials under `~/.bb/env.json`:
+
+```bash
+npx bb-app env set OPENAI_API_KEY <key>
+npx bb-app env list
+npx bb-app env unset OPENAI_API_KEY
+```
+
+`env list` redacts all values. Config and env writes ask a running local bb
+server to reload; if bb is stopped, the values apply on the next start.
 
 For all config keys, precedence, startup flags, and source-development `.env`
 behavior, see the

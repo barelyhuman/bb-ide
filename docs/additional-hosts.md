@@ -13,8 +13,9 @@ give you more places to actually run things.
 
 - A bb server already running on one machine, reachable from the machine you
   want to add.
-- `BB_APP_URL` configured on the server with `npx bb-app config BB_APP_URL <url>`,
-  so the app can generate join commands.
+- `BB_APP_URL` configured on the server with
+  `npx bb-app config set BB_APP_URL <url>`, so the app can generate join
+  commands.
   See [Using bb on multiple devices](./multiple-devices.md) if you haven't set
   this up yet.
 - Node.js on the new host.
@@ -50,7 +51,7 @@ To confirm a host is connected, run this from any machine that can reach the
 server:
 
 ```bash
-npx bb-app config BB_SERVER_URL http://<server>.<tailnet>.ts.net:38886
+npx bb-app config set BB_SERVER_URL http://<server>.<tailnet>.ts.net:38886
 npx --package bb-app bb host list
 ```
 
@@ -67,7 +68,7 @@ The app doesn't yet support adding a source path on another host, so add it
 from the CLI:
 
 ```bash
-npx bb-app config BB_SERVER_URL http://<server>.<tailnet>.ts.net:38886
+npx bb-app config set BB_SERVER_URL http://<server>.<tailnet>.ts.net:38886
 npx --package bb-app bb project source add <project-id> \
   --host <remote-host-id> \
   --path /absolute/path/on/the/host
@@ -89,7 +90,7 @@ A few quick checks:
 1. Run `npx --package bb-app bb host list` from any machine that can reach the
    server. The new host should show up as connected.
 2. If the app shows an "app URL required" prompt when generating a join
-   command, run `npx bb-app config BB_APP_URL <server-url>` on the server
+   command, run `npx bb-app config set BB_APP_URL <server-url>` on the server
    machine. bb picks up the new URL while it is running.
 3. Join codes are single-use and expire after 15 minutes. If you missed the
    window, request a new one from the app.

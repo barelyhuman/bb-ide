@@ -484,7 +484,10 @@ describe("generated managed branch names", () => {
         throw new Error("Expected environment.provision command");
       }
       expect(queued.command.branchName).toBe(`bb/${thread.id}`);
-      expect(piAiMocks.getModel).not.toHaveBeenCalled();
+      expect(piAiMocks.getModel).toHaveBeenCalledWith(
+        "openai",
+        "gpt-4o-mini",
+      );
       expect(piAiMocks.complete).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();

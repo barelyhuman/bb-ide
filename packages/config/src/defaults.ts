@@ -15,5 +15,6 @@ export const DEFAULTS = {
   appPort: { dev: 5173 },
   devEnvPort: 9112,
   serverUrl: { prod: "http://localhost:38886", dev: "http://localhost:3334" },
-  inferenceModel: "openai/gpt-4o-mini",
+  inferenceModel: "codex/gpt-5.4-mini",
+  transcriptionModel: "codex/gpt-4o-mini-transcribe",
 } as const;

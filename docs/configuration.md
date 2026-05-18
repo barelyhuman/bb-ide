@@ -1,65 +1,75 @@
 # Configuration
 
-The packaged `npx bb-app` flow stores persistent package config under
-`~/.bb/config.json`. Use `bb-app config` for values that should apply every
-time:
+The packaged `npx bb-app` flow stores persistent package settings under
+`~/.bb/config.json` and provider environment values under `~/.bb/env.json`.
+
+Use `bb-app config` for non-secret bb settings:
 
 ```bash
-npx bb-app config OPENAI_API_KEY <key>
-npx bb-app config BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
+npx bb-app config set BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
+npx bb-app config set BB_INFERENCE codex/gpt-5.4-mini
+npx bb-app config set BB_TRANSCRIPTION codex/gpt-4o-mini-transcribe
 npx bb-app config list
-npx bb-app config unset OPENAI_API_KEY
+npx bb-app config unset BB_APP_URL
 npx bb-app config refresh
 ```
 
-`bb-app config list` redacts secret values and shows whether they are set.
-Use `unset` to remove a stored value.
+Use `bb-app env` for provider credentials and provider-specific environment:
+
+```bash
+npx bb-app env set OPENAI_API_KEY <key>
+npx bb-app env list
+npx bb-app env unset OPENAI_API_KEY
+```
+
+`bb-app config list` shows non-secret values. `bb-app env list` redacts every
+value and only shows whether a key is set.
 
 ## Precedence
 
 Configuration is resolved in this order:
 
 1. Explicit launcher flags, such as `--data-dir` or `--server-port`.
-2. Persistent `bb-app config` values.
+2. Persistent `bb-app config` and `bb-app env` values.
 3. Ambient shell environment.
 4. Built-in defaults.
 
-For the packaged app, prefer `bb-app config` and launcher flags over shell
-variables. The environment remains the internal and deployment substrate, and
-source-development commands still load `.env` files.
+For the packaged app, prefer `bb-app config`, `bb-app env`, and launcher flags
+over shell variables. The environment remains the internal and deployment
+substrate, and source-development commands still load `.env` files.
 
-After `bb-app config` writes `~/.bb/config.json`, it asks the running local
-server to reload its config. If bb is not running, the new values apply on the
-next start. If you edit `config.json` by hand, run `npx bb-app config refresh`
-to apply the file to a running server.
+After `bb-app config` writes `~/.bb/config.json` or `bb-app env` writes
+`~/.bb/env.json`, it asks the running local server to reload. If bb is not
+running, the new values apply on the next start. If you edit either file by
+hand, run `npx bb-app config refresh` to apply the files to a running server.
 
-The live reload applies runtime keys such as `OPENAI_API_KEY`, `BB_APP_URL`,
-and `BB_INFERENCE_MODEL`. Startup-only values such as `BB_LOG_LEVEL` apply the
-next time bb starts. Feature flags remain source/deployment environment
-variables rather than `bb-app config` keys.
+The live reload applies runtime keys such as `BB_APP_URL`, `BB_INFERENCE`,
+`BB_TRANSCRIPTION`, and provider env values like `OPENAI_API_KEY`. Startup-only
+values such as `BB_LOG_LEVEL` apply the next time bb starts. Feature flags
+remain source/deployment environment variables rather than `bb-app config`
+keys.
 
 When targeting a non-default running instance, pass the same `--data-dir` and
-`--server-port` to `bb-app config` commands so they write the right config file
-and refresh the right server.
+`--server-port` to `bb-app config` or `bb-app env` commands so they write the
+right file and refresh the right server.
 
 Startup settings such as data directory and ports still apply when the process
 starts.
 
 ## Common Keys
 
-| Config key           | When to set             | Used for                                                                                                   |
-| -------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY`     | Recommended             | Generated thread titles, branch names, commit messages, and voice transcription.                           |
-| `BB_APP_URL`         | Optional for remote use | Human-facing app URL used for generated links and allowed browser origins. Leave empty for local-only use. |
-| `BB_INFERENCE_MODEL` | Optional                | Server-side helper model in `provider/model` format.                                                       |
-| `BB_SERVER_URL`      | Remote CLI/host use     | Server URL for standalone `bb` CLI and `host-daemon` commands on the current machine.                      |
-| `BB_LOG_LEVEL`       | Debugging               | Log level for the next bb start: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.                    |
+| Key                | Command         | When to set             | Used for                                                                                                                 |
+| ------------------ | --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `BB_APP_URL`       | `bb-app config` | Optional for remote use | Human-facing app URL used for generated links and allowed browser origins. Leave empty for local-only use.               |
+| `BB_INFERENCE`     | `bb-app config` | Optional                | Server-side helper model in `provider/model` format. Defaults to `codex/gpt-5.4-mini`.                                   |
+| `BB_TRANSCRIPTION` | `bb-app config` | Optional                | Voice transcription model in `provider/model` format. Defaults to `codex/gpt-4o-mini-transcribe`.                        |
+| `BB_SERVER_URL`    | `bb-app config` | Remote CLI/host use     | Server URL for standalone `bb` CLI and `host-daemon` commands on the current machine.                                    |
+| `BB_LOG_LEVEL`     | `bb-app config` | Debugging               | Log level for the next bb start: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.                                  |
+| `OPENAI_API_KEY`   | `bb-app env`    | OpenAI opt-in routes    | Required only when selecting explicit OpenAI provider routes such as `openai/gpt-4o-mini` or `openai/gpt-4o-transcribe`. |
 
-`OPENAI_API_KEY` is the main key most users should set for the best default
-experience. bb's server-side helper model defaults to
-`BB_INFERENCE_MODEL=openai/gpt-4o-mini`; without an OpenAI key, those helper
-calls return no result. Core threads can still run when the selected provider
-CLI is authenticated, such as `codex login` or a logged-in Claude Code install.
+By default, helper inference and voice transcription use Codex credentials from
+the host daemon. Run `codex login` on the host for the default path. Set
+provider env keys only when opting into a non-Codex provider route.
 
 `BB_SERVER_URL` does not change where full `npx bb-app` startup binds locally.
 It is for commands that need to target an already-running server, such as the

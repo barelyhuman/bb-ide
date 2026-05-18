@@ -34,12 +34,7 @@ npx bb-app
 Then open `http://localhost:38886`.
 
 bb uses the provider CLIs you already have authenticated, such as Codex,
-Claude Code, or Pi. For the best default experience, set the helper API key
-once:
-
-```bash
-npx bb-app config OPENAI_API_KEY <key>
-```
+Claude Code, or Pi.
 
 For install requirements, provider setup, configuration, and package-focused
 docs, start with

@@ -19,6 +19,7 @@ export interface ServerRuntimeConfig {
   isDevelopment: boolean;
   openAiApiKey: string;
   serverPort: number;
+  transcriptionModel: string;
   appUrl?: string;
 }
 

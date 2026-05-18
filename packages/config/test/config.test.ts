@@ -97,7 +97,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_EXTERNAL_URL", undefined);
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", undefined);
     vi.stubEnv("BB_FF_TERMINALS", undefined);
-    vi.stubEnv("BB_INFERENCE_MODEL", undefined);
+    vi.stubEnv("BB_INFERENCE", undefined);
+    vi.stubEnv("BB_TRANSCRIPTION", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
     const { serverConfig } =
@@ -111,7 +112,8 @@ describe("consumer-specific config", () => {
       askUserQuestion: false,
       terminals: true,
     });
-    expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
+    expect(serverConfig.BB_INFERENCE).toBe("codex/gpt-5.4-mini");
+    expect(serverConfig.BB_TRANSCRIPTION).toBe("codex/gpt-4o-mini-transcribe");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
   });
 
@@ -141,14 +143,24 @@ describe("consumer-specific config", () => {
     expect(databaseConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
   });
 
-  it("requires provider/model format for BB_INFERENCE_MODEL", async () => {
+  it("requires provider/model format for BB_INFERENCE", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    vi.stubEnv("BB_INFERENCE_MODEL", "gpt-4o-mini");
+    vi.stubEnv("BB_INFERENCE", "gpt-4o-mini");
 
     await expect(
       importFresh<typeof import("../src/server.js")>("../src/server.js"),
-    ).rejects.toThrow(/BB_INFERENCE_MODEL/u);
+    ).rejects.toThrow(/BB_INFERENCE/u);
+  });
+
+  it("requires provider/model format for BB_TRANSCRIPTION", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("BB_TRANSCRIPTION", "gpt-4o-mini-transcribe");
+
+    await expect(
+      importFresh<typeof import("../src/server.js")>("../src/server.js"),
+    ).rejects.toThrow(/BB_TRANSCRIPTION/u);
   });
 
   it("parses feature flags from env", async () => {
@@ -325,5 +337,38 @@ describe("consumer-specific config", () => {
         "../src/host-daemon-entrypoint.js",
       ),
     ).rejects.toThrow('Invalid BB_HOST_TYPE "ephemeral"');
+  });
+});
+
+describe("provider model config", () => {
+  it("parses provider/model values", async () => {
+    const { parseProviderModelConfig } = await importFresh<
+      typeof import("../src/inference-model.js")
+    >("../src/inference-model.js");
+
+    expect(
+      parseProviderModelConfig({
+        name: "BB_INFERENCE",
+        value: "codex/gpt-5.4-mini",
+      }),
+    ).toEqual({
+      provider: "codex",
+      modelId: "gpt-5.4-mini",
+    });
+  });
+
+  it("rejects empty or nested provider/model values", async () => {
+    const { parseProviderModelConfig } = await importFresh<
+      typeof import("../src/inference-model.js")
+    >("../src/inference-model.js");
+
+    for (const value of ["gpt-4o-mini", "/gpt-4o-mini", "openai/", "a/b/c"]) {
+      expect(() =>
+        parseProviderModelConfig({
+          name: "BB_INFERENCE",
+          value,
+        }),
+      ).toThrow(/BB_INFERENCE/u);
+    }
   });
 });

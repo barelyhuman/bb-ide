@@ -1,30 +1,25 @@
+import { jsonObjectSchema, type JsonObject, type JsonValue } from "@bb/domain";
+import {
+  parseProviderModelConfig,
+  type ProviderModelInfo,
+} from "@bb/config/inference-model";
 import { complete, getModel, validateToolCall } from "@mariozechner/pi-ai";
-import type { Static, TSchema, Tool } from "@mariozechner/pi-ai";
-import type { AppDeps } from "../../types.js";
+import type { Static, TSchema, Tool, ToolCall } from "@mariozechner/pi-ai";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
+import { ApiError } from "../../errors.js";
+import { requireDefaultConnectedPersistentHostId } from "../lib/entity-lookup.js";
+import { queueCommandAndWait } from "../hosts/command-wait.js";
 
-export interface InferenceModelInfo {
-  provider: string;
-  modelId: string;
-}
-
-function parseInferenceModel(model: string): InferenceModelInfo {
-  const slashIndex = model.indexOf("/");
-  if (slashIndex === -1) {
-    throw new Error(`Invalid inference model: ${model}`);
-  }
-  return {
-    provider: model.slice(0, slashIndex),
-    modelId: model.slice(slashIndex + 1),
-  };
-}
+type BaseInferenceDeps = Pick<AppDeps, "config" | "logger">;
+type InferenceCompleteDeps = LoggedWorkSessionDeps;
 
 function getInferenceModel(
-  deps: Pick<AppDeps, "config" | "logger">,
+  deps: BaseInferenceDeps,
 ): ReturnType<typeof getModel> | null {
-  const modelInfo = parseInferenceModel(deps.config.inferenceModel);
-  if (modelInfo.provider === "openai" && !deps.config.openAiApiKey) {
-    return null;
-  }
+  const modelInfo = parseProviderModelConfig({
+    name: "BB_INFERENCE",
+    value: deps.config.inferenceModel,
+  });
   // @ts-expect-error — pi-ai overloads getModel per provider; our provider string is dynamic
   const model = getModel(modelInfo.provider, modelInfo.modelId);
   if (!model) {
@@ -38,6 +33,8 @@ function getInferenceModel(
 }
 
 const RESULT_TOOL_NAME = "result";
+const CODEX_INFERENCE_PROVIDER = "codex";
+const DEFAULT_INFERENCE_TIMEOUT_MS = 30_000;
 
 interface InferenceCompleteArgs<T extends TSchema> {
   prompt: string;
@@ -62,6 +59,81 @@ export class InferenceTimeoutError extends Error {
   }
 }
 
+function toToolCallArguments(value: JsonValue): JsonObject {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Structured inference result must be a JSON object");
+  }
+  return value;
+}
+
+function validateStructuredResult<T extends TSchema>(
+  schema: T,
+  value: JsonValue,
+): Static<T> {
+  const tools: Tool<T>[] = [
+    {
+      name: RESULT_TOOL_NAME,
+      description: "Return the result as structured JSON.",
+      parameters: schema,
+    },
+  ];
+  const toolCall: ToolCall = {
+    type: "toolCall",
+    id: "codex_result",
+    name: RESULT_TOOL_NAME,
+    arguments: toToolCallArguments(value),
+  };
+
+  // validateToolCall validates arguments against the TypeBox schema and
+  // returns the validated data. Its return type is `any` so the cast is needed.
+  return validateToolCall(tools, toolCall) as Static<T>;
+}
+
+function parseInferenceSchema(schema: TSchema): JsonObject {
+  return jsonObjectSchema.parse(schema);
+}
+
+function shouldTreatAsInferenceTimeout(error: Error): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.body.code === "command_timeout" ||
+      error.body.code === "codex_request_timeout")
+  );
+}
+
+async function completeWithCodexHostDaemon<T extends TSchema>(
+  deps: InferenceCompleteDeps,
+  modelInfo: ProviderModelInfo,
+  args: InferenceCompleteArgs<T>,
+): Promise<Static<T> | null> {
+  const hostId = requireDefaultConnectedPersistentHostId(deps.db);
+  const timeoutMs = args.timeoutMs ?? DEFAULT_INFERENCE_TIMEOUT_MS;
+  try {
+    const result = await queueCommandAndWait(deps, {
+      hostId,
+      timeoutMs,
+      command: {
+        type: "codex.inference.complete",
+        model: modelInfo.modelId,
+        prompt: args.prompt,
+        outputSchema: parseInferenceSchema(args.schema),
+        timeoutMs,
+      },
+    });
+
+    return validateStructuredResult(args.schema, result.value);
+  } catch (error) {
+    const err =
+      error instanceof Error
+        ? error
+        : new Error("Non-Error thrown during Codex inference");
+    if (shouldTreatAsInferenceTimeout(err)) {
+      throw new InferenceTimeoutError({ timeoutMs });
+    }
+    throw err;
+  }
+}
+
 /**
  * Send a prompt to the configured inference model and return structured
  * output validated via a tool call. The model is given a single tool whose
@@ -70,9 +142,17 @@ export class InferenceTimeoutError extends Error {
  * model is not configured or does not produce a valid tool call.
  */
 export async function inferenceComplete<T extends TSchema>(
-  deps: Pick<AppDeps, "config" | "logger">,
+  deps: InferenceCompleteDeps,
   args: InferenceCompleteArgs<T>,
 ): Promise<Static<T> | null> {
+  const modelInfo = parseProviderModelConfig({
+    name: "BB_INFERENCE",
+    value: deps.config.inferenceModel,
+  });
+  if (modelInfo.provider === CODEX_INFERENCE_PROVIDER) {
+    return completeWithCodexHostDaemon(deps, modelInfo, args);
+  }
+
   const model = getInferenceModel(deps);
   if (!model) {
     return null;

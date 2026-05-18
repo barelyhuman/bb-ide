@@ -387,18 +387,20 @@ async function smokeConfigCommand(tarballPath) {
     args: createNpxArgs(tarballPath, "bb-app", [
       "--data-dir",
       dataDir,
-      "config",
+      "env",
+      "set",
       "OPENAI_API_KEY",
       "test-openai-key",
     ]),
     command: "npx",
-    label: "bb-app config OPENAI_API_KEY",
+    label: "bb-app env OPENAI_API_KEY",
   });
   await runCommand({
     args: createNpxArgs(tarballPath, "bb-app", [
       "--data-dir",
       dataDir,
       "config",
+      "set",
       "BB_APP_URL",
       "https://bb.example.test",
     ]),
@@ -409,10 +411,11 @@ async function smokeConfigCommand(tarballPath) {
   const configJson = JSON.parse(
     await readFile(join(dataDir, "config.json"), "utf8"),
   );
-  if (configJson.env?.OPENAI_API_KEY !== "test-openai-key") {
-    throw new Error("Expected bb-app config to persist OPENAI_API_KEY");
+  const envJson = JSON.parse(await readFile(join(dataDir, "env.json"), "utf8"));
+  if (envJson.env?.OPENAI_API_KEY !== "test-openai-key") {
+    throw new Error("Expected bb-app env to persist OPENAI_API_KEY");
   }
-  if (configJson.env?.BB_APP_URL !== "https://bb.example.test") {
+  if (configJson.config?.BB_APP_URL !== "https://bb.example.test") {
     throw new Error("Expected bb-app config to persist BB_APP_URL");
   }
 }

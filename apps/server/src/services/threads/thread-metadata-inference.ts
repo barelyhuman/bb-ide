@@ -1,5 +1,5 @@
 import type { PromptInput, ProvisioningTranscriptEntry } from "@bb/domain";
-import type { AppDeps } from "../../types.js";
+import type { LoggedWorkSessionDeps } from "../../types.js";
 import { appendThreadProvisioningEvent } from "./thread-events.js";
 import {
   applyGeneratedThreadTitle,
@@ -7,10 +7,7 @@ import {
   type ThreadMetadataGenerationOutcome,
 } from "./title-generation.js";
 
-type ThreadMetadataInferenceDeps = Pick<
-  AppDeps,
-  "config" | "db" | "hub" | "logger"
->;
+type ThreadMetadataInferenceDeps = LoggedWorkSessionDeps;
 
 // Two 2.5s attempts preserve roughly the old 5s managed provisioning
 // blocking budget while recovering transient metadata inference timeouts.

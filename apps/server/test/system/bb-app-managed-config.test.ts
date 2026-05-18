@@ -56,6 +56,7 @@ function createRuntimeConfig(): ServerRuntimeConfig {
     isDevelopment: false,
     openAiApiKey: "ambient-openai-key",
     serverPort: 38886,
+    transcriptionModel: "openai/gpt-4o-transcribe",
   };
 }
 
@@ -67,9 +68,14 @@ describe("bb-app managed config", () => {
     applyBbAppManagedConfig({
       baseConfig,
       managedConfig: {
-        env: {
+        config: {
           BB_APP_URL: "https://stored-app.example.test",
-          BB_INFERENCE_MODEL: "anthropic/claude-sonnet-4-5",
+          BB_INFERENCE: "anthropic/claude-sonnet-4-5",
+          BB_TRANSCRIPTION: "openai/gpt-4o-transcribe",
+        },
+      },
+      managedEnvFile: {
+        env: {
           OPENAI_API_KEY: "stored-openai-key",
         },
       },
@@ -80,6 +86,7 @@ describe("bb-app managed config", () => {
       appUrl: "https://stored-app.example.test",
       inferenceModel: "anthropic/claude-sonnet-4-5",
       openAiApiKey: "stored-openai-key",
+      transcriptionModel: "openai/gpt-4o-transcribe",
     });
   });
 
@@ -90,8 +97,12 @@ describe("bb-app managed config", () => {
     applyBbAppManagedConfig({
       baseConfig,
       managedConfig: {
-        env: {
+        config: {
           BB_APP_URL: "https://stored-app.example.test",
+        },
+      },
+      managedEnvFile: {
+        env: {
           OPENAI_API_KEY: "stored-openai-key",
         },
       },
@@ -100,6 +111,7 @@ describe("bb-app managed config", () => {
     applyBbAppManagedConfig({
       baseConfig,
       managedConfig: {},
+      managedEnvFile: {},
       targetConfig,
     });
 
@@ -115,13 +127,14 @@ describe("bb-app managed config", () => {
       applyBbAppManagedConfig({
         baseConfig,
         managedConfig: {
-          env: {
-            BB_INFERENCE_MODEL: "gpt-4o-mini",
+          config: {
+            BB_INFERENCE: "gpt-4o-mini",
           },
         },
+        managedEnvFile: {},
         targetConfig,
       }),
-    ).toThrow(/BB_INFERENCE_MODEL/u);
+    ).toThrow(/BB_INFERENCE/u);
   });
 
   it("reloads config file changes and notifies clients", async () => {
@@ -148,7 +161,7 @@ describe("bb-app managed config", () => {
 
     try {
       writeFileSync(
-        join(dataDir, "config.json"),
+        join(dataDir, "env.json"),
         `${JSON.stringify({ env: { OPENAI_API_KEY: "live-openai-key" } })}\n`,
         "utf8",
       );
@@ -206,12 +219,12 @@ describe("bb-app managed config", () => {
     try {
       writeFileSync(
         join(dataDir, "config.json"),
-        `${JSON.stringify({ env: { BB_INFERENCE_MODEL: "gpt-4o-mini" } })}\n`,
+        `${JSON.stringify({ config: { BB_INFERENCE: "gpt-4o-mini" } })}\n`,
         "utf8",
       );
 
       await expect(reloader.reload({ notify: true })).rejects.toThrow(
-        /BB_INFERENCE_MODEL/u,
+        /BB_INFERENCE/u,
       );
       expect(config.inferenceModel).toBe("openai/gpt-4o-mini");
     } finally {

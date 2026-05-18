@@ -16,15 +16,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
-  BB_APP_MANAGED_ENV_KEYS,
-  BB_APP_SECRET_MANAGED_ENV_KEYS,
+  BB_APP_MANAGED_CONFIG_KEYS,
   bbAppManagedConfigSchema,
+  bbAppManagedEnvFileSchema,
   formatBbAppConfigPath,
+  formatBbAppEnvPath,
   type BbAppManagedConfig,
+  type BbAppManagedConfigKey,
+  type BbAppManagedConfigValues,
   type BbAppManagedEnvConfig,
-  type BbAppManagedEnvKey,
+  type BbAppManagedEnvFile,
 } from "@bb/config/bb-app-managed-config";
-import { validateInferenceModel } from "@bb/config/inference-model";
+import {
+  validateInferenceModel,
+  validateTranscriptionModel,
+} from "@bb/config/inference-model";
 import { validateLogLevel } from "@bb/config/log-level";
 import { validateOptionalUrl } from "@bb/config/public-url";
 import { z } from "zod";
@@ -41,18 +47,20 @@ const START_COMMAND = "start";
 const HOST_DAEMON_COMMAND = "host-daemon";
 const HOST_DAEMON_JOIN_COMMAND = "join";
 const CONFIG_COMMAND = "config";
+const ENV_COMMAND = "env";
+const SET_COMMAND = "set";
 const CONFIG_UNSET_COMMAND = "unset";
 const CONFIG_LIST_COMMAND = "list";
 const CONFIG_REFRESH_COMMAND = "refresh";
 
-type ManagedEnvKey = BbAppManagedEnvKey;
-type ManagedConfigKey = "BB_SERVER_URL" | "serverUrl" | ManagedEnvKey;
+type ManagedConfigValueKey = BbAppManagedConfigKey;
+type ManagedConfigKey = "BB_SERVER_URL" | "serverUrl" | ManagedConfigValueKey;
 
-const MANAGED_ENV_KEYS = BB_APP_MANAGED_ENV_KEYS;
-const MANAGED_ENV_KEY_VALUES = new Set<string>(MANAGED_ENV_KEYS);
-const SECRET_MANAGED_ENV_KEY_VALUES = new Set<string>(
-  BB_APP_SECRET_MANAGED_ENV_KEYS,
-);
+const MANAGED_CONFIG_KEYS = BB_APP_MANAGED_CONFIG_KEYS;
+const MANAGED_CONFIG_KEY_VALUES = new Set<string>(MANAGED_CONFIG_KEYS);
+const PORTABLE_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+const SECRET_SHAPED_ENV_NAME_PATTERN =
+  /(?:^|_)(?:API_KEY|TOKEN|SECRET|PASSWORD)$/u;
 
 const hostJoinResponseSchema = z
   .object({
@@ -66,7 +74,9 @@ const apiErrorResponseSchema = z.object({
 });
 
 export type HostJoinResponse = z.infer<typeof hostJoinResponseSchema>;
+export type ManagedConfigValues = BbAppManagedConfigValues;
 export type ManagedEnvConfig = BbAppManagedEnvConfig;
+export type ManagedEnvFile = BbAppManagedEnvFile;
 export type ManagedConfig = BbAppManagedConfig;
 
 export interface PersistentHostJoinRequestBody {
@@ -124,6 +134,7 @@ export interface BbAppStartContext {
   daemonPort: number;
   dataDir: string;
   dbPath: string;
+  envFile: string;
   logDir: string;
   packageRoot: string;
   serverEntry: string;
@@ -155,6 +166,11 @@ export interface HostDaemonCommand {
 export interface ConfigCommand {
   args: string[];
   kind: "config";
+}
+
+export interface EnvCommand {
+  args: string[];
+  kind: "env";
 }
 
 export interface HelpCommand {
@@ -204,6 +220,7 @@ type ManagedProcessName = "daemon" | "server";
 type OutputChunk = Buffer | string;
 type BbAppCommand =
   | ConfigCommand
+  | EnvCommand
   | HelpCommand
   | HostDaemonCommand
   | InvalidCommand
@@ -260,6 +277,7 @@ interface CreateServerEnvArgs {
 interface CreateServerBaseEnvArgs {
   config: ManagedConfig;
   env: NodeJS.ProcessEnv;
+  envFile: ManagedEnvFile;
 }
 
 interface CreateHostDaemonOnlyEnvArgs {
@@ -308,6 +326,11 @@ interface WriteManagedConfigFileArgs {
   dataDir: string;
 }
 
+interface WriteManagedEnvFileArgs {
+  config: ManagedEnvFile;
+  dataDir: string;
+}
+
 interface ResolveServerUrlArgs {
   config: ManagedConfig;
   defaultServerUrl: string;
@@ -318,6 +341,7 @@ interface ResolveServerUrlArgs {
 interface ApplyManagedConfigEnvArgs {
   config: ManagedConfig;
   env: NodeJS.ProcessEnv;
+  envFile: ManagedEnvFile;
 }
 
 interface ResolveBbAppRuntimeStateArgs {
@@ -329,6 +353,12 @@ interface ResolveBbAppRuntimeStateArgs {
 }
 
 interface RunConfigCommandArgs {
+  args: string[];
+  dataDir: string;
+  serverUrl: string;
+}
+
+interface RunEnvCommandArgs {
   args: string[];
   dataDir: string;
   serverUrl: string;
@@ -399,16 +429,22 @@ function formatReadyOutputRow(label: string, value: string): string {
   return `${dim(label.padEnd("daemon".length))} ${value}`;
 }
 
-function isManagedEnvKey(value: string): value is ManagedEnvKey {
-  return MANAGED_ENV_KEY_VALUES.has(value);
+function isManagedConfigValueKey(
+  value: string,
+): value is ManagedConfigValueKey {
+  return MANAGED_CONFIG_KEY_VALUES.has(value);
 }
 
-function isSecretManagedEnvKey(value: ManagedEnvKey): boolean {
-  return SECRET_MANAGED_ENV_KEY_VALUES.has(value);
+function isPortableEnvName(value: string): boolean {
+  return PORTABLE_ENV_NAME_PATTERN.test(value);
+}
+
+function isSecretShapedEnvName(value: string): boolean {
+  return SECRET_SHAPED_ENV_NAME_PATTERN.test(value);
 }
 
 function supportedConfigKeysText(): string {
-  return ["BB_SERVER_URL", ...MANAGED_ENV_KEYS].join(", ");
+  return ["BB_SERVER_URL", ...MANAGED_CONFIG_KEYS].join(", ");
 }
 
 function createDefaultLauncherOptions(): LauncherCliOptions {
@@ -593,16 +629,16 @@ function applyManagedConfigEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...args.env,
-    ...args.config.env,
+    ...args.config.config,
+    ...args.envFile.env,
   };
 }
 
 function createServerBaseEnv(args: CreateServerBaseEnvArgs): NodeJS.ProcessEnv {
   return {
     ...args.env,
-    ...(args.config.env?.BB_LOG_LEVEL !== undefined
-      ? { BB_LOG_LEVEL: args.config.env.BB_LOG_LEVEL }
-      : {}),
+    ...args.config.config,
+    ...args.envFile.env,
   };
 }
 
@@ -633,13 +669,37 @@ async function readManagedConfig(
   }
 }
 
-function createManagedEnvPatch(
-  key: ManagedEnvKey,
+async function readManagedEnvFile(
+  args: ResolveManagedConfigArgs,
+): Promise<ManagedEnvFile> {
+  try {
+    const rawConfig = await readFile(formatBbAppEnvPath(args.dataDir), "utf8");
+    return bbAppManagedEnvFileSchema.parse(JSON.parse(rawConfig));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `Invalid bb-app env JSON at ${formatBbAppEnvPath(args.dataDir)}`,
+      );
+    }
+    if (error instanceof z.ZodError) {
+      throw new Error(
+        `Invalid bb-app env at ${formatBbAppEnvPath(args.dataDir)}: ${error.message}`,
+      );
+    }
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {};
+    }
+    throw error;
+  }
+}
+
+function createManagedConfigValuePatch(
+  key: ManagedConfigValueKey,
   value: string,
-): ManagedEnvConfig {
-  const env: ManagedEnvConfig = {};
-  env[key] = value;
-  return env;
+): ManagedConfigValues {
+  const config: ManagedConfigValues = {};
+  config[key] = value;
+  return config;
 }
 
 function mergeManagedConfig(
@@ -654,10 +714,10 @@ function mergeManagedConfig(
     nextConfig.serverUrl = patchConfig.serverUrl;
   }
 
-  if (patchConfig.env !== undefined) {
-    nextConfig.env = {
-      ...currentConfig.env,
-      ...patchConfig.env,
+  if (patchConfig.config !== undefined) {
+    nextConfig.config = {
+      ...currentConfig.config,
+      ...patchConfig.config,
     };
   }
 
@@ -669,6 +729,32 @@ function pruneManagedConfig(config: ManagedConfig): ManagedConfig {
   if (config.serverUrl !== undefined) {
     nextConfig.serverUrl = config.serverUrl;
   }
+  if (config.config !== undefined && Object.keys(config.config).length > 0) {
+    nextConfig.config = config.config;
+  }
+  return nextConfig;
+}
+
+function mergeManagedEnvFile(
+  currentConfig: ManagedEnvFile,
+  patchConfig: ManagedEnvFile,
+): ManagedEnvFile {
+  const nextConfig: ManagedEnvFile = {
+    ...currentConfig,
+  };
+
+  if (patchConfig.env !== undefined) {
+    nextConfig.env = {
+      ...currentConfig.env,
+      ...patchConfig.env,
+    };
+  }
+
+  return nextConfig;
+}
+
+function pruneManagedEnvFile(config: ManagedEnvFile): ManagedEnvFile {
+  const nextConfig: ManagedEnvFile = {};
   if (config.env !== undefined && Object.keys(config.env).length > 0) {
     nextConfig.env = config.env;
   }
@@ -703,18 +789,21 @@ function validateManagedConfigForWrite(config: ManagedConfig): void {
   if (config.serverUrl !== undefined) {
     validateOptionalUrl("BB_SERVER_URL", config.serverUrl);
   }
-  const env = config.env;
-  if (env === undefined) {
+  const configValues = config.config;
+  if (configValues === undefined) {
     return;
   }
-  if (env.BB_APP_URL !== undefined) {
-    validateOptionalUrl("BB_APP_URL", env.BB_APP_URL);
+  if (configValues.BB_APP_URL !== undefined) {
+    validateOptionalUrl("BB_APP_URL", configValues.BB_APP_URL);
   }
-  if (env.BB_INFERENCE_MODEL !== undefined) {
-    validateInferenceModel(env.BB_INFERENCE_MODEL);
+  if (configValues.BB_INFERENCE !== undefined) {
+    validateInferenceModel(configValues.BB_INFERENCE);
   }
-  if (env.BB_LOG_LEVEL !== undefined) {
-    validateLogLevel(env.BB_LOG_LEVEL);
+  if (configValues.BB_TRANSCRIPTION !== undefined) {
+    validateTranscriptionModel(configValues.BB_TRANSCRIPTION);
+  }
+  if (configValues.BB_LOG_LEVEL !== undefined) {
+    validateLogLevel(configValues.BB_LOG_LEVEL);
   }
 }
 
@@ -724,6 +813,37 @@ async function writeManagedConfig(args: WriteManagedConfigArgs): Promise<void> {
     config: mergeManagedConfig(existingConfig, args.config),
     dataDir: args.dataDir,
   });
+}
+
+async function writeManagedEnv(args: WriteManagedEnvFileArgs): Promise<void> {
+  const existingConfig = await readManagedEnvFile({ dataDir: args.dataDir });
+  await writeManagedEnvFile({
+    config: mergeManagedEnvFile(existingConfig, args.config),
+    dataDir: args.dataDir,
+  });
+}
+
+async function writeManagedEnvFile(
+  args: WriteManagedEnvFileArgs,
+): Promise<void> {
+  await mkdir(args.dataDir, { recursive: true });
+  const nextConfig = pruneManagedEnvFile(args.config);
+  const envPath = formatBbAppEnvPath(args.dataDir);
+  const tempPath = join(
+    args.dataDir,
+    `.env.json.${process.pid}.${randomUUID()}.tmp`,
+  );
+
+  try {
+    await writeFile(tempPath, `${JSON.stringify(nextConfig, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await rename(tempPath, envPath);
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined);
+    throw error;
+  }
 }
 
 export function resolveBbAppStartContext(
@@ -754,6 +874,7 @@ export function resolveBbAppStartContext(
     daemonPort,
     dataDir,
     dbPath: join(dataDir, "bb.db"),
+    envFile: formatBbAppEnvPath(dataDir),
     logDir: join(dataDir, "logs"),
     packageRoot,
     serverEntry: resolve(packageRoot, "server", "dist", "index.js"),
@@ -777,8 +898,10 @@ export async function resolveBbAppRuntimeState(
     homeDir: args.homeDir,
   });
   const config = await readManagedConfig({ dataDir: initialContext.dataDir });
+  const envFile = await readManagedEnvFile({ dataDir: initialContext.dataDir });
   const managedEnv = applyManagedConfigEnv({
     config,
+    envFile,
     env: initialEnv,
   });
 
@@ -786,6 +909,7 @@ export async function resolveBbAppRuntimeState(
     const localEnv = { ...managedEnv };
     const localServerEnv = createServerBaseEnv({
       config,
+      envFile,
       env: initialEnv,
     });
     delete localEnv.BB_SERVER_URL;
@@ -821,6 +945,7 @@ export async function resolveBbAppRuntimeState(
     env: finalEnv,
     serverEnv: createServerBaseEnv({
       config,
+      envFile,
       env: initialEnv,
     }),
   };
@@ -878,6 +1003,13 @@ export function resolveBbAppCommand(args: string[]): BbAppCommand {
     };
   }
 
+  if (args[0] === ENV_COMMAND) {
+    return {
+      args: args.slice(1),
+      kind: "env",
+    };
+  }
+
   if (args[0] === "help" || args[0] === "--help" || args[0] === "-h") {
     return { kind: "help" };
   }
@@ -895,7 +1027,7 @@ Usage:
   bb-app config
   bb-app config list
   bb-app config refresh
-  bb-app config <key> <value>
+  bb-app config set <key> <value>
   bb-app config unset <key>
 
 Supported keys:
@@ -906,13 +1038,32 @@ Config file:
 `);
 }
 
+function printEnvHelp(dataDir: string): void {
+  process.stdout.write(`bb-app env
+
+Usage:
+  bb-app env
+  bb-app env list
+  bb-app env set <key> <value>
+  bb-app env unset <key>
+
+Env file:
+  ${formatBbAppEnvPath(dataDir)}
+`);
+}
+
 function resolveManagedConfigKey(rawKey: string): ManagedConfigKey {
   const key = rawKey.trim();
   if (key === "BB_SERVER_URL" || key === "serverUrl") {
     return key;
   }
-  if (isManagedEnvKey(key)) {
+  if (isManagedConfigValueKey(key)) {
     return key;
+  }
+  if (isSecretShapedEnvName(key)) {
+    throw new Error(
+      `bb-app config does not store secrets. Use "bb-app env set ${key} <value>" instead.`,
+    );
   }
   throw new Error(
     `Unsupported bb-app config key "${rawKey}". Supported keys: ${supportedConfigKeysText()}`,
@@ -926,7 +1077,7 @@ function createManagedConfigPatch(
   if (key === "BB_SERVER_URL" || key === "serverUrl") {
     return { serverUrl: value };
   }
-  return { env: createManagedEnvPatch(key, value) };
+  return { config: createManagedConfigValuePatch(key, value) };
 }
 
 function unsetManagedConfigKey(
@@ -940,19 +1091,45 @@ function unsetManagedConfigKey(
     delete nextConfig.serverUrl;
     return pruneManagedConfig(nextConfig);
   }
+  const nextConfigValues: ManagedConfigValues = {
+    ...config.config,
+  };
+  delete nextConfigValues[key];
+  nextConfig.config = nextConfigValues;
+  return pruneManagedConfig(nextConfig);
+}
+
+function resolveManagedEnvKey(rawKey: string): string {
+  const key = rawKey.trim();
+  if (!isPortableEnvName(key)) {
+    throw new Error(
+      `Invalid env key "${rawKey}". Env keys must match ${PORTABLE_ENV_NAME_PATTERN.source}`,
+    );
+  }
+  return key;
+}
+
+function createManagedEnvPatch(key: string, value: string): ManagedEnvFile {
+  return {
+    env: {
+      [key]: value,
+    },
+  };
+}
+
+function unsetManagedEnvKey(
+  config: ManagedEnvFile,
+  key: string,
+): ManagedEnvFile {
+  const nextConfig: ManagedEnvFile = {
+    ...config,
+  };
   const nextEnv: ManagedEnvConfig = {
     ...config.env,
   };
   delete nextEnv[key];
   nextConfig.env = nextEnv;
-  return pruneManagedConfig(nextConfig);
-}
-
-function formatManagedEnvValue(key: ManagedEnvKey, value: string): string {
-  if (isSecretManagedEnvKey(key)) {
-    return "<set>";
-  }
-  return value;
+  return pruneManagedEnvFile(nextConfig);
 }
 
 function formatManagedConfig(config: ManagedConfig): string {
@@ -960,13 +1137,25 @@ function formatManagedConfig(config: ManagedConfig): string {
   if (config.serverUrl !== undefined) {
     lines.push(`BB_SERVER_URL=${config.serverUrl}`);
   }
-  for (const key of MANAGED_ENV_KEYS) {
-    const value = config.env?.[key];
+  for (const key of MANAGED_CONFIG_KEYS) {
+    const value = config.config?.[key];
     if (value !== undefined) {
-      lines.push(`${key}=${formatManagedEnvValue(key, value)}`);
+      lines.push(`${key}=${value}`);
     }
   }
   return lines.length > 0 ? `${lines.join("\n")}\n` : "No bb-app config set.\n";
+}
+
+function formatManagedEnv(config: ManagedEnvFile): string {
+  const env = config.env;
+  if (env === undefined) {
+    return "No bb-app env set.\n";
+  }
+  const keys = Object.keys(env).sort();
+  if (keys.length === 0) {
+    return "No bb-app env set.\n";
+  }
+  return `${keys.map((key) => `${key}=<set>`).join("\n")}\n`;
 }
 
 async function refreshRunningServerConfig(
@@ -1059,15 +1248,15 @@ async function runConfigCommand(args: RunConfigCommandArgs): Promise<void> {
     await refreshRunningServerConfigAfterWrite(args.serverUrl);
     return;
   }
-  if (commandArgs.length !== 2) {
-    throw new Error("Usage: bb-app config <key> <value>");
+  if (commandArgs[0] !== SET_COMMAND || commandArgs.length !== 3) {
+    throw new Error("Usage: bb-app config set <key> <value>");
   }
 
-  const value = commandArgs[1].trim();
+  const value = commandArgs[2].trim();
   if (value.length === 0) {
     throw new Error("Config value must not be empty. Use unset to remove it.");
   }
-  const key = resolveManagedConfigKey(commandArgs[0]);
+  const key = resolveManagedConfigKey(commandArgs[1]);
   await writeManagedConfig({
     config: createManagedConfigPatch(key, value),
     dataDir: args.dataDir,
@@ -1075,6 +1264,59 @@ async function runConfigCommand(args: RunConfigCommandArgs): Promise<void> {
   process.stdout.write(
     `Set ${key} in ${formatBbAppConfigPath(args.dataDir)}\n`,
   );
+  await refreshRunningServerConfigAfterWrite(args.serverUrl);
+}
+
+async function runEnvCommand(args: RunEnvCommandArgs): Promise<void> {
+  const commandArgs = args.args;
+  if (
+    commandArgs.length === 0 ||
+    (commandArgs.length === 1 && commandArgs[0] === CONFIG_LIST_COMMAND)
+  ) {
+    process.stdout.write(
+      formatManagedEnv(await readManagedEnvFile({ dataDir: args.dataDir })),
+    );
+    return;
+  }
+  if (
+    commandArgs.length === 1 &&
+    (commandArgs[0] === "help" ||
+      commandArgs[0] === "--help" ||
+      commandArgs[0] === "-h")
+  ) {
+    printEnvHelp(args.dataDir);
+    return;
+  }
+  if (commandArgs[0] === CONFIG_UNSET_COMMAND) {
+    if (commandArgs.length !== 2) {
+      throw new Error("Usage: bb-app env unset <key>");
+    }
+    const key = resolveManagedEnvKey(commandArgs[1]);
+    const currentConfig = await readManagedEnvFile({ dataDir: args.dataDir });
+    await writeManagedEnvFile({
+      config: unsetManagedEnvKey(currentConfig, key),
+      dataDir: args.dataDir,
+    });
+    process.stdout.write(
+      `Unset ${key} in ${formatBbAppEnvPath(args.dataDir)}\n`,
+    );
+    await refreshRunningServerConfigAfterWrite(args.serverUrl);
+    return;
+  }
+  if (commandArgs[0] !== SET_COMMAND || commandArgs.length !== 3) {
+    throw new Error("Usage: bb-app env set <key> <value>");
+  }
+
+  const key = resolveManagedEnvKey(commandArgs[1]);
+  const value = commandArgs[2].trim();
+  if (value.length === 0) {
+    throw new Error("Env value must not be empty. Use unset to remove it.");
+  }
+  await writeManagedEnv({
+    config: createManagedEnvPatch(key, value),
+    dataDir: args.dataDir,
+  });
+  process.stdout.write(`Set ${key} in ${formatBbAppEnvPath(args.dataDir)}\n`);
   await refreshRunningServerConfigAfterWrite(args.serverUrl);
 }
 
@@ -1684,8 +1926,9 @@ function printBbAppHelp(): void {
 Usage:
   bb-app [--data-dir <path>] [--server-port <port>] [--host-daemon-port <port>]
   bb-app start
-  bb-app config <key> <value>
+  bb-app config set <key> <value>
   bb-app config refresh
+  bb-app env set <key> <value>
   bb-app host-daemon [--server-url <url>] [--host-id <id>] [--host-type <type>] [--enroll-key <key>]
   bb-app host-daemon join --server-url <url>
 
@@ -1722,13 +1965,24 @@ export async function runBbApp(
     homeDir: homedir(),
     options: parsedArgs.options,
     serverUrlMode:
-      command.kind === "config" || command.kind === "host-daemon"
+      command.kind === "config" ||
+      command.kind === "env" ||
+      command.kind === "host-daemon"
         ? "managed"
         : "local",
   });
 
   if (command.kind === "config") {
     await runConfigCommand({
+      args: command.args,
+      dataDir: runtime.context.dataDir,
+      serverUrl: runtime.context.serverUrl,
+    });
+    return;
+  }
+
+  if (command.kind === "env") {
+    await runEnvCommand({
       args: command.args,
       dataDir: runtime.context.dataDir,
       serverUrl: runtime.context.serverUrl,

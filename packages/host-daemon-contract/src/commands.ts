@@ -13,6 +13,7 @@ import {
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
   clientTurnRequestIdSchema,
+  jsonObjectSchema,
 } from "@bb/domain";
 import {
   replayCaptureDaemonListResponseSchema,
@@ -21,7 +22,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 15 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 17 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -35,6 +36,8 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.unarchive",
   "thread.deleted",
   "interactive.resolve",
+  "codex.inference.complete",
+  "codex.voice.transcribe",
   "host.list_files",
   "host.list_branches",
   "host.read_file",
@@ -217,6 +220,28 @@ export const interactiveResolveCommandSchema =
     providerRequestId: z.string().min(1),
     resolution: pendingInteractionResolutionSchema,
   });
+
+export const codexInferenceCompleteCommandSchema = z
+  .object({
+    type: z.literal("codex.inference.complete"),
+    model: z.string().min(1),
+    prompt: z.string().min(1),
+    outputSchema: jsonObjectSchema,
+    timeoutMs: z.number().int().positive(),
+  })
+  .strict();
+
+export const codexVoiceTranscribeCommandSchema = z
+  .object({
+    type: z.literal("codex.voice.transcribe"),
+    model: z.string().min(1),
+    audioBase64: z.string().min(1),
+    mimeType: z.string().min(1),
+    filename: z.string().min(1),
+    prompt: z.string().nullable(),
+    timeoutMs: z.number().int().positive(),
+  })
+  .strict();
 
 /**
  * Read a file from an absolute host path. When `rootPath` is provided, the
@@ -403,6 +428,8 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   replayCaptureDeleteCommandSchema,
   replayRunCommandSchema,
   interactiveResolveCommandSchema,
+  codexInferenceCompleteCommandSchema,
+  codexVoiceTranscribeCommandSchema,
   hostListFilesCommandSchema,
   hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
@@ -435,6 +462,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "host.list_branches":
     case "host.list_files":
     case "host.read_file":
+    case "codex.inference.complete":
     case "provider.list":
     case "provider.list_models":
     case "replay.capture_delete":
@@ -445,6 +473,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "thread.archive":
     case "thread.rename":
     case "thread.unarchive":
+    case "codex.voice.transcribe":
     case "workspace.commit":
     case "workspace.diff":
     case "workspace.squash_merge":
@@ -483,6 +512,14 @@ export const hostDaemonCommandResultSchemaByType = {
   "replay.capture_delete": z.object({}),
   "replay.run": z.object({}),
   "interactive.resolve": z.object({}),
+  "codex.inference.complete": z.object({
+    model: z.string().min(1),
+    value: jsonObjectSchema,
+  }),
+  "codex.voice.transcribe": z.object({
+    model: z.string().min(1),
+    text: z.string(),
+  }),
   "host.list_files": fileListResultSchema,
   "host.list_branches": z.object({
     branches: z.array(z.string()),

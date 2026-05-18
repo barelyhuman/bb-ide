@@ -22,13 +22,13 @@ will use. Replace `<machine>.<tailnet>.ts.net` with that machine's Tailscale
 name:
 
 ```bash
-npx bb-app config BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
+npx bb-app config set BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
 ```
 
 If you don't use MagicDNS, the Tailscale IP works too:
 
 ```bash
-npx bb-app config BB_APP_URL http://<tailscale-ip>:38886
+npx bb-app config set BB_APP_URL http://<tailscale-ip>:38886
 ```
 
 If bb is not already running, start it:
@@ -58,7 +58,7 @@ tailscale serve --bg --https=443 http://127.0.0.1:38886
 Update `BB_APP_URL` to the HTTPS URL:
 
 ```bash
-npx bb-app config BB_APP_URL https://<machine>.<tailnet>.ts.net
+npx bb-app config set BB_APP_URL https://<machine>.<tailnet>.ts.net
 ```
 
 bb picks up the new URL while it is running.

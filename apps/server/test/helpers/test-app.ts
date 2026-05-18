@@ -150,6 +150,7 @@ export async function createTestAppHarness(
     isDevelopment: true,
     openAiApiKey: "test-openai-key",
     serverPort: 3334,
+    transcriptionModel: "test/mock-transcription",
     appUrl: "https://bb.example.test",
     ...configOverrides,
   };

@@ -1,9 +1,9 @@
-import { defaultFeatureFlags } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateCommitMessage } from "../../src/services/ai/commit-message.js";
 import { InferenceTimeoutError } from "../../src/services/ai/inference.js";
-import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
+import type { AppDeps, LoggedWorkSessionDeps } from "../../src/types.js";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
@@ -20,9 +20,10 @@ const piAiMocks = vi.hoisted(() => ({
   getModel: vi.fn(),
 }));
 
-type CommitMessageDeps = Pick<AppDeps, "config" | "logger">;
+type CommitMessageDeps = LoggedWorkSessionDeps;
 
 interface TestCommitMessageDeps {
+  cleanup: () => Promise<void>;
   deps: CommitMessageDeps;
   logger: AppDeps["logger"];
 }
@@ -48,17 +49,10 @@ vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
   };
 });
 
-function createCommitMessageDeps(): TestCommitMessageDeps {
-  const config: ServerRuntimeConfig = {
-    appUrl: "https://bb.example.test",
-    dataDir: "/tmp/bb-commit-message-test",
-    featureFlags: defaultFeatureFlags,
-    hostDaemonPort: 3001,
+async function createCommitMessageDeps(): Promise<TestCommitMessageDeps> {
+  const harness = await createTestAppHarness({
     inferenceModel: "test/mock-model",
-    isDevelopment: true,
-    openAiApiKey: "test-openai-key",
-    serverPort: 3334,
-  };
+  });
   const logger = {
     debug: vi.fn(),
     error: vi.fn(),
@@ -67,9 +61,10 @@ function createCommitMessageDeps(): TestCommitMessageDeps {
   };
   return {
     deps: {
-      config,
+      ...harness.deps,
       logger,
     },
+    cleanup: harness.cleanup,
     logger,
   };
 }
@@ -121,83 +116,134 @@ describe("commit message generation", () => {
           message: "fix: recover commit message",
         }),
       );
-    const { deps, logger } = createCommitMessageDeps();
+    const { cleanup, deps, logger } = await createCommitMessageDeps();
+    try {
+      const message = await generateCommitMessage(deps, commitMessageArgs);
 
-    const message = await generateCommitMessage(deps, commitMessageArgs);
-
-    expect(message).toBe("fix: recover commit message");
-    expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attempt: 1,
-        maxAttempts: 2,
-        reason: "timeout",
-        timeoutMs: 5_000,
-      }),
-      "Commit message inference timed out; retrying",
-    );
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attempts: 2,
-        reason: "timeout",
-      }),
-      "Commit message inference completed after timeout retry",
-    );
+      expect(message).toBe("fix: recover commit message");
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempt: 1,
+          maxAttempts: 2,
+          reason: "timeout",
+          timeoutMs: 5_000,
+        }),
+        "Commit message inference timed out; retrying",
+      );
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempts: 2,
+          reason: "timeout",
+        }),
+        "Commit message inference completed after timeout retry",
+      );
+    } finally {
+      await cleanup();
+    }
   });
 
   it("returns a timeout outcome after exhausting commit message retries", async () => {
     piAiMocks.complete.mockRejectedValue(
       new InferenceTimeoutError({ timeoutMs: 5_000 }),
     );
-    const { deps, logger } = createCommitMessageDeps();
+    const { cleanup, deps, logger } = await createCommitMessageDeps();
+    try {
+      const message = await generateCommitMessage(deps, commitMessageArgs);
 
-    const message = await generateCommitMessage(deps, commitMessageArgs);
-
-    expect(message).toBeNull();
-    expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attempts: 2,
-        reason: "timeout",
-        timeoutMs: 5_000,
-      }),
-      "Commit message inference timed out",
-    );
+      expect(message).toBeNull();
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempts: 2,
+          reason: "timeout",
+          timeoutMs: 5_000,
+        }),
+        "Commit message inference timed out",
+      );
+    } finally {
+      await cleanup();
+    }
   });
 
   it("returns no-result without retrying when inference completes without a result tool call", async () => {
     piAiMocks.complete.mockResolvedValue(mockNoResultCompletion());
-    const { deps, logger } = createCommitMessageDeps();
+    const { cleanup, deps, logger } = await createCommitMessageDeps();
+    try {
+      const message = await generateCommitMessage(deps, commitMessageArgs);
 
-    const message = await generateCommitMessage(deps, commitMessageArgs);
-
-    expect(message).toBeNull();
-    expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attempts: 1,
-        reason: "no-result",
-      }),
-      "Commit message inference returned no result",
-    );
+      expect(message).toBeNull();
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempts: 1,
+          reason: "no-result",
+        }),
+        "Commit message inference returned no result",
+      );
+    } finally {
+      await cleanup();
+    }
   });
 
   it("does not retry non-timeout failures", async () => {
     piAiMocks.complete.mockResolvedValue(mockInvalidCommitMessageCompletion());
-    const { deps, logger } = createCommitMessageDeps();
+    const { cleanup, deps, logger } = await createCommitMessageDeps();
+    try {
+      const message = await generateCommitMessage(deps, commitMessageArgs);
 
-    const message = await generateCommitMessage(deps, commitMessageArgs);
+      expect(message).toBeNull();
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempts: 1,
+          err: expect.any(Error),
+          reason: "failed",
+        }),
+        "Failed to generate commit message",
+      );
+    } finally {
+      await cleanup();
+    }
+  });
 
-    expect(message).toBeNull();
-    expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attempts: 1,
-        err: expect.any(Error),
-        reason: "failed",
-      }),
-      "Failed to generate commit message",
-    );
+  it("returns null for Codex inference setup failures", async () => {
+    const harness = await createTestAppHarness({
+      inferenceModel: "codex/gpt-5.4-mini",
+    });
+    try {
+      await expect(
+        generateCommitMessage(harness.deps, commitMessageArgs),
+      ).resolves.toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns null for transient Codex inference command failures", async () => {
+    const harness = await createTestAppHarness({
+      inferenceModel: "codex/gpt-5.4-mini",
+    });
+    try {
+      seedHostSession(harness.deps);
+      const messagePromise = generateCommitMessage(
+        harness.deps,
+        commitMessageArgs,
+      );
+
+      const inferenceCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "codex.inference.complete",
+      );
+      await reportQueuedCommandError(harness, inferenceCommand, {
+        errorCode: "codex_request_failed",
+        errorMessage: "Codex request failed",
+      });
+
+      await expect(messagePromise).resolves.toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("uses the route fallback message only after commit message timeout retries are exhausted", async () => {
@@ -277,6 +323,107 @@ describe("commit message generation", () => {
         message: "bb: automated commit",
       });
       expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
+      await reportQueuedCommandSuccess(harness, commitCommand, {
+        commitSha: "abc123",
+        commitSubject: "bb: automated commit",
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        action: "commit",
+        commitSubject: "bb: automated commit",
+        ok: true,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses the route fallback message when Codex commit-message inference fails", async () => {
+    const harness = await createTestAppHarness({
+      inferenceModel: "codex/gpt-5.4-mini",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "commit",
+          }),
+        },
+      );
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          branch: {
+            currentBranch: "feature",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+          workingTree: {
+            deletions: 0,
+            files: [],
+            hasUncommittedChanges: true,
+            insertions: 1,
+            state: "dirty_uncommitted",
+          },
+        },
+      });
+
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, diffCommand, {
+        diff: {
+          diff: commitMessageArgs.patch,
+          files: commitMessageArgs.files,
+          mergeBaseRef: null,
+          shortstat: commitMessageArgs.shortstat,
+          truncated: false,
+        },
+      });
+
+      const inferenceCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "codex.inference.complete",
+      );
+      await reportQueuedCommandError(harness, inferenceCommand, {
+        errorCode: "codex_request_failed",
+        errorMessage: "Codex request failed",
+      });
+
+      const commitCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.commit" &&
+          command.environmentId === environment.id,
+      );
+      expect(commitCommand.command).toMatchObject({
+        message: "bb: automated commit",
+      });
       await reportQueuedCommandSuccess(harness, commitCommand, {
         commitSha: "abc123",
         commitSubject: "bb: automated commit",

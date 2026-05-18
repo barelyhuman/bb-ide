@@ -9,7 +9,10 @@ import type { ServerAppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
-import { transcribeVoiceInput } from "../services/ai/voice-transcription.js";
+import {
+  resolveVoiceTranscriptionEnabled,
+  transcribeVoiceInput,
+} from "../services/ai/voice-transcription.js";
 import {
   applyProviderFeatureFlags,
   resolveSystemExecutionOptions,
@@ -25,7 +28,7 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
     context.json({
       featureFlags: deps.config.featureFlags,
       hostDaemonPort: deps.config.hostDaemonPort,
-      voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
+      voiceTranscriptionEnabled: resolveVoiceTranscriptionEnabled(deps),
     }),
   );
 
@@ -66,22 +69,14 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
   );
 
   post("/system/voice-transcription", async (context) => {
-    if (!deps.config.openAiApiKey) {
-      throw new ApiError(
-        501,
-        "not_configured",
-        "Voice transcription requires OPENAI_API_KEY to be configured",
-      );
-    }
     const formData = await context.req.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
       throw new ApiError(400, "invalid_request", "Audio file is required");
     }
     return context.json({
-      text: await transcribeVoiceInput({
+      text: await transcribeVoiceInput(deps, {
         file,
-        openAiApiKey: deps.config.openAiApiKey,
         prompt:
           typeof formData.get("prompt") === "string"
             ? String(formData.get("prompt"))

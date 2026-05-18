@@ -12,6 +12,7 @@ import {
   WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
 } from "../../src/constants.js";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -519,6 +520,116 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("uses fallback squash commit message when Codex inference fails", async () => {
+    const harness = await createTestAppHarness({
+      inferenceModel: "codex/gpt-5.4-mini",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "squash_merge",
+            options: {
+              mergeBaseBranch: "main",
+            },
+          }),
+        },
+      );
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: false,
+            state: "clean",
+            insertions: 0,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/feature",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, diffCommand, {
+        diff: {
+          diff: "diff --git a/file.ts b/file.ts",
+          truncated: false,
+          shortstat: " 1 file changed, 1 insertion(+)\n",
+          files: "M\tfile.ts\n",
+          mergeBaseRef: "abc1234",
+        },
+      });
+
+      const inferenceCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "codex.inference.complete",
+      );
+      await reportQueuedCommandError(harness, inferenceCommand, {
+        errorCode: "codex_auth_missing",
+        errorMessage: "Codex auth file not found",
+      });
+
+      const mergeCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.squash_merge" &&
+          command.environmentId === environment.id,
+      );
+      expect(mergeCommand.command).toMatchObject({
+        targetBranch: "main",
+        commitMessage: "bb: squash merge",
+      });
+      await reportQueuedCommandSuccess(harness, mergeCommand, {
+        merged: true,
+        commitSha: "merge123",
+        commitSubject: "bb: squash merge",
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: true,
+        action: "squash_merge",
+        merged: true,
+        commitSha: "merge123",
+        commitSubject: "bb: squash merge",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects squash merge with 409 when workspace is in detached HEAD state", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -774,6 +885,8 @@ describe("public environment and system routes", () => {
         askUserQuestion: true,
       },
       hostDaemonPort: 4010,
+      openAiApiKey: "",
+      transcriptionModel: "codex/gpt-4o-mini-transcribe",
     });
     try {
       const response = await harness.app.request("/api/v1/system/config");
@@ -784,6 +897,25 @@ describe("public environment and system routes", () => {
           terminals: true,
         },
         hostDaemonPort: 4010,
+        voiceTranscriptionEnabled: false,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reports Codex voice transcription enabled when a persistent host is connected", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "",
+      transcriptionModel: "codex/gpt-4o-mini-transcribe",
+    });
+    try {
+      seedHostSession(harness.deps, {
+        id: "host-voice-availability",
+      });
+      const response = await harness.app.request("/api/v1/system/config");
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
         voiceTranscriptionEnabled: true,
       });
     } finally {
@@ -797,7 +929,7 @@ describe("public environment and system routes", () => {
     });
     try {
       await writeFile(
-        join(harness.config.dataDir, "config.json"),
+        join(harness.config.dataDir, "env.json"),
         `${JSON.stringify({ env: { OPENAI_API_KEY: "stored-openai-key" } })}\n`,
         "utf8",
       );
@@ -824,7 +956,7 @@ describe("public environment and system routes", () => {
     try {
       await writeFile(
         join(harness.config.dataDir, "config.json"),
-        `${JSON.stringify({ env: { BB_INFERENCE_MODEL: "gpt-4o-mini" } })}\n`,
+        `${JSON.stringify({ config: { BB_INFERENCE: "gpt-4o-mini" } })}\n`,
         "utf8",
       );
 
@@ -1260,9 +1392,241 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("rejects voice transcription requests when the API key is not configured", async () => {
+  it("uses the configured OpenAI voice transcription model when selected", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ text: "transcribed text" }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      }),
+    );
+    const harness = await createTestAppHarness({
+      openAiApiKey: "provider-key",
+      transcriptionModel: "openai/gpt-4o-transcribe",
+    });
+    try {
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File([new Uint8Array([1, 2, 3])], "audio.wav", {
+          type: "audio/wav",
+        }),
+        "audio.wav",
+      );
+      formData.set("prompt", "  Use repo vocabulary.  ");
+
+      const response = await harness.app.request(
+        "/api/v1/system/voice-transcription",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        text: "transcribed text",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const fetchCall = fetchMock.mock.calls[0];
+      if (!fetchCall) {
+        throw new Error("Expected fetch call");
+      }
+      expect(fetchCall[0]).toBe(
+        "https://api.openai.com/v1/audio/transcriptions",
+      );
+      const init = fetchCall[1];
+      expect(init?.headers).toEqual({
+        authorization: "Bearer provider-key",
+      });
+      const body = init?.body;
+      if (!(body instanceof FormData)) {
+        throw new Error("Expected transcription request body to be FormData");
+      }
+      expect(body.get("model")).toBe("gpt-4o-transcribe");
+      expect(body.get("prompt")).toBe("Use repo vocabulary.");
+      const file = body.get("file");
+      if (!(file instanceof File)) {
+        throw new Error("Expected transcription request file");
+      }
+      expect(file.name).toBe("audio.wav");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues Codex voice transcription through the persistent host", async () => {
     const harness = await createTestAppHarness({
       openAiApiKey: "",
+      transcriptionModel: "codex/gpt-4o-mini-transcribe",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-voice-transcription",
+      });
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File([new Uint8Array([1, 2, 3])], "audio.wav", {
+          type: "audio/wav",
+        }),
+        "audio.wav",
+      );
+      formData.set("prompt", "  Use repo vocabulary.  ");
+
+      const responsePromise = harness.app.request(
+        "/api/v1/system/voice-transcription",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      const command = await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "codex.voice.transcribe" &&
+          queued.row.hostId === host.id,
+      );
+      expect(command.command).toEqual({
+        type: "codex.voice.transcribe",
+        model: "gpt-4o-mini-transcribe",
+        audioBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        mimeType: "audio/wav",
+        filename: "audio.wav",
+        prompt: "Use repo vocabulary.",
+        timeoutMs: 60_000,
+      });
+      await reportQueuedCommandSuccess(
+        harness,
+        command,
+        {
+          model: "gpt-4o-mini-transcribe",
+          text: "transcribed through codex",
+        },
+        { hostId: host.id },
+      );
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        text: "transcribed through codex",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("maps Codex voice transcription timeouts to a retryable API error", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "",
+      transcriptionModel: "codex/gpt-4o-mini-transcribe",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-voice-transcription-timeout",
+      });
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File([new Uint8Array([1, 2, 3])], "audio.wav", {
+          type: "audio/wav",
+        }),
+        "audio.wav",
+      );
+
+      const responsePromise = harness.app.request(
+        "/api/v1/system/voice-transcription",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      const command = await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "codex.voice.transcribe" &&
+          queued.row.hostId === host.id,
+      );
+      await reportQueuedCommandError(
+        harness,
+        command,
+        {
+          errorCode: "codex_request_timeout",
+          errorMessage: "Codex request timed out",
+        },
+        { hostId: host.id },
+      );
+
+      const response = await responsePromise;
+      expect(response.status).toBe(504);
+      await expect(readJson(response)).resolves.toEqual({
+        code: "transcription_timeout",
+        message: "Voice transcription timed out",
+        retryable: true,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("surfaces Codex voice transcription auth failures", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "",
+      transcriptionModel: "codex/gpt-4o-mini-transcribe",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-voice-transcription-auth-failure",
+      });
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File([new Uint8Array([1, 2, 3])], "audio.wav", {
+          type: "audio/wav",
+        }),
+        "audio.wav",
+      );
+
+      const responsePromise = harness.app.request(
+        "/api/v1/system/voice-transcription",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      const command = await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "codex.voice.transcribe" &&
+          queued.row.hostId === host.id,
+      );
+      await reportQueuedCommandError(
+        harness,
+        command,
+        {
+          errorCode: "codex_auth_missing",
+          errorMessage: "Codex auth file not found",
+        },
+        { hostId: host.id },
+      );
+
+      const response = await responsePromise;
+      expect(response.status).toBe(502);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "codex_auth_missing",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects OpenAI voice transcription requests when the API key is not configured", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "",
+      transcriptionModel: "openai/gpt-4o-transcribe",
     });
     try {
       const formData = new FormData();
@@ -1285,7 +1649,8 @@ describe("public environment and system routes", () => {
       expect(response.status).toBe(501);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "not_configured",
-        message: "Voice transcription requires OPENAI_API_KEY to be configured",
+        message:
+          "Voice transcription requires OPENAI_API_KEY for openai/* transcription",
       });
     } finally {
       await harness.cleanup();

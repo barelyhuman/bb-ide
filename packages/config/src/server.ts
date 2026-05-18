@@ -3,7 +3,10 @@ import { commonConfig } from "./common.js";
 import { databaseConfig } from "./database.js";
 import { DEFAULTS } from "./defaults.js";
 import { featureFlags } from "./feature-flags.js";
-import { validateInferenceModel } from "./inference-model.js";
+import {
+  validateInferenceModel,
+  validateTranscriptionModel,
+} from "./inference-model.js";
 import { validateOptionalUrl } from "./public-url.js";
 import { serverPortConfig } from "./server-port.js";
 
@@ -25,13 +28,18 @@ const rawServerConfig = envsafe({
     default: "",
     allowEmpty: true,
   }),
-  BB_INFERENCE_MODEL: str({
+  BB_INFERENCE: str({
     desc: "Inference model used for server-side completions in provider/model format",
     default: DEFAULTS.inferenceModel,
     devDefault: DEFAULTS.inferenceModel,
   }),
+  BB_TRANSCRIPTION: str({
+    desc: "Speech-to-text model used for voice transcription in provider/model format",
+    default: DEFAULTS.transcriptionModel,
+    devDefault: DEFAULTS.transcriptionModel,
+  }),
   OPENAI_API_KEY: str({
-    desc: "OpenAI API key used for voice transcription and OpenAI-backed inference (optional)",
+    desc: "OpenAI API key used when an explicit OpenAI provider route is configured (optional)",
     default: "",
     allowEmpty: true,
     devDefault: "",
@@ -48,7 +56,8 @@ export const serverConfig = {
     "BB_EXTERNAL_URL",
     rawServerConfig.BB_EXTERNAL_URL,
   ),
-  BB_INFERENCE_MODEL: validateInferenceModel(
-    rawServerConfig.BB_INFERENCE_MODEL,
+  BB_INFERENCE: validateInferenceModel(rawServerConfig.BB_INFERENCE),
+  BB_TRANSCRIPTION: validateTranscriptionModel(
+    rawServerConfig.BB_TRANSCRIPTION,
   ),
 };
