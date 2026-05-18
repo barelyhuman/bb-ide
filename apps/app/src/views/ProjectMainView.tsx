@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import type { ThreadListEntry } from "@bb/domain";
 import { NewThreadPromptBox } from "@/components/promptbox/NewThreadPromptBox";
-import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
+import {
+  encodeReuseValue,
+  parseEnvironmentValue,
+} from "@/components/pickers/environment-picker-value";
 import { OptionPicker } from "@/components/pickers/OptionPicker";
+import type { ReuseThreadOption } from "@/components/pickers/WorktreePicker";
+import { Icon } from "@/components/ui/icon.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
@@ -12,6 +18,7 @@ import {
   useProjects,
   useSidebarBootstrap,
 } from "@/hooks/queries/project-queries";
+import { useThreads } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
@@ -20,10 +27,76 @@ import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
 import { useScopedBranchSelection } from "./project-main-branch-selection";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
+
+// react-router's location.state is freeform unknown — narrow it here at the
+// system boundary before reading.
+function readReuseEnvironmentIdFromLocationState(state: unknown): string | null {
+  if (!state || typeof state !== "object") return null;
+  const candidate = (state as { reuseEnvironmentId?: unknown })
+    .reuseEnvironmentId;
+  if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  return null;
+}
+
+function isWorktreeWithEnv(thread: ThreadListEntry): boolean {
+  if (thread.environmentId === null) return false;
+  return (
+    thread.environmentWorkspaceDisplayKind === "managed-worktree" ||
+    thread.environmentWorkspaceDisplayKind === "unmanaged-worktree"
+  );
+}
+
+function buildReuseThreadOptions(
+  threads: readonly ThreadListEntry[],
+): ReuseThreadOption[] {
+  // One option per worktree env. Threads within each env are sorted
+  // most-recently-active first so the picker preview surfaces the threads
+  // the user is most likely to recognize. Only unarchived threads reach
+  // here — `useThreads({ archived: false })` filters at the source. Envs
+  // with no unarchived threads naturally drop out.
+  const threadsByEnvironmentId = new Map<string, ThreadListEntry[]>();
+  const branchByEnvironmentId = new Map<string, string | null>();
+  for (const thread of threads) {
+    if (!isWorktreeWithEnv(thread)) continue;
+    if (thread.environmentId === null) continue;
+    let bucket = threadsByEnvironmentId.get(thread.environmentId);
+    if (!bucket) {
+      bucket = [];
+      threadsByEnvironmentId.set(thread.environmentId, bucket);
+      branchByEnvironmentId.set(
+        thread.environmentId,
+        thread.environmentBranchName,
+      );
+    }
+    bucket.push(thread);
+  }
+  const options: ReuseThreadOption[] = [];
+  for (const [environmentId, bucket] of threadsByEnvironmentId) {
+    bucket.sort(
+      (left, right) => right.latestAttentionAt - left.latestAttentionAt,
+    );
+    options.push({
+      environmentId,
+      branchName: branchByEnvironmentId.get(environmentId) ?? null,
+      threads: bucket.map((thread) => ({
+        id: thread.id,
+        title: getThreadDisplayTitle(thread),
+      })),
+    });
+  }
+  options.sort((left, right) => {
+    if (left.branchName && right.branchName) {
+      return left.branchName.localeCompare(right.branchName);
+    }
+    return left.environmentId.localeCompare(right.environmentId);
+  });
+  return options;
+}
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -77,6 +150,7 @@ export function ProjectMainView() {
     setPermissionMode,
     environmentSelectionValue,
     setEnvironmentSelectionValue,
+    clearReuseEnvironment,
     activeModel,
     modelOptions,
     reasoningOptions,
@@ -85,6 +159,41 @@ export function ProjectMainView() {
     supportsServiceTier,
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({ scope: "new-thread", projectId });
+
+  // Seed env picker from the sidebar "+" affordance's navigation state.
+  // Reuse intent is purely transient — `setEnvironmentSelectionValue`
+  // routes reuse values to session state inside the hook, never to
+  // localStorage. We then clear location.state so a later refresh starts
+  // from the user's host-mode default.
+  useEffect(() => {
+    const reuseEnvironmentId = readReuseEnvironmentIdFromLocationState(
+      location.state,
+    );
+    if (reuseEnvironmentId === null) return;
+    setEnvironmentSelectionValue(encodeReuseValue(reuseEnvironmentId));
+    navigate(location.pathname + location.search, {
+      replace: true,
+      state: null,
+    });
+  }, [
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    setEnvironmentSelectionValue,
+  ]);
+
+  // Worktree picker options come from the project's unarchived threads.
+  // Threads on managed or unmanaged worktrees with a non-null environmentId
+  // contribute; envs with only archived threads disappear naturally.
+  const threadsQuery = useThreads(
+    { projectId, archived: false },
+    { enabled: Boolean(projectId) },
+  );
+  const reuseThreadOptions = useMemo(
+    () => buildReuseThreadOptions(threadsQuery.data ?? []),
+    [threadsQuery.data],
+  );
 
   const currentProject = useMemo(
     () => projects?.find((p) => p.id === projectId),
@@ -95,7 +204,10 @@ export function ProjectMainView() {
     [currentProject?.sources],
   );
 
-  // Fall back to local host direct if no value is stored yet
+  // The hook returns reuse values from session-only state and sanitizes any
+  // legacy reuse entries out of localStorage, so we can take its value
+  // verbatim and fall back to the local-host default only when nothing's
+  // selected.
   const effectiveEnvironmentValue = useMemo(() => {
     if (
       environmentSelectionValue &&
@@ -383,9 +495,28 @@ export function ProjectMainView() {
       value: effectiveEnvironmentValue,
       onChange: setEnvironmentSelectionValue,
       sources: projectSources,
+      reuseDisabled: reuseThreadOptions.length === 0,
     }),
-    [effectiveEnvironmentValue, projectSources, setEnvironmentSelectionValue],
+    [
+      effectiveEnvironmentValue,
+      projectSources,
+      reuseThreadOptions.length,
+      setEnvironmentSelectionValue,
+    ],
   );
+  const worktreeConfig = useMemo(() => {
+    const handleWorktreeChange = (environmentId: string) => {
+      setEnvironmentSelectionValue(encodeReuseValue(environmentId));
+    };
+    return {
+      options: reuseThreadOptions,
+      value:
+        parsedEnvironment?.type === "reuse"
+          ? parsedEnvironment.environmentId
+          : null,
+      onChange: handleWorktreeChange,
+    };
+  }, [parsedEnvironment, reuseThreadOptions, setEnvironmentSelectionValue]);
   const branchConfig = useMemo(
     () => ({
       value: selectedBranch?.name ?? null,
@@ -421,6 +552,29 @@ export function ProjectMainView() {
       supportsPermissionModeSelection,
     ],
   );
+
+  const reuseHeader = useMemo(() => {
+    if (parsedEnvironment?.type !== "reuse") return null;
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <Icon name="GitBranch" className="size-4 shrink-0 text-primary" />
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="font-medium text-foreground">
+            Reusing existing worktree
+          </span>
+          <button
+            type="button"
+            onClick={clearReuseEnvironment}
+            title="Stop reusing and start a regular new thread"
+            aria-label="Stop reusing worktree"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+          >
+            <Icon name="X" className="size-3.5" />
+          </button>
+        </span>
+      </div>
+    );
+  }, [clearReuseEnvironment, parsedEnvironment]);
 
   if (!projectId) {
     return (
@@ -462,7 +616,9 @@ export function ProjectMainView() {
           execution={executionConfig}
           environment={environmentConfig}
           branch={branchConfig}
+          worktree={worktreeConfig}
           permission={permissionConfig}
+          header={reuseHeader}
         />
       </div>
     </PageShell>

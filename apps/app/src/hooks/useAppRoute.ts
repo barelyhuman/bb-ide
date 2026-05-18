@@ -26,7 +26,11 @@ export interface AppRouteState {
  */
 export function useAppRoute(): AppRouteState {
   const location = useLocation();
+  // Wildcard match exists only to extract `projectId` from any
+  // project-scoped subroute; specific-view detection uses exact matches so a
+  // new subroute doesn't accidentally count as "project main".
   const projectMatch = useMatch("/projects/:projectId/*");
+  const projectMainMatch = useMatch("/projects/:projectId");
   const projectThreadMatch = useMatch(
     "/projects/:projectId/threads/:threadId/*",
   );
@@ -34,26 +38,14 @@ export function useAppRoute(): AppRouteState {
   const projectNewManagerMatch = useMatch("/projects/:projectId/managers/new");
   const projectSettingsMatch = useMatch("/projects/:projectId/settings");
 
-  const isThreadView = Boolean(projectThreadMatch);
-  const isArchivedView = Boolean(projectArchivedMatch);
-  const isNewManagerView = Boolean(projectNewManagerMatch);
-  const isSettingsView = Boolean(projectSettingsMatch);
-  const isProjectMainView = Boolean(
-    projectMatch &&
-    !isThreadView &&
-    !isArchivedView &&
-    !isNewManagerView &&
-    !isSettingsView,
-  );
-
   return {
     projectId: projectMatch?.params.projectId,
     threadId: projectThreadMatch?.params.threadId,
-    isProjectMainView,
-    isThreadView,
-    isArchivedView,
-    isNewManagerView,
-    isSettingsView,
+    isProjectMainView: Boolean(projectMainMatch),
+    isThreadView: Boolean(projectThreadMatch),
+    isArchivedView: Boolean(projectArchivedMatch),
+    isNewManagerView: Boolean(projectNewManagerMatch),
+    isSettingsView: Boolean(projectSettingsMatch),
     isRootView: location.pathname === "/",
   };
 }

@@ -430,7 +430,13 @@ export function NewManagerForm({
       <div className="relative w-full rounded-lg border border-input bg-background pb-2">
         <div className="space-y-3 px-4 pt-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">New Manager</p>
+            <div className="flex items-center gap-2 text-sm">
+              <Icon
+                name="UserRoundPlus"
+                className="size-4 shrink-0 text-primary"
+              />
+              <span className="font-medium text-foreground">New Manager</span>
+            </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
               A manager is a teammate that coordinates work for you and
               delegates to worker threads. They remember your preferences

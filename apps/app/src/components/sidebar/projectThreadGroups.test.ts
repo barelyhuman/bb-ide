@@ -1,6 +1,9 @@
 import type { ThreadListEntry } from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import { buildProjectThreadGroups } from "./projectThreadGroups";
+import {
+  buildProjectThreadGroups,
+  type ProjectThreadItem,
+} from "./projectThreadGroups";
 
 type ThreadListEntryOverrides = Partial<ThreadListEntry>;
 
@@ -37,8 +40,28 @@ function createThread(
   };
 }
 
-function threadIds(threads: readonly ThreadListEntry[]): string[] {
-  return threads.map((thread) => thread.id);
+type ItemSummary = string | { env: string; threads: string[] };
+
+function summarizeItems(items: readonly ProjectThreadItem[]): ItemSummary[] {
+  return items.map((item) =>
+    item.kind === "thread"
+      ? item.thread.id
+      : {
+          env: item.group.environmentId,
+          threads: item.group.threads.map((thread) => thread.id),
+        },
+  );
+}
+
+function looseThreadIds(items: readonly ProjectThreadItem[]): string[] {
+  return items.map((item) => {
+    if (item.kind !== "thread") {
+      throw new Error(
+        `expected thread item, got env group ${item.group.environmentId}`,
+      );
+    }
+    return item.thread.id;
+  });
 }
 
 describe("buildProjectThreadGroups", () => {
@@ -96,17 +119,15 @@ describe("buildProjectThreadGroups", () => {
       managedChildBusyCount: 0,
       managedChildCount: 0,
     });
-    expect(
-      threadIds(groups.managerThreadGroups[0]?.managedThreads ?? []),
-    ).toEqual([]);
+    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
+      .toEqual([]);
     expect(groups.managerThreadGroups[1]?.stats).toEqual({
       managedChildBusyCount: 1,
       managedChildCount: 2,
     });
-    expect(
-      threadIds(groups.managerThreadGroups[1]?.managedThreads ?? []),
-    ).toEqual(["child-idle", "child-busy"]);
-    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+    expect(looseThreadIds(groups.managerThreadGroups[1]?.managedItems ?? []))
+      .toEqual(["child-idle", "child-busy"]);
+    expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "orphan-child",
       "root-old",
     ]);
@@ -150,7 +171,7 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+    expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "active-newer-created",
       "active-older-created",
       "idle-newer-attention",
@@ -174,7 +195,7 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+    expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "newer-attention",
       "older-attention-recently-maintained",
     ]);
@@ -228,7 +249,7 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+    expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "active-a",
       "active-b",
       "idle-created-b",
@@ -284,14 +305,250 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(
-      threadIds(groups.managerThreadGroups[0]?.managedThreads ?? []),
-    ).toEqual([
+    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
+      .toEqual([
       "active-newer-created-child",
       "active-older-created-child",
       "idle-newer-attention-child",
       "idle-older-attention-child",
     ]);
+  });
+
+  it("groups standard threads that share a worktree environment", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "wt-thread-a",
+        environmentId: "env_shared",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        environmentBranchName: "feat/sidebar",
+        createdAt: 10,
+        latestAttentionAt: 100,
+      }),
+      createThread({
+        id: "wt-thread-b",
+        environmentId: "env_shared",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        environmentBranchName: "feat/sidebar",
+        createdAt: 20,
+        latestAttentionAt: 200,
+      }),
+      createThread({
+        id: "loose-thread",
+        createdAt: 5,
+        latestAttentionAt: 50,
+      }),
+    ]);
+
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([
+      { env: "env_shared", threads: ["wt-thread-b", "wt-thread-a"] },
+      "loose-thread",
+    ]);
+  });
+
+  it("leaves a solo worktree thread loose instead of building a 1-thread group", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "solo-wt",
+        environmentId: "env_solo",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+      }),
+    ]);
+
+    expect(summarizeItems(groups.unmanagedItems)).toEqual(["solo-wt"]);
+  });
+
+  it("does not group threads with non-worktree environments even when they share an environmentId", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "other-a",
+        environmentId: "env_other",
+        environmentWorkspaceDisplayKind: "other",
+      }),
+      createThread({
+        id: "other-b",
+        environmentId: "env_other",
+        environmentWorkspaceDisplayKind: "other",
+      }),
+    ]);
+
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([
+      "other-a",
+      "other-b",
+    ]);
+  });
+
+  it("interleaves env groups with loose threads at the project level by recency", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "old-loose",
+        createdAt: 1,
+        latestAttentionAt: 100,
+      }),
+      createThread({
+        id: "wt-old-a",
+        environmentId: "env_old_wt",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 2,
+        latestAttentionAt: 200,
+      }),
+      createThread({
+        id: "wt-old-b",
+        environmentId: "env_old_wt",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 3,
+        latestAttentionAt: 250,
+      }),
+      createThread({
+        id: "recent-loose",
+        createdAt: 4,
+        latestAttentionAt: 900,
+      }),
+      createThread({
+        id: "wt-new-a",
+        environmentId: "env_new_wt",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 5,
+        latestAttentionAt: 800,
+      }),
+      createThread({
+        id: "wt-new-b",
+        environmentId: "env_new_wt",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 6,
+        latestAttentionAt: 950,
+      }),
+    ]);
+
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([
+      { env: "env_new_wt", threads: ["wt-new-b", "wt-new-a"] },
+      "recent-loose",
+      { env: "env_old_wt", threads: ["wt-old-b", "wt-old-a"] },
+      "old-loose",
+    ]);
+  });
+
+  it("floats an env group above an idle loose thread when one of its threads is active", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "idle-loose-recent",
+        createdAt: 1,
+        latestAttentionAt: 5_000,
+      }),
+      createThread({
+        id: "active-in-env",
+        status: "active",
+        environmentId: "env_active",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 10,
+        latestAttentionAt: 100,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      createThread({
+        id: "idle-in-env",
+        environmentId: "env_active",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 5,
+        latestAttentionAt: 200,
+      }),
+    ]);
+
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([
+      { env: "env_active", threads: ["active-in-env", "idle-in-env"] },
+      "idle-loose-recent",
+    ]);
+  });
+
+  it("keeps a manager child out of the project-level env group even when sharing an environmentId with a standalone", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({ id: "manager", type: "manager", createdAt: 100 }),
+      createThread({
+        id: "managed-child",
+        parentThreadId: "manager",
+        environmentId: "env_shared",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 90,
+      }),
+      createThread({
+        id: "standalone-on-same-env",
+        environmentId: "env_shared",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 80,
+      }),
+    ]);
+
+    expect(
+      summarizeItems(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual(["managed-child"]);
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([
+      "standalone-on-same-env",
+    ]);
+  });
+
+  it("sub-groups managed children that share a worktree environment under their manager", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({ id: "manager", type: "manager", createdAt: 100 }),
+      createThread({
+        id: "managed-loose-a",
+        parentThreadId: "manager",
+        createdAt: 90,
+        latestAttentionAt: 50,
+      }),
+      createThread({
+        id: "managed-loose-b",
+        parentThreadId: "manager",
+        createdAt: 80,
+        latestAttentionAt: 40,
+      }),
+      createThread({
+        id: "managed-env-a",
+        parentThreadId: "manager",
+        environmentId: "env_managed_worktree",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        environmentBranchName: "bb/feat",
+        createdAt: 70,
+        latestAttentionAt: 700,
+      }),
+      createThread({
+        id: "managed-env-b",
+        parentThreadId: "manager",
+        environmentId: "env_managed_worktree",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        environmentBranchName: "bb/feat",
+        createdAt: 60,
+        latestAttentionAt: 800,
+      }),
+    ]);
+
+    expect(
+      summarizeItems(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual([
+      {
+        env: "env_managed_worktree",
+        threads: ["managed-env-b", "managed-env-a"],
+      },
+      "managed-loose-a",
+      "managed-loose-b",
+    ]);
+  });
+
+  it("does not sub-group a solo managed child on a worktree environment", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({ id: "manager", type: "manager", createdAt: 100 }),
+      createThread({
+        id: "managed-env-solo",
+        parentThreadId: "manager",
+        environmentId: "env_solo",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        createdAt: 90,
+      }),
+    ]);
+
+    expect(
+      summarizeItems(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual(["managed-env-solo"]);
   });
 
   it("keeps managed children inside their manager group instead of globally interleaving them", () => {
@@ -328,13 +585,13 @@ describe("buildProjectThreadGroups", () => {
     expect(
       groups.managerThreadGroups.map((group) => [
         group.managerThread.id,
-        threadIds(group.managedThreads),
+        looseThreadIds(group.managedItems),
       ]),
     ).toEqual([
       ["manager-newer", ["newer-manager-older-child"]],
       ["manager-older", ["older-manager-recent-child"]],
     ]);
-    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+    expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "unmanaged-standard",
     ]);
   });

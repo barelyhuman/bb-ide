@@ -1,4 +1,7 @@
-import type { ThreadListEntry } from "@bb/domain";
+import type {
+  EnvironmentWorkspaceDisplayKind,
+  ThreadListEntry,
+} from "@bb/domain";
 import { isBusyThread } from "@/lib/thread-activity";
 
 export interface ManagerThreadStats {
@@ -6,15 +9,35 @@ export interface ManagerThreadStats {
   managedChildBusyCount: number;
 }
 
+export interface EnvironmentThreadGroup {
+  environmentId: string;
+  threads: ThreadListEntry[];
+}
+
+// A single render slot in a project's or manager's thread list. Threads and
+// env groups interleave by recency, so the renderer iterates one ordered list
+// rather than two parallel arrays.
+export type ProjectThreadItem =
+  | { kind: "thread"; thread: ThreadListEntry }
+  | { kind: "environment"; group: EnvironmentThreadGroup };
+
 export interface ManagerThreadGroup {
   managerThread: ThreadListEntry;
-  managedThreads: ThreadListEntry[];
+  managedItems: ProjectThreadItem[];
   stats: ManagerThreadStats;
 }
 
 export interface ProjectThreadGroups {
   managerThreadGroups: ManagerThreadGroup[];
-  unmanagedStandardThreads: ThreadListEntry[];
+  unmanagedItems: ProjectThreadItem[];
+}
+
+type WorktreeDisplayKind = "managed-worktree" | "unmanaged-worktree";
+
+function isWorktreeDisplayKind(
+  kind: EnvironmentWorkspaceDisplayKind,
+): kind is WorktreeDisplayKind {
+  return kind === "managed-worktree" || kind === "unmanaged-worktree";
 }
 
 interface KnownManagerParentArgs {
@@ -69,6 +92,36 @@ function compareStandardThreads(
   return compareByLatestAttentionAtDescending(left, right);
 }
 
+function representativeThread(item: ProjectThreadItem): ThreadListEntry {
+  return item.kind === "thread" ? item.thread : item.group.threads[0];
+}
+
+function compareProjectThreadItems(
+  left: ProjectThreadItem,
+  right: ProjectThreadItem,
+): number {
+  return compareStandardThreads(
+    representativeThread(left),
+    representativeThread(right),
+  );
+}
+
+function buildSortedItems(
+  threads: ThreadListEntry[],
+): ProjectThreadItem[] {
+  const { environmentThreadGroups, looseThreads } =
+    bucketWorktreeEnvironmentGroups(threads);
+  const items: ProjectThreadItem[] = [
+    ...looseThreads.map((thread) => ({ kind: "thread" as const, thread })),
+    ...environmentThreadGroups.map((group) => ({
+      kind: "environment" as const,
+      group,
+    })),
+  ];
+  items.sort(compareProjectThreadItems);
+  return items;
+}
+
 function getKnownManagerParentId({
   managerThreadIds,
   thread,
@@ -87,17 +140,15 @@ export function buildProjectThreadGroups(
     .filter((thread) => thread.type === "manager")
     .sort(compareByCreatedAtDescending);
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
-  const managerThreadGroupsById = new Map<string, ManagerThreadGroup>();
+  const childrenByManagerId = new Map<string, ThreadListEntry[]>();
+  const statsByManagerId = new Map<string, ManagerThreadStats>();
   const unmanagedStandardThreads: ThreadListEntry[] = [];
 
   for (const managerThread of managerThreads) {
-    managerThreadGroupsById.set(managerThread.id, {
-      managerThread,
-      managedThreads: [],
-      stats: {
-        managedChildBusyCount: 0,
-        managedChildCount: 0,
-      },
+    childrenByManagerId.set(managerThread.id, []);
+    statsByManagerId.set(managerThread.id, {
+      managedChildBusyCount: 0,
+      managedChildCount: 0,
     });
   }
 
@@ -110,24 +161,76 @@ export function buildProjectThreadGroups(
       continue;
     }
 
-    const managerThreadGroup = managerThreadGroupsById.get(managerId);
-    if (!managerThreadGroup) continue;
+    const children = childrenByManagerId.get(managerId);
+    const stats = statsByManagerId.get(managerId);
+    if (!children || !stats) continue;
 
-    managerThreadGroup.managedThreads.push(thread);
-    managerThreadGroup.stats.managedChildCount += 1;
+    children.push(thread);
+    stats.managedChildCount += 1;
     if (isBusyThread(thread)) {
-      managerThreadGroup.stats.managedChildBusyCount += 1;
+      stats.managedChildBusyCount += 1;
     }
   }
 
-  const managerThreadGroups = Array.from(managerThreadGroupsById.values());
-  for (const managerThreadGroup of managerThreadGroups) {
-    managerThreadGroup.managedThreads.sort(compareStandardThreads);
-  }
-  unmanagedStandardThreads.sort(compareStandardThreads);
+  const managerThreadGroups: ManagerThreadGroup[] = managerThreads.map(
+    (managerThread) => ({
+      managerThread,
+      managedItems: buildSortedItems(
+        childrenByManagerId.get(managerThread.id) ?? [],
+      ),
+      stats: statsByManagerId.get(managerThread.id) ?? {
+        managedChildBusyCount: 0,
+        managedChildCount: 0,
+      },
+    }),
+  );
 
   return {
     managerThreadGroups,
-    unmanagedStandardThreads,
+    unmanagedItems: buildSortedItems(unmanagedStandardThreads),
   };
+}
+
+interface BucketWorktreeEnvironmentGroupsResult {
+  environmentThreadGroups: EnvironmentThreadGroup[];
+  looseThreads: ThreadListEntry[];
+}
+
+// Bucket threads by shared worktree environmentId. A bucket only becomes a
+// group when ≥2 threads share the environment; solo threads stay loose so
+// we don't render degenerate 1-thread groups. Callers pass standard threads
+// that are siblings in the same render context (project-level or under a
+// single manager).
+function bucketWorktreeEnvironmentGroups(
+  threads: ThreadListEntry[],
+): BucketWorktreeEnvironmentGroupsResult {
+  const threadsByEnvironmentId = new Map<string, ThreadListEntry[]>();
+  for (const thread of threads) {
+    if (thread.environmentId === null) continue;
+    if (!isWorktreeDisplayKind(thread.environmentWorkspaceDisplayKind)) continue;
+    let bucket = threadsByEnvironmentId.get(thread.environmentId);
+    if (!bucket) {
+      bucket = [];
+      threadsByEnvironmentId.set(thread.environmentId, bucket);
+    }
+    bucket.push(thread);
+  }
+
+  const groupedEnvironmentIds = new Set<string>();
+  const environmentThreadGroups: EnvironmentThreadGroup[] = [];
+  for (const [environmentId, bucket] of threadsByEnvironmentId) {
+    if (bucket.length < 2) continue;
+    bucket.sort(compareStandardThreads);
+    groupedEnvironmentIds.add(environmentId);
+    environmentThreadGroups.push({ environmentId, threads: bucket });
+  }
+
+  const looseThreads = threads.filter(
+    (thread) =>
+      thread.environmentId === null ||
+      !groupedEnvironmentIds.has(thread.environmentId),
+  );
+  looseThreads.sort(compareStandardThreads);
+
+  return { environmentThreadGroups, looseThreads };
 }

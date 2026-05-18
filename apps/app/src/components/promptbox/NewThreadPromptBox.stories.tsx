@@ -6,6 +6,7 @@ import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
+  type NewThreadWorktreeConfig,
 } from "@/components/promptbox/NewThreadPromptBox";
 import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
 import type { HistoryConfig } from "@/components/promptbox/PromptBoxInternal";
@@ -111,6 +112,12 @@ const baseBranch: NewThreadBranchConfig = {
   onCreate: noop,
 };
 
+const baseWorktree: NewThreadWorktreeConfig = {
+  options: [],
+  value: null,
+  onChange: noop,
+};
+
 const permissionModeOptions: readonly PickerOption<PermissionMode>[] = [
   { value: "full", label: "Full Access", tone: "warning" },
   { value: "workspace-write", label: "Workspace Write" },
@@ -163,6 +170,7 @@ function DefaultRow() {
         execution={baseExecution}
         environment={baseEnvironment}
         branch={baseBranch}
+        worktree={baseWorktree}
         permission={basePermission}
       />
     </PromptStage>
@@ -189,6 +197,7 @@ function SubmittingRow() {
         execution={baseExecution}
         environment={baseEnvironment}
         branch={baseBranch}
+        worktree={baseWorktree}
         permission={basePermission}
       />
     </PromptStage>
@@ -227,6 +236,7 @@ function ClaudeProviderRow() {
         }}
         environment={baseEnvironment}
         branch={baseBranch}
+        worktree={baseWorktree}
         permission={basePermission}
       />
     </PromptStage>

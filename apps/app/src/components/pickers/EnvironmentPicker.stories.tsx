@@ -97,15 +97,29 @@ export function Overview() {
           isLocalHost={isLocalHost}
         />
       </StoryRow>
-      <StoryRow label="open menu" hint="defaultOpen + modal=false">
+      <StoryRow
+        label="reuse selected"
+        hint="env mode is reuse — button shows 'Reuse worktree'; the specific worktree lives in the adjacent WorktreePicker"
+      >
+        <EnvironmentPickerUI
+          value="reuse"
+          onChange={noop}
+          sources={localProjectSources}
+          hosts={mockHosts}
+          isLocalHost={isLocalHost}
+        />
+      </StoryRow>
+      <StoryRow
+        label="no worktrees to reuse"
+        hint="reuseDisabled — open the menu to see the 'Existing worktree' row disabled with a hint about why"
+      >
         <EnvironmentPickerUI
           value={`host:${HOST_IDS.local}:local`}
           onChange={noop}
-          sources={multiHostSources}
+          sources={localProjectSources}
           hosts={mockHosts}
           isLocalHost={isLocalHost}
-          defaultOpen
-          modal={false}
+          reuseDisabled
         />
       </StoryRow>
     </StoryCard>

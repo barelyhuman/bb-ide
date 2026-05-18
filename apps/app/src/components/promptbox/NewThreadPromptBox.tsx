@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef } from "react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 import type { Host, ProjectSource } from "@bb/domain";
 import {
   ExecutionControls,
@@ -20,6 +20,10 @@ import {
 } from "@/components/pickers/EnvironmentPicker";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
+import {
+  WorktreePicker,
+  type ReuseThreadOption,
+} from "@/components/pickers/WorktreePicker";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 
@@ -29,6 +33,9 @@ export interface NewThreadEnvironmentConfig {
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
   isLocalHost: EnvironmentPickerUIProps["isLocalHost"];
+  /** When true, the picker's "Reuse existing worktree" entry is disabled.
+   * Caller signals the project has no worktree envs available. */
+  reuseDisabled?: boolean;
 }
 
 export interface NewThreadBranchConfig {
@@ -45,6 +52,14 @@ export interface NewThreadBranchConfig {
    * select an existing branch to use as the merge base.
    */
   onCreate?: () => void;
+}
+
+export interface NewThreadWorktreeConfig {
+  options: readonly ReuseThreadOption[];
+  /** Currently-selected env id, or null when reuse mode is active but no
+   * worktree has been chosen yet. */
+  value: string | null;
+  onChange: (environmentId: string) => void;
 }
 
 export interface NewThreadPromptBoxUIProps {
@@ -68,7 +83,11 @@ export interface NewThreadPromptBoxUIProps {
   execution: ExecutionControlsProps;
   environment: NewThreadEnvironmentConfig;
   branch: NewThreadBranchConfig;
+  worktree: NewThreadWorktreeConfig;
   permission: ExecutionPermissionConfig;
+  /** Slot rendered inside the prompt box card, above the text area. Used by
+   * ProjectMainView to surface a prominent banner when env mode is reuse. */
+  header?: ReactNode;
 }
 
 /**
@@ -89,12 +108,15 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   execution,
   environment,
   branch,
+  worktree,
   permission,
+  header,
 }: NewThreadPromptBoxUIProps) {
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
   const parsedEnvironment = parseEnvironmentValue(environment.value);
   const showBranchPicker = parsedEnvironment?.type === "host";
+  const showWorktreePicker = parsedEnvironment?.type === "reuse";
   return (
     <>
       <PromptBoxInternal
@@ -118,6 +140,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
           layout: "project-main",
           storageKey: zenModeStorageKey,
         }}
+        header={header}
         footerStart={<ExecutionControls {...execution} />}
       />
       <div className="flex items-center justify-between gap-2 px-3.5">
@@ -128,6 +151,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
             sources={environment.sources}
             hosts={environment.hosts}
             isLocalHost={environment.isLocalHost}
+            reuseDisabled={environment.reuseDisabled}
             muted
           />
           {showBranchPicker ? (
@@ -142,6 +166,14 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
               onChange={branch.onChange}
               onOpenChange={branch.onOpenChange}
               onCreate={branch.onCreate}
+            />
+          ) : null}
+          {showWorktreePicker ? (
+            <WorktreePicker
+              muted
+              options={worktree.options}
+              value={worktree.value}
+              onChange={worktree.onChange}
             />
           ) : null}
         </div>
@@ -160,6 +192,9 @@ export interface NewThreadConnectedEnvironmentConfig {
   value: string;
   onChange: (value: string) => void;
   sources: readonly ProjectSource[];
+  /** When true, the "Reuse existing worktree" entry in the env picker is
+   * disabled — caller signals the project has no worktree envs available. */
+  reuseDisabled?: boolean;
 }
 
 export interface NewThreadConnectedBranchConfig {

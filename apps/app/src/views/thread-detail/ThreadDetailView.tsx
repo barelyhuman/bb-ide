@@ -40,6 +40,7 @@ import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { assertNever } from "@bb/thread-view";
+import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
@@ -415,6 +416,10 @@ export function ThreadDetailView() {
     staleTime: 5_000,
   });
   const environment = environmentQuery.data;
+  const createThreadInWorktree = useCreateThreadInWorktree({
+    projectId: projectId ?? "",
+    environmentId: thread?.environmentId ?? "",
+  });
   const environmentMergeBaseBranch =
     environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined;
   const {
@@ -840,6 +845,16 @@ export function ThreadDetailView() {
         threadEnvironmentDisplay.workspaceDisplayKind,
       )
     : null;
+  const isThreadOnWorktreeEnvironment =
+    environment !== undefined &&
+    (environment.isWorktree ||
+      environment.workspaceProvisionType === "managed-worktree");
+  const onCreateNewThreadInWorktree =
+    isThreadOnWorktreeEnvironment &&
+    projectId &&
+    thread.environmentId !== null
+      ? createThreadInWorktree
+      : undefined;
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
@@ -931,6 +946,7 @@ export function ThreadDetailView() {
           : undefined
       }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
+      onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
       composerQueriesEnabled={hasThreadComposerBootstrapSettled}
       composerQueriesRefetchOnMount={
         threadComposerBootstrapQuery.isSuccess ? false : "always"

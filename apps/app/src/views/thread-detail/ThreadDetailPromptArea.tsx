@@ -71,6 +71,7 @@ interface ThreadDetailPromptAreaProps {
   environmentHostLabel?: string;
   environmentIcon?: IconName;
   environmentLabel?: string;
+  onCreateNewThreadInWorktree?: () => void;
   isEnvironmentActionPending: boolean;
   pendingInteractions: readonly PendingInteraction[];
   onChangedFileClick: (selection: WorkspaceChangedFileSelection) => void;
@@ -140,6 +141,7 @@ export function ThreadDetailPromptArea({
   environmentHostLabel,
   environmentIcon,
   environmentLabel,
+  onCreateNewThreadInWorktree,
   isEnvironmentActionPending,
   pendingInteractions,
   onChangedFileClick,
@@ -235,7 +237,7 @@ export function ThreadDetailPromptArea({
   } = useThreadCreationOptions({
     enabled: composerQueriesEnabled,
     environmentId: thread.environmentId ?? undefined,
-    scope: "thread",
+    scope: "component-local",
     resetKey: thread.id,
     initialProviderId: thread.providerId,
     initialModel: defaultExecutionOptions?.model,
@@ -713,6 +715,7 @@ export function ThreadDetailPromptArea({
           environmentHostConnected={environmentHostConnected}
           environmentIcon={environmentIcon}
           environmentBranchName={environmentBranchName}
+          onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
         />
       ) : null,
     [
@@ -721,6 +724,7 @@ export function ThreadDetailPromptArea({
       environmentHostLabel,
       environmentIcon,
       environmentLabel,
+      onCreateNewThreadInWorktree,
     ],
   );
 

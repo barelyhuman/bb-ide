@@ -34,6 +34,7 @@ import {
 import {
   encodeHostValue,
   parseEnvironmentValue,
+  REUSE_VALUE_WITHOUT_ENVIRONMENT,
 } from "./environment-picker-value";
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,11 @@ export interface EnvironmentPickerUIProps {
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
   isLocalHost: (hostId: string | null | undefined) => boolean;
+  /** When true, the "Reuse existing worktree" entry is disabled — the
+   * caller signals that the project has no worktree envs available to
+   * reuse. The entry is always rendered so the affordance stays
+   * discoverable; it just can't be selected. */
+  reuseDisabled?: boolean;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
   /** Render with the menu open on mount. Story-only escape hatch. */
@@ -106,6 +112,7 @@ export function EnvironmentPickerUI({
   sources,
   hosts,
   isLocalHost,
+  reuseDisabled,
   muted,
   defaultOpen,
   modal,
@@ -115,33 +122,37 @@ export function EnvironmentPickerUI({
     [hosts, sources, isLocalHost],
   );
 
+  const parsed = useMemo(() => parseEnvironmentValue(value), [value]);
+
   const selected = useMemo((): SelectedEnvironment => {
-    const parsed = parseEnvironmentValue(value);
     if (!parsed) return { modeLabel: "Environment", icon: "Laptop" as const };
-    if (parsed.type === "host") {
-      const host = hosts.find((h) => h.id === parsed.hostId);
-      const isLocal = isLocalHost(parsed.hostId);
-      const modeLabel =
-        parsed.mode === "worktree"
-          ? "New worktree"
-          : isLocal
-            ? "Work locally"
-            : "Work remotely";
-      const icon = getEnvironmentWorkspaceLabelIconName(
-        parsed.mode === "worktree" ? "managed-worktree" : "other",
-      );
-      if (isLocal) {
-        return { modeLabel, icon };
-      }
+    if (parsed.type === "reuse") {
       return {
-        modeLabel,
-        hostLabel: host?.name ?? "Unknown",
-        icon,
-        hostConnected: host?.status === "connected",
+        modeLabel: "Reuse worktree",
+        icon: getEnvironmentWorkspaceLabelIconName("managed-worktree"),
       };
     }
-    return { modeLabel: "Environment", icon: "Laptop" as const };
-  }, [value, hosts, isLocalHost]);
+    const host = hosts.find((h) => h.id === parsed.hostId);
+    const isLocal = isLocalHost(parsed.hostId);
+    const modeLabel =
+      parsed.mode === "worktree"
+        ? "New worktree"
+        : isLocal
+          ? "Work locally"
+          : "Work remotely";
+    const icon = getEnvironmentWorkspaceLabelIconName(
+      parsed.mode === "worktree" ? "managed-worktree" : "other",
+    );
+    if (isLocal) {
+      return { modeLabel, icon };
+    }
+    return {
+      modeLabel,
+      hostLabel: host?.name ?? "Unknown",
+      icon,
+      hostConnected: host?.status === "connected",
+    };
+  }, [parsed, hosts, isLocalHost]);
 
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
@@ -202,21 +213,27 @@ export function EnvironmentPickerUI({
             />
           );
         })}
+        <ReuseSection
+          isReuseSelected={parsed?.type === "reuse"}
+          disabled={Boolean(reuseDisabled)}
+          onChange={onChange}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Connected variant — wires app-wide hooks (jotai atoms + React Query) into
-// the presentational EnvironmentPickerUI. App callers use this; stories use
-// EnvironmentPickerUI directly with mocks.
+// Connected variant — wires app-wide hooks into the presentational
+// EnvironmentPickerUI. App callers use this; stories use EnvironmentPickerUI
+// directly with mocks.
 // ---------------------------------------------------------------------------
 
 export interface EnvironmentPickerProps {
   value: string;
   onChange: (value: string) => void;
   sources: readonly ProjectSource[];
+  reuseDisabled?: boolean;
   muted?: boolean;
 }
 
@@ -224,6 +241,7 @@ export function EnvironmentPicker({
   value,
   onChange,
   sources,
+  reuseDisabled,
   muted,
 }: EnvironmentPickerProps) {
   const { isLocalHost } = useHostDaemon();
@@ -236,8 +254,66 @@ export function EnvironmentPicker({
       sources={sources}
       hosts={hosts}
       isLocalHost={isLocalHost}
+      reuseDisabled={reuseDisabled}
       muted={muted}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reuse section — single entry, sets the value to the bare reuse marker.
+// The actual worktree picker lives beside the env picker (see WorktreePicker).
+// ---------------------------------------------------------------------------
+
+interface ReuseSectionProps {
+  isReuseSelected: boolean;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}
+
+function ReuseSection({
+  isReuseSelected,
+  disabled,
+  onChange,
+}: ReuseSectionProps) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Reuse</DropdownMenuLabel>
+      <DropdownMenuItem
+        disabled={disabled}
+        onSelect={() => {
+          if (disabled) return;
+          onChange(REUSE_VALUE_WITHOUT_ENVIRONMENT);
+        }}
+        className="flex items-center justify-between gap-3"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon
+            name={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
+            className={cn(
+              "text-muted-foreground",
+              COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+            )}
+          />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-xs">Existing worktree</span>
+            {disabled ? (
+              // No extra muting: the disabled DropdownMenuItem already
+              // applies opacity-50 to its content. Stacking more dimming
+              // here would make the subtitle barely readable.
+              <span className="text-xs">No worktrees in this project yet</span>
+            ) : null}
+          </span>
+        </span>
+        <Icon
+          name="Check"
+          className={cn(
+            COARSE_POINTER_ICON_SIZE_CLASS,
+            isReuseSelected ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </DropdownMenuItem>
+    </DropdownMenuGroup>
   );
 }
 

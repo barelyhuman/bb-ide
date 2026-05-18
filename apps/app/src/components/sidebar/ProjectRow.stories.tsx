@@ -139,6 +139,24 @@ const standardThread = makeThread({
   environmentBranchName: BRANCH_NAMES.default,
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
+const sharedWorktreeThreadA = makeThread({
+  id: "thr_shared_wt_a",
+  title: "Refactor timeline row types",
+  titleFallback: "Refactor timeline row types",
+  environmentId: "env_shared_worktree",
+  environmentHostId: HOST_IDS.local,
+  environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
+  environmentWorkspaceDisplayKind: "managed-worktree",
+});
+const sharedWorktreeThreadB = makeThread({
+  id: "thr_shared_wt_b",
+  title: "Add story for env-grouped sidebar",
+  titleFallback: "Add story for env-grouped sidebar",
+  environmentId: "env_shared_worktree",
+  environmentHostId: HOST_IDS.local,
+  environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
+  environmentWorkspaceDisplayKind: "managed-worktree",
+});
 const manager = makeThread({
   id: "thr_manager",
   type: "manager",
@@ -291,6 +309,17 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
+        label="environment group"
+        hint="two unmanaged standard threads sharing one worktree environment — grouped under a worktree header that surfaces the branch"
+      >
+        {singleProject({
+          threadListState: {
+            status: "ready",
+            threads: [sharedWorktreeThreadA, sharedWorktreeThreadB],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
         label="multiple projects"
         hint="four projects stacked — active project at the top with a standard thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
       >
@@ -357,6 +386,28 @@ const fullProjectAThreads: ThreadListEntry[] = [
     }),
   ),
   makeThread({
+    id: "thr_full_a_managed_env_group_1",
+    projectId: "proj_full_a",
+    title: "Audit recurring permission failures",
+    titleFallback: "Audit recurring permission failures",
+    parentThreadId: fullManagerA.id,
+    environmentId: "env_full_a_codex_train",
+    environmentHostId: "host_local",
+    environmentBranchName: "bb/squash-merge-ready-app-train-thr_s6fn8fuv9w",
+    environmentWorkspaceDisplayKind: "managed-worktree",
+  }),
+  makeThread({
+    id: "thr_full_a_managed_env_group_2",
+    projectId: "proj_full_a",
+    title: "Investigate ux regression bug",
+    titleFallback: "Investigate ux regression bug",
+    parentThreadId: fullManagerA.id,
+    environmentId: "env_full_a_codex_train",
+    environmentHostId: "host_local",
+    environmentBranchName: "bb/squash-merge-ready-app-train-thr_s6fn8fuv9w",
+    environmentWorkspaceDisplayKind: "managed-worktree",
+  }),
+  makeThread({
     id: "thr_full_a_standalone_1",
     projectId: "proj_full_a",
     title: "Stabilize Pnpm Dev Environment",
@@ -372,6 +423,26 @@ const fullProjectAThreads: ThreadListEntry[] = [
     titleFallback: "Investigate Laptop Sleep Bug",
     lastReadAt: 50,
     latestAttentionAt: 200,
+  }),
+  makeThread({
+    id: "thr_full_a_env_group_1",
+    projectId: "proj_full_a",
+    title: "Wire sidebar env-grouping data shape",
+    titleFallback: "Wire sidebar env-grouping data shape",
+    environmentId: "env_full_a_sidebar_rail",
+    environmentHostId: "host_local",
+    environmentBranchName: "bb/fix-diff-panel-issues-thr_u8cnp5fnea",
+    environmentWorkspaceDisplayKind: "managed-worktree",
+  }),
+  makeThread({
+    id: "thr_full_a_env_group_2",
+    projectId: "proj_full_a",
+    title: "Add story for env-grouped sidebar",
+    titleFallback: "Add story for env-grouped sidebar",
+    environmentId: "env_full_a_sidebar_rail",
+    environmentHostId: "host_local",
+    environmentBranchName: "bb/fix-diff-panel-issues-thr_u8cnp5fnea",
+    environmentWorkspaceDisplayKind: "managed-worktree",
   }),
 ];
 
@@ -449,7 +520,7 @@ export function Full() {
     <StoryCard>
       <StoryRow
         label="full sidebar"
-        hint="action buttons + three projects: bb (active) with a 4-child manager + 2 standalones; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
+        hint="action buttons + three projects: bb (active) with a manager that has 4 loose children + a 2-thread env sub-group, plus 2 standalones and a 2-thread project-level env group; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
       >
         <SidebarStage>
           <div className="px-2 pb-2">

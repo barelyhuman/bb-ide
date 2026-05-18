@@ -13,6 +13,7 @@ import type {
   ReasoningLevel,
   ServiceTier,
 } from "@bb/domain";
+import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import {
   createLocalStorageEnumStorage,
   createProjectScopedStorageAtomFamily,
@@ -67,7 +68,7 @@ interface PickerOption<T extends string> {
 interface UsePromptModelReasoningOptions {
   enabled?: boolean;
   environmentId?: string;
-  scope?: "new-thread" | "thread";
+  scope?: "new-thread" | "component-local";
   projectId?: string | null;
   resetKey?: string | number | null;
   initialProviderId?: string;
@@ -289,6 +290,16 @@ export function formatModelLabel(value: string, providerId?: string): string {
   return label;
 }
 
+function sanitizeStoredEnvironmentValue(stored: string): string {
+  // Legacy guard: earlier iterations briefly persisted `reuse:<envId>` to
+  // localStorage. Treat any persisted reuse value as absent so the picker
+  // never resurrects a stale reuse selection across sessions.
+  if (!stored) return "";
+  const parsed = parseEnvironmentValue(stored);
+  if (parsed?.type === "reuse") return "";
+  return stored;
+}
+
 export function useThreadCreationOptions(
   options?: UsePromptModelReasoningOptions,
 ) {
@@ -322,6 +333,13 @@ export function useThreadCreationOptions(
   );
   const [storedEnvironmentSelectionValue, setStoredEnvironmentSelectionValue] =
     useAtom(environmentSelectionAtomFamily(projectId));
+  // Reuse env values are intentionally NEVER persisted to localStorage —
+  // they represent a transient "create one thread in this worktree" intent,
+  // not a project default. Held in component state for the duration of this
+  // composer; refresh resets to the user's host-mode default.
+  const [sessionReuseValue, setSessionReuseValue] = useState<string | null>(
+    null,
+  );
   const [threadSelections, setThreadSelections] =
     useState<ThreadPromptSelections>(() =>
       getInitialThreadPromptSelections({
@@ -360,16 +378,17 @@ export function useThreadCreationOptions(
       : threadSelections.permissionMode;
   const rawEnvironmentSelectionValue =
     scope === "new-thread"
-      ? storedEnvironmentSelectionValue
+      ? (sessionReuseValue ??
+          sanitizeStoredEnvironmentValue(storedEnvironmentSelectionValue))
       : threadSelections.environmentSelectionValue;
 
   // --- Provider selection ---
   const executionOptionsEnvironmentId =
-    scope === "thread" ? environmentId : undefined;
+    scope === "component-local" ? environmentId : undefined;
   const executionOptionsQuery = useSystemExecutionOptions({
     enabled:
       enabled &&
-      (scope !== "thread" || executionOptionsEnvironmentId !== undefined),
+      (scope !== "component-local" || executionOptionsEnvironmentId !== undefined),
     environmentId: executionOptionsEnvironmentId,
     providerId: rawSelectedProviderId || undefined,
   });
@@ -526,7 +545,7 @@ export function useThreadCreationOptions(
   const environmentSelectionValue = rawEnvironmentSelectionValue;
 
   useEffect(() => {
-    if (scope !== "thread") return;
+    if (scope !== "component-local") return;
     const nextSelections = getInitialThreadPromptSelections({
       initialEnvironmentSelectionValue,
       initialModel,
@@ -651,6 +670,15 @@ export function useThreadCreationOptions(
   const setEnvironmentSelectionValue = useCallback(
     (value: string) => {
       if (scope === "new-thread") {
+        const parsed = parseEnvironmentValue(value);
+        if (parsed?.type === "reuse") {
+          // Reuse intent is transient. Hold it in session state so the
+          // picker reflects the user's choice without overwriting their
+          // persisted host-mode default.
+          setSessionReuseValue(value);
+          return;
+        }
+        setSessionReuseValue(null);
         setStoredEnvironmentSelectionValue(value);
         return;
       }
@@ -665,6 +693,12 @@ export function useThreadCreationOptions(
     },
     [scope, setStoredEnvironmentSelectionValue],
   );
+  // Dismissing the reuse banner reverts to whatever the user's persisted
+  // host-mode default is — no localStorage write needed, just clear the
+  // session override.
+  const clearReuseEnvironment = useCallback(() => {
+    setSessionReuseValue(null);
+  }, []);
 
   return {
     selectedProviderId: effectiveProviderId,
@@ -683,6 +717,7 @@ export function useThreadCreationOptions(
     setPermissionMode,
     environmentSelectionValue,
     setEnvironmentSelectionValue,
+    clearReuseEnvironment,
     activeModel,
     modelOptions,
     reasoningOptions,

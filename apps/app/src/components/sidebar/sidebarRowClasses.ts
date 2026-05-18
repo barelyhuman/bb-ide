@@ -9,6 +9,8 @@ export const SIDEBAR_MANAGER_ROW_PADDING_CLASS = "pl-8";
 
 export const SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS = "pl-14";
 
+export const SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS = "pl-20";
+
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
   "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
 
@@ -34,3 +36,11 @@ export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
  */
 export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
   "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-30 before:w-px before:bg-sidebar-foreground/15 before:content-['']";
+
+/**
+ * Hairline that runs through an env sub-group nested inside a manager.
+ * Sits under the center of the sub-group header's worktree glyph at the
+ * managed-child indent (pl-14), so the line lands at left-16.
+ */
+export const SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS =
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-sidebar-foreground/15 before:content-['']";

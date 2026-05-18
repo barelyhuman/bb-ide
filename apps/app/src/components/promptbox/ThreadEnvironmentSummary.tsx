@@ -15,6 +15,10 @@ export interface ThreadEnvironmentSummaryProps {
   environmentIcon?: IconName;
   /** Branch name if the environment runs on a worktree. Renders a copy-to-clipboard button. */
   environmentBranchName?: string;
+  /** When set, render a "new thread in this worktree" affordance beside the
+   * environment label. Caller is responsible for only providing this when the
+   * environment is a worktree. */
+  onCreateNewThreadInWorktree?: () => void;
 }
 
 /**
@@ -34,6 +38,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   environmentHostConnected,
   environmentIcon,
   environmentBranchName,
+  onCreateNewThreadInWorktree,
 }: ThreadEnvironmentSummaryProps) {
   if (!environmentLabel && environmentHostConnected === undefined) {
     return null;
@@ -85,6 +90,17 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
         >
           <Icon name="GitMerge" className="size-3.5 shrink-0" />
           <span className="truncate">{environmentBranchName}</span>
+        </button>
+      ) : null}
+      {onCreateNewThreadInWorktree ? (
+        <button
+          type="button"
+          aria-label="Create new thread in this worktree"
+          title="New thread in this worktree"
+          onClick={onCreateNewThreadInWorktree}
+          className="-ml-1 inline-flex shrink-0 items-center justify-center rounded-md px-1 py-0.5 text-muted-foreground/75 transition-colors hover:bg-state-hover hover:text-foreground"
+        >
+          <Icon name="MessageSquarePlus" className="size-4" />
         </button>
       ) : null}
     </div>

@@ -127,6 +127,10 @@ export interface PromptBoxInternalProps {
   onSubmit: () => void;
   placeholder?: string;
   className?: string;
+  /** Content rendered inside the prompt box card, above the text area. Use
+   * for prominent context that should be impossible to miss — e.g. a
+   * "Reusing existing worktree" banner when env mode is set to reuse. */
+  header?: ReactNode;
   footerStart?: ReactNode;
   autoFocus?: boolean;
   submission?: PromptBoxSubmissionConfig;
@@ -185,6 +189,7 @@ export function PromptBoxInternal({
   onSubmit,
   placeholder = "Ask anything. @ to mention files",
   className,
+  header,
   footerStart,
   autoFocus = false,
   submission = {},
@@ -867,25 +872,6 @@ export function PromptBoxInternal({
         className,
       )}
     >
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        onMouseDown={(event) => {
-          event.preventDefault();
-        }}
-        onClick={toggleZenMode}
-        title={isZenMode ? "Exit zen mode" : "Enter zen mode"}
-        aria-label={isZenMode ? "Exit zen mode" : "Enter zen mode"}
-        aria-pressed={isZenMode}
-        className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-muted-foreground/40 hover:text-muted-foreground"
-      >
-        {isZenMode ? (
-          <Icon name="Minimize2" className="size-3" />
-        ) : (
-          <Icon name="Maximize2" className="size-3" />
-        )}
-      </Button>
       <input
         ref={attachmentInputRef}
         type="file"
@@ -893,7 +879,42 @@ export function PromptBoxInternal({
         className="hidden"
         onChange={handleAttachmentInputChange}
       />
-      <textarea
+      {header ? (
+        // Left padding matches the textarea's so the header content aligns
+        // with the placeholder column in both normal and zen modes (textarea
+        // shifts from px-4 to px-6 when entering zen). Right padding leaves
+        // room for the zen-mode toggle button in the top-right corner. Zen
+        // mode also gets more top room since the card fills the viewport.
+        <div className={cn("pr-14", isZenMode ? "pl-6 pt-6" : "pl-4 pt-3")}>
+          {header}
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "relative",
+          isZenMode && "flex flex-1 flex-col",
+        )}
+      >
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          onClick={toggleZenMode}
+          title={isZenMode ? "Exit zen mode" : "Enter zen mode"}
+          aria-label={isZenMode ? "Exit zen mode" : "Enter zen mode"}
+          aria-pressed={isZenMode}
+          className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-muted-foreground/40 hover:text-muted-foreground"
+        >
+          {isZenMode ? (
+            <Icon name="Minimize2" className="size-3" />
+          ) : (
+            <Icon name="Maximize2" className="size-3" />
+          )}
+        </Button>
+        <textarea
         ref={textareaRef}
         id={id}
         value={value}
@@ -945,6 +966,11 @@ export function PromptBoxInternal({
           "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-muted-foreground/60",
           COARSE_POINTER_TEXT_BASE_CLASS,
           isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8",
+          // When a header sits above the textarea, its own padding already
+          // separates it from the top of the card — the zen-mode pt-8 would
+          // stack on top of that and push the placeholder visibly away from
+          // the header. Pull it back to the normal-mode top padding.
+          isZenMode && header ? "pt-3" : null,
         )}
         style={{
           minHeight: isZenMode ? "0px" : `${minHeight}px`,
@@ -952,6 +978,7 @@ export function PromptBoxInternal({
           maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
         }}
       />
+      </div>
 
       {showMentionMenu ? (
         <div

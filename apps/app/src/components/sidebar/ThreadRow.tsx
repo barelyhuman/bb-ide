@@ -25,6 +25,7 @@ import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 import {
   SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
+  SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ROW_PADDING_CLASS,
   SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
@@ -37,6 +38,12 @@ export type ThreadRowOptions =
     }
   | {
       kind: "managed-child";
+    }
+  | {
+      kind: "env-grouped-child";
+    }
+  | {
+      kind: "env-grouped-managed-child";
     }
   | {
       kind: "manager";
@@ -99,7 +106,7 @@ function ManagerChevron({
         <span
           data-manager-leading-icon=""
           className={cn(
-            "absolute inline-flex items-center justify-center opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 group-focus-within/thread-row:opacity-0",
+            "absolute inline-flex items-center justify-center opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 group-has-[:focus-visible]/thread-row:opacity-0",
             COARSE_POINTER_ICON_SIZE_CLASS,
           )}
           aria-hidden="true"
@@ -113,7 +120,7 @@ function ManagerChevron({
         <span
           data-manager-collapse-indicator=""
           className={cn(
-            "absolute inline-flex items-center justify-center opacity-0 transition-all duration-150 group-hover/thread-row:opacity-100 group-focus-within/thread-row:opacity-100",
+            "absolute inline-flex items-center justify-center opacity-0 transition-all duration-150 group-hover/thread-row:opacity-100 group-has-[:focus-visible]/thread-row:opacity-100",
             COARSE_POINTER_ICON_SIZE_CLASS,
             !isCollapsed && "rotate-90",
           )}
@@ -269,26 +276,40 @@ function ThreadRowComponent({
   const managerOptions = options.kind === "manager" ? options : null;
   const isManager = managerOptions !== null;
   const isManagedChild = options.kind === "managed-child";
+  const isEnvGroupedChild = options.kind === "env-grouped-child";
+  const isEnvGroupedManagedChild = options.kind === "env-grouped-managed-child";
+  const isCompactChild =
+    isManagedChild || isEnvGroupedChild || isEnvGroupedManagedChild;
+  const isUnderEnvHeader = isEnvGroupedChild || isEnvGroupedManagedChild;
   const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
   const managedChildCount = managerOptions?.managedChildCount ?? 0;
   const hasManagedChildren = managedChildCount > 0;
-  const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
-    thread.environmentWorkspaceDisplayKind,
-  );
-  const environmentIconLabel = getEnvironmentWorkspaceDisplayIconLabel(
-    thread.environmentWorkspaceDisplayKind,
-  );
+  // Env-grouped children sit under a header that already shows the
+  // worktree branch + icon, so suppress the redundant trailing icon.
+  const environmentIcon = isUnderEnvHeader
+    ? null
+    : getEnvironmentWorkspaceDisplayIconName(
+        thread.environmentWorkspaceDisplayKind,
+      );
+  const environmentIconLabel = isUnderEnvHeader
+    ? null
+    : getEnvironmentWorkspaceDisplayIconLabel(
+        thread.environmentWorkspaceDisplayKind,
+      );
+  const childPaddingClass = isEnvGroupedManagedChild
+    ? SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS
+    : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
   const rowClassName = cn(
     "group/thread-row",
     SIDEBAR_ROW_BASE_CLASS,
     !isManager && "relative",
-    isManagedChild
+    isCompactChild
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
     isManager
       ? SIDEBAR_MANAGER_ROW_PADDING_CLASS
-      : isManagedChild
-        ? SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS
+      : isCompactChild
+        ? childPaddingClass
         : SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"

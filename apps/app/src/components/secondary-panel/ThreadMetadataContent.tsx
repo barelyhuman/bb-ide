@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { CopyableInlineLabel } from "@/components/ui/copy-button.js";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -226,6 +227,10 @@ export function EnvironmentRow({
   environmentHost,
   environmentIsLocal,
 }: EnvironmentRowProps) {
+  const createThreadInWorktree = useCreateThreadInWorktree({
+    projectId: thread.projectId,
+    environmentId: environment?.id ?? "",
+  });
   if (thread.type === "manager") return null;
   if (!environment) return null;
   const display = formatEnvironmentDisplay({
@@ -233,9 +238,23 @@ export function EnvironmentRow({
     isLocalHost: environmentIsLocal,
     hostName: environmentHost?.name,
   });
+  const showCreateThreadButton = isWorktreeEnvironment(environment);
   return (
-    <DetailRow label="Environment" valueClassName="min-w-0 truncate">
-      {display.modeLabel}
+    <DetailRow label="Environment" valueClassName="min-w-0">
+      <span className="flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate">{display.modeLabel}</span>
+        {showCreateThreadButton ? (
+          <button
+            type="button"
+            aria-label="Create new thread in this worktree"
+            title="New thread in this worktree"
+            onClick={createThreadInWorktree}
+            className="inline-flex shrink-0 items-center justify-center rounded-md p-0.5 text-muted-foreground/75 transition-colors hover:bg-state-hover hover:text-foreground"
+          >
+            <Icon name="MessageSquarePlus" className="size-4" />
+          </button>
+        ) : null}
+      </span>
     </DetailRow>
   );
 }

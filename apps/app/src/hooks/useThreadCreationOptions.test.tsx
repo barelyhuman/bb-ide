@@ -90,7 +90,7 @@ describe("useThreadCreationOptions", () => {
           enabled: false,
           initialProviderId: "codex",
           projectId: "project-disabled-options",
-          scope: "thread",
+          scope: "component-local",
         }),
       { wrapper },
     );
@@ -106,7 +106,7 @@ describe("useThreadCreationOptions", () => {
         useThreadCreationOptions({
           initialProviderId: "codex",
           projectId: "project-thread-without-environment",
-          scope: "thread",
+          scope: "component-local",
         }),
       { wrapper },
     );
@@ -376,7 +376,7 @@ describe("useThreadCreationOptions", () => {
           initialProviderId: "codex",
           projectId: "project-thread",
           resetKey,
-          scope: "thread",
+          scope: "component-local",
         }),
       {
         initialProps: {
@@ -516,7 +516,7 @@ describe("useThreadCreationOptions", () => {
           initialModel: "opus",
           initialProviderId: "claude-code",
           projectId: "project-selected-only",
-          scope: "thread",
+          scope: "component-local",
         }),
       { wrapper },
     );
@@ -565,7 +565,7 @@ describe("useThreadCreationOptions", () => {
           initialModel: "claude-opus-4-7",
           initialProviderId: "claude-code",
           projectId: "project-active",
-          scope: "thread",
+          scope: "component-local",
         }),
       { wrapper },
     );
