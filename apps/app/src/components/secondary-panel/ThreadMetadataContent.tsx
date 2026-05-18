@@ -1,14 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
 import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 import { Link } from "react-router-dom";
-import { copyToClipboardWithToast } from "@/lib/clipboard";
 import type {
   Environment,
   Host,
@@ -21,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { CopyButton } from "@/components/ui/copy-button.js";
+import { CopyableInlineLabel } from "@/components/ui/copy-button.js";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import {
   DropdownMenu,
@@ -266,17 +259,13 @@ export function WorktreePathRow({ thread, environment }: WorktreePathRowProps) {
 
   return (
     <DetailRow label="Worktree path" valueClassName="min-w-0">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className="min-w-0 truncate" title={environment.path}>
-          {environment.path}
-        </span>
-        <CopyButton
-          text={environment.path}
-          label="Copy worktree path"
-          className="size-5 shrink-0"
-          iconClassName="size-3.5"
-        />
-      </div>
+      <CopyableInlineLabel
+        text={environment.path}
+        label="Copy worktree path"
+        title={environment.path}
+        successMessage="Worktree path copied"
+        errorMessage="Failed to copy worktree path"
+      />
     </DetailRow>
   );
 }
@@ -288,48 +277,16 @@ export interface BranchRowProps {
 
 export function BranchRow({ thread, workspaceStatus }: BranchRowProps) {
   const branchName = workspaceStatus?.branch.currentBranch ?? null;
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timeoutId = window.setTimeout(() => {
-      setCopied(false);
-    }, 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [copied]);
-  const onCopyClick = useCallback(async () => {
-    if (!branchName) return;
-    const success = await copyToClipboardWithToast(branchName, {
-      successMessage: "Branch name copied",
-      errorMessage: "Failed to copy branch name",
-    });
-    if (success) setCopied(true);
-  }, [branchName]);
   if (thread.type === "manager") return null;
   if (!branchName) return null;
   return (
     <DetailRow label="Branch" valueClassName="min-w-0 truncate">
-      <button
-        type="button"
-        className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
-        onClick={() => {
-          void onCopyClick();
-        }}
-        aria-label="Copy branch name"
-        title="Copy branch name"
-      >
-        <span className="truncate">{branchName}</span>
-        {copied ? (
-          <Icon
-            name="Check"
-            className="size-3.5 shrink-0 text-muted-foreground"
-          />
-        ) : (
-          <Icon
-            name="Copy"
-            className="size-3.5 shrink-0 text-muted-foreground"
-          />
-        )}
-      </button>
+      <CopyableInlineLabel
+        text={branchName}
+        label="Copy branch name"
+        successMessage="Branch name copied"
+        errorMessage="Failed to copy branch name"
+      />
     </DetailRow>
   );
 }

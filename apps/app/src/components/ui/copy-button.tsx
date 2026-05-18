@@ -1,9 +1,42 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon.js";
 
-interface CopyButtonProps {
+interface ClipboardCopyOptions {
   text: string;
+  successMessage?: string | null;
+  errorMessage?: string | null;
+}
+
+function useClipboardCopy({
+  text,
+  successMessage = null,
+  errorMessage = "Failed to copy",
+}: ClipboardCopyOptions) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timeoutId = window.setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [copied]);
+
+  const copy = useCallback(async () => {
+    if (!text || copied) return;
+    const success = await copyToClipboardWithToast(text, {
+      successMessage,
+      errorMessage,
+    });
+    if (success) setCopied(true);
+  }, [text, copied, successMessage, errorMessage]);
+
+  return { copied, copy };
+}
+
+interface CopyButtonProps extends ClipboardCopyOptions {
   className?: string;
   iconClassName?: string;
   label?: string;
@@ -14,30 +47,14 @@ export function CopyButton({
   className,
   iconClassName,
   label = "Copy to clipboard",
+  successMessage,
+  errorMessage,
 }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setCopied(false);
-    }, 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [copied]);
-
-  const handleCopy = async () => {
-    if (!text || copied) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
+  const { copied, copy } = useClipboardCopy({
+    text,
+    successMessage,
+    errorMessage,
+  });
 
   return (
     <button
@@ -47,7 +64,7 @@ export function CopyButton({
         className,
       )}
       onClick={() => {
-        void handleCopy();
+        void copy();
       }}
       aria-label={label}
       title={label}
@@ -57,6 +74,52 @@ export function CopyButton({
       ) : (
         <Icon name="Copy" className={cn("size-3", iconClassName)} />
       )}
+    </button>
+  );
+}
+
+interface CopyableInlineLabelProps extends ClipboardCopyOptions {
+  label: string;
+  title?: string;
+  className?: string;
+  iconClassName?: string;
+  children?: ReactNode;
+}
+
+export function CopyableInlineLabel({
+  text,
+  label,
+  title,
+  className,
+  iconClassName,
+  successMessage,
+  errorMessage,
+  children,
+}: CopyableInlineLabelProps) {
+  const { copied, copy } = useClipboardCopy({
+    text,
+    successMessage,
+    errorMessage,
+  });
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80",
+        className,
+      )}
+      onClick={() => {
+        void copy();
+      }}
+      aria-label={label}
+      title={title ?? label}
+    >
+      <span className="min-w-0 truncate">{children ?? text}</span>
+      <Icon
+        name={copied ? "Check" : "Copy"}
+        className={cn("size-3.5 shrink-0 text-muted-foreground", iconClassName)}
+      />
     </button>
   );
 }
