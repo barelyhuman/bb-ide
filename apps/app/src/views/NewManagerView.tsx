@@ -428,13 +428,23 @@ export function NewManagerForm({
       </div>
 
       <div className="relative w-full rounded-lg border border-input bg-background pb-2">
-        <div className="space-y-1 px-4 pt-3">
-          <p className="text-sm font-medium text-foreground">New Manager</p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Managers are special threads that have persistent memory and can
-            help you coordinate work by delegating tasks to managed child
-            threads.
-          </p>
+        <div className="space-y-3 px-4 pt-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">New Manager</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              A manager is a teammate that coordinates work for you and
+              delegates to worker threads. They remember your preferences
+              and use bb just like you do.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">They can:</p>
+            <ul className="list-disc space-y-0.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+              <li>Orchestrate work across multiple threads</li>
+              <li>Handle the repetitive parts of your work</li>
+              <li>Schedule recurring check-ins or future tasks</li>
+            </ul>
+          </div>
         </div>
 
         <div className="px-4 pt-3">
@@ -452,7 +462,7 @@ export function NewManagerForm({
           />
         </div>
 
-        <div className="flex flex-row items-center gap-3 px-3.5 pt-1.5">
+        <div className="flex flex-row items-center gap-3 pl-3.5 pr-4 pt-1.5">
           <div className="flex min-w-0 flex-1 flex-row items-center gap-1">
             {hasSelectedProvider ? (
               modelOptions.length > 0 ? (
