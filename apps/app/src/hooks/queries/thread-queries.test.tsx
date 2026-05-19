@@ -388,7 +388,7 @@ describe("thread query bootstraps", () => {
           initialModel: "gpt-5.5",
           initialProviderId: "codex",
           resetKey: "thread-1",
-          scope: "thread",
+          scope: "component-local",
         });
         return {
           bootstrap,
@@ -485,12 +485,15 @@ describe("thread prompt history query", () => {
 describe("thread host file preview query", () => {
   it("loads host file content lazily through the thread-scoped route", async () => {
     const hostPath = "/Users/me/notes/plan.md";
-    let requestUrl: URL | null = null;
+    // Use an object holder so TS doesn't narrow the outer variable away
+    // (the assignment lives inside the fetch callback, which TS can't
+    // follow back into the test body).
+    const requestUrlRef: { current: URL | null } = { current: null };
     installFetchRoutes([
       {
         pathname: "/api/v1/threads/thread-1/host-files/content",
         handler: (request) => {
-          requestUrl = new URL(request.url);
+          requestUrlRef.current = new URL(request.url);
           return new Response("# Plan\n", {
             headers: { "content-type": "text/markdown" },
           });
@@ -507,7 +510,7 @@ describe("thread host file preview query", () => {
     await waitFor(() => {
       expect(result.current.status).toBe("success");
     });
-    expect(requestUrl?.searchParams.get("path")).toBe(hostPath);
+    expect(requestUrlRef.current?.searchParams.get("path")).toBe(hostPath);
     expect(result.current.data).toMatchObject({
       kind: "text",
       path: hostPath,

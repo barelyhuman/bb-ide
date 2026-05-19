@@ -6,8 +6,6 @@ export default {
   title: "thread/timeline/rows/User Message",
 };
 
-const noop = () => {};
-
 // Match production: ThreadTimelinePane's PageShell content area caps at
 // 760px. Without it the message bubble stretches the full row width and
 // doesn't reflect what users see.
@@ -149,7 +147,7 @@ export function Overview() {
             attachments={mixedAttachments}
             turnRequest={acceptedMessage}
             resolveUserAttachmentImageSrc={resolveImageSrc}
-            onOpenLocalFileLink={noop}
+            onOpenLocalFileLink={() => false}
           />
         </TimelineStage>
       </StoryRow>

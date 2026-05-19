@@ -48,6 +48,8 @@ function userRow(args: {
     createdAt: args.createdAt,
     kind: "conversation",
     role: "user",
+    initiator: "user",
+    senderThreadId: null,
     text: args.text,
     attachments: null,
     turnRequest: { kind: "message", status: "accepted" },

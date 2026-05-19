@@ -25,6 +25,7 @@ function makeStorageFiles(paths: string[]) {
       path,
     })),
     truncated: false,
+    storageRootPath: "/tmp/thread-storage-root",
   };
 }
 

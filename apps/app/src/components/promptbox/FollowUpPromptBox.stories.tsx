@@ -197,6 +197,7 @@ const dirtyContextBannerSection =
 const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
   <ThreadPromptContextBanner
     todoSection={null}
+    archivedSection={null}
     gitSection={{
       changedFiles: dirtyContextBannerSection,
       mergeBase: {
@@ -206,6 +207,7 @@ const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
       },
       onPromptBannerFileClick: noop,
     }}
+    gitSectionPending={false}
     managedBySection={null}
     managerChildrenSection={null}
     expandedSection={null}

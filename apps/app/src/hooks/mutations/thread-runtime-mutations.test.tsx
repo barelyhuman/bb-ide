@@ -20,7 +20,6 @@ import {
 import {
   useCreateThread,
   useCreateThreadQueuedMessage,
-  useSendThreadQueuedMessage,
   useSendThreadMessage,
   useStopThread,
 } from "./thread-runtime-mutations";
@@ -122,6 +121,7 @@ function makeTimelineResponse(
   return {
     rows,
     activeThinking: null,
+    pendingTodos: null,
     timelinePage: {
       kind: "latest",
       segmentLimit: 20,

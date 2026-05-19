@@ -450,6 +450,7 @@ describe("useThreadCreationOptions", () => {
                   model: "gpt-5.4",
                 }),
               ],
+        selectedOnlyModels: [],
       }),
     );
 

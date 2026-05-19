@@ -43,10 +43,6 @@ const baseProps = {
 // Regenerate via /tmp/build-delegation-fixtures.mjs.
 // ---------------------------------------------------------------------------
 
-const THREAD_ID = "thr_cfpiech9ui";
-const TURN_ID = "turn_21b66e2a4c034b96_1";
-
-
 // =============================================================================
 // Dispatch 1 — toolu_01LKp2KK7kaTCi5vi15VZYvw, "Correctness review of commit range".
 // Real Agent dispatch with 14 toolCall children (Read/Grep/Glob) and 4

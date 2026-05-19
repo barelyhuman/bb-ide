@@ -13,11 +13,5 @@
     },
     "rootDir": "."
   },
-  "include": ["src", "test", "tests", "fixtures", "stories"],
-  "exclude": [
-    "src/**/*.stories.tsx",
-    "src/**/*.fixtures.tsx",
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx"
-  ]
+  "include": ["src", "test", "tests", "fixtures", "stories"]
 }

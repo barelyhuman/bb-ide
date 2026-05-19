@@ -261,6 +261,7 @@ function FullAccessRow() {
         execution={baseExecution}
         environment={baseEnvironment}
         branch={baseBranch}
+        worktree={baseWorktree}
         permission={{ ...basePermission, value: "full" }}
       />
     </PromptStage>

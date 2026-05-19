@@ -18,7 +18,6 @@ import {
   serializeFixedPanelTabsState,
   type FixedPanelTab,
   type FixedPanelTabsState,
-  type HostFilePreviewFixedPanelTab,
   type ThreadStorageFilePreviewFixedPanelTab,
   type WorkspaceFilePreviewFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
@@ -89,12 +88,6 @@ function isWorkspaceFilePreviewTab(
   tab: FixedPanelTab,
 ): tab is WorkspaceFilePreviewFixedPanelTab {
   return tab.kind === "workspace-file-preview";
-}
-
-function isHostFilePreviewTab(
-  tab: FixedPanelTab,
-): tab is HostFilePreviewFixedPanelTab {
-  return tab.kind === "host-file-preview";
 }
 
 function isStorageFilePreviewTab(

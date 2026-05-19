@@ -1,7 +1,4 @@
-import {
-  ThreadDeleteDialogContent,
-  type ThreadDeleteDialogTarget,
-} from "./ThreadDeleteDialog";
+import { ThreadDeleteDialogContent } from "./ThreadDeleteDialog";
 import { makeThread } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { DialogStage } from "../../../.ladle/story-dialog-stage";

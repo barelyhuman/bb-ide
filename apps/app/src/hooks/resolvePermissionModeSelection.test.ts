@@ -18,9 +18,9 @@ describe("resolvePermissionModeSelection", () => {
     expect(
       resolvePermissionModeSelection({
         rawPermissionMode: "readonly",
-        supportedPermissionModes: ["bypass"],
+        supportedPermissionModes: ["workspace-write"],
       }),
-    ).toBe("bypass");
+    ).toBe("workspace-write");
     expect(
       resolvePermissionModeSelection({
         rawPermissionMode: "readonly",

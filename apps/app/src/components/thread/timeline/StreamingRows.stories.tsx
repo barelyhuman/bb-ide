@@ -187,6 +187,8 @@ function buildOptimisticUserRow(id: string): TimelineRow {
     createdAt: 0,
     kind: "conversation",
     role: "user",
+    initiator: "user",
+    senderThreadId: null,
     text: OPTIMISTIC_USER_PROMPT_TEXT,
     attachments: null,
     turnRequest: { kind: "message", status: "accepted" },
@@ -298,6 +300,8 @@ function conversationRowFromStep(
     return {
       ...base,
       role: "user",
+      initiator: "user",
+      senderThreadId: null,
       turnRequest: { kind: "message", status: "accepted" },
     };
   }
@@ -436,6 +440,8 @@ function AssistantContentStreaming({
     createdAt: 0,
     kind: "conversation",
     role: "user",
+    initiator: "user",
+    senderThreadId: null,
     text: ASSISTANT_STREAMING_USER_PROMPT.text,
     attachments: null,
     turnRequest: { kind: "message", status: "accepted" },

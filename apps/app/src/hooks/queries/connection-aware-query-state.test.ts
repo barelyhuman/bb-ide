@@ -14,7 +14,13 @@ const baseArgs: ConnectionAwareQueryStateArgs = {
 
 describe("getConnectionAwareQueryState", () => {
   it("resolves loading, unavailable, and ready states from fetch and connection state", () => {
-    const cases = [
+    // Annotate so each object literal stays narrowly typed (object literals
+    // otherwise widen "connected" to string and lose assignability to the
+    // WebSocketConnectionState enum).
+    const cases: ReadonlyArray<{
+      args: ConnectionAwareQueryStateArgs;
+      status: "loading" | "unavailable" | "ready";
+    }> = [
       {
         args: { ...baseArgs, isFetching: true },
         status: "loading",

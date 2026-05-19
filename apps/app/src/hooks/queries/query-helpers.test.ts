@@ -84,6 +84,7 @@ function makeThreadTimelineResponse(
 ): ThreadTimelineResponse {
   return {
     activeThinking: null,
+    pendingTodos: null,
     rows,
     timelinePage: {
       kind: "latest",

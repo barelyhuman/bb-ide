@@ -38,6 +38,8 @@ function userRow(args: TimelineTestRowArgs): TimelineUserConversationRow {
     createdAt: args.sequence,
     kind: "conversation",
     role: "user",
+    initiator: "user",
+    senderThreadId: null,
     text: args.id,
     attachments: null,
     turnRequest: { kind: "message", status: "accepted" },
@@ -92,6 +94,7 @@ function makeTimelineResponse(
   return {
     rows,
     activeThinking: null,
+    pendingTodos: null,
     timelinePage: {
       kind: "latest",
       segmentLimit: 20,

@@ -25,7 +25,8 @@ const codexProvider: SystemProviderInfo = {
     supportsArchive: true,
     supportsRename: true,
     supportsServiceTier: true,
-    supportedPermissionModes: ["default"],
+    supportsUserQuestion: true,
+    supportedPermissionModes: ["full"],
   },
 };
 
@@ -37,7 +38,8 @@ const claudeProvider: SystemProviderInfo = {
     supportsArchive: true,
     supportsRename: true,
     supportsServiceTier: false,
-    supportedPermissionModes: ["default"],
+    supportsUserQuestion: true,
+    supportedPermissionModes: ["full"],
   },
 };
 
@@ -48,9 +50,9 @@ const codexModels: readonly AvailableModel[] = [
     displayName: "GPT-5.5",
     description: "",
     supportedReasoningEfforts: [
-      { reasoningEffort: "low" },
-      { reasoningEffort: "medium" },
-      { reasoningEffort: "high" },
+      { reasoningEffort: "low", description: "" },
+      { reasoningEffort: "medium", description: "" },
+      { reasoningEffort: "high", description: "" },
     ],
     defaultReasoningEffort: "medium",
     isDefault: true,
@@ -61,9 +63,9 @@ const codexModels: readonly AvailableModel[] = [
     displayName: "GPT-5 Pro",
     description: "",
     supportedReasoningEfforts: [
-      { reasoningEffort: "medium" },
-      { reasoningEffort: "high" },
-      { reasoningEffort: "xhigh" },
+      { reasoningEffort: "medium", description: "" },
+      { reasoningEffort: "high", description: "" },
+      { reasoningEffort: "xhigh", description: "" },
     ],
     defaultReasoningEffort: "high",
     isDefault: false,
@@ -90,18 +92,26 @@ const remoteHost: Host = {
   updatedAt: 0,
 };
 
-const projectSources: readonly ProjectSource[] = [
+const projectSources: ProjectSource[] = [
   {
     type: "local_path",
     id: "src_local",
+    projectId: PROJECT_IDS.bb,
     hostId: HOST_IDS.local,
     path: "/Users/michael/Projects/bb",
+    isDefault: true,
+    createdAt: 0,
+    updatedAt: 0,
   },
   {
     type: "local_path",
     id: "src_remote",
+    projectId: PROJECT_IDS.bb,
     hostId: HOST_IDS.remote,
     path: "/srv/repos/bb",
+    isDefault: false,
+    createdAt: 0,
+    updatedAt: 0,
   },
 ];
 
@@ -116,7 +126,7 @@ function ControlledNewManagerForm(props: {
 }) {
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const projects: readonly ProjectResponse[] = [
-    makeProject({ sources: props.projectSources }),
+    makeProject({ sources: [...props.projectSources] }),
   ];
   return (
     <NewManagerForm

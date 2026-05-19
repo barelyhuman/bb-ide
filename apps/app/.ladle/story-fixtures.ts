@@ -185,6 +185,7 @@ export function makeEnvironment(
     isWorktree: true,
     workspaceProvisionType: "managed-worktree",
     branchName: BRANCH_NAMES.feature,
+    baseBranch: BRANCH_NAMES.default,
     defaultBranch: BRANCH_NAMES.default,
     mergeBaseBranch: null,
     cleanupRequestedAt: null,

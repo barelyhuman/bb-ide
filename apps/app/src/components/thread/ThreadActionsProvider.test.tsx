@@ -162,7 +162,9 @@ describe("ThreadActionsProvider", () => {
     }
 
     act(() => {
-      action.onClick();
+      // Sonner types onClick as `(event: MouseEvent) => void`; pass a stub
+      // since the handler in production doesn't read the event.
+      action.onClick(new MouseEvent("click") as unknown as Parameters<typeof action.onClick>[0]);
     });
 
     await waitFor(() => {

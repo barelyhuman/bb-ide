@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadMetadataContent } from "./ThreadMetadataContent";
 import { baseProps, makeEnvironment } from "./ThreadMetadataContent.fixtures";
@@ -37,10 +38,12 @@ describe("ThreadMetadataContent", () => {
     const { wrapper } = createQueryClientTestHarness();
 
     render(
-      <ThreadMetadataContent
-        {...baseProps}
-        environment={makeEnvironment({ path: WORKTREE_PATH })}
-      />,
+      <MemoryRouter>
+        <ThreadMetadataContent
+          {...baseProps}
+          environment={makeEnvironment({ path: WORKTREE_PATH })}
+        />
+      </MemoryRouter>,
       { wrapper },
     );
 
