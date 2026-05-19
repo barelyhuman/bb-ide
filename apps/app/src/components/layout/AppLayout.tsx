@@ -10,6 +10,7 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
+  useIsSidebarShowing,
 } from "@/components/ui/sidebar.js";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
@@ -104,6 +105,16 @@ function SidebarStateBridge({
     >
       {children}
     </SidebarProvider>
+  );
+}
+
+function FloatingSidebarTrigger() {
+  const isSidebarShowing = useIsSidebarShowing();
+  if (isSidebarShowing) return null;
+  return (
+    <div className="absolute left-3 top-3.5 z-20">
+      <SidebarTrigger className="h-5 w-5 rounded-md p-0" />
+    </div>
   );
 }
 
@@ -462,11 +473,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           />
           <SidebarInset>
             <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
-              {showFloatingSidebarTrigger ? (
-                <div className="absolute left-3 top-3.5 z-20">
-                  <SidebarTrigger className="h-5 w-5 rounded-md p-0" />
-                </div>
-              ) : null}
+              {showFloatingSidebarTrigger ? <FloatingSidebarTrigger /> : null}
               {showHeader ? (
                 <AppHeader
                   usesProjectChromeStyle={

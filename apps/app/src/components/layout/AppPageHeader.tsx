@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar.js";
+import {
+  SidebarTrigger,
+  useIsSidebarShowing,
+} from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { cn } from "@/lib/utils";
 
@@ -23,10 +26,7 @@ export function AppPageHeader({
   bordered = true,
   className,
 }: AppPageHeaderProps) {
-  const { state, isCompactViewport, openMobile } = useSidebar();
-  const isSidebarShowing = isCompactViewport
-    ? openMobile
-    : state === "expanded";
+  const isSidebarShowing = useIsSidebarShowing();
   return (
     <header
       className={cn(

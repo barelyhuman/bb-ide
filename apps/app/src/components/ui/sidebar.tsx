@@ -57,6 +57,11 @@ function useSidebar() {
   return context;
 }
 
+function useIsSidebarShowing() {
+  const { state, isCompactViewport, openMobile } = useSidebar();
+  return isCompactViewport ? openMobile : state === "expanded";
+}
+
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
@@ -810,5 +815,6 @@ export {
   SidebarStickyStack,
   SidebarStickyTier,
   SidebarTrigger,
+  useIsSidebarShowing,
   useSidebar,
 };
