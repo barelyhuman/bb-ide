@@ -10,16 +10,13 @@
 
 [![npm version](https://img.shields.io/npm/v/bb-app.svg)](https://www.npmjs.com/package/bb-app)
 
-A programmable workspace for coding agents.
+bb is a programmable IDE that lets you run your favorite coding agents
+(Codex, Claude Code or Pi). It's built to be used by both you and your
+agents so you can seamlessly delegate any task to them.
 
-bb is a tool that your agents can use too. Delegate your entire workflow
-or hand off only specific parts of it. Babysit an agent while it works,
-or have another agent do it. Micromanage an agent or let it run. Teach
-an agent to work like you would, then watch it use bb like you would.
-
-bb gives coding agents a shared workspace with a UI, CLI, and server they can
-all operate through. Use it to run work in threads, inspect progress, steer
-execution, and keep humans and agents working in the same loop.
+Every surface — the web app, CLI, and HTTP API — is a first-class way to
+drive bb. Work runs in threads you can follow live, steer at any point,
+or hand off to another agent.
 
 > [!NOTE]
 > bb is in active development. Core architecture is stable, but workflows
@@ -28,13 +25,12 @@ execution, and keep humans and agents working in the same loop.
 ## Use bb
 
 ```bash
-npx bb-app
+npx bb-app@latest
 ```
 
 Then open `http://localhost:38886`.
 
-bb uses the provider CLIs you already have authenticated, such as Codex,
-Claude Code, or Pi.
+bb uses the provider CLI you already have authenticated.
 
 For install requirements, provider setup, configuration, and package-focused
 docs, start with
@@ -46,7 +42,7 @@ This monorepo contains the packaged app plus the runtime services it bundles:
 
 | Package or app                                                     | Role                                                                                  |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [`packages/bb-app`](./packages/bb-app)                             | Published npm package and `npx bb-app` launcher.                                      |
+| [`packages/bb-app`](./packages/bb-app)                             | Published npm package and `npx bb-app@latest` launcher.                                      |
 | [`apps/app`](./apps/app)                                           | Web UI for inspecting projects, threads, environments, and running work.              |
 | [`apps/server`](./apps/server)                                     | HTTP API, WebSocket notifications, state management, and server-owned product policy. |
 | [`apps/host-daemon`](./apps/host-daemon)                           | Host-local runtime that provisions workspaces and runs provider processes.            |
@@ -64,7 +60,7 @@ pnpm dev
 
 That starts the Vite app on `http://localhost:5173` and proxies API and
 WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by
-default so it can run alongside the packaged `npx bb-app` instance.
+default so it can run alongside the packaged `npx bb-app@latest` instance.
 
 Development behavior is intentionally split:
 
@@ -89,7 +85,7 @@ pnpm start
 ```
 
 That builds the local `bb-app` package artifacts and runs
-`packages/bb-app/dist/bb-app.js`, matching the published `npx bb-app` path
+`packages/bb-app/dist/bb-app.js`, matching the published `npx bb-app@latest` path
 without downloading from npm.
 
 To test an additional host against that dev server, use:

@@ -10,12 +10,14 @@
 
 [![npm version](https://img.shields.io/npm/v/bb-app.svg)](https://www.npmjs.com/package/bb-app)
 
-A programmable workspace for coding agents.
+bb is a programmable IDE that lets you run your favorite coding agents
+(Codex, Claude Code or Pi). It's built to be used by both you and your
+agents so you can seamlessly delegate any task to them.
 
-This package provides the `npx bb-app` launcher. bb gives coding agents a
-shared workspace with a web app, CLI, and server they can all operate through.
-Use it to run work in threads, inspect progress, steer execution, and keep
-humans and agents working in the same loop.
+This package provides the `npx bb-app` launcher. Every surface — the web
+app, CLI, and HTTP API — is a first-class way to drive bb. Work runs in
+threads you can follow live, steer at any point, or hand off to another
+agent.
 
 > Note: bb is in active development. Workflows and surfaces are still evolving.
 
@@ -54,12 +56,12 @@ checkout, but it is slower and less reliable for file watching.
 ### Install and run
 
 ```bash
-npx bb-app
+npx bb-app@latest
 ```
 
 Then open: `http://localhost:38886`
 
-`npx bb-app` downloads the published `bb-app` package, starts the server and
+`npx bb-app@latest` downloads the published `bb-app` package, starts the server and
 local host daemon, and serves the web app. It stores bb-managed state under
 `~/.bb/` by default. Press `Ctrl+C` in the terminal to stop both processes.
 
