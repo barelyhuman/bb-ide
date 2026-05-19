@@ -20,6 +20,16 @@ export default defineConfig(({ command }) => ({
     // Skip compressed-size calculation to keep production app builds fast.
     reportCompressedSize: false,
   },
+  optimizeDeps: {
+    // The terminal imports xterm lazily when the panel mounts. Pre-optimize
+    // these packages so opening the terminal does not discover new deps and
+    // invalidate Vite's optimized-dependency hash mid-session.
+    include: [
+      "@xterm/addon-fit",
+      "@xterm/addon-web-links",
+      "@xterm/xterm",
+    ],
+  },
   resolve: {
     conditions: ["source"],
     alias: {
