@@ -35,6 +35,8 @@ describe("public thread default routes", () => {
         hostId: host.id,
         path: "/tmp/thread-defaults-create",
       });
+      // Host-default app creation is default-shaping; seed the source
+      // environment so this route test can assert the queued start directly.
       seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,

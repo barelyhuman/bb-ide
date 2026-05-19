@@ -201,9 +201,14 @@ describe("Codex ChatGPT client", () => {
       outputSchema: {
         type: "object",
         additionalProperties: false,
-        required: ["title"],
         properties: {
           title: { type: "string" },
+          metadata: {
+            type: "object",
+            properties: {
+              slug: { type: "string" },
+            },
+          },
         },
       },
       timeoutMs: 10000,
@@ -229,6 +234,22 @@ describe("Codex ChatGPT client", () => {
           type: "json_schema",
           name: "result",
           strict: true,
+        },
+      },
+    });
+    expect(requestBody.text.format.schema).toEqual({
+      type: "object",
+      additionalProperties: false,
+      required: ["title", "metadata"],
+      properties: {
+        title: { type: "string" },
+        metadata: {
+          type: "object",
+          additionalProperties: false,
+          required: ["slug"],
+          properties: {
+            slug: { type: "string" },
+          },
         },
       },
     });
