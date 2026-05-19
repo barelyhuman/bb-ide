@@ -1424,7 +1424,9 @@ describe("claude-code provider adapter", () => {
 
     expect(() =>
       adapter.buildInteractiveResponse?.({
-        request: createClaudeUserQuestionRequest(createClaudeUserQuestionPayload()),
+        request: createClaudeUserQuestionRequest(
+          createClaudeUserQuestionPayload(),
+        ),
         resolution,
       }),
     ).toThrow(
@@ -2169,6 +2171,7 @@ describe("claude-code provider adapter", () => {
           type: "result",
           subtype: "success",
           is_error: true,
+          api_error_status: 529,
           result:
             'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_123"}',
           usage: {},
@@ -2188,6 +2191,146 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "provider/error",
         message: "Provider error",
+        errorInfo: {
+          category: "overloaded",
+          providerCode: null,
+          httpStatusCode: 529,
+        },
+      }),
+    );
+  });
+
+  it("translateEvent maps Claude API retry events to retrying provider errors", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "assistant",
+          message: {
+            id: "assistant-1",
+            content: [],
+          },
+        },
+      },
+    });
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "system",
+          subtype: "api_retry",
+          attempt: 2,
+          max_retries: 5,
+          retry_delay_ms: 1500,
+          error_status: 429,
+          error: "rate_limit",
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/error",
+        scope: turnScope("turn-1"),
+        message: "Provider error",
+        detail: "Claude Code API retry 2/5 after 1500ms: HTTP 429 rate_limit",
+        willRetry: true,
+        errorInfo: {
+          category: "rate-limit",
+          providerCode: "rate_limit",
+          httpStatusCode: 429,
+        },
+      }),
+    );
+  });
+
+  it("translateEvent maps Claude result error subtypes to provider error info", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "assistant",
+          message: {
+            id: "assistant-1",
+            content: [],
+          },
+        },
+      },
+    });
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "result",
+          subtype: "error_max_budget_usd",
+          is_error: true,
+          errors: ["Budget limit reached"],
+          usage: {},
+          modelUsage: {},
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/error",
+        scope: turnScope("turn-1"),
+        message: "Provider error",
+        detail: "Budget limit reached",
+        errorInfo: {
+          category: "budget-exceeded",
+          providerCode: "error_max_budget_usd",
+          httpStatusCode: null,
+        },
+      }),
+    );
+  });
+
+  it("translateEvent maps rejected Claude rate limit events to provider error info", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "rate_limit_event",
+          rate_limit_info: {
+            status: "rejected",
+            rateLimitType: "five_hour",
+            resetsAt: 12345,
+          },
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/error",
+        scope: threadScope(),
+        message: "Provider error",
+        detail:
+          "Claude Code rate limit rejected; type five_hour; resetsAt 12345",
+        errorInfo: {
+          category: "rate-limit",
+          providerCode: "rate_limit_event",
+          httpStatusCode: null,
+        },
       }),
     );
   });

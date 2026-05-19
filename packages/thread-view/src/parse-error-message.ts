@@ -77,6 +77,12 @@ export function parseErrorMessage(
     rawType: decoded.type,
     message: message || "Error event",
     detail: detail && detail !== message ? detail : null,
+    ...(decoded.type === "provider/error" && decoded.errorInfo
+      ? { providerErrorInfo: decoded.errorInfo }
+      : {}),
+    ...(decoded.type === "provider/error" && decoded.willRetry !== undefined
+      ? { willRetry: decoded.willRetry }
+      : {}),
     ...(reconnectState
       ? {
           reconnectAttempt: reconnectState.attempt,

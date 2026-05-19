@@ -3,6 +3,7 @@ import type {
   ApprovalPendingInteractionResolution,
   JsonObject,
   OwnershipChangeOperationAction,
+  ProviderErrorInfo,
   ThreadEventFileChange,
   ThreadEventItemStatus,
   UserQuestionPendingInteractionResolution,
@@ -76,6 +77,14 @@ interface SystemErrorEventArgs {
   detail?: string;
   message: string;
   seq: number;
+}
+
+interface ProviderErrorEventArgs {
+  detail?: string;
+  errorInfo?: ProviderErrorInfo;
+  message?: string;
+  seq: number;
+  willRetry?: boolean;
 }
 
 interface UserQuestionLifecycleEventArgs {
@@ -282,6 +291,32 @@ function systemErrorEvent({
   };
 }
 
+function providerErrorEvent({
+  detail,
+  errorInfo,
+  message = "Provider error",
+  seq,
+  willRetry,
+}: ProviderErrorEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "provider/error",
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      message,
+      ...(detail !== undefined ? { detail } : {}),
+      ...(errorInfo !== undefined ? { errorInfo } : {}),
+      ...(willRetry !== undefined ? { willRetry } : {}),
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
 function permissionGrantLifecycleEvent({
   interactionId = "pi-permission-grant",
   resolution = null,
@@ -343,8 +378,7 @@ function userQuestionLifecycleEvent({
         questions: [
           {
             id: "question-1",
-            prompt:
-              questionPrompt ?? "Which deployment target should I use?",
+            prompt: questionPrompt ?? "Which deployment target should I use?",
             shortLabel: "Target",
             multiSelect: false,
             options: [
@@ -645,6 +679,72 @@ describe("buildThreadTimelineFromEvents", () => {
         systemKind: "error",
         title: "Provider runtime is unavailable",
         detail: null,
+      }),
+    ]);
+  });
+
+  it("uses structured provider error info for provider error titles", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      providerErrorEvent({
+        detail: "You've hit your limit - resets at 2:00 PM",
+        errorInfo: {
+          category: "rate-limit",
+          providerCode: "usageLimitExceeded",
+          httpStatusCode: null,
+        },
+        seq: 2,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        status: "error",
+        title: "Provider rate limit reached",
+        detail: "You've hit your limit - resets at 2:00 PM",
+      }),
+    ]);
+  });
+
+  it("uses legacy provider error detail as the title for generic provider errors", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      providerErrorEvent({
+        detail: "API Error: Overloaded",
+        seq: 2,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        status: "error",
+        title: "API Error: Overloaded",
+        detail: "API Error: Overloaded",
+      }),
+    ]);
+  });
+
+  it("renders retrying provider errors as pending reconnect rows", () => {
+    const detail =
+      "Reconnecting... 3/5\nstream disconnected before completion: Network is unreachable (os error 51)";
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      providerErrorEvent({
+        detail,
+        seq: 2,
+        willRetry: true,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "reconnect",
+        status: "pending",
+        title:
+          "stream disconnected before completion: Network is unreachable (os error 51)",
+        detail,
       }),
     ]);
   });

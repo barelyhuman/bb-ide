@@ -1,4 +1,6 @@
 import type {
+  ProviderErrorCategory,
+  ProviderErrorInfo,
   ThreadEvent,
   ThreadEventContextWindowUsage,
   ThreadEventWebFetchItem,
@@ -23,6 +25,7 @@ import {
   codexHandledThreadItemSchema,
   isHandledCodexMethod,
   type CodexDynamicToolCallContentItem,
+  type CodexErrorInfo,
   type CodexHandledEvent,
   type CodexHandledThreadItem,
   type CodexItemStatus,
@@ -43,6 +46,9 @@ type CodexNormalizedWebItem =
   | ThreadEventWebSearchItem
   | ThreadEventWebFetchItem;
 
+type CodexErrorEvent = Extract<CodexHandledEvent, { method: "error" }>;
+type CodexErrorPayload = CodexErrorEvent["params"]["error"];
+
 type CodexItemTranslationResult =
   | { kind: "translated"; item: ThreadEventItem }
   | { kind: "ignored" }
@@ -56,6 +62,109 @@ function toCodexContextWindowUsage(
     usedTokens: lastTokenUsage.totalTokens,
     modelContextWindow,
     estimated: false,
+  };
+}
+
+function getCodexErrorProviderCode(errorInfo: CodexErrorInfo): string {
+  if (typeof errorInfo === "string") {
+    return errorInfo;
+  }
+  if ("httpConnectionFailed" in errorInfo) {
+    return "httpConnectionFailed";
+  }
+  if ("responseStreamConnectionFailed" in errorInfo) {
+    return "responseStreamConnectionFailed";
+  }
+  if ("responseStreamDisconnected" in errorInfo) {
+    return "responseStreamDisconnected";
+  }
+  if ("responseTooManyFailedAttempts" in errorInfo) {
+    return "responseTooManyFailedAttempts";
+  }
+  if ("activeTurnNotSteerable" in errorInfo) {
+    return "activeTurnNotSteerable";
+  }
+  return assertNever(errorInfo);
+}
+
+function getCodexErrorHttpStatusCode(errorInfo: CodexErrorInfo): number | null {
+  if (typeof errorInfo === "string") {
+    return null;
+  }
+  if ("httpConnectionFailed" in errorInfo) {
+    return errorInfo.httpConnectionFailed.httpStatusCode;
+  }
+  if ("responseStreamConnectionFailed" in errorInfo) {
+    return errorInfo.responseStreamConnectionFailed.httpStatusCode;
+  }
+  if ("responseStreamDisconnected" in errorInfo) {
+    return errorInfo.responseStreamDisconnected.httpStatusCode;
+  }
+  if ("responseTooManyFailedAttempts" in errorInfo) {
+    return errorInfo.responseTooManyFailedAttempts.httpStatusCode;
+  }
+  if ("activeTurnNotSteerable" in errorInfo) {
+    return null;
+  }
+  return assertNever(errorInfo);
+}
+
+function getProviderErrorCategory(
+  errorInfo: CodexErrorInfo,
+): ProviderErrorCategory {
+  if (typeof errorInfo === "string") {
+    switch (errorInfo) {
+      case "contextWindowExceeded":
+        return "context-window-exceeded";
+      case "usageLimitExceeded":
+        return "rate-limit";
+      case "serverOverloaded":
+        return "overloaded";
+      case "cyberPolicy":
+        return "policy";
+      case "internalServerError":
+        return "internal";
+      case "unauthorized":
+        return "unauthorized";
+      case "badRequest":
+        return "bad-request";
+      case "threadRollbackFailed":
+        return "thread-rollback-failed";
+      case "sandboxError":
+        return "sandbox";
+      case "other":
+        return "unknown";
+    }
+  }
+  if ("httpConnectionFailed" in errorInfo) {
+    return "connection-failed";
+  }
+  if ("responseStreamConnectionFailed" in errorInfo) {
+    return "connection-failed";
+  }
+  if ("responseStreamDisconnected" in errorInfo) {
+    return "stream-disconnected";
+  }
+  if ("responseTooManyFailedAttempts" in errorInfo) {
+    return "too-many-failed-attempts";
+  }
+  if ("activeTurnNotSteerable" in errorInfo) {
+    return "active-turn-not-steerable";
+  }
+  return assertNever(errorInfo);
+}
+
+function toProviderErrorInfo(
+  error: CodexErrorPayload,
+): ProviderErrorInfo | null {
+  const errorInfo = error.codexErrorInfo;
+  if (!errorInfo) {
+    return null;
+  }
+  return {
+    category: getProviderErrorCategory(errorInfo),
+    providerCode: getCodexErrorProviderCode(errorInfo),
+    httpStatusCode: getCodexErrorHttpStatusCode(errorInfo),
   };
 }
 
@@ -721,7 +830,8 @@ export function translateCodexEvent(
           diff: handledEvent.params.diff,
         },
       ];
-    case "error":
+    case "error": {
+      const errorInfo = toProviderErrorInfo(handledEvent.params.error);
       return [
         {
           type: "provider/error",
@@ -737,8 +847,10 @@ export function translateCodexEvent(
           ...(handledEvent.params.willRetry !== undefined
             ? { willRetry: handledEvent.params.willRetry }
             : {}),
+          ...(errorInfo ? { errorInfo } : {}),
         },
       ];
+    }
     case "deprecationNotice":
       return [
         {

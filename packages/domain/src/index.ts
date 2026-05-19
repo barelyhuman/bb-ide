@@ -445,6 +445,9 @@ export type {
 } from "./thread-event-scope.js";
 
 export {
+  providerErrorCategorySchema,
+  providerErrorCategoryValues,
+  providerErrorInfoSchema,
   providerEventSchema,
   providerEventTypeSchema,
   providerEventTypeValues,
@@ -471,6 +474,8 @@ export {
   threadEventWebSearchItemSchema,
 } from "./provider-event.js";
 export type {
+  ProviderErrorCategory,
+  ProviderErrorInfo,
   ProviderUnhandledEvent,
   ProviderRawEvent,
   ProviderEvent,

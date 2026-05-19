@@ -2009,9 +2009,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
 
     expect(
-      adapter.translateEvent(
-        codexEvent("thread/archived", { threadId: "t1" }),
-      ),
+      adapter.translateEvent(codexEvent("thread/archived", { threadId: "t1" })),
     ).toEqual([]);
     expect(
       adapter.translateEvent(
@@ -3806,6 +3804,41 @@ describe("codex provider adapter", () => {
         message: "Provider error",
         detail: "Rate limited\nretry after 30s",
         willRetry: true,
+      }),
+    );
+  });
+
+  it("translateEvent error maps codexErrorInfo to provider error info", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("error", {
+        threadId: "t1",
+        turnId: "turn-1",
+        error: {
+          message: "stream disconnected",
+          codexErrorInfo: {
+            responseStreamDisconnected: { httpStatusCode: 502 },
+          },
+          additionalDetails: null,
+        },
+        willRetry: false,
+      }),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/error",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        message: "Provider error",
+        detail: "stream disconnected",
+        willRetry: false,
+        errorInfo: {
+          category: "stream-disconnected",
+          providerCode: "responseStreamDisconnected",
+          httpStatusCode: 502,
+        },
       }),
     );
   });

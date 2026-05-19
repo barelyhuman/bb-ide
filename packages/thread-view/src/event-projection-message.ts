@@ -3,6 +3,7 @@ import type {
   OwnershipChangeOperationMetadata,
   PendingInteractionUserAnswer,
   PendingInteractionUserQuestionQuestion,
+  ProviderErrorInfo,
   Thread,
   ThreadEventRow,
   ThreadEventScope,
@@ -347,8 +348,10 @@ export interface EventProjectionErrorMessage extends EventProjectionMessageBase 
   message: string;
   detail: string | null;
   rawType: string;
+  providerErrorInfo?: ProviderErrorInfo;
   reconnectAttempt?: number;
   reconnectTotal?: number;
+  willRetry?: boolean;
 }
 
 export interface EventProjectionDebugRawEventMessage extends EventProjectionMessageBase {

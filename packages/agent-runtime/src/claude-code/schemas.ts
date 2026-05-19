@@ -130,6 +130,20 @@ export const streamEventSchema = z.union([
   contentBlockStartSchema,
 ]);
 
+export const claudeAssistantMessageErrorSchema = z.enum([
+  "authentication_failed",
+  "oauth_org_not_allowed",
+  "billing_error",
+  "rate_limit",
+  "invalid_request",
+  "server_error",
+  "unknown",
+  "max_output_tokens",
+]);
+export type ClaudeAssistantMessageError = z.infer<
+  typeof claudeAssistantMessageErrorSchema
+>;
+
 export const claudeSdkMessageTypeSchema = z
   .object({
     type: z.enum([
@@ -148,6 +162,18 @@ export const claudeSystemMessageSchema = z
     type: z.literal("system"),
   })
   .passthrough();
+
+export const claudeApiRetryMessageSchema = claudeSystemMessageSchema
+  .extend({
+    subtype: z.literal("api_retry"),
+    attempt: z.number(),
+    max_retries: z.number(),
+    retry_delay_ms: z.number(),
+    error_status: z.number().nullable(),
+    error: claudeAssistantMessageErrorSchema,
+  })
+  .passthrough();
+export type ClaudeApiRetryMessage = z.infer<typeof claudeApiRetryMessageSchema>;
 
 export const claudeStatusSystemMessageSchema = claudeSystemMessageSchema
   .extend({
@@ -197,14 +223,69 @@ export const claudeUserMessageSchema = z
   .passthrough();
 export type ClaudeUserMessage = z.infer<typeof claudeUserMessageSchema>;
 
+export const claudeResultSubtypeSchema = z.enum([
+  "success",
+  "error_during_execution",
+  "error_max_turns",
+  "error_max_budget_usd",
+  "error_max_structured_output_retries",
+]);
+export type ClaudeResultSubtype = z.infer<typeof claudeResultSubtypeSchema>;
+
 export const claudeResultMessageSchema = z
   .object({
     type: z.literal("result"),
     subtype: z.string(),
     is_error: z.boolean().optional(),
+    api_error_status: z.number().nullable().optional(),
+    errors: z.array(z.string()).optional(),
     result: z.unknown().optional(),
     usage: z.unknown().optional(),
     modelUsage: z.unknown().optional(),
   })
   .passthrough();
 export type ClaudeResultMessage = z.infer<typeof claudeResultMessageSchema>;
+
+const claudeRateLimitInfoSchema = z
+  .object({
+    status: z.enum(["allowed", "allowed_warning", "rejected"]),
+    resetsAt: z.number().optional(),
+    rateLimitType: z
+      .enum([
+        "five_hour",
+        "seven_day",
+        "seven_day_opus",
+        "seven_day_sonnet",
+        "overage",
+      ])
+      .optional(),
+    overageStatus: z
+      .enum(["allowed", "allowed_warning", "rejected"])
+      .optional(),
+    overageDisabledReason: z
+      .enum([
+        "overage_not_provisioned",
+        "org_level_disabled",
+        "org_level_disabled_until",
+        "out_of_credits",
+        "seat_tier_level_disabled",
+        "member_level_disabled",
+        "seat_tier_zero_credit_limit",
+        "group_zero_credit_limit",
+        "member_zero_credit_limit",
+        "org_service_level_disabled",
+        "no_limits_configured",
+        "fetch_error",
+        "unknown",
+      ])
+      .optional(),
+  })
+  .passthrough();
+
+export const claudeRateLimitEventSchema = z
+  .object({
+    type: z.literal("rate_limit_event"),
+    rate_limit_info: claudeRateLimitInfoSchema,
+  })
+  .passthrough();
+export type ClaudeRateLimitEvent = z.infer<typeof claudeRateLimitEventSchema>;

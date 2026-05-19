@@ -21,6 +21,7 @@ import type {
   ThreadTimelinePendingTodos,
 } from "@bb/domain";
 import type {
+  EventProjectionErrorMessage,
   EventProjectionFileEditChange,
   EventProjectionMessage,
   EventProjection,
@@ -54,6 +55,7 @@ import {
 } from "./completed-turn-grouping.js";
 import { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 import { extractThreadTimelinePendingTodos } from "./todo-snapshot-extraction.js";
+import { buildTimelineErrorDisplay } from "./error-display.js";
 
 export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
@@ -319,6 +321,10 @@ function buildTimelineRowBase(
     startedAt: getMessageStartedAt(message),
     createdAt: message.createdAt,
   };
+}
+
+function isPendingErrorMessage(message: EventProjectionErrorMessage): boolean {
+  return message.reconnectAttempt !== undefined || message.willRetry === true;
 }
 
 function toConversationAttachments(
@@ -655,17 +661,20 @@ function convertMessage(
         }),
       ];
     }
-    case "error":
+    case "error": {
+      const errorDisplay = buildTimelineErrorDisplay(message);
+      const pendingError = isPendingErrorMessage(message);
       return [
         {
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "system",
-          systemKind: message.reconnectAttempt ? "reconnect" : "error",
-          title: message.message,
-          detail: message.detail,
-          status: message.reconnectAttempt ? "pending" : "error",
+          systemKind: pendingError ? "reconnect" : "error",
+          title: errorDisplay.title,
+          detail: errorDisplay.detail,
+          status: pendingError ? "pending" : "error",
         },
       ];
+    }
     case "debug/raw-event":
       return [
         {

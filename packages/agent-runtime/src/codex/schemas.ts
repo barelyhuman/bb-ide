@@ -436,18 +436,50 @@ const codexThreadTurnParamsSchema = z
   })
   .passthrough();
 
+const codexErrorHttpStatusSchema = z
+  .object({
+    httpStatusCode: z.number().nullable(),
+  })
+  .strip();
+
+export const codexErrorInfoSchema = z.union([
+  z.literal("contextWindowExceeded"),
+  z.literal("usageLimitExceeded"),
+  z.literal("serverOverloaded"),
+  z.literal("cyberPolicy"),
+  z.object({ httpConnectionFailed: codexErrorHttpStatusSchema }),
+  z.object({ responseStreamConnectionFailed: codexErrorHttpStatusSchema }),
+  z.literal("internalServerError"),
+  z.literal("unauthorized"),
+  z.literal("badRequest"),
+  z.literal("threadRollbackFailed"),
+  z.literal("sandboxError"),
+  z.object({ responseStreamDisconnected: codexErrorHttpStatusSchema }),
+  z.object({ responseTooManyFailedAttempts: codexErrorHttpStatusSchema }),
+  z.object({
+    activeTurnNotSteerable: z
+      .object({
+        turnKind: z.enum(["review", "compact"]),
+      })
+      .strip(),
+  }),
+  z.literal("other"),
+]);
+export type CodexErrorInfo = z.infer<typeof codexErrorInfoSchema>;
+
+const codexTurnErrorSchema = z
+  .object({
+    message: z.string(),
+    codexErrorInfo: codexErrorInfoSchema.nullish(),
+    additionalDetails: z.string().nullish(),
+  })
+  .passthrough();
+
 const codexTurnSchema = z
   .object({
     id: z.string(),
     status: codexTurnStatusSchema,
-    error: z
-      .object({
-        message: z.string(),
-        additionalDetails: z.string().nullish(),
-      })
-      .passthrough()
-      .nullable()
-      .optional(),
+    error: codexTurnErrorSchema.nullable().optional(),
   })
   .passthrough();
 
@@ -829,12 +861,7 @@ export const codexHandledEventSchema = z.discriminatedUnion("method", [
       .object({
         threadId: z.string(),
         turnId: z.string().optional(),
-        error: z
-          .object({
-            message: z.string(),
-            additionalDetails: z.string().nullish(),
-          })
-          .passthrough(),
+        error: codexTurnErrorSchema,
         willRetry: z.boolean().optional(),
       })
       .passthrough(),

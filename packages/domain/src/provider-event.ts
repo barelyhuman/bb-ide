@@ -40,6 +40,37 @@ export const threadEventTurnStatusSchema = z.enum([
 ]);
 export type ThreadEventTurnStatus = z.infer<typeof threadEventTurnStatusSchema>;
 
+export const providerErrorCategoryValues = [
+  "active-turn-not-steerable",
+  "bad-request",
+  "connection-failed",
+  "context-window-exceeded",
+  "billing",
+  "budget-exceeded",
+  "internal",
+  "max-output-tokens",
+  "max-turns",
+  "overloaded",
+  "policy",
+  "rate-limit",
+  "sandbox",
+  "stream-disconnected",
+  "structured-output-retries",
+  "thread-rollback-failed",
+  "too-many-failed-attempts",
+  "unauthorized",
+  "unknown",
+] as const;
+export const providerErrorCategorySchema = z.enum(providerErrorCategoryValues);
+export type ProviderErrorCategory = z.infer<typeof providerErrorCategorySchema>;
+
+export const providerErrorInfoSchema = z.object({
+  category: providerErrorCategorySchema,
+  providerCode: z.string().nullable(),
+  httpStatusCode: z.number().nullable(),
+});
+export type ProviderErrorInfo = z.infer<typeof providerErrorInfoSchema>;
+
 export const threadEventFileChangeKindSchema = z.enum([
   "add",
   "delete",
@@ -422,6 +453,7 @@ const unscopedProviderEventSchema = z.discriminatedUnion("type", [
     message: z.string(),
     detail: z.string().optional(),
     willRetry: z.boolean().optional(),
+    errorInfo: providerErrorInfoSchema.optional(),
   }),
   z.object({
     type: z.literal("provider/warning"),

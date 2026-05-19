@@ -1,9 +1,10 @@
 import type {
+  ProviderErrorInfo,
   ThreadEvent,
   ThreadEventItem,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
-import { turnScope } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import { withParentToolCallId } from "../shared/adapter-utils.js";
 import type { AcceptedUserMessageState } from "../shared/accepted-user-messages.js";
 import type {
@@ -17,16 +18,22 @@ import {
 import { UNSTAMPED_THREAD_ID } from "../shared/unstamped-thread-id.js";
 import type { ProviderTranslationContext } from "../provider-adapter.js";
 import {
+  claudeApiRetryMessageSchema,
   claudeAssistantMessageSchema,
   claudeCompactBoundarySystemMessageSchema,
+  claudeRateLimitEventSchema,
   claudeResultMessageSchema,
   claudeSdkMessageTypeSchema,
   claudeStatusSystemMessageSchema,
   claudeStreamEventMessageSchema,
   claudeSystemMessageSchema,
   claudeUserMessageSchema,
+  type ClaudeApiRetryMessage,
+  type ClaudeRateLimitEvent,
+  type ClaudeResultMessage,
   type ClaudeToolUseResult,
 } from "./schemas.js";
+import { buildClaudeProviderErrorInfo } from "./error-info.js";
 import {
   extractAssistantText,
   extractClaudeContextWindowUsage,
@@ -89,7 +96,9 @@ export interface TranslateClaudeSdkMessageArgs {
   translateToolResultItem: (
     input: ClaudeToolResultTranslationInput,
   ) => ThreadEventItem;
-  translateToolUseItem: (input: ClaudeToolUseTranslationInput) => ThreadEventItem;
+  translateToolUseItem: (
+    input: ClaudeToolUseTranslationInput,
+  ) => ThreadEventItem;
   turnState: ProviderTurnStateRegistry<ClaudeTurnState>;
 }
 
@@ -102,6 +111,37 @@ interface ClaudeReasoningItemIdArgs {
 interface BuildClaudeCompactedEventArgs {
   threadId: string;
   turnId: string;
+}
+
+interface BuildClaudeProviderErrorEventArgs {
+  detail: string;
+  errorInfo: ProviderErrorInfo | null;
+  threadId: string;
+  turnId: string | null;
+  willRetry?: boolean;
+}
+
+const claudeResultFallbackErrorDetails: Record<string, string> = {
+  error_during_execution: "Claude Code failed during execution.",
+  error_max_budget_usd: "Claude Code exceeded the configured budget.",
+  error_max_structured_output_retries:
+    "Claude Code exhausted structured output retries.",
+  error_max_turns: "Claude Code reached the maximum number of turns.",
+};
+
+function buildClaudeProviderErrorEvent(
+  args: BuildClaudeProviderErrorEventArgs,
+): ThreadEvent {
+  return {
+    type: "provider/error",
+    threadId: args.threadId,
+    providerThreadId: "",
+    scope: args.turnId ? turnScope(args.turnId) : threadScope(),
+    message: "Provider error",
+    detail: args.detail,
+    ...(args.errorInfo ? { errorInfo: args.errorInfo } : {}),
+    ...(args.willRetry !== undefined ? { willRetry: args.willRetry } : {}),
+  };
 }
 
 function buildClaudeCompactionItemId(turnId: string): string {
@@ -148,6 +188,54 @@ function buildClaudeCompactedEvent(
   };
 }
 
+function buildClaudeApiRetryDetail(message: ClaudeApiRetryMessage): string {
+  const status =
+    message.error_status !== null ? ` HTTP ${message.error_status}` : "";
+  return `Claude Code API retry ${message.attempt}/${message.max_retries} after ${message.retry_delay_ms}ms:${status} ${message.error}`;
+}
+
+function buildClaudeRateLimitEventDetail(
+  message: ClaudeRateLimitEvent,
+): string {
+  const info = message.rate_limit_info;
+  const details: string[] = ["Claude Code rate limit rejected"];
+  if (info.rateLimitType) {
+    details.push(`type ${info.rateLimitType}`);
+  }
+  if (info.resetsAt !== undefined) {
+    details.push(`resetsAt ${info.resetsAt}`);
+  }
+  if (info.overageStatus) {
+    details.push(`overage ${info.overageStatus}`);
+  }
+  if (info.overageDisabledReason) {
+    details.push(`overage disabled: ${info.overageDisabledReason}`);
+  }
+  return details.join("; ");
+}
+
+function isClaudeResultFailure(message: ClaudeResultMessage): boolean {
+  return message.is_error === true || message.subtype.startsWith("error");
+}
+
+function getClaudeResultErrorDetail(message: ClaudeResultMessage): string {
+  if (message.is_error && typeof message.result === "string") {
+    return message.result;
+  }
+
+  const errors = (message.errors ?? [])
+    .map((error) => error.trim())
+    .filter((error) => error.length > 0);
+  if (errors.length > 0) {
+    return errors.join("\n");
+  }
+
+  return (
+    claudeResultFallbackErrorDetails[message.subtype] ??
+    `Claude Code result failed: ${message.subtype}`
+  );
+}
+
 function resolveClaudeActiveTurnId(
   args: Pick<TranslateClaudeSdkMessageArgs, "context" | "turnState">,
 ): string | undefined {
@@ -182,13 +270,33 @@ export function translateClaudeSdkMessage(
           turnId: fallbackTurnId,
         });
       }
+      const apiRetryMessage = claudeApiRetryMessageSchema.safeParse(args.event);
+      if (apiRetryMessage.success) {
+        const turnId =
+          state.currentTurnId ??
+          args.ensureTurnStarted({
+            events,
+            state,
+            threadId,
+          });
+        events.push(
+          buildClaudeProviderErrorEvent({
+            detail: buildClaudeApiRetryDetail(apiRetryMessage.data),
+            errorInfo: buildClaudeProviderErrorInfo({
+              code: apiRetryMessage.data.error,
+              httpStatusCode: apiRetryMessage.data.error_status,
+            }),
+            threadId,
+            turnId,
+            willRetry: true,
+          }),
+        );
+        return events;
+      }
       const statusMessage = claudeStatusSystemMessageSchema.safeParse(
         args.event,
       );
-      if (
-        statusMessage.success &&
-        statusMessage.data.status === "compacting"
-      ) {
+      if (statusMessage.success && statusMessage.data.status === "compacting") {
         const turnId = args.ensureTurnStarted({
           events,
           state,
@@ -427,12 +535,6 @@ export function translateClaudeSdkMessage(
       }
       const message = parsedMessage.data;
       if (state.currentTurnId) {
-        const resultErrorText =
-          message.is_error &&
-          "result" in message &&
-          typeof message.result === "string"
-            ? message.result
-            : null;
         const contextWindowUsage = extractClaudeContextWindowUsage({
           fallbackModelContextWindow: state.selectedModelContextWindow,
           latestRequestContextTokens: state.latestRequestContextTokens,
@@ -464,15 +566,18 @@ export function translateClaudeSdkMessage(
             tokenUsage,
           });
         }
-        if (resultErrorText) {
-          events.push({
-            type: "provider/error",
-            threadId,
-            providerThreadId: "",
-            scope: turnScope(state.currentTurnId),
-            message: "Provider error",
-            detail: resultErrorText,
-          });
+        if (isClaudeResultFailure(message)) {
+          events.push(
+            buildClaudeProviderErrorEvent({
+              detail: getClaudeResultErrorDetail(message),
+              errorInfo: buildClaudeProviderErrorInfo({
+                httpStatusCode: message.api_error_status,
+                resultSubtype: message.subtype,
+              }),
+              threadId,
+              turnId: state.currentTurnId,
+            }),
+          );
         }
         events.push({
           type: "turn/completed",
@@ -489,8 +594,34 @@ export function translateClaudeSdkMessage(
       break;
     }
 
-    case "rate_limit_event":
-      return [];
+    case "rate_limit_event": {
+      const parsedMessage = claudeRateLimitEventSchema.safeParse(args.event);
+      if (!parsedMessage.success) {
+        return args.buildUnexpectedSdkEvent({
+          event: args.event,
+          context: args.context,
+          turnId: fallbackTurnId,
+        });
+      }
+      const message = parsedMessage.data;
+      if (message.rate_limit_info.status !== "rejected") {
+        return [];
+      }
+      const turnId = state.currentTurnId ?? null;
+      events.push(
+        buildClaudeProviderErrorEvent({
+          detail: buildClaudeRateLimitEventDetail(message),
+          errorInfo: {
+            category: "rate-limit",
+            providerCode: "rate_limit_event",
+            httpStatusCode: null,
+          },
+          threadId,
+          turnId,
+        }),
+      );
+      return events;
+    }
   }
 
   return events;
