@@ -312,7 +312,7 @@ describe("atoms", () => {
     }
   });
 
-  it("does not re-probe local host status after the websocket first connects", async () => {
+  it("re-probes local host status after the websocket first connects", async () => {
     installAtomFetchRoutes({
       configs: [
         {
@@ -320,7 +320,16 @@ describe("atoms", () => {
           voiceTranscriptionEnabled: false,
         },
       ],
-      daemonStatuses: [null],
+      daemonStatuses: [
+        null,
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+      ],
     });
 
     const { FakeReconnectingWebSocket, localHostIdAtom, wsManager } =
@@ -338,7 +347,9 @@ describe("atoms", () => {
       await waitFor(() => {
         expect(socket.readyState).toBe(WebSocket.OPEN);
       });
-      expect(await store.get(localHostIdAtom)).toBeNull();
+      await waitFor(async () => {
+        expect(await store.get(localHostIdAtom)).toBe("host-1");
+      });
 
       wsManager.disconnect();
     } finally {
@@ -359,6 +370,7 @@ describe("atoms", () => {
         },
       ],
       daemonStatuses: [
+        null,
         null,
         {
           connected: true,
@@ -389,7 +401,9 @@ describe("atoms", () => {
       const socket = FakeReconnectingWebSocket.latest();
       socket.open();
 
-      expect(await store.get(localHostIdAtom)).toBeNull();
+      await waitFor(async () => {
+        expect(await store.get(localHostIdAtom)).toBeNull();
+      });
 
       socket.close();
       socket.open();

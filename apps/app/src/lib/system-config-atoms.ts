@@ -88,10 +88,9 @@ export const systemConfigAtom = atom(async (get) => {
 });
 
 // ---------------------------------------------------------------------------
-// Local host ID — probed from the host daemon on startup. Re-probes on host
-// status changes while some UI is subscribed to it. Server connection events
-// refresh systemConfigAtom, which in turn refreshes this atom. No-daemon is a
-// normal state (e.g., mobile browser).
+// Local host ID — probed from the host daemon on startup. Re-probes on server
+// connects/reconnects and host status changes while some UI is subscribed to
+// it. No-daemon is a normal state (e.g., mobile browser).
 // ---------------------------------------------------------------------------
 
 const localHostIdRefreshTickAtom = atom(0);
@@ -100,13 +99,19 @@ localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
     setRefreshTick((count) => count + 1);
   };
 
+  const unsubscribeConnected = wsManager.onConnected(() => {
+    refresh();
+  });
   const unsubscribeChanged = wsManager.onChanged((message) => {
     if (message.entity === "host") {
       refresh();
     }
   });
 
-  return unsubscribeChanged;
+  return () => {
+    unsubscribeConnected();
+    unsubscribeChanged();
+  };
 };
 
 /** The local machine's host ID, or null if no daemon is reachable. */
