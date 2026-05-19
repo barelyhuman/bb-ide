@@ -62,6 +62,7 @@ function buildTerminalTheme(): ITheme {
 }
 
 interface ThreadTerminalViewProps {
+  isPanelOpen: boolean;
   onTitleChange?: TerminalTitleChangeHandler;
   onUserInput?: () => void;
   session: TerminalSession;
@@ -195,6 +196,7 @@ function handleTerminalServerMessage({
 }
 
 export function ThreadTerminalView({
+  isPanelOpen,
   onTitleChange,
   onUserInput,
   session,
@@ -206,8 +208,10 @@ export function ThreadTerminalView({
     onTitleChange,
   );
   const onUserInputRef = useRef<(() => void) | undefined>(onUserInput);
+  const isPanelOpenRef = useRef(isPanelOpen);
   const preferredTheme = usePreferredTheme();
 
+  isPanelOpenRef.current = isPanelOpen;
   onTitleChangeRef.current = onTitleChange;
   onUserInputRef.current = onUserInput;
 
@@ -256,6 +260,9 @@ export function ThreadTerminalView({
       terminal.loadAddon(new WebLinksAddon());
       terminal.open(containerElement);
       fitAddon.fit();
+      if (isPanelOpenRef.current) {
+        terminal.focus();
+      }
 
       socket = new WebSocket(
         buildTerminalWebSocketUrl({
@@ -354,6 +361,13 @@ export function ThreadTerminalView({
       terminalRef.current = null;
     };
   }, [session.id, threadId]);
+
+  useEffect(() => {
+    if (!isPanelOpen) {
+      return;
+    }
+    terminalRef.current?.focus();
+  }, [isPanelOpen]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

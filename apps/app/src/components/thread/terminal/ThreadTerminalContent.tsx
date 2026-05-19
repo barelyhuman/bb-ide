@@ -37,6 +37,7 @@ export function ThreadTerminalContent({
 
   return (
     <ThreadTerminalView
+      isPanelOpen={controller.isPanelOpen}
       onTitleChange={controller.handleActiveTerminalTitleChange}
       onUserInput={controller.handleActiveTerminalUserInput}
       session={controller.activeSession}

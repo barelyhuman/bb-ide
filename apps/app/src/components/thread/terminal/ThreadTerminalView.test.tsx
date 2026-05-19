@@ -29,6 +29,7 @@ const xtermMocks = vi.hoisted(() => {
       callback?.();
     });
     readonly dispose = vi.fn();
+    readonly focus = vi.fn();
     dataDuringNextWrite: string | null = null;
     titleDuringNextWrite: string | null = null;
     cols = 80;
@@ -169,6 +170,7 @@ describe("ThreadTerminalView", () => {
     const onUserInput = vi.fn();
     render(
       <ThreadTerminalView
+        isPanelOpen={true}
         onUserInput={onUserInput}
         session={terminalSession}
         threadId="thr_test"
@@ -195,6 +197,7 @@ describe("ThreadTerminalView", () => {
       cols: 80,
       rows: 24,
     });
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
 
     terminal.emitData("pwd\n");
 
@@ -207,7 +210,11 @@ describe("ThreadTerminalView", () => {
 
   it("writes websocket output into xterm", async () => {
     render(
-      <ThreadTerminalView session={terminalSession} threadId="thr_test" />,
+      <ThreadTerminalView
+        isPanelOpen={true}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
     );
 
     await waitFor(() => {
@@ -238,6 +245,7 @@ describe("ThreadTerminalView", () => {
     const onTitleChange = vi.fn();
     render(
       <ThreadTerminalView
+        isPanelOpen={true}
         onTitleChange={onTitleChange}
         session={terminalSession}
         threadId="thr_test"
@@ -282,6 +290,7 @@ describe("ThreadTerminalView", () => {
     const onUserInput = vi.fn();
     render(
       <ThreadTerminalView
+        isPanelOpen={true}
         onUserInput={onUserInput}
         session={terminalSession}
         threadId="thr_test"
@@ -340,6 +349,7 @@ describe("ThreadTerminalView", () => {
     const secondUserInput = vi.fn();
     const { rerender } = render(
       <ThreadTerminalView
+        isPanelOpen={true}
         onTitleChange={firstTitleChange}
         onUserInput={firstUserInput}
         session={terminalSession}
@@ -361,6 +371,7 @@ describe("ThreadTerminalView", () => {
     socket.open();
     rerender(
       <ThreadTerminalView
+        isPanelOpen={true}
         onTitleChange={secondTitleChange}
         onUserInput={secondUserInput}
         session={{
@@ -382,5 +393,35 @@ describe("ThreadTerminalView", () => {
     expect(firstUserInput).not.toHaveBeenCalled();
     expect(secondTitleChange).toHaveBeenCalledWith("Renamed terminal");
     expect(secondUserInput).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses an already mounted terminal when the panel opens", async () => {
+    const { rerender } = render(
+      <ThreadTerminalView
+        isPanelOpen={false}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+    });
+
+    const terminal = xtermMocks.MockTerminal.instances[0];
+    if (!terminal) {
+      throw new Error("Expected xterm instance");
+    }
+    expect(terminal.focus).not.toHaveBeenCalled();
+
+    rerender(
+      <ThreadTerminalView
+        isPanelOpen={true}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
   });
 });

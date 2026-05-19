@@ -42,6 +42,7 @@ export interface ThreadTerminalController {
   handleSelectTerminal: ThreadTerminalIdHandler;
   hasTerminalQueryError: boolean;
   isCreateTerminalPending: boolean;
+  isPanelOpen: boolean;
   isTerminalQueryLoading: boolean;
   showTerminalPlaceholders: boolean;
   terminalBodyMessage: string;
@@ -373,6 +374,7 @@ export function useThreadTerminalController({
     handleSelectTerminal,
     hasTerminalQueryError: terminalsQuery.error !== null,
     isCreateTerminalPending: createTerminal.isPending,
+    isPanelOpen: panelState.isOpen,
     isTerminalQueryLoading: terminalsQuery.isLoading,
     showTerminalPlaceholders,
     terminalBodyMessage,
