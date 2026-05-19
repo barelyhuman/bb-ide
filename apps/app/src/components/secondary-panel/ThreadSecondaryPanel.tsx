@@ -4,6 +4,12 @@ import { Icon } from "@/components/ui/icon.js";
 import { TabPill } from "@/components/ui/tab-pill";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { cn } from "@/lib/utils";
 import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
@@ -57,6 +63,7 @@ export interface ThreadSecondaryPanelProps {
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   onCollapse: () => void;
   onClose: () => void;
+  onOpenFileSearch: () => void;
   workspaceRootPath?: string | null;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
@@ -66,6 +73,10 @@ export interface ThreadSecondaryPanelProps {
    * Caller is responsible for wrapping the content in a Drawer in that case.
    */
   renderAsDrawer: boolean;
+}
+
+interface OpenFileSearchMenuButtonProps {
+  onOpenFileSearch: () => void;
 }
 
 export function ThreadSecondaryPanel({
@@ -82,6 +93,7 @@ export function ThreadSecondaryPanel({
   onPanelChange,
   onCollapse,
   onClose,
+  onOpenFileSearch,
   workspaceRootPath,
   onOpenFileInEditor,
   onOpenFilePreview,
@@ -206,13 +218,12 @@ export function ThreadSecondaryPanel({
                 <Icon name="FileDiff" />
               </Button>
             ) : null}
-            {fileTabs && fileTabs.length > 0 ? (
-              <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-                {fileTabs.map((tab) => (
-                  <FileTab key={tab.id} tab={tab} />
-                ))}
-              </div>
-            ) : null}
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+              {fileTabs && fileTabs.length > 0
+                ? fileTabs.map((tab) => <FileTab key={tab.id} tab={tab} />)
+                : null}
+            </div>
+            <OpenFileSearchMenuButton onOpenFileSearch={onOpenFileSearch} />
           </div>
           <Button
             type="button"
@@ -317,6 +328,33 @@ export function ThreadSecondaryPanel({
         {asideMarkup}
       </Panel>
     </>
+  );
+}
+
+function OpenFileSearchMenuButton({
+  onOpenFileSearch,
+}: OpenFileSearchMenuButtonProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 shrink-0 rounded-md p-0"
+          aria-label="Add secondary panel tab"
+          title="Add tab"
+        >
+          <Icon name="Plus" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onSelect={onOpenFileSearch}>
+          <Icon name="File" />
+          Open file
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

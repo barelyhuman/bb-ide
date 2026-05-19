@@ -74,6 +74,7 @@ function ShellRow({
             onPanelChange={noop}
             onCollapse={noop}
             onClose={noop}
+            onOpenFileSearch={noop}
             renderAsDrawer
           />
         </PanelStage>
@@ -148,6 +149,7 @@ function FileTabsShellInner({
         }}
         onCollapse={noop}
         onClose={noop}
+        onOpenFileSearch={noop}
         renderAsDrawer
       />
     </PanelStage>

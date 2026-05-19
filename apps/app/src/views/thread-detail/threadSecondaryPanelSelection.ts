@@ -56,6 +56,7 @@ function getSecondaryPanelForFixedTab(
     case "workspace-file-preview":
     case "host-file-preview":
     case "thread-storage-file-preview":
+    case "open-file-search":
       return "thread-info";
     case "terminal":
       return null;

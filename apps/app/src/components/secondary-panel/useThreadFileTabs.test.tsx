@@ -21,6 +21,7 @@ import {
   type ThreadStorageFilePreviewFixedPanelTab,
   type WorkspaceFilePreviewFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
+import { useFixedPanelTabsState } from "@/lib/fixed-panel-tabs";
 import {
   MANAGER_STATUS_HTML_FILE_PATH,
   MANAGER_STATUS_MARKDOWN_FILE_PATH,
@@ -78,10 +79,20 @@ function TestWrapper({ children }: TestWrapperProps) {
 }
 
 function renderThreadFileTabsHook(initialProps: HookProps) {
-  return renderHook((props: HookProps) => useThreadFileTabs(props), {
-    initialProps,
-    wrapper: TestWrapper,
-  });
+  return renderHook(
+    (props: HookProps) => {
+      const fileTabs = useThreadFileTabs(props);
+      const fixedPanelTabsState = useFixedPanelTabsState(props.threadId);
+      return {
+        ...fileTabs,
+        fixedPanelTabsState,
+      };
+    },
+    {
+      initialProps,
+      wrapper: TestWrapper,
+    },
+  );
 }
 
 function isWorkspaceFilePreviewTab(
@@ -102,6 +113,10 @@ function workspaceFileTabId(path: string): string {
 
 function storageFileTabId(path: string): string {
   return `thread-storage-file-preview:${encodeURIComponent(path)}`;
+}
+
+function openFileSearchTabId(): string {
+  return "open-file-search";
 }
 
 function createStoredWorkspaceTab(
@@ -303,6 +318,88 @@ describe("useThreadFileTabs", () => {
     });
     expect(result.current.openHostFileTabs).toEqual([secondTab]);
     expect(result.current.activeHostFilePath).toBeNull();
+  });
+
+  it("opens the transient open file search tab once and does not persist it", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "standard",
+      storageFiles: undefined,
+      threadId: "thr-open-file-search",
+    });
+
+    act(() => {
+      result.current.openFileSearchTab();
+      result.current.openFileSearchTab();
+    });
+
+    expect(result.current.hasOpenFileSearchTab).toBe(true);
+    expect(result.current.isOpenFileSearchActive).toBe(true);
+    expect(result.current.fixedPanelTabsState.secondary.tabs).toEqual([
+      {
+        id: openFileSearchTabId(),
+        kind: "open-file-search",
+      },
+    ]);
+    expect(readStoredState("thr-open-file-search").secondary.tabs).toEqual([]);
+  });
+
+  it("replaces the open file search tab with a selected workspace preview", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "standard",
+      storageFiles: undefined,
+      threadId: "thr-open-file-workspace",
+    });
+
+    act(() => {
+      result.current.openFileSearchTab();
+      result.current.selectOpenFileSearchResult({
+        source: "workspace",
+        path: "src/open.ts",
+      });
+    });
+
+    expect(result.current.hasOpenFileSearchTab).toBe(false);
+    expect(result.current.activeWorkspaceFilePath).toBe("src/open.ts");
+    expect(result.current.fixedPanelTabsState.secondary.tabs).toEqual([
+      {
+        environmentId: "env-one",
+        id: workspaceFileTabId("src/open.ts"),
+        kind: "workspace-file-preview",
+        lineNumber: null,
+        path: "src/open.ts",
+        source: WORKING_TREE_SOURCE,
+        statusLabel: null,
+      },
+    ]);
+  });
+
+  it("focuses an already-open workspace preview and removes the search tab", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "standard",
+      storageFiles: undefined,
+      threadId: "thr-open-file-dedupe",
+    });
+    const workspaceTab = buildWorkspaceFileTab({
+      lineNumber: 7,
+      path: "src/existing.ts",
+    });
+
+    act(() => {
+      result.current.openWorkspaceFile(workspaceTab);
+      result.current.openFileSearchTab();
+      result.current.selectOpenFileSearchResult({
+        source: "workspace",
+        path: "src/existing.ts",
+      });
+    });
+
+    expect(result.current.hasOpenFileSearchTab).toBe(false);
+    expect(result.current.activeWorkspaceFilePath).toBe("src/existing.ts");
+    expect(result.current.activeWorkspaceFileLineNumber).toBe(7);
+    expect(result.current.fixedPanelTabsState.secondary.tabs).toHaveLength(1);
   });
 
   it("updates host-file line numbers without duplicating tabs", () => {

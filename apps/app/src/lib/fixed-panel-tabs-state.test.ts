@@ -5,12 +5,14 @@ import {
   EMPTY_FIXED_PANEL_TABS_STATE,
   FIXED_PANEL_TABS_IDLE_EXPIRY_MS,
   createEmptyFixedPanelTabsState,
+  createOpenFileSearchFixedPanelTab,
   getFixedPanelTabsStateStorageKey,
   normalizeFixedPanelTabsState,
   parseFixedPanelTabsState,
   pruneFixedPanelTabsStorage,
   serializeFixedPanelTabsState,
   type FixedPanelTabsState,
+  type WorkspaceFilePreviewFixedPanelTab,
 } from "./fixed-panel-tabs-state";
 
 const NOW = 1_700_000_000_000;
@@ -254,5 +256,49 @@ describe("fixed panel tabs normalization", () => {
       },
     ]);
     expect(normalized.bottom.activeTabId).toBe(terminalTabId("term_1"));
+  });
+
+  it("removes transient open file search tabs from persisted state", () => {
+    const searchTab = createOpenFileSearchFixedPanelTab();
+    const workspaceTab: WorkspaceFilePreviewFixedPanelTab = {
+      environmentId: "env-current",
+      id: workspaceFileTabId("src/app.ts"),
+      kind: "workspace-file-preview",
+      lineNumber: 12,
+      path: "src/app.ts",
+      source: { kind: "working-tree" },
+      statusLabel: null,
+    };
+    const state: FixedPanelTabsState = {
+      version: EMPTY_FIXED_PANEL_TABS_STATE.version,
+      secondary: {
+        tabs: [searchTab, workspaceTab],
+        activeTabId: searchTab.id,
+        isOpen: true,
+      },
+      bottom: {
+        tabs: [],
+        activeTabId: null,
+      },
+      lastUsedAt: NOW,
+    };
+
+    const storedValue = serializeFixedPanelTabsState({ state });
+
+    expect(storedValue).not.toContain("open-file-search");
+    expect(
+      parseFixedPanelTabsState({
+        initialValue: EMPTY_FIXED_PANEL_TABS_STATE,
+        now: NOW,
+        storedValue,
+      }),
+    ).toEqual({
+      ...state,
+      secondary: {
+        tabs: [workspaceTab],
+        activeTabId: null,
+        isOpen: true,
+      },
+    });
   });
 });
