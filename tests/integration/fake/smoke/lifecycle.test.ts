@@ -169,7 +169,10 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
           expect.arrayContaining(["message_user"]),
         );
         expect(managerRuntimeCommand?.instructions).toContain(
-          "You are a manager in a project inside bb, an agent orchestration tool.",
+          "You are a manager in a project inside bb",
+        );
+        expect(managerRuntimeCommand?.instructions).toContain(
+          "Delegate substantive work by default.",
         );
         expect(managerRuntimeCommand?.instructions).toContain(
           "(file does not exist)",
