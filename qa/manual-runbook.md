@@ -20,6 +20,17 @@ jq --help
 sqlite3 --version
 ```
 
+Default-path QA must not use generic OpenAI API-key routes. Clear ambient
+`OPENAI_API_KEY` before a normal pass. To intentionally validate API-key routes,
+set `BB_QA_OPENAI_API_KEY` and record that the pass is opt-in.
+
+```bash
+if [ -n "${OPENAI_API_KEY:-}" ] && [ -z "${BB_QA_OPENAI_API_KEY:-}" ]; then
+  echo "OPENAI_API_KEY is set. Unset it for default-path QA, or set BB_QA_OPENAI_API_KEY for an explicit API-key route pass."
+  false
+fi
+```
+
 ## Standalone Setup
 
 Before starting, clear any leftover standalone QA processes or temp roots from a prior run:
@@ -33,6 +44,7 @@ Start an isolated server + daemon pair and load the exported QA environment:
 ```bash
 eval "$(pnpm --silent qa:standalone:start --format env)"
 jq . "$STATE_PATH"
+SERVER_DB_PATH=$(jq -er '.server.dataDir + "/bb.db"' "$STATE_PATH")
 
 bb() { node apps/cli/dist/index.js "$@"; }
 ```
@@ -71,6 +83,15 @@ PI_MODEL=$(printf '%s\n' "$PI_MODELS_JSON" | jq -er '
 ')
 
 printf 'codex: %s\nclaude-code: %s\npi: %s\n' "$CODEX_MODEL" "$CLAUDE_MODEL" "$PI_MODEL"
+
+case "$PI_MODEL" in
+  openai/*)
+    if [ "${BB_QA_ALLOW_OPENAI_API_KEY_MODELS:-}" != "1" ]; then
+      echo "Pi resolved to generic OpenAI API-key model $PI_MODEL. Pick a subscription-backed model or set BB_QA_ALLOW_OPENAI_API_KEY_MODELS=1 for an explicit API-key route pass."
+      false
+    fi
+    ;;
+esac
 ```
 
 For exact-output checks, use prompts in the form `Say exactly: <EXPECTED TEXT>`.
@@ -79,7 +100,8 @@ as a behavioral constraint rather than the expected response text.
 
 For Pi checks, prefer subscription-backed `openai-codex/...` models from Codex
 subscription auth first, then `anthropic/...` models from Claude/Anthropic auth,
-over generic `openai/...` API-key models.
+over generic `openai/...` API-key models. Generic `openai/...` Pi models are
+only acceptable in an explicitly recorded API-key route pass.
 
 Teardown:
 
@@ -141,6 +163,30 @@ curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID/status" | jq
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID/diff/branches" | jq
 ```
 
+Verify Codex-backed helper inference for environment commit. This catches
+regressions where the default helper path accidentally falls back to generic
+OpenAI API-key inference.
+
+```bash
+WORKTREE_ENV_PATH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID" | jq -er '.path')
+printf 'helper inference commit smoke\n' > "$WORKTREE_ENV_PATH/helper-inference-smoke.txt"
+HELPER_PRE_COMMIT_COMMAND_CURSOR=$(sqlite3 "$SERVER_DB_PATH" \
+  "SELECT COALESCE(MAX(cursor), 0) FROM host_daemon_commands;")
+
+bb environment commit "$WORKTREE_ENV_ID" --json | jq -e '.action == "commit" and (.commitSha | type == "string")'
+
+HELPER_INFERENCE_COMMAND_COUNT=0
+for _ in {1..30}; do
+  HELPER_INFERENCE_COMMAND_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
+    "SELECT COUNT(*) FROM host_daemon_commands WHERE cursor > $HELPER_PRE_COMMIT_COMMAND_CURSOR AND type = 'codex.inference.complete' AND state = 'success';")
+  if [ "$HELPER_INFERENCE_COMMAND_COUNT" -ge 1 ]; then
+    break
+  fi
+  sleep 1
+done
+test "$HELPER_INFERENCE_COMMAND_COUNT" -ge 1
+```
+
 Verify merge-base environment metadata:
 
 ```bash
@@ -188,7 +234,6 @@ DIRTY_ARCHIVE_THREAD_ID=$(bb thread spawn \
 bb thread wait "$DIRTY_ARCHIVE_THREAD_ID" --status idle --timeout 120
 DIRTY_ARCHIVE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_THREAD_ID" | jq -r '.environmentId')
 DIRTY_ARCHIVE_ENV_PATH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$DIRTY_ARCHIVE_ENV_ID" | jq -er '.path')
-SERVER_DB_PATH=$(jq -er '.server.dataDir + "/bb.db"' "$STATE_PATH")
 printf 'dirty archive safety\n' > "$DIRTY_ARCHIVE_ENV_PATH/dirty-archive.txt"
 bb thread show "$DIRTY_ARCHIVE_THREAD_ID" --work-status
 DIRTY_PRE_ARCHIVE_COMMAND_CURSOR=$(sqlite3 "$SERVER_DB_PATH" \
@@ -226,6 +271,7 @@ Expected result:
 
 - The unmanaged thread reaches `idle`, shows output, and accepts a follow-up.
 - The worktree thread reaches `idle`, the environment reports `isWorktree: true`, and workspace status/diff routes return data for uncommitted, branch-committed, and combined targets.
+- `bb environment commit` succeeds and records successful `codex.inference.complete` for helper-generated commit text without requiring `OPENAI_API_KEY`.
 - Environment merge-base metadata can be set, reflected by `bb environment show`, used by thread status/diff output, and cleared.
 - Archiving blocks `bb thread tell`; unarchiving restores normal operation.
 - Dirty isolated managed worktree archive succeeds, records safe cleanup intent, runs the cleanup safety inspection, and keeps the worktree intact without queueing `environment.destroy` while uncommitted or unmerged work remains.
@@ -553,6 +599,7 @@ Record each pass with:
 - Date and operator
 - Standalone state path
 - Provider(s) used
+- Credential mode: default subscription-backed path, or explicitly opt-in API-key route path
 - Thread IDs and environment IDs
 - Whether smoke, multi-thread, and recovery passed
 - Any unexpected output, missing events, or log findings

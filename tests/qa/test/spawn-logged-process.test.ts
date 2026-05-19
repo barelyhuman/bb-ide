@@ -115,6 +115,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 import {
+  buildStandaloneRuntimeEnv,
   cleanupStandaloneOrphans,
   createStandaloneHostJoin,
   spawnLoggedProcess,
@@ -165,10 +166,11 @@ describe("spawnLoggedProcess", () => {
     expect(spawnMockState.invocations[0]?.options.detached).toBe(true);
   });
 
-  it("keeps standalone server runtime env isolated from inherited bb env", async () => {
+  it("keeps standalone server runtime env isolated from inherited bb and ambient OpenAI env", async () => {
     vi.stubEnv("BB_APP_URL", "https://inherited-app.example.test");
     vi.stubEnv("BB_DATA_DIR", "/Users/example/.bb-dev");
     vi.stubEnv("BB_SERVER_PORT", "3334");
+    vi.stubEnv("OPENAI_API_KEY", "ambient-openai-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 200 })),
@@ -176,11 +178,13 @@ describe("spawnLoggedProcess", () => {
 
     await startQaServer({
       dataDir: "/tmp/standalone-server-data",
-      env: {
-        BB_DATA_DIR: "/tmp/leaked-data-dir",
-        BB_SERVER_PORT: "9999",
-        OPENAI_API_KEY: "test-openai-key",
-      },
+      env: buildStandaloneRuntimeEnv({
+        baseEnv: process.env,
+        overrides: {
+          BB_DATA_DIR: "/tmp/leaked-data-dir",
+          BB_SERVER_PORT: "9999",
+        },
+      }),
       logPath: "/tmp/standalone-server.log",
       port: 4567,
     });
@@ -188,8 +192,10 @@ describe("spawnLoggedProcess", () => {
     expect(spawnMockState.invocations[0]?.options.env).toMatchObject({
       BB_DATA_DIR: "/tmp/standalone-server-data",
       BB_SERVER_PORT: "4567",
-      OPENAI_API_KEY: "test-openai-key",
     });
+    expect(
+      spawnMockState.invocations[0]?.options.env?.OPENAI_API_KEY,
+    ).toBeUndefined();
     expect(
       spawnMockState.invocations[0]?.options.env?.BB_APP_URL,
     ).toBeUndefined();

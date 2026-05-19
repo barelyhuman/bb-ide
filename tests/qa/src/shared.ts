@@ -26,6 +26,7 @@ const execFile = promisify(execFileCallback);
 
 export const STANDALONE_INSTANCE_ENV = "BB_STANDALONE_INSTANCE";
 export const STANDALONE_PARENT_PID_ENV = "BB_STANDALONE_PARENT_PID";
+export const STANDALONE_OPENAI_API_KEY_ENV = "BB_QA_OPENAI_API_KEY";
 const STANDALONE_TMP_PREFIX = "bb-standalone-";
 const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
@@ -63,6 +64,10 @@ interface StartQuickTunnelResult {
 
 interface StartQaServerArgs {
   dataDir: string;
+  /**
+   * Complete server process environment. This is not merged over process.env;
+   * callers that need inherited variables must include them explicitly.
+   */
   env?: NodeJS.ProcessEnv;
   logPath: string;
   port: number;
@@ -104,6 +109,11 @@ interface CleanupStandaloneResult {
 interface LoadDotEnvResult {
   loaded: EnvironmentMap;
   path: string | null;
+}
+
+export interface BuildStandaloneRuntimeEnvArgs {
+  baseEnv: NodeJS.ProcessEnv;
+  overrides: NodeJS.ProcessEnv;
 }
 
 export interface ResolveStandaloneParentPidArgs {
@@ -177,6 +187,26 @@ export function buildStandaloneShellExports(env: EnvironmentMap): string {
     (key) => `unset ${key}`,
   );
   return [...unsetThreadContext, buildShellExports(env)].join("\n");
+}
+
+/**
+ * Builds the standalone QA process environment and applies provider-key policy:
+ * ambient OPENAI_API_KEY is stripped unless BB_QA_OPENAI_API_KEY opts in.
+ */
+export function buildStandaloneRuntimeEnv(
+  args: BuildStandaloneRuntimeEnvArgs,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...args.baseEnv,
+    ...args.overrides,
+  };
+  const qaOpenAiApiKey = env[STANDALONE_OPENAI_API_KEY_ENV];
+  if (typeof qaOpenAiApiKey === "string" && qaOpenAiApiKey.trim().length > 0) {
+    env.OPENAI_API_KEY = qaOpenAiApiKey;
+  } else {
+    delete env.OPENAI_API_KEY;
+  }
+  return env;
 }
 
 export function readStandaloneStateRuntime(
@@ -579,8 +609,7 @@ export async function startQaServer(
   }
 
   const serverEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...(args.env ?? {}),
+    ...(args.env ?? process.env),
     BB_DATA_DIR: args.dataDir,
     BB_SERVER_PORT: String(args.port),
   };
@@ -819,6 +848,11 @@ export function buildDaemonRestartCommand(
   const envFileCommand = args.envFilePath
     ? `[ ! -f ${shellQuote(args.envFilePath)} ] || . ${shellQuote(args.envFilePath)}`
     : ":";
+  const qaOpenAiApiKeyParameter = `\${${STANDALONE_OPENAI_API_KEY_ENV}-}`;
+  const providerEnvCommand =
+    `case "${qaOpenAiApiKeyParameter}" in *[![:space:]]*) ` +
+    `OPENAI_API_KEY="$${STANDALONE_OPENAI_API_KEY_ENV}"; export OPENAI_API_KEY ;; ` +
+    "*) unset OPENAI_API_KEY ;; esac";
   const daemonEnv = [
     `BB_DATA_DIR=${shellQuote(args.dataDir)}`,
     `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
@@ -827,6 +861,7 @@ export function buildDaemonRestartCommand(
   ].join(" ");
   const startCommand =
     `(set -a; ${envFileCommand}; set +a; ` +
+    `${providerEnvCommand}; ` +
     `${daemonEnv} exec node ${shellQuote(args.entrypoint)} ` +
     `>> ${shellQuote(args.logPath)} 2>&1) &`;
   const waitForReconnectCommand = [

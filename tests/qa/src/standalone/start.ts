@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import {
   buildStandaloneShellExports,
   buildDaemonRestartCommand,
+  buildStandaloneRuntimeEnv,
   cleanupStandaloneOrphans,
   createProject,
   createStandaloneHostJoin,
@@ -76,14 +77,16 @@ async function main() {
   let daemonProcess;
 
   try {
-    const qaServer = await startQaServer({
-      dataDir: serverDataDir,
-      env: {
-        ...process.env,
+    const standaloneBaseEnv = buildStandaloneRuntimeEnv({
+      baseEnv: process.env,
+      overrides: {
         [STANDALONE_INSTANCE_ENV]: instanceId,
         [STANDALONE_PARENT_PID_ENV]: String(parentPid),
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
       },
+    });
+    const qaServer = await startQaServer({
+      dataDir: serverDataDir,
+      env: standaloneBaseEnv,
       logPath: serverLogPath,
       port: serverPort,
     });
@@ -100,16 +103,18 @@ async function main() {
       command: "node",
       args: ["apps/host-daemon/dist/index.js"],
       cwd: repoRoot,
-      env: {
-        ...process.env,
-        BB_DATA_DIR: bbRoot,
-        BB_HOST_DAEMON_PORT: String(daemonPort),
-        BB_HOST_ENROLL_KEY: join.joinCode,
-        BB_HOST_ID: join.hostId,
-        BB_SERVER_URL: serverUrl,
-        [STANDALONE_INSTANCE_ENV]: instanceId,
-        [STANDALONE_PARENT_PID_ENV]: String(parentPid),
-      },
+      env: buildStandaloneRuntimeEnv({
+        baseEnv: standaloneBaseEnv,
+        overrides: {
+          BB_DATA_DIR: bbRoot,
+          BB_HOST_DAEMON_PORT: String(daemonPort),
+          BB_HOST_ENROLL_KEY: join.joinCode,
+          BB_HOST_ID: join.hostId,
+          BB_SERVER_URL: serverUrl,
+          [STANDALONE_INSTANCE_ENV]: instanceId,
+          [STANDALONE_PARENT_PID_ENV]: String(parentPid),
+        },
+      }),
       logPath: daemonLogPath,
     });
 
