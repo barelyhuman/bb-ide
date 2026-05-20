@@ -41,6 +41,7 @@ import type {
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentArchiveThreadsResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
   ThreadStorageContentQuery,
@@ -349,6 +350,15 @@ export type PublicApiSchema = {
           409
         >
       | Endpoint<PathId & { json: EnvironmentActionRequest }, ApiError, 404>;
+  };
+  "/environments/:id/archive-threads": {
+    /**
+     * Archive every live thread attached to a worktree environment. For managed
+     * environments, safe cleanup is requested after the last live thread is
+     * archived and still waits on shutdown, dirty-worktree, and host safety
+     * checks.
+     */
+    $post: Endpoint<PathId, EnvironmentArchiveThreadsResponse>;
   };
 
   // ─── Threads ─────────────────────────────────────────────────────────

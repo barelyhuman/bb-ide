@@ -1,9 +1,16 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
+import { useArchiveEnvironmentThreads } from "@/hooks/mutations/environment-mutations";
 import { Button } from "@/components/ui/button.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
 import {
@@ -14,12 +21,20 @@ import {
   ProjectActionsContextMenu,
   ProjectActionsMenu,
 } from "@/components/project/ProjectActionsMenu";
-import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar.js";
-import { COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { cn } from "@/lib/utils";
 import {
-  getEnvironmentWorkspaceLabelIconName,
-} from "@/lib/environment-workspace-display";
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+} from "@/components/ui/sidebar.js";
+import {
+  COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
+  COARSE_POINTER_GLYPH_BOX_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
+import { cn } from "@/lib/utils";
+import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
+import { toast } from "sonner";
 import {
   CollapsedChildCountBadge,
   ThreadRow,
@@ -105,8 +120,150 @@ interface EnvironmentThreadGroupHeaderProps {
   parentLineClass?: string;
   childCount: number;
   isCollapsed: boolean;
+  archiveThreadsPending?: boolean;
+  onArchiveThreads?: () => void;
   onCreateNewThread?: () => void;
   onToggleCollapsed: (environmentId: string) => void;
+}
+
+interface EnvironmentThreadGroupHeaderActionsProps {
+  archiveThreadsPending: boolean;
+  onArchiveThreads?: () => void;
+  onCreateNewThread?: () => void;
+}
+
+interface UseArchiveEnvironmentThreadGroupActionArgs {
+  environmentId: string;
+  projectId: string;
+  selectedThreadId?: string;
+}
+
+interface UseArchiveEnvironmentThreadGroupActionResult {
+  archiveThreadsPending: boolean;
+  onArchiveThreads: () => void;
+}
+
+function formatArchivedWorktreeThreadMessage(threadCount: number): string {
+  return threadCount === 1
+    ? "Archived 1 worktree thread"
+    : `Archived ${threadCount} worktree threads`;
+}
+
+function useArchiveEnvironmentThreadGroupAction({
+  environmentId,
+  projectId,
+  selectedThreadId,
+}: UseArchiveEnvironmentThreadGroupActionArgs): UseArchiveEnvironmentThreadGroupActionResult {
+  const navigate = useNavigate();
+  const archiveEnvironmentThreads = useArchiveEnvironmentThreads();
+  const {
+    isPending: archiveThreadsIsPending,
+    mutate: archiveThreads,
+    variables,
+  } = archiveEnvironmentThreads;
+  const archiveThreadsPending =
+    archiveThreadsIsPending && variables?.id === environmentId;
+  const onArchiveThreads = useCallback(() => {
+    archiveThreads(
+      { id: environmentId },
+      {
+        onSuccess: (response) => {
+          toast.success(
+            formatArchivedWorktreeThreadMessage(
+              response.archivedThreadIds.length,
+            ),
+          );
+          if (
+            selectedThreadId &&
+            response.archivedThreadIds.includes(selectedThreadId)
+          ) {
+            navigate(`/projects/${projectId}`);
+          }
+        },
+      },
+    );
+  }, [archiveThreads, environmentId, navigate, projectId, selectedThreadId]);
+
+  return {
+    archiveThreadsPending,
+    onArchiveThreads,
+  };
+}
+
+function EnvironmentThreadGroupHeaderActions({
+  archiveThreadsPending,
+  onArchiveThreads,
+  onCreateNewThread,
+}: EnvironmentThreadGroupHeaderActionsProps) {
+  if (!onCreateNewThread && !onArchiveThreads) {
+    return (
+      <span
+        className={cn("shrink-0", COARSE_POINTER_ROW_ACTION_SIZE_CLASS)}
+        aria-hidden="true"
+      />
+    );
+  }
+
+  return (
+    <span className="relative z-10 inline-flex shrink-0 items-center">
+      {onCreateNewThread ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Create new thread in this worktree"
+          title="New thread in this worktree"
+          onClick={onCreateNewThread}
+          className={cn(
+            "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+          )}
+        >
+          <Icon
+            name="MessageSquarePlus"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
+          />
+        </Button>
+      ) : null}
+      {onArchiveThreads ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Worktree actions"
+              title="Worktree actions"
+              className={cn(
+                "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+              )}
+            >
+              <Icon
+                name="MoreHorizontal"
+                className={COARSE_POINTER_ICON_SIZE_CLASS}
+              />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              disabled={archiveThreadsPending}
+              className="text-destructive focus:text-destructive"
+              onSelect={(event) => {
+                if (archiveThreadsPending) {
+                  event.preventDefault();
+                  return;
+                }
+                onArchiveThreads();
+              }}
+            >
+              Archive worktree
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </span>
+  );
 }
 
 function EnvironmentThreadGroupHeader({
@@ -117,6 +274,8 @@ function EnvironmentThreadGroupHeader({
   parentLineClass,
   childCount,
   isCollapsed,
+  archiveThreadsPending = false,
+  onArchiveThreads,
   onCreateNewThread,
   onToggleCollapsed,
 }: EnvironmentThreadGroupHeaderProps) {
@@ -204,27 +363,11 @@ function EnvironmentThreadGroupHeader({
           </>
         ) : null}
       </span>
-      {onCreateNewThread ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Create new thread in this worktree"
-          title="New thread in this worktree"
-          onClick={onCreateNewThread}
-          className={cn(
-            "relative z-10 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
-            COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-          )}
-        >
-          <Icon name="MessageSquarePlus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
-        </Button>
-      ) : (
-        <span
-          className={cn("shrink-0", COARSE_POINTER_ROW_ACTION_SIZE_CLASS)}
-          aria-hidden="true"
-        />
-      )}
+      <EnvironmentThreadGroupHeaderActions
+        archiveThreadsPending={archiveThreadsPending}
+        onArchiveThreads={onArchiveThreads}
+        onCreateNewThread={onCreateNewThread}
+      />
     </SidebarStickyTier>
   );
 }
@@ -251,6 +394,12 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
     projectId,
     environmentId,
   });
+  const { archiveThreadsPending, onArchiveThreads } =
+    useArchiveEnvironmentThreadGroupAction({
+      environmentId,
+      projectId,
+      selectedThreadId,
+    });
   const handleCreateNewThread = useCallback(() => {
     onProjectSelect?.();
     createThreadInWorktree();
@@ -264,12 +413,17 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
         stickyTier="manager"
         childCount={threads.length}
         isCollapsed={isCollapsed}
+        archiveThreadsPending={archiveThreadsPending}
+        onArchiveThreads={onArchiveThreads}
         onCreateNewThread={handleCreateNewThread}
         onToggleCollapsed={onToggleEnvironmentCollapsed}
       />
       {!isCollapsed ? (
         <div
-          className={cn("relative space-y-px", SIDEBAR_MANAGER_GROUP_LINE_CLASS)}
+          className={cn(
+            "relative space-y-px",
+            SIDEBAR_MANAGER_GROUP_LINE_CLASS,
+          )}
         >
           {threads.map((thread) => (
             <ThreadRow
@@ -309,6 +463,12 @@ function ManagedEnvironmentThreadSubGroup({
     projectId,
     environmentId,
   });
+  const { archiveThreadsPending, onArchiveThreads } =
+    useArchiveEnvironmentThreadGroupAction({
+      environmentId,
+      projectId,
+      selectedThreadId,
+    });
   const handleCreateNewThread = useCallback(() => {
     onProjectSelect?.();
     createThreadInWorktree();
@@ -323,6 +483,8 @@ function ManagedEnvironmentThreadSubGroup({
         parentLineClass={SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS}
         childCount={threads.length}
         isCollapsed={isCollapsed}
+        archiveThreadsPending={archiveThreadsPending}
+        onArchiveThreads={onArchiveThreads}
         onCreateNewThread={handleCreateNewThread}
         onToggleCollapsed={onToggleEnvironmentCollapsed}
       />
@@ -489,7 +651,8 @@ function ProjectRowComponent({
                 COARSE_POINTER_ICON_SIZE_CLASS,
               )}
             >
-              <Icon name="ChevronRight"
+              <Icon
+                name="ChevronRight"
                 className={cn(
                   "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
                   COARSE_POINTER_ICON_SIZE_CLASS,
@@ -497,14 +660,16 @@ function ProjectRowComponent({
                 )}
               />
               {isCollapsed ? (
-                <Icon name="Folder"
+                <Icon
+                  name="Folder"
                   className={cn(
                     "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
                     COARSE_POINTER_ICON_SIZE_CLASS,
                   )}
                 />
               ) : (
-                <Icon name="FolderOpen"
+                <Icon
+                  name="FolderOpen"
                   className={cn(
                     "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
                     COARSE_POINTER_ICON_SIZE_CLASS,
@@ -530,7 +695,10 @@ function ProjectRowComponent({
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
             >
-              <Icon name="AlertTriangle" className={COARSE_POINTER_ICON_SIZE_CLASS} />
+              <Icon
+                name="AlertTriangle"
+                className={COARSE_POINTER_ICON_SIZE_CLASS}
+              />
             </NavLink>
           ) : null}
           <ProjectActionsMenu

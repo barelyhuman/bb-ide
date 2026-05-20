@@ -805,6 +805,14 @@ export type EnvironmentDiffFileResponse = z.infer<
   typeof environmentDiffFileResponseSchema
 >;
 
+export const environmentArchiveThreadsResponseSchema = z.object({
+  ok: z.literal(true),
+  archivedThreadIds: z.array(z.string().min(1)),
+});
+export type EnvironmentArchiveThreadsResponse = z.infer<
+  typeof environmentArchiveThreadsResponseSchema
+>;
+
 export const threadListQuerySchema = z.object({
   projectId: z.string().min(1),
   type: threadTypeSchema.optional(),

@@ -1,4 +1,8 @@
-import type { InfiniteData, QueryClient, QueryKey } from "@tanstack/react-query";
+import type {
+  InfiniteData,
+  QueryClient,
+  QueryKey,
+} from "@tanstack/react-query";
 import type { ThreadListEntry } from "@bb/domain";
 
 // Some thread list queries store a flat array (`useThreads`); the paginated
@@ -59,14 +63,24 @@ export function isThreadListCacheData(
   return isThreadListEntryArray(value) || isInfiniteThreadListData(value);
 }
 
-interface CachedThreadList {
+export interface CachedThreadList {
   queryKey: QueryKey;
   data: ThreadListCacheData;
 }
 
+export type CachedThreadListSnapshot = CachedThreadList[];
+
+interface ThreadListCacheQueryOptions {
+  queryKey: QueryKey;
+}
+
+interface ApplyToCachedThreadListsOptions extends ThreadListCacheQueryOptions {
+  mapper: (list: ThreadListEntry[]) => ThreadListEntry[];
+}
+
 export function getCachedThreadLists(
   queryClient: QueryClient,
-  options: { queryKey: QueryKey },
+  options: ThreadListCacheQueryOptions,
 ): CachedThreadList[] {
   const result: CachedThreadList[] = [];
   for (const [queryKey, data] of queryClient.getQueriesData({
@@ -80,12 +94,25 @@ export function getCachedThreadLists(
   return result;
 }
 
+export function snapshotCachedThreadLists(
+  queryClient: QueryClient,
+  options: ThreadListCacheQueryOptions,
+): CachedThreadListSnapshot {
+  return getCachedThreadLists(queryClient, options);
+}
+
+export function restoreCachedThreadLists(
+  queryClient: QueryClient,
+  snapshot: CachedThreadListSnapshot,
+): void {
+  for (const { queryKey, data } of snapshot) {
+    queryClient.setQueryData(queryKey, data);
+  }
+}
+
 export function applyToCachedThreadLists(
   queryClient: QueryClient,
-  options: {
-    queryKey: QueryKey;
-    mapper: (list: ThreadListEntry[]) => ThreadListEntry[];
-  },
+  options: ApplyToCachedThreadListsOptions,
 ): void {
   for (const { queryKey, data } of getCachedThreadLists(queryClient, {
     queryKey: options.queryKey,
@@ -96,4 +123,3 @@ export function applyToCachedThreadLists(
     );
   }
 }
-

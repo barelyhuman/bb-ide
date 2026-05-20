@@ -20,6 +20,7 @@ import type {
   CreateProjectRequest,
   CreateQueuedMessageRequest,
   DeleteThreadRequest,
+  EnvironmentArchiveThreadsResponse,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentDiffFileQuery,
@@ -1083,6 +1084,16 @@ export async function requestEnvironmentAction(
 ): Promise<EnvironmentActionResponse> {
   return request<EnvironmentActionResponse>(
     apiClient.environments[":id"].actions.$post({ param: { id }, json: req }),
+  );
+}
+
+export async function archiveEnvironmentThreads(
+  id: string,
+): Promise<EnvironmentArchiveThreadsResponse> {
+  return request<EnvironmentArchiveThreadsResponse>(
+    apiClient.environments[":id"]["archive-threads"].$post({
+      param: { id },
+    }),
   );
 }
 

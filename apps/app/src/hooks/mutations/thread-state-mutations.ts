@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadWithRuntime } from "@bb/domain";
 import type { ProjectResponse, UpdateThreadRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
@@ -17,8 +17,9 @@ import {
 } from "../queries/query-keys";
 import {
   applyToCachedThreadLists,
-  getCachedThreadLists,
-  type ThreadListCacheData,
+  restoreCachedThreadLists,
+  snapshotCachedThreadLists,
+  type CachedThreadListSnapshot,
 } from "../queries/thread-list-cache-data";
 
 interface ThreadMutationRequest {
@@ -26,11 +27,6 @@ interface ThreadMutationRequest {
 }
 
 type UpdateThreadMutationRequest = ThreadMutationRequest & UpdateThreadRequest;
-
-type ThreadListSnapshot = Array<{
-  queryKey: QueryKey;
-  data: ThreadListCacheData;
-}>;
 
 interface ArchiveThreadMutationRequest {
   id: string;
@@ -43,14 +39,14 @@ interface DeleteThreadMutationRequest {
 
 interface DeleteThreadMutationContext {
   previousThread: ThreadWithRuntime | undefined;
-  previousThreadLists: ThreadListSnapshot;
+  previousThreadLists: CachedThreadListSnapshot;
   previousProjects: ProjectResponse[] | undefined;
   environmentId: string | null | undefined;
 }
 
 interface ThreadListMutationContext {
   previousThread: ThreadWithRuntime | undefined;
-  previousThreadLists: ThreadListSnapshot;
+  previousThreadLists: CachedThreadListSnapshot;
 }
 
 interface UpdateThreadInListsArgs {
@@ -58,24 +54,11 @@ interface UpdateThreadInListsArgs {
   thread: ThreadWithRuntime;
 }
 
-function snapshotThreadLists(queryClient: QueryClient): ThreadListSnapshot {
-  return getCachedThreadLists(queryClient, { queryKey: threadsQueryKey() });
-}
-
 function removeThreadFromLists(queryClient: QueryClient, id: string): void {
   applyToCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
     mapper: (list) => list.filter((thread) => thread.id !== id),
   });
-}
-
-function restoreThreadLists(
-  queryClient: QueryClient,
-  threadLists: ThreadListSnapshot,
-): void {
-  for (const { queryKey, data } of threadLists) {
-    queryClient.setQueryData(queryKey, data);
-  }
 }
 
 function updateThreadInLists({
@@ -118,8 +101,7 @@ export function useArchiveThread() {
       errorMessage: "Failed to archive thread.",
       showErrorToast: false,
     },
-    mutationFn: ({ id }: ArchiveThreadMutationRequest) =>
-      api.archiveThread(id),
+    mutationFn: ({ id }: ArchiveThreadMutationRequest) => api.archiveThread(id),
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
@@ -127,7 +109,9 @@ export function useArchiveThread() {
       const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
       );
-      const previousThreadLists = snapshotThreadLists(queryClient);
+      const previousThreadLists = snapshotCachedThreadLists(queryClient, {
+        queryKey: threadsQueryKey(),
+      });
 
       const archivedAt = Date.now();
 
@@ -161,7 +145,7 @@ export function useArchiveThread() {
         threadQueryKey(variables.id),
         context.previousThread,
       );
-      restoreThreadLists(queryClient, context.previousThreadLists);
+      restoreCachedThreadLists(queryClient, context.previousThreadLists);
     },
     onSettled: (_data, _error, variables) => {
       invalidateThreadListMembershipQueries({
@@ -187,7 +171,9 @@ export function useUnarchiveThread() {
       const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
       );
-      const previousThreadLists = snapshotThreadLists(queryClient);
+      const previousThreadLists = snapshotCachedThreadLists(queryClient, {
+        queryKey: threadsQueryKey(),
+      });
 
       queryClient.setQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
@@ -219,7 +205,7 @@ export function useUnarchiveThread() {
         threadQueryKey(variables.id),
         context.previousThread,
       );
-      restoreThreadLists(queryClient, context.previousThreadLists);
+      restoreCachedThreadLists(queryClient, context.previousThreadLists);
     },
     onSettled: (_data, _error, variables) => {
       invalidateThreadListMembershipQueries({
@@ -250,7 +236,9 @@ export function useDeleteThread() {
       const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
       );
-      const previousThreadLists = snapshotThreadLists(queryClient);
+      const previousThreadLists = snapshotCachedThreadLists(queryClient, {
+        queryKey: threadsQueryKey(),
+      });
       const previousProjects =
         queryClient.getQueryData<ProjectResponse[]>(projectsQueryKey());
       const environmentId = previousThread?.environmentId;
@@ -276,7 +264,7 @@ export function useDeleteThread() {
         threadQueryKey(variables.id),
         context.previousThread,
       );
-      restoreThreadLists(queryClient, context.previousThreadLists);
+      restoreCachedThreadLists(queryClient, context.previousThreadLists);
       queryClient.setQueryData(projectsQueryKey(), context.previousProjects);
     },
     onSettled: (_data, _error, variables, context) => {

@@ -27,6 +27,7 @@ import {
   type WorkspaceProvisionType,
 } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
+import { environmentArchiveThreadsResponseSchema } from "@bb/server-contract";
 import {
   listQueuedEnvironmentCommands,
   listQueuedThreadCommands,
@@ -1090,9 +1091,7 @@ describe("public thread archive delete cleanup routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "environment_cleanup_in_progress",
       });
-      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf(
-        "number",
-      );
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(
         "destroying",
       );
@@ -1661,6 +1660,196 @@ describe("public thread archive delete cleanup routes", () => {
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives every live thread in a worktree environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/archive-worktree-row",
+      });
+      const firstThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const secondThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const alreadyArchivedThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      archiveThread(harness.db, harness.hub, alreadyArchivedThread.id);
+      const otherEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/archive-worktree-row-other",
+      });
+      const otherEnvironmentThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: otherEnvironment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/environments/${environment.id}/archive-threads`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = environmentArchiveThreadsResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(body.archivedThreadIds).toHaveLength(2);
+      expect(body.archivedThreadIds).toEqual(
+        expect.arrayContaining([firstThread.id, secondThread.id]),
+      );
+      expect(getThread(harness.db, firstThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(getThread(harness.db, secondThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(
+        getThread(harness.db, alreadyArchivedThread.id)?.archivedAt,
+      ).toBeTypeOf("number");
+      expect(
+        getThread(harness.db, otherEnvironmentThread.id)?.archivedAt,
+      ).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: expect.any(Number),
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({
+        kind: "destroy",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives non-managed worktree threads without requesting cleanup", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: false,
+        isGitRepo: true,
+        isWorktree: true,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/archive-unmanaged-worktree-row",
+        status: "ready",
+        branchName: "bb/unmanaged-worktree",
+        defaultBranch: "main",
+      });
+      const firstThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const secondThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/environments/${environment.id}/archive-threads`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = environmentArchiveThreadsResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(body.archivedThreadIds).toHaveLength(2);
+      expect(body.archivedThreadIds).toEqual(
+        expect.arrayContaining([firstThread.id, secondThread.id]),
+      );
+      expect(getThread(harness.db, firstThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(getThread(harness.db, secondThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: null,
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toBeNull();
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.destroy",
+          environment.id,
+        ),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects environment archive for non-worktree environments", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        workspaceProvisionType: "unmanaged",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/environments/${environment.id}/archive-threads`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(409);
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeNull();
     } finally {
       await harness.cleanup();
     }

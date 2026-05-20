@@ -1,6 +1,10 @@
 import path from "node:path";
 import { updateEnvironmentMetadata } from "@bb/db";
 import {
+  resolveEnvironmentWorkspaceDisplayKind,
+  type Environment,
+} from "@bb/domain";
+import {
   environmentActionRequestSchema,
   environmentDiffFileQuerySchema,
   environmentDiffQuerySchema,
@@ -25,6 +29,7 @@ import {
 } from "../services/lib/entity-lookup.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
+import { archiveEnvironmentThreads } from "../services/threads/thread-archive.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
@@ -58,6 +63,10 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
       return _exhaustive;
     }
   }
+}
+
+function isWorktreeEnvironment(environment: Environment): boolean {
+  return resolveEnvironmentWorkspaceDisplayKind({ environment }) !== "other";
 }
 
 /**
@@ -124,6 +133,23 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       return context.json(updated);
     },
   );
+
+  post("/environments/:id/archive-threads", (context) => {
+    const environment = requireEnvironment(deps.db, context.req.param("id"));
+    if (!isWorktreeEnvironment(environment)) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Only worktree environments can be archived as a group",
+      );
+    }
+
+    const result = archiveEnvironmentThreads(deps, { environment });
+    return context.json({
+      ok: true,
+      archivedThreadIds: result.archivedThreadIds,
+    });
+  });
 
   get(
     "/environments/:id/status",

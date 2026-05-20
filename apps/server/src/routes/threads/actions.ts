@@ -14,7 +14,6 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import type { Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
@@ -22,7 +21,6 @@ import {
   cancelPendingEnvironmentCleanup,
   requestEnvironmentCleanup,
   requestEnvironmentCleanupAdvance,
-  wouldCleanupEnvironment,
 } from "../../services/environments/environment-cleanup.js";
 import {
   requirePublicThread,
@@ -38,35 +36,18 @@ import {
   sendThreadMessage,
 } from "../../services/threads/thread-send.js";
 import {
-  pruneThreadEventHistoryBestEffort,
-  resetActiveThreadEventPruningState,
-} from "../../services/system/event-pruning.js";
-import {
   buildExecutionOptions,
   queueThreadUnarchiveCommand,
 } from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
-import {
-  queueSettledArchivedThreadProviderArchiveCommand,
-  requestThreadStopIfNeeded,
-} from "../../services/threads/thread-lifecycle.js";
+import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
 import { toThreadResponseFromThread } from "../../services/threads/thread-runtime-display.js";
-import { archiveThreadAndReleaseChildren } from "../../services/threads/thread-ownership.js";
+import {
+  archiveThreadWithLifecycleEffects,
+  wouldCleanupAfterThreadArchive,
+} from "../../services/threads/thread-archive.js";
 
-function shouldCleanupAfterArchive(
-  deps: AppDeps,
-  thread: Thread,
-): boolean {
-  return wouldCleanupEnvironment(deps, {
-    environmentId: thread.environmentId,
-    excludeThreadId: thread.id,
-  });
-}
-
-export function registerThreadActionRoutes(
-  app: Hono,
-  deps: AppDeps,
-): void {
+export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   const { post, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
@@ -188,24 +169,14 @@ export function registerThreadActionRoutes(
       });
       return context.json({ ok: true });
     }
-    const shouldRequestCleanup = shouldCleanupAfterArchive(deps, thread);
-    const archiveResult = archiveThreadAndReleaseChildren(deps, { thread });
+    const shouldRequestCleanup = wouldCleanupAfterThreadArchive(deps, thread);
+    const archiveResult = archiveThreadWithLifecycleEffects(deps, {
+      environment,
+      thread,
+    });
     if (!archiveResult) {
       throw new ApiError(404, "thread_not_found", "Thread not found");
     }
-    const { archivedThread } = archiveResult;
-    deps.terminalSessions.closeArchivedThreadTerminals({
-      threadId: archivedThread.id,
-    });
-    requestThreadStopIfNeeded(deps, archivedThread, environment);
-    queueSettledArchivedThreadProviderArchiveCommand(deps, {
-      threadId: archivedThread.id,
-    });
-    resetActiveThreadEventPruningState(thread.id);
-    pruneThreadEventHistoryBestEffort(deps, {
-      mode: "archived",
-      threadId: thread.id,
-    });
     if (shouldRequestCleanup) {
       requestEnvironmentCleanup(deps, {
         environmentId: environment.id,

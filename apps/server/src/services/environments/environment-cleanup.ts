@@ -81,6 +81,10 @@ export interface WouldCleanupEnvironmentArgs {
   excludeThreadId: string;
 }
 
+export interface WouldCleanupEnvironmentWithNoLiveThreadsArgs {
+  environmentId: string | null | undefined;
+}
+
 interface EnvironmentCleanupReadDeps {
   db: DbQueryConnection;
 }
@@ -88,6 +92,8 @@ interface EnvironmentCleanupReadDeps {
 interface EnvironmentCleanupWriteDeps extends EnvironmentCleanupReadDeps {
   hub: DbNotifier;
 }
+
+type EnvironmentCleanupDecisionDeps = Pick<AppDeps, "db">;
 
 function hasConnectedHostSession(
   deps: Pick<AppDeps, "db">,
@@ -413,7 +419,7 @@ function queueDestroyAndMarkDestroying(
 }
 
 export function wouldCleanupEnvironment(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentCleanupDecisionDeps,
   args: WouldCleanupEnvironmentArgs,
 ): boolean {
   if (!args.environmentId) {
@@ -429,6 +435,26 @@ export function wouldCleanupEnvironment(
     countLiveThreadsInEnvironment(deps.db, {
       environmentId: environment.id,
       excludeThreadId: args.excludeThreadId,
+    }) === 0
+  );
+}
+
+export function wouldCleanupEnvironmentWithNoLiveThreads(
+  deps: EnvironmentCleanupDecisionDeps,
+  args: WouldCleanupEnvironmentWithNoLiveThreadsArgs,
+): boolean {
+  if (!args.environmentId) {
+    return false;
+  }
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment || !environment.managed) {
+    return false;
+  }
+
+  return (
+    countLiveThreadsInEnvironment(deps.db, {
+      environmentId: environment.id,
     }) === 0
   );
 }
@@ -502,10 +528,7 @@ export async function advanceEnvironmentCleanup(
     return;
   }
 
-  const canDestroyNow = await workspaceCanBeSafelyCleaned(
-    deps,
-    environment.id,
-  );
+  const canDestroyNow = await workspaceCanBeSafelyCleaned(deps, environment.id);
   if (!canDestroyNow) {
     return;
   }

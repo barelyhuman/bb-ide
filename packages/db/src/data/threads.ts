@@ -152,6 +152,10 @@ export interface CountLiveThreadsInEnvironmentArgs {
   excludeThreadId?: string;
 }
 
+export interface ListLiveThreadsInEnvironmentArgs {
+  environmentId: string;
+}
+
 export interface CountNonDeletedAssignedChildThreadsArgs {
   parentThreadId: string;
 }
@@ -415,6 +419,24 @@ export function countLiveThreadsInEnvironment(
     .get();
 
   return liveThreadCount?.count ?? 0;
+}
+
+export function listLiveThreadsInEnvironment(
+  db: ThreadWriteConnection,
+  args: ListLiveThreadsInEnvironmentArgs,
+): ThreadRow[] {
+  return db
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.environmentId, args.environmentId),
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .orderBy(desc(threads.createdAt))
+    .all();
 }
 
 export function countNonDeletedAssignedChildThreads(
