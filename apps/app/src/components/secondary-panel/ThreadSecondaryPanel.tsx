@@ -361,7 +361,13 @@ function OpenFileSearchMenuButton({
           <Icon name="Plus" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
+      <DropdownMenuContent
+        align="end"
+        className="w-40"
+        // Let the opened search tab's input keep focus instead of Radix
+        // restoring focus to this trigger button on close.
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <DropdownMenuItem onSelect={onOpenFileSearch}>
           <Icon name="File" />
           Open file

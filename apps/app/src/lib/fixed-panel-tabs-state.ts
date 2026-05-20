@@ -191,6 +191,17 @@ export type SecondaryFixedPanelTab =
   | ThreadStorageFilePreviewFixedPanelTab
   | OpenFileSearchFixedPanelTab;
 
+/**
+ * The subset of secondary-panel tabs rendered as closable file tabs in the tab
+ * strip. Excludes thread-info and git-diff, which are fixed views toggled
+ * separately rather than ordered alongside opened files.
+ */
+export type SecondaryFileFixedPanelTab =
+  | WorkspaceFilePreviewFixedPanelTab
+  | HostFilePreviewFixedPanelTab
+  | ThreadStorageFilePreviewFixedPanelTab
+  | OpenFileSearchFixedPanelTab;
+
 export type BottomFixedPanelTab = TerminalFixedPanelTab;
 
 export type FixedPanelTab = SecondaryFixedPanelTab | BottomFixedPanelTab;
@@ -200,8 +211,7 @@ export interface FixedPanelTabGroupState {
   activeTabId: string | null;
 }
 
-export interface FixedSecondaryPanelTabGroupState
-  extends FixedPanelTabGroupState {
+export interface FixedSecondaryPanelTabGroupState extends FixedPanelTabGroupState {
   isOpen: boolean;
 }
 
@@ -515,7 +525,8 @@ function parseFixedPanelTabsStateForStorage({
     };
   }
 
-  const legacyStateResult = legacyFixedPanelTabsStateSchema.safeParse(parsedValue);
+  const legacyStateResult =
+    legacyFixedPanelTabsStateSchema.safeParse(parsedValue);
   if (!legacyStateResult.success) {
     return {
       shouldPrune: true,

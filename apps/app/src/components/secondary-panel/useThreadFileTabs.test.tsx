@@ -8,6 +8,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   EnvironmentFilePreviewSource,
+  HostFileTabState,
   WorkspaceFileTabState,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
@@ -18,6 +19,8 @@ import {
   serializeFixedPanelTabsState,
   type FixedPanelTab,
   type FixedPanelTabsState,
+  type HostFilePreviewFixedPanelTab,
+  type SecondaryFileFixedPanelTab,
   type ThreadStorageFilePreviewFixedPanelTab,
   type WorkspaceFilePreviewFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
@@ -108,12 +111,48 @@ function isStorageFilePreviewTab(
   return tab.kind === "thread-storage-file-preview";
 }
 
+function isHostFilePreviewTab(
+  tab: FixedPanelTab,
+): tab is HostFilePreviewFixedPanelTab {
+  return tab.kind === "host-file-preview";
+}
+
+function workspaceFileStates(
+  tabs: readonly SecondaryFileFixedPanelTab[],
+): WorkspaceFileTabState[] {
+  return tabs.filter(isWorkspaceFilePreviewTab).map((tab) => ({
+    lineNumber: tab.lineNumber,
+    path: tab.path,
+    source: tab.source,
+    statusLabel: tab.statusLabel,
+  }));
+}
+
+function hostFileStates(
+  tabs: readonly SecondaryFileFixedPanelTab[],
+): HostFileTabState[] {
+  return tabs.filter(isHostFilePreviewTab).map((tab) => ({
+    lineNumber: tab.lineNumber,
+    path: tab.path,
+  }));
+}
+
+function storageFilePaths(
+  tabs: readonly SecondaryFileFixedPanelTab[],
+): string[] {
+  return tabs.filter(isStorageFilePreviewTab).map((tab) => tab.path);
+}
+
 function workspaceFileTabId(path: string): string {
   return `workspace-file-preview:${encodeURIComponent(path)}`;
 }
 
 function storageFileTabId(path: string): string {
   return `thread-storage-file-preview:${encodeURIComponent(path)}`;
+}
+
+function hostFileTabId(path: string): string {
+  return `host-file-preview:${encodeURIComponent(path)}`;
 }
 
 function openFileSearchTabId(): string {
@@ -203,7 +242,9 @@ describe("useThreadFileTabs", () => {
       result.current.openWorkspaceFile(workspaceTab);
     });
 
-    expect(result.current.openWorkspaceFileTabs).toEqual([workspaceTab]);
+    expect(
+      workspaceFileStates(result.current.orderedSecondaryFileTabs),
+    ).toEqual([workspaceTab]);
     expect(result.current.activeWorkspaceFilePath).toBe("src/app.ts");
     expect(result.current.activeWorkspaceFileSource).toEqual(
       WORKING_TREE_SOURCE,
@@ -238,7 +279,9 @@ describe("useThreadFileTabs", () => {
       threadId: "thr-two",
     });
 
-    expect(result.current.openWorkspaceFileTabs).toEqual([]);
+    expect(
+      workspaceFileStates(result.current.orderedSecondaryFileTabs),
+    ).toEqual([]);
     expect(result.current.activeWorkspaceFilePath).toBeNull();
 
     rerender({
@@ -248,7 +291,9 @@ describe("useThreadFileTabs", () => {
       threadId: "thr-one",
     });
 
-    expect(result.current.openWorkspaceFileTabs).toEqual([workspaceTab]);
+    expect(
+      workspaceFileStates(result.current.orderedSecondaryFileTabs),
+    ).toEqual([workspaceTab]);
     expect(result.current.activeWorkspaceFilePath).toBe("src/one.ts");
   });
 
@@ -303,7 +348,10 @@ describe("useThreadFileTabs", () => {
       result.current.openHostFile(secondTab);
     });
 
-    expect(result.current.openHostFileTabs).toEqual([firstTab, secondTab]);
+    expect(hostFileStates(result.current.orderedSecondaryFileTabs)).toEqual([
+      firstTab,
+      secondTab,
+    ]);
     expect(result.current.activeHostFilePath).toBe(secondTab.path);
     expect(result.current.activeHostFileLineNumber).toBeNull();
     expect(readStoredState("thr-host-files").secondary.isOpen).toBe(true);
@@ -317,8 +365,49 @@ describe("useThreadFileTabs", () => {
     act(() => {
       result.current.closeHostFileTab(firstTab.path);
     });
-    expect(result.current.openHostFileTabs).toEqual([secondTab]);
+    expect(hostFileStates(result.current.orderedSecondaryFileTabs)).toEqual([
+      secondTab,
+    ]);
     expect(result.current.activeHostFilePath).toBeNull();
+  });
+
+  it("orders file tabs by open order with the pinned status tab first", async () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "manager",
+      storageFiles: [{ path: "STATUS.md" }, { path: "notes.md" }],
+      threadId: "thr-manager-open-order",
+    });
+
+    await waitFor(() => {
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS"],
+      );
+    });
+
+    act(() => {
+      result.current.openWorkspaceFile(
+        buildWorkspaceFileTab({ lineNumber: null, path: "src/app.ts" }),
+      );
+    });
+    act(() => {
+      result.current.openStorageFile("notes.md");
+    });
+    act(() => {
+      result.current.openHostFile({ lineNumber: null, path: "/tmp/host.md" });
+    });
+
+    // notes.md is opened after the workspace file, so it stays after it —
+    // tabs interleave by open order rather than grouping by type, while the
+    // pinned STATUS tab remains first.
+    expect(
+      result.current.orderedSecondaryFileTabs.map((tab) => tab.id),
+    ).toEqual([
+      storageFileTabId("STATUS"),
+      workspaceFileTabId("src/app.ts"),
+      storageFileTabId("notes.md"),
+      hostFileTabId("/tmp/host.md"),
+    ]);
   });
 
   it("opens the transient open file search tab once and does not persist it", () => {
@@ -417,7 +506,9 @@ describe("useThreadFileTabs", () => {
       result.current.openHostFile({ lineNumber: 20, path });
     });
 
-    expect(result.current.openHostFileTabs).toEqual([{ lineNumber: 20, path }]);
+    expect(hostFileStates(result.current.orderedSecondaryFileTabs)).toEqual([
+      { lineNumber: 20, path },
+    ]);
     expect(result.current.activeHostFileLineNumber).toBe(20);
   });
 
@@ -445,7 +536,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openWorkspaceFileTabs).toEqual([]);
+      expect(
+        workspaceFileStates(result.current.orderedSecondaryFileTabs),
+      ).toEqual([]);
     });
     expect(result.current.activeWorkspaceFilePath).toBeNull();
   });
@@ -459,13 +552,15 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual(["STATUS"]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS"],
+      );
     });
 
     act(() => {
       result.current.openStorageFile("notes.md");
     });
-    expect(result.current.openStorageFilePaths).toEqual([
+    expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual([
       "STATUS",
       "notes.md",
     ]);
@@ -478,7 +573,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual(["STATUS"]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS"],
+      );
     });
     expect(result.current.activeStorageFilePath).toBe("STATUS");
   });
@@ -496,9 +593,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([
-        MANAGER_STATUS_FILE_PATH,
-      ]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        [MANAGER_STATUS_FILE_PATH],
+      );
     });
     expect(result.current.activeStorageFilePath).toBe(
       MANAGER_STATUS_FILE_PATH,
@@ -511,7 +608,7 @@ describe("useThreadFileTabs", () => {
       result.current.openStorageFile(MANAGER_STATUS_HTML_FILE_PATH);
     });
 
-    expect(result.current.openStorageFilePaths).toEqual([
+    expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual([
       MANAGER_STATUS_FILE_PATH,
       MANAGER_STATUS_HTML_FILE_PATH,
     ]);
@@ -526,9 +623,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([
-        MANAGER_STATUS_FILE_PATH,
-      ]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        [MANAGER_STATUS_FILE_PATH],
+      );
     });
     expect(result.current.pinnedStorageFilePath).toBe(MANAGER_STATUS_FILE_PATH);
   });
@@ -542,9 +639,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([
-        MANAGER_STATUS_FILE_PATH,
-      ]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        [MANAGER_STATUS_FILE_PATH],
+      );
     });
     expect(result.current.activeStorageFilePath).toBe(MANAGER_STATUS_FILE_PATH);
     expect(result.current.pinnedStorageFilePath).toBe(MANAGER_STATUS_FILE_PATH);
@@ -574,7 +671,9 @@ describe("useThreadFileTabs", () => {
       threadId,
     });
 
-    expect(result.current.openStorageFilePaths).toEqual([]);
+    expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+      [],
+    );
     expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
       "STATUS",
       "notes.md",
@@ -591,10 +690,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([
-        "STATUS",
-        "notes.md",
-      ]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS", "notes.md"],
+      );
     });
     expect(result.current.activeStorageFilePath).toBe("notes.md");
   });
@@ -624,7 +722,9 @@ describe("useThreadFileTabs", () => {
       threadId,
     });
 
-    expect(result.current.openWorkspaceFileTabs).toEqual([]);
+    expect(
+      workspaceFileStates(result.current.orderedSecondaryFileTabs),
+    ).toEqual([]);
     expect(getStoredWorkspaceTabs(readStoredState(threadId))).toEqual([
       workspaceTab,
     ]);
@@ -640,7 +740,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openWorkspaceFileTabs).toEqual([workspaceTab]);
+      expect(
+        workspaceFileStates(result.current.orderedSecondaryFileTabs),
+      ).toEqual([workspaceTab]);
     });
     expect(result.current.activeWorkspaceFilePath).toBe("src/app.ts");
   });
@@ -667,10 +769,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([
-        "STATUS",
-        "notes.md",
-      ]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS", "notes.md"],
+      );
     });
     expect(result.current.activeStorageFilePath).toBe("notes.md");
   });
@@ -684,14 +785,18 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual(["STATUS"]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS"],
+      );
     });
 
     act(() => {
       result.current.closeStorageFileTab("STATUS");
     });
 
-    expect(result.current.openStorageFilePaths).toEqual(["STATUS"]);
+    expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual([
+      "STATUS",
+    ]);
     expect(result.current.activeStorageFilePath).toBe("STATUS");
   });
 
@@ -746,10 +851,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([
-        "STATUS",
-        "notes.md",
-      ]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        ["STATUS", "notes.md"],
+      );
     });
     expect(result.current.activeStorageFilePath).toBe("STATUS");
     expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([
@@ -793,7 +897,9 @@ describe("useThreadFileTabs", () => {
     });
 
     expect(readStoredState(threadId).lastUsedAt).toBe(NOW);
-    expect(result.current.openWorkspaceFileTabs).toEqual([workspaceTab]);
+    expect(
+      workspaceFileStates(result.current.orderedSecondaryFileTabs),
+    ).toEqual([workspaceTab]);
   });
 
   it("does not rewrite manager storage tabs for no-op callbacks", async () => {
@@ -860,7 +966,9 @@ describe("useThreadFileTabs", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.openStorageFilePaths).toEqual([]);
+      expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual(
+        [],
+      );
     });
     expect(result.current.activeStorageFilePath).toBeNull();
     expect(getStoredStoragePaths(readStoredState(threadId))).toEqual([]);

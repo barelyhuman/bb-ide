@@ -14,6 +14,7 @@ import {
   type FixedPanelTabsState,
   type HostFilePreviewFixedPanelTab,
   type OpenFileSearchFixedPanelTab,
+  type SecondaryFileFixedPanelTab,
   type ThreadStorageFilePreviewFixedPanelTab,
   type WorkspaceFilePreviewFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
@@ -82,13 +83,6 @@ function isOpenFileSearchTab(
   tab: FixedPanelTab,
 ): tab is OpenFileSearchFixedPanelTab {
   return tab.kind === "open-file-search";
-}
-
-function isWorkspaceFilePreviewTabForEnvironment(
-  tab: FixedPanelTab,
-  environmentId: string | null,
-): tab is WorkspaceFilePreviewFixedPanelTab {
-  return isWorkspaceFilePreviewTab(tab) && tab.environmentId === environmentId;
 }
 
 function getActiveSecondaryTab(
@@ -303,32 +297,57 @@ function replaceOpenFileSearchTab({
   });
 }
 
-function toWorkspaceFileTabState(
-  tab: WorkspaceFilePreviewFixedPanelTab,
-): WorkspaceFileTabState {
-  return {
-    lineNumber: tab.lineNumber,
-    path: tab.path,
-    source: tab.source,
-    statusLabel: tab.statusLabel,
-  };
+interface BuildOrderedSecondaryFileTabsArgs {
+  tabs: readonly FixedPanelTab[];
+  resolvedEnvironmentId: string | null | undefined;
+  isManagerThread: boolean;
 }
 
-function toHostFileTabState(
-  tab: HostFilePreviewFixedPanelTab,
-): HostFileTabState {
-  return {
-    lineNumber: tab.lineNumber,
-    path: tab.path,
-  };
+function isPinnedStorageTab(tab: SecondaryFileFixedPanelTab): boolean {
+  return tab.kind === "thread-storage-file-preview" && tab.isPinned;
 }
 
-function orderStorageTabs(
-  tabs: readonly ThreadStorageFilePreviewFixedPanelTab[],
-): readonly ThreadStorageFilePreviewFixedPanelTab[] {
-  const pinnedTabs = tabs.filter((tab) => tab.isPinned);
-  const unpinnedTabs = tabs.filter((tab) => !tab.isPinned);
-  return [...pinnedTabs, ...unpinnedTabs];
+/**
+ * Flattens the secondary panel's tabs into the closable file-tab strip, in the
+ * order the user opened them. The pinned manager status tab is floated to the
+ * front; everything else (workspace, host, storage, file search) keeps its
+ * insertion order regardless of type.
+ */
+function buildOrderedSecondaryFileTabs({
+  tabs,
+  resolvedEnvironmentId,
+  isManagerThread,
+}: BuildOrderedSecondaryFileTabsArgs): readonly SecondaryFileFixedPanelTab[] {
+  const displayable: SecondaryFileFixedPanelTab[] = [];
+  for (const tab of tabs) {
+    switch (tab.kind) {
+      case "workspace-file-preview":
+        if (
+          resolvedEnvironmentId !== undefined &&
+          tab.environmentId === resolvedEnvironmentId
+        ) {
+          displayable.push(tab);
+        }
+        break;
+      case "host-file-preview":
+      case "open-file-search":
+        displayable.push(tab);
+        break;
+      case "thread-storage-file-preview":
+        if (isManagerThread) {
+          displayable.push(tab);
+        }
+        break;
+      case "thread-info":
+      case "git-diff":
+      case "terminal":
+        break;
+    }
+  }
+  return [
+    ...displayable.filter(isPinnedStorageTab),
+    ...displayable.filter((tab) => !isPinnedStorageTab(tab)),
+  ];
 }
 
 export function useThreadFileTabs({
@@ -798,12 +817,11 @@ export function useThreadFileTabs({
   }, [updateFixedPanelTabsState]);
 
   const activeTab = getActiveSecondaryTab(fixedPanelTabsState);
-  const workspaceTabs =
-    resolvedEnvironmentId === undefined
-      ? []
-      : fixedPanelTabsState.secondary.tabs.filter((tab) =>
-          isWorkspaceFilePreviewTabForEnvironment(tab, resolvedEnvironmentId),
-        );
+  const orderedSecondaryFileTabs = buildOrderedSecondaryFileTabs({
+    tabs: fixedPanelTabsState.secondary.tabs,
+    resolvedEnvironmentId,
+    isManagerThread,
+  });
   const activeWorkspaceFileTab =
     activeTab?.kind === "workspace-file-preview" &&
     activeTab.environmentId === resolvedEnvironmentId
@@ -817,13 +835,9 @@ export function useThreadFileTabs({
     activeTab?.kind === "host-file-preview" ? activeTab : null;
   const activeOpenFileSearchTab =
     activeTab?.kind === "open-file-search" ? activeTab : null;
-  const storageTabs = isManagerThread
-    ? orderStorageTabs(
-        fixedPanelTabsState.secondary.tabs.filter(isStorageFilePreviewTab),
-      )
-    : [];
 
   return {
+    orderedSecondaryFileTabs,
     activateOpenFileSearchTab,
     activateHostFileTab,
     activateStorageFileTab,
@@ -845,13 +859,8 @@ export function useThreadFileTabs({
     isOpenFileSearchActive: activeOpenFileSearchTab !== null,
     openFileSearchTab,
     openHostFile,
-    openHostFileTabs: fixedPanelTabsState.secondary.tabs
-      .filter(isHostFilePreviewTab)
-      .map(toHostFileTabState),
     openStorageFile,
-    openStorageFilePaths: storageTabs.map((tab) => tab.path),
     openWorkspaceFile,
-    openWorkspaceFileTabs: workspaceTabs.map(toWorkspaceFileTabState),
     pinnedStorageFilePath,
     selectOpenFileSearchResult,
   };

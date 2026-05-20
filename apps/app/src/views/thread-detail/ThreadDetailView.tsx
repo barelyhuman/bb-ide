@@ -273,15 +273,12 @@ export function ThreadDetailView() {
     closeOpenFileSearchTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
-    hasOpenFileSearchTab,
     isOpenFileSearchActive,
     openFileSearchTab,
     openHostFile,
-    openHostFileTabs,
     openStorageFile,
-    openStorageFilePaths,
     openWorkspaceFile,
-    openWorkspaceFileTabs,
+    orderedSecondaryFileTabs,
     pinnedStorageFilePath,
     selectOpenFileSearchResult,
   } = useThreadFileTabs({
@@ -475,51 +472,48 @@ export function ThreadDetailView() {
     [openSecondaryPanelDiffFile, openWorkspaceFile],
   );
   const fileTabs = useMemo<SecondaryPanelFileTab[] | undefined>(() => {
-    const workspaceTabs = openWorkspaceFileTabs.map((tab) => ({
-      id: `workspace:${tab.path}`,
-      filename: tab.path.split("/").at(-1) ?? tab.path,
-      isActive: tab.path === activeWorkspaceFilePath,
-      statusLabel: tab.statusLabel,
-      onSelect: () => activateWorkspaceFileTab(tab.path),
-      onClose: () => closeWorkspaceFileTab(tab.path),
-    }));
-    const storageTabs = isManagerThread
-      ? openStorageFilePaths.map((path) => ({
-          id: `storage:${path}`,
-          filename: path.split("/").at(-1) ?? path,
-          isActive: path === activeStorageFilePath,
-          isPinned: path === pinnedStorageFilePath,
-          statusLabel: null,
-          onSelect: () => activateStorageFileTab(path),
-          onClose: () => closeStorageFileTab(path),
-        }))
-      : [];
-    const hostFileTabs = openHostFileTabs.map((tab) => ({
-      id: `host-file:${tab.path}`,
-      filename: tab.path.split("/").at(-1) ?? tab.path,
-      isActive: tab.path === activeHostFilePath,
-      statusLabel: null,
-      onSelect: () => activateHostFileTab(tab.path),
-      onClose: () => closeHostFileTab(tab.path),
-    }));
-    const openFileSearchTabs = hasOpenFileSearchTab
-      ? [
-          {
-            id: "open-file-search",
+    const filenameOf = (path: string) => path.split("/").at(-1) ?? path;
+    const tabs = orderedSecondaryFileTabs.map((tab): SecondaryPanelFileTab => {
+      switch (tab.kind) {
+        case "workspace-file-preview":
+          return {
+            id: tab.id,
+            filename: filenameOf(tab.path),
+            isActive: tab.path === activeWorkspaceFilePath,
+            statusLabel: tab.statusLabel,
+            onSelect: () => activateWorkspaceFileTab(tab.path),
+            onClose: () => closeWorkspaceFileTab(tab.path),
+          };
+        case "host-file-preview":
+          return {
+            id: tab.id,
+            filename: filenameOf(tab.path),
+            isActive: tab.path === activeHostFilePath,
+            statusLabel: null,
+            onSelect: () => activateHostFileTab(tab.path),
+            onClose: () => closeHostFileTab(tab.path),
+          };
+        case "thread-storage-file-preview":
+          return {
+            id: tab.id,
+            filename: filenameOf(tab.path),
+            isActive: tab.path === activeStorageFilePath,
+            isPinned: tab.isPinned,
+            statusLabel: null,
+            onSelect: () => activateStorageFileTab(tab.path),
+            onClose: () => closeStorageFileTab(tab.path),
+          };
+        case "open-file-search":
+          return {
+            id: tab.id,
             filename: "Open file",
             isActive: isOpenFileSearchActive,
             statusLabel: null,
             onSelect: activateOpenFileSearchTab,
             onClose: closeOpenFileSearchTab,
-          },
-        ]
-      : [];
-    const tabs = [
-      ...workspaceTabs,
-      ...hostFileTabs,
-      ...storageTabs,
-      ...openFileSearchTabs,
-    ];
+          };
+      }
+    });
     return tabs.length > 0 ? tabs : undefined;
   }, [
     activateOpenFileSearchTab,
@@ -533,13 +527,8 @@ export function ThreadDetailView() {
     closeOpenFileSearchTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
-    hasOpenFileSearchTab,
-    isManagerThread,
     isOpenFileSearchActive,
-    openHostFileTabs,
-    openStorageFilePaths,
-    openWorkspaceFileTabs,
-    pinnedStorageFilePath,
+    orderedSecondaryFileTabs,
   ]);
   const requestedMergeBaseBranch =
     selectedMergeBaseBranch ?? environmentMergeBaseBranch;
@@ -836,9 +825,7 @@ export function ThreadDetailView() {
     (environment.isWorktree ||
       environment.workspaceProvisionType === "managed-worktree");
   const onCreateNewThreadInWorktree =
-    isThreadOnWorktreeEnvironment &&
-    projectId &&
-    thread.environmentId !== null
+    isThreadOnWorktreeEnvironment && projectId && thread.environmentId !== null
       ? createThreadInWorktree
       : undefined;
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;

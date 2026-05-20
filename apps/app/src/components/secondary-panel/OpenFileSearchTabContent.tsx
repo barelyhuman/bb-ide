@@ -36,7 +36,7 @@ interface OpenFileSearchResultRowProps {
 }
 
 interface OpenFileSearchMessageProps {
-  iconName: "AlertCircle" | "FileQuestion" | "Search" | "Spinner";
+  iconName: "AlertCircle" | "File" | "FileQuestion" | "Spinner";
   iconClassName?: string;
   message: string;
 }
@@ -240,20 +240,15 @@ export function OpenFileSearchTabContent({
   const [activeIndex, setActiveIndex] = useState(-1);
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
-  const {
-    suggestions,
-    isLoading,
-    isError,
-    isDebouncing,
-    isUnavailable,
-  } = useFileSearchSuggestions({
-    projectId,
-    query,
-    limit: FILE_SEARCH_LIMIT,
-    environmentId,
-    currentThreadId,
-    currentThreadType,
-  });
+  const { suggestions, isLoading, isError, isDebouncing, isUnavailable } =
+    useFileSearchSuggestions({
+      projectId,
+      query,
+      limit: FILE_SEARCH_LIMIT,
+      environmentId,
+      currentThreadId,
+      currentThreadType,
+    });
   const availableSources = useMemo(
     () =>
       getAvailableFileSearchSources({
@@ -283,7 +278,14 @@ export function OpenFileSearchTabContent({
   );
 
   useEffect(() => {
+    // Focus synchronously, then again on the next frame to win the focus race
+    // against the dropdown menu that opened this tab — its FocusScope can pull
+    // focus back while it animates closed in the same commit.
     inputRef.current?.focus();
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
   }, [focusRequest]);
 
   useEffect(() => {
@@ -346,7 +348,7 @@ export function OpenFileSearchTabContent({
             activeSuggestion ? getOpenFileResultId(activeSuggestion) : undefined
           }
           placeholder={isUnavailable ? "No searchable source" : "Search files"}
-          className="h-8 pl-8 pr-8 font-mono text-xs focus-visible:ring-0"
+          className="h-8 pl-8 pr-8 text-xs focus-visible:ring-0"
         />
         {isDebouncing ? (
           <Icon
@@ -408,7 +410,7 @@ export function OpenFileSearchTabContent({
         </div>
       ) : (
         <OpenFileSearchMessage
-          iconName="Search"
+          iconName={hasQuery ? "FileQuestion" : "File"}
           message={hasQuery ? "No files match." : "Type to search files."}
         />
       )}
