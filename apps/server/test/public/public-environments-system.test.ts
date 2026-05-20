@@ -995,7 +995,11 @@ describe("public environment and system routes", () => {
   });
 
   it("queues provider list and provider list_models commands for system routes", async () => {
-    const harness = await createTestAppHarness();
+    const harness = await createTestAppHarness({
+      featureFlags: {
+        askUserQuestion: false,
+      },
+    });
     try {
       const { host } = seedHostSession(harness.deps, {
         id: "host-system-routes",

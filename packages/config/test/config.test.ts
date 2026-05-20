@@ -120,7 +120,7 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
     expect(serverConfig.featureFlags).toEqual({
-      askUserQuestion: false,
+      askUserQuestion: true,
       terminals: true,
     });
     expect(serverConfig.BB_INFERENCE).toBe("codex/gpt-5.4-mini");
@@ -201,6 +201,19 @@ describe("consumer-specific config", () => {
   });
 
   it("parses feature flags from env", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    stubServerRuntimeEnv();
+    vi.stubEnv("BB_FF_ASK_USER_QUESTION", "false");
+    vi.stubEnv("BB_FF_TERMINALS", "true");
+
+    const { serverConfig } =
+      await importFresh<typeof import("../src/server.js")>("../src/server.js");
+
+    expect(serverConfig.featureFlags.askUserQuestion).toBe(false);
+    expect(serverConfig.featureFlags.terminals).toBe(true);
+  });
+
+  it("accepts explicit enabled feature flags from env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     stubServerRuntimeEnv();
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", "true");

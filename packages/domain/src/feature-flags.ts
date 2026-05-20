@@ -7,6 +7,6 @@ export const featureFlagsSchema = z.object({
 export type FeatureFlags = z.infer<typeof featureFlagsSchema>;
 
 export const defaultFeatureFlags: FeatureFlags = {
-  askUserQuestion: false,
+  askUserQuestion: true,
   terminals: true,
 };

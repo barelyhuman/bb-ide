@@ -232,7 +232,11 @@ describe("internal interactive request lifecycle", () => {
   });
 
   it("rejects user-question interactive requests when the feature flag is disabled", async () => {
-    const harness = await createTestAppHarness();
+    const harness = await createTestAppHarness({
+      featureFlags: {
+        askUserQuestion: false,
+      },
+    });
     try {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-user-question-disabled",
