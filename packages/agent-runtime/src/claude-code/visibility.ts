@@ -70,6 +70,7 @@ type ClaudeStreamEventType =
   | "message_delta"
   | "message_start"
   | "message_stop"
+  | "ping"
   | "unknown";
 
 interface ClaudeThreadIdentityRawEvent {
@@ -202,6 +203,7 @@ function toClaudeStreamEventType(
     case "message_delta":
     case "message_start":
     case "message_stop":
+    case "ping":
       return eventType;
     default:
       return "unknown";
@@ -455,6 +457,7 @@ function describeParsedClaudeRawEvent(
         case "content_block_stop":
         case "message_delta":
         case "message_stop":
+        case "ping":
           return {
             kind: `sdk/stream_event:${event.eventType}`,
             coverage: "noise",

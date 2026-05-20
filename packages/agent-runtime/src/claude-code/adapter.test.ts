@@ -2395,6 +2395,29 @@ describe("claude-code provider adapter", () => {
     expect(events).toEqual([]);
   });
 
+  it("translateEvent ignores sdk stream ping keepalives", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "bb-thread-1",
+        message: {
+          type: "stream_event",
+          event: {
+            type: "ping",
+          },
+          session_id: "sess-1",
+          parent_tool_use_id: null,
+          uuid: "stream-ping-1",
+        },
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
   it("translateEvent preserves the active turn on unknown sdk envelopes", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

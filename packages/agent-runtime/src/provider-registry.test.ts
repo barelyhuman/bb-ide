@@ -329,6 +329,32 @@ describe("provider registry", () => {
     });
   });
 
+  it("classifies Claude stream ping events as noise", () => {
+    const claude = getProviderVisibilityMetadata("claude-code");
+
+    expect(
+      claude.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          threadId: "thread-1",
+          message: {
+            type: "stream_event",
+            event: {
+              type: "ping",
+            },
+            session_id: "session-1",
+            parent_tool_use_id: null,
+            uuid: "message-1",
+          },
+        },
+      } satisfies JsonRpcMessage),
+    ).toEqual({
+      kind: "sdk/stream_event:ping",
+      coverage: "noise",
+    });
+  });
+
   it("classifies Codex MCP startup status updates as noise", () => {
     const codex = getProviderVisibilityMetadata("codex");
 
