@@ -136,6 +136,9 @@ export function ThreadDetailSecondaryContent({
   return (
     <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
       <PanelGroup
+        // Thread-scoped panel state should mount at its saved size instead of
+        // animating from the previously selected thread's layout.
+        key={timeline.threadId}
         direction="vertical"
         className="h-full w-full min-w-0"
       >
