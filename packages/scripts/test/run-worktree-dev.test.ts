@@ -155,6 +155,9 @@ describe("run-worktree-dev", () => {
       repoRoot: path.join(homeDir, "src", "bb"),
     });
     await fs.mkdir(path.join(legacyDataDir, "logs"), { recursive: true });
+    await fs.mkdir(path.join(legacyDataDir, "attachments", "proj_test"), {
+      recursive: true,
+    });
     await fs.mkdir(path.join(legacyDataDir, "worktrees", "env_old", "bb"), {
       recursive: true,
     });
@@ -170,6 +173,16 @@ describe("run-worktree-dev", () => {
     await fs.writeFile(
       path.join(legacyDataDir, "auth-secret"),
       "secret",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(
+        legacyDataDir,
+        "attachments",
+        "proj_test",
+        "screenshot.png",
+      ),
+      "image",
       "utf8",
     );
     await fs.writeFile(
@@ -189,6 +202,7 @@ describe("run-worktree-dev", () => {
 
     expect(result).toEqual({
       migratedEntries: [
+        "attachments",
         "auth-secret",
         "bb.db",
         "bb.db.backup-20260515-160305",
@@ -202,6 +216,12 @@ describe("run-worktree-dev", () => {
     await expect(
       fs.readFile(path.join(config.dataDir, "auth-secret"), "utf8"),
     ).resolves.toBe("secret");
+    await expect(
+      fs.readFile(
+        path.join(config.dataDir, "attachments", "proj_test", "screenshot.png"),
+        "utf8",
+      ),
+    ).resolves.toBe("image");
     await expect(
       fs.access(path.join(legacyDataDir, "worktrees", "env_old", "bb")),
     ).resolves.toBeUndefined();

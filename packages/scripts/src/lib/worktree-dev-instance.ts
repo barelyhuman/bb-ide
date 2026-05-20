@@ -83,6 +83,7 @@ const LEGACY_DEV_SUPERVISOR_PID_FILE_NAMES = [
   "server.pid",
 ] as const;
 const MIGRATABLE_LEGACY_ENTRY_NAMES = new Set([
+  "attachments",
   "auth-secret",
   "auth.json",
   "bb.db",
