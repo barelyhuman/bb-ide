@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   HOST_AUTH_FILE_NAME,
@@ -9,11 +10,15 @@ import {
 import {
   maybeAddAutoJoinEnv,
   resolveDefaultDataDirName,
+  resolveHostDaemonRuntimeEnvironment,
   resolveHostDaemonProcessCommand,
 } from "../src/commands/run-host-daemon.js";
 import type { HostDaemonRuntimeEnvironment } from "../src/lib/host-daemon-runtime.js";
+import { resolveCurrentWorktreeDevInstanceConfig } from "../src/lib/worktree-dev-instance.js";
 
 const tempDirs: string[] = [];
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(testDir, "..", "..", "..");
 
 type TestFetchInput = RequestInfo | URL;
 
@@ -52,6 +57,7 @@ async function makeTempDir(prefix: string): Promise<string> {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   await Promise.all(
     tempDirs
       .splice(0)
@@ -79,6 +85,51 @@ describe("run-host-daemon auto join", () => {
       args: ["apps/host-daemon/dist/index.js"],
       command: process.execPath,
     });
+  });
+
+  it("uses the current checkout instance when dev overrides are absent", () => {
+    vi.stubEnv("BB_DATA_DIR", undefined);
+    vi.stubEnv("BB_SERVER_URL", undefined);
+    const instanceConfig = resolveCurrentWorktreeDevInstanceConfig(repoRoot);
+
+    const env = resolveHostDaemonRuntimeEnvironment("dev");
+
+    expect(env.BB_DATA_DIR).toBe(
+      path.join(instanceConfig.dataDir, "extra-host"),
+    );
+    expect(env.BB_SERVER_URL).toBe(instanceConfig.serverUrl);
+    expect(env.NODE_ENV).toBe("development");
+  });
+
+  it("uses paired explicit dev overrides", () => {
+    vi.stubEnv("BB_DATA_DIR", "~/bb-host-daemon-test");
+    vi.stubEnv("BB_SERVER_URL", "http://127.0.0.1:19333");
+
+    const env = resolveHostDaemonRuntimeEnvironment("dev");
+
+    expect(env.BB_DATA_DIR).toBe(
+      path.join(os.homedir(), "bb-host-daemon-test"),
+    );
+    expect(env.BB_SERVER_URL).toBe("http://127.0.0.1:19333");
+    expect(env.NODE_ENV).toBe("development");
+  });
+
+  it("rejects a dev data-dir override without a server URL override", () => {
+    vi.stubEnv("BB_DATA_DIR", "~/bb-host-daemon-test");
+    vi.stubEnv("BB_SERVER_URL", undefined);
+
+    expect(() => resolveHostDaemonRuntimeEnvironment("dev")).toThrow(
+      "Dev host-daemon overrides must set both BB_DATA_DIR and BB_SERVER_URL, or neither.",
+    );
+  });
+
+  it("rejects a dev server URL override without a data-dir override", () => {
+    vi.stubEnv("BB_DATA_DIR", undefined);
+    vi.stubEnv("BB_SERVER_URL", "http://127.0.0.1:19333");
+
+    expect(() => resolveHostDaemonRuntimeEnvironment("dev")).toThrow(
+      "Dev host-daemon overrides must set both BB_DATA_DIR and BB_SERVER_URL, or neither.",
+    );
   });
 
   it("skips auto join when auth state already exists", async () => {

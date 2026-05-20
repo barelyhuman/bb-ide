@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { resolveContainedPath } from "@bb/process-utils";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
@@ -16,11 +16,16 @@ import {
 import { resolveConfiguredDataDir } from "@bb/config/data-dir";
 import { DEFAULTS } from "@bb/config/defaults";
 import { type HostMode, resolveScriptMode } from "../lib/script-config.js";
+import { resolveCurrentWorktreeDevInstanceConfig } from "../lib/worktree-dev-instance.js";
 
 interface NamedDataDirs {
   defaultDataDir: string;
   defaultDevDataDir: string;
 }
+
+const commandDir = dirname(fileURLToPath(import.meta.url));
+const packageRoot = resolve(commandDir, "..", "..");
+const repoRoot = resolve(packageRoot, "..", "..");
 
 function resolveMode(): HostMode {
   return resolveScriptMode();
@@ -38,6 +43,10 @@ function resolveNamedDataDirs(): NamedDataDirs {
 }
 
 export function resolveResetDataDir(mode: HostMode): string {
+  if (mode === "dev" && process.env.BB_DATA_DIR === undefined) {
+    return resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir;
+  }
+
   const dataDirs = resolveNamedDataDirs();
   return mode === "dev" ? dataDirs.defaultDevDataDir : dataDirs.defaultDataDir;
 }
@@ -53,8 +62,7 @@ export function resolveResetTargets(args: Set<string>): string[] {
   if (args.has("--all")) {
     return uniquePaths([
       dataDirs.defaultDataDir,
-      dataDirs.defaultDevDataDir,
-      resolveResetDataDir(mode),
+      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
     ]);
   }
 
@@ -86,11 +94,11 @@ export function renderHelpText(): string {
     pnpm reset -- [--all] [--yes]
 
   ${dim("Options")}
-    --all   Remove both prod and dev data directories
+    --all   Remove prod and this checkout's dev data directories
     --yes   Skip the interactive confirmation prompt
 
   ${dim("Notes")}
-    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}).
+    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev/<checkout-instance>")}).
     Does not touch external provider config managed by other tools.
     Respects BB_DATA_DIR for single-directory resets.
 \n`;

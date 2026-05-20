@@ -14,6 +14,11 @@
       "types": "./src/commands/request-dev-restart.ts",
       "import": "./dist/commands/request-dev-restart.js"
     },
+    "./run-worktree-dev": {
+      "source": "./src/commands/run-worktree-dev.ts",
+      "types": "./src/commands/run-worktree-dev.ts",
+      "import": "./dist/commands/run-worktree-dev.js"
+    },
     "./run-cli": {
       "source": "./src/commands/run-cli.ts",
       "types": "./src/commands/run-cli.ts",
@@ -58,6 +63,7 @@
     "dev:restart": "node dist/commands/request-dev-restart.js both",
     "dev:restart-host-daemon": "node dist/commands/request-dev-restart.js host-daemon",
     "dev:restart-server": "node dist/commands/request-dev-restart.js server",
+    "dev:worktree": "node dist/commands/run-worktree-dev.js",
     "reset": "node dist/commands/reset-bb-data.js",
     "codex:archive-tmp-bb-sessions": "node dist/commands/archive-codex-tmp-bb-sessions.js",
     "start": "node dist/commands/start-bb.js",

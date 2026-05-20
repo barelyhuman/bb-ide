@@ -26,6 +26,7 @@ import {
 } from "../lib/script-config.js";
 import { runScriptProcess } from "../lib/process-helpers.js";
 import { waitForServerHealth } from "../lib/wait-for-server-health.js";
+import { resolveCurrentWorktreeDevInstanceConfig } from "../lib/worktree-dev-instance.js";
 
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
@@ -54,16 +55,57 @@ export function resolveDefaultDataDirName(mode: HostMode): string {
 }
 
 function resolveDataDir(mode: HostMode): string {
+  if (mode === "dev" && process.env.BB_DATA_DIR === undefined) {
+    return join(
+      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
+      "extra-host",
+    );
+  }
+
   return resolveConfiguredDataDir({
     defaultDirName: resolveDefaultDataDirName(mode),
   });
 }
 
-function buildEnv(mode: HostMode): HostDaemonRuntimeEnvironment {
+function resolveServerUrl(mode: HostMode): string {
+  if (mode === "dev" && process.env.BB_SERVER_URL === undefined) {
+    return resolveCurrentWorktreeDevInstanceConfig(repoRoot).serverUrl;
+  }
+
+  if (mode === "dev" && process.env.BB_SERVER_URL !== undefined) {
+    const serverUrl = process.env.BB_SERVER_URL.trim();
+    if (serverUrl.length === 0) {
+      throw new Error("BB_SERVER_URL must not be empty");
+    }
+    new URL(serverUrl);
+    return serverUrl;
+  }
+
+  return hostDaemonConfig.BB_SERVER_URL;
+}
+
+function ensureDevOverridePair(mode: HostMode): void {
+  if (mode !== "dev") {
+    return;
+  }
+
+  const hasDataDirOverride = process.env.BB_DATA_DIR !== undefined;
+  const hasServerUrlOverride = process.env.BB_SERVER_URL !== undefined;
+  if (hasDataDirOverride !== hasServerUrlOverride) {
+    throw new Error(
+      "Dev host-daemon overrides must set both BB_DATA_DIR and BB_SERVER_URL, or neither.",
+    );
+  }
+}
+
+export function resolveHostDaemonRuntimeEnvironment(
+  mode: HostMode,
+): HostDaemonRuntimeEnvironment {
+  ensureDevOverridePair(mode);
   return {
     ...hostDaemonEntrypointConfig,
     BB_DATA_DIR: resolveDataDir(mode),
-    BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
+    BB_SERVER_URL: resolveServerUrl(mode),
     NODE_ENV: resolveNodeEnvironment(mode),
   };
 }
@@ -182,7 +224,10 @@ export async function maybeAddAutoJoinEnv(
 export async function main(): Promise<void> {
   const mode = resolveMode();
   const autoJoin = shouldAutoJoin();
-  const env = await maybeAddAutoJoinEnv(buildEnv(mode), autoJoin);
+  const env = await maybeAddAutoJoinEnv(
+    resolveHostDaemonRuntimeEnvironment(mode),
+    autoJoin,
+  );
   const daemonProcessCommand = resolveHostDaemonProcessCommand(mode);
   process.exitCode = await runScriptProcess({
     args: daemonProcessCommand.args,

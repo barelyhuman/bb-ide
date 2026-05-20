@@ -42,7 +42,7 @@ This monorepo contains the packaged app plus the runtime services it bundles:
 
 | Package or app                                                     | Role                                                                                  |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [`packages/bb-app`](./packages/bb-app)                             | Published npm package and `npx bb-app@latest` launcher.                                      |
+| [`packages/bb-app`](./packages/bb-app)                             | Published npm package and `npx bb-app@latest` launcher.                               |
 | [`apps/app`](./apps/app)                                           | Web UI for inspecting projects, threads, environments, and running work.              |
 | [`apps/server`](./apps/server)                                     | HTTP API, WebSocket notifications, state management, and server-owned product policy. |
 | [`apps/host-daemon`](./apps/host-daemon)                           | Host-local runtime that provisions workspaces and runs provider processes.            |
@@ -58,9 +58,15 @@ Use the development loop when working on bb itself:
 pnpm dev
 ```
 
-That starts the Vite app on `http://localhost:5173` and proxies API and
-WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by
-default so it can run alongside the packaged `npx bb-app@latest` instance.
+That starts the Vite app and proxies API and WebSocket traffic to a separate
+dev server. The launcher prints the actual ports at startup. Each checkout gets
+a data directory under
+`~/.bb-dev/<checkout-instance>/` and deterministic high ports derived from the
+checkout path, so separate worktrees can run alongside each other and the
+packaged `npx bb-app@latest` instance. `pnpm dev:worktree` is kept as an
+explicit alias for the same isolated launcher. On first run, legacy flat
+`~/.bb-dev` state is migrated into the current checkout's instance directory
+when no old dev server or host daemon is still running.
 
 Development behavior is intentionally split:
 
@@ -95,15 +101,16 @@ pnpm dev:host-daemon -- --auto-join
 ```
 
 That runs a second host daemon against the dev server and stores its state
-under `~/.bb-dev-extra-host`. On first run, it requests local enrollment from
-the dev server; after enrollment, the daemon persists its auth state locally.
+under the current checkout's dev data directory. On first run, it requests
+local enrollment from the dev server; after enrollment, the daemon persists its
+auth state locally.
 
 ```bash
 pnpm bb --help            # built CLI, targets the default/prod instance
 pnpm reset                # clear production state
 
-pnpm bb:dev --help        # source CLI, targets the dev instance
-pnpm reset:dev            # clear dev state
+pnpm bb:dev --help        # source CLI, targets this checkout's dev instance
+pnpm reset:dev            # clear this checkout's dev state
 
 pnpm reset:all            # clear both production and dev states
 ```

@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runScriptProcess } from "../lib/process-helpers.js";
+import { resolveCurrentWorktreeDevProcessEnv } from "../lib/worktree-dev-instance.js";
 
 interface CliExecution {
   args: string[];
@@ -16,11 +17,22 @@ const repoRoot = resolve(packageRoot, "..", "..");
 export function resolveCliExecution(
   cliArgs: string[] = process.argv.slice(2),
 ): CliExecution {
+  const env = { ...process.env };
+  if (process.env.NODE_ENV !== "production") {
+    const worktreeDevEnv = resolveCurrentWorktreeDevProcessEnv(
+      repoRoot,
+      process.env,
+    );
+    env.BB_SERVER_URL =
+      process.env.BB_SERVER_URL ?? worktreeDevEnv.BB_SERVER_URL;
+    env.BB_HOST_DAEMON_PORT =
+      process.env.BB_HOST_DAEMON_PORT ?? worktreeDevEnv.BB_HOST_DAEMON_PORT;
+  }
   return {
     args: ["apps/cli/dist/index.js", ...cliArgs],
     command: process.execPath,
     cwd: repoRoot,
-    env: process.env,
+    env,
   };
 }
 

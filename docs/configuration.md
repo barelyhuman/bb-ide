@@ -85,9 +85,10 @@ npx bb-app --data-dir ~/.bb-test --server-port 48886 --host-daemon-port 48887
 
 The data directory is the root directory for all bb-managed state: the SQLite
 database, logs, host identity, and thread storage. It defaults to `~/.bb/` for
-the packaged app and `~/.bb-dev/` when using `pnpm dev`. Use `--data-dir` to
-point two instances at different data directories for fully isolated
-environments.
+the packaged app. The `pnpm dev` source launcher derives an isolated data
+directory under `~/.bb-dev/<checkout-instance>/` from the checkout path. Use `--data-dir`
+to point packaged-app instances at different data directories for fully
+isolated environments.
 
 If the default ports are already in use, set explicit ports before starting:
 
@@ -107,8 +108,16 @@ cp .env.example .env
 
 The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade
 applies to source development. `pnpm dev` loads `.env`, `.env.local`,
-`.env.development`, and `.env.development.local`; `pnpm start` loads `.env`,
-`.env.local`, `.env.production`, and `.env.production.local`.
+`.env.development`, and `.env.development.local`, then overrides the instance
+selectors (`BB_DATA_DIR`, `BB_DATABASE_URL`, server URL/port, host-daemon local
+API port, Vite port, and dev-env port) with deterministic values derived from
+the checkout path. `pnpm dev:worktree` is an alias for the same isolated
+launcher. On first run, known legacy flat `~/.bb-dev` state such as the dev DB,
+logs, auth, thread storage, manager templates, replays, and event spool files is
+migrated into the current checkout's instance directory. The migration leaves
+top-level `worktrees/`, lock files, and PID files in place, and it refuses to
+run while an old dev server or host daemon is still running. `pnpm start` loads
+`.env`, `.env.local`, `.env.production`, and `.env.production.local`.
 
 Source checkout commands such as `pnpm bb`, `pnpm bb:dev`, and `pnpm reset`
 are thin wrappers around `@bb/scripts`. Those wrappers force `NODE_ENV` to the

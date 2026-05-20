@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostDaemonConfig } from "@bb/config/host-daemon";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { statusResponseSchema } from "@bb/host-daemon-contract/local";
 import {
   createTurboBuildCommand,
+  resolveDevHostDaemonPort,
   resolveSupervisorPidPath,
 } from "../lib/dev-restart-utils.js";
 import { readRunningPid } from "../lib/pid-file.js";
@@ -96,7 +96,7 @@ export async function resolveEffectiveRestartTarget(
   const compatibility = await resolveHostDaemonProtocolCompatibility({
     fetchFn: options.fetchFn ?? fetch,
     hostDaemonLocalPort:
-      options.hostDaemonLocalPort ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
+      options.hostDaemonLocalPort ?? resolveDevHostDaemonPort(),
   });
   if (compatibility !== "mismatch") {
     return target;

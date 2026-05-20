@@ -1,0 +1,140 @@
+import { access } from "node:fs/promises";
+import { createServer } from "node:net";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runScriptProcess } from "../lib/process-helpers.js";
+import {
+  migrateLegacyDevData,
+  resolveCurrentWorktreeDevInstanceConfig,
+  toWorktreeDevProcessEnv,
+  type WorktreeDevInstanceConfig,
+} from "../lib/worktree-dev-instance.js";
+
+interface PortAvailabilityCheck {
+  label: string;
+  port: number;
+}
+
+interface DevTurboCommand {
+  args: string[];
+  command: string;
+}
+
+const LOOPBACK_HOST = "127.0.0.1";
+
+const commandDir = dirname(fileURLToPath(import.meta.url));
+const packageRoot = resolve(commandDir, "..", "..");
+const repoRoot = resolve(packageRoot, "..", "..");
+
+export function createDevTurboCommand(): DevTurboCommand {
+  return {
+    args: [
+      "exec",
+      "turbo",
+      "run",
+      "dev",
+      "--filter=@bb/app",
+      "--filter=@bb/server",
+      "--filter=@bb/host-daemon",
+      "--filter=@bb/dev-env",
+      "--ui",
+      "tui",
+      "--concurrency",
+      "20",
+      "--no-update-notifier",
+    ],
+    command: "pnpm",
+  };
+}
+
+function formatConfig(config: WorktreeDevInstanceConfig): string {
+  return [
+    `[dev:worktree] Instance ${config.instanceId}`,
+    `[dev:worktree] Data dir ${config.dataDir}`,
+    `[dev:worktree] App http://localhost:${config.ports.appPort}`,
+    `[dev:worktree] Server ${config.serverUrl}`,
+    `[dev:worktree] Host daemon http://127.0.0.1:${config.ports.hostDaemonPort}`,
+    `[dev:worktree] Dev-env http://127.0.0.1:${config.ports.devEnvPort}`,
+  ].join("\n");
+}
+
+function checkPortAvailable(check: PortAvailabilityCheck): Promise<void> {
+  return new Promise<void>((resolvePromise, rejectPromise) => {
+    const server = createServer();
+    const rejectWithPortError = (error: Error) => {
+      rejectPromise(
+        new Error(
+          `[dev:worktree] ${check.label} port ${check.port} is unavailable: ${error.message}`,
+        ),
+      );
+    };
+    server.once("error", rejectWithPortError);
+    server.listen(check.port, LOOPBACK_HOST, () => {
+      server.removeListener("error", rejectWithPortError);
+      server.close((error) => {
+        if (error) {
+          rejectPromise(error);
+          return;
+        }
+        resolvePromise();
+      });
+    });
+  });
+}
+
+async function assertPortsAvailable(
+  config: WorktreeDevInstanceConfig,
+): Promise<void> {
+  const checks: PortAvailabilityCheck[] = [
+    { label: "app", port: config.ports.appPort },
+    { label: "server", port: config.ports.serverPort },
+    { label: "host-daemon", port: config.ports.hostDaemonPort },
+    { label: "dev-env", port: config.ports.devEnvPort },
+  ];
+  await Promise.all(checks.map(checkPortAvailable));
+}
+
+async function resolveExistingRepoRoot(): Promise<string> {
+  await access(repoRoot);
+  return repoRoot;
+}
+
+export async function main(): Promise<void> {
+  const resolvedRepoRoot = await resolveExistingRepoRoot();
+  const config = resolveCurrentWorktreeDevInstanceConfig(resolvedRepoRoot);
+  const migration = await migrateLegacyDevData({
+    config,
+    output: process.stdout,
+  });
+  if (migration.skippedReason === "legacy-dev-process-running") {
+    throw new Error(
+      "[dev:worktree] Legacy ~/.bb-dev data was found, but an old dev server or host-daemon is still running. Stop the old dev process and rerun pnpm dev to migrate it.",
+    );
+  }
+  await assertPortsAvailable(config);
+  process.stdout.write(`${formatConfig(config)}\n`);
+
+  const turboCommand = createDevTurboCommand();
+  process.exitCode = await runScriptProcess({
+    args: turboCommand.args,
+    command: turboCommand.command,
+    cwd: config.repoRoot,
+    env: toWorktreeDevProcessEnv({
+      baseEnv: process.env,
+      config,
+    }),
+    stdio: "inherit",
+  });
+}
+
+if (
+  process.argv[1] != null &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  void main().catch((error) => {
+    const message =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}

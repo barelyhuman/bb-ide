@@ -1,11 +1,16 @@
 import os from "node:os";
-import path from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ensureSafeTargets,
   renderHelpText,
   resolveResetTargets,
 } from "../src/commands/reset-bb-data.js";
+import { resolveCurrentWorktreeDevInstanceConfig } from "../src/lib/worktree-dev-instance.js";
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(testDir, "..", "..", "..");
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -21,8 +26,20 @@ describe("reset-bb-data", () => {
     vi.stubEnv("NODE_ENV", "development");
 
     expect(resolveResetTargets(new Set())).toEqual([
-      path.join(os.homedir(), ".bb-dev"),
+      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
     ]);
+  });
+
+  it("selects prod and the current checkout instance for --all", () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    const targets = resolveResetTargets(new Set(["--all"]));
+
+    expect(targets).toEqual([
+      join(os.homedir(), ".bb"),
+      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
+    ]);
+    expect(targets).not.toContain(join(os.homedir(), ".bb-dev"));
   });
 
   it("lets BB_DATA_DIR override the single reset target", () => {
@@ -30,7 +47,7 @@ describe("reset-bb-data", () => {
     vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
 
     expect(resolveResetTargets(new Set())).toEqual([
-      path.join(os.homedir(), "custom-bb"),
+      join(os.homedir(), "custom-bb"),
     ]);
   });
 
@@ -42,7 +59,7 @@ describe("reset-bb-data", () => {
 
   it("rejects unsafe targets like the homedir", () => {
     expect(() => ensureSafeTargets([os.homedir()])).toThrow(
-      `Refusing to remove unsafe path: ${path.resolve(os.homedir())}`,
+      `Refusing to remove unsafe path: ${resolve(os.homedir())}`,
     );
   });
 
