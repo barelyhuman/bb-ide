@@ -15,8 +15,6 @@ export { commonConfig };
 const rawServerConfig = envsafe({
   BB_HOST_DAEMON_PORT: port({
     desc: "Port the host daemon listens on for local API requests",
-    default: DEFAULTS.hostDaemonPort.prod,
-    devDefault: DEFAULTS.hostDaemonPort.dev,
   }),
   BB_APP_VERSION: str({
     desc: "Version of the running bb-app package. The bb-app launcher sets this from packages/bb-app/package.json; defaults to a sentinel for dev/source runs.",

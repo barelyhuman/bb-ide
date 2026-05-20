@@ -494,8 +494,8 @@ Status: passed
 
 Validated:
 
-- Replayed known bad Claude thread `thr_m22cr9ggq7` from `~/.bb-dev/bb.db` through the server timeline builder. The rendered timeline had 13 rows, 6 `Unhandled Claude Code event` entries, and 0 such entries in the trailing 30 rendered lines.
-- Spot-checked all 13 unarchived development threads in `~/.bb-dev/bb.db` through `buildThreadTimeline`; 0 failed to project.
+- Replayed known bad Claude thread `thr_m22cr9ggq7` from the active dev database (`<dev-data-dir>/bb.db`) through the server timeline builder. The rendered timeline had 13 rows, 6 `Unhandled Claude Code event` entries, and 0 such entries in the trailing 30 rendered lines.
+- Spot-checked all 13 unarchived development threads in the active dev database (`<dev-data-dir>/bb.db`) through `buildThreadTimeline`; 0 failed to project.
 - Re-ran malformed turn-scope projection coverage with `pnpm exec turbo run test --filter=@bb/core-ui -- --run test/to-view-messages.turn-lifecycle.test.ts`; 9 tests passed.
 
 Notes:

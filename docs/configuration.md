@@ -86,9 +86,10 @@ npx bb-app --data-dir ~/.bb-test --server-port 48886 --host-daemon-port 48887
 The data directory is the root directory for all bb-managed state: the SQLite
 database, logs, host identity, and thread storage. It defaults to `~/.bb/` for
 the packaged app. The `pnpm dev` source launcher derives an isolated data
-directory under `~/.bb-dev/<checkout-instance>/` from the checkout path. Use `--data-dir`
-to point packaged-app instances at different data directories for fully
-isolated environments.
+directory under `~/.bb-dev/<checkout-instance>/` from the checkout path. The
+checkout instance id is the sanitized path to the checkout, relative to your
+home directory, plus a short hash suffix. Use `--data-dir` to point packaged-app
+instances at different data directories for fully isolated environments.
 
 If the default ports are already in use, set explicit ports before starting:
 
@@ -118,6 +119,11 @@ migrated into the current checkout's instance directory. The migration leaves
 top-level `worktrees/`, lock files, and PID files in place, and it refuses to
 run while an old dev server or host daemon is still running. `pnpm start` loads
 `.env`, `.env.local`, `.env.production`, and `.env.production.local`.
+
+Production startup from source goes through the packaged launcher path:
+`pnpm start` runs `packages/bb-app/dist/bb-app.js`, and
+`pnpm start:host-daemon` runs `packages/bb-app/dist/bb-app.js host-daemon`.
+Source-only scripts do not own production ports or data-dir defaults.
 
 Source checkout commands such as `pnpm bb`, `pnpm bb:dev`, and `pnpm reset`
 are thin wrappers around `@bb/scripts`. Those wrappers force `NODE_ENV` to the

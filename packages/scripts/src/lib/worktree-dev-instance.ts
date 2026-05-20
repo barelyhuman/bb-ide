@@ -9,7 +9,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 
 interface WorktreeDevPortSet {
   appPort: number;
@@ -30,11 +30,6 @@ export interface WorktreeDevInstanceConfig {
 interface ResolveWorktreeDevInstanceConfigArgs {
   homeDir: string;
   repoRoot: string;
-}
-
-interface ManagedWorktreePathParts {
-  environmentId: string;
-  repoName: string;
 }
 
 interface WorktreeDevProcessEnvArgs {
@@ -109,36 +104,30 @@ function sanitizeInstanceLabel(value: string): string {
   const sanitized = value
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
+    .replace(/^[._-]+|[._-]+$/gu, "");
   return sanitized.length > 0 ? sanitized : "worktree";
 }
 
-function findManagedWorktreePathParts(
-  repoRootPath: string,
-): ManagedWorktreePathParts | null {
-  const segments = repoRootPath.split(/[\\/]+/u).filter(Boolean);
-  for (let index = segments.length - 3; index >= 0; index -= 1) {
-    const environmentId = segments[index + 1];
-    const repoName = segments[index + 2];
-    if (
-      segments[index] === "worktrees" &&
-      environmentId?.startsWith("env_") &&
-      repoName
-    ) {
-      return { environmentId, repoName };
-    }
+function resolveRepoRootLabel(
+  args: ResolveWorktreeDevInstanceConfigArgs,
+): string {
+  const homeRelativePath = relative(args.homeDir, args.repoRoot);
+  if (
+    homeRelativePath.length > 0 &&
+    !homeRelativePath.startsWith("../") &&
+    !homeRelativePath.startsWith("..\\") &&
+    homeRelativePath !== ".." &&
+    !isAbsolute(homeRelativePath)
+  ) {
+    return homeRelativePath;
   }
 
-  return null;
+  return args.repoRoot;
 }
 
-function resolveInstanceId(repoRootPath: string): string {
-  const hash = createRepoRootHash(repoRootPath);
-  const managedWorktree = findManagedWorktreePathParts(repoRootPath);
-  const label =
-    managedWorktree === null
-      ? basename(repoRootPath)
-      : `${managedWorktree.repoName}-${managedWorktree.environmentId}`;
+function resolveInstanceId(args: ResolveWorktreeDevInstanceConfigArgs): string {
+  const hash = createRepoRootHash(args.repoRoot);
+  const label = resolveRepoRootLabel(args);
   return `${sanitizeInstanceLabel(label)}-${hash.slice(0, WORKTREE_DEV_HASH_LENGTH)}`;
 }
 
@@ -160,7 +149,7 @@ function resolvePorts(repoRootPath: string): WorktreeDevPortSet {
 export function resolveWorktreeDevInstanceConfig(
   args: ResolveWorktreeDevInstanceConfigArgs,
 ): WorktreeDevInstanceConfig {
-  const instanceId = resolveInstanceId(args.repoRoot);
+  const instanceId = resolveInstanceId(args);
   const dataDir = join(args.homeDir, WORKTREE_DEV_DATA_ROOT_DIR, instanceId);
   const ports = resolvePorts(args.repoRoot);
   const serverUrl = `http://localhost:${ports.serverPort}`;

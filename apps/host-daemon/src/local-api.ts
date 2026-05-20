@@ -40,8 +40,8 @@ export interface StartLocalApiServerOptions {
    * daemon doesn't need to depend on server config). Used to build the CORS
    * allowlist. */
   serverPort: number;
-  /** Vite dev port for the BB app frontend; allowed origin for CORS. */
-  devAppPort: number;
+  /** Vite dev port for the BB app frontend; allowed origin for CORS when set. */
+  devAppPort?: number;
   /** Optional public app origin (e.g. `https://app.example.com`); allowed
    * origin for CORS when the frontend is served from a non-localhost domain. */
   appUrl?: string;

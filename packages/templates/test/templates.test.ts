@@ -240,6 +240,7 @@ describe("@bb/templates", () => {
 
     expect(rendered).toContain("Manager templates");
     expect(rendered).toContain("<bb-data-dir>/manager-templates/");
+    expect(rendered).toContain("$BB_DATA_DIR/manager-templates/");
     expect(rendered).toContain('DATA_DIR="${BB_DATA_DIR:-$HOME/.bb}"');
     expect(rendered).not.toContain("~/.bb/manager-templates");
     expect(rendered).not.toContain("~/.bb-dev/manager-templates");

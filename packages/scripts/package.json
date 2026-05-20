@@ -29,16 +29,6 @@
       "types": "./src/commands/run-host-daemon.ts",
       "import": "./dist/commands/run-host-daemon.js"
     },
-    "./start-bb": {
-      "source": "./src/commands/start-bb.ts",
-      "types": "./src/commands/start-bb.ts",
-      "import": "./dist/commands/start-bb.js"
-    },
-    "./start-host-daemon": {
-      "source": "./src/commands/start-host-daemon.ts",
-      "types": "./src/commands/start-host-daemon.ts",
-      "import": "./dist/commands/start-host-daemon.js"
-    },
     "./reset-bb-data": {
       "source": "./src/commands/reset-bb-data.ts",
       "types": "./src/commands/reset-bb-data.ts",
@@ -65,9 +55,7 @@
     "dev:restart-server": "node dist/commands/request-dev-restart.js server",
     "dev:worktree": "node dist/commands/run-worktree-dev.js",
     "reset": "node dist/commands/reset-bb-data.js",
-    "codex:archive-tmp-bb-sessions": "node dist/commands/archive-codex-tmp-bb-sessions.js",
-    "start": "node dist/commands/start-bb.js",
-    "start:host-daemon": "node dist/commands/start-host-daemon.js"
+    "codex:archive-tmp-bb-sessions": "node dist/commands/archive-codex-tmp-bb-sessions.js"
   },
   "dependencies": {
     "@bb/config": "workspace:*",

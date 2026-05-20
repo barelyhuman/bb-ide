@@ -71,7 +71,7 @@ describe("run-worktree-dev", () => {
     const config = resolveWorktreeDevInstanceConfig({ homeDir, repoRoot });
 
     expect(config.instanceId).toBe(
-      `bb-env_q7e5i54kxt-${hash.slice(0, HASH_LENGTH)}`,
+      `bb-dev-worktrees-env_q7e5i54kxt-bb-${hash.slice(0, HASH_LENGTH)}`,
     );
     expect(config.dataDir).toBe(
       path.join(homeDir, ".bb-dev", config.instanceId),
@@ -89,15 +89,15 @@ describe("run-worktree-dev", () => {
     expect(Object.values(config.ports)).not.toContain(38887);
   });
 
-  it("uses the checkout directory name for non-managed worktree paths", () => {
+  it("uses the home-relative checkout path for non-managed worktree paths", () => {
     const homeDir = "/Users/tester";
-    const repoRoot = "/Users/tester/src/bb-feature-copy";
+    const repoRoot = "/Users/tester/src/work/bb-feature-copy";
     const hash = repoRootHash(repoRoot);
 
     const config = resolveWorktreeDevInstanceConfig({ homeDir, repoRoot });
 
     expect(config.instanceId).toBe(
-      `bb-feature-copy-${hash.slice(0, HASH_LENGTH)}`,
+      `src-work-bb-feature-copy-${hash.slice(0, HASH_LENGTH)}`,
     );
   });
 

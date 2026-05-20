@@ -41,16 +41,17 @@
 - Don't assume — instrument and observe. Add logging, read logs, inspect the database, repeat.
 - Prefer server API, CLI, direct SQL queries, or log files over browser-based debugging. Use the browser only for browser-specific issues.
 
-  | -           | Dev            | Prod           |
-  | ----------- | -------------- | -------------- |
-  | Frontend    | `:5173`        | `:38886`       |
-  | Server API  | `:3334`        | `:38886`       |
-  | Host daemon | `:3002`        | `:38887`       |
-  | Data dir    | `~/.bb-dev/`   | `~/.bb/`       |
-  | Database    | `<data>/bb.db` | `<data>/bb.db` |
-  | Logs        | `<data>/logs/` | `<data>/logs/` |
+  | -           | Dev                                        | Prod           |
+  | ----------- | ------------------------------------------ | -------------- |
+  | Frontend    | printed by `pnpm dev`                      | `:38886`       |
+  | Server API  | printed by `pnpm dev`                      | `:38886`       |
+  | Host daemon | printed by `pnpm dev`                      | `:38887`       |
+  | Data dir    | `~/.bb-dev/<checkout-instance>/`           | `~/.bb/`       |
+  | Database    | `<data>/bb.db`                             | `<data>/bb.db` |
+  | Logs        | `<data>/logs/`                             | `<data>/logs/` |
 
-- Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly: `sqlite3 ~/.bb-dev/bb.db "SELECT * FROM threads WHERE id = 'thr_xxx';"`.
+- `pnpm dev` derives deterministic high ports and the checkout-scoped data dir from the checkout path, then prints them at startup. The checkout instance id is the sanitized home-relative checkout path plus a short hash suffix. Do not assume the old flat dev ports.
+- Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly against the active data dir: `sqlite3 <data>/bb.db "SELECT * FROM threads WHERE id = 'thr_xxx';"`.
 - API routes are under `/api/v1/` — e.g. `GET /api/v1/threads/:id`. `curl` the server directly to isolate frontend vs server bugs.
 - Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source: `pnpm bb:dev`.
 

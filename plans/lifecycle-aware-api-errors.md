@@ -204,9 +204,9 @@ Fix all three:
 - `pnpm exec turbo run test --filter=@bb/server --filter=@bb/app --force > /tmp/lifecycle-errors-test.log 2>&1` then read the log (per AGENTS.md testing guidance).
 - New server test per affected route asserting the `code` + `details.reason` for each lifecycle branch. Real DB via `createConnection(":memory:") + migrate(db)`; no mocked DBs.
 
-**Manual smoke** (each via dev server on `:5173` with `~/.bb-dev/bb.db`):
+**Manual smoke** (each via the app URL and data dir printed by `pnpm dev`):
 
-1. Create a managed-worktree thread; archive it; wait for cleanup sweep to destroy the env (`sqlite3 ~/.bb-dev/bb.db "SELECT id, status FROM environments WHERE id = '...';"` to confirm `status = "destroyed"`). Navigate to the archived thread's diff panel. **Expected:** state-specific message, not `HTTP 409`.
+1. Create a managed-worktree thread; archive it; wait for cleanup sweep to destroy the env (`sqlite3 <data>/bb.db "SELECT id, status FROM environments WHERE id = '...';"` to confirm `status = "destroyed"`). Navigate to the archived thread's diff panel. **Expected:** state-specific message, not `HTTP 409`.
 2. While an environment is still provisioning, send a message to its thread. **Expected:** banner says "still provisioning," not a generic 409 toast.
 3. Suspend the host (or simulate it via DB write). Try to send a message. **Expected:** "Host is paused" — distinct from "Host lost connection."
 4. Delete a project (or mark `project_operation { kind: "delete", state: "pending" }`). Hit any project-scoped route. **Expected:** "Project is being deleted," not "project not found."

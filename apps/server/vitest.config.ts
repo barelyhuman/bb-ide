@@ -15,5 +15,10 @@ export default defineConfig({
     name: "@bb/server",
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
+    env: {
+      BB_DATA_DIR: "/tmp/bb-server-test",
+      BB_SERVER_PORT: "49161",
+      BB_HOST_DAEMON_PORT: "49162",
+    },
   },
 });

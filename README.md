@@ -62,8 +62,10 @@ That starts the Vite app and proxies API and WebSocket traffic to a separate
 dev server. The launcher prints the actual ports at startup. Each checkout gets
 a data directory under
 `~/.bb-dev/<checkout-instance>/` and deterministic high ports derived from the
-checkout path, so separate worktrees can run alongside each other and the
-packaged `npx bb-app@latest` instance. `pnpm dev:worktree` is kept as an
+checkout path. The checkout instance id is the sanitized path to the checkout,
+relative to your home directory, plus a short hash suffix. Separate worktrees
+can run alongside each other and the packaged `npx bb-app@latest` instance.
+`pnpm dev:worktree` is kept as an
 explicit alias for the same isolated launcher. On first run, legacy flat
 `~/.bb-dev` state is migrated into the current checkout's instance directory
 when no old dev server or host daemon is still running.

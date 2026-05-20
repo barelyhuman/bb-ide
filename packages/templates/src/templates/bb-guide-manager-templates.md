@@ -26,9 +26,10 @@ Directory layout:
     STATUS.html
 ```
 
-In this guide, `<bb-data-dir>` is your bb data directory. It defaults to
-`~/.bb` for packaged installs (`npx bb-app@latest`) and `~/.bb-dev` for source
-development. Override it with the `BB_DATA_DIR` env var.
+In this guide, `<bb-data-dir>` is your bb data directory. Packaged installs
+default to `$HOME/.bb`. In source development, `pnpm dev` sets `BB_DATA_DIR`
+to the current checkout's data directory; use `$BB_DATA_DIR/manager-templates/`.
+Override packaged installs with the `BB_DATA_DIR` env var.
 
 `active` is a plain text file. bb reads the first line, trims it, and uses it
 as the template name. Missing or empty `active` means `default`. An invalid

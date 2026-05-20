@@ -2,23 +2,19 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
 } from "@bb/host-daemon-contract";
-import {
-  maybeAddAutoJoinEnv,
-  resolveDefaultDataDirName,
-  resolveHostDaemonRuntimeEnvironment,
-  resolveHostDaemonProcessCommand,
-} from "../src/commands/run-host-daemon.js";
+import type * as RunHostDaemonModule from "../src/commands/run-host-daemon.js";
 import type { HostDaemonRuntimeEnvironment } from "../src/lib/host-daemon-runtime.js";
 import { resolveCurrentWorktreeDevInstanceConfig } from "../src/lib/worktree-dev-instance.js";
 
 const tempDirs: string[] = [];
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testDir, "..", "..", "..");
+let runHostDaemon: typeof RunHostDaemonModule;
 
 type TestFetchInput = RequestInfo | URL;
 
@@ -55,6 +51,14 @@ async function makeTempDir(prefix: string): Promise<string> {
   return dir;
 }
 
+beforeEach(async () => {
+  vi.resetModules();
+  vi.stubEnv("BB_DATA_DIR", "/tmp/bb-run-host-daemon-test");
+  vi.stubEnv("BB_SERVER_URL", "http://127.0.0.1:3334");
+  vi.stubEnv("BB_HOST_DAEMON_PORT", "3002");
+  runHostDaemon = await import("../src/commands/run-host-daemon.js");
+});
+
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -67,12 +71,12 @@ afterEach(async () => {
 
 describe("run-host-daemon auto join", () => {
   it("resolves the default data dir by mode", () => {
-    expect(resolveDefaultDataDirName("dev")).toBe(".bb-dev");
-    expect(resolveDefaultDataDirName("prod")).toBe(".bb");
+    expect(runHostDaemon.resolveDefaultDataDirName("dev")).toBe(".bb-dev");
+    expect(runHostDaemon.resolveDefaultDataDirName("prod")).toBe(".bb");
   });
 
   it("runs the daemon from source in dev and from dist in prod", () => {
-    expect(resolveHostDaemonProcessCommand("dev")).toEqual({
+    expect(runHostDaemon.resolveHostDaemonProcessCommand("dev")).toEqual({
       args: [
         "--conditions=source",
         "--import",
@@ -81,7 +85,7 @@ describe("run-host-daemon auto join", () => {
       ],
       command: process.execPath,
     });
-    expect(resolveHostDaemonProcessCommand("prod")).toEqual({
+    expect(runHostDaemon.resolveHostDaemonProcessCommand("prod")).toEqual({
       args: ["apps/host-daemon/dist/index.js"],
       command: process.execPath,
     });
@@ -92,7 +96,7 @@ describe("run-host-daemon auto join", () => {
     vi.stubEnv("BB_SERVER_URL", undefined);
     const instanceConfig = resolveCurrentWorktreeDevInstanceConfig(repoRoot);
 
-    const env = resolveHostDaemonRuntimeEnvironment("dev");
+    const env = runHostDaemon.resolveHostDaemonRuntimeEnvironment("dev");
 
     expect(env.BB_DATA_DIR).toBe(
       path.join(instanceConfig.dataDir, "extra-host"),
@@ -105,7 +109,7 @@ describe("run-host-daemon auto join", () => {
     vi.stubEnv("BB_DATA_DIR", "~/bb-host-daemon-test");
     vi.stubEnv("BB_SERVER_URL", "http://127.0.0.1:19333");
 
-    const env = resolveHostDaemonRuntimeEnvironment("dev");
+    const env = runHostDaemon.resolveHostDaemonRuntimeEnvironment("dev");
 
     expect(env.BB_DATA_DIR).toBe(
       path.join(os.homedir(), "bb-host-daemon-test"),
@@ -118,7 +122,9 @@ describe("run-host-daemon auto join", () => {
     vi.stubEnv("BB_DATA_DIR", "~/bb-host-daemon-test");
     vi.stubEnv("BB_SERVER_URL", undefined);
 
-    expect(() => resolveHostDaemonRuntimeEnvironment("dev")).toThrow(
+    expect(() =>
+      runHostDaemon.resolveHostDaemonRuntimeEnvironment("dev"),
+    ).toThrow(
       "Dev host-daemon overrides must set both BB_DATA_DIR and BB_SERVER_URL, or neither.",
     );
   });
@@ -127,7 +133,9 @@ describe("run-host-daemon auto join", () => {
     vi.stubEnv("BB_DATA_DIR", undefined);
     vi.stubEnv("BB_SERVER_URL", "http://127.0.0.1:19333");
 
-    expect(() => resolveHostDaemonRuntimeEnvironment("dev")).toThrow(
+    expect(() =>
+      runHostDaemon.resolveHostDaemonRuntimeEnvironment("dev"),
+    ).toThrow(
       "Dev host-daemon overrides must set both BB_DATA_DIR and BB_SERVER_URL, or neither.",
     );
   });
@@ -146,7 +154,7 @@ describe("run-host-daemon auto join", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 
-    const env = await maybeAddAutoJoinEnv(
+    const env = await runHostDaemon.maybeAddAutoJoinEnv(
       createTestRuntimeEnv({ dataDir }),
       true,
     );
@@ -199,7 +207,7 @@ describe("run-host-daemon auto join", () => {
       },
     );
 
-    const env = await maybeAddAutoJoinEnv(
+    const env = await runHostDaemon.maybeAddAutoJoinEnv(
       createTestRuntimeEnv({ dataDir }),
       true,
     );
@@ -257,7 +265,7 @@ describe("run-host-daemon auto join", () => {
       },
     );
 
-    const env = await maybeAddAutoJoinEnv(
+    const env = await runHostDaemon.maybeAddAutoJoinEnv(
       createTestRuntimeEnv({ dataDir }),
       true,
     );
@@ -312,7 +320,7 @@ describe("run-host-daemon auto join", () => {
       },
     );
 
-    const env = await maybeAddAutoJoinEnv(
+    const env = await runHostDaemon.maybeAddAutoJoinEnv(
       createTestRuntimeEnv({
         dataDir,
         serverUrl: "https://bb.example.test",
@@ -351,7 +359,10 @@ describe("run-host-daemon auto join", () => {
     });
 
     await expect(
-      maybeAddAutoJoinEnv(createTestRuntimeEnv({ dataDir }), true),
+      runHostDaemon.maybeAddAutoJoinEnv(
+        createTestRuntimeEnv({ dataDir }),
+        true,
+      ),
     ).rejects.toThrow(
       "Failed to request host join material: 500 Internal Server Error - nope",
     );

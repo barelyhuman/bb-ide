@@ -6,6 +6,9 @@ import { devEnvConfig } from "../../packages/config/src/dev-env.js";
 import { serverPortConfig } from "../../packages/config/src/server-port.js";
 
 const appPort = devEnvConfig.BB_DEV_APP_PORT;
+if (appPort === undefined) {
+  throw new Error("BB_DEV_APP_PORT is required to run the app dev server");
+}
 const appHost =
   devEnvConfig.BB_DEV_APP_HOST === ""
     ? undefined

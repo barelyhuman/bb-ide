@@ -18,10 +18,8 @@ export interface BuildLocalAppOriginsArgs {
   /** Port the BB server binds on (also the prod-style frontend origin when the
    * server serves the bundle directly). */
   serverPort: number;
-  /** Vite dev-server port for `apps/app`. Always included; the helper has no
-   * way to know whether the runtime is in dev or prod. In prod the Vite
-   * server isn't running, so allowing its port has no practical effect. */
-  devAppPort: number;
+  /** Vite dev-server port for `apps/app`. Omitted in production launchers. */
+  devAppPort?: number;
   /** Public app URL when the frontend is served from a non-localhost origin
    * (e.g. a cloud-hosted deployment). Optional; an empty/invalid string is
    * silently skipped. */
@@ -38,7 +36,10 @@ export function buildLocalAppOrigins(
   args: BuildLocalAppOriginsArgs,
 ): string[] {
   const origins: string[] = [];
-  const ports = [args.serverPort, args.devAppPort].filter(isValidPort);
+  const ports = [args.serverPort];
+  if (args.devAppPort !== undefined && isValidPort(args.devAppPort)) {
+    ports.push(args.devAppPort);
+  }
   for (const host of LOCAL_HOSTS) {
     for (const port of ports) {
       origins.push(`http://${host}:${port}`);

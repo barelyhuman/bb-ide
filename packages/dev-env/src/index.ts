@@ -20,6 +20,11 @@ interface ShutdownArgs {
 
 type ShutdownSignal = "SIGINT" | "SIGTERM";
 
+const devEnvPort = devEnvConfig.BB_DEV_ENV_PORT;
+if (devEnvPort === undefined) {
+  throw new Error("BB_DEV_ENV_PORT is required to run the dev-env status API");
+}
+
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -39,7 +44,7 @@ async function startStatusServer(
       {
         fetch: app.fetch,
         hostname: "127.0.0.1",
-        port: devEnvConfig.BB_DEV_ENV_PORT,
+        port: devEnvPort,
       },
       () => resolveServer({ server: startedServer }),
     );
@@ -47,7 +52,7 @@ async function startStatusServer(
   });
 
   process.stdout.write(
-    `[dev-env] Status API listening at http://127.0.0.1:${devEnvConfig.BB_DEV_ENV_PORT}\n`,
+    `[dev-env] Status API listening at http://127.0.0.1:${devEnvPort}\n`,
   );
 
   return {

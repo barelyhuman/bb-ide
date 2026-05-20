@@ -423,6 +423,7 @@ describe("CLI command output contracts", () => {
     expect(output.trim().length).toBeGreaterThan(0);
     expect(output).toContain("Manager templates");
     expect(output).toContain("<bb-data-dir>/manager-templates/");
+    expect(output).toContain("$BB_DATA_DIR/manager-templates/");
     expect(output).toContain('DATA_DIR="${BB_DATA_DIR:-$HOME/.bb}"');
     expect(output).not.toContain("~/.bb/manager-templates");
     expect(output).not.toContain("~/.bb-dev/manager-templates");

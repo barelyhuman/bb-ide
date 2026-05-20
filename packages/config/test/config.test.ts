@@ -11,17 +11,26 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function stubServerRuntimeEnv(): void {
+  vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
+  vi.stubEnv("BB_SERVER_PORT", "4444");
+  vi.stubEnv("BB_HOST_DAEMON_PORT", "5555");
+}
+
+function stubHostDaemonRuntimeEnv(): void {
+  vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
+  vi.stubEnv("BB_SERVER_URL", "http://localhost:4444");
+  vi.stubEnv("BB_HOST_DAEMON_PORT", "5555");
+}
+
 describe("commonConfig", () => {
-  it("defaults BB_DATA_DIR to ~/.bb-dev and uses raw env names", async () => {
+  it("requires BB_DATA_DIR", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DATA_DIR", undefined);
-    vi.stubEnv("BB_LOG_LEVEL", undefined);
 
-    const { commonConfig } =
-      await importFresh<typeof import("../src/common.js")>("../src/common.js");
-
-    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb-dev"));
-    expect(commonConfig.BB_LOG_LEVEL).toBe("debug");
+    await expect(
+      importFresh<typeof import("../src/common.js")>("../src/common.js"),
+    ).rejects.toThrow(/BB_DATA_DIR/u);
   });
 
   it("expands home-directory overrides for BB_DATA_DIR", async () => {
@@ -88,10 +97,9 @@ describe("data-dir helpers", () => {
 });
 
 describe("consumer-specific config", () => {
-  it("builds server defaults from the shared data directory", async () => {
+  it("builds server config from explicit runtime env", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
-    vi.stubEnv("BB_SERVER_PORT", undefined);
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_DATABASE_URL", undefined);
     vi.stubEnv("BB_APP_URL", undefined);
     vi.stubEnv("BB_APP_VERSION", undefined);
@@ -105,7 +113,8 @@ describe("consumer-specific config", () => {
     const { serverConfig } =
       await importFresh<typeof import("../src/server.js")>("../src/server.js");
 
-    expect(serverConfig.BB_SERVER_PORT).toBe(3334);
+    expect(serverConfig.BB_SERVER_PORT).toBe(4444);
+    expect(serverConfig.BB_HOST_DAEMON_PORT).toBe(5555);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
     expect(serverConfig.BB_APP_URL).toBe("");
     expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
@@ -121,6 +130,7 @@ describe("consumer-specific config", () => {
 
   it("uses 0.0.0-dev as the default BB_APP_VERSION in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_APP_VERSION", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
@@ -132,6 +142,7 @@ describe("consumer-specific config", () => {
 
   it("honors an explicit BB_APP_VERSION env override", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_APP_VERSION", "0.1.2");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
@@ -144,13 +155,13 @@ describe("consumer-specific config", () => {
   it("lets tooling read the server port without validating unrelated server env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_EXTERNAL_URL", "not-a-url");
-    vi.stubEnv("BB_SERVER_PORT", undefined);
+    vi.stubEnv("BB_SERVER_PORT", "4444");
 
     const { serverPortConfig } = await importFresh<
       typeof import("../src/server-port.js")
     >("../src/server-port.js");
 
-    expect(serverPortConfig.BB_SERVER_PORT).toBe(3334);
+    expect(serverPortConfig.BB_SERVER_PORT).toBe(4444);
   });
 
   it("lets tooling read the database path without validating unrelated server env", async () => {
@@ -169,6 +180,7 @@ describe("consumer-specific config", () => {
 
   it("requires provider/model format for BB_INFERENCE", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    stubServerRuntimeEnv();
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("BB_INFERENCE", "gpt-4o-mini");
 
@@ -179,6 +191,7 @@ describe("consumer-specific config", () => {
 
   it("requires provider/model format for BB_TRANSCRIPTION", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    stubServerRuntimeEnv();
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("BB_TRANSCRIPTION", "gpt-4o-mini-transcribe");
 
@@ -189,6 +202,7 @@ describe("consumer-specific config", () => {
 
   it("parses feature flags from env", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", "true");
     vi.stubEnv("BB_FF_TERMINALS", "true");
 
@@ -201,6 +215,7 @@ describe("consumer-specific config", () => {
 
   it("rejects invalid feature flag booleans in server config", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", "not-bool");
 
     await expect(
@@ -210,6 +225,7 @@ describe("consumer-specific config", () => {
 
   it("rejects invalid terminal feature flag booleans in server config", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_FF_TERMINALS", "not-bool");
 
     await expect(
@@ -219,6 +235,7 @@ describe("consumer-specific config", () => {
 
   it("requires a valid server URL for the daemon and CLI", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    stubHostDaemonRuntimeEnv();
     vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
 
     const { hostDaemonConfig } = await importFresh<
@@ -236,16 +253,14 @@ describe("consumer-specific config", () => {
     ).rejects.toThrow(/BB_SERVER_URL/u);
   });
 
-  it("uses development defaults for the CLI in development mode", async () => {
+  it("requires CLI connection env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_URL", undefined);
     vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
 
-    const { cliConfig } =
-      await importFresh<typeof import("../src/cli.js")>("../src/cli.js");
-
-    expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:3334");
-    expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3002);
+    await expect(
+      importFresh<typeof import("../src/cli.js")>("../src/cli.js"),
+    ).rejects.toThrow(/BB_SERVER_URL/u);
   });
 
   it("lets explicit CLI env overrides win over NODE_ENV-selected defaults", async () => {
@@ -262,6 +277,7 @@ describe("consumer-specific config", () => {
 
   it("allows app and external URLs to be omitted in production server config", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_APP_URL", undefined);
     vi.stubEnv("BB_EXTERNAL_URL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
@@ -275,6 +291,7 @@ describe("consumer-specific config", () => {
 
   it("validates app and external URLs independently", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    stubServerRuntimeEnv();
     vi.stubEnv("BB_APP_URL", "https://app.example.test");
     vi.stubEnv("BB_EXTERNAL_URL", "https://external.example.test");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
@@ -300,6 +317,8 @@ describe("consumer-specific config", () => {
   it("reads dev app host from its dedicated config scope", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DEV_APP_HOST", "0.0.0.0");
+    vi.stubEnv("BB_DEV_APP_PORT", undefined);
+    vi.stubEnv("BB_DEV_ENV_PORT", undefined);
 
     const { devEnvConfig } =
       await importFresh<typeof import("../src/dev-env.js")>(
@@ -307,6 +326,8 @@ describe("consumer-specific config", () => {
       );
 
     expect(devEnvConfig.BB_DEV_APP_HOST).toBe("0.0.0.0");
+    expect(devEnvConfig.BB_DEV_APP_PORT).toBeUndefined();
+    expect(devEnvConfig.BB_DEV_ENV_PORT).toBeUndefined();
   });
 
   it("parses optional host-daemon entrypoint env vars in one place", async () => {
