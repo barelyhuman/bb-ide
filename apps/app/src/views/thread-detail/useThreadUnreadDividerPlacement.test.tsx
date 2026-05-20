@@ -353,6 +353,83 @@ describe("useThreadUnreadDividerPlacement", () => {
     }
   });
 
+  it("does not place the divider above a user-authored accepted steer", async () => {
+    const unreadThread: UnreadDividerThreadState = {
+      id: "thread-1",
+      lastReadAt: 1_500,
+      latestAttentionAt: 3_000,
+      type: "standard",
+    };
+    const timelineRows = [
+      conversationRow({
+        id: "already-read-row",
+        sourceSeqStart: 1_000,
+        text: "Already-read context",
+      }),
+      conversationRow({
+        id: "accepted-steer-row",
+        role: "user",
+        sourceSeqStart: 2_000,
+        text: "My steer",
+        turnRequest: { kind: "steer", status: "accepted" },
+      }),
+      conversationRow({
+        id: "new-assistant-row",
+        sourceSeqStart: 3_000,
+        text: "Incoming update",
+      }),
+    ];
+
+    render(
+      <ThreadUnreadTimelineHarness
+        thread={unreadThread}
+        timelineRows={timelineRows}
+      />,
+    );
+
+    const divider = await screen.findByRole("separator", {
+      name: "New messages",
+    });
+    expectElementBefore(screen.getByText("My steer"), divider);
+    expectElementBefore(divider, screen.getByText("Incoming update"));
+  });
+
+  it("places the divider above an agent-initiated user row", async () => {
+    const unreadThread: UnreadDividerThreadState = {
+      id: "thread-1",
+      lastReadAt: 1_500,
+      latestAttentionAt: 2_000,
+      type: "standard",
+    };
+    const timelineRows = [
+      conversationRow({
+        id: "already-read-row",
+        sourceSeqStart: 1_000,
+        text: "Already-read context",
+      }),
+      conversationRow({
+        id: "agent-initiated-user-row",
+        initiator: "agent",
+        role: "user",
+        sourceSeqStart: 2_000,
+        text: "Agent handoff",
+        turnRequest: { kind: "message", status: "accepted" },
+      }),
+    ];
+
+    render(
+      <ThreadUnreadTimelineHarness
+        thread={unreadThread}
+        timelineRows={timelineRows}
+      />,
+    );
+
+    const divider = await screen.findByRole("separator", {
+      name: "New messages",
+    });
+    expectElementBefore(divider, screen.getByText("Agent handoff"));
+  });
+
   it("re-arms when a mounted read manager thread gets a new attention epoch", async () => {
     const readThread: UnreadDividerThreadState = {
       id: "thread-1",

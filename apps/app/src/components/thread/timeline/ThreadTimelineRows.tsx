@@ -174,6 +174,11 @@ interface FindUnreadDividerIndexArgs {
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
+interface IsUnreadDividerCandidateAfterCutoffArgs {
+  cutoffAt: number;
+  row: ThreadTimelineViewRow;
+}
+
 interface RequestLazyTurnRowsArgs {
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   row: TimelineViewTurnRow;
@@ -949,12 +954,34 @@ function findUnreadDividerIndex({
     case "before-first":
       return rows.length > 0 ? 0 : -1;
     case "after-cutoff":
-      return rows.findIndex(
-        (row) => row.createdAt > unreadDividerPlacement.cutoffAt,
+      return rows.findIndex((row) =>
+        isUnreadDividerCandidateAfterCutoff({
+          cutoffAt: unreadDividerPlacement.cutoffAt,
+          row,
+        }),
       );
     default:
       assertNever(unreadDividerPlacement);
   }
+}
+
+function isUserAuthoredConversationRow(row: ThreadTimelineViewRow): boolean {
+  return (
+    row.kind === "conversation" &&
+    row.role === "user" &&
+    row.initiator === "user"
+  );
+}
+
+function isUnreadDividerCandidateAfterCutoff({
+  cutoffAt,
+  row,
+}: IsUnreadDividerCandidateAfterCutoffArgs): boolean {
+  if (row.createdAt <= cutoffAt) {
+    return false;
+  }
+
+  return !isUserAuthoredConversationRow(row);
 }
 
 function buildTimelineRowsListItems({
