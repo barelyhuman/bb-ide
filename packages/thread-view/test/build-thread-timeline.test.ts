@@ -1163,6 +1163,27 @@ describe("buildThreadTimelineFromEvents", () => {
     expect(JSON.stringify(rows)).not.toContain("Matched tools: TodoWrite");
   });
 
+  it("suppresses the generic AskUserQuestion tool row in favor of the question row", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 0 }),
+      toolCallItemEvent({
+        seq: 1,
+        tool: "AskUserQuestion",
+        toolArgs: { questions: [{ question: "Which path?" }] },
+        type: "item/started",
+      }),
+      toolCallItemEvent({
+        result: "ok",
+        seq: 2,
+        tool: "AskUserQuestion",
+        toolArgs: { questions: [{ question: "Which path?" }] },
+        type: "item/completed",
+      }),
+    ]);
+
+    expect(collectToolRows(rows)).toEqual([]);
+  });
+
   it("extracts context-window usage from ordered events", () => {
     expect(
       buildContextWindowUsage([

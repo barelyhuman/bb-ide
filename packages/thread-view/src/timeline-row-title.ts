@@ -868,46 +868,90 @@ function mapApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
   }
 }
 
-function firstQuestionPrompt(row: TimelineQuestionViewWorkRow): string | null {
-  return row.questions[0]?.prompt ?? null;
+function singleQuestion(
+  row: TimelineQuestionViewWorkRow,
+): TimelineQuestionViewWorkRow["questions"][number] | null {
+  return row.questions.length === 1 ? (row.questions[0] ?? null) : null;
+}
+
+/**
+ * Selected option labels (plus any free text) for an answered single question,
+ * so the title can read "Answered <prompt> — <answer>". Null when there's no
+ * recorded answer.
+ */
+function singleQuestionAnswerSummary(
+  row: TimelineQuestionViewWorkRow,
+  question: TimelineQuestionViewWorkRow["questions"][number],
+): string | null {
+  const answer = row.answers?.[question.id];
+  if (!answer) {
+    return null;
+  }
+  const parts = answer.selected.map((value) => {
+    const option = question.options?.find(
+      (candidate) => candidate.value === value,
+    );
+    return option?.label ?? value;
+  });
+  if (answer.freeText) {
+    parts.push(answer.freeText);
+  }
+  const text = parts.join(", ");
+  return text.length > 0 ? text : null;
 }
 
 function mapQuestionTitle(row: TimelineQuestionViewWorkRow): TimelineTitle {
-  const prompt = firstQuestionPrompt(row);
-  const promptSegment = prompt
-    ? segment(prompt, { em: true, truncate: true })
-    : null;
+  const question = singleQuestion(row);
+  // Single question → surface the prompt (and answer once given). Multiple →
+  // a per-prompt title would only show the first and read as if it were the
+  // whole interaction, so summarize the count instead.
+  const subject = question
+    ? segment(question.prompt, { em: true, truncate: true })
+    : segment(`${row.questions.length} questions`, { em: true });
+
   switch (row.lifecycle) {
     case "pending":
       return makeTitle({
-        segments: filterNull([
-          segment("Waiting for answer", { shimmer: true }),
-          promptSegment,
-        ]),
+        segments: [
+          segment(question ? "Waiting for answer" : "Waiting for answers to", {
+            shimmer: true,
+          }),
+          subject,
+        ],
       });
     case "resolving":
       return makeTitle({
+        segments: [
+          segment(question ? "Delivering answer" : "Delivering answers to", {
+            shimmer: true,
+          }),
+          subject,
+        ],
+      });
+    case "answered": {
+      const answerSummary = question
+        ? singleQuestionAnswerSummary(row, question)
+        : null;
+      return makeTitle({
         segments: filterNull([
-          segment("Delivering answer", { shimmer: true }),
-          promptSegment,
+          segment("Answered"),
+          subject,
+          answerSummary ? segment(`— ${answerSummary}`, { truncate: true }) : null,
         ]),
       });
-    case "answered":
-      return makeTitle({
-        segments: filterNull([segment("Answered"), promptSegment]),
-      });
+    }
     case "interrupted":
       // Mirror the command/tool/web-search interrupted pattern: a past-tense
       // verb plus a status decoration. Keeps the title shape consistent with
       // peer rows; the longer statusReason lives on the row itself if a
       // reader wants the detail.
       return makeTitle({
-        segments: filterNull([segment("Asked"), promptSegment]),
+        segments: [segment("Asked"), subject],
         decorations: [statusDecoration("interrupted", null)],
       });
     case "expired":
       return makeTitle({
-        segments: filterNull([segment("Asked"), promptSegment]),
+        segments: [segment("Asked"), subject],
         decorations: [statusDecoration("expired", null)],
       });
     default:

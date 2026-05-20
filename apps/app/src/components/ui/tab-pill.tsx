@@ -13,6 +13,8 @@ export interface TabPillCloseAction {
 export interface TabPillProps {
   label: string;
   secondaryLabel?: string | null;
+  /** Extra classes for the label text (e.g. `line-through` for a done tab). */
+  labelClassName?: string;
   title: string;
   isActive: boolean;
   onSelect: () => void;
@@ -23,6 +25,7 @@ export interface TabPillProps {
 export function TabPill({
   label,
   secondaryLabel = null,
+  labelClassName,
   title,
   isActive,
   onSelect,
@@ -49,7 +52,9 @@ export function TabPill({
           isClosable ? "pr-1" : "rounded-r-md pr-2",
         )}
       >
-        <span className={cn("truncate", labelMaxWidthClass)}>{label}</span>
+        <span className={cn("truncate", labelMaxWidthClass, labelClassName)}>
+          {label}
+        </span>
         {secondaryLabel ? (
           <span className="ml-1 shrink-0 text-muted-foreground">
             {secondaryLabel}

@@ -4,6 +4,11 @@ const SUPPRESSED_TIMELINE_TOOL_NAMES = new Set([
   "TodoRead",
   "TodoWrite",
   "ToolSearch",
+  // AskUserQuestion is fully represented by its dedicated user-question
+  // lifecycle row. Keeping the generic tool-call row too produces a confusing
+  // duplicate ("Running tool: AskUserQuestion …" plus "Waiting for approval"
+  // alongside the question's own "Waiting for answer" row).
+  "AskUserQuestion",
 ]);
 
 export function shouldSuppressLowValueToolCall(decoded: ThreadEvent): boolean {

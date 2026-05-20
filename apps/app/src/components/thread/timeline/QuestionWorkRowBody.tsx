@@ -4,7 +4,6 @@ import type {
 } from "@bb/domain";
 import type { TimelineQuestionViewWorkRow } from "@bb/thread-view";
 import { formatPendingInteractionUserQuestionOptionLabel } from "@bb/core-ui";
-import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 
 interface QuestionWorkRowBodyProps {
   row: TimelineQuestionViewWorkRow;
@@ -25,7 +24,7 @@ export function QuestionWorkRowBody({ row }: QuestionWorkRowBodyProps) {
     return null;
   }
   return (
-    <DetailCard labelWidth="120px">
+    <div className="space-y-2 text-xs leading-snug">
       {row.questions.map((question) => (
         <AnsweredQuestionRow
           key={question.id}
@@ -33,12 +32,13 @@ export function QuestionWorkRowBody({ row }: QuestionWorkRowBodyProps) {
           answer={row.answers?.[question.id] ?? null}
         />
       ))}
-    </DetailCard>
+    </div>
   );
 }
 
+// Full question prompt with the answer beneath, rather than a short-label /
+// value row — the prompt is the point, and it rarely fits a narrow label column.
 function AnsweredQuestionRow({ question, answer }: AnsweredQuestionRowProps) {
-  const label = question.shortLabel ?? question.prompt;
   const selectedLabels =
     answer?.selected.map((value) =>
       formatPendingInteractionUserQuestionOptionLabel({ question, value }),
@@ -46,22 +46,21 @@ function AnsweredQuestionRow({ question, answer }: AnsweredQuestionRowProps) {
   const freeText = answer?.freeText ?? null;
   const hasContent = selectedLabels.length > 0 || freeText !== null;
 
-  if (!hasContent) {
-    return (
-      <DetailRow label={label}>
-        <span className="text-muted-foreground">No answer</span>
-      </DetailRow>
-    );
-  }
-
   return (
-    <DetailRow label={label} align="start">
-      {selectedLabels.length > 0 ? (
-        <div>{selectedLabels.join(", ")}</div>
-      ) : null}
-      {freeText ? (
-        <div className="whitespace-pre-wrap">{freeText}</div>
-      ) : null}
-    </DetailRow>
+    <div>
+      <div className="text-muted-foreground">{question.prompt}</div>
+      {hasContent ? (
+        <div className="mt-0.5 text-foreground">
+          {selectedLabels.length > 0 ? (
+            <div>{selectedLabels.join(", ")}</div>
+          ) : null}
+          {freeText ? (
+            <div className="whitespace-pre-wrap">{freeText}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-0.5 text-muted-foreground">No answer</div>
+      )}
+    </div>
   );
 }

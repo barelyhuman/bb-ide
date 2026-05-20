@@ -2,7 +2,6 @@ import { useMemo, type ReactNode } from "react";
 import {
   assertNever,
   buildPendingInteractionApprovalResolution,
-  formatPendingInteractionSummary,
   formatPendingInteractionSubjectDetailLines,
 } from "@bb/core-ui";
 import { extractShellCommandFromString } from "@bb/thread-view";
@@ -42,7 +41,8 @@ interface UserQuestionPendingInteractionBannerProps {
 }
 
 interface BannerShellProps {
-  title: string;
+  /** Heading line. Omitted when the body supplies its own (e.g. the question form). */
+  title?: string;
   errorMessage?: string | null;
   footer?: ReactNode;
   children?: ReactNode;
@@ -93,12 +93,16 @@ function BannerShell({
 }: BannerShellProps) {
   return (
     <div className="mb-2 rounded-lg border border-border bg-surface-recessed px-4 py-3 text-xs text-muted-foreground">
-      <h3 className="min-w-0 text-sm font-semibold text-foreground">
-        <ExpandableLine fullText={title} collapsedClassName="line-clamp-2">
-          {title}
-        </ExpandableLine>
-      </h3>
-      {children ? <div className="mt-3">{children}</div> : null}
+      {title ? (
+        <h3 className="min-w-0 text-sm font-semibold text-foreground">
+          <ExpandableLine fullText={title} collapsedClassName="line-clamp-2">
+            {title}
+          </ExpandableLine>
+        </h3>
+      ) : null}
+      {children ? (
+        <div className={title ? "mt-3" : undefined}>{children}</div>
+      ) : null}
       {footer ? (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
           {footer}
@@ -174,13 +178,11 @@ function ThreadUserQuestionPendingInteractionBanner({
   threadId,
 }: UserQuestionPendingInteractionBannerProps) {
   const isResolving = interaction.status === "resolving";
-  const title = formatPendingInteractionSummary({
-    interaction,
-    surface: "app",
-  });
 
+  // No shell title: the form supplies its own heading (the current question
+  // prompt) plus the question tab strip.
   return (
-    <BannerShell title={title}>
+    <BannerShell>
       <UserQuestionAnswerForm
         interactionId={interaction.id}
         isResolving={isResolving}
@@ -273,13 +275,13 @@ function buildApprovalSubject({
             <pre
               className={cn(
                 getDetailScrollMaxHeightClass("base"),
-                "overflow-auto whitespace-pre px-4 py-3 font-mono text-sm leading-tight text-foreground",
+                "overflow-auto whitespace-pre px-3 py-2 font-mono text-xs leading-relaxed text-foreground",
               )}
             >
               $ {command}
             </pre>
             {detailLines.length > 0 ? (
-              <ul className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+              <ul className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
                 {detailLines.map((line) => (
                   <li key={line}>{line}</li>
                 ))}
@@ -296,7 +298,7 @@ function buildApprovalSubject({
         title: payload.reason ?? "Do you want to make these changes?",
         body:
           detailLines.length > 0 ? (
-            <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+            <ul className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
               {detailLines.map((line) => (
                 <li key={line}>{line}</li>
               ))}
@@ -311,7 +313,7 @@ function buildApprovalSubject({
         title: payload.reason ?? "Do you want to grant this permission?",
         body:
           detailLines.length > 0 ? (
-            <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+            <ul className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
               {detailLines.map((line) => (
                 <li key={line}>{line}</li>
               ))}

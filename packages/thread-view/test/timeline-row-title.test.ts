@@ -1396,3 +1396,110 @@ describe("buildTimelineRowTitle", () => {
     ]);
   });
 });
+
+type QuestionViewRow = Extract<TimelineViewWorkRow, { workKind: "question" }>;
+
+function questionRow(args: {
+  lifecycle: QuestionViewRow["lifecycle"];
+  questions: QuestionViewRow["questions"];
+  answers?: QuestionViewRow["answers"];
+}): QuestionViewRow {
+  return {
+    ...baseRow("question-1"),
+    kind: "work",
+    workKind: "question",
+    status: "pending",
+    interactionId: "pi-1",
+    lifecycle: args.lifecycle,
+    questions: args.questions,
+    answers: args.answers ?? null,
+    statusReason: null,
+  };
+}
+
+const branchQuestion = {
+  id: "branch",
+  prompt: "Which branch should I update?",
+  shortLabel: "Branch",
+  multiSelect: false,
+  allowFreeText: true,
+  options: [
+    { value: "main", label: "main" },
+    { value: "release", label: "release/1.0" },
+  ],
+};
+
+const testsQuestion = {
+  id: "tests",
+  prompt: "Should I run the tests?",
+  shortLabel: "Tests",
+  multiSelect: false,
+  allowFreeText: true,
+  options: [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+  ],
+};
+
+describe("buildTimelineRowTitle question rows", () => {
+  it("shows the prompt for a single pending question", () => {
+    const title = buildTimelineRowTitle(
+      questionRow({ lifecycle: "pending", questions: [branchQuestion] }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe("Waiting for answer Which branch should I update?");
+  });
+
+  it("appends the chosen answer for a single answered question", () => {
+    const title = buildTimelineRowTitle(
+      questionRow({
+        lifecycle: "answered",
+        questions: [branchQuestion],
+        answers: { branch: { selected: ["main"] } },
+      }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe("Answered Which branch should I update? — main");
+  });
+
+  it("summarizes the count for multiple questions instead of only the first", () => {
+    const pending = buildTimelineRowTitle(
+      questionRow({
+        lifecycle: "pending",
+        questions: [branchQuestion, testsQuestion],
+      }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(pending.plain).toBe("Waiting for answers to 2 questions");
+    expect(pending.plain).not.toContain("Which branch");
+
+    const answered = buildTimelineRowTitle(
+      questionRow({
+        lifecycle: "answered",
+        questions: [branchQuestion, testsQuestion],
+        answers: {
+          branch: { selected: ["main"] },
+          tests: { selected: ["yes"] },
+        },
+      }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(answered.plain).toBe("Answered 2 questions");
+  });
+
+  it("marks an interrupted question with a status decoration", () => {
+    const title = buildTimelineRowTitle(
+      questionRow({ lifecycle: "interrupted", questions: [branchQuestion] }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toContain("Asked Which branch should I update?");
+    expect(title.decorations).toEqual([
+      { kind: "status", status: "interrupted", durationMs: null },
+    ]);
+  });
+});
