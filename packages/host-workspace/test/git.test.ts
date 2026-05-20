@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  getCheckoutRef,
+  getWorkspaceGitOperation,
   parseBranchStatus,
   parseNameStatusEntries,
   parseNumstatEntriesZ,
@@ -31,12 +33,109 @@ async function initReadGitBlobRepo() {
   return repoPath;
 }
 
+async function initEmptyRepo() {
+  const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "bb-empty-git-"));
+  tempDirs.push(repoPath);
+  await runGit(["init", "-b", "main"], { cwd: repoPath });
+  return repoPath;
+}
+
+async function initConflictRepo() {
+  const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "bb-git-conflict-"));
+  tempDirs.push(repoPath);
+  await runGit(["init", "-b", "main"], { cwd: repoPath });
+  await runGit(["config", "user.name", "BB Tests"], { cwd: repoPath });
+  await runGit(["config", "user.email", "bb@example.com"], { cwd: repoPath });
+  await fs.writeFile(path.join(repoPath, "README.md"), "base\n", "utf8");
+  await runGit(["add", "."], { cwd: repoPath });
+  await runGit(["commit", "-m", "Initial commit"], { cwd: repoPath });
+  await runGit(["switch", "-c", "feature"], { cwd: repoPath });
+  await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
+  await runGit(["commit", "-am", "Feature edit"], { cwd: repoPath });
+  await runGit(["switch", "main"], { cwd: repoPath });
+  await fs.writeFile(path.join(repoPath, "README.md"), "main\n", "utf8");
+  await runGit(["commit", "-am", "Main edit"], { cwd: repoPath });
+  return repoPath;
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs
       .splice(0)
       .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
+});
+
+describe("getCheckoutRef", () => {
+  it("reports branch checkouts with HEAD sha", async () => {
+    const repoPath = await initReadGitBlobRepo();
+    const head = await runGit(["rev-parse", "HEAD"], { cwd: repoPath });
+
+    await expect(getCheckoutRef(repoPath)).resolves.toEqual({
+      kind: "branch",
+      branchName: "main",
+      headSha: head.stdout.trim(),
+    });
+  });
+
+  it("reports detached HEAD without pretending there is a current branch", async () => {
+    const repoPath = await initReadGitBlobRepo();
+    const head = await runGit(["rev-parse", "HEAD"], { cwd: repoPath });
+    await runGit(["switch", "--detach", "HEAD"], { cwd: repoPath });
+
+    await expect(getCheckoutRef(repoPath)).resolves.toEqual({
+      kind: "detached",
+      headSha: head.stdout.trim(),
+    });
+  });
+
+  it("reports unborn branches for empty repositories", async () => {
+    const repoPath = await initEmptyRepo();
+
+    await expect(getCheckoutRef(repoPath)).resolves.toEqual({
+      kind: "unborn",
+      branchName: "main",
+    });
+  });
+});
+
+describe("getWorkspaceGitOperation", () => {
+  it("reports no operation for ordinary repositories", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    await expect(getWorkspaceGitOperation(repoPath)).resolves.toEqual({
+      kind: "none",
+    });
+  });
+
+  it("reports merge conflicts", async () => {
+    const repoPath = await initConflictRepo();
+    const merge = await runGit(["merge", "feature"], {
+      cwd: repoPath,
+      allowFailure: true,
+    });
+    expect(merge.exitCode).not.toBe(0);
+
+    await expect(getWorkspaceGitOperation(repoPath)).resolves.toEqual({
+      kind: "merge",
+      hasConflicts: true,
+    });
+  });
+
+  it("reports rebase conflicts", async () => {
+    const repoPath = await initConflictRepo();
+    await runGit(["switch", "feature"], { cwd: repoPath });
+    const rebase = await runGit(["rebase", "main"], {
+      cwd: repoPath,
+      allowFailure: true,
+    });
+    expect(rebase.exitCode).not.toBe(0);
+
+    await expect(getWorkspaceGitOperation(repoPath)).resolves.toEqual({
+      kind: "rebase",
+      hasConflicts: true,
+    });
+  });
 });
 
 describe("readGitBlob", () => {
@@ -74,10 +173,11 @@ describe("readGitBlob", () => {
   it("rejects non-blob git objects instead of treating them as missing", async () => {
     const repoPath = await initReadGitBlobRepo();
 
-    await expect(readGitBlob(repoPath, "HEAD", "docs", 1024)).rejects
-      .toMatchObject({
-        code: "git_command_failed",
-      });
+    await expect(
+      readGitBlob(repoPath, "HEAD", "docs", 1024),
+    ).rejects.toMatchObject({
+      code: "git_command_failed",
+    });
   });
 
   it("allows blobs exactly at the byte cap", async () => {
@@ -92,11 +192,12 @@ describe("readGitBlob", () => {
   it("rejects oversized blobs during size preflight", async () => {
     const repoPath = await initReadGitBlobRepo();
 
-    await expect(readGitBlob(repoPath, "HEAD", "large.txt", 4)).rejects
-      .toMatchObject({
-        code: "blob_too_large",
-        message: "Blob size 11 bytes exceeds the 0 MB limit",
-      });
+    await expect(
+      readGitBlob(repoPath, "HEAD", "large.txt", 4),
+    ).rejects.toMatchObject({
+      code: "blob_too_large",
+      message: "Blob size 11 bytes exceeds the 0 MB limit",
+    });
   });
 });
 

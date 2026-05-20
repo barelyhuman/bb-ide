@@ -9,13 +9,6 @@ export interface ProjectMainSelectedBranch {
 export interface ResolveProjectMainThreadEnvironmentArgs {
   environmentValue: string;
   projectId: string | undefined;
-  /**
-   * The branch the env will use when no override is selected. For host:local
-   * this is the primary checkout's HEAD; for worktree it is the
-   * repo's default branch (and is ignored - the server resolves
-   * `baseBranch: "default"` from its own knowledge of the source).
-   */
-  currentBranch: string | null;
   selectedBranch: ProjectMainSelectedBranch | null;
 }
 
@@ -71,15 +64,14 @@ export function resolveProjectMainThreadEnvironment(
       };
     }
 
-    const branchName = args.selectedBranch?.name ?? args.currentBranch;
     return {
       type: "host",
       hostId: parsed.hostId,
       workspace: {
         type: "unmanaged",
         path: null,
-        ...(branchName
-          ? { branch: { kind: "existing", name: branchName } }
+        ...(args.selectedBranch
+          ? { branch: { kind: "existing", name: args.selectedBranch.name } }
           : {}),
       },
     };

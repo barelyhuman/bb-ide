@@ -24,6 +24,14 @@ const directUnmanagedIntentSchema = z.object({
   branch: unmanagedBranchSpecSchema.optional(),
 });
 
+const checkoutUnmanagedIntentSchema = z.object({
+  type: z.literal("checkout-unmanaged"),
+  environmentId: z.string().min(1),
+  hostId: z.string().min(1),
+  path: z.string().min(1),
+  branch: unmanagedBranchSpecSchema,
+});
+
 const directManagedIntentSchema = z.object({
   type: z.literal("direct-managed"),
   hostId: z.string().min(1),
@@ -39,7 +47,12 @@ const reuseIntentSchema = z.object({
 
 export const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion(
   "type",
-  [directUnmanagedIntentSchema, directManagedIntentSchema, reuseIntentSchema],
+  [
+    directUnmanagedIntentSchema,
+    checkoutUnmanagedIntentSchema,
+    directManagedIntentSchema,
+    reuseIntentSchema,
+  ],
 );
 
 export const threadProvisionCommonPayloadSchema = z.object({

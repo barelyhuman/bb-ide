@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import type { GitCheckoutRef, WorkspaceGitOperation } from "@bb/domain";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
@@ -35,6 +36,11 @@ type BranchStatus = {
   behindCount: number;
 };
 
+type ActiveWorkspaceGitOperationKind = Exclude<
+  WorkspaceGitOperation["kind"],
+  "none" | "unknown"
+>;
+
 export interface PorcelainEntry {
   path: string;
   status: string;
@@ -42,10 +48,32 @@ export interface PorcelainEntry {
   worktreeStatus: string;
 }
 
+interface WorkspaceGitOperationMarker {
+  kind: ActiveWorkspaceGitOperationKind;
+  markerNames: string[];
+}
+
 interface ParsedPorcelainPathToken {
   nextIndex: number;
   value: string;
 }
+
+const CONFLICT_PORCELAIN_STATUSES = new Set<string>([
+  "DD",
+  "AU",
+  "UD",
+  "UA",
+  "DU",
+  "AA",
+  "UU",
+]);
+
+const WORKSPACE_GIT_OPERATION_MARKERS: WorkspaceGitOperationMarker[] = [
+  { kind: "rebase", markerNames: ["rebase-merge", "rebase-apply"] },
+  { kind: "merge", markerNames: ["MERGE_HEAD"] },
+  { kind: "cherry-pick", markerNames: ["CHERRY_PICK_HEAD"] },
+  { kind: "revert", markerNames: ["REVERT_HEAD"] },
+];
 
 const GIT_QUOTED_PATH_ESCAPE_BYTES = new Map<string, number>([
   ['"', 34],
@@ -236,6 +264,19 @@ export async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+async function findWorkspaceGitOperationMarker(
+  gitDir: string,
+): Promise<WorkspaceGitOperationMarker | undefined> {
+  for (const marker of WORKSPACE_GIT_OPERATION_MARKERS) {
+    for (const markerName of marker.markerNames) {
+      if (await pathExists(path.join(gitDir, markerName))) {
+        return marker;
+      }
+    }
+  }
+  return undefined;
+}
+
 export async function detectGitRepo(cwd: string): Promise<boolean> {
   const result = await runGit(["rev-parse", "--is-inside-work-tree"], {
     cwd,
@@ -255,6 +296,19 @@ export async function ensureGitRepo(cwd: string): Promise<void> {
   );
 }
 
+async function readHeadSha(cwd: string): Promise<string | null> {
+  const result = await runGit(["rev-parse", "--verify", "HEAD"], {
+    cwd,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) {
+    return null;
+  }
+
+  const sha = trimOutput(result.stdout);
+  return sha || null;
+}
+
 export async function getCurrentBranch(
   cwd: string,
 ): Promise<string | undefined> {
@@ -272,6 +326,37 @@ export async function getCurrentBranch(
 
   const branchName = trimOutput(result.stdout);
   return branchName || undefined;
+}
+
+export async function getCheckoutRef(cwd: string): Promise<GitCheckoutRef> {
+  if (!(await detectGitRepo(cwd))) {
+    return { kind: "unknown", reason: "Path is not a git repository" };
+  }
+
+  const [symbolicRef, headSha] = await Promise.all([
+    runGit(["symbolic-ref", "--quiet", "--short", "HEAD"], {
+      cwd,
+      allowFailure: true,
+    }),
+    readHeadSha(cwd),
+  ]);
+
+  const branchName = trimOutput(symbolicRef.stdout);
+  if (symbolicRef.exitCode === 0 && branchName) {
+    if (headSha === null) {
+      return { kind: "unborn", branchName };
+    }
+    return { kind: "branch", branchName, headSha };
+  }
+
+  if (headSha !== null) {
+    return { kind: "detached", headSha };
+  }
+
+  return {
+    kind: "unknown",
+    reason: "HEAD is not symbolic and no commit is checked out",
+  };
 }
 
 export function parseBranchStatus(line: string | undefined): BranchStatus {
@@ -410,6 +495,50 @@ export function parsePorcelainEntries(statusOutput: string): PorcelainEntry[] {
     });
 }
 
+function hasPorcelainConflict(entries: PorcelainEntry[]): boolean {
+  return entries.some(
+    (entry) =>
+      entry.indexStatus === "U" ||
+      entry.worktreeStatus === "U" ||
+      CONFLICT_PORCELAIN_STATUSES.has(entry.status),
+  );
+}
+
+function buildActiveWorkspaceGitOperation(
+  kind: ActiveWorkspaceGitOperationKind,
+  hasConflicts: boolean,
+): WorkspaceGitOperation {
+  switch (kind) {
+    case "merge":
+      return { kind: "merge", hasConflicts };
+    case "rebase":
+      return { kind: "rebase", hasConflicts };
+    case "cherry-pick":
+      return { kind: "cherry-pick", hasConflicts };
+    case "revert":
+      return { kind: "revert", hasConflicts };
+  }
+}
+
+export async function getWorkspaceGitOperation(
+  cwd: string,
+): Promise<WorkspaceGitOperation> {
+  await ensureGitRepo(cwd);
+
+  const [gitDir, status] = await Promise.all([
+    getAbsoluteGitDir(cwd),
+    runGit(["status", "--porcelain=v1", "--untracked-files=all"], { cwd }),
+  ]);
+  const hasConflicts = hasPorcelainConflict(
+    parsePorcelainEntries(status.stdout),
+  );
+  const marker = await findWorkspaceGitOperationMarker(gitDir);
+  if (!marker) {
+    return { kind: "none" };
+  }
+  return buildActiveWorkspaceGitOperation(marker.kind, hasConflicts);
+}
+
 export interface NameStatusEntry {
   path: string;
   /** Raw status letter from `git diff --name-status` (M, A, D, R, C, T, U). */
@@ -502,9 +631,7 @@ export function parseNumstatEntriesZ(output: string): NumstatEntry[] {
     const secondTab = output.indexOf("\t", firstTab + 1);
     if (secondTab < 0) break;
     const insertions = parseNumstatCount(output.slice(cursor, firstTab));
-    const deletions = parseNumstatCount(
-      output.slice(firstTab + 1, secondTab),
-    );
+    const deletions = parseNumstatCount(output.slice(firstTab + 1, secondTab));
 
     let path: string;
     if (output[secondTab + 1] === "\0") {
@@ -679,15 +806,11 @@ export async function readGitBlob(
   }
 
   try {
-    const result = await execFileAsync(
-      "git",
-      ["cat-file", "blob", target],
-      {
-        cwd,
-        encoding: "buffer",
-        maxBuffer: maxBytes,
-      },
-    );
+    const result = await execFileAsync("git", ["cat-file", "blob", target], {
+      cwd,
+      encoding: "buffer",
+      maxBuffer: maxBytes,
+    });
     const contents = Buffer.from(result.stdout);
     return { contents, sizeBytes: size };
   } catch (error) {

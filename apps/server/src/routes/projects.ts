@@ -492,11 +492,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
           path: source.path,
         },
       });
-      return context.json({
-        branches: result.branches,
-        current: result.current,
-        defaultBranch: result.defaultBranch,
-      });
+      return context.json(result);
     },
   );
 

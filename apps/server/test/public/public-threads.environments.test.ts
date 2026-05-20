@@ -6,13 +6,22 @@ import {
 import {
   archiveThread,
   createPendingInteraction,
+  environmentOperations,
   getEnvironment,
   getThread,
+  getThreadOperation,
   hostDaemonCommands,
+  listThreads,
 } from "@bb/db";
+import { setEnvironmentStatus } from "@bb/db/internal-lifecycle";
 import { threadSchema } from "@bb/domain";
 import { threadListResponseSchema } from "@bb/server-contract";
-import { waitForQueuedCommand } from "../helpers/commands.js";
+import {
+  reportQueuedCommandSuccess,
+  reportQueuedCommandError,
+  waitForQueuedCommand,
+  waitForQueuedCommandAfter,
+} from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -24,6 +33,29 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
+
+const CHECKOUT_BLOCKING_THREAD_STATUSES = [
+  "active",
+  "idle",
+  "provisioning",
+  "created",
+] as const;
+
+const CHECKOUT_PREFLIGHT_FAILURES = [
+  {
+    errorCode: "checkout_dirty",
+    errorMessage:
+      "Cannot checkout branch while the workspace has uncommitted changes",
+    path: "/tmp/dirty-unmanaged-checkout",
+  },
+  {
+    errorCode: "checkout_conflicts",
+    errorMessage:
+      "Cannot checkout branch while the workspace has unresolved conflicts",
+    path: "/tmp/conflicted-unmanaged-checkout",
+  },
+] as const;
 
 describe("public thread environment routes", () => {
   beforeEach(() => {
@@ -336,6 +368,351 @@ describe("public thread environment routes", () => {
       await harness.cleanup();
     }
   });
+
+  it("reconciles explicit branch checkout before starting a thread on an existing unmanaged environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/reconcile-unmanaged-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        status: "ready",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Start after checkout" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+              branch: { kind: "existing", name: "feature/reconcile" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      expect(createdThread).toMatchObject({
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+
+      const queuedProvision = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
+      );
+      expect(queuedProvision.command).toMatchObject({
+        environmentId: environment.id,
+        path: source.path,
+        workspaceProvisionType: "unmanaged",
+        checkout: { kind: "existing", name: "feature/reconcile" },
+      });
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "provisioning",
+      );
+      expect(
+        harness.db
+          .select()
+          .from(environmentOperations)
+          .where(eq(environmentOperations.environmentId, environment.id))
+          .all(),
+      ).toMatchObject([{ kind: "reprovision", state: "queued" }]);
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: createdThread.id,
+          kind: "provision",
+        }),
+      ).toMatchObject({
+        provisioningEnvironmentId: environment.id,
+        provisioningStage: "environment-provisioning",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "thread.start"))
+          .all(),
+      ).toHaveLength(0);
+
+      const result = await reportQueuedCommandSuccess(
+        harness,
+        queuedProvision,
+        {
+          branchName: "feature/reconcile",
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: false,
+          path: source.path,
+          transcript: [],
+        },
+      );
+      expect(result.status).toBe(200);
+
+      const queuedStart = await waitForQueuedCommandAfter(
+        harness,
+        queuedProvision.row.cursor,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.environmentId === environment.id &&
+          command.threadId === createdThread.id,
+      );
+      expect(queuedStart.command).toMatchObject({
+        workspaceContext: {
+          workspacePath: source.path,
+          workspaceProvisionType: "unmanaged",
+        },
+      });
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        branchName: "feature/reconcile",
+        status: "ready",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("requeues stranded unmanaged checkout provisioning before starting the thread", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/stranded-unmanaged-checkout",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        status: "ready",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Recover checkout" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+              branch: { kind: "existing", name: "feature/recovered" },
+            },
+          },
+        }),
+      });
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      const originalProvision = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
+      );
+
+      harness.db
+        .delete(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, originalProvision.row.id))
+        .run();
+      harness.db
+        .delete(environmentOperations)
+        .where(eq(environmentOperations.environmentId, environment.id))
+        .run();
+      setEnvironmentStatus(harness.db, harness.hub, environment.id, {
+        status: "ready",
+      });
+
+      await advanceThreadProvisioning(harness.deps, {
+        threadId: createdThread.id,
+      });
+
+      const requeuedProvision = await waitForQueuedCommandAfter(
+        harness,
+        originalProvision.row.cursor,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
+      );
+      expect(requeuedProvision.command).toMatchObject({
+        checkout: { kind: "existing", name: "feature/recovered" },
+        environmentId: environment.id,
+        path: source.path,
+        workspaceProvisionType: "unmanaged",
+      });
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "provisioning",
+      );
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "thread.start"))
+          .all(),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it.each(CHECKOUT_PREFLIGHT_FAILURES)(
+    "fails unmanaged checkout provisioning without starting the thread when preflight fails with $errorCode",
+    async ({ errorCode, errorMessage, path }) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project, source } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+          path,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+          path: source.path,
+          status: "ready",
+        });
+
+        const response = await harness.app.request("/api/v1/threads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Preflight failure" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: {
+                type: "unmanaged",
+                path: null,
+                branch: { kind: "existing", name: "feature/preflight" },
+              },
+            },
+          }),
+        });
+        expect(response.status).toBe(201);
+        const createdThread = threadSchema.parse(await readJson(response));
+        const queuedProvision = await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "environment.provision" &&
+            command.environmentId === environment.id,
+        );
+
+        const result = await reportQueuedCommandError(
+          harness,
+          queuedProvision,
+          {
+            errorCode,
+            errorMessage,
+          },
+        );
+        expect(result.status).toBe(200);
+        expect(getThread(harness.db, createdThread.id)?.status).toBe("error");
+        expect(
+          harness.db
+            .select()
+            .from(hostDaemonCommands)
+            .where(eq(hostDaemonCommands.type, "thread.start"))
+            .all(),
+        ).toHaveLength(0);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it.each(CHECKOUT_BLOCKING_THREAD_STATUSES)(
+    "blocks explicit branch checkout when another thread is %s in the unmanaged environment",
+    async (status) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project, source } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+          path: "/tmp/active-unmanaged-project",
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+          path: source.path,
+          status: "ready",
+        });
+        seedThread(harness.deps, {
+          environmentId: environment.id,
+          projectId: project.id,
+          status,
+        });
+
+        const response = await harness.app.request("/api/v1/threads", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Try branch checkout" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: {
+                type: "unmanaged",
+                path: null,
+                branch: { kind: "existing", name: "feature/blocked" },
+              },
+            },
+          }),
+        });
+
+        expect(response.status).toBe(409);
+        await expect(readJson(response)).resolves.toMatchObject({
+          code: "invalid_request",
+          message:
+            "Cannot checkout branch while another thread is using this workspace",
+        });
+        expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+          1,
+        );
+        expect(
+          harness.db
+            .select()
+            .from(hostDaemonCommands)
+            .where(eq(hostDaemonCommands.type, "environment.provision"))
+            .all(),
+        ).toHaveLength(0);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
 
   it("attaches new threads to an in-flight unmanaged environment without reprovisioning", async () => {
     const harness = await createTestAppHarness();

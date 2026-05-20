@@ -12,6 +12,7 @@ import {
 } from "@bb/db";
 import {
   markThreadOperationRecordFailed,
+  setEnvironmentStatus,
   upsertEnvironmentOperationRecord,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
@@ -23,7 +24,7 @@ import {
   type ProvisioningTranscriptEntry,
   type Thread,
 } from "@bb/domain";
-import type { BaseBranchSpec } from "@bb/server-contract";
+import type { BaseBranchSpec, UnmanagedBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import type { LifecycleCoordinationDeps } from "../../lifecycle-coordination-deps.js";
 import { ApiError } from "../../errors.js";
@@ -41,6 +42,7 @@ import {
   buildEnvironmentProvisionCommand,
   buildManagedBranchName,
   SETUP_TIMEOUT_MS,
+  type UnmanagedCheckoutCommand,
 } from "./thread-create-helpers.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import {
@@ -56,6 +58,7 @@ import {
   createEnvironmentProvisioningContext,
   createWorkspaceReadyContext,
   isAttachableContext,
+  isEnvironmentProvisioningContext,
   isEnvironmentPendingContext,
   isMetadataPendingContext,
   isProvisionableContext,
@@ -76,6 +79,7 @@ import { resolveManagedTargetPath } from "./worktree-paths.js";
 export type ThreadProvisioningDeps = LifecycleCoordinationDeps;
 
 type ThreadProvisionOperationWriteConnection = DbConnection | DbTransaction;
+type ThreadProvisionWriteDeps = Pick<AppDeps, "db" | "hub">;
 type ActiveDirectEnvironmentOperationKind = "provision" | "reprovision";
 type DirectManagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
@@ -85,9 +89,13 @@ type DirectUnmanagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
   { type: "direct-unmanaged" }
 >;
+type CheckoutUnmanagedIntent = Extract<
+  ThreadProvisionEnvironmentIntent,
+  { type: "checkout-unmanaged" }
+>;
 type NewThreadProvisionEnvironmentIntent = Exclude<
   ThreadProvisionEnvironmentIntent,
-  { type: "reuse" }
+  { type: "reuse" } | { type: "checkout-unmanaged" }
 >;
 
 const ACTIVE_DIRECT_ENVIRONMENT_OPERATION_KINDS: readonly ActiveDirectEnvironmentOperationKind[] =
@@ -137,6 +145,12 @@ interface BuildEnvironmentProvisionRequestArgs {
   environment: Environment;
 }
 
+interface BuildUnmanagedCheckoutArgs {
+  branch: UnmanagedBranchSpec;
+  context: ThreadProvisionEnvironmentProvisioningContext;
+  thread: Thread;
+}
+
 interface ThreadProvisionEnvironmentPlan {
   buildRequest: (
     args: BuildEnvironmentProvisionRequestArgs,
@@ -164,6 +178,41 @@ interface DirectUnmanagedEnvironmentPlanArgs {
   intent: DirectUnmanagedIntent;
   thread: Thread;
 }
+
+interface CheckoutUnmanagedEnvironmentArgs {
+  context: ThreadProvisionContext;
+  intent: CheckoutUnmanagedIntent;
+  thread: Thread;
+}
+
+interface QueueCheckoutUnmanagedEnvironmentArgs {
+  context: ThreadProvisionProvisionableContext;
+  environment: Environment;
+  intent: CheckoutUnmanagedIntent;
+  thread: Thread;
+}
+
+interface RequestCheckoutUnmanagedEnvironmentProvisionArgs {
+  context: ThreadProvisionProvisionableContext;
+  environment: Environment;
+  intent: CheckoutUnmanagedIntent;
+  thread: Thread;
+}
+
+interface CheckoutUnmanagedEnvironmentProvisionQueuedResult {
+  context: ThreadProvisionEnvironmentProvisioningContext;
+  environment: Environment;
+  eventAppended: boolean;
+  kind: "queued";
+}
+
+interface CheckoutUnmanagedEnvironmentProvisionBlockedResult {
+  kind: "active-operation";
+}
+
+type CheckoutUnmanagedEnvironmentProvisionResult =
+  | CheckoutUnmanagedEnvironmentProvisionQueuedResult
+  | CheckoutUnmanagedEnvironmentProvisionBlockedResult;
 
 interface ManagedEnvironmentPlanCommonArgs {
   dataDir: string;
@@ -351,7 +400,7 @@ export function failThreadProvisioning(
 }
 
 function hasActiveEnvironmentProvisionOperation(
-  deps: Pick<AppDeps, "db">,
+  deps: { db: ThreadProvisionOperationWriteConnection },
   environment: Environment,
 ): boolean {
   return (
@@ -599,6 +648,51 @@ function createProvisioningEnvironmentWithOperation(
   return result;
 }
 
+function buildUnmanagedCheckout(
+  args: BuildUnmanagedCheckoutArgs,
+): UnmanagedCheckoutCommand {
+  if (args.branch.kind === "existing") {
+    return { kind: "existing", name: args.branch.name };
+  }
+
+  return {
+    kind: "new",
+    name: buildManagedBranchName({
+      branchSlug: args.context.request.branchSlug,
+      threadId: args.thread.id,
+    }),
+  };
+}
+
+function buildCheckoutUnmanagedEnvironmentProvisionRequest(
+  args: BuildEnvironmentProvisionRequestArgs & {
+    intent: CheckoutUnmanagedIntent;
+    thread: Thread;
+  },
+): ReturnType<typeof buildDirectEnvironmentProvisionRequest> {
+  const checkout = buildUnmanagedCheckout({
+    branch: args.intent.branch,
+    context: args.context,
+    thread: args.thread,
+  });
+  const command = buildEnvironmentProvisionCommand({
+    environmentId: args.environment.id,
+    hostId: args.intent.hostId,
+    initiator: {
+      threadId: args.thread.id,
+      provisioningId: args.context.state.provisioningId,
+    },
+    path: args.intent.path,
+    workspaceProvisionType: "unmanaged",
+    checkout,
+  });
+
+  return buildDirectEnvironmentProvisionRequest({
+    command,
+    provisioningId: args.context.state.provisioningId,
+  });
+}
+
 function buildDirectUnmanagedEnvironmentPlan(
   args: DirectUnmanagedEnvironmentPlanArgs,
 ): ThreadProvisionEnvironmentPlan {
@@ -615,15 +709,11 @@ function buildDirectUnmanagedEnvironmentPlan(
       // expects an explicit branch name in both kinds; for "new" we mint a
       // thread-scoped name using the same scheme as managed worktrees.
       const checkout = args.intent.branch
-        ? args.intent.branch.kind === "existing"
-          ? { kind: "existing" as const, name: args.intent.branch.name }
-          : {
-              kind: "new" as const,
-              name: buildManagedBranchName({
-                branchSlug: context.request.branchSlug,
-                threadId: args.thread.id,
-              }),
-            }
+        ? buildUnmanagedCheckout({
+            branch: args.intent.branch,
+            context,
+            thread: args.thread,
+          })
         : undefined;
       return buildDirectEnvironmentProvisionRequest({
         command: buildEnvironmentProvisionCommand({
@@ -715,6 +805,208 @@ async function resolveEnvironmentCreationPlan(
   return _exhaustive;
 }
 
+function requestCheckoutUnmanagedEnvironmentProvision(
+  deps: ThreadProvisionWriteDeps,
+  args: RequestCheckoutUnmanagedEnvironmentProvisionArgs,
+): CheckoutUnmanagedEnvironmentProvisionResult {
+  return deps.db.transaction(
+    (tx) => {
+      if (
+        hasActiveEnvironmentProvisionOperation({ db: tx }, args.environment)
+      ) {
+        return { kind: "active-operation" };
+      }
+
+      const activeOperation = getThreadOperation(tx, {
+        threadId: args.thread.id,
+        kind: "provision",
+      });
+      if (
+        !activeOperation ||
+        !isActiveLifecycleOperationState(activeOperation.state)
+      ) {
+        throw new Error("Thread provision operation is no longer active");
+      }
+
+      const eventAppended = !isEnvironmentProvisioningContext(args.context);
+      const context = isEnvironmentProvisioningContext(args.context)
+        ? args.context
+        : createEnvironmentProvisioningContext(args.context, {
+            provisionEventSequence: appendThreadProvisioningEventInTransaction(
+              tx,
+              {
+                threadId: args.thread.id,
+                environmentId: args.environment.id,
+                provisioningId: args.context.state.provisioningId,
+                status: "active",
+                entries: initialProvisioningEntries(args.environment),
+              },
+            ),
+          });
+      const request = buildCheckoutUnmanagedEnvironmentProvisionRequest({
+        context,
+        environment: args.environment,
+        intent: args.intent,
+        thread: args.thread,
+      });
+
+      upsertThreadProvisionOperation(tx, {
+        threadId: args.thread.id,
+        context,
+      });
+      upsertEnvironmentOperationRecord(tx, {
+        environmentId: args.environment.id,
+        kind: "reprovision",
+        payload: JSON.stringify(request),
+      });
+      if (args.environment.status !== "provisioning") {
+        setEnvironmentStatus(tx, deps.hub, args.environment.id, {
+          status: "provisioning",
+        });
+      }
+
+      return {
+        kind: "queued",
+        context,
+        eventAppended,
+        environment:
+          getEnvironment(tx, args.environment.id) ?? args.environment,
+      };
+    },
+    { behavior: "immediate" },
+  );
+}
+
+function queueCheckoutUnmanagedEnvironment(
+  deps: ThreadProvisionWriteDeps,
+  args: QueueCheckoutUnmanagedEnvironmentArgs,
+): ThreadProvisioningResult {
+  const result = requestCheckoutUnmanagedEnvironmentProvision(deps, {
+    context: args.context,
+    environment: args.environment,
+    intent: args.intent,
+    thread: args.thread,
+  });
+
+  if (result.kind === "active-operation") {
+    failThreadProvisioning(deps, {
+      thread: args.thread,
+      environmentId: args.environment.id,
+      detail: "Environment already has an active provision operation",
+    });
+    return {
+      context: args.context,
+      environment: args.environment,
+    };
+  }
+
+  if (result.eventAppended) {
+    deps.hub.notifyThread(args.thread.id, ["events-appended"], {
+      eventTypes: ["system/thread-provisioning"],
+    });
+  }
+  return result;
+}
+
+function ensureCheckoutUnmanagedEnvironmentRequested(
+  deps: ThreadProvisionWriteDeps,
+  args: CheckoutUnmanagedEnvironmentArgs,
+): ThreadProvisioningResult {
+  if (!isAttachableContext(args.context)) {
+    throw new Error(
+      `Cannot request environment from ${args.context.state.stage} state`,
+    );
+  }
+
+  const environment = getEnvironment(deps.db, args.intent.environmentId);
+  if (!environment) {
+    throw new ApiError(404, "environment_not_found", "Environment not found");
+  }
+  if (environment.projectId !== args.thread.projectId) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Environment belongs to a different project",
+    );
+  }
+  if (environment.hostId !== args.intent.hostId) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Environment belongs to a different host",
+    );
+  }
+  if (environment.path !== args.intent.path) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Environment path changed before checkout reconciliation",
+    );
+  }
+
+  const context = attachThreadToEnvironment(deps, {
+    context: args.context,
+    environment,
+    thread: args.thread,
+  });
+
+  if (environment.status === "provisioning") {
+    if (!hasActiveEnvironmentProvisionOperation(deps, environment)) {
+      failThreadProvisioning(deps, {
+        thread: args.thread,
+        environmentId: environment.id,
+        detail:
+          "Environment is provisioning without an active provision operation",
+      });
+      return { context, environment };
+    }
+    return {
+      context: appendProvisioningStartedEvent(deps, {
+        context,
+        environment,
+        thread: args.thread,
+      }),
+      environment,
+    };
+  }
+
+  const startedContext = provisioningStartedContext(context);
+  if (startedContext) {
+    if (
+      isEnvironmentProvisioningContext(startedContext) &&
+      environment.status === "ready" &&
+      environment.path
+    ) {
+      return queueCheckoutUnmanagedEnvironment(deps, {
+        context: startedContext,
+        environment,
+        intent: args.intent,
+        thread: args.thread,
+      });
+    }
+    return {
+      context: startedContext,
+      environment,
+    };
+  }
+
+  if (environment.status !== "ready" || !environment.path) {
+    failThreadProvisioning(deps, {
+      thread: args.thread,
+      environmentId: environment.id,
+      detail: `Environment is ${environment.status}`,
+    });
+    return { context, environment };
+  }
+
+  return queueCheckoutUnmanagedEnvironment(deps, {
+    context,
+    environment,
+    intent: args.intent,
+    thread: args.thread,
+  });
+}
+
 async function ensureEnvironmentRequested(
   deps: ThreadProvisioningDeps,
   args: EnsureEnvironmentRequestedArgs,
@@ -723,6 +1015,14 @@ async function ensureEnvironmentRequested(
     throw new Error(
       `Cannot request environment from ${args.context.state.stage} state`,
     );
+  }
+
+  if (args.context.request.environmentIntent.type === "checkout-unmanaged") {
+    return ensureCheckoutUnmanagedEnvironmentRequested(deps, {
+      context: args.context,
+      intent: args.context.request.environmentIntent,
+      thread: args.thread,
+    });
   }
 
   if (args.context.request.environmentIntent.type === "reuse") {

@@ -144,6 +144,11 @@ export interface EnsureEnvironmentArgs {
   provision?: ProvisionWorkspaceArgs;
 }
 
+interface ApplyExistingEnvironmentProvisionArgs {
+  entry: RuntimeEntry;
+  provision: ProvisionWorkspaceArgs | undefined;
+}
+
 export interface RuntimeManagerOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
@@ -499,6 +504,10 @@ export class RuntimeManager {
   async ensureEnvironment(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
     const existing = this.entries.get(args.environmentId);
     if (existing) {
+      await this.applyExistingEnvironmentProvision({
+        entry: existing,
+        provision: args.provision,
+      });
       return existing;
     }
 
@@ -515,6 +524,28 @@ export class RuntimeManager {
     const entry = await creation;
     this.entries.set(args.environmentId, entry);
     return entry;
+  }
+
+  private async applyExistingEnvironmentProvision(
+    args: ApplyExistingEnvironmentProvisionArgs,
+  ): Promise<void> {
+    if (
+      args.provision?.workspaceProvisionType !== "unmanaged" ||
+      !args.provision.checkout
+    ) {
+      return;
+    }
+    if (args.provision.path !== args.entry.path) {
+      throw new Error(
+        `Cannot reprovision existing environment ${args.entry.environmentId} at a different path`,
+      );
+    }
+
+    await this.provisionWorkspace(args.provision);
+    this.options.onWorkspaceStatusChanged?.({
+      environmentId: args.entry.environmentId,
+      changeKinds: ["work-status-changed", "git-refs-changed"],
+    });
   }
 
   async destroyEnvironment(environmentId: string): Promise<void> {

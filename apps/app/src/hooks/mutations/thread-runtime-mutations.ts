@@ -38,6 +38,7 @@ import {
 } from "../queries/thread-list-cache-data";
 import {
   projectPromptHistoryQueryKey,
+  projectSourceBranchesQueryKeyPrefix,
   threadQueryKey,
   threadPromptHistoryQueryKey,
   threadQueuedMessagesQueryKey,
@@ -139,6 +140,14 @@ function prependThreadPromptHistory(
   );
 }
 
+function hasUnmanagedCheckoutIntent(request: AppCreateThreadRequest): boolean {
+  return (
+    request.environment.type === "host" &&
+    request.environment.workspace.type === "unmanaged" &&
+    request.environment.workspace.branch !== undefined
+  );
+}
+
 function snapshotThreadLists(queryClient: QueryClient): ThreadListSnapshot {
   return getCachedThreadLists(queryClient, { queryKey: threadsQueryKey() });
 }
@@ -207,6 +216,11 @@ export function useCreateThread() {
         queryClient,
         projectId: variables.projectId,
       });
+      if (hasUnmanagedCheckoutIntent(variables)) {
+        queryClient.invalidateQueries({
+          queryKey: projectSourceBranchesQueryKeyPrefix(variables.projectId),
+        });
+      }
       refetchThreadListsAfterComposerThreadCreate({ queryClient });
     },
   });

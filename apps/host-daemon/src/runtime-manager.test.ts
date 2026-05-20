@@ -274,6 +274,43 @@ describe("RuntimeManager", () => {
     expect(entry.path).toBe("/tmp/env-1");
   });
 
+  it("applies unmanaged checkout provisioning to existing runtime entries", async () => {
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
+    const createRuntime = vi.fn(() => createFakeRuntime());
+    const onWorkspaceStatusChanged = vi.fn();
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime,
+      onWorkspaceStatusChanged,
+    });
+
+    const firstEntry = await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    const secondEntry = await manager.ensureEnvironment({
+      environmentId: "env-1",
+      provision: {
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/env-1",
+        checkout: { kind: "existing", name: "feature-existing" },
+      },
+    });
+
+    expect(secondEntry).toBe(firstEntry);
+    expect(createRuntime).toHaveBeenCalledTimes(1);
+    expect(provisionWorkspace).toHaveBeenCalledTimes(2);
+    expect(provisionWorkspace).toHaveBeenNthCalledWith(2, {
+      workspaceProvisionType: "unmanaged",
+      path: "/tmp/env-1",
+      checkout: { kind: "existing", name: "feature-existing" },
+    });
+    expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
+      environmentId: "env-1",
+      changeKinds: ["work-status-changed", "git-refs-changed"],
+    });
+  });
+
   it("passes managed worktree git metadata roots to created runtimes", async () => {
     const repoPath = await initRepo();
     const parentDir = await makeTempDir("bb-runtime-manager-worktree-");

@@ -98,7 +98,8 @@ const baseEnvironment: NewThreadEnvironmentConfig = {
 };
 
 const baseBranch: NewThreadBranchConfig = {
-  value: "main",
+  value: null,
+  currentBranch: "main",
   isNew: false,
   options: [
     "main",
@@ -108,7 +109,12 @@ const baseBranch: NewThreadBranchConfig = {
     "chore/upgrade-react",
   ],
   loading: false,
+  currentOptionLabel: "Current: main",
+  placeholder: "Current checkout",
+  triggerLabel: "Current (main)",
+  triggerTitle: "Current: main",
   onChange: noop,
+  onClear: noop,
   onCreate: noop,
 };
 
@@ -148,7 +154,11 @@ function useControlledValue(initial: string) {
 // Match production: ProjectMainView wraps the prompt area in PageShell which
 // caps content at 760px. Without this constraint the env-permission strip's
 // justify-between drifts the permission picker far to the right.
-function PromptStage({ children }: { children: React.ReactNode }) {
+interface PromptStageProps {
+  children: React.ReactNode;
+}
+
+function PromptStage({ children }: PromptStageProps) {
   return <div className="mx-auto w-full max-w-[760px]">{children}</div>;
 }
 

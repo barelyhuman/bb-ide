@@ -13,12 +13,18 @@ import {
   type PromptBoxHandle,
 } from "@/components/promptbox/PromptBoxInternal";
 import { usePromptVoice } from "@/components/promptbox/usePromptVoice";
-import { BranchPicker } from "@/components/pickers/BranchPicker";
+import {
+  BranchPicker,
+  type BranchPickerMenuKind,
+} from "@/components/pickers/BranchPicker";
 import {
   EnvironmentPickerUI,
   type EnvironmentPickerUIProps,
 } from "@/components/pickers/EnvironmentPicker";
-import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
+import {
+  type ParsedEnvironmentValue,
+  parseEnvironmentValue,
+} from "@/components/pickers/environment-picker-value";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import {
   WorktreePicker,
@@ -40,16 +46,26 @@ export interface NewThreadEnvironmentConfig {
 
 export interface NewThreadBranchConfig {
   value: string | null;
+  currentBranch?: string | null;
   isNew: boolean;
   options: readonly string[];
   loading?: boolean;
   placeholder?: string;
+  triggerLabel?: string;
+  triggerTitle?: string;
+  currentOptionLabel?: string | null;
+  currentOptionTitle?: string;
+  optionDisabledReason?: string | null;
+  optionDisabledTitle?: string;
+  createDisabledReason?: string | null;
+  createDisabledTitle?: string;
   onChange: (value: string) => void;
+  onClear?: () => void;
   onOpenChange?: (open: boolean) => void;
   /**
    * When provided, the picker exposes a "Create new branch" item. Only set
-   * for `host:local` (work locally / remotely) — managed-worktree
-   * select an existing branch to use as the merge base.
+   * for `host:local` (work locally / remotely). Managed-worktree mode uses
+   * the picked branch as the branch source instead.
    */
   onCreate?: () => void;
 }
@@ -90,6 +106,20 @@ export interface NewThreadPromptBoxUIProps {
   header?: ReactNode;
 }
 
+interface GetBranchPickerMenuKindArgs {
+  parsedEnvironment: ParsedEnvironmentValue;
+}
+
+function getBranchPickerMenuKind({
+  parsedEnvironment,
+}: GetBranchPickerMenuKindArgs): BranchPickerMenuKind | undefined {
+  if (parsedEnvironment?.type !== "host") {
+    return undefined;
+  }
+
+  return parsedEnvironment.mode === "worktree" ? "base" : "checkout";
+}
+
 /**
  * Prop-only variant. Stories render this directly with mock host data; the
  * connected NewThreadPromptBox below wires up the real hooks.
@@ -114,9 +144,13 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
 }: NewThreadPromptBoxUIProps) {
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
-  const parsedEnvironment = parseEnvironmentValue(environment.value);
+  const parsedEnvironment = useMemo(
+    () => parseEnvironmentValue(environment.value),
+    [environment.value],
+  );
   const showBranchPicker = parsedEnvironment?.type === "host";
   const showWorktreePicker = parsedEnvironment?.type === "reuse";
+  const branchMenuKind = getBranchPickerMenuKind({ parsedEnvironment });
   return (
     <>
       <PromptBoxInternal
@@ -159,11 +193,22 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
               variant="option"
               muted
               value={branch.value}
+              currentBranch={branch.currentBranch}
               isCreatingNew={branch.isNew}
               options={branch.options}
               loading={branch.loading}
               placeholder={branch.placeholder}
+              triggerLabel={branch.triggerLabel}
+              triggerTitle={branch.triggerTitle}
+              menuKind={branchMenuKind}
+              currentOptionLabel={branch.currentOptionLabel}
+              currentOptionTitle={branch.currentOptionTitle}
+              optionDisabledReason={branch.optionDisabledReason}
+              optionDisabledTitle={branch.optionDisabledTitle}
+              createDisabledReason={branch.createDisabledReason}
+              createDisabledTitle={branch.createDisabledTitle}
               onChange={branch.onChange}
+              onClear={branch.onClear}
               onOpenChange={branch.onOpenChange}
               onCreate={branch.onCreate}
             />
@@ -198,13 +243,22 @@ export interface NewThreadConnectedEnvironmentConfig {
 }
 
 export interface NewThreadConnectedBranchConfig {
-  current: string | null;
   value: string | null;
+  currentBranch?: string | null;
   isNew: boolean;
   options: readonly string[];
   loading?: boolean;
   placeholder?: string;
+  triggerLabel?: string;
+  triggerTitle?: string;
+  currentOptionLabel?: string | null;
+  currentOptionTitle?: string;
+  optionDisabledReason?: string | null;
+  optionDisabledTitle?: string;
+  createDisabledReason?: string | null;
+  createDisabledTitle?: string;
   onChange: (value: string) => void;
+  onClear?: () => void;
   onOpenChange?: (open: boolean) => void;
   onCreate: () => void;
 }
@@ -235,11 +289,10 @@ export function NewThreadPromptBox({
 
   // Create-new-branch is only meaningful for host:local (work locally /
   // remotely) — the server checks out a fresh branch in the primary checkout
-  // before the thread starts. Worktree env modes use the picked
-  // branch as a merge base instead, so we omit onCreate there.
+  // before the thread starts. Worktree mode uses the picked branch as the
+  // branch source instead, so we omit onCreate there.
   const allowCreate = isHostMode && parsedEnvironment.mode === "local";
-  const branchPickerValue = branch.value ?? branch.current;
-  const canCreate = allowCreate && branchPickerValue !== null;
+  const branchPickerValue = branch.value;
 
   const uiEnvironment = useMemo(
     () => ({
@@ -252,25 +305,44 @@ export function NewThreadPromptBox({
   const uiBranch = useMemo(
     () => ({
       value: branchPickerValue,
+      currentBranch: branch.currentBranch,
       isNew: allowCreate && branch.isNew,
       options: branch.options,
       loading: branch.loading,
       placeholder: branch.placeholder,
+      triggerLabel: branch.triggerLabel,
+      triggerTitle: branch.triggerTitle,
+      currentOptionLabel: branch.currentOptionLabel,
+      currentOptionTitle: branch.currentOptionTitle,
+      optionDisabledReason: branch.optionDisabledReason,
+      optionDisabledTitle: branch.optionDisabledTitle,
+      createDisabledReason: branch.createDisabledReason,
+      createDisabledTitle: branch.createDisabledTitle,
       onChange: branch.onChange,
+      onClear: branch.onClear,
       onOpenChange: branch.onOpenChange,
-      ...(canCreate ? { onCreate: branch.onCreate } : {}),
+      ...(allowCreate ? { onCreate: branch.onCreate } : {}),
     }),
     [
       allowCreate,
+      branch.createDisabledReason,
+      branch.createDisabledTitle,
+      branch.currentBranch,
+      branch.currentOptionLabel,
+      branch.currentOptionTitle,
       branch.isNew,
       branch.loading,
       branch.onChange,
+      branch.onClear,
       branch.onCreate,
       branch.onOpenChange,
+      branch.optionDisabledReason,
+      branch.optionDisabledTitle,
       branch.options,
       branch.placeholder,
+      branch.triggerLabel,
+      branch.triggerTitle,
       branchPickerValue,
-      canCreate,
     ],
   );
 

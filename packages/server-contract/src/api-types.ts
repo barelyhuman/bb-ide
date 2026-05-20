@@ -14,6 +14,7 @@ import {
   projectSourceSchema,
   promptInputSchema,
   permissionModeSchema,
+  projectSourceCheckoutSchema,
   providerInfoSchema,
   reasoningLevelSchema,
   resolvedThreadExecutionOptionsSchema,
@@ -659,19 +660,7 @@ export const projectBranchesQuerySchema = z.object({
 });
 export type ProjectBranchesQuery = z.infer<typeof projectBranchesQuerySchema>;
 
-export const projectBranchesResponseSchema = z.object({
-  branches: z.array(z.string()),
-  /**
-   * HEAD of the primary checkout. Use this when the environment will operate on
-   * the checkout in place.
-   */
-  current: z.string().nullable(),
-  /**
-   * The repo's tracked default branch. Use this when the environment will create
-   * a fresh worktree from the repo's default.
-   */
-  defaultBranch: z.string().nullable(),
-});
+export const projectBranchesResponseSchema = projectSourceCheckoutSchema;
 export type ProjectBranchesResponse = z.infer<
   typeof projectBranchesResponseSchema
 >;

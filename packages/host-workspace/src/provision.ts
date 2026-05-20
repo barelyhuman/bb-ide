@@ -15,7 +15,16 @@ import {
   withCheckoutMutationLock,
 } from "./checkout-mutation-lock.js";
 import { createWorktree, removeWorktree } from "./provisioning.js";
-import { detectGitRepo, pathExists, runGit, WorkspaceError } from "./git.js";
+import {
+  detectGitRepo,
+  getCheckoutRef,
+  getWorkspaceGitOperation,
+  hasUncommittedChanges,
+  listBranches,
+  pathExists,
+  runGit,
+  WorkspaceError,
+} from "./git.js";
 import { resolveAdditionalWorkspaceWriteRoots } from "./workspace-write-roots.js";
 
 // ---------------------------------------------------------------------------
@@ -253,6 +262,116 @@ interface ApplyUnmanagedCheckoutArgs {
   onProgress: ProvisionProgressCallback | undefined;
 }
 
+interface ValidateUnmanagedCheckoutArgs {
+  cwd: string;
+  checkout: UnmanagedCheckoutOpts;
+}
+
+interface CheckoutCompletedTextArgs {
+  checkout: UnmanagedCheckoutOpts;
+  alreadyOnTarget: boolean;
+}
+
+type UnmanagedCheckoutPreflightResult =
+  | { kind: "already-current" }
+  | { kind: "ready" };
+
+function formatOperationKind(kind: string): string {
+  switch (kind) {
+    case "cherry-pick":
+      return "cherry-pick";
+    default:
+      return kind;
+  }
+}
+
+function getCheckoutCompletedText(args: CheckoutCompletedTextArgs): string {
+  const { checkout, alreadyOnTarget } = args;
+  if (alreadyOnTarget) {
+    return `Already on branch ${checkout.name}`;
+  }
+  if (checkout.kind === "new") {
+    return `Created branch ${checkout.name}`;
+  }
+  return `Switched to branch ${checkout.name}`;
+}
+
+async function validateUnmanagedCheckout(
+  args: ValidateUnmanagedCheckoutArgs,
+): Promise<UnmanagedCheckoutPreflightResult> {
+  const { cwd, checkout } = args;
+  const checkoutRef = await getCheckoutRef(cwd);
+  if (
+    checkoutRef.kind === "branch" &&
+    checkoutRef.branchName === checkout.name
+  ) {
+    return { kind: "already-current" };
+  }
+  if (
+    checkoutRef.kind === "unborn" &&
+    checkoutRef.branchName === checkout.name
+  ) {
+    return { kind: "already-current" };
+  }
+
+  switch (checkoutRef.kind) {
+    case "branch":
+      break;
+    case "detached":
+      throw new WorkspaceError(
+        "checkout_detached",
+        "Cannot checkout branch while the workspace is on a detached HEAD",
+      );
+    case "unborn":
+      throw new WorkspaceError(
+        "checkout_unborn",
+        "Cannot checkout branch before the current branch has an initial commit",
+      );
+    case "unknown":
+      throw new WorkspaceError(
+        "checkout_unknown",
+        `Cannot inspect current checkout: ${checkoutRef.reason}`,
+      );
+  }
+
+  if (checkout.kind === "existing") {
+    const branches = await listBranches(cwd);
+    if (!branches.includes(checkout.name)) {
+      throw new WorkspaceError(
+        "checkout_missing_branch",
+        `Cannot checkout missing branch ${checkout.name}`,
+      );
+    }
+  }
+
+  const operation = await getWorkspaceGitOperation(cwd);
+  if (operation.kind !== "none" && operation.hasConflicts) {
+    throw new WorkspaceError(
+      "checkout_conflicts",
+      `Cannot checkout branch while ${formatOperationKind(
+        operation.kind,
+      )} has unresolved conflicts`,
+    );
+  }
+  if (operation.kind !== "none") {
+    throw new WorkspaceError(
+      "checkout_in_progress_operation",
+      `Cannot checkout branch while ${formatOperationKind(
+        operation.kind,
+      )} is in progress`,
+    );
+  }
+
+  if (await hasUncommittedChanges(cwd)) {
+    throw new WorkspaceError(
+      "checkout_dirty",
+      "Cannot checkout branch while the workspace has uncommitted changes",
+    );
+  }
+
+  return { kind: "ready" };
+}
+
 async function applyUnmanagedCheckout(
   args: ApplyUnmanagedCheckoutArgs,
 ): Promise<void> {
@@ -275,6 +394,7 @@ async function applyUnmanagedCheckout(
   });
   let startedAt = waitingStartedAt;
   let waitingCompleted = false;
+  let alreadyOnTarget = false;
   try {
     await withCheckoutMutationAdmission(cwd, async () => {
       if (!(await pathExists(cwd))) {
@@ -305,6 +425,14 @@ async function applyUnmanagedCheckout(
         });
         waitingCompleted = true;
         startedAt = lockAcquiredAt;
+        const preflightResult = await validateUnmanagedCheckout({
+          cwd,
+          checkout,
+        });
+        if (preflightResult.kind === "already-current") {
+          alreadyOnTarget = true;
+          return;
+        }
         onProgress?.({
           type: "step",
           key: "git-checkout-started",
@@ -322,10 +450,7 @@ async function applyUnmanagedCheckout(
     onProgress?.({
       type: "step",
       key: "git-checkout-completed",
-      text:
-        checkout.kind === "new"
-          ? `Created branch ${checkout.name}`
-          : `Switched to branch ${checkout.name}`,
+      text: getCheckoutCompletedText({ checkout, alreadyOnTarget }),
       status: "completed",
       startedAt,
       metadata: { durationMs: Date.now() - startedAt },

@@ -1,4 +1,4 @@
-import { BranchPicker } from "./BranchPicker";
+import { BranchPicker, type BranchPickerProps } from "./BranchPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
@@ -6,9 +6,9 @@ export default {
 };
 
 const branches = [
-  "origin/main",
-  "origin/develop",
-  "origin/staging",
+  "main",
+  "develop",
+  "staging",
   "bb/feat/review-flow",
   "bb/fix/timeline-pagination",
   "bb/implement-server-daemon-protocol-simplification-thr_qfk8ksbxkk",
@@ -16,58 +16,102 @@ const branches = [
 
 const noop = () => {};
 
+type BranchPickerStoryConfig = Omit<
+  BranchPickerProps,
+  "onChange" | "options" | "variant"
+>;
+
+interface BranchPickerStoryRowProps {
+  label: string;
+  hint: string;
+  picker: BranchPickerStoryConfig;
+  variant?: BranchPickerProps["variant"];
+}
+
+const currentCheckoutPicker: BranchPickerStoryConfig = {
+  value: null,
+  currentBranch: "main",
+  currentOptionLabel: "Current: main",
+  currentOptionTitle: "Use the current checkout without switching branches",
+  triggerLabel: "Current (main)",
+  triggerTitle: "Current: main",
+  menuKind: "checkout",
+  onClear: noop,
+  onCreate: noop,
+  modal: false,
+};
+
+const branchFromPicker: BranchPickerStoryConfig = {
+  value: null,
+  currentBranch: "main",
+  currentOptionLabel: "main",
+  currentOptionTitle: "Branch from: main",
+  triggerLabel: "Branch from: main",
+  triggerTitle: "Branch from: main",
+  menuKind: "base",
+  onClear: noop,
+  modal: false,
+};
+
+const mergeBasePicker: BranchPickerStoryConfig = {
+  value: "main",
+  modal: false,
+};
+
+function BranchPickerStoryRow({
+  label,
+  hint,
+  picker,
+  variant,
+}: BranchPickerStoryRowProps) {
+  return (
+    <StoryRow label={label} hint={hint}>
+      <BranchPicker
+        {...picker}
+        options={branches}
+        variant={variant}
+        onChange={noop}
+      />
+    </StoryRow>
+  );
+}
+
 export function Overview() {
   return (
-    <StoryCard>
-      <StoryRow label="default" hint="form-style, full-width">
-        <BranchPicker value="origin/main" options={branches} onChange={noop} />
-      </StoryRow>
-      <StoryRow label="minimal" hint='variant="minimal"'>
-        <BranchPicker
-          value="origin/main"
-          options={branches}
-          variant="minimal"
-          onChange={noop}
-        />
-      </StoryRow>
-      <StoryRow label="minimal + muted" hint="prompt-box context">
-        <BranchPicker
-          value="origin/main"
-          options={branches}
-          variant="minimal"
-          muted
-          onChange={noop}
-        />
-      </StoryRow>
-      <StoryRow label="loading">
-        <BranchPicker
-          value="origin/main"
-          options={branches}
-          loading
-          onChange={noop}
-        />
-      </StoryRow>
-      <StoryRow label="disabled">
-        <BranchPicker
-          value="origin/main"
-          options={branches}
-          disabled
-          onChange={noop}
-        />
-      </StoryRow>
-      <StoryRow
-        label="open popover"
-        hint="defaultOpen + modal=false + create-new affordance"
-      >
-        <BranchPicker
-          value="origin/main"
-          options={branches}
-          onChange={noop}
-          onCreate={noop}
-          defaultOpen
-          modal={false}
-        />
-      </StoryRow>
+    <StoryCard labelWidth="190px">
+      <BranchPickerStoryRow
+        label="choosing current/checkout"
+        hint="work locally in the current checkout or switch branches"
+        picker={currentCheckoutPicker}
+      />
+      <BranchPickerStoryRow
+        label="choosing branch from"
+        hint="pick the base branch for a new worktree"
+        picker={branchFromPicker}
+      />
+      <BranchPickerStoryRow
+        label="choosing a merge base"
+        hint="pick a comparison branch for an existing worktree"
+        picker={mergeBasePicker}
+      />
+      <BranchPickerStoryRow
+        label="minimal current/checkout"
+        hint="minimal trigger for local checkout choice"
+        picker={currentCheckoutPicker}
+        variant="minimal"
+      />
+      <BranchPickerStoryRow
+        label="minimal branch from"
+        hint="minimal trigger for new worktree base"
+        picker={branchFromPicker}
+        variant="minimal"
+      />
+      <BranchPickerStoryRow
+        label="minimal merge base"
+        hint="minimal trigger for comparison branch"
+        picker={mergeBasePicker}
+        variant="minimal"
+      />
     </StoryCard>
   );
 }

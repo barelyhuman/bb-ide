@@ -6,6 +6,7 @@ import {
   managerTemplateNameSchema,
   pendingInteractionResolutionSchema,
   promptInputSchema,
+  projectSourceCheckoutSchema,
   threadGitDiffResponseSchema,
   workspaceProvisionTypeSchema,
   providerInfoSchema,
@@ -732,13 +733,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "host.list_paths": pathListResultSchema,
   "host.file_metadata": fileMetadataResultSchema,
   "host.status_version": statusVersionResultSchema,
-  "host.list_branches": z.object({
-    branches: z.array(z.string()),
-    /** HEAD of the primary checkout at `path`. Null when the path is not a git repo. */
-    current: z.string().nullable(),
-    /** Repo's tracked default branch (origin/HEAD or `init.defaultBranch`). Null when unknown. */
-    defaultBranch: z.string().nullable(),
-  }),
+  "host.list_branches": projectSourceCheckoutSchema,
   "host.list_manager_templates": z.object({
     /** Sorted alphabetically. Includes only template names that contain at least one regular file. */
     templates: z.array(managerTemplateSummarySchema),

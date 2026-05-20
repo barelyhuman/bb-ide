@@ -36,13 +36,48 @@ describe("host.list_branches dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(result.current).toBe("develop");
+    expect(result.checkout).toMatchObject({
+      kind: "branch",
+      branchName: "develop",
+    });
     expect(result.defaultBranch).toBe("main");
+    expect(result.hasUncommittedChanges).toBe(false);
+    expect(result.operation).toEqual({ kind: "none" });
     expect(result.branches[0]).toBe("main");
     expect(result.branches).toHaveLength(3);
     expect(result.branches).toEqual(
       expect.arrayContaining(["main", "develop", "release/1.2"]),
     );
+  });
+
+  it("reports detached HEAD in checkout state", async () => {
+    const repoPath = await initBranchRepo();
+    await runGitCommand(["switch", "--detach", "HEAD"], { cwd: repoPath });
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      { type: "host.list_branches", path: repoPath },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.checkout.kind).toBe("detached");
+    expect(result.branches).toEqual(
+      expect.arrayContaining(["main", "develop", "release/1.2"]),
+    );
+  });
+
+  it("reports dirty primary checkouts", async () => {
+    const repoPath = await initBranchRepo();
+    await fs.writeFile(path.join(repoPath, "draft.txt"), "dirty\n", "utf8");
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      { type: "host.list_branches", path: repoPath },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.hasUncommittedChanges).toBe(true);
+    expect(result.operation).toEqual({ kind: "none" });
   });
 
   it("returns an empty list for non-git directories", async () => {
@@ -54,7 +89,13 @@ describe("host.list_branches dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(result).toEqual({ branches: [], current: null, defaultBranch: null });
+    expect(result).toEqual({
+      branches: [],
+      checkout: { kind: "unknown", reason: "Path is not a git repository" },
+      defaultBranch: null,
+      hasUncommittedChanges: false,
+      operation: { kind: "none" },
+    });
   });
 
   it("returns an empty list for missing paths", async () => {
@@ -66,6 +107,12 @@ describe("host.list_branches dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(result).toEqual({ branches: [], current: null, defaultBranch: null });
+    expect(result).toEqual({
+      branches: [],
+      checkout: { kind: "unknown", reason: "Path is not a git repository" },
+      defaultBranch: null,
+      hasUncommittedChanges: false,
+      operation: { kind: "none" },
+    });
   });
 });

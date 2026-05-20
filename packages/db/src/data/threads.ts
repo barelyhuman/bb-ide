@@ -204,10 +204,21 @@ export interface HasPendingThreadShutdownInEnvironmentArgs {
   environmentId: string;
 }
 
+export interface HasNonTerminalThreadInEnvironmentArgs {
+  environmentId: string;
+}
+
 export interface TransitionThreadsToErrorArgs {
   now?: number;
   threadIds: readonly string[];
 }
+
+const NON_TERMINAL_THREAD_STATUSES: readonly ThreadStatus[] = [
+  "created",
+  "provisioning",
+  "idle",
+  "active",
+];
 
 const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
   "created",
@@ -539,6 +550,25 @@ export function hasPendingThreadShutdownInEnvironment(
       and(
         eq(threads.environmentId, args.environmentId),
         isNotNull(threads.stopRequestedAt),
+      ),
+    )
+    .get();
+
+  return row !== undefined;
+}
+
+export function hasNonTerminalThreadInEnvironment(
+  db: DbConnection,
+  args: HasNonTerminalThreadInEnvironmentArgs,
+): boolean {
+  const row = db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.environmentId, args.environmentId),
+        inArray(threads.status, [...NON_TERMINAL_THREAD_STATUSES]),
+        isNull(threads.deletedAt),
       ),
     )
     .get();

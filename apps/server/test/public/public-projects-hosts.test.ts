@@ -13,6 +13,7 @@ import {
   updateHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
+import { projectBranchesResponseSchema } from "@bb/server-contract";
 import { threadListEntrySchema, threadSchema } from "@bb/domain";
 import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
@@ -69,12 +70,6 @@ const hostStatusListResponseSchema = z.array(
     status: z.string(),
   }),
 );
-
-const branchListResponseSchema = z.object({
-  branches: z.array(z.string()),
-  current: z.string().nullable(),
-  defaultBranch: z.string().nullable(),
-});
 
 interface ReportCleanWorkspaceStatusForEnvironmentArgs {
   afterCursor?: number;
@@ -1237,16 +1232,30 @@ describe("public project and host routes", () => {
       });
       await reportQueuedCommandSuccess(harness, queued, {
         branches: ["main", "feature/test"],
-        current: "feature/test",
+        checkout: {
+          kind: "branch",
+          branchName: "feature/test",
+          headSha: "abc123",
+        },
         defaultBranch: "main",
+        hasUncommittedChanges: false,
+        operation: { kind: "none" },
       });
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
-      expect(branchListResponseSchema.parse(await readJson(response))).toEqual({
+      expect(
+        projectBranchesResponseSchema.parse(await readJson(response)),
+      ).toEqual({
         branches: ["main", "feature/test"],
-        current: "feature/test",
+        checkout: {
+          kind: "branch",
+          branchName: "feature/test",
+          headSha: "abc123",
+        },
         defaultBranch: "main",
+        hasUncommittedChanges: false,
+        operation: { kind: "none" },
       });
     } finally {
       await harness.cleanup();

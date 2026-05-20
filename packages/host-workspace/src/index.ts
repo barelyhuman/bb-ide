@@ -22,8 +22,11 @@ export type {
 export {
   WorkspaceError,
   detectGitRepo,
+  getCheckoutRef,
   getCurrentBranch,
+  getWorkspaceGitOperation,
   gitBlobSize,
+  hasUncommittedChanges,
   listBranches,
   readDefaultBranch,
   readGitBlob,

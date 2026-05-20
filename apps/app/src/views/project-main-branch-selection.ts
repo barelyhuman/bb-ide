@@ -26,6 +26,7 @@ export interface UseScopedBranchSelectionArgs extends BranchSelectionScopeArgs {
 
 export interface UseScopedBranchSelectionResult {
   onBranchChange: (name: string) => void;
+  onClearBranch: () => void;
   onCreateBranch: () => void;
   selectedBranch: ProjectMainSelectedBranch | null;
 }
@@ -114,8 +115,19 @@ export function useScopedBranchSelection(
     });
   }, [args.currentBranch, scope]);
 
+  const onClearBranch = useCallback(() => {
+    if (!scope) {
+      return;
+    }
+
+    setSelectedBranchState((previous) =>
+      matchesBranchSelectionScope(previous?.scope, scope) ? null : previous,
+    );
+  }, [scope]);
+
   return {
     onBranchChange,
+    onClearBranch,
     onCreateBranch,
     selectedBranch,
   };

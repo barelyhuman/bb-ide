@@ -13,6 +13,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   projectPromptHistoryQueryKey,
+  projectSourceBranchesQueryKey,
   threadListQueryKey,
   threadQueryKey,
   threadQueuedMessagesQueryKey,
@@ -184,6 +185,44 @@ describe("thread runtime mutations", () => {
     expect(
       queryClient.getQueryState(projectPromptHistoryQueryKey("project-1"))
         ?.isInvalidated,
+    ).toBe(true);
+  });
+
+  it("invalidates project source checkout observations after unmanaged checkout intent", async () => {
+    vi.mocked(api.createThread).mockResolvedValue(createdThread);
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const projectSourceBranchesKey = projectSourceBranchesQueryKey(
+      "project-1",
+      "host-1",
+    );
+    queryClient.setQueryData(projectSourceBranchesKey, {
+      branches: ["main", "release/1.2"],
+      checkout: { kind: "branch", branchName: "main", headSha: "abc123" },
+      defaultBranch: "main",
+      hasUncommittedChanges: false,
+      operation: { kind: "none" },
+    });
+    const { result } = renderHook(() => useCreateThread(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        input: [{ type: "text", text: "Open a release thread" }],
+        projectId: "project-1",
+        providerId: "codex",
+        environment: {
+          type: "host",
+          hostId: "host-1",
+          workspace: {
+            type: "unmanaged",
+            path: null,
+            branch: { kind: "existing", name: "release/1.2" },
+          },
+        },
+      });
+    });
+
+    expect(
+      queryClient.getQueryState(projectSourceBranchesKey)?.isInvalidated,
     ).toBe(true);
   });
 

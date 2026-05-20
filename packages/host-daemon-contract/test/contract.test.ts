@@ -1012,6 +1012,27 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
+      hostDaemonCommandResultSchemaByType["host.list_branches"].parse({
+        branches: ["main", "feature/test"],
+        checkout: {
+          kind: "branch",
+          branchName: "feature/test",
+          headSha: "abc123",
+        },
+        defaultBranch: "main",
+        hasUncommittedChanges: true,
+        operation: { kind: "merge", hasConflicts: true },
+      }),
+    ).toMatchObject({
+      checkout: {
+        kind: "branch",
+        branchName: "feature/test",
+      },
+      hasUncommittedChanges: true,
+      operation: { kind: "merge", hasConflicts: true },
+    });
+
+    expect(
       hostDaemonCommandResultSchemaByType["host.read_file"].parse({
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         content: "# Preferences",

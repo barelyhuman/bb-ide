@@ -119,6 +119,114 @@ describe("provisionWorkspace", () => {
       expect(await ws.listBranches()).toContain("feature-new");
     });
 
+    it("no-ops unmanaged checkout when already on the target branch even if dirty", async () => {
+      const repoPath = await initRepo();
+      await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+        checkout: { kind: "existing", name: "main" },
+      });
+
+      expect(ws.isGitRepo).toBe(true);
+      expect(await ws.getCurrentBranch()).toBe("main");
+      expect(
+        (await runGit(["status", "--porcelain=v1"], { cwd: repoPath })).stdout,
+      ).toContain("dirty.txt");
+    });
+
+    it("rejects unmanaged checkout branch changes when the repo is dirty", async () => {
+      const repoPath = await initRepo();
+      await runGit(["branch", "feature-dirty"], { cwd: repoPath });
+      await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: repoPath,
+          checkout: { kind: "existing", name: "feature-dirty" },
+        }),
+      ).rejects.toHaveProperty("code", "checkout_dirty");
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("main\n");
+    });
+
+    it("rejects unmanaged new branch checkout when the repo is dirty", async () => {
+      const repoPath = await initRepo();
+      await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: repoPath,
+          checkout: { kind: "new", name: "feature-new-dirty" },
+        }),
+      ).rejects.toHaveProperty("code", "checkout_dirty");
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("main\n");
+    });
+
+    it("rejects unmanaged checkout branch changes with unresolved conflicts", async () => {
+      const repoPath = await initRepo();
+      await runGit(["switch", "-c", "feature-conflict"], { cwd: repoPath });
+      await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
+      await runGit(["commit", "-am", "Feature change"], { cwd: repoPath });
+      await runGit(["switch", "main"], { cwd: repoPath });
+      await fs.writeFile(path.join(repoPath, "README.md"), "main\n", "utf8");
+      await runGit(["commit", "-am", "Main change"], { cwd: repoPath });
+      const merge = await runGit(["merge", "feature-conflict"], {
+        cwd: repoPath,
+        allowFailure: true,
+      });
+
+      expect(merge.exitCode).not.toBe(0);
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: repoPath,
+          checkout: { kind: "existing", name: "feature-conflict" },
+        }),
+      ).rejects.toHaveProperty("code", "checkout_conflicts");
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("main\n");
+    });
+
+    it("rejects unmanaged checkout branch changes from detached HEAD", async () => {
+      const repoPath = await initRepo();
+      await runGit(["branch", "feature-detached"], { cwd: repoPath });
+      await runGit(["checkout", "--detach", "HEAD"], { cwd: repoPath });
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: repoPath,
+          checkout: { kind: "existing", name: "feature-detached" },
+        }),
+      ).rejects.toHaveProperty("code", "checkout_detached");
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("");
+    });
+
+    it("rejects unmanaged checkout for missing existing branches", async () => {
+      const repoPath = await initRepo();
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: repoPath,
+          checkout: { kind: "existing", name: "missing-branch" },
+        }),
+      ).rejects.toHaveProperty("code", "checkout_missing_branch");
+      expect(
+        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
+      ).toBe("main\n");
+    });
+
     it("rejects unmanaged checkouts for non-git directories", async () => {
       const dirPath = await makeTempDir("bb-provision-nongit-checkout-");
 

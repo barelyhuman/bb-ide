@@ -37,6 +37,17 @@ export type {
 export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
 export type { FeatureFlags } from "./feature-flags.js";
 
+export {
+  gitCheckoutRefSchema,
+  projectSourceCheckoutSchema,
+  workspaceGitOperationSchema,
+} from "./git-checkout.js";
+export type {
+  GitCheckoutRef,
+  ProjectSourceCheckout,
+  WorkspaceGitOperation,
+} from "./git-checkout.js";
+
 export { managerTemplateNameSchema } from "./manager-templates.js";
 export type { ManagerTemplateName } from "./manager-templates.js";
 

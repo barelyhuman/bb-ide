@@ -70,6 +70,23 @@ describe("useScopedBranchSelection", () => {
     });
   });
 
+  it("clears an explicit branch selection back to the current checkout", () => {
+    const { result } = renderBranchSelection({
+      currentBranch: "main",
+      environmentValue: "host:hst_test:local",
+      projectId: "proj_test",
+    });
+
+    act(() => {
+      result.current.onBranchChange("release/1.2");
+    });
+    act(() => {
+      result.current.onClearBranch();
+    });
+
+    expect(result.current.selectedBranch).toBeNull();
+  });
+
   it("scopes branch selection to the current project and environment", () => {
     const firstScopeProps = {
       currentBranch: "main",

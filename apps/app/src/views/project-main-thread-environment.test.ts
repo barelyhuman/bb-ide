@@ -13,12 +13,11 @@ function selectedBranch(name: string): ProjectMainSelectedBranch {
 }
 
 describe("resolveProjectMainThreadEnvironment", () => {
-  it("omits unmanaged branch checkout when no current branch is known", () => {
+  it("omits unmanaged branch checkout when no branch is selected", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
-        currentBranch: null,
         selectedBranch: null,
       }),
     ).toEqual({
@@ -31,13 +30,12 @@ describe("resolveProjectMainThreadEnvironment", () => {
     });
   });
 
-  it("uses the env's current branch (HEAD) for host local checkout", () => {
+  it("sends explicit existing branch checkout for host local", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
-        currentBranch: "develop",
-        selectedBranch: null,
+        selectedBranch: selectedBranch("develop"),
       }),
     ).toMatchObject({
       workspace: {
@@ -47,12 +45,26 @@ describe("resolveProjectMainThreadEnvironment", () => {
     });
   });
 
+  it("sends explicit new branch checkout for host local", () => {
+    expect(
+      resolveProjectMainThreadEnvironment({
+        environmentValue: hostLocalEnvironmentValue,
+        projectId,
+        selectedBranch: { name: "develop", isNew: true },
+      }),
+    ).toMatchObject({
+      workspace: {
+        type: "unmanaged",
+        branch: { kind: "new" },
+      },
+    });
+  });
+
   it("sends default base branch for managed worktrees without an explicit pick", () => {
     expect(
       resolveProjectMainThreadEnvironment({
         environmentValue: hostWorktreeEnvironmentValue,
         projectId,
-        currentBranch: "master",
         selectedBranch: null,
       }),
     ).toMatchObject({
@@ -68,7 +80,6 @@ describe("resolveProjectMainThreadEnvironment", () => {
       resolveProjectMainThreadEnvironment({
         environmentValue: hostWorktreeEnvironmentValue,
         projectId,
-        currentBranch: "develop",
         selectedBranch: selectedBranch("develop"),
       }),
     ).toMatchObject({

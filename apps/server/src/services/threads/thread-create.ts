@@ -4,9 +4,11 @@ import {
   deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
+  hasNonTerminalThreadInEnvironment,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
+import type { UnmanagedBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
@@ -60,10 +62,18 @@ type ThreadCreateDeps = Pick<
   | "machineAuth"
 >;
 
-interface ReuseEnvironmentIntentByHostPathArgs {
+interface ExistingUnmanagedEnvironmentIntentByHostPathArgs {
+  branch: UnmanagedBranchSpec | undefined;
   hostId: string;
   path: string;
   request: ThreadCreateServiceRequest;
+}
+
+interface ExistingUnmanagedEnvironmentIntentResult {
+  environmentId: string;
+  intent:
+    | Extract<ThreadProvisionEnvironmentIntent, { type: "reuse" }>
+    | Extract<ThreadProvisionEnvironmentIntent, { type: "checkout-unmanaged" }>;
 }
 
 interface CreateProvisioningThreadArgs {
@@ -111,6 +121,7 @@ function resolveProvisionHostId(
   switch (environmentIntent.type) {
     case "direct-managed":
     case "direct-unmanaged":
+    case "checkout-unmanaged":
       return environmentIntent.hostId;
     case "reuse": {
       const environment = getEnvironment(
@@ -156,10 +167,10 @@ async function prepareManagerThreadInitialInput(
   });
 }
 
-function reuseEnvironmentIntentByHostPath(
+function existingUnmanagedEnvironmentIntentByHostPath(
   deps: ThreadCreateDeps,
-  args: ReuseEnvironmentIntentByHostPathArgs,
-): Extract<ThreadProvisionEnvironmentIntent, { type: "reuse" }> | null {
+  args: ExistingUnmanagedEnvironmentIntentByHostPathArgs,
+): ExistingUnmanagedEnvironmentIntentResult | null {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
   if (!existing) {
     return null;
@@ -173,18 +184,54 @@ function reuseEnvironmentIntentByHostPath(
     );
   }
 
-  if (existing.status === "ready" || existing.status === "provisioning") {
-    return {
-      type: "reuse",
-      environmentId: existing.id,
-    };
+  if (!args.branch) {
+    if (existing.status === "ready" || existing.status === "provisioning") {
+      return {
+        environmentId: existing.id,
+        intent: {
+          type: "reuse",
+          environmentId: existing.id,
+        },
+      };
+    }
+
+    throw new ApiError(
+      409,
+      "invalid_request",
+      `Workspace path is already attached to an environment in ${existing.status} state`,
+    );
   }
 
-  throw new ApiError(
-    409,
-    "invalid_request",
-    `Workspace path is already attached to an environment in ${existing.status} state`,
-  );
+  if (existing.status !== "ready" || !existing.path) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      `Cannot checkout branch while the workspace environment is in ${existing.status} state`,
+    );
+  }
+
+  if (
+    hasNonTerminalThreadInEnvironment(deps.db, {
+      environmentId: existing.id,
+    })
+  ) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Cannot checkout branch while another thread is using this workspace",
+    );
+  }
+
+  return {
+    environmentId: existing.id,
+    intent: {
+      type: "checkout-unmanaged",
+      environmentId: existing.id,
+      hostId: args.hostId,
+      path: args.path,
+      branch: args.branch,
+    },
+  };
 }
 
 async function createProvisioningThread(
@@ -307,19 +354,23 @@ export async function createThreadFromRequest(
             "Validated unmanaged host request is missing a workspace path",
           );
         }
-        const reuseIntent = reuseEnvironmentIntentByHostPath(deps, {
-          hostId,
-          path: resolvedEnvironment.unmanagedPath,
-          request,
-        });
-        environmentIntent = reuseIntent ?? {
+        const existingIntent = existingUnmanagedEnvironmentIntentByHostPath(
+          deps,
+          {
+            branch: workspace.branch,
+            hostId,
+            path: resolvedEnvironment.unmanagedPath,
+            request,
+          },
+        );
+        environmentIntent = existingIntent?.intent ?? {
           type: "direct-unmanaged",
           hostId,
           path: resolvedEnvironment.unmanagedPath,
           ...(workspace.branch ? { branch: workspace.branch } : {}),
         };
-        if (reuseIntent) {
-          environmentId = reuseIntent.environmentId;
+        if (existingIntent) {
+          environmentId = existingIntent.environmentId;
         }
         break;
       }

@@ -28,6 +28,10 @@ import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+import {
+  buildProjectMainBranchUiState,
+  type ProjectMainBranchEnvironmentMode,
+} from "./project-main-branch-ui";
 import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
 import { useScopedBranchSelection } from "./project-main-branch-selection";
 
@@ -35,7 +39,9 @@ const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
 
 // react-router's location.state is freeform unknown — narrow it here at the
 // system boundary before reading.
-function readReuseEnvironmentIdFromLocationState(state: unknown): string | null {
+function readReuseEnvironmentIdFromLocationState(
+  state: unknown,
+): string | null {
   if (!state || typeof state !== "object") return null;
   const candidate = (state as { reuseEnvironmentId?: unknown })
     .reuseEnvironmentId;
@@ -235,40 +241,65 @@ export function ProjectMainView() {
     () => activeBranchesQuery.data?.branches ?? [],
     [activeBranchesQuery.data?.branches],
   );
-  // The branch this env will use if the user doesn't override:
-  //   - host:local      → the primary checkout's HEAD (`current`)
-  //   - host:worktree   → the repo's default branch (the server's `default`
-  //                       base-branch resolves to this)
-  // For non-local environments, `current` is meaningless, so we prefer
-  // `defaultBranch`.
   const isHostLocalMode = isHostMode && parsedEnvironment.mode === "local";
-  const effectiveCurrentBranch = isHostLocalMode
-    ? (activeBranchesQuery.data?.current ?? null)
-    : (activeBranchesQuery.data?.defaultBranch ?? null);
+  const branchEnvironmentMode: ProjectMainBranchEnvironmentMode =
+    isHostLocalMode
+      ? "local"
+      : isHostMode && parsedEnvironment.mode === "worktree"
+        ? "worktree"
+        : "other";
+  const branchSelectionSeed =
+    branchEnvironmentMode === "local" &&
+    activeBranchesQuery.data?.checkout.kind === "branch"
+      ? activeBranchesQuery.data.checkout.branchName
+      : branchEnvironmentMode === "worktree"
+        ? (activeBranchesQuery.data?.defaultBranch ?? null)
+        : null;
   const {
     selectedBranch,
     onBranchChange: handleBranchChange,
+    onClearBranch: handleClearBranch,
     onCreateBranch: handleCreateBranch,
   } = useScopedBranchSelection({
-    currentBranch: effectiveCurrentBranch,
+    currentBranch: branchSelectionSeed,
     environmentValue: effectiveEnvironmentValue,
     projectId,
   });
+  const branchUiState = useMemo(
+    () =>
+      buildProjectMainBranchUiState({
+        checkout: activeBranchesQuery.data,
+        isFetching: activeBranchesQuery.isFetching,
+        isLoading: activeBranchesQuery.isLoading,
+        mode: branchEnvironmentMode,
+        selectedBranch,
+      }),
+    [
+      activeBranchesQuery.data,
+      activeBranchesQuery.isFetching,
+      activeBranchesQuery.isLoading,
+      branchEnvironmentMode,
+      selectedBranch,
+    ],
+  );
+  const refetchSourceBranches = activeBranchesQuery.refetch;
+  const handleBranchOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        void refetchSourceBranches();
+      }
+    },
+    [refetchSourceBranches],
+  );
 
   const selectedEnvironment = useMemo(
     () =>
       resolveProjectMainThreadEnvironment({
         environmentValue: effectiveEnvironmentValue,
         projectId,
-        currentBranch: effectiveCurrentBranch,
         selectedBranch,
       }),
-    [
-      effectiveEnvironmentValue,
-      projectId,
-      effectiveCurrentBranch,
-      selectedBranch,
-    ],
+    [effectiveEnvironmentValue, projectId, selectedBranch],
   );
 
   const projectOptions = useMemo(() => {
@@ -396,7 +427,10 @@ export function ProjectMainView() {
     promptInput.length === 0 ||
     !selectedEnvironment ||
     !selectedProviderId ||
-    !selectedThreadModel;
+    !selectedThreadModel ||
+    (branchEnvironmentMode === "local" &&
+      selectedBranch !== null &&
+      branchUiState.mutationBlocker !== null);
 
   const currentPromptDraft = useMemo(
     () => ({
@@ -522,19 +556,36 @@ export function ProjectMainView() {
   const branchConfig = useMemo(
     () => ({
       value: selectedBranch?.name ?? null,
-      current: effectiveCurrentBranch,
+      currentBranch: branchUiState.currentBranch,
       isNew: selectedBranch?.isNew ?? false,
       options: branchOptions,
       loading: activeBranchesQuery.isLoading,
-      placeholder: "Default branch",
+      placeholder: branchUiState.placeholder,
+      triggerLabel: branchUiState.triggerLabel,
+      triggerTitle: branchUiState.triggerTitle,
+      currentOptionLabel: branchUiState.currentOptionLabel,
+      currentOptionTitle: branchUiState.currentOptionLabel ?? undefined,
+      optionDisabledReason: branchUiState.mutationBlocker?.label,
+      optionDisabledTitle: branchUiState.mutationBlocker?.title,
+      createDisabledReason: branchUiState.mutationBlocker?.label,
+      createDisabledTitle: branchUiState.mutationBlocker?.title,
       onChange: handleBranchChange,
+      onClear: handleClearBranch,
       onCreate: handleCreateBranch,
+      onOpenChange: handleBranchOpenChange,
     }),
     [
       activeBranchesQuery.isLoading,
       branchOptions,
-      effectiveCurrentBranch,
+      branchUiState.currentBranch,
+      branchUiState.currentOptionLabel,
+      branchUiState.mutationBlocker,
+      branchUiState.placeholder,
+      branchUiState.triggerLabel,
+      branchUiState.triggerTitle,
       handleBranchChange,
+      handleBranchOpenChange,
+      handleClearBranch,
       handleCreateBranch,
       selectedBranch?.isNew,
       selectedBranch?.name,

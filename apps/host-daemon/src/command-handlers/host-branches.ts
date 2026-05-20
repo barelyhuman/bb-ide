@@ -1,7 +1,9 @@
 import path from "node:path";
 import {
   detectGitRepo,
-  getCurrentBranch,
+  getCheckoutRef,
+  getWorkspaceGitOperation,
+  hasUncommittedChanges,
   listBranches,
   readDefaultBranch,
 } from "@bb/host-workspace";
@@ -17,14 +19,23 @@ export async function listHostBranches(
   }
 
   if (!(await detectGitRepo(command.path))) {
-    return { branches: [], current: null, defaultBranch: null };
+    return {
+      branches: [],
+      checkout: { kind: "unknown", reason: "Path is not a git repository" },
+      defaultBranch: null,
+      hasUncommittedChanges: false,
+      operation: { kind: "none" },
+    };
   }
 
-  const [branches, current, defaultBranch] = await Promise.all([
-    listBranches(command.path),
-    getCurrentBranch(command.path),
-    readDefaultBranch(command.path),
-  ]);
+  const [branches, checkout, defaultBranch, dirty, operation] =
+    await Promise.all([
+      listBranches(command.path),
+      getCheckoutRef(command.path),
+      readDefaultBranch(command.path),
+      hasUncommittedChanges(command.path),
+      getWorkspaceGitOperation(command.path),
+    ]);
   // Pin the source's default branch to the top of the list so the picker
   // surfaces it first; everything else preserves git's alphabetical order.
   const sorted =
@@ -33,7 +44,9 @@ export async function listHostBranches(
       : branches;
   return {
     branches: sorted,
-    current: current ?? null,
+    checkout,
     defaultBranch: defaultBranch ?? null,
+    hasUncommittedChanges: dirty,
+    operation,
   };
 }
