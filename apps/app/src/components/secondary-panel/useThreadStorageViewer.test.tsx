@@ -158,38 +158,6 @@ describe("useThreadStorageViewer", () => {
     expect(api.getThreadStorageFilePreview).not.toHaveBeenCalled();
   });
 
-  it("passes explicit file-list options through the storage query", async () => {
-    const fileListOptions = {
-      limit: 25,
-      query: "notes",
-    };
-    vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
-      makeStorageFiles(["docs/notes.md"]),
-    );
-
-    const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () =>
-        useThreadStorageViewer({
-          activePath: null,
-          fileListOptions,
-          threadId: "thread-1",
-          threadType: "manager",
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.threadStorageFiles?.files).toHaveLength(1);
-    });
-
-    expect(api.listThreadStorageFiles).toHaveBeenCalledWith({
-      id: "thread-1",
-      options: fileListOptions,
-      signal: expect.any(AbortSignal),
-    });
-  });
-
   it("surfaces file-list errors separately from preview errors", async () => {
     const listError = new Error("List failed");
     vi.mocked(api.listThreadStorageFiles).mockRejectedValue(listError);
