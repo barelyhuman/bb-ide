@@ -14,6 +14,7 @@ import {
   listQueuedThreadMessages,
   releaseQueuedMessageClaim,
   releaseStaleQueuedMessageClaims,
+  reorderQueuedThreadMessage,
 } from "../../src/data/queued-thread-messages.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
@@ -287,5 +288,219 @@ describe("queued thread messages", () => {
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it("reorders queued messages to the front, middle, and end", () => {
+    const { db, thread } = setup();
+    const firstQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: defaultInput,
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const secondQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: altInput,
+      model: "gpt-5",
+      reasoningLevel: "high",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const thirdQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: [{ type: "text", text: "third" }],
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+
+    const moveToFront = reorderQueuedThreadMessage({
+      db,
+      notifier: noopNotifier,
+      threadId: thread.id,
+      queuedMessageId: thirdQueuedMessage.id,
+      previousQueuedMessageId: null,
+      nextQueuedMessageId: firstQueuedMessage.id,
+    });
+    expect(moveToFront.kind).toBe("reordered");
+    expect(listQueuedThreadMessages(db, thread.id).map((row) => row.id)).toEqual([
+      thirdQueuedMessage.id,
+      firstQueuedMessage.id,
+      secondQueuedMessage.id,
+    ]);
+
+    const moveToMiddle = reorderQueuedThreadMessage({
+      db,
+      notifier: noopNotifier,
+      threadId: thread.id,
+      queuedMessageId: secondQueuedMessage.id,
+      previousQueuedMessageId: thirdQueuedMessage.id,
+      nextQueuedMessageId: firstQueuedMessage.id,
+    });
+    expect(moveToMiddle.kind).toBe("reordered");
+    expect(listQueuedThreadMessages(db, thread.id).map((row) => row.id)).toEqual([
+      thirdQueuedMessage.id,
+      secondQueuedMessage.id,
+      firstQueuedMessage.id,
+    ]);
+
+    const moveToEnd = reorderQueuedThreadMessage({
+      db,
+      notifier: noopNotifier,
+      threadId: thread.id,
+      queuedMessageId: thirdQueuedMessage.id,
+      previousQueuedMessageId: firstQueuedMessage.id,
+      nextQueuedMessageId: null,
+    });
+    expect(moveToEnd.kind).toBe("reordered");
+    expect(listQueuedThreadMessages(db, thread.id).map((row) => row.id)).toEqual([
+      secondQueuedMessage.id,
+      firstQueuedMessage.id,
+      thirdQueuedMessage.id,
+    ]);
+  });
+
+  it("claims the reordered first queued message", () => {
+    const { db, thread } = setup();
+    const firstQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: defaultInput,
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const secondQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: altInput,
+      model: "gpt-5",
+      reasoningLevel: "high",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+
+    expect(
+      reorderQueuedThreadMessage({
+        db,
+        notifier: noopNotifier,
+        threadId: thread.id,
+        queuedMessageId: secondQueuedMessage.id,
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: firstQueuedMessage.id,
+      }).kind,
+    ).toBe("reordered");
+
+    const claimedQueuedMessage = claimNextQueuedThreadMessage(
+      db,
+      noopNotifier,
+      thread.id,
+    );
+    expect(claimedQueuedMessage?.id).toBe(secondQueuedMessage.id);
+    expect(listQueuedThreadMessages(db, thread.id).map((row) => row.id)).toEqual([
+      firstQueuedMessage.id,
+    ]);
+  });
+
+  it("rejects reordering claimed, missing, cross-thread, and inverted neighbors", () => {
+    const { db, thread } = setup();
+    const otherThread = createThread(db, noopNotifier, {
+      projectId: thread.projectId,
+      providerId: "codex",
+    });
+    const firstQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: defaultInput,
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const secondQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: altInput,
+      model: "gpt-5",
+      reasoningLevel: "high",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const thirdQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: thread.id,
+      content: [{ type: "text", text: "third" }],
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const otherQueuedMessage = createQueuedThreadMessage(db, noopNotifier, {
+      threadId: otherThread.id,
+      content: defaultInput,
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+
+    expect(
+      reorderQueuedThreadMessage({
+        db,
+        notifier: noopNotifier,
+        threadId: thread.id,
+        queuedMessageId: "qmsg_missing",
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: firstQueuedMessage.id,
+      }).kind,
+    ).toBe("not_found");
+    expect(
+      reorderQueuedThreadMessage({
+        db,
+        notifier: noopNotifier,
+        threadId: thread.id,
+        queuedMessageId: thirdQueuedMessage.id,
+        previousQueuedMessageId: otherQueuedMessage.id,
+        nextQueuedMessageId: null,
+      }).kind,
+    ).toBe("stale_neighbor");
+    expect(
+      reorderQueuedThreadMessage({
+        db,
+        notifier: noopNotifier,
+        threadId: thread.id,
+        queuedMessageId: firstQueuedMessage.id,
+        previousQueuedMessageId: thirdQueuedMessage.id,
+        nextQueuedMessageId: secondQueuedMessage.id,
+      }).kind,
+    ).toBe("invalid_neighbor_order");
+
+    const claimedQueuedMessage = claimQueuedThreadMessage(
+      db,
+      noopNotifier,
+      secondQueuedMessage.id,
+    );
+    if (!claimedQueuedMessage) {
+      throw new Error("Expected queued message claim");
+    }
+    expect(
+      reorderQueuedThreadMessage({
+        db,
+        notifier: noopNotifier,
+        threadId: thread.id,
+        queuedMessageId: secondQueuedMessage.id,
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: firstQueuedMessage.id,
+      }).kind,
+    ).toBe("claimed");
+    expect(
+      reorderQueuedThreadMessage({
+        db,
+        notifier: noopNotifier,
+        threadId: thread.id,
+        queuedMessageId: thirdQueuedMessage.id,
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: secondQueuedMessage.id,
+      }).kind,
+    ).toBe("stale_neighbor");
   });
 });

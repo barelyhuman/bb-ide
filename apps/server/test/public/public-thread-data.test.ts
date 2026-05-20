@@ -4,12 +4,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   archiveThread,
+  claimQueuedThreadMessage,
   createPromptHistoryEntry,
   createQueuedThreadMessageId,
+  deleteQueuedThreadMessage,
   deleteHost,
   environments,
   events,
   getQueuedThreadMessage,
+  listQueuedThreadMessages,
   getThread,
   hostDaemonCommands,
   queuedThreadMessages,
@@ -39,7 +42,7 @@ import {
   timelineTurnSummaryDetailsResponseSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   type QueuedCommand,
   reportQueuedCommandError,
@@ -1132,6 +1135,274 @@ describe("public thread data routes", () => {
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
       expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reorders thread queued messages", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-queued-message-reorder",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-queued-message-reorder-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+      const firstQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "First queued message" }],
+      });
+      const secondQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Second queued message" }],
+      });
+      const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Third queued message" }],
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${thirdQueuedMessage.id}/order`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            previousQueuedMessageId: null,
+            nextQueuedMessageId: firstQueuedMessage.id,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const queuedMessages = threadQueuedMessageListResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(queuedMessages.map((queuedMessage) => queuedMessage.id)).toEqual([
+        thirdQueuedMessage.id,
+        firstQueuedMessage.id,
+        secondQueuedMessage.id,
+      ]);
+      expect(
+        listQueuedThreadMessages(harness.db, thread.id).map(
+          (queuedMessage) => queuedMessage.id,
+        ),
+      ).toEqual([
+        thirdQueuedMessage.id,
+        firstQueuedMessage.id,
+        secondQueuedMessage.id,
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("maps queued message reorder not-found and invalid-neighbor errors", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-queued-message-reorder-errors",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-queued-message-reorder-errors-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+      const firstQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "First queued message" }],
+      });
+      const secondQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Second queued message" }],
+      });
+      const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Third queued message" }],
+      });
+
+      const notFoundResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/qmsg_missing/order`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            previousQueuedMessageId: null,
+            nextQueuedMessageId: firstQueuedMessage.id,
+          }),
+        },
+      );
+      expect(notFoundResponse.status).toBe(404);
+      await expect(readJson(notFoundResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Queued message not found",
+      });
+
+      const invalidNeighborResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${firstQueuedMessage.id}/order`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            previousQueuedMessageId: thirdQueuedMessage.id,
+            nextQueuedMessageId: secondQueuedMessage.id,
+          }),
+        },
+      );
+      expect(invalidNeighborResponse.status).toBe(409);
+      await expect(readJson(invalidNeighborResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Queued message order is invalid",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns queued messages without notification for unchanged reorder requests", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-queued-message-reorder-unchanged",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-queued-message-reorder-unchanged-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+      const firstQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "First queued message" }],
+      });
+      const secondQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Second queued message" }],
+      });
+      const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Third queued message" }],
+      });
+      const notifyThreadSpy = vi.spyOn(harness.hub, "notifyThread");
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${secondQueuedMessage.id}/order`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            previousQueuedMessageId: firstQueuedMessage.id,
+            nextQueuedMessageId: thirdQueuedMessage.id,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const queuedMessages = threadQueuedMessageListResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(queuedMessages.map((queuedMessage) => queuedMessage.id)).toEqual([
+        firstQueuedMessage.id,
+        secondQueuedMessage.id,
+        thirdQueuedMessage.id,
+      ]);
+      expect(notifyThreadSpy).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects stale and claimed queued message reorder requests", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-queued-message-reorder-stale",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-queued-message-reorder-stale-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+      const firstQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "First queued message" }],
+      });
+      const secondQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Second queued message" }],
+      });
+      const thirdQueuedMessage = seedQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Third queued message" }],
+      });
+
+      expect(
+        deleteQueuedThreadMessage(
+          harness.db,
+          harness.hub,
+          firstQueuedMessage.id,
+        ),
+      ).toBe(true);
+      const staleResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${thirdQueuedMessage.id}/order`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            previousQueuedMessageId: null,
+            nextQueuedMessageId: firstQueuedMessage.id,
+          }),
+        },
+      );
+      expect(staleResponse.status).toBe(409);
+      await expect(readJson(staleResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Queued message order changed",
+      });
+
+      const claimedQueuedMessage = claimQueuedThreadMessage(
+        harness.db,
+        harness.hub,
+        secondQueuedMessage.id,
+      );
+      expect(claimedQueuedMessage?.id).toBe(secondQueuedMessage.id);
+      const claimedResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${secondQueuedMessage.id}/order`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            previousQueuedMessageId: null,
+            nextQueuedMessageId: thirdQueuedMessage.id,
+          }),
+        },
+      );
+      expect(claimedResponse.status).toBe(409);
+      await expect(readJson(claimedResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Queued message is already being sent",
+      });
     } finally {
       await harness.cleanup();
     }
@@ -3200,6 +3471,7 @@ describe("public thread data routes", () => {
           reasoningLevel: "medium",
           permissionMode: "full",
           claimedAt: null,
+          sortKey: "V",
           createdAt: now,
           updatedAt: now,
         })

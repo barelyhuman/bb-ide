@@ -24,6 +24,7 @@ import {
   environmentActionRequestSchema,
   baseBranchSpecSchema,
   gitBranchNameSchema,
+  reorderQueuedMessageRequestSchema,
   resolvePendingInteractionRequestSchema,
   sendQueuedMessageRequestSchema,
   sendMessageRequestSchema,
@@ -529,6 +530,20 @@ describe("server-contract canonical schemas", () => {
       mode: "auto",
     });
     expect(() => sendQueuedMessageRequestSchema.parse({})).toThrow();
+    expect(
+      reorderQueuedMessageRequestSchema.parse({
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: "qmsg_next",
+      }),
+    ).toEqual({
+      previousQueuedMessageId: null,
+      nextQueuedMessageId: "qmsg_next",
+    });
+    expect(() =>
+      reorderQueuedMessageRequestSchema.parse({
+        nextQueuedMessageId: "qmsg_next",
+      }),
+    ).toThrow();
 
     expect(
       threadListResponseSchema.parse([
@@ -811,6 +826,13 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/queued-messages");
     expect(
+      publicClient.threads[":id"]["queued-messages"][
+        ":queuedMessageId"
+      ].order.$url({
+        param: { id: "thr_123", queuedMessageId: "qmsg_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/queued-messages/qmsg_123/order");
+    expect(
       publicClient.threads[":id"]["composer-bootstrap"].$url({
         param: { id: "thr_123" },
       }).pathname,
@@ -1008,6 +1030,8 @@ describe("server-contract clients", () => {
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
       threadStorageFilesQuerySchema: contract.threadStorageFilesQuerySchema,
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
+      reorderQueuedMessageRequestSchema:
+        contract.reorderQueuedMessageRequestSchema,
       sendQueuedMessageRequestSchema: contract.sendQueuedMessageRequestSchema,
       sendQueuedMessageResponseSchema: contract.sendQueuedMessageResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,

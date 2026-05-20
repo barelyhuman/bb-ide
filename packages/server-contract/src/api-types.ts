@@ -400,6 +400,14 @@ export type SendQueuedMessageRequest = z.infer<
   typeof sendQueuedMessageRequestSchema
 >;
 
+export const reorderQueuedMessageRequestSchema = z.object({
+  previousQueuedMessageId: z.string().min(1).nullable(),
+  nextQueuedMessageId: z.string().min(1).nullable(),
+});
+export type ReorderQueuedMessageRequest = z.infer<
+  typeof reorderQueuedMessageRequestSchema
+>;
+
 export const sendQueuedMessageResponseSchema = z.object({
   ok: z.literal(true),
   queuedMessage: threadQueuedMessageSchema,

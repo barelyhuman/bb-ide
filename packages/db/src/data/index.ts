@@ -397,6 +397,7 @@ export {
   listQueuedThreadMessages,
   releaseQueuedMessageClaim,
   releaseStaleQueuedMessageClaims,
+  reorderQueuedThreadMessage,
 } from "./queued-thread-messages.js";
 export type {
   ClaimedQueuedThreadMessageRow,
@@ -409,6 +410,8 @@ export type {
   QueuedMessageThreadRow,
   ReleaseQueuedMessageClaimArgs,
   ReleaseStaleQueuedMessageClaimsArgs,
+  ReorderQueuedThreadMessageArgs,
+  ReorderQueuedThreadMessageResult,
 } from "./queued-thread-messages.js";
 
 export {

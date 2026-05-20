@@ -244,6 +244,7 @@ describe("db rebuild schema", () => {
         reasoningLevel: "medium",
         permissionMode: "full",
         serviceTier: "default",
+        sortKey: "V",
         createdAt: now,
         updatedAt: now,
       })
@@ -825,6 +826,7 @@ describe("db rebuild schema", () => {
         reasoningLevel: "medium",
         permissionMode: "full",
         serviceTier: "default",
+        sortKey: "V",
         createdAt: now,
         updatedAt: now,
       })

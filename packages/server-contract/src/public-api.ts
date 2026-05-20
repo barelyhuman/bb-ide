@@ -62,6 +62,7 @@ import type {
   PromptHistoryResponse,
   ProjectResponse,
   ProjectWithThreadsResponse,
+  ReorderQueuedMessageRequest,
   SendQueuedMessageRequest,
   SendQueuedMessageResponse,
   SendMessageRequest,
@@ -426,6 +427,13 @@ export type PublicApiSchema = {
     $post: Endpoint<
       PathThreadAndQueuedMessage & { json: SendQueuedMessageRequest },
       SendQueuedMessageResponse
+    >;
+  };
+  "/threads/:id/queued-messages/:queuedMessageId/order": {
+    /** Reposition a queued message between its nullable previous and next queued-message neighbors. */
+    $patch: Endpoint<
+      PathThreadAndQueuedMessage & { json: ReorderQueuedMessageRequest },
+      ThreadQueuedMessageListResponse
     >;
   };
   "/threads/:id/prompt-history": {

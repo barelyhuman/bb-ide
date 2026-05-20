@@ -6,6 +6,7 @@ import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
   PromptHistoryResponse,
   SendQueuedMessageResponse,
+  ThreadQueuedMessageListResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -14,12 +15,14 @@ import {
   projectPromptHistoryQueryKey,
   threadListQueryKey,
   threadQueryKey,
+  threadQueuedMessagesQueryKey,
   threadPromptHistoryQueryKey,
   threadTimelineQueryKey,
 } from "../queries/query-keys";
 import {
   useCreateThread,
   useCreateThreadQueuedMessage,
+  useReorderThreadQueuedMessage,
   useSendThreadMessage,
   useStopThread,
 } from "./thread-runtime-mutations";
@@ -28,6 +31,7 @@ vi.mock("@/lib/api", () => ({
   HttpError: class HttpError extends Error {},
   createThread: vi.fn(),
   createThreadQueuedMessage: vi.fn(),
+  reorderThreadQueuedMessage: vi.fn(),
   sendThreadQueuedMessage: vi.fn(),
   sendThreadMessage: vi.fn(),
   stopThread: vi.fn(),
@@ -48,6 +52,14 @@ const queuedMessage = {
   serviceTier: "default",
   createdAt: 1,
   updatedAt: 1,
+} satisfies SendQueuedMessageResponse["queuedMessage"];
+
+const secondQueuedMessage = {
+  ...queuedMessage,
+  id: "queued-2",
+  content: [{ type: "text", text: "Second queued message" }],
+  createdAt: 2,
+  updatedAt: 2,
 } satisfies SendQueuedMessageResponse["queuedMessage"];
 
 const createdThread = {
@@ -705,5 +717,97 @@ describe("thread runtime mutations", () => {
         input: [{ type: "text", text: "Continue" }],
       },
     ]);
+  });
+
+  it("optimistically reorders queued messages and reconciles with the server response", async () => {
+    let resolveReorder:
+      | ((queuedMessages: ThreadQueuedMessageListResponse) => void)
+      | null = null;
+    vi.mocked(api.reorderThreadQueuedMessage).mockImplementation(
+      () =>
+        new Promise<ThreadQueuedMessageListResponse>((resolve) => {
+          resolveReorder = resolve;
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const queryKey = threadQueuedMessagesQueryKey("thread-1");
+    queryClient.setQueryData<ThreadQueuedMessageListResponse>(queryKey, [
+      queuedMessage,
+      secondQueuedMessage,
+    ]);
+    const { result } = renderHook(() => useReorderThreadQueuedMessage(), {
+      wrapper,
+    });
+
+    let mutationPromise: Promise<ThreadQueuedMessageListResponse> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        queuedMessageId: secondQueuedMessage.id,
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: queuedMessage.id,
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        queryClient
+          .getQueryData<ThreadQueuedMessageListResponse>(queryKey)
+          ?.map((message) => message.id),
+      ).toEqual([secondQueuedMessage.id, queuedMessage.id]);
+    });
+    expect(api.reorderThreadQueuedMessage).toHaveBeenCalledWith(
+      "thread-1",
+      secondQueuedMessage.id,
+      {
+        previousQueuedMessageId: null,
+        nextQueuedMessageId: queuedMessage.id,
+      },
+    );
+
+    await act(async () => {
+      resolveReorder?.([secondQueuedMessage, queuedMessage]);
+      await mutationPromise;
+    });
+
+    expect(
+      queryClient
+        .getQueryData<ThreadQueuedMessageListResponse>(queryKey)
+        ?.map((message) => message.id),
+    ).toEqual([secondQueuedMessage.id, queuedMessage.id]);
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
+  });
+
+  it("rolls back optimistic queued message reorder failures", async () => {
+    vi.mocked(api.reorderThreadQueuedMessage).mockRejectedValue(
+      new Error("stale order"),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const queryKey = threadQueuedMessagesQueryKey("thread-1");
+    queryClient.setQueryData<ThreadQueuedMessageListResponse>(queryKey, [
+      queuedMessage,
+      secondQueuedMessage,
+    ]);
+    const { result } = renderHook(() => useReorderThreadQueuedMessage(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          id: "thread-1",
+          queuedMessageId: secondQueuedMessage.id,
+          previousQueuedMessageId: null,
+          nextQueuedMessageId: queuedMessage.id,
+        }),
+      ).rejects.toThrow("stale order");
+    });
+
+    expect(
+      queryClient
+        .getQueryData<ThreadQueuedMessageListResponse>(queryKey)
+        ?.map((message) => message.id),
+    ).toEqual([queuedMessage.id, secondQueuedMessage.id]);
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
   });
 });

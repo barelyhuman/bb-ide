@@ -11,6 +11,7 @@ import type {
   CreateQueuedMessageRequest,
   SendQueuedMessageMode,
   SendQueuedMessageResponse,
+  ThreadQueuedMessageListResponse,
   TimelineConversationAttachments,
   TimelineRow,
 } from "@bb/server-contract";
@@ -19,6 +20,10 @@ import type { AppCreateThreadRequest } from "@/lib/api";
 import { prependPromptHistoryEntry } from "@/lib/prompt-history";
 import { wsManager } from "@/lib/ws";
 import { collectPromptAttachments } from "@/lib/prompt-attachments";
+import {
+  applyQueuedMessageReorder,
+  type QueuedMessageReorderRequest,
+} from "@/lib/queued-message-reorder";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
 import {
   insertOptimisticTimelineRow,
@@ -35,6 +40,7 @@ import {
   projectPromptHistoryQueryKey,
   threadQueryKey,
   threadPromptHistoryQueryKey,
+  threadQueuedMessagesQueryKey,
   threadsQueryKey,
   threadTimelineQueryKeyPrefix,
 } from "../queries/query-keys";
@@ -61,6 +67,15 @@ interface SendThreadQueuedMessageMutationRequest {
 interface DeleteThreadQueuedMessageMutationRequest {
   id: string;
   queuedMessageId: string;
+}
+
+interface ReorderThreadQueuedMessageMutationRequest
+  extends QueuedMessageReorderRequest {
+  id: string;
+}
+
+interface ReorderThreadQueuedMessageMutationContext {
+  previousQueuedMessages: ThreadQueuedMessageListResponse | undefined;
 }
 
 interface ThreadListSnapshotEntry {
@@ -435,6 +450,70 @@ export function useSendThreadQueuedMessage() {
       api.sendThreadQueuedMessage(id, queuedMessageId, { mode }),
     onSuccess: (_data, variables) => {
       invalidateThreadQueuedMessageSendQueries({
+        queryClient,
+        threadId: variables.id,
+      });
+    },
+  });
+}
+
+export function useReorderThreadQueuedMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    meta: {
+      errorMessage: "Failed to reorder queued message.",
+      showErrorToast: false,
+    },
+    mutationFn: ({
+      id,
+      nextQueuedMessageId,
+      previousQueuedMessageId,
+      queuedMessageId,
+    }: ReorderThreadQueuedMessageMutationRequest): Promise<ThreadQueuedMessageListResponse> =>
+      api.reorderThreadQueuedMessage(id, queuedMessageId, {
+        previousQueuedMessageId,
+        nextQueuedMessageId,
+      }),
+    onMutate: async (
+      variables,
+    ): Promise<ReorderThreadQueuedMessageMutationContext> => {
+      const queryKey = threadQueuedMessagesQueryKey(variables.id);
+      await queryClient.cancelQueries({ queryKey });
+      const previousQueuedMessages =
+        queryClient.getQueryData<ThreadQueuedMessageListResponse>(queryKey);
+
+      queryClient.setQueryData<ThreadQueuedMessageListResponse>(
+        queryKey,
+        (currentQueuedMessages) =>
+          currentQueuedMessages
+            ? applyQueuedMessageReorder({
+                queuedMessages: currentQueuedMessages,
+                request: variables,
+              })
+            : currentQueuedMessages,
+      );
+
+      return { previousQueuedMessages };
+    },
+    onError: (_error, variables, context) => {
+      if (context?.previousQueuedMessages !== undefined) {
+        queryClient.setQueryData<ThreadQueuedMessageListResponse>(
+          threadQueuedMessagesQueryKey(variables.id),
+          context.previousQueuedMessages,
+        );
+      }
+      invalidateThreadQueueQueries({
+        queryClient,
+        threadId: variables.id,
+      });
+    },
+    onSuccess: (queuedMessages, variables) => {
+      queryClient.setQueryData<ThreadQueuedMessageListResponse>(
+        threadQueuedMessagesQueryKey(variables.id),
+        queuedMessages,
+      );
+      invalidateThreadQueueQueries({
         queryClient,
         threadId: variables.id,
       });

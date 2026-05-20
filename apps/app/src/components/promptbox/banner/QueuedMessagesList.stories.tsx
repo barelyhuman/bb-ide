@@ -1,5 +1,12 @@
+import { useCallback, useState, type ReactNode } from "react";
 import type { ThreadQueuedMessage } from "@bb/domain";
-import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
+import {
+  applyQueuedMessageReorder,
+  type QueuedMessageReorderRequest,
+} from "@/lib/queued-message-reorder";
+import {
+  QueuedMessagesList,
+} from "@/components/promptbox/banner/QueuedMessagesList";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
@@ -8,9 +15,13 @@ export default {
 
 const noop = () => {};
 
+interface PromptStageProps {
+  children: ReactNode;
+}
+
 // Production max width matches PageShell's footer cap (760px). Without it the
 // queued list stretches the full row width, which doesn't reflect prod.
-function PromptStage({ children }: { children: React.ReactNode }) {
+function PromptStage({ children }: PromptStageProps) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
 
@@ -88,6 +99,40 @@ const longMessage: readonly ThreadQueuedMessage[] = [
   }),
 ];
 
+function ReorderableQueuedMessagesList() {
+  const [queuedMessages, setQueuedMessages] =
+    useState<readonly ThreadQueuedMessage[]>(multipleMessages);
+  const handleReorder = useCallback((request: QueuedMessageReorderRequest) => {
+    setQueuedMessages((currentQueuedMessages) =>
+      applyQueuedMessageReorder({
+        queuedMessages: currentQueuedMessages,
+        request,
+      }),
+    );
+  }, []);
+
+  return (
+    <QueuedMessagesList
+      queuedMessages={queuedMessages}
+      sendDisabled={false}
+      actionDisabled={false}
+      processingMessageId={null}
+      onSendImmediately={noop}
+      onReorder={handleReorder}
+      onEdit={noop}
+      onDelete={noop}
+    />
+  );
+}
+
+export function Reorderable() {
+  return (
+    <PromptStage>
+      <ReorderableQueuedMessagesList />
+    </PromptStage>
+  );
+}
+
 export function Overview() {
   return (
     <StoryCard>
@@ -99,25 +144,15 @@ export function Overview() {
             actionDisabled={false}
             processingMessageId={null}
             onSendImmediately={noop}
+            onReorder={noop}
             onEdit={noop}
             onDelete={noop}
           />
         </PromptStage>
       </StoryRow>
-      <StoryRow
-        label="multiple messages"
-        hint="three queued messages behind the active turn"
-      >
+      <StoryRow label="multiple messages" hint="drag the row icon to reorder">
         <PromptStage>
-          <QueuedMessagesList
-            queuedMessages={multipleMessages}
-            sendDisabled={false}
-            actionDisabled={false}
-            processingMessageId={null}
-            onSendImmediately={noop}
-            onEdit={noop}
-            onDelete={noop}
-          />
+          <ReorderableQueuedMessagesList />
         </PromptStage>
       </StoryRow>
       <StoryRow
@@ -131,6 +166,7 @@ export function Overview() {
             actionDisabled={false}
             processingMessageId={null}
             onSendImmediately={noop}
+            onReorder={noop}
             onEdit={noop}
             onDelete={noop}
           />
@@ -147,6 +183,7 @@ export function Overview() {
             actionDisabled={false}
             processingMessageId={null}
             onSendImmediately={noop}
+            onReorder={noop}
             onEdit={noop}
             onDelete={noop}
           />
@@ -163,6 +200,7 @@ export function Overview() {
             actionDisabled={false}
             processingMessageId="q_b"
             onSendImmediately={noop}
+            onReorder={noop}
             onEdit={noop}
             onDelete={noop}
           />
@@ -179,6 +217,7 @@ export function Overview() {
             actionDisabled={false}
             processingMessageId={null}
             onSendImmediately={noop}
+            onReorder={noop}
             onEdit={noop}
             onDelete={noop}
           />

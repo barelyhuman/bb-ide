@@ -155,7 +155,7 @@ describe("server skeleton", () => {
 
   it("warns when startup finds future-dated applied migrations", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(1779139400001 + 10_000);
+    vi.setSystemTime(1779230683658 + 10_000);
 
     const dataDir = mkdtempSync(join(tmpdir(), "bb-server-db-startup-"));
     try {

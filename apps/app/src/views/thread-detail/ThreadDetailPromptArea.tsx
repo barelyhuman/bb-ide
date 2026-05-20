@@ -22,6 +22,7 @@ import type {
   WorkspaceChangedFilesSection,
 } from "@/components/workspace/workspace-change-summary";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
+import type { QueuedMessageReorderRequest } from "@/lib/queued-message-reorder";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
@@ -30,6 +31,7 @@ import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import {
   useCreateThreadQueuedMessage,
   useDeleteThreadQueuedMessage,
+  useReorderThreadQueuedMessage,
   useSendThreadQueuedMessage,
   useStopThread,
 } from "@/hooks/mutations/thread-runtime-mutations";
@@ -171,9 +173,9 @@ export function ThreadDetailPromptArea({
   });
   // Ref-backed lookup keeps queued-message action handlers stable across
   // queue refetches so memoized rows do not rerender on unrelated queue updates.
-  const queuedMessagesByIdRef = useRef<ReadonlyMap<string, ThreadQueuedMessage>>(
-    new Map(),
-  );
+  const queuedMessagesByIdRef = useRef<
+    ReadonlyMap<string, ThreadQueuedMessage>
+  >(new Map());
   queuedMessagesByIdRef.current = useMemo(() => {
     const next = new Map<string, ThreadQueuedMessage>();
     for (const message of queuedMessages) {
@@ -192,6 +194,7 @@ export function ThreadDetailPromptArea({
   const createQueuedMessage = useCreateThreadQueuedMessage();
   const sendQueuedMessage = useSendThreadQueuedMessage();
   const deleteQueuedMessage = useDeleteThreadQueuedMessage();
+  const reorderQueuedMessage = useReorderThreadQueuedMessage();
   const stopThread = useStopThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({
@@ -261,6 +264,7 @@ export function ThreadDetailPromptArea({
     createQueuedMessage.isPending ||
     sendQueuedMessage.isPending ||
     deleteQueuedMessage.isPending ||
+    reorderQueuedMessage.isPending ||
     isSteerBatchSending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
@@ -562,6 +566,25 @@ export function ThreadDetailPromptArea({
     [deleteQueuedMessage, thread.id],
   );
 
+  const handleReorderQueuedMessage = useCallback(
+    (request: QueuedMessageReorderRequest) => {
+      void reorderQueuedMessage
+        .mutateAsync({
+          id: thread.id,
+          ...request,
+        })
+        .catch((nextError) => {
+          toast.error(
+            getMutationErrorMessage({
+              error: nextError,
+              fallbackMessage: "Failed to reorder queued message.",
+            }),
+          );
+        });
+    },
+    [reorderQueuedMessage, thread.id],
+  );
+
   const handlePromptBannerFileClick = useCallback(
     (selection: WorkspaceChangedFileSelection) => {
       onChangedFileClick(selection);
@@ -783,6 +806,7 @@ export function ThreadDetailPromptArea({
             actionDisabled={isQueueMutationPending}
             processingMessageId={processingQueuedMessageId}
             onSendImmediately={handleSendQueuedImmediately}
+            onReorder={handleReorderQueuedMessage}
             onEdit={handleEditQueuedMessage}
             onDelete={handleDeleteQueuedMessage}
           />

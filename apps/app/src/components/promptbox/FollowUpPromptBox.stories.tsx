@@ -251,6 +251,7 @@ const queuedMessagesElement: ReactNode = (
     actionDisabled={false}
     processingMessageId={null}
     onSendImmediately={noop}
+    onReorder={noop}
     onEdit={noop}
     onDelete={noop}
   />

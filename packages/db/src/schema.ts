@@ -489,6 +489,7 @@ export const queuedThreadMessages = sqliteTable(
     serviceTier: text("service_tier").notNull(),
     claimedAt: integer("claimed_at"),
     claimToken: text("claim_token"),
+    sortKey: text("sort_key").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -496,6 +497,11 @@ export const queuedThreadMessages = sqliteTable(
     index("queued_thread_messages_thread_created_idx").on(
       table.threadId,
       table.createdAt,
+      table.id,
+    ),
+    index("queued_thread_messages_thread_sort_idx").on(
+      table.threadId,
+      table.sortKey,
       table.id,
     ),
   ],

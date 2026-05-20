@@ -32,6 +32,7 @@ import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
+  ReorderQueuedMessageRequest,
   SendQueuedMessageRequest,
   SendQueuedMessageResponse,
   SendMessageRequest,
@@ -951,6 +952,21 @@ export async function sendThreadQueuedMessage(
 ): Promise<SendQueuedMessageResponse> {
   return request<SendQueuedMessageResponse>(
     apiClient.threads[":id"]["queued-messages"][":queuedMessageId"].send.$post({
+      param: { id, queuedMessageId },
+      json: req,
+    }),
+  );
+}
+
+export async function reorderThreadQueuedMessage(
+  id: string,
+  queuedMessageId: string,
+  req: ReorderQueuedMessageRequest,
+): Promise<ThreadQueuedMessageListResponse> {
+  return request<ThreadQueuedMessageListResponse>(
+    apiClient.threads[":id"]["queued-messages"][
+      ":queuedMessageId"
+    ].order.$patch({
       param: { id, queuedMessageId },
       json: req,
     }),

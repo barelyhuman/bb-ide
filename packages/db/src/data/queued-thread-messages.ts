@@ -1,9 +1,17 @@
-import { and, asc, eq, isNotNull, isNull, lt, min } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt, min } from "drizzle-orm";
 import type { PermissionMode, PromptInput } from "@bb/domain";
-import type { DbConnection, DbTransaction } from "../connection.js";
+import type {
+  DbConnection,
+  DbQueryConnection,
+  DbTransaction,
+} from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { queuedThreadMessages, threads } from "../schema.js";
 import { createQueuedThreadMessageClaimToken, createQueuedThreadMessageId } from "../ids.js";
+import {
+  createOrderKeyAfter,
+  createOrderKeyBetween,
+} from "./order-keys.js";
 
 export interface CreateQueuedThreadMessageInput {
   threadId: string;
@@ -30,6 +38,21 @@ export interface DeleteQueuedThreadMessageInTransactionArgs {
   id: string;
 }
 
+export interface ReorderQueuedThreadMessageArgs {
+  db: DbConnection;
+  nextQueuedMessageId: string | null;
+  notifier: DbNotifier;
+  previousQueuedMessageId: string | null;
+  queuedMessageId: string;
+  threadId: string;
+}
+
+interface ResolveQueuedThreadMessageNeighborArgs {
+  movedQueuedMessageId: string;
+  neighborQueuedMessageId: string | null;
+  threadId: string;
+}
+
 export interface ClaimedQueuedThreadMessageMutationArgs {
   claimToken: string;
   id: string;
@@ -43,7 +66,45 @@ export interface ReleaseStaleQueuedMessageClaimsArgs {
   claimedBefore: number;
 }
 
+export interface ReorderQueuedThreadMessageSuccess {
+  kind: "reordered";
+  queuedMessages: QueuedThreadMessageRow[];
+}
+
+export interface ReorderQueuedThreadMessageUnchanged {
+  kind: "unchanged";
+  queuedMessages: QueuedThreadMessageRow[];
+}
+
+export interface ReorderQueuedThreadMessageNotFound {
+  kind: "not_found";
+}
+
+export interface ReorderQueuedThreadMessageClaimed {
+  kind: "claimed";
+}
+
+export interface ReorderQueuedThreadMessageStaleNeighbor {
+  kind: "stale_neighbor";
+}
+
+export interface ReorderQueuedThreadMessageInvalidNeighborOrder {
+  kind: "invalid_neighbor_order";
+}
+
+export type ReorderQueuedThreadMessageResult =
+  | ReorderQueuedThreadMessageSuccess
+  | ReorderQueuedThreadMessageUnchanged
+  | ReorderQueuedThreadMessageNotFound
+  | ReorderQueuedThreadMessageClaimed
+  | ReorderQueuedThreadMessageStaleNeighbor
+  | ReorderQueuedThreadMessageInvalidNeighborOrder;
+
 export type ReleaseQueuedMessageClaimArgs = ClaimedQueuedThreadMessageMutationArgs;
+
+function isQueuedThreadMessageClaimed(row: QueuedThreadMessageRow): boolean {
+  return row.claimedAt !== null || row.claimToken !== null;
+}
 
 function requireClaimedQueuedThreadMessage(row: QueuedThreadMessageRow | null): ClaimedQueuedThreadMessageRow | null {
   if (!row || row.claimedAt === null || row.claimToken === null) {
@@ -56,6 +117,77 @@ function requireClaimedQueuedThreadMessage(row: QueuedThreadMessageRow | null): 
   };
 }
 
+function listUnclaimedQueuedThreadMessages(
+  db: DbQueryConnection,
+  threadId: string,
+): QueuedThreadMessageRow[] {
+  return db
+    .select()
+    .from(queuedThreadMessages)
+    .where(
+      and(
+        eq(queuedThreadMessages.threadId, threadId),
+        isNull(queuedThreadMessages.claimedAt),
+        isNull(queuedThreadMessages.claimToken),
+      ),
+    )
+    .orderBy(asc(queuedThreadMessages.sortKey), asc(queuedThreadMessages.id))
+    .all();
+}
+
+function getQueuedThreadMessageForMutation(
+  db: DbQueryConnection,
+  id: string,
+): QueuedThreadMessageRow | null {
+  return (
+    db
+      .select()
+      .from(queuedThreadMessages)
+      .where(eq(queuedThreadMessages.id, id))
+      .get() ?? null
+  );
+}
+
+function getLastQueuedThreadMessage(
+  db: DbQueryConnection,
+  threadId: string,
+): QueuedThreadMessageRow | null {
+  return (
+    db
+      .select()
+      .from(queuedThreadMessages)
+      .where(eq(queuedThreadMessages.threadId, threadId))
+      .orderBy(desc(queuedThreadMessages.sortKey), desc(queuedThreadMessages.id))
+      .limit(1)
+      .get() ?? null
+  );
+}
+
+function resolveQueuedThreadMessageNeighbor(
+  db: DbQueryConnection,
+  args: ResolveQueuedThreadMessageNeighborArgs,
+): QueuedThreadMessageRow | null | false {
+  if (args.neighborQueuedMessageId === null) {
+    return null;
+  }
+  if (args.neighborQueuedMessageId === args.movedQueuedMessageId) {
+    return false;
+  }
+
+  const neighbor = getQueuedThreadMessageForMutation(
+    db,
+    args.neighborQueuedMessageId,
+  );
+  if (
+    !neighbor ||
+    neighbor.threadId !== args.threadId ||
+    isQueuedThreadMessageClaimed(neighbor)
+  ) {
+    return false;
+  }
+  return neighbor;
+}
+
 export function createQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,
@@ -63,23 +195,33 @@ export function createQueuedThreadMessage(
 ) {
   const now = Date.now();
   const id = createQueuedThreadMessageId();
-  const row = db
-    .insert(queuedThreadMessages)
-    .values({
-      id,
-      threadId: input.threadId,
-      content: JSON.stringify(input.content),
-      model: input.model,
-      reasoningLevel: input.reasoningLevel,
-      permissionMode: input.permissionMode,
-      serviceTier: input.serviceTier,
-      claimedAt: null,
-      claimToken: null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  const row = db.transaction(
+    (tx) => {
+      const lastQueuedMessage = getLastQueuedThreadMessage(tx, input.threadId);
+      const sortKey = lastQueuedMessage
+        ? createOrderKeyAfter({ previousKey: lastQueuedMessage.sortKey })
+        : createOrderKeyBetween({ previousKey: null, nextKey: null });
+      return tx
+        .insert(queuedThreadMessages)
+        .values({
+          id,
+          threadId: input.threadId,
+          content: JSON.stringify(input.content),
+          model: input.model,
+          reasoningLevel: input.reasoningLevel,
+          permissionMode: input.permissionMode,
+          serviceTier: input.serviceTier,
+          claimedAt: null,
+          claimToken: null,
+          sortKey,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+    },
+    { behavior: "immediate" },
+  );
   notifier.notifyThread(input.threadId, ["queue-changed"]);
   return row;
 }
@@ -95,18 +237,7 @@ export function getQueuedThreadMessage(db: DbConnection, id: string) {
 }
 
 export function listQueuedThreadMessages(db: DbConnection, threadId: string) {
-  return db
-    .select()
-    .from(queuedThreadMessages)
-    .where(
-      and(
-        eq(queuedThreadMessages.threadId, threadId),
-        isNull(queuedThreadMessages.claimedAt),
-        isNull(queuedThreadMessages.claimToken),
-      ),
-    )
-    .orderBy(asc(queuedThreadMessages.createdAt), asc(queuedThreadMessages.id))
-    .all();
+  return listUnclaimedQueuedThreadMessages(db, threadId);
 }
 
 export function listIdleThreadsWithQueuedMessages(
@@ -194,10 +325,7 @@ export function claimNextQueuedThreadMessage(
             isNull(queuedThreadMessages.claimToken),
           ),
         )
-        .orderBy(
-          asc(queuedThreadMessages.createdAt),
-          asc(queuedThreadMessages.id),
-        )
+        .orderBy(asc(queuedThreadMessages.sortKey), asc(queuedThreadMessages.id))
         .limit(1)
         .get();
       if (!nextQueuedMessage) {
@@ -228,6 +356,106 @@ export function claimNextQueuedThreadMessage(
     notifier.notifyThread(claimedQueuedMessage.threadId, ["queue-changed"]);
   }
   return claimedQueuedMessage;
+}
+
+export function reorderQueuedThreadMessage({
+  db,
+  nextQueuedMessageId,
+  notifier,
+  previousQueuedMessageId,
+  queuedMessageId,
+  threadId,
+}: ReorderQueuedThreadMessageArgs): ReorderQueuedThreadMessageResult {
+  const result = db.transaction(
+    (tx): ReorderQueuedThreadMessageResult => {
+      const movedQueuedMessage = getQueuedThreadMessageForMutation(
+        tx,
+        queuedMessageId,
+      );
+      if (!movedQueuedMessage || movedQueuedMessage.threadId !== threadId) {
+        return { kind: "not_found" };
+      }
+      if (isQueuedThreadMessageClaimed(movedQueuedMessage)) {
+        return { kind: "claimed" };
+      }
+
+      const previousQueuedMessage = resolveQueuedThreadMessageNeighbor(tx, {
+        movedQueuedMessageId: queuedMessageId,
+        neighborQueuedMessageId: previousQueuedMessageId,
+        threadId,
+      });
+      const nextQueuedMessage = resolveQueuedThreadMessageNeighbor(tx, {
+        movedQueuedMessageId: queuedMessageId,
+        neighborQueuedMessageId: nextQueuedMessageId,
+        threadId,
+      });
+      if (
+        previousQueuedMessage === false ||
+        nextQueuedMessage === false
+      ) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
+        previousQueuedMessage !== null &&
+        nextQueuedMessage !== null &&
+        previousQueuedMessage.sortKey >= nextQueuedMessage.sortKey
+      ) {
+        return { kind: "invalid_neighbor_order" };
+      }
+
+      const currentQueuedMessages = listUnclaimedQueuedThreadMessages(
+        tx,
+        threadId,
+      );
+      const currentIndex = currentQueuedMessages.findIndex(
+        (queuedMessage) => queuedMessage.id === queuedMessageId,
+      );
+      const currentPreviousQueuedMessageId =
+        currentQueuedMessages[currentIndex - 1]?.id ?? null;
+      const currentNextQueuedMessageId =
+        currentQueuedMessages[currentIndex + 1]?.id ?? null;
+      if (
+        currentPreviousQueuedMessageId === previousQueuedMessageId &&
+        currentNextQueuedMessageId === nextQueuedMessageId
+      ) {
+        return {
+          kind: "unchanged",
+          queuedMessages: currentQueuedMessages,
+        };
+      }
+
+      const sortKey = createOrderKeyBetween({
+        previousKey: previousQueuedMessage?.sortKey ?? null,
+        nextKey: nextQueuedMessage?.sortKey ?? null,
+      });
+      const updated = tx
+        .update(queuedThreadMessages)
+        .set({ sortKey, updatedAt: Date.now() })
+        .where(
+          and(
+            eq(queuedThreadMessages.id, queuedMessageId),
+            isNull(queuedThreadMessages.claimedAt),
+            isNull(queuedThreadMessages.claimToken),
+          ),
+        )
+        .returning({ id: queuedThreadMessages.id })
+        .get();
+      if (!updated) {
+        return { kind: "stale_neighbor" };
+      }
+
+      return {
+        kind: "reordered",
+        queuedMessages: listUnclaimedQueuedThreadMessages(tx, threadId),
+      };
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result.kind === "reordered") {
+    notifier.notifyThread(threadId, ["queue-changed"]);
+  }
+  return result;
 }
 
 export function releaseQueuedMessageClaim(
