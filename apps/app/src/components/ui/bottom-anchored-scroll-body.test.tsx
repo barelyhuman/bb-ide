@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BottomAnchoredScrollBody,
+  type CapturedScrollAnchor,
   useBottomAnchoredScroll,
 } from "@/components/ui/bottom-anchored-scroll-body";
 
@@ -21,6 +22,10 @@ interface TestRect {
   right: number;
   top: number;
   width: number;
+}
+
+interface RenderBodyOptions {
+  extraRowCount: number;
 }
 
 let nextAnimationFrameId = 1;
@@ -119,6 +124,7 @@ function buildDomRect(rect: TestRect): DOMRect {
 function BottomAnchorProbe() {
   const bottomAnchor = useBottomAnchoredScroll();
   const targetRef = useRef<HTMLDivElement>(null);
+  const capturedAnchorRef = useRef<CapturedScrollAnchor | null>(null);
   return (
     <div>
       <output aria-label="Bottom state">
@@ -142,14 +148,39 @@ function BottomAnchorProbe() {
           >
             Scroll target into view
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              capturedAnchorRef.current = bottomAnchor.captureScrollAnchor();
+            }}
+          >
+            Capture scroll anchor
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              capturedAnchorRef.current?.restore();
+            }}
+          >
+            Restore scroll anchor
+          </button>
         </>
       ) : null}
     </div>
   );
 }
 
-function renderBody() {
-  const view = render(
+const DEFAULT_RENDER_BODY_OPTIONS: RenderBodyOptions = {
+  extraRowCount: 0,
+};
+
+function renderBodyContent(options: RenderBodyOptions) {
+  const extraRows = Array.from(
+    { length: options.extraRowCount },
+    (_item, index) => <div key={index}>Extra timeline row {index + 1}</div>,
+  );
+
+  return (
     <>
       <textarea aria-label="Prompt" />
       <BottomAnchoredScrollBody
@@ -158,15 +189,25 @@ function renderBody() {
         scrollAreaClassName="scroll-area"
       >
         <div>Timeline row</div>
+        {extraRows}
         <BottomAnchorProbe />
       </BottomAnchoredScrollBody>
-    </>,
+    </>
   );
+}
+
+function renderBody(options = DEFAULT_RENDER_BODY_OPTIONS) {
+  const view = render(renderBodyContent(options));
+  const getScrollArea = () =>
+    requireHTMLElement(view.container.querySelector(".scroll-area"));
+
+  const rerenderBody = (nextOptions: RenderBodyOptions) => {
+    view.rerender(renderBodyContent(nextOptions));
+  };
 
   return {
-    scrollArea: requireHTMLElement(
-      view.container.querySelector(".scroll-area"),
-    ),
+    rerenderBody,
+    scrollArea: getScrollArea(),
     unmount: view.unmount,
   };
 }
@@ -300,5 +341,72 @@ describe("BottomAnchoredScrollBody", () => {
     flushAnimationFrames(1);
 
     expect(scrollArea.scrollTop).toBe(1_100);
+  });
+
+  it("preserves a captured scroll anchor through multiple height changes", () => {
+    const { rerenderBody, scrollArea } = renderBody();
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_000,
+      clientHeight: 100,
+      scrollTop: 200,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Capture scroll anchor" }),
+    );
+
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_020,
+      clientHeight: 100,
+      scrollTop: 200,
+    });
+    rerenderBody({ extraRowCount: 1 });
+
+    expect(scrollArea.scrollTop).toBe(220);
+
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_500,
+      clientHeight: 100,
+      scrollTop: 220,
+    });
+    rerenderBody({ extraRowCount: 2 });
+
+    expect(scrollArea.scrollTop).toBe(700);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore scroll anchor" }),
+    );
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_600,
+      clientHeight: 100,
+      scrollTop: 700,
+    });
+    rerenderBody({ extraRowCount: 3 });
+
+    expect(scrollArea.scrollTop).toBe(700);
+  });
+
+  it("does not restore to bottom while a captured scroll anchor is pending", () => {
+    const { rerenderBody, scrollArea } = renderBody();
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_000,
+      clientHeight: 100,
+      scrollTop: 400,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Capture scroll anchor" }),
+    );
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_200,
+      clientHeight: 100,
+      scrollTop: 400,
+    });
+    rerenderBody({ extraRowCount: 1 });
+    getResizeObserverInstance().trigger();
+    flushAnimationFrames(1);
+
+    expect(scrollArea.scrollTop).toBe(600);
+    expect(getBottomState()).toBe("away");
   });
 });
