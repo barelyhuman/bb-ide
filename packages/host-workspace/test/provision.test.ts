@@ -489,7 +489,8 @@ describe("provisionWorkspace", () => {
     it("destroy() removes the worktree", async () => {
       const repoPath = await initRepo();
       const parentDir = await makeTempDir("bb-provision-mwt-destroy-");
-      const targetPath = path.join(parentDir, "env");
+      const envDir = path.join(parentDir, "env");
+      const targetPath = path.join(envDir, "bb");
 
       const ws = await provisionWorkspace({
         workspaceProvisionType: "managed-worktree",
@@ -503,6 +504,7 @@ describe("provisionWorkspace", () => {
       await ws.destroy();
 
       await expect(fs.stat(targetPath)).rejects.toThrow();
+      await expect(fs.stat(envDir)).rejects.toThrow();
       // Worktree should be removed from git's list
       const worktrees = await runGit(["worktree", "list", "--porcelain"], {
         cwd: repoPath,
@@ -538,7 +540,8 @@ describe("provisionWorkspace", () => {
         setupScript: "echo failing >&2\nexit 1\n",
       });
       const parentDir = await makeTempDir("bb-provision-mwt-fail-");
-      const targetPath = path.join(parentDir, "env");
+      const envDir = path.join(parentDir, "env");
+      const targetPath = path.join(envDir, "bb");
 
       await expect(
         provisionWorkspace({
@@ -552,6 +555,7 @@ describe("provisionWorkspace", () => {
       ).rejects.toThrow(/Setup script failed/u);
 
       await expect(fs.stat(targetPath)).rejects.toThrow();
+      await expect(fs.stat(envDir)).rejects.toThrow();
     });
   });
 
@@ -595,7 +599,8 @@ describe("provisionWorkspace", () => {
     it("reconnects to an existing worktree with managed=true", async () => {
       const repoPath = await initRepo();
       const parentDir = await makeTempDir("bb-reconnect-wt-parent-");
-      const wtPath = path.join(parentDir, "wt");
+      const envDir = path.join(parentDir, "env");
+      const wtPath = path.join(envDir, "bb");
       await runGit(["worktree", "add", "-B", "feature", wtPath], {
         cwd: repoPath,
       });
@@ -609,6 +614,10 @@ describe("provisionWorkspace", () => {
       expect(ws.managed).toBe(true);
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(true);
+
+      await ws.destroy();
+      await expect(fs.stat(wtPath)).rejects.toThrow();
+      await expect(fs.stat(envDir)).rejects.toThrow();
     });
 
     it("throws path_not_found for non-existent path", async () => {

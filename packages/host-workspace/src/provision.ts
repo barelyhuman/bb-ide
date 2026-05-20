@@ -528,6 +528,7 @@ async function provisionWorktree(
     baseBranch: opts.baseBranch,
     timeoutMs: opts.timeoutMs,
     onProgress: opts.onProgress,
+    pruneEmptyParent: true,
   });
 
   return new ProvisionedHostWorkspace({
@@ -535,7 +536,8 @@ async function provisionWorktree(
     managed: true,
     isGitRepo: true,
     isWorktree: true,
-    destroyFn: () => removeWorktree({ path: wsPath, force: true }),
+    destroyFn: () =>
+      removeWorktree({ path: wsPath, force: true, pruneEmptyParent: true }),
   });
 }
 
@@ -566,6 +568,6 @@ async function reconnectManagedWorktree(
   opts: ReconnectManagedWorktreeOpts,
 ): Promise<HostWorkspace> {
   return reconnectManaged(opts.path, () =>
-    removeWorktree({ path: opts.path, force: true }),
+    removeWorktree({ path: opts.path, force: true, pruneEmptyParent: true }),
   );
 }

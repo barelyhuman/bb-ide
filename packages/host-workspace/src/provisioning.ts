@@ -47,6 +47,7 @@ export interface CreateWorkspaceArgs {
   /** Setup script timeout in ms. Controlled by the server. */
   timeoutMs: number;
   onProgress?: ProgressCallback;
+  pruneEmptyParent?: boolean;
 }
 
 export interface RunSetupScriptArgs {
@@ -58,6 +59,7 @@ export interface RunSetupScriptArgs {
 export interface RemoveWorktreeArgs {
   path: string;
   force?: boolean;
+  pruneEmptyParent?: boolean;
 }
 
 interface SetupScriptCommand {
@@ -282,7 +284,11 @@ export async function createWorktree(
         metadata: { durationMs: Date.now() - worktreeStartedAt },
       });
     }
-    await removeWorktree({ path: args.targetPath, force: true });
+    await removeWorktree({
+      path: args.targetPath,
+      force: true,
+      pruneEmptyParent: args.pruneEmptyParent,
+    });
     throw error;
   }
 }
@@ -413,12 +419,16 @@ export async function runSetupScript(
 }
 
 export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
-  if (!(await pathExists(args.path))) {
+  const force = args.force !== false;
+  const workspacePath = path.resolve(args.path);
+  const parentPath = path.dirname(workspacePath);
+  if (!(await pathExists(workspacePath))) {
+    if (args.pruneEmptyParent) {
+      await removeDirectoryIfEmpty(parentPath);
+    }
     return;
   }
 
-  const force = args.force !== false;
-  const workspacePath = path.resolve(args.path);
   const commonDirResult = await runGit(["rev-parse", "--git-common-dir"], {
     cwd: workspacePath,
     allowFailure: true,
@@ -453,8 +463,28 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
   }
 
   await fs.rm(workspacePath, { recursive: true, force: true });
+  if (args.pruneEmptyParent) {
+    await removeDirectoryIfEmpty(parentPath);
+  }
 }
 
 export async function removeDirectory(args: { path: string }): Promise<void> {
   await fs.rm(args.path, { recursive: true, force: true });
+}
+
+async function removeDirectoryIfEmpty(pathToRemove: string): Promise<void> {
+  try {
+    await fs.rmdir(pathToRemove);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      ["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)
+    ) {
+      return;
+    }
+
+    throw error;
+  }
 }
