@@ -16,9 +16,11 @@ export function isBusyThread(thread: ThreadRuntimeShape): boolean {
 
 /**
  * The signals a collapsed parent row surfaces on behalf of its hidden children.
- * These are independent, not ranked: a parent can simultaneously have a child
- * blocked on the user and another still working, so each flag drives its own
- * cue (amber badge / spinning ring / trailing unread dot) and they coexist.
+ * A collapsed row renders these through its single trailing status glyph, using
+ * the same priority as a leaf row (pending > working > unread): a child blocked
+ * on the user shows the attention dot, else a working child spins, else an
+ * unread child shows the unread dot. (Expanded rows show their own status, since
+ * the children are then visible with their own glyphs.)
  */
 export interface CollapsedChildActivity {
   /** At least one child is blocked on the user (needs input). */

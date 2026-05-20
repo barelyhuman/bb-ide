@@ -359,7 +359,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="collapsed manager — child needs input"
-        hint="amber count badge surfaces a hidden child blocked on the user"
+        hint="trailing attention dot surfaces a hidden child blocked on the user"
       >
         {singleProject({
           initialCollapsedManagerIds: new Set([manager.id]),
@@ -375,7 +375,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="collapsed manager — needs input + working"
-        hint="one child blocked, another running: amber badge and spinning ring combine"
+        hint="one child blocked, another running: attention wins, trailing slot shows the attention dot"
       >
         {singleProject({
           initialCollapsedManagerIds: new Set([manager.id]),
@@ -391,7 +391,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="collapsed worktree — child working"
-        hint="spinning dashed ring hugs the worktree count when a hidden child is busy"
+        hint="trailing slot shows the busy spinner when a hidden child is working"
       >
         {singleProject({
           initialCollapsedEnvironmentIds: new Set(["env_collapsed_busy"]),
@@ -414,7 +414,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="collapsed worktree — unread child"
-        hint="worktree badged like a regular unread thread — trailing primary dot"
+        hint="surfaces like a regular unread thread — trailing primary dot"
       >
         {singleProject({
           initialCollapsedEnvironmentIds: new Set(["env_collapsed_unread"]),

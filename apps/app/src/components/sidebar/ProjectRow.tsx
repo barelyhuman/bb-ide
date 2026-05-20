@@ -40,8 +40,8 @@ import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { toast } from "sonner";
 import {
-  CollapsedChildCountBadge,
   ThreadRow,
+  ThreadStatusGlyph,
   type ThreadRowOptions,
 } from "./ThreadRow";
 import {
@@ -58,7 +58,6 @@ import {
   SIDEBAR_PROJECT_GROUP_LINE_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
-  SIDEBAR_UNREAD_DOT_CLASS,
 } from "./sidebarRowClasses";
 
 const THREAD_ROW_DEFAULT_OPTIONS: ThreadRowOptions = { kind: "default" };
@@ -274,7 +273,12 @@ function EnvironmentThreadGroupHeader({
   const iconName = getEnvironmentWorkspaceLabelIconName(
     representativeThread.environmentWorkspaceDisplayKind,
   );
-  const showUnreadDot = isCollapsed && childActivity.unread;
+  // Collapsed: the header speaks for its hidden children through one status
+  // glyph (pending > working > unread). Expanded: the children show their own
+  // glyphs, and the synthetic header has no status of its own.
+  const showRollupGlyph =
+    isCollapsed &&
+    (childActivity.pending || childActivity.working || childActivity.unread);
   return (
     <SidebarStickyTier
       tier={stickyTier}
@@ -338,13 +342,6 @@ function EnvironmentThreadGroupHeader({
             aria-hidden="true"
           />
         </span>
-        {isCollapsed ? (
-          <CollapsedChildCountBadge
-            count={childCount}
-            activity={childActivity}
-            className="group-hover/env-row:opacity-0 group-has-[:focus-visible]/env-row:opacity-0"
-          />
-        ) : null}
       </span>
       <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
         <span>Worktree</span>
@@ -361,7 +358,7 @@ function EnvironmentThreadGroupHeader({
           COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
         )}
       >
-        {showUnreadDot ? (
+        {showRollupGlyph ? (
           <span
             className={cn(
               "pointer-events-none absolute inset-0 flex items-center justify-center text-subtle-foreground transition-opacity",
@@ -370,9 +367,10 @@ function EnvironmentThreadGroupHeader({
                 : "group-hover/env-row:opacity-0 group-has-[:focus-visible]/env-row:opacity-0",
             )}
           >
-            <span
-              className={SIDEBAR_UNREAD_DOT_CLASS}
-              aria-label="An unread thread in this worktree"
+            <ThreadStatusGlyph
+              hasPendingInteraction={childActivity.pending}
+              isBusy={childActivity.working}
+              showUnreadBadge={childActivity.unread}
             />
           </span>
         ) : null}

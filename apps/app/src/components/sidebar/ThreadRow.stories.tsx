@@ -241,7 +241,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, collapsed"
-        hint="chevron points right (default); count badge stands in for hidden children"
+        hint="chevron points right (default) for a collapsed manager with hidden children"
       >
         <SidebarStage>
           <ThreadRow
@@ -257,7 +257,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, collapsed — child working"
-        hint="spinning dashed ring hugs the count when a hidden child is busy"
+        hint="trailing slot shows the busy spinner when a hidden child is working"
       >
         <SidebarStage>
           <ThreadRow
@@ -274,7 +274,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, collapsed — child needs input"
-        hint="count badge turns amber when a hidden child is blocked on the user"
+        hint="trailing slot shows the attention dot when a hidden child is blocked on the user"
       >
         <SidebarStage>
           <ThreadRow
@@ -291,7 +291,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, collapsed — needs input + working"
-        hint="signals combine: amber count badge with the spinning ring around it"
+        hint="attention wins priority: the trailing slot shows the attention dot, not the spinner"
       >
         <SidebarStage>
           <ThreadRow

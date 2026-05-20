@@ -31,9 +31,6 @@ import {
   SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ROW_PADDING_CLASS,
-  SIDEBAR_COLLAPSED_CHILD_BADGE_CHIP_CLASS,
-  SIDEBAR_COLLAPSED_CHILD_BADGE_WORKING_RING_CLASS,
-  SIDEBAR_COLLAPSED_CHILD_BADGE_WRAPPER_CLASS,
   SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
@@ -70,8 +67,6 @@ interface ThreadRowProps {
 }
 
 interface ManagerChevronProps {
-  childCount: number;
-  childActivity: CollapsedChildActivity;
   isCollapsed: boolean;
   onToggle: () => void;
   threadTitle: string;
@@ -81,8 +76,6 @@ const ROW_GLYPH_SLOT_CLASS =
   "inline-flex shrink-0 items-center justify-center text-subtle-foreground";
 
 function ManagerChevron({
-  childCount,
-  childActivity,
   isCollapsed,
   onToggle,
   threadTitle,
@@ -145,13 +138,6 @@ function ManagerChevron({
             aria-hidden="true"
           />
         </span>
-        {isCollapsed ? (
-          <CollapsedChildCountBadge
-            count={childCount}
-            activity={childActivity}
-            className="group-hover/thread-row:opacity-0 group-has-[:focus-visible]/thread-row:opacity-0"
-          />
-        ) : null}
       </span>
     </button>
   );
@@ -179,7 +165,7 @@ interface ThreadStatusGlyphProps {
   showUnreadBadge: boolean;
 }
 
-function ThreadStatusGlyph({
+export function ThreadStatusGlyph({
   hasPendingInteraction,
   isBusy,
   showUnreadBadge,
@@ -221,50 +207,6 @@ function ThreadStatusGlyph({
   }
 
   return null;
-}
-
-interface CollapsedChildCountBadgeProps {
-  className?: string;
-  count: number;
-  activity?: CollapsedChildActivity;
-}
-
-export function formatCollapsedChildCount(count: number): string {
-  return count > 9 ? "9+" : String(count);
-}
-
-// A blocked child recolors the count chip amber; otherwise it stays the neutral
-// primary chip. The working ring layers on independently, so a chip can be amber
-// and spinning at once. ("unread" is surfaced by the row's own trailing dot.)
-function collapsedChildBadgeChipColor(activity: CollapsedChildActivity): string {
-  return activity.pending
-    ? "bg-attention text-attention-foreground"
-    : "bg-primary text-primary-foreground";
-}
-
-export function CollapsedChildCountBadge({
-  className,
-  count,
-  activity = NO_COLLAPSED_CHILD_ACTIVITY,
-}: CollapsedChildCountBadgeProps) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(SIDEBAR_COLLAPSED_CHILD_BADGE_WRAPPER_CLASS, className)}
-    >
-      {activity.working ? (
-        <span className={SIDEBAR_COLLAPSED_CHILD_BADGE_WORKING_RING_CLASS} />
-      ) : null}
-      <span
-        className={cn(
-          SIDEBAR_COLLAPSED_CHILD_BADGE_CHIP_CLASS,
-          collapsedChildBadgeChipColor(activity),
-        )}
-      >
-        {formatCollapsedChildCount(count)}
-      </span>
-    </span>
-  );
 }
 
 interface ThreadTrailingIndicatorProps extends ThreadStatusGlyphProps {
@@ -350,6 +292,20 @@ function ThreadRowComponent({
   const managedChildActivity =
     managerOptions?.managedChildActivity ?? NO_COLLAPSED_CHILD_ACTIVITY;
   const hasManagedChildren = managedChildCount > 0;
+  // A collapsed manager hides its children, so its trailing glyph speaks for
+  // them; an expanded manager (and any leaf row) shows its own status, since
+  // the children are then visible with their own glyphs.
+  const hasHiddenChildren =
+    isManager && isManagerCollapsed && hasManagedChildren;
+  const trailingHasPendingInteraction = hasHiddenChildren
+    ? managedChildActivity.pending
+    : hasPendingInteraction;
+  const trailingIsBusy = hasHiddenChildren
+    ? managedChildActivity.working
+    : threadIsBusy;
+  const trailingShowUnreadBadge = hasHiddenChildren
+    ? managedChildActivity.unread
+    : showUnreadBadge;
   // Env-grouped children sit under a header that already shows the
   // worktree branch + icon, so suppress the redundant trailing icon.
   const environmentIcon = isUnderEnvHeader
@@ -394,8 +350,6 @@ function ThreadRowComponent({
       />
       {managerOptions && hasManagedChildren ? (
         <ManagerChevron
-          childCount={managedChildCount}
-          childActivity={managedChildActivity}
           isCollapsed={isManagerCollapsed}
           onToggle={() => {
             managerOptions.onToggleCollapsed(thread.id);
@@ -429,9 +383,9 @@ function ThreadRowComponent({
             <ThreadTrailingIndicator
               environmentIcon={environmentIcon}
               environmentIconLabel={environmentIconLabel}
-              hasPendingInteraction={hasPendingInteraction}
-              isBusy={threadIsBusy}
-              showUnreadBadge={showUnreadBadge}
+              hasPendingInteraction={trailingHasPendingInteraction}
+              isBusy={trailingIsBusy}
+              showUnreadBadge={trailingShowUnreadBadge}
             />
           </span>
           <div

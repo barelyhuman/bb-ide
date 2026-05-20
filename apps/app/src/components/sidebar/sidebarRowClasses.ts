@@ -55,24 +55,14 @@ export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
 export const SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS =
   "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
 
+/**
+ * Bridges the manager hairline across a nested env sub-group header. That header
+ * is an opaque sticky tier (z-35) sitting above the manager line (z-30), and it
+ * also paints a `child-row-gap` shield directly below itself, so the line is
+ * hidden behind both the header box and that bottom shield. This continuation
+ * redraws the line over both: `top-0` + `-bottom-0.5` spans the header plus the
+ * 0.125rem shield (= --bb-sidebar-sticky-child-row-gap) so the hairline stays
+ * unbroken into the first child row.
+ */
 export const SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS =
-  "pointer-events-none absolute bottom-0 left-10 top-0 z-[1] w-px bg-border-hairline";
-
-/**
- * Wrapper that anchors the collapsed child-count badge to the bottom-right of
- * the leading glyph. Owns positioning + the hover fade so the chip and the
- * working ring can stack concentrically inside it.
- */
-export const SIDEBAR_COLLAPSED_CHILD_BADGE_WRAPPER_CLASS =
-  "pointer-events-none absolute -bottom-0.5 -right-1 inline-flex items-center justify-center transition-opacity duration-150";
-
-/** The count chip itself; its color is set per child-activity state. */
-export const SIDEBAR_COLLAPSED_CHILD_BADGE_CHIP_CLASS =
-  "flex h-3 min-w-3 items-center justify-center rounded-full px-0.5 text-[8px] font-semibold leading-none";
-
-/**
- * Spinning dashed ring drawn around the count chip when a hidden child is
- * working — the collapsed echo of the leaf row's CircleDashed busy glyph.
- */
-export const SIDEBAR_COLLAPSED_CHILD_BADGE_WORKING_RING_CLASS =
-  "pointer-events-none absolute -inset-[3px] animate-spin rounded-full border border-dashed border-primary/70";
+  "pointer-events-none absolute -bottom-0.5 left-10 top-0 z-[1] w-px bg-border-hairline";

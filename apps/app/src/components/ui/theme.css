@@ -267,7 +267,7 @@
   --diff-added: oklch(0.4 0.13 163);
   --diff-removed: oklch(0.4 0.17 28);
   --border: oklch(0.8576 0 0);
-  --border-hairline: oklch(0.8 0 0);
+  --border-hairline: oklch(0.85 0 0);
   --input: oklch(0.75 0 0);
   --ring: oklch(0.4891 0 0);
   --surface-recessed: color-mix(in oklch, oklch(0.8853 0 0) 30%, transparent);
@@ -385,7 +385,7 @@
   --diff-added: oklch(0.77 0.17 163);
   --diff-removed: oklch(0.72 0.19 22);
   --border: oklch(0.329 0 0);
-  --border-hairline: oklch(0.4 0 0);
+  --border-hairline: oklch(0.34 0 0);
   --input: oklch(0.42 0 0);
   --ring: oklch(0.7058 0 0);
   --surface-recessed: color-mix(in oklch, oklch(0.285 0 0) 30%, transparent);
