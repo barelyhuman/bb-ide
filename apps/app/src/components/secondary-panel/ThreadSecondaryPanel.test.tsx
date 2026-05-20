@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   type SecondaryPanelFileTab,
@@ -19,7 +19,6 @@ import {
 interface RenderPanelArgs {
   fileTabContent?: ReactNode;
   fileTabs?: SecondaryPanelFileTab[];
-  onOpenFileSearch: () => void;
   renderAsDrawer?: boolean;
 }
 
@@ -34,7 +33,6 @@ const IFRAME_POINTER_EVENTS_NONE_CLASS = "[&_iframe]:pointer-events-none";
 function renderPanel({
   fileTabContent,
   fileTabs,
-  onOpenFileSearch,
   renderAsDrawer = true,
 }: RenderPanelArgs) {
   const { wrapper } = createQueryClientTestHarness();
@@ -49,7 +47,7 @@ function renderPanel({
       metadataContent={<div>Thread details</div>}
       onCollapse={noop}
       onClose={noop}
-      onOpenFileSearch={onOpenFileSearch}
+      onOpenNewTab={noop}
       onPanelChange={noop}
       onPanelFocus={noop}
       renderAsDrawer={renderAsDrawer}
@@ -77,22 +75,6 @@ afterEach(() => {
 });
 
 describe("ThreadSecondaryPanel", () => {
-  it("opens file search from the trailing plus menu", async () => {
-    const onOpenFileSearch = vi.fn();
-
-    renderPanel({ onOpenFileSearch });
-    fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Add secondary panel tab" }),
-      {
-        button: 0,
-        ctrlKey: false,
-      },
-    );
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Open file" }));
-
-    expect(onOpenFileSearch).toHaveBeenCalledTimes(1);
-  });
-
   it.each<ResizeDragEndScenario>([
     {
       name: "pointerup",
@@ -138,7 +120,6 @@ describe("ThreadSecondaryPanel", () => {
       renderPanel({
         fileTabs: [activeStatusTab],
         fileTabContent: <iframe title="Manager status" />,
-        onOpenFileSearch: noop,
         renderAsDrawer: false,
       });
 

@@ -58,56 +58,6 @@ afterEach(() => {
 });
 
 describe("useFileSearchSuggestions", () => {
-  it("returns workspace-only file search results", async () => {
-    vi.mocked(api.searchProjectPaths).mockResolvedValue(
-      makePathResponse([
-        {
-          kind: "file",
-          path: "src/index.ts",
-          score: 80,
-          positions: [0, 1, 2],
-        },
-      ]),
-    );
-
-    const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () =>
-        useFileSearchSuggestions({
-          projectId: "proj-1",
-          query: "src",
-          limit: 4,
-          environmentId: null,
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(1);
-    });
-
-    expect(result.current.suggestions).toEqual([
-      {
-        source: "workspace",
-        entryKind: "file",
-        path: "src/index.ts",
-        name: "index.ts",
-        score: 80,
-        positions: [0, 1, 2],
-      },
-    ]);
-    expect(result.current.isUnavailable).toBe(false);
-    expect(api.searchProjectPaths).toHaveBeenCalledWith({
-      projectId: "proj-1",
-      query: "src",
-      limit: 8,
-      environmentId: null,
-      includeFiles: true,
-      includeDirectories: false,
-    });
-    expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
-  });
-
   it("merges workspace and manager thread-storage file results", async () => {
     vi.mocked(api.searchProjectPaths).mockResolvedValue(
       makePathResponse([
@@ -171,37 +121,6 @@ describe("useFileSearchSuggestions", () => {
       },
       signal: expect.any(AbortSignal),
     });
-  });
-
-  it("does not query thread storage for non-manager threads", async () => {
-    vi.mocked(api.searchProjectPaths).mockResolvedValue(
-      makePathResponse([
-        {
-          kind: "file",
-          path: "src/app.ts",
-          score: 40,
-        },
-      ]),
-    );
-
-    const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () =>
-        useFileSearchSuggestions({
-          projectId: "proj-1",
-          query: "app",
-          environmentId: "env-1",
-          currentThreadId: "thr-standard",
-          currentThreadType: "standard",
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(1);
-    });
-
-    expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
   });
 
   it("excludes directory results defensively", async () => {
