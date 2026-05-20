@@ -4,7 +4,15 @@ import { makeThreadListEntry } from "../../../.ladle/story-fixtures";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.js";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
+import {
+  NO_COLLAPSED_CHILD_ACTIVITY,
+  type CollapsedChildActivity,
+} from "@/lib/thread-activity";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+
+const childActivity = (
+  overrides: Partial<CollapsedChildActivity> = {},
+): CollapsedChildActivity => ({ ...NO_COLLAPSED_CHILD_ACTIVITY, ...overrides });
 
 export default {
   title: "sidebar/Threads",
@@ -40,6 +48,7 @@ function managerOption(
     kind: "manager",
     isCollapsed: false,
     managedChildCount: 0,
+    managedChildActivity: NO_COLLAPSED_CHILD_ACTIVITY,
     onToggleCollapsed: noop,
     ...overrides,
   };
@@ -232,7 +241,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, collapsed"
-        hint="chevron points right (default)"
+        hint="chevron points right (default); count badge stands in for hidden children"
       >
         <SidebarStage>
           <ThreadRow
@@ -242,6 +251,60 @@ export function Overview() {
             options={managerOption({
               isCollapsed: true,
               managedChildCount: 4,
+            })}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
+        label="manager, collapsed — child working"
+        hint="spinning dashed ring hugs the count when a hidden child is busy"
+      >
+        <SidebarStage>
+          <ThreadRow
+            projectId="proj_demo"
+            thread={managerThread}
+            isActive={false}
+            options={managerOption({
+              isCollapsed: true,
+              managedChildCount: 4,
+              managedChildActivity: childActivity({ working: true }),
+            })}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
+        label="manager, collapsed — child needs input"
+        hint="count badge turns amber when a hidden child is blocked on the user"
+      >
+        <SidebarStage>
+          <ThreadRow
+            projectId="proj_demo"
+            thread={managerThread}
+            isActive={false}
+            options={managerOption({
+              isCollapsed: true,
+              managedChildCount: 4,
+              managedChildActivity: childActivity({ pending: true }),
+            })}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
+        label="manager, collapsed — needs input + working"
+        hint="signals combine: amber count badge with the spinning ring around it"
+      >
+        <SidebarStage>
+          <ThreadRow
+            projectId="proj_demo"
+            thread={managerThread}
+            isActive={false}
+            options={managerOption({
+              isCollapsed: true,
+              managedChildCount: 4,
+              managedChildActivity: childActivity({
+                pending: true,
+                working: true,
+              }),
             })}
           />
         </SidebarStage>

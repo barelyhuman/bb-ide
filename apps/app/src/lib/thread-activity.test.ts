@@ -1,8 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
+  getCollapsedChildActivity,
   isBusyThread,
   isUnreadDoneThread,
 } from "./thread-activity";
+
+type ChildActivityInput = Parameters<typeof getCollapsedChildActivity>[0][number];
+
+function makeChild(
+  overrides: Partial<ChildActivityInput> = {},
+): ChildActivityInput {
+  return {
+    status: "idle",
+    lastReadAt: 10,
+    latestAttentionAt: 10,
+    parentThreadId: null,
+    hasPendingInteraction: false,
+    runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
+    ...overrides,
+  };
+}
+
+const busyChild = makeChild({
+  status: "active",
+  runtime: { displayStatus: "active", hostReconnectGraceExpiresAt: null },
+});
+const pendingChild = makeChild({ hasPendingInteraction: true });
+const unreadChild = makeChild({ latestAttentionAt: 20, lastReadAt: 10 });
 
 describe("thread-activity", () => {
   it("exposes shared running/unread helpers", () => {
@@ -63,5 +87,66 @@ describe("thread-activity", () => {
         parentThreadId: null,
       }),
     ).toBe(false);
+  });
+
+  describe("getCollapsedChildActivity", () => {
+    it("flags nothing for an empty or fully-idle child list", () => {
+      expect(getCollapsedChildActivity([])).toEqual({
+        pending: false,
+        working: false,
+        unread: false,
+      });
+      expect(getCollapsedChildActivity([makeChild(), makeChild()])).toEqual({
+        pending: false,
+        working: false,
+        unread: false,
+      });
+    });
+
+    it("flags a single child's activity", () => {
+      expect(getCollapsedChildActivity([busyChild])).toEqual({
+        pending: false,
+        working: true,
+        unread: false,
+      });
+      expect(getCollapsedChildActivity([pendingChild])).toEqual({
+        pending: true,
+        working: false,
+        unread: false,
+      });
+      expect(getCollapsedChildActivity([unreadChild])).toEqual({
+        pending: false,
+        working: false,
+        unread: true,
+      });
+    });
+
+    it("flags pending and working independently when both are present", () => {
+      expect(
+        getCollapsedChildActivity([unreadChild, busyChild, pendingChild]),
+      ).toEqual({ pending: true, working: true, unread: true });
+    });
+
+    it("reads a blocked child as pending only, never also working", () => {
+      const busyAndPending = makeChild({
+        status: "active",
+        hasPendingInteraction: true,
+        runtime: { displayStatus: "active", hostReconnectGraceExpiresAt: null },
+      });
+      expect(getCollapsedChildActivity([busyAndPending])).toEqual({
+        pending: true,
+        working: false,
+        unread: false,
+      });
+    });
+
+    it("never flags 'unread' for parented children", () => {
+      const unreadButParented = makeChild({
+        latestAttentionAt: 20,
+        lastReadAt: 10,
+        parentThreadId: "manager-1",
+      });
+      expect(getCollapsedChildActivity([unreadButParented]).unread).toBe(false);
+    });
   });
 });

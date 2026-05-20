@@ -32,6 +32,10 @@ import {
   COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  getCollapsedChildActivity,
+  type CollapsedChildActivity,
+} from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { toast } from "sonner";
@@ -54,6 +58,7 @@ import {
   SIDEBAR_PROJECT_GROUP_LINE_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+  SIDEBAR_UNREAD_DOT_CLASS,
 } from "./sidebarRowClasses";
 
 const THREAD_ROW_DEFAULT_OPTIONS: ThreadRowOptions = { kind: "default" };
@@ -119,6 +124,7 @@ interface EnvironmentThreadGroupHeaderProps {
   stickyTier: EnvironmentStickyTier;
   parentLineClass?: string;
   childCount: number;
+  childActivity: CollapsedChildActivity;
   isCollapsed: boolean;
   archiveThreadsPending?: boolean;
   onArchiveThreads?: () => void;
@@ -130,6 +136,7 @@ interface EnvironmentThreadGroupHeaderActionsProps {
   archiveThreadsPending: boolean;
   onArchiveThreads?: () => void;
   onCreateNewThread?: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 interface UseArchiveEnvironmentThreadGroupActionArgs {
@@ -194,61 +201,42 @@ function EnvironmentThreadGroupHeaderActions({
   archiveThreadsPending,
   onArchiveThreads,
   onCreateNewThread,
+  onOpenChange,
 }: EnvironmentThreadGroupHeaderActionsProps) {
   if (!onCreateNewThread && !onArchiveThreads) {
-    return (
-      <span
-        className={cn("shrink-0", COARSE_POINTER_ROW_ACTION_SIZE_CLASS)}
-        aria-hidden="true"
-      />
-    );
+    return null;
   }
 
   return (
-    <span className="relative z-10 inline-flex shrink-0 items-center">
-      {onCreateNewThread ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Create new thread in this worktree"
-          title="New thread in this worktree"
-          onClick={onCreateNewThread}
-          className={cn(
-            "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
-            COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-          )}
-        >
-          <Icon
-            name="MessageSquarePlus"
-            className={COARSE_POINTER_ICON_SIZE_CLASS}
-          />
-        </Button>
-      ) : null}
-      {onArchiveThreads ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Worktree actions"
-              title="Worktree actions"
-              className={cn(
-                "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
-                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-              )}
-            >
-              <Icon
-                name="MoreHorizontal"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
-              />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
+    <span className="inline-flex shrink-0 items-center">
+      <DropdownMenu onOpenChange={onOpenChange}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Worktree actions"
+            title="Worktree actions"
+            className={cn(
+              "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+              COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+            )}
+          >
+            <Icon
+              name="MoreHorizontal"
+              className={COARSE_POINTER_ICON_SIZE_CLASS}
+            />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          {onCreateNewThread ? (
+            <DropdownMenuItem onSelect={onCreateNewThread}>
+              New thread
+            </DropdownMenuItem>
+          ) : null}
+          {onArchiveThreads ? (
             <DropdownMenuItem
               disabled={archiveThreadsPending}
-              className="text-destructive focus:text-destructive"
               onSelect={(event) => {
                 if (archiveThreadsPending) {
                   event.preventDefault();
@@ -259,9 +247,9 @@ function EnvironmentThreadGroupHeaderActions({
             >
               Archive worktree
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </span>
   );
 }
@@ -273,17 +261,20 @@ function EnvironmentThreadGroupHeader({
   stickyTier,
   parentLineClass,
   childCount,
+  childActivity,
   isCollapsed,
   archiveThreadsPending = false,
   onArchiveThreads,
   onCreateNewThread,
   onToggleCollapsed,
 }: EnvironmentThreadGroupHeaderProps) {
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
   const branchName = representativeThread.environmentBranchName;
   const headerTitle = branchName ? `Worktree: ${branchName}` : "Worktree";
   const iconName = getEnvironmentWorkspaceLabelIconName(
     representativeThread.environmentWorkspaceDisplayKind,
   );
+  const showUnreadDot = isCollapsed && childActivity.unread;
   return (
     <SidebarStickyTier
       tier={stickyTier}
@@ -350,6 +341,7 @@ function EnvironmentThreadGroupHeader({
         {isCollapsed ? (
           <CollapsedChildCountBadge
             count={childCount}
+            activity={childActivity}
             className="group-hover/env-row:opacity-0 group-has-[:focus-visible]/env-row:opacity-0"
           />
         ) : null}
@@ -363,11 +355,43 @@ function EnvironmentThreadGroupHeader({
           </>
         ) : null}
       </span>
-      <EnvironmentThreadGroupHeaderActions
-        archiveThreadsPending={archiveThreadsPending}
-        onArchiveThreads={onArchiveThreads}
-        onCreateNewThread={onCreateNewThread}
-      />
+      <span
+        className={cn(
+          "relative z-10 shrink-0",
+          COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+        )}
+      >
+        {showUnreadDot ? (
+          <span
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center text-subtle-foreground transition-opacity",
+              isActionsOpen
+                ? "opacity-0"
+                : "group-hover/env-row:opacity-0 group-has-[:focus-visible]/env-row:opacity-0",
+            )}
+          >
+            <span
+              className={SIDEBAR_UNREAD_DOT_CLASS}
+              aria-label="An unread thread in this worktree"
+            />
+          </span>
+        ) : null}
+        <div
+          className={cn(
+            "absolute inset-0 flex items-center justify-end transition-opacity",
+            isActionsOpen
+              ? "pointer-events-auto opacity-100"
+              : "pointer-events-none opacity-0 group-hover/env-row:pointer-events-auto group-hover/env-row:opacity-100 group-has-[:focus-visible]/env-row:pointer-events-auto group-has-[:focus-visible]/env-row:opacity-100",
+          )}
+        >
+          <EnvironmentThreadGroupHeaderActions
+            archiveThreadsPending={archiveThreadsPending}
+            onArchiveThreads={onArchiveThreads}
+            onCreateNewThread={onCreateNewThread}
+            onOpenChange={setIsActionsOpen}
+          />
+        </div>
+      </span>
     </SidebarStickyTier>
   );
 }
@@ -412,6 +436,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
         paddingClass={SIDEBAR_MANAGER_ROW_PADDING_CLASS}
         stickyTier="manager"
         childCount={threads.length}
+        childActivity={getCollapsedChildActivity(threads)}
         isCollapsed={isCollapsed}
         archiveThreadsPending={archiveThreadsPending}
         onArchiveThreads={onArchiveThreads}
@@ -482,6 +507,7 @@ function ManagedEnvironmentThreadSubGroup({
         stickyTier="environment"
         parentLineClass={SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS}
         childCount={threads.length}
+        childActivity={getCollapsedChildActivity(threads)}
         isCollapsed={isCollapsed}
         archiveThreadsPending={archiveThreadsPending}
         onArchiveThreads={onArchiveThreads}
@@ -527,9 +553,15 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
       kind: "manager",
       isCollapsed: isManagerCollapsed,
       managedChildCount: stats.managedChildCount,
+      managedChildActivity: stats.managedChildActivity,
       onToggleCollapsed: onToggleManagerCollapsed,
     }),
-    [isManagerCollapsed, onToggleManagerCollapsed, stats.managedChildCount],
+    [
+      isManagerCollapsed,
+      onToggleManagerCollapsed,
+      stats.managedChildCount,
+      stats.managedChildActivity,
+    ],
   );
   const showManagedChildren = !isManagerCollapsed && managedItems.length > 0;
   return (

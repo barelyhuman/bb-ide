@@ -358,6 +358,84 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
+        label="collapsed manager — child needs input"
+        hint="amber count badge surfaces a hidden child blocked on the user"
+      >
+        {singleProject({
+          initialCollapsedManagerIds: new Set([manager.id]),
+          threadListState: {
+            status: "ready",
+            threads: [
+              manager,
+              managerChildA,
+              { ...managerChildB, hasPendingInteraction: true },
+            ],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="collapsed manager — needs input + working"
+        hint="one child blocked, another running: amber badge and spinning ring combine"
+      >
+        {singleProject({
+          initialCollapsedManagerIds: new Set([manager.id]),
+          threadListState: {
+            status: "ready",
+            threads: [
+              manager,
+              { ...managerChildA, hasPendingInteraction: true },
+              managerChildB,
+            ],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="collapsed worktree — child working"
+        hint="spinning dashed ring hugs the worktree count when a hidden child is busy"
+      >
+        {singleProject({
+          initialCollapsedEnvironmentIds: new Set(["env_collapsed_busy"]),
+          threadListState: {
+            status: "ready",
+            threads: [
+              {
+                ...sharedWorktreeThreadA,
+                environmentId: "env_collapsed_busy",
+                status: "active",
+                runtime: {
+                  displayStatus: "active",
+                  hostReconnectGraceExpiresAt: null,
+                },
+              },
+              { ...sharedWorktreeThreadB, environmentId: "env_collapsed_busy" },
+            ],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="collapsed worktree — unread child"
+        hint="worktree badged like a regular unread thread — trailing primary dot"
+      >
+        {singleProject({
+          initialCollapsedEnvironmentIds: new Set(["env_collapsed_unread"]),
+          threadListState: {
+            status: "ready",
+            threads: [
+              {
+                ...sharedWorktreeThreadA,
+                environmentId: "env_collapsed_unread",
+                lastReadAt: 50,
+                latestAttentionAt: 200,
+              },
+              {
+                ...sharedWorktreeThreadB,
+                environmentId: "env_collapsed_unread",
+              },
+            ],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
         label="multiple projects"
         hint="four projects stacked — active project at the top with a standard thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
       >

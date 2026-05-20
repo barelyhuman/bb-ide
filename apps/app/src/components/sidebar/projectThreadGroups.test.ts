@@ -116,13 +116,13 @@ describe("buildProjectThreadGroups", () => {
       groups.managerThreadGroups.map((group) => group.managerThread.id),
     ).toEqual(["manager-new", "manager-old"]);
     expect(groups.managerThreadGroups[0]?.stats).toEqual({
-      managedChildBusyCount: 0,
+      managedChildActivity: { pending: false, working: false, unread: false },
       managedChildCount: 0,
     });
     expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
       .toEqual([]);
     expect(groups.managerThreadGroups[1]?.stats).toEqual({
-      managedChildBusyCount: 1,
+      managedChildActivity: { pending: false, working: true, unread: false },
       managedChildCount: 2,
     });
     expect(looseThreadIds(groups.managerThreadGroups[1]?.managedItems ?? []))

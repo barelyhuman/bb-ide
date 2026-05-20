@@ -1,5 +1,14 @@
+import { COARSE_POINTER_DOT_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+
 export const SIDEBAR_ROW_BASE_CLASS =
   "flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors";
+
+/**
+ * The unread "attention" dot shared by a leaf thread row and a collapsed
+ * worktree header. Inner styling only — call sites own wrapper, positioning,
+ * fade, and the aria-label.
+ */
+export const SIDEBAR_UNREAD_DOT_CLASS = `rounded-full bg-primary ${COARSE_POINTER_DOT_SIZE_CLASS}`;
 
 export const SIDEBAR_STANDARD_ROW_PADDING_CLASS = "pl-2";
 
@@ -49,5 +58,21 @@ export const SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS =
 export const SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS =
   "pointer-events-none absolute bottom-0 left-10 top-0 z-[1] w-px bg-border-hairline";
 
-export const SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS =
-  "pointer-events-none absolute -bottom-0.5 -right-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold leading-none text-primary-foreground transition-opacity duration-150";
+/**
+ * Wrapper that anchors the collapsed child-count badge to the bottom-right of
+ * the leading glyph. Owns positioning + the hover fade so the chip and the
+ * working ring can stack concentrically inside it.
+ */
+export const SIDEBAR_COLLAPSED_CHILD_BADGE_WRAPPER_CLASS =
+  "pointer-events-none absolute -bottom-0.5 -right-1 inline-flex items-center justify-center transition-opacity duration-150";
+
+/** The count chip itself; its color is set per child-activity state. */
+export const SIDEBAR_COLLAPSED_CHILD_BADGE_CHIP_CLASS =
+  "flex h-3 min-w-3 items-center justify-center rounded-full px-0.5 text-[8px] font-semibold leading-none";
+
+/**
+ * Spinning dashed ring drawn around the count chip when a hidden child is
+ * working — the collapsed echo of the leaf row's CircleDashed busy glyph.
+ */
+export const SIDEBAR_COLLAPSED_CHILD_BADGE_WORKING_RING_CLASS =
+  "pointer-events-none absolute -inset-[3px] animate-spin rounded-full border border-dashed border-primary/70";

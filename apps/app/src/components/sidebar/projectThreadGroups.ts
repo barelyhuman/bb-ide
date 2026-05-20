@@ -2,11 +2,14 @@ import type {
   EnvironmentWorkspaceDisplayKind,
   ThreadListEntry,
 } from "@bb/domain";
-import { isBusyThread } from "@/lib/thread-activity";
+import {
+  getCollapsedChildActivity,
+  type CollapsedChildActivity,
+} from "@/lib/thread-activity";
 
 export interface ManagerThreadStats {
   managedChildCount: number;
-  managedChildBusyCount: number;
+  managedChildActivity: CollapsedChildActivity;
 }
 
 export interface EnvironmentThreadGroup {
@@ -141,15 +144,10 @@ export function buildProjectThreadGroups(
     .sort(compareByCreatedAtDescending);
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
   const childrenByManagerId = new Map<string, ThreadListEntry[]>();
-  const statsByManagerId = new Map<string, ManagerThreadStats>();
   const unmanagedStandardThreads: ThreadListEntry[] = [];
 
   for (const managerThread of managerThreads) {
     childrenByManagerId.set(managerThread.id, []);
-    statsByManagerId.set(managerThread.id, {
-      managedChildBusyCount: 0,
-      managedChildCount: 0,
-    });
   }
 
   for (const thread of projectThreads) {
@@ -161,28 +159,21 @@ export function buildProjectThreadGroups(
       continue;
     }
 
-    const children = childrenByManagerId.get(managerId);
-    const stats = statsByManagerId.get(managerId);
-    if (!children || !stats) continue;
-
-    children.push(thread);
-    stats.managedChildCount += 1;
-    if (isBusyThread(thread)) {
-      stats.managedChildBusyCount += 1;
-    }
+    childrenByManagerId.get(managerId)?.push(thread);
   }
 
   const managerThreadGroups: ManagerThreadGroup[] = managerThreads.map(
-    (managerThread) => ({
-      managerThread,
-      managedItems: buildSortedItems(
-        childrenByManagerId.get(managerThread.id) ?? [],
-      ),
-      stats: statsByManagerId.get(managerThread.id) ?? {
-        managedChildBusyCount: 0,
-        managedChildCount: 0,
-      },
-    }),
+    (managerThread) => {
+      const children = childrenByManagerId.get(managerThread.id) ?? [];
+      return {
+        managerThread,
+        managedItems: buildSortedItems(children),
+        stats: {
+          managedChildCount: children.length,
+          managedChildActivity: getCollapsedChildActivity(children),
+        },
+      };
+    },
   );
 
   return {
