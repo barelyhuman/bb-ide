@@ -560,10 +560,6 @@ body.sidebar-resizing [data-sidebar="panel"] {
   overflow-anchor: none;
 }
 
-.scroll-anchor-disabled-content * {
-  overflow-anchor: none;
-}
-
 .scroll-bottom-anchor-content .scroll-bottom-anchor {
   height: 1px;
   flex-shrink: 0;

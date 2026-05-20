@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -13,10 +12,7 @@ import { ConversationTimeline } from "@/components/ui/conversation.js";
 import { HeightTransition } from "@/components/ui/height-transition.js";
 import { Icon } from "@/components/ui/icon.js";
 import { PageShell } from "@/components/ui/page-shell.js";
-import {
-  useBottomAnchoredScroll,
-  type CapturedScrollPosition,
-} from "@/components/ui/bottom-anchored-scroll-body.js";
+import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
 import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
@@ -66,7 +62,6 @@ export interface HostConnectionNotice {
 interface LoadOlderMessagesButtonProps {
   isLoadingOlderTimelineRows: boolean;
   onLoadOlderRows: LoadOlderRowsHandler;
-  timelineRowsVersion: string;
 }
 
 interface BuildStopRequestedTimelineRowArgs {
@@ -135,18 +130,6 @@ function useTimelineRowsWithPendingStop({
   }, [rows, stopRequestedAt, threadId]);
 }
 
-interface BuildTimelineRowsVersionArgs {
-  rows: readonly TimelineRow[];
-}
-
-function buildTimelineRowsVersion({
-  rows,
-}: BuildTimelineRowsVersionArgs): string {
-  const firstRowId = rows[0]?.id ?? "";
-  const lastRowId = rows.at(-1)?.id ?? "";
-  return `${rows.length}:${firstRowId}:${lastRowId}`;
-}
-
 export function ThreadTimelinePane({
   activeThinking,
   footer,
@@ -191,10 +174,6 @@ export function ThreadTimelinePane({
     stopRequestedAt,
     threadId,
   });
-  const timelineRowsVersion = useMemo(
-    () => buildTimelineRowsVersion({ rows: timelineRows }),
-    [timelineRows],
-  );
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -214,7 +193,6 @@ export function ThreadTimelinePane({
             <LoadOlderMessagesButton
               isLoadingOlderTimelineRows={isLoadingOlderTimelineRows}
               onLoadOlderRows={onLoadOlderRows}
-              timelineRowsVersion={timelineRowsVersion}
             />
           ) : null}
           {isThreadTimelinePending ? (
@@ -269,55 +247,18 @@ export function ThreadTimelinePane({
 function LoadOlderMessagesButton({
   isLoadingOlderTimelineRows,
   onLoadOlderRows,
-  timelineRowsVersion,
 }: LoadOlderMessagesButtonProps) {
   const bottomAnchor = useBottomAnchoredScroll();
-  const capturedScrollPositionRef = useRef<CapturedScrollPosition | null>(
-    null,
-  );
-  const observedLoadingRef = useRef(false);
-  const previousTimelineRowsVersionRef = useRef(timelineRowsVersion);
-  const releaseCapturedScrollPosition = useCallback(() => {
-    capturedScrollPositionRef.current?.release();
-    capturedScrollPositionRef.current = null;
-    observedLoadingRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    if (previousTimelineRowsVersionRef.current === timelineRowsVersion) {
-      return;
-    }
-
-    previousTimelineRowsVersionRef.current = timelineRowsVersion;
-    if (!observedLoadingRef.current) {
-      releaseCapturedScrollPosition();
-    }
-  }, [releaseCapturedScrollPosition, timelineRowsVersion]);
-
-  useEffect(() => {
-    if (isLoadingOlderTimelineRows) {
-      observedLoadingRef.current = true;
-      return;
-    }
-
-    if (observedLoadingRef.current) {
-      releaseCapturedScrollPosition();
-    }
-  }, [isLoadingOlderTimelineRows, releaseCapturedScrollPosition]);
-
-  useEffect(
-    () => () => {
-      releaseCapturedScrollPosition();
-    },
-    [releaseCapturedScrollPosition],
-  );
-
   const handleClick = useCallback(() => {
-    releaseCapturedScrollPosition();
-    capturedScrollPositionRef.current =
-      bottomAnchor?.captureScrollPosition() ?? null;
-    void Promise.resolve().then(onLoadOlderRows);
-  }, [bottomAnchor, onLoadOlderRows, releaseCapturedScrollPosition]);
+    const capturedScrollAnchor = bottomAnchor?.captureScrollAnchor() ?? null;
+    void Promise.resolve()
+      .then(onLoadOlderRows)
+      .finally(() => {
+        window.requestAnimationFrame(() => {
+          capturedScrollAnchor?.restore();
+        });
+      });
+  }, [bottomAnchor, onLoadOlderRows]);
 
   return (
     <div className="flex justify-center pt-2 mb-3">

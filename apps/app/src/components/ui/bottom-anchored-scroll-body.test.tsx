@@ -5,7 +5,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BottomAnchoredScrollBody,
-  type CapturedScrollPosition,
+  type CapturedScrollAnchor,
   useBottomAnchoredScroll,
 } from "@/components/ui/bottom-anchored-scroll-body";
 
@@ -124,7 +124,7 @@ function buildDomRect(rect: TestRect): DOMRect {
 function BottomAnchorProbe() {
   const bottomAnchor = useBottomAnchoredScroll();
   const targetRef = useRef<HTMLDivElement>(null);
-  const capturedPositionRef = useRef<CapturedScrollPosition | null>(null);
+  const capturedAnchorRef = useRef<CapturedScrollAnchor | null>(null);
   return (
     <div>
       <output aria-label="Bottom state">
@@ -151,20 +151,18 @@ function BottomAnchorProbe() {
           <button
             type="button"
             onClick={() => {
-              capturedPositionRef.current =
-                bottomAnchor.captureScrollPosition();
+              capturedAnchorRef.current = bottomAnchor.captureScrollAnchor();
             }}
           >
-            Capture scroll position
+            Capture scroll anchor
           </button>
           <button
             type="button"
             onClick={() => {
-              capturedPositionRef.current?.release();
-              capturedPositionRef.current = null;
+              capturedAnchorRef.current?.restore();
             }}
           >
-            Release scroll position
+            Restore scroll anchor
           </button>
         </>
       ) : null}
@@ -345,7 +343,7 @@ describe("BottomAnchoredScrollBody", () => {
     expect(scrollArea.scrollTop).toBe(1_100);
   });
 
-  it("preserves a captured scroll position through multiple height changes", () => {
+  it("preserves a captured scroll anchor through multiple height changes", () => {
     const { rerenderBody, scrollArea } = renderBody();
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_000,
@@ -354,7 +352,7 @@ describe("BottomAnchoredScrollBody", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Capture scroll position" }),
+      screen.getByRole("button", { name: "Capture scroll anchor" }),
     );
 
     setScrollMetrics(scrollArea, {
@@ -364,31 +362,31 @@ describe("BottomAnchoredScrollBody", () => {
     });
     rerenderBody({ extraRowCount: 1 });
 
-    expect(scrollArea.scrollTop).toBe(200);
+    expect(scrollArea.scrollTop).toBe(220);
 
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_500,
       clientHeight: 100,
-      scrollTop: 200,
+      scrollTop: 220,
     });
     rerenderBody({ extraRowCount: 2 });
 
-    expect(scrollArea.scrollTop).toBe(200);
+    expect(scrollArea.scrollTop).toBe(700);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Release scroll position" }),
+      screen.getByRole("button", { name: "Restore scroll anchor" }),
     );
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_600,
       clientHeight: 100,
-      scrollTop: 200,
+      scrollTop: 700,
     });
     rerenderBody({ extraRowCount: 3 });
 
-    expect(scrollArea.scrollTop).toBe(200);
+    expect(scrollArea.scrollTop).toBe(700);
   });
 
-  it("overrides browser anchoring while a captured scroll position is pending", () => {
+  it("does not restore to bottom while a captured scroll anchor is pending", () => {
     const { rerenderBody, scrollArea } = renderBody();
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_000,
@@ -397,18 +395,18 @@ describe("BottomAnchoredScrollBody", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Capture scroll position" }),
+      screen.getByRole("button", { name: "Capture scroll anchor" }),
     );
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_200,
       clientHeight: 100,
-      scrollTop: 600,
+      scrollTop: 400,
     });
     rerenderBody({ extraRowCount: 1 });
     getResizeObserverInstance().trigger();
     flushAnimationFrames(1);
 
-    expect(scrollArea.scrollTop).toBe(400);
+    expect(scrollArea.scrollTop).toBe(600);
     expect(getBottomState()).toBe("away");
   });
 });
