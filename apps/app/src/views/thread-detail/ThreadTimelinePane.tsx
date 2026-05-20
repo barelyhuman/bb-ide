@@ -35,7 +35,7 @@ interface ThreadTimelinePaneProps {
   timelineError: boolean;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
-  onLoadOlderRows: LoadOlderRowsHandler;
+  onLoadOlderRows: () => void;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -52,16 +52,9 @@ interface ThreadTimelinePaneProps {
   workspaceRootPath: string | undefined;
 }
 
-type LoadOlderRowsHandler = () => Promise<void> | void;
-
 export interface HostConnectionNotice {
   label: string;
   tone: "pending" | "error";
-}
-
-interface LoadOlderMessagesButtonProps {
-  isLoadingOlderTimelineRows: boolean;
-  onLoadOlderRows: LoadOlderRowsHandler;
 }
 
 interface BuildStopRequestedTimelineRowArgs {
@@ -247,17 +240,14 @@ export function ThreadTimelinePane({
 function LoadOlderMessagesButton({
   isLoadingOlderTimelineRows,
   onLoadOlderRows,
-}: LoadOlderMessagesButtonProps) {
+}: {
+  isLoadingOlderTimelineRows: boolean;
+  onLoadOlderRows: () => void;
+}) {
   const bottomAnchor = useBottomAnchoredScroll();
   const handleClick = useCallback(() => {
-    const capturedScrollAnchor = bottomAnchor?.captureScrollAnchor() ?? null;
-    void Promise.resolve()
-      .then(onLoadOlderRows)
-      .finally(() => {
-        window.requestAnimationFrame(() => {
-          capturedScrollAnchor?.restore();
-        });
-      });
+    bottomAnchor?.captureScrollAnchor();
+    onLoadOlderRows();
   }, [bottomAnchor, onLoadOlderRows]);
 
   return (
