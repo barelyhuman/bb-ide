@@ -40,7 +40,6 @@ export async function writeHostAuthState(
       hostId: authState.hostId,
       hostKey: authState.hostKey,
       hostType: authState.hostType,
-      serverUrl: normalizeServerUrl(authState.serverUrl),
     },
     null,
     2,
@@ -53,26 +52,12 @@ export async function writeHostAuthState(
 }
 
 export interface ResolveServerUrlArgs {
-  persistedServerUrl: string | null;
   providedServerUrl: string | undefined;
 }
 
 export function resolveServerUrl(args: ResolveServerUrlArgs): string | null {
-  const normalizedProvided =
-    typeof args.providedServerUrl === "string" &&
+  return typeof args.providedServerUrl === "string" &&
     args.providedServerUrl.trim().length > 0
-      ? normalizeServerUrl(args.providedServerUrl.trim())
-      : null;
-
-  if (
-    args.persistedServerUrl &&
-    normalizedProvided &&
-    args.persistedServerUrl !== normalizedProvided
-  ) {
-    throw new Error(
-      `Configured server URL ${normalizedProvided} does not match persisted auth state ${args.persistedServerUrl}`,
-    );
-  }
-
-  return args.persistedServerUrl ?? normalizedProvided;
+    ? normalizeServerUrl(args.providedServerUrl.trim())
+    : null;
 }

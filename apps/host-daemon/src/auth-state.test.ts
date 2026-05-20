@@ -26,19 +26,9 @@ afterEach(async () => {
 });
 
 describe("auth state", () => {
-  it("returns the persisted server URL when present", () => {
+  it("returns the normalized provided server URL", () => {
     expect(
       resolveServerUrl({
-        persistedServerUrl: "https://persisted.example.test",
-        providedServerUrl: undefined,
-      }),
-    ).toBe("https://persisted.example.test");
-  });
-
-  it("returns the normalized provided server URL when no persisted value exists", () => {
-    expect(
-      resolveServerUrl({
-        persistedServerUrl: null,
         providedServerUrl: "https://provided.example.test/",
       }),
     ).toBe("https://provided.example.test");
@@ -47,40 +37,26 @@ describe("auth state", () => {
   it("returns null when no server URL is configured", () => {
     expect(
       resolveServerUrl({
-        persistedServerUrl: null,
         providedServerUrl: undefined,
       }),
     ).toBeNull();
   });
 
-  it("treats localhost and 127.0.0.1 as equivalent", () => {
+  it("normalizes localhost server URLs", () => {
     expect(
       resolveServerUrl({
-        persistedServerUrl: "http://127.0.0.1:3000",
         providedServerUrl: "http://localhost:3000",
       }),
     ).toBe("http://127.0.0.1:3000");
   });
 
-  it("throws when persisted and provided server URLs disagree", () => {
-    expect(() =>
-      resolveServerUrl({
-        persistedServerUrl: "https://persisted.example.test",
-        providedServerUrl: "https://provided.example.test",
-      }),
-    ).toThrow(
-      "Configured server URL https://provided.example.test does not match persisted auth state https://persisted.example.test",
-    );
-  });
-
-  it("writes auth state with normalized URLs and reads it back", async () => {
+  it("writes auth state without server URL and reads it back", async () => {
     const dataDir = await makeTempDir("bb-host-daemon-auth-state-");
 
     await writeHostAuthState(dataDir, {
       hostId: "host_auth_state",
       hostKey: "bbdh_test_key",
       hostType: "persistent",
-      serverUrl: "https://server.example.test/",
     });
 
     const authState = await readHostAuthState(dataDir);
@@ -88,11 +64,38 @@ describe("auth state", () => {
       hostId: "host_auth_state",
       hostKey: "bbdh_test_key",
       hostType: "persistent",
-      serverUrl: "https://server.example.test",
     });
 
     const authStatePath = path.join(dataDir, HOST_AUTH_FILE_NAME);
+    await expect(fs.readFile(authStatePath, "utf8")).resolves.not.toContain(
+      "serverUrl",
+    );
     const stats = await fs.stat(authStatePath);
     expect(stats.mode & 0o777).toBe(0o600);
+  });
+
+  it("reads legacy auth state that still contains server URL", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-legacy-auth-state-");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, HOST_AUTH_FILE_NAME),
+      JSON.stringify(
+        {
+          hostId: "host_auth_state",
+          hostKey: "bbdh_test_key",
+          hostType: "persistent",
+          serverUrl: "https://server.example.test/",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    await expect(readHostAuthState(dataDir)).resolves.toEqual({
+      hostId: "host_auth_state",
+      hostKey: "bbdh_test_key",
+      hostType: "persistent",
+    });
   });
 });

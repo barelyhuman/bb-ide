@@ -20,8 +20,15 @@ export const hostAuthStateSchema = z
     hostId: z.string().min(1),
     hostKey: nonEmptyTrimmedStringSchema,
     hostType: hostTypeSchema,
-    serverUrl: z.string().trim().url().transform(normalizeServerUrl),
+    // Legacy auth files included serverUrl. Accept it so old files keep
+    // loading, but strip it from the parsed auth state.
+    serverUrl: z.unknown().optional(),
   })
-  .strict();
+  .strict()
+  .transform(({ hostId, hostKey, hostType }) => ({
+    hostId,
+    hostKey,
+    hostType,
+  }));
 
 export type HostAuthState = z.infer<typeof hostAuthStateSchema>;

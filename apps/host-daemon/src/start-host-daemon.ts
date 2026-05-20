@@ -64,7 +64,6 @@ export async function startHostDaemon(
     });
     const instanceId = (options.createInstanceId ?? randomUUID)();
     const serverUrl = resolveServerUrl({
-      persistedServerUrl: persistedAuth?.serverUrl ?? null,
       providedServerUrl: options.serverUrl ?? hostDaemonConfig.BB_SERVER_URL,
     });
     if (!serverUrl) {
@@ -114,7 +113,6 @@ export async function startHostDaemon(
         hostId: identity.hostId,
         hostKey,
         hostType,
-        serverUrl,
       });
     }
 
