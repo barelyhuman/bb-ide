@@ -338,6 +338,8 @@ export type {
   ManagerTimelineView,
   SystemConfigResponse,
   SystemConfigReloadResponse,
+  SystemExecutionOptionsModelLoadErrorCode,
+  SystemExecutionOptionsModelLoadError,
   SystemExecutionOptionsQuery,
   SystemExecutionOptionsResponse,
   SystemProviderInfo,

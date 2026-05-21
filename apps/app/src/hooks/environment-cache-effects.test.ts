@@ -32,6 +32,13 @@ function scopedSystemExecutionOptionsKey({
   });
 }
 
+const EMPTY_EXECUTION_OPTIONS = {
+  providers: [],
+  models: [],
+  selectedOnlyModels: [],
+  modelLoadError: null,
+};
+
 describe("environment cache effects", () => {
   it("removes env-scoped execution options and composer bootstrap caches on cleanup", () => {
     const queryClient = createCacheEffectQueryClient();
@@ -53,25 +60,25 @@ describe("environment cache effects", () => {
       "env-removed",
       "main",
     );
-    queryClient.setQueryData(removedExecutionOptionsKey, {
-      providers: [],
-      models: [],
-    });
-    queryClient.setQueryData(retainedExecutionOptionsKey, {
-      providers: [],
-      models: [],
-    });
+    queryClient.setQueryData(
+      removedExecutionOptionsKey,
+      EMPTY_EXECUTION_OPTIONS,
+    );
+    queryClient.setQueryData(
+      retainedExecutionOptionsKey,
+      EMPTY_EXECUTION_OPTIONS,
+    );
     queryClient.setQueryData(removedComposerBootstrapKey, {
       defaultExecutionOptions: null,
       queuedMessages: [],
-      executionOptions: { providers: [], models: [] },
+      executionOptions: EMPTY_EXECUTION_OPTIONS,
       pendingInteractions: [],
       promptHistory: [],
     });
     queryClient.setQueryData(retainedComposerBootstrapKey, {
       defaultExecutionOptions: null,
       queuedMessages: [],
-      executionOptions: { providers: [], models: [] },
+      executionOptions: EMPTY_EXECUTION_OPTIONS,
       pendingInteractions: [],
       promptHistory: [],
     });
@@ -89,14 +96,13 @@ describe("environment cache effects", () => {
       queryClient.getQueryData(removedComposerBootstrapKey),
     ).toBeUndefined();
     expect(queryClient.getQueryData(removedWorkStatusKey)).toBeUndefined();
-    expect(queryClient.getQueryData(retainedExecutionOptionsKey)).toEqual({
-      providers: [],
-      models: [],
-    });
+    expect(queryClient.getQueryData(retainedExecutionOptionsKey)).toEqual(
+      EMPTY_EXECUTION_OPTIONS,
+    );
     expect(queryClient.getQueryData(retainedComposerBootstrapKey)).toEqual({
       defaultExecutionOptions: null,
       queuedMessages: [],
-      executionOptions: { providers: [], models: [] },
+      executionOptions: EMPTY_EXECUTION_OPTIONS,
       pendingInteractions: [],
       promptHistory: [],
     });

@@ -107,6 +107,7 @@ async function buildThreadComposerBootstrapResponse(
         providers: [],
         models: [],
         selectedOnlyModels: [],
+        modelLoadError: null,
       };
   return {
     defaultExecutionOptions,

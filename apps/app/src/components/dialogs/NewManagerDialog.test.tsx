@@ -16,6 +16,7 @@ import type {
   CreateManagerThreadRequest,
   ManagerTemplatesResponse,
   ProjectResponse,
+  SystemExecutionOptionsModelLoadError,
 } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -47,6 +48,10 @@ vi.mock("partysocket/ws", async () => {
 interface InstallHireManagerRoutesArgs {
   managerThread?: Thread;
   managerTemplates?: ManagerTemplatesResponse;
+  modelLoadErrorsByProvider?: Record<
+    string,
+    SystemExecutionOptionsModelLoadError
+  >;
   modelResponsesByProvider?: Record<string, AvailableModel[]>;
   projects?: ProjectResponse[];
   systemProviders?: SystemProvidersFixture;
@@ -368,7 +373,15 @@ function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
       const models = resolvedProviderId
         ? (args.modelResponsesByProvider?.[resolvedProviderId] ?? [])
         : [];
-      return jsonResponse({ providers, models });
+      const modelLoadError = resolvedProviderId
+        ? (args.modelLoadErrorsByProvider?.[resolvedProviderId] ?? null)
+        : null;
+      return jsonResponse({
+        providers,
+        models,
+        selectedOnlyModels: [],
+        modelLoadError,
+      });
     },
   });
 
@@ -692,6 +705,8 @@ describe("NewManagerDialog", () => {
     ).toEqual({
       providers: createDefaultSystemProviders(),
       models: codexModels,
+      selectedOnlyModels: [],
+      modelLoadError: null,
     });
   });
 
@@ -818,6 +833,95 @@ describe("NewManagerDialog", () => {
         },
       ]);
     });
+  });
+
+  it("keeps provider switching reachable when the selected provider has no models", async () => {
+    const codexModels = [
+      makeModel("openai-codex/gpt-5.4", {
+        displayName: "GPT-5.4",
+        isDefault: true,
+      }),
+    ];
+    const { managerRequests, requestedModelProviders } =
+      installNewManagerRoutes({
+        modelLoadErrorsByProvider: {
+          pi: {
+            providerId: "pi",
+            code: "missing_executable",
+          },
+        },
+        modelResponsesByProvider: {
+          pi: [],
+          codex: codexModels,
+        },
+      });
+    const { wrapper } = createSuspenseWrapper();
+
+    await renderNewManagerDialog({ wrapper });
+
+    await waitFor(() => {
+      expectProviderModelTitle(["Pi", "Select model"]);
+    });
+
+    await openProviderModelPicker();
+    await waitFor(() => {
+      expect(screen.getByText("Could not load models for Pi.")).toBeTruthy();
+    });
+    fireEvent.click(await screen.findByTitle("Codex"));
+    fireEvent.click(await waitFor(() => findOptionLabel("GPT-5.4")));
+
+    await waitFor(() => {
+      expectProviderModelTitle(["Codex", "GPT-5.4"]);
+    });
+
+    await waitForCreateButtonReady();
+    fireEvent.click(getCreateButton());
+
+    await waitFor(() => {
+      expect(managerRequests).toEqual([
+        {
+          origin: "app",
+          providerId: "codex",
+          model: "openai-codex/gpt-5.4",
+          reasoningLevel: "medium",
+          environment: { type: "host", hostId: "host-local" },
+        },
+      ]);
+    });
+    expect(compactConsecutiveProviderRequests(requestedModelProviders)).toEqual(
+      ["pi", "codex"],
+    );
+  });
+
+  it("renders Codex CLI guidance as a link when a single provider has no models", async () => {
+    installNewManagerRoutes({
+      systemProviders: [
+        createTestSystemProvider({
+          displayName: "Codex",
+          id: "codex",
+        }),
+      ],
+      modelLoadErrorsByProvider: {
+        codex: {
+          providerId: "codex",
+          code: "missing_executable",
+        },
+      },
+      modelResponsesByProvider: {
+        codex: [],
+      },
+    });
+    const { wrapper } = createSuspenseWrapper();
+
+    await renderNewManagerDialog({ wrapper });
+
+    const link = await screen.findByRole("link", { name: "Codex CLI" });
+    expect(link.getAttribute("href")).toBe(
+      "https://developers.openai.com/codex/cli",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Provider and model" }),
+    ).toBeNull();
   });
 
   it("preserves a user-selected reasoning level across real model refetches", async () => {

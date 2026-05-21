@@ -89,6 +89,9 @@ export interface DefaultListModelsOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
 }
 
+const MISSING_EXECUTABLE_PATTERN = /\bENOENT\b/;
+const SPAWN_PATTERN = /\bspawn\b/;
+
 const defaultModelListRuntimes = new Map<string, AgentRuntime>();
 
 function getDefaultModelListRuntime(
@@ -148,6 +151,9 @@ export function getErrorCode(error: unknown): string {
   if (error instanceof CommandDispatchError) {
     return error.code;
   }
+  if (isStructuredSpawnMissingExecutableError(error)) {
+    return "missing_executable";
+  }
   if (
     error instanceof Error &&
     "code" in error &&
@@ -155,7 +161,35 @@ export function getErrorCode(error: unknown): string {
   ) {
     return error.code;
   }
+  if (isMessageOnlySpawnMissingExecutableError(error)) {
+    return "missing_executable";
+  }
   return "command_failed";
+}
+
+function isStructuredSpawnMissingExecutableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    "code" in error &&
+    error.code === "ENOENT" &&
+    "syscall" in error &&
+    typeof error.syscall === "string" &&
+    error.syscall.startsWith("spawn")
+  );
+}
+
+function isMessageOnlySpawnMissingExecutableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    MISSING_EXECUTABLE_PATTERN.test(error.message) &&
+    SPAWN_PATTERN.test(error.message)
+  );
 }
 
 export async function requireExistingEnvironment(

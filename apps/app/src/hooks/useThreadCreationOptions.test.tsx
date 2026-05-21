@@ -2,6 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { AvailableModel } from "@bb/domain";
+import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
@@ -60,10 +61,12 @@ function makeModel(overrides: ModelOverrides = {}): AvailableModel {
 }
 
 function mockExecutionOptions({
+  modelLoadError = null,
   models,
   providers,
   selectedOnlyModels = [],
 }: {
+  modelLoadError?: SystemExecutionOptionsModelLoadError | null;
   models: AvailableModel[];
   providers: ReturnType<typeof createTestSystemProvider>[];
   selectedOnlyModels?: AvailableModel[];
@@ -72,6 +75,7 @@ function mockExecutionOptions({
     models,
     providers,
     selectedOnlyModels,
+    modelLoadError,
   });
 }
 
@@ -237,6 +241,39 @@ describe("useThreadCreationOptions", () => {
     expect(result.current.permissionModeOptions).toEqual([
       PERMISSION_MODE_OPTIONS[0],
     ]);
+  });
+
+  it("exposes the model load error from execution options", async () => {
+    const modelLoadError: SystemExecutionOptionsModelLoadError = {
+      providerId: "codex",
+      code: "missing_executable",
+    };
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          displayName: "Codex",
+          id: "codex",
+        }),
+      ],
+      models: [],
+      modelLoadError,
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          projectId: "project-model-load-error",
+          scope: "new-thread",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedProviderId).toBe("codex");
+    });
+
+    expect(result.current.modelLoadError).toEqual(modelLoadError);
   });
 
   it("persists new-thread selections to project-scoped local storage", async () => {
@@ -451,6 +488,7 @@ describe("useThreadCreationOptions", () => {
                 }),
               ],
         selectedOnlyModels: [],
+        modelLoadError: null,
       }),
     );
 

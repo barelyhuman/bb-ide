@@ -689,6 +689,23 @@ export type PromptHistoryQuery = z.infer<typeof promptHistoryQuerySchema>;
 export const promptHistoryResponseSchema = z.array(promptHistoryEntrySchema);
 export type PromptHistoryResponse = z.infer<typeof promptHistoryResponseSchema>;
 
+export const systemExecutionOptionsModelLoadErrorCodeSchema = z.enum([
+  "missing_executable",
+  "timeout",
+  "failed",
+]);
+export type SystemExecutionOptionsModelLoadErrorCode = z.infer<
+  typeof systemExecutionOptionsModelLoadErrorCodeSchema
+>;
+
+export const systemExecutionOptionsModelLoadErrorSchema = z.object({
+  providerId: z.string().min(1),
+  code: systemExecutionOptionsModelLoadErrorCodeSchema,
+});
+export type SystemExecutionOptionsModelLoadError = z.infer<
+  typeof systemExecutionOptionsModelLoadErrorSchema
+>;
+
 export const systemExecutionOptionsResponseSchema = z.object({
   providers: z.array(providerInfoSchema),
   /** Active models offered as fresh picker choices. */
@@ -700,6 +717,11 @@ export const systemExecutionOptionsResponseSchema = z.object({
    * the user's choice.
    */
   selectedOnlyModels: z.array(availableModelSchema),
+  /**
+   * Error for the provider whose model list was requested. Null means the
+   * lookup completed or no provider was available to query.
+   */
+  modelLoadError: systemExecutionOptionsModelLoadErrorSchema.nullable(),
 });
 export type SystemExecutionOptionsResponse = z.infer<
   typeof systemExecutionOptionsResponseSchema

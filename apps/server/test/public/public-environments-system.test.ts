@@ -1,6 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEnvironment, hostDaemonCommands, updateHost } from "@bb/db";
+import type { ProviderCapabilities, ProviderInfo } from "@bb/domain";
+import type { SystemExecutionOptionsModelLoadErrorCode } from "@bb/server-contract";
 import {
   makeWorkspaceMergeBase,
   makeWorkspaceStatus,
@@ -12,6 +14,7 @@ import {
   WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
 } from "../../src/constants.js";
 import {
+  internalAuthHeaders,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -25,6 +28,89 @@ import {
   seedProjectWithSource,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+interface MakeSystemProviderArgs {
+  id: string;
+  displayName: string;
+  capabilities?: Partial<ProviderCapabilities>;
+}
+
+interface ProviderModelLookupFailureCase {
+  providerId: string;
+  errorCode: string;
+  errorMessage: string;
+  expectedCode: SystemExecutionOptionsModelLoadErrorCode;
+  name: string;
+}
+
+const DEFAULT_PROVIDER_CAPABILITIES: ProviderCapabilities = {
+  supportsArchive: false,
+  supportsRename: false,
+  supportsServiceTier: false,
+  supportsUserQuestion: false,
+  supportedPermissionModes: ["full", "workspace-write", "readonly"],
+};
+
+const PROVIDER_MODEL_LOOKUP_FAILURE_CASES: ProviderModelLookupFailureCase[] = [
+  {
+    providerId: "codex",
+    errorCode: "missing_executable",
+    errorMessage:
+      'Provider "codex" exited unexpectedly\nstderr: Error: spawn /usr/local/lib/node_modules/@openai/codex/vendor/aarch64-apple-darwin/codex/codex ENOENT',
+    expectedCode: "missing_executable",
+    name: "Codex missing executable",
+  },
+  {
+    providerId: "claude-code",
+    errorCode: "missing_executable",
+    errorMessage:
+      'Provider "claude-code" exited unexpectedly\nstderr: Error: spawn /usr/local/bin/claude ENOENT',
+    expectedCode: "missing_executable",
+    name: "Claude Code missing executable",
+  },
+  {
+    providerId: "pi",
+    errorCode: "missing_executable",
+    errorMessage:
+      'Provider "pi" exited unexpectedly\nstderr: Error: spawn /Applications/bb.app/Contents/Resources/bb-pi-bridge.mjs ENOENT',
+    expectedCode: "missing_executable",
+    name: "Pi missing executable",
+  },
+  {
+    providerId: "codex",
+    errorCode: "command_timeout",
+    errorMessage: "Timed out waiting for command result",
+    expectedCode: "timeout",
+    name: "command timeout",
+  },
+  {
+    providerId: "codex",
+    errorCode: "provider_rpc_error",
+    errorMessage: "Provider failed",
+    expectedCode: "failed",
+    name: "generic provider failure",
+  },
+  {
+    providerId: "codex",
+    errorCode: "provider_rpc_error",
+    errorMessage:
+      'Provider "codex" exited unexpectedly\nstderr: Error: spawn /usr/local/bin/codex ENOENT',
+    expectedCode: "failed",
+    name: "ENOENT-looking message with generic error code",
+  },
+];
+
+function makeSystemProvider(args: MakeSystemProviderArgs): ProviderInfo {
+  return {
+    id: args.id,
+    displayName: args.displayName,
+    capabilities: {
+      ...DEFAULT_PROVIDER_CAPABILITIES,
+      ...(args.capabilities ?? {}),
+    },
+    available: true,
+  };
+}
 
 describe("public environment and system routes", () => {
   afterEach(() => {
@@ -1146,6 +1232,7 @@ describe("public environment and system routes", () => {
             id: "gpt-4o-mini-legacy",
           }),
         ],
+        modelLoadError: null,
       });
 
       // A stale providerId falls back to the first provider in the list and
@@ -1200,6 +1287,148 @@ describe("public environment and system routes", () => {
         ],
         models: [],
         selectedOnlyModels: [],
+        modelLoadError: null,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it.each(PROVIDER_MODEL_LOOKUP_FAILURE_CASES)(
+    "returns provider choices with a provider-specific error when model lookup fails: $name",
+    async ({ errorCode, providerId, errorMessage, expectedCode }) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps, {
+          id: `host-system-${providerId}-models-fail`,
+        });
+
+        const executionOptionsPromise = harness.app.request(
+          `/api/v1/system/execution-options?hostId=${host.id}&providerId=${providerId}`,
+        );
+        const providersCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) => command.type === "provider.list",
+        );
+        await reportQueuedCommandSuccess(harness, providersCommand, {
+          providers: [
+            makeSystemProvider({
+              id: "codex",
+              displayName: "Codex",
+              capabilities: {
+                supportsArchive: true,
+                supportsRename: true,
+                supportsServiceTier: true,
+              },
+            }),
+            makeSystemProvider({
+              id: "claude-code",
+              displayName: "Claude Code",
+              capabilities: {
+                supportsUserQuestion: true,
+              },
+            }),
+            makeSystemProvider({
+              id: "pi",
+              displayName: "Pi",
+              capabilities: {
+                supportedPermissionModes: ["full"],
+              },
+            }),
+          ],
+        });
+        const modelsCommand = await waitForQueuedCommandAfter(
+          harness,
+          providersCommand.row.cursor,
+          ({ command }) =>
+            command.type === "provider.list_models" &&
+            command.providerId === providerId,
+        );
+        await reportQueuedCommandError(harness, modelsCommand, {
+          errorCode,
+          errorMessage,
+        });
+
+        const response = await executionOptionsPromise;
+        expect(response.status).toBe(200);
+        await expect(readJson(response)).resolves.toEqual({
+          providers: [
+            expect.objectContaining({
+              id: "codex",
+            }),
+            expect.objectContaining({
+              id: "claude-code",
+            }),
+            expect.objectContaining({
+              id: "pi",
+            }),
+          ],
+          models: [],
+          selectedOnlyModels: [],
+          modelLoadError: {
+            providerId,
+            code: expectedCode,
+          },
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it("does not degrade non-502/504 model lookup failures into modelLoadError", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-system-models-type-mismatch",
+      });
+
+      const executionOptionsPromise = harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex`,
+      );
+      const providersCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, providersCommand, {
+        providers: [
+          makeSystemProvider({
+            id: "codex",
+            displayName: "Codex",
+          }),
+        ],
+      });
+      const modelsCommand = await waitForQueuedCommandAfter(
+        harness,
+        providersCommand.row.cursor,
+        ({ command }) =>
+          command.type === "provider.list_models" &&
+          command.providerId === "codex",
+      );
+
+      const commandResultResponse = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: modelsCommand.row.sessionId,
+            commandId: modelsCommand.row.id,
+            completedAt: Date.now(),
+            type: "provider.list",
+            ok: true,
+            result: {
+              providers: [],
+            },
+          }),
+        },
+      );
+      expect(commandResultResponse.status).toBe(200);
+
+      const response = await executionOptionsPromise;
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "command_result_type_mismatch",
       });
     } finally {
       await harness.cleanup();

@@ -1728,6 +1728,7 @@ describe("public thread data routes", () => {
         providers: [],
         models: [],
         selectedOnlyModels: [],
+        modelLoadError: null,
       });
     } finally {
       await harness.cleanup();

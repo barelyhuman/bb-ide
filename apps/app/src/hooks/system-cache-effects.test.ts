@@ -36,6 +36,13 @@ function scopedSystemExecutionOptionsKey({
   });
 }
 
+const EMPTY_EXECUTION_OPTIONS = {
+  providers: [],
+  models: [],
+  selectedOnlyModels: [],
+  modelLoadError: null,
+};
+
 describe("system cache effects", () => {
   it("invalidates env-scoped execution options and composer bootstrap caches after reconnect", () => {
     const queryClient = createCacheEffectQueryClient();
@@ -46,14 +53,11 @@ describe("system cache effects", () => {
       "thread-1",
       "env-1",
     );
-    queryClient.setQueryData(executionOptionsKey, {
-      providers: [],
-      models: [],
-    });
+    queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
     queryClient.setQueryData(composerBootstrapKey, {
       defaultExecutionOptions: null,
       queuedMessages: [],
-      executionOptions: { providers: [], models: [] },
+      executionOptions: EMPTY_EXECUTION_OPTIONS,
       pendingInteractions: [],
       promptHistory: [],
     });
@@ -77,14 +81,11 @@ describe("system cache effects", () => {
       "thread-1",
       "env-1",
     );
-    queryClient.setQueryData(executionOptionsKey, {
-      providers: [],
-      models: [],
-    });
+    queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
     queryClient.setQueryData(composerBootstrapKey, {
       defaultExecutionOptions: null,
       queuedMessages: [],
-      executionOptions: { providers: [], models: [] },
+      executionOptions: EMPTY_EXECUTION_OPTIONS,
       pendingInteractions: [],
       promptHistory: [],
     });

@@ -13,6 +13,7 @@ import type {
   ReasoningLevel,
   ServiceTier,
 } from "@bb/domain";
+import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import {
   createLocalStorageEnumStorage,
@@ -106,6 +107,8 @@ interface ResolvePermissionModeSelectionArgs {
   rawPermissionMode: PermissionMode;
   supportedPermissionModes: readonly PermissionMode[];
 }
+
+const NO_MODEL_LOAD_ERROR: SystemExecutionOptionsModelLoadError | null = null;
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return (
@@ -393,6 +396,8 @@ export function useThreadCreationOptions(
     providerId: rawSelectedProviderId || undefined,
   });
   const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
+  const modelLoadError =
+    executionOptionsQuery.data?.modelLoadError ?? NO_MODEL_LOAD_ERROR;
   const hasMultipleProviders = providers.length >= 2;
 
   // Resolve the effective provider: use selectedProviderId if it matches a known
@@ -720,6 +725,7 @@ export function useThreadCreationOptions(
     clearReuseEnvironment,
     activeModel,
     modelOptions,
+    modelLoadError,
     reasoningOptions,
     permissionModeOptions,
     supportsPermissionModeSelection,

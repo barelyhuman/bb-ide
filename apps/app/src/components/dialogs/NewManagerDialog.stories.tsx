@@ -3,6 +3,7 @@ import type { AvailableModel, Host, ProjectSource } from "@bb/domain";
 import type {
   ManagerTemplateSummary,
   ProjectResponse,
+  SystemExecutionOptionsModelLoadError,
   SystemProviderInfo,
 } from "@bb/server-contract";
 import {
@@ -32,6 +33,8 @@ interface NewManagerStoryProps {
   providers: SystemProviderInfo[];
   providersAreLoaded: boolean;
   models: readonly AvailableModel[];
+  modelLoadError?: SystemExecutionOptionsModelLoadError | null;
+  modelsAreLoading?: boolean;
   hosts: Host[];
   hostsAreLoaded?: boolean;
   projectSources: readonly ProjectSource[];
@@ -186,6 +189,8 @@ function ControlledNewManagerForm(props: NewManagerStoryProps) {
       models={props.models}
       managerTemplates={managerTemplates}
       managerTemplateActiveName={managerTemplateActiveName}
+      modelLoadError={props.modelLoadError ?? null}
+      modelsAreLoading={props.modelsAreLoading ?? false}
       selectedProviderId={selectedProviderId}
       onSelectedProviderIdChange={setSelectedProviderId}
       onProjectChange={noop}
@@ -218,6 +223,7 @@ export function Overview() {
           providers={[codexProvider]}
           providersAreLoaded
           models={[]}
+          modelsAreLoading
           hosts={[localHost]}
           projectSources={projectSources}
         />

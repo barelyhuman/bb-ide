@@ -233,6 +233,7 @@ export function ThreadDetailPromptArea({
     setPermissionMode,
     activeModel,
     modelOptions,
+    modelLoadError,
     reasoningOptions,
     permissionModeOptions,
     supportsPermissionModeSelection,
@@ -667,6 +668,7 @@ export function ThreadDetailPromptArea({
         active: activeModel,
         selected: selectedModel,
         options: modelOptions,
+        loadError: modelLoadError,
         onChange: setSelectedModel,
       },
       serviceTier: {
@@ -684,6 +686,7 @@ export function ThreadDetailPromptArea({
     [
       activeModel,
       hasMultipleProviders,
+      modelLoadError,
       modelOptions,
       providerOptions,
       reasoningLevel,

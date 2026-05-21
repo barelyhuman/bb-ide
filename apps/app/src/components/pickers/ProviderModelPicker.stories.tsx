@@ -1,6 +1,7 @@
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
 import { PiIcon } from "@/components/icons/PiIcon";
+import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import type { PickerOption } from "./OptionPicker";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
@@ -77,6 +78,16 @@ const piBase = {
   showFastModeToggle: false,
 };
 
+const codexModelsUnavailableBase = {
+  ...codexBase,
+  modelValue: "",
+  modelOptions: [],
+  modelLoadError: {
+    providerId: "codex",
+    code: "missing_executable",
+  } satisfies SystemExecutionOptionsModelLoadError,
+};
+
 export function Overview() {
   return (
     <StoryCard>
@@ -95,8 +106,11 @@ export function Overview() {
       <StoryRow label="fast mode active" hint="codex + fastModeEnabled">
         <ProviderModelPicker {...codexBase} fastModeEnabled />
       </StoryRow>
-      <StoryRow label="open popover" hint="defaultOpen + modal=false">
-        <ProviderModelPicker {...codexBase} defaultOpen modal={false} />
+      <StoryRow
+        label="models unavailable"
+        hint="codex selected, no models returned"
+      >
+        <ProviderModelPicker {...codexModelsUnavailableBase} />
       </StoryRow>
     </StoryCard>
   );

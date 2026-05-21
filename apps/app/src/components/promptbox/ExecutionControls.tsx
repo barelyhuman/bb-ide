@@ -1,6 +1,8 @@
 import { memo } from "react";
 import type { PermissionMode, ReasoningLevel, ServiceTier } from "@bb/domain";
+import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
+import { ModelLoadErrorMessage } from "@/components/pickers/model-load-error-message";
 import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
 import {
   OptionPicker,
@@ -21,6 +23,7 @@ export interface ExecutionModelConfig {
   active?: { model: string } | null;
   selected: string;
   options: readonly PickerOption<string>[];
+  loadError?: SystemExecutionOptionsModelLoadError | null;
   onChange: (value: string) => void;
 }
 
@@ -59,6 +62,12 @@ export const ExecutionControls = memo(function ExecutionControls({
 }: ExecutionControlsProps) {
   const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
   const isProviderLocked = provider.onChange === undefined;
+  const selectedProviderId = provider.selectedId ?? "";
+  const selectedProviderOption = provider.options?.find(
+    (candidate) => candidate.value === selectedProviderId,
+  );
+  const selectedProviderLabel =
+    provider.displayName ?? selectedProviderOption?.label ?? selectedProviderId;
 
   // Show read-only provider label when provider is locked (thread follow-up)
   // and there's no model list to show in the unified picker.
@@ -68,7 +77,17 @@ export const ExecutionControls = memo(function ExecutionControls({
     provider.displayName &&
     model.options.length === 0;
 
-  const showModelPicker = model.options.length > 0;
+  const canSwitchProviders = Boolean(
+    provider.hasMultiple &&
+    provider.onChange &&
+    provider.options &&
+    provider.options.length > 1,
+  );
+  const showModelPicker = model.options.length > 0 || canSwitchProviders;
+  const selectedProviderModelLoadError =
+    model.loadError?.providerId === selectedProviderId ? model.loadError : null;
+  const showModelLoadError =
+    !showModelPicker && selectedProviderModelLoadError !== null;
 
   return (
     <>
@@ -76,22 +95,19 @@ export const ExecutionControls = memo(function ExecutionControls({
         <OptionDisplay
           label="Provider"
           value={provider.displayName}
-          icon={
-            provider.options?.find(
-              (candidate) => candidate.value === provider.selectedId,
-            )?.icon
-          }
+          icon={selectedProviderOption?.icon}
           muted
         />
       ) : null}
       {showModelPicker ? (
         <ProviderModelPicker
           providerOptions={provider.options ?? []}
-          selectedProviderId={provider.selectedId ?? ""}
+          selectedProviderId={selectedProviderId}
           onSelectedProviderChange={provider.onChange}
           hasMultipleProviders={provider.hasMultiple ?? false}
           modelValue={model.active?.model ?? model.selected}
           modelOptions={model.options}
+          modelLoadError={model.loadError}
           onModelChange={model.onChange}
           formatModelLabel={formatModelLabel}
           fastModeEnabled={serviceTier?.value === "fast"}
@@ -102,6 +118,14 @@ export const ExecutionControls = memo(function ExecutionControls({
           serviceTierSupportByProvider={serviceTier?.supportByProvider}
           muted
         />
+      ) : null}
+      {showModelLoadError ? (
+        <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
+          <ModelLoadErrorMessage
+            error={selectedProviderModelLoadError}
+            providerLabel={selectedProviderLabel}
+          />
+        </span>
       ) : null}
       {reasoning.options.length > 0 ? (
         <OptionPicker

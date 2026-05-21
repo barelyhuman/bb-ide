@@ -1,8 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
+import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
-import { COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_SHRINK_CLASS, COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS, COARSE_POINTER_TEXT_SM_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
+import {
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
+  COARSE_POINTER_TEXT_SM_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover.js";
 import { Switch } from "@/components/ui/switch.js";
 import { cn } from "@/lib/utils";
 import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
@@ -14,6 +24,10 @@ import {
   OPTION_MUTED_CLASS_NAME,
   type PickerOption,
 } from "./OptionPicker";
+import {
+  formatModelLoadErrorText,
+  ModelLoadErrorMessage,
+} from "./model-load-error-message";
 
 interface ProviderModelPickerProps {
   // Provider state
@@ -25,6 +39,7 @@ interface ProviderModelPickerProps {
   // Model state
   modelValue: string;
   modelOptions: readonly PickerOption<string>[];
+  modelLoadError?: SystemExecutionOptionsModelLoadError | null;
   onModelChange: (value: string) => void;
   formatModelLabel?: (displayName: string, providerId: string) => string;
   // Fast mode / service tier
@@ -48,6 +63,7 @@ export function ProviderModelPicker({
   hasMultipleProviders,
   modelValue,
   modelOptions,
+  modelLoadError,
   onModelChange,
   formatModelLabel,
   fastModeEnabled,
@@ -70,18 +86,16 @@ export function ProviderModelPicker({
 
   const activeProviderId = previewProviderId ?? selectedProviderId;
 
-  // When previewing a different provider, resolve fast-mode toggle from that
-  // provider's capabilities instead of the committed provider's.
-  const effectiveShowFastModeToggle = serviceTierSupportByProvider
-    ? (serviceTierSupportByProvider[activeProviderId] ?? false)
-    : showFastModeToggle;
-
   const selectedProvider = providerOptions.find(
     (p) => p.value === selectedProviderId,
   );
   const ProviderIcon = selectedProvider?.icon;
   const selectedModelOption = modelOptions.find((m) => m.value === modelValue);
   const selectedModelLabel = selectedModelOption?.label ?? modelValue;
+  const hasSelectedModel = selectedModelLabel.trim().length > 0;
+  const triggerModelLabel = hasSelectedModel
+    ? selectedModelLabel
+    : "Select model";
 
   const showProviderTabs =
     hasMultipleProviders &&
@@ -117,6 +131,32 @@ export function ProviderModelPicker({
     formatModelLabel,
     previewProviderId,
   ]);
+  const activeModelLoadError = isPreviewing
+    ? (previewQuery.data?.modelLoadError ?? null)
+    : (modelLoadError ?? null);
+  const activeProvider = providerOptions.find(
+    (p) => p.value === activeProviderId,
+  );
+  const activeProviderLabel = activeProvider?.label ?? activeProviderId;
+  const activeModelLoadErrorMessage =
+    activeModelLoadError?.providerId === activeProviderId
+      ? formatModelLoadErrorText({
+          error: activeModelLoadError,
+          providerLabel: activeProviderLabel,
+        })
+      : null;
+  const activeModelOptions = previewModelOptions;
+  const hasActiveModelOptions = activeModelOptions.length > 0;
+
+  // When previewing a different provider, resolve fast-mode toggle from that
+  // provider's capabilities instead of the committed provider's.
+  const effectiveShowFastModeToggle =
+    hasActiveModelOptions &&
+    (serviceTierSupportByProvider
+      ? (serviceTierSupportByProvider[activeProviderId] ?? false)
+      : showFastModeToggle);
+  const showSelectedFastMode =
+    hasSelectedModel && fastModeEnabled && modelOptions.length > 0;
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -141,7 +181,7 @@ export function ProviderModelPicker({
     [isPreviewing, onModelChange, onSelectedProviderChange, previewProviderId],
   );
 
-  const TriggerIcon = ProviderIcon;
+  const TriggerIcon = hasSelectedModel ? ProviderIcon : undefined;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={modal}>
@@ -151,7 +191,7 @@ export function ProviderModelPicker({
           variant="ghost"
           size="sm"
           aria-label="Provider and model"
-          title={`${selectedProvider?.label ?? selectedProviderId}: ${selectedModelLabel}${fastModeEnabled ? " (Fast mode)" : ""}`}
+          title={`${selectedProvider?.label ?? selectedProviderId}: ${triggerModelLabel}${showSelectedFastMode ? " (Fast mode)" : ""}`}
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
@@ -161,24 +201,29 @@ export function ProviderModelPicker({
         >
           <span className={OPTION_CONTENT_CLASS_NAME}>
             {TriggerIcon ? <TriggerIcon className="size-3.5 shrink-0" /> : null}
-            {fastModeEnabled ? (
-              <Icon name="Zap" className="size-3.5 shrink-0 fill-current text-subtle-foreground" />
+            {showSelectedFastMode ? (
+              <Icon
+                name="Zap"
+                className="size-3.5 shrink-0 fill-current text-subtle-foreground"
+              />
             ) : null}
-            <span className="truncate">{selectedModelLabel}</span>
+            <span className="truncate">{triggerModelLabel}</span>
           </span>
           <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="flex w-auto min-w-52 max-w-80 flex-col p-0 max-md:w-full max-md:max-w-none"
+        className="flex w-52 flex-col p-0 max-md:w-full max-md:max-w-none"
       >
         {/* Provider icon tabs */}
         {showProviderTabs ? (
           <div
             className={cn(
               "flex items-center gap-0.5 border-b border-border px-2.5 pt-1",
-              isCompactViewport ? "sticky top-0 z-10 bg-background" : "bg-surface-recessed",
+              isCompactViewport
+                ? "sticky top-0 z-10 bg-background"
+                : "bg-surface-recessed",
             )}
           >
             {providerOptions.map((provider) => {
@@ -241,8 +286,8 @@ export function ProviderModelPicker({
             >
               Loading models...
             </div>
-          ) : previewModelOptions.length > 0 ? (
-            previewModelOptions.map((option) => (
+          ) : hasActiveModelOptions ? (
+            activeModelOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -255,7 +300,8 @@ export function ProviderModelPicker({
                 <span className="truncate" title={option.label}>
                   {option.label}
                 </span>
-                <Icon name="Check"
+                <Icon
+                  name="Check"
                   className={cn(
                     COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
                     !isPreviewing && option.value === modelValue
@@ -271,8 +317,16 @@ export function ProviderModelPicker({
                 "px-2 text-xs text-muted-foreground",
                 isCompactViewport ? "py-2" : "py-[0.3125rem]",
               )}
+              title={activeModelLoadErrorMessage ?? undefined}
             >
-              No models available
+              {activeModelLoadError?.providerId === activeProviderId ? (
+                <ModelLoadErrorMessage
+                  error={activeModelLoadError}
+                  providerLabel={activeProviderLabel}
+                />
+              ) : (
+                "No models available"
+              )}
             </div>
           )}
         </div>
@@ -284,7 +338,10 @@ export function ProviderModelPicker({
             <div className="p-1">
               <div className="flex items-center justify-between gap-3 rounded-sm px-2 py-[0.3125rem] text-xs">
                 <span className="flex min-w-0 items-center gap-2">
-                  <Icon name="Zap" className="size-4 fill-current text-muted-foreground" />
+                  <Icon
+                    name="Zap"
+                    className="size-4 fill-current text-muted-foreground"
+                  />
                   <span>Fast mode</span>
                 </span>
                 <Switch

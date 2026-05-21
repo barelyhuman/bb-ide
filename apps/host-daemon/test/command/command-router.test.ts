@@ -371,6 +371,102 @@ describe("CommandRouter", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it("reports missing provider executables with a specific error code", async () => {
+    const errorMessage =
+      'Provider "codex" exited unexpectedly\nstderr: Error: spawn /missing/codex ENOENT';
+    const reportResult = vi.fn(async () => undefined);
+    const logger = createLogger();
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      reportResult,
+      runtimeManager: new RuntimeManager({
+        provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      }),
+      eventSink: noopEventSink,
+      listModels: vi.fn(async () => {
+        throw new Error(errorMessage);
+      }),
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger,
+    });
+
+    await router.handleCommands([
+      {
+        id: "provider-models-missing-executable",
+        cursor: 1,
+        command: {
+          type: "provider.list_models",
+          providerId: "codex",
+        },
+      },
+    ]);
+
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "provider-models-missing-executable",
+        errorCode: "missing_executable",
+        errorMessage,
+        ok: false,
+        type: "provider.list_models",
+      }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "provider-models-missing-executable",
+        err: expect.any(Error),
+        type: "provider.list_models",
+      }),
+      "command execution failed",
+    );
+  });
+
+  it("preserves structured provider error codes over missing executable message fallback", async () => {
+    class StructuredProviderError extends Error {
+      readonly code = "permission_denied";
+    }
+
+    const errorMessage =
+      'Provider "codex" exited unexpectedly\nstderr: Error: spawn /missing/codex ENOENT';
+    const reportResult = vi.fn(async () => undefined);
+    const logger = createLogger();
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      reportResult,
+      runtimeManager: new RuntimeManager({
+        provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      }),
+      eventSink: noopEventSink,
+      listModels: vi.fn(async () => {
+        throw new StructuredProviderError(errorMessage);
+      }),
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger,
+    });
+
+    await router.handleCommands([
+      {
+        id: "provider-models-structured-error",
+        cursor: 1,
+        command: {
+          type: "provider.list_models",
+          providerId: "codex",
+        },
+      },
+    ]);
+
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "provider-models-structured-error",
+        errorCode: "permission_denied",
+        errorMessage,
+        ok: false,
+        type: "provider.list_models",
+      }),
+    );
+  });
+
   it("still warns for missing host file read roots", async () => {
     const parentPath = await makeTempDir("bb-command-router-root-");
     const rootPath = path.join(parentPath, "missing-root");

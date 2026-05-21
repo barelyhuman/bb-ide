@@ -1,7 +1,12 @@
-import type { SystemExecutionOptionsResponse } from "@bb/server-contract";
+import type {
+  SystemExecutionOptionsModelLoadErrorCode,
+  SystemExecutionOptionsModelLoadError,
+  SystemExecutionOptionsResponse,
+} from "@bb/server-contract";
 import type { FeatureFlags, ProviderInfo } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
+import { ApiError } from "../../errors.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { resolveSystemLookupHostId } from "./host-lookup.js";
 
@@ -15,6 +20,16 @@ interface ApplyProviderFeatureFlagsArgs {
   featureFlags: FeatureFlags;
   providers: ProviderInfo[];
 }
+
+interface BuildModelLoadErrorArgs {
+  error: ApiError;
+  provider: ProviderInfo;
+}
+
+type ModelListResult = Pick<
+  SystemExecutionOptionsResponse,
+  "modelLoadError" | "models" | "selectedOnlyModels"
+>;
 
 export function applyProviderFeatureFlags({
   featureFlags,
@@ -49,37 +64,92 @@ export async function resolveSystemExecutionOptions(
     timeoutMs: COMMAND_TIMEOUT_MS,
     command: { type: "provider.list" },
   });
+  const featureFlaggedProviders = applyProviderFeatureFlags({
+    featureFlags: deps.config.featureFlags,
+    providers,
+  });
   const requestedProvider = query.providerId
     ? providers.find((provider) => provider.id === query.providerId)
     : undefined;
-  const modelsProviderId = requestedProvider?.id ?? providers[0]?.id;
+  const modelsProvider = requestedProvider ?? providers[0];
 
-  if (!modelsProviderId) {
+  if (!modelsProvider) {
     return {
-      providers: applyProviderFeatureFlags({
-        featureFlags: deps.config.featureFlags,
-        providers,
-      }),
+      providers: featureFlaggedProviders,
       models: [],
       selectedOnlyModels: [],
+      modelLoadError: null,
     };
   }
 
-  const { models, selectedOnlyModels } = await queueCommandAndWait(deps, {
-    hostId,
-    timeoutMs: COMMAND_TIMEOUT_MS,
-    command: {
-      type: "provider.list_models",
-      providerId: modelsProviderId,
-    },
-  });
+  let modelResult: ModelListResult;
+  try {
+    const { models, selectedOnlyModels } = await queueCommandAndWait(deps, {
+      hostId,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      command: {
+        type: "provider.list_models",
+        providerId: modelsProvider.id,
+      },
+    });
+    modelResult = {
+      models,
+      selectedOnlyModels,
+      modelLoadError: null,
+    };
+  } catch (error) {
+    if (
+      !(error instanceof ApiError) ||
+      (error.status !== 502 && error.status !== 504)
+    ) {
+      throw error;
+    }
+    deps.logger.warn(
+      {
+        err: error,
+        hostId,
+        providerId: modelsProvider.id,
+      },
+      "Failed to resolve provider models",
+    );
+    modelResult = {
+      models: [],
+      selectedOnlyModels: [],
+      modelLoadError: buildModelLoadError({
+        error,
+        provider: modelsProvider,
+      }),
+    };
+  }
 
   return {
-    providers: applyProviderFeatureFlags({
-      featureFlags: deps.config.featureFlags,
-      providers,
-    }),
-    models,
-    selectedOnlyModels,
+    providers: featureFlaggedProviders,
+    models: modelResult.models,
+    selectedOnlyModels: modelResult.selectedOnlyModels,
+    modelLoadError: modelResult.modelLoadError,
   };
+}
+
+function buildModelLoadError({
+  error,
+  provider,
+}: BuildModelLoadErrorArgs): SystemExecutionOptionsModelLoadError {
+  return {
+    providerId: provider.id,
+    code: toModelLoadErrorCode(error),
+  };
+}
+
+function toModelLoadErrorCode(
+  error: ApiError,
+): SystemExecutionOptionsModelLoadErrorCode {
+  if (error.body.code === "command_timeout") {
+    return "timeout";
+  }
+
+  if (error.body.code === "missing_executable") {
+    return "missing_executable";
+  }
+
+  return "failed";
 }

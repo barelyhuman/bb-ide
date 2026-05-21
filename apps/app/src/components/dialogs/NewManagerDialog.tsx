@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -16,6 +17,7 @@ import type {
 import type {
   ManagerTemplateSummary,
   ProjectResponse,
+  SystemExecutionOptionsModelLoadError,
 } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutations";
@@ -50,6 +52,7 @@ import {
 } from "@/components/pickers/OptionPicker";
 import { ManagerTemplatePicker } from "@/components/pickers/ManagerTemplatePicker";
 import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
+import { ModelLoadErrorMessage } from "@/components/pickers/model-load-error-message";
 import { HostPicker } from "@/components/pickers/HostPicker";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
@@ -67,6 +70,11 @@ const EMPTY_MANAGER_TEMPLATES: ManagerTemplateSummary[] = [];
 type ReasoningSelectionSource = "default" | "user";
 
 type IsLocalHostFn = (id: string | null | undefined) => boolean;
+
+interface LoadingOrEmptyTextProps {
+  isLoading: boolean;
+  message: ReactNode;
+}
 
 export function NewManagerDialog() {
   const { state, setOpen } = useNewManagerDialog();
@@ -121,6 +129,7 @@ function NewManagerDialogBody({
   const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
   const providersAreLoaded = executionOptionsQuery.data !== undefined;
   const models = executionOptionsQuery.data?.models ?? EMPTY_MODELS;
+  const modelLoadError = executionOptionsQuery.data?.modelLoadError ?? null;
 
   const managerTemplatesQuery = useManagerTemplates();
   const managerTemplates =
@@ -151,6 +160,8 @@ function NewManagerDialogBody({
       models={models}
       managerTemplates={managerTemplates}
       managerTemplateActiveName={managerTemplateActiveName}
+      modelLoadError={modelLoadError}
+      modelsAreLoading={executionOptionsQuery.isLoading}
       selectedProviderId={selectedProviderId}
       onSelectedProviderIdChange={setSelectedProviderId}
       onProjectChange={setSelectedProjectId}
@@ -173,6 +184,8 @@ export interface NewManagerFormProps {
   managerTemplates: readonly ManagerTemplateSummary[];
   /** Resolved active template name on the server, or null while loading. */
   managerTemplateActiveName: string | null;
+  modelLoadError: SystemExecutionOptionsModelLoadError | null;
+  modelsAreLoading: boolean;
   selectedProviderId: string;
   onSelectedProviderIdChange: (providerId: string) => void;
   onProjectChange: (projectId: string) => void;
@@ -192,6 +205,8 @@ export function NewManagerForm({
   models,
   managerTemplates,
   managerTemplateActiveName,
+  modelLoadError,
+  modelsAreLoading,
   selectedProviderId,
   onSelectedProviderIdChange,
   onProjectChange,
@@ -305,6 +320,24 @@ export function NewManagerForm({
         ),
       })),
     [models, providerIdForLabel],
+  );
+  const canSwitchProviders = providers.length > 1;
+  const showProviderModelPicker = modelOptions.length > 0 || canSwitchProviders;
+  const selectedProviderModelLoadError =
+    modelLoadError?.providerId === selectedProviderValue
+      ? modelLoadError
+      : null;
+  const selectedProviderLabel =
+    selectedProvider?.displayName ?? selectedProviderValue;
+  const modelUnavailableMessage: ReactNode = modelsAreLoading ? (
+    "Loading…"
+  ) : selectedProviderModelLoadError ? (
+    <ModelLoadErrorMessage
+      error={selectedProviderModelLoadError}
+      providerLabel={selectedProviderLabel}
+    />
+  ) : (
+    "No models available"
   );
 
   useEffect(() => {
@@ -534,15 +567,16 @@ export function NewManagerForm({
         </DetailRow>
         <DetailRow label="Model" valueClassName="min-w-0">
           {hasSelectedProvider ? (
-            modelOptions.length > 0 ? (
+            showProviderModelPicker ? (
               <div className="flex flex-wrap items-center gap-1">
                 <ProviderModelPicker
                   providerOptions={providerOptions}
                   selectedProviderId={selectedProviderValue}
                   onSelectedProviderChange={handleProviderChange}
-                  hasMultipleProviders={providers.length > 1}
+                  hasMultipleProviders={canSwitchProviders}
                   modelValue={selectedModel}
                   modelOptions={modelOptions}
+                  modelLoadError={modelLoadError}
                   onModelChange={handleModelChange}
                   formatModelLabel={formatModelLabel}
                   fastModeEnabled={false}
@@ -561,7 +595,10 @@ export function NewManagerForm({
                 ) : null}
               </div>
             ) : (
-              <LoadingOrEmptyText isLoading message="Loading…" />
+              <LoadingOrEmptyText
+                isLoading={modelsAreLoading}
+                message={modelUnavailableMessage}
+              />
             )
           ) : (
             <LoadingOrEmptyText
@@ -617,13 +654,7 @@ export function NewManagerForm({
   );
 }
 
-function LoadingOrEmptyText({
-  isLoading,
-  message,
-}: {
-  isLoading: boolean;
-  message: string;
-}) {
+function LoadingOrEmptyText({ isLoading, message }: LoadingOrEmptyTextProps) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
       {isLoading ? (

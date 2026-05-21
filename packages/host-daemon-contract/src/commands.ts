@@ -741,7 +741,7 @@ export const hostDaemonCommandResultSchemaByType = {
      * Resolved active template name. Falls back to "default" when the `active`
      * file is missing/empty/invalid. Not guaranteed to appear in `templates`
      * — callers should treat that case as "active points at a missing template".
-     */
+    */
     activeName: managerTemplateNameSchema,
   }),
   "host.read_file": fileReadResultSchema,

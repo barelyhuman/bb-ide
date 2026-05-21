@@ -436,6 +436,7 @@ describe("thread query bootstraps", () => {
         ],
         models: [],
         selectedOnlyModels: [],
+        modelLoadError: null,
       },
       pendingInteractions: [],
       promptHistory: [],
@@ -575,6 +576,8 @@ describe("thread query bootstraps", () => {
           isDefault: true,
         },
       ],
+      selectedOnlyModels: [],
+      modelLoadError: null,
     };
     let bootstrapRequestCount = 0;
     let fallbackRequestCount = 0;

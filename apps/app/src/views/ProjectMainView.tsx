@@ -159,6 +159,7 @@ export function ProjectMainView() {
     clearReuseEnvironment,
     activeModel,
     modelOptions,
+    modelLoadError,
     reasoningOptions,
     permissionModeOptions,
     supportsPermissionModeSelection,
@@ -494,6 +495,7 @@ export function ProjectMainView() {
         active: activeModel,
         selected: selectedModel,
         options: modelOptions,
+        loadError: modelLoadError,
         onChange: setSelectedModel,
       },
       serviceTier: {
@@ -511,6 +513,7 @@ export function ProjectMainView() {
     [
       activeModel,
       hasMultipleProviders,
+      modelLoadError,
       modelOptions,
       providerOptions,
       reasoningLevel,
