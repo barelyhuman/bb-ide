@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   const lifecycleDedupers = createLifecycleDedupers();
   const appUrl = toOptionalString(serverConfig.BB_APP_URL);
   const threadStorageRootPath = resolveThreadStorageRootPath({
-    dataDir: commonConfig.BB_DATA_DIR,
+    dataDir: serverConfig.BB_DATA_DIR,
   });
 
   const selfDir = dirname(fileURLToPath(import.meta.url));
