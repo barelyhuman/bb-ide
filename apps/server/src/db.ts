@@ -12,10 +12,10 @@ export interface InitDbOptions {
 }
 
 export function initDb(
-  databaseUrl: string,
+  databasePath: string,
   options: InitDbOptions = {},
 ): DbConnection {
-  const db = createConnection(databaseUrl, {
+  const db = createConnection(databasePath, {
     slowQueryLogger: options.logger,
   });
   migrate(db, { logger: options.logger });

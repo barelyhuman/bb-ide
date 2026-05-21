@@ -7,6 +7,10 @@ interface ResolveConfiguredDataDirArgs {
   env?: NodeJS.ProcessEnv;
 }
 
+interface ResolveDataDirDatabasePathArgs {
+  dataDir: string;
+}
+
 function expandHomeDirectory(pathValue: string): string {
   if (pathValue === "~") {
     return homedir();
@@ -41,4 +45,10 @@ export function resolveConfiguredDataDir(
       env: args.env,
     },
   ).BB_DATA_DIR;
+}
+
+export function resolveDataDirDatabasePath(
+  args: ResolveDataDirDatabasePathArgs,
+): string {
+  return join(args.dataDir, "bb.db");
 }

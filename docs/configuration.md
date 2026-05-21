@@ -110,10 +110,11 @@ cp .env.example .env
 The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade
 applies to source development. `pnpm dev` loads `.env`, `.env.local`,
 `.env.development`, and `.env.development.local`, then overrides the instance
-selectors (`BB_DATA_DIR`, `BB_DATABASE_URL`, server URL/port, host-daemon local
-API port, Vite port, and dev-env port) with deterministic values derived from
-the checkout path. `pnpm dev:worktree` is an alias for the same isolated
-launcher. On first run, known legacy flat `~/.bb-dev` state such as the dev DB,
+selectors (`BB_DATA_DIR`, server URL/port, host-daemon local API port, Vite
+port, and dev-env port) with deterministic values derived from the checkout
+path. The SQLite database path is always derived from `BB_DATA_DIR`.
+`pnpm dev:worktree` is an alias for the same isolated launcher. On first run,
+known legacy flat `~/.bb-dev` state such as the dev DB,
 logs, auth, thread storage, manager templates, replays, and event spool files is
 migrated into the current checkout's instance directory. The migration leaves
 top-level `worktrees/`, lock files, and PID files in place, and it refuses to

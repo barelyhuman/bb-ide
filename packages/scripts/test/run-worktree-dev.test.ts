@@ -76,7 +76,6 @@ describe("run-worktree-dev", () => {
     expect(config.dataDir).toBe(
       path.join(homeDir, ".bb-dev", config.instanceId),
     );
-    expect(config.databaseUrl).toBe(path.join(config.dataDir, "bb.db"));
     expect(config.ports).toEqual(expectedPorts(repoRoot));
     expect(config.serverUrl).toBe(
       `http://localhost:${config.ports.serverPort}`,
@@ -118,7 +117,6 @@ describe("run-worktree-dev", () => {
     expect(env.OPENAI_API_KEY).toBe("test-key");
     expect(env.NODE_ENV).toBe("development");
     expect(env.BB_DATA_DIR).toBe(config.dataDir);
-    expect(env.BB_DATABASE_URL).toBe(config.databaseUrl);
     expect(env.BB_SERVER_PORT).toBe(String(config.ports.serverPort));
     expect(env.BB_SERVER_URL).toBe(config.serverUrl);
     expect(env.BB_HOST_DAEMON_PORT).toBe(String(config.ports.hostDaemonPort));

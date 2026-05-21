@@ -100,7 +100,6 @@ describe("consumer-specific config", () => {
   it("builds server config from explicit runtime env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     stubServerRuntimeEnv();
-    vi.stubEnv("BB_DATABASE_URL", undefined);
     vi.stubEnv("BB_APP_URL", undefined);
     vi.stubEnv("BB_APP_VERSION", undefined);
     vi.stubEnv("BB_EXTERNAL_URL", undefined);
@@ -115,7 +114,7 @@ describe("consumer-specific config", () => {
 
     expect(serverConfig.BB_SERVER_PORT).toBe(4444);
     expect(serverConfig.BB_HOST_DAEMON_PORT).toBe(5555);
-    expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
+    expect(serverConfig.databasePath).toBe("/tmp/bb-data/bb.db");
     expect(serverConfig.BB_APP_URL).toBe("");
     expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
@@ -175,18 +174,17 @@ describe("consumer-specific config", () => {
     expect(() => serverPortConfig.BB_SERVER_PORT).toThrow(/BB_SERVER_PORT/u);
   });
 
-  it("lets tooling read the database path without validating unrelated server env", async () => {
+  it("derives the database path from data dir without validating unrelated server env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
     vi.stubEnv("BB_EXTERNAL_URL", "not-a-url");
-    vi.stubEnv("BB_DATABASE_URL", undefined);
 
     const { databaseConfig } =
       await importFresh<typeof import("../src/database.js")>(
         "../src/database.js",
       );
 
-    expect(databaseConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
+    expect(databaseConfig.databasePath).toBe("/tmp/bb-data/bb.db");
   });
 
   it("requires provider/model format for BB_INFERENCE", async () => {

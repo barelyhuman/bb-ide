@@ -24,7 +24,7 @@ import { NotificationHub } from "./ws/hub.js";
 
 async function main(): Promise<void> {
   const logger = createLogger({ component: "server" });
-  const db = initDb(serverConfig.BB_DATABASE_URL, { logger });
+  const db = initDb(serverConfig.databasePath, { logger });
   const hub = new NotificationHub();
   const hostLifecycle = createHostLifecycleService();
   const pendingInteractions = new PendingInteractionLifecycle({

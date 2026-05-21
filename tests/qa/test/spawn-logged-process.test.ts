@@ -169,7 +169,6 @@ describe("spawnLoggedProcess", () => {
   it("keeps standalone server runtime env isolated from inherited bb and ambient OpenAI env", async () => {
     vi.stubEnv("BB_APP_URL", "https://inherited-app.example.test");
     vi.stubEnv("BB_DATA_DIR", "/Users/example/.bb-dev");
-    vi.stubEnv("BB_DATABASE_URL", "/leaked/bb.db");
     vi.stubEnv("BB_SERVER_PORT", "3334");
     vi.stubEnv("OPENAI_API_KEY", "ambient-openai-key");
     vi.stubGlobal(
@@ -183,7 +182,6 @@ describe("spawnLoggedProcess", () => {
         baseEnv: process.env,
         overrides: {
           BB_DATA_DIR: "/tmp/leaked-data-dir",
-          BB_DATABASE_URL: "/tmp/leaked-data-dir/leaked.db",
           BB_SERVER_PORT: "9999",
         },
       }),
@@ -193,7 +191,6 @@ describe("spawnLoggedProcess", () => {
 
     expect(spawnMockState.invocations[0]?.options.env).toMatchObject({
       BB_DATA_DIR: "/tmp/standalone-server-data",
-      BB_DATABASE_URL: "/tmp/standalone-server-data/bb.db",
       BB_SERVER_PORT: "4567",
     });
     expect(

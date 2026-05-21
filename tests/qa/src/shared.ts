@@ -611,7 +611,6 @@ export async function startQaServer(
   const serverEnv: NodeJS.ProcessEnv = {
     ...(args.env ?? process.env),
     BB_DATA_DIR: args.dataDir,
-    BB_DATABASE_URL: path.join(args.dataDir, "bb.db"),
     BB_SERVER_PORT: String(args.port),
   };
   if (args.publicUrl) {

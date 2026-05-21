@@ -20,7 +20,6 @@ interface WorktreeDevPortSet {
 
 export interface WorktreeDevInstanceConfig {
   dataDir: string;
-  databaseUrl: string;
   instanceId: string;
   ports: WorktreeDevPortSet;
   repoRoot: string;
@@ -156,7 +155,6 @@ export function resolveWorktreeDevInstanceConfig(
   const serverUrl = `http://localhost:${ports.serverPort}`;
   return {
     dataDir,
-    databaseUrl: join(dataDir, "bb.db"),
     instanceId,
     ports,
     repoRoot: args.repoRoot,
@@ -367,7 +365,6 @@ export function toWorktreeDevProcessEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...args.baseEnv,
-    BB_DATABASE_URL: args.config.databaseUrl,
     BB_DATA_DIR: args.config.dataDir,
     BB_DEV_APP_PORT: String(args.config.ports.appPort),
     BB_DEV_ENV_PORT: String(args.config.ports.devEnvPort),
