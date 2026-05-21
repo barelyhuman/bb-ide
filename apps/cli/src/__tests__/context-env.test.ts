@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createCliRuntimeContext,
   requireProjectId,
   requireThreadId,
   requireThreadIdWithLabelOrSelf,
   resolveContextSnapshot,
+  resolveHostDaemonUrl,
   resolveProjectId,
+  resolveServerUrl,
   resolveThreadId,
 } from "../context-env.js";
 
@@ -51,6 +54,21 @@ describe("context-env", () => {
     expect(snapshot.projectId).toBe("proj-1");
     expect(snapshot.threadId).toBe("thread-1");
     expect(snapshot.serverUrl).toMatch(/^https?:\/\//);
+  });
+
+  it("resolves connection settings from one CLI runtime context", () => {
+    const context = createCliRuntimeContext({
+      cliConfig: {
+        BB_HOST_DAEMON_PORT: 4567,
+        BB_SERVER_URL: "http://server.test",
+      },
+    });
+
+    expect(resolveServerUrl(context)).toBe("http://server.test");
+    expect(resolveHostDaemonUrl(context)).toBe("http://127.0.0.1:4567");
+    expect(resolveContextSnapshot(context).serverUrl).toBe(
+      "http://server.test",
+    );
   });
 
   it("resolves --self from BB_THREAD_ID for read-only thread commands", () => {

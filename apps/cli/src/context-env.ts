@@ -1,7 +1,23 @@
-import { cliConfig } from "@bb/config/cli";
+import { loadCliConfig, type CliConfig } from "@bb/config/cli";
 import { DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST } from "@bb/host-daemon-contract";
 
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+export interface CliRuntimeContext {
+  cliConfig: CliConfig;
+}
+
+export interface CreateCliRuntimeContextArgs {
+  cliConfig?: CliConfig;
+}
+
+export function createCliRuntimeContext(
+  args: CreateCliRuntimeContextArgs = {},
+): CliRuntimeContext {
+  return {
+    cliConfig: args.cliConfig ?? loadCliConfig(),
+  };
+}
 
 function validateId(value: string, source: string): string {
   if (!VALID_ID_PATTERN.test(value)) {
@@ -18,12 +34,16 @@ function trimToUndefined(value?: string): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-export function resolveServerUrl(): string {
-  return cliConfig.BB_SERVER_URL;
+export function resolveServerUrl(
+  context: CliRuntimeContext = createCliRuntimeContext(),
+): string {
+  return context.cliConfig.BB_SERVER_URL;
 }
 
-export function resolveHostDaemonUrl(): string {
-  return `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${cliConfig.BB_HOST_DAEMON_PORT}`;
+export function resolveHostDaemonUrl(
+  context: CliRuntimeContext = createCliRuntimeContext(),
+): string {
+  return `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.cliConfig.BB_HOST_DAEMON_PORT}`;
 }
 
 export function resolveProjectId(flagValue?: string): string | undefined {
@@ -193,10 +213,12 @@ export interface ContextSnapshot {
   serverUrl: string;
 }
 
-export function resolveContextSnapshot(): ContextSnapshot {
+export function resolveContextSnapshot(
+  context: CliRuntimeContext = createCliRuntimeContext(),
+): ContextSnapshot {
   return {
     projectId: resolveProjectId(),
     threadId: resolveThreadId(),
-    serverUrl: cliConfig.BB_SERVER_URL,
+    serverUrl: context.cliConfig.BB_SERVER_URL,
   };
 }

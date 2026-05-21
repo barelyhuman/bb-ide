@@ -1,18 +1,34 @@
-import { bool, envsafe } from "envsafe";
-import { defaultFeatureFlags, type FeatureFlags } from "@bb/domain";
+import type { FeatureFlags } from "@bb/domain";
+import {
+  readEnvVarWithDefault,
+  resolveEnvLoader,
+  type EnvLoaderArgs,
+} from "./env.js";
+import {
+  BB_FF_ASK_USER_QUESTION_ENV,
+  BB_FF_TERMINALS_ENV,
+  DEFAULT_BB_FF_ASK_USER_QUESTION,
+  DEFAULT_BB_FF_TERMINALS,
+} from "./env-vars.js";
 
-const rawFeatureFlagConfig = envsafe({
-  BB_FF_ASK_USER_QUESTION: bool({
-    desc: "Enable the Ask User Question feature",
-    default: defaultFeatureFlags.askUserQuestion,
-  }),
-  BB_FF_TERMINALS: bool({
-    desc: "Enable terminal sessions in threads",
-    default: defaultFeatureFlags.terminals,
-  }),
-});
+export type LoadFeatureFlagsArgs = EnvLoaderArgs;
 
-export const featureFlags: FeatureFlags = {
-  askUserQuestion: rawFeatureFlagConfig.BB_FF_ASK_USER_QUESTION,
-  terminals: rawFeatureFlagConfig.BB_FF_TERMINALS,
-};
+export function loadFeatureFlags(
+  args: LoadFeatureFlagsArgs = {},
+): FeatureFlags {
+  const loader = resolveEnvLoader(args);
+  return {
+    askUserQuestion: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_FF_ASK_USER_QUESTION,
+      definition: BB_FF_ASK_USER_QUESTION_ENV,
+      env: loader.env,
+    }),
+    terminals: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_FF_TERMINALS,
+      definition: BB_FF_TERMINALS_ENV,
+      env: loader.env,
+    }),
+  };
+}

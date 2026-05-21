@@ -13,42 +13,28 @@ import {
   log,
   endStep,
 } from "../lib/script-helpers.js";
-import { resolveConfiguredDataDir } from "@bb/config/data-dir";
-import { DEFAULTS } from "@bb/config/defaults";
-import { type HostMode, resolveScriptMode } from "../lib/script-config.js";
-import { resolveCurrentWorktreeDevInstanceConfig } from "../lib/worktree-dev-instance.js";
-
-interface NamedDataDirs {
-  defaultDataDir: string;
-  defaultDevDataDir: string;
-}
+import {
+  resolveCurrentDevInstanceConfig,
+  resolveRuntimeDataDir,
+  type BbRuntimeMode,
+} from "@bb/config/runtime";
+import { resolveScriptMode } from "../lib/script-config.js";
 
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
 
-function resolveMode(): HostMode {
+function resolveMode(): BbRuntimeMode {
   return resolveScriptMode();
 }
 
-function resolveNamedDataDirs(): NamedDataDirs {
-  return {
-    defaultDataDir: resolveConfiguredDataDir({
-      defaultDirName: DEFAULTS.dataDir.prod,
-    }),
-    defaultDevDataDir: resolveConfiguredDataDir({
-      defaultDirName: DEFAULTS.dataDir.dev,
-    }),
-  };
-}
-
-export function resolveResetDataDir(mode: HostMode): string {
-  if (mode === "dev" && process.env.BB_DATA_DIR === undefined) {
-    return resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir;
-  }
-
-  const dataDirs = resolveNamedDataDirs();
-  return mode === "dev" ? dataDirs.defaultDevDataDir : dataDirs.defaultDataDir;
+export function resolveResetDataDir(mode: BbRuntimeMode): string {
+  return resolveRuntimeDataDir({
+    env: process.env,
+    homeDir: homedir(),
+    mode,
+    repoRoot: mode === "dev" ? repoRoot : undefined,
+  });
 }
 
 function uniquePaths(paths: string[]): string[] {
@@ -56,13 +42,16 @@ function uniquePaths(paths: string[]): string[] {
 }
 
 export function resolveResetTargets(args: Set<string>): string[] {
-  const dataDirs = resolveNamedDataDirs();
   const mode = resolveMode();
 
   if (args.has("--all")) {
     return uniquePaths([
-      dataDirs.defaultDataDir,
-      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
+      resolveRuntimeDataDir({
+        env: process.env,
+        homeDir: homedir(),
+        mode: "prod",
+      }),
+      resolveCurrentDevInstanceConfig(repoRoot).dataDir,
     ]);
   }
 
@@ -100,7 +89,7 @@ export function renderHelpText(): string {
   ${dim("Notes")}
     Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev/<checkout-instance>")}).
     Does not touch external provider config managed by other tools.
-    Respects BB_DATA_DIR for single-directory resets.
+    Respects BB_DATA_DIR for production reset targets.
 \n`;
 }
 

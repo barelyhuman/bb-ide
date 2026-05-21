@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 export { startHostDaemon } from "./start-host-daemon.js";
 export type { StartHostDaemonOptions } from "./start-host-daemon.js";
-import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
+import { loadHostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import { startHostDaemon } from "./start-host-daemon.js";
 
 const entrypointDir = dirname(fileURLToPath(import.meta.url));
@@ -15,6 +15,7 @@ function resolveEntrypointBridgeBundleDir(): string | undefined {
 }
 
 async function main(): Promise<void> {
+  const hostDaemonEntrypointConfig = loadHostDaemonEntrypointConfig();
   const daemon = await startHostDaemon({
     bbExecutableDirectory: hostDaemonEntrypointConfig.BB_CLI_DIR,
     bridgeBundleDir:

@@ -2,13 +2,13 @@ import { access } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runScriptProcess } from "../lib/process-helpers.js";
 import {
-  migrateLegacyDevData,
-  resolveCurrentWorktreeDevInstanceConfig,
-  toWorktreeDevProcessEnv,
-  type WorktreeDevInstanceConfig,
-} from "../lib/worktree-dev-instance.js";
+  resolveCurrentDevInstanceConfig,
+  toDevProcessEnv,
+  type DevInstanceConfig,
+} from "@bb/config/runtime";
+import { migrateLegacyDevData } from "../lib/legacy-dev-data-migration.js";
+import { runScriptProcess } from "../lib/process-helpers.js";
 
 interface PortAvailabilityCheck {
   label: string;
@@ -47,7 +47,7 @@ export function createDevTurboCommand(): DevTurboCommand {
   };
 }
 
-function formatConfig(config: WorktreeDevInstanceConfig): string {
+function formatConfig(config: DevInstanceConfig): string {
   return [
     `[dev] Instance ${config.instanceId}`,
     `[dev] Data dir ${config.dataDir}`,
@@ -82,9 +82,7 @@ function checkPortAvailable(check: PortAvailabilityCheck): Promise<void> {
   });
 }
 
-async function assertPortsAvailable(
-  config: WorktreeDevInstanceConfig,
-): Promise<void> {
+async function assertPortsAvailable(config: DevInstanceConfig): Promise<void> {
   const checks: PortAvailabilityCheck[] = [
     { label: "app", port: config.ports.appPort },
     { label: "server", port: config.ports.serverPort },
@@ -101,7 +99,7 @@ async function resolveExistingRepoRoot(): Promise<string> {
 
 export async function main(): Promise<void> {
   const resolvedRepoRoot = await resolveExistingRepoRoot();
-  const config = resolveCurrentWorktreeDevInstanceConfig(resolvedRepoRoot);
+  const config = resolveCurrentDevInstanceConfig(resolvedRepoRoot);
   const migration = await migrateLegacyDevData({
     config,
     output: process.stdout,
@@ -119,7 +117,7 @@ export async function main(): Promise<void> {
     args: turboCommand.args,
     command: turboCommand.command,
     cwd: config.repoRoot,
-    env: toWorktreeDevProcessEnv({
+    env: toDevProcessEnv({
       baseEnv: process.env,
       config,
     }),

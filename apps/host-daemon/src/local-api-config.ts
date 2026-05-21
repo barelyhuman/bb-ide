@@ -1,5 +1,4 @@
 import type { HostType } from "@bb/domain";
-import { hostDaemonConfig } from "@bb/config/host-daemon";
 import {
   DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
@@ -25,26 +24,27 @@ export interface HostDaemonLocalApiOverrides {
 }
 
 export interface ResolveHostDaemonLocalApiConfigArgs {
+  hostDaemonPort: number;
   hostType: HostType;
   localApi: HostDaemonLocalApiOverrides | undefined;
 }
 
 function getHostDaemonLocalApiDefaults(
-  _hostType: HostType,
+  args: ResolveHostDaemonLocalApiConfigArgs,
 ): HostDaemonLocalApiConfig {
   return {
     bindHost: DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
     healthPath: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
     healthValue: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
     mode: "full",
-    port: hostDaemonConfig.BB_HOST_DAEMON_PORT,
+    port: args.hostDaemonPort,
   };
 }
 
 export function resolveHostDaemonLocalApiConfig(
   args: ResolveHostDaemonLocalApiConfigArgs,
 ): HostDaemonLocalApiConfig {
-  const defaults = getHostDaemonLocalApiDefaults(args.hostType);
+  const defaults = getHostDaemonLocalApiDefaults(args);
   return {
     bindHost: args.localApi?.bindHost ?? defaults.bindHost,
     healthPath: args.localApi?.healthPath ?? defaults.healthPath,

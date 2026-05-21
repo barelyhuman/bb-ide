@@ -1,18 +1,21 @@
 import { defineConfig } from "drizzle-kit";
-import { DEFAULTS } from "@bb/config/defaults";
 import {
-  resolveConfiguredDataDir,
   resolveDataDirDatabasePath,
-} from "@bb/config/data-dir";
-import { resolve } from "node:path";
+  resolveRuntimeDataDir,
+  resolveRuntimeMode,
+} from "@bb/config/runtime";
+import { homedir } from "node:os";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const defaultDataDirName =
-  process.env.NODE_ENV === "production"
-    ? DEFAULTS.dataDir.prod
-    : DEFAULTS.dataDir.dev;
-const dataDir = resolveConfiguredDataDir({
-  defaultDirName: defaultDataDirName,
+const packageRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(packageRoot, "..", "..");
+const runtimeMode = resolveRuntimeMode();
+const dataDir = resolveRuntimeDataDir({
   env: process.env,
+  homeDir: homedir(),
+  mode: runtimeMode,
+  repoRoot: runtimeMode === "dev" ? repoRoot : undefined,
 });
 const dbPath = resolve(resolveDataDirDatabasePath({ dataDir }));
 

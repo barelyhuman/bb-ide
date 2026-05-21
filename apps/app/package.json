@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@bb/agent-providers": "workspace:*",
+    "@bb/config": "workspace:*",
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/fuzzy-match": "workspace:*",

@@ -17,10 +17,9 @@ describe("script-config", () => {
     expect(resolveNodeEnvironment("prod")).toBe("production");
   });
 
-  it("treats unset and non-production NODE_ENV as dev, matching envsafe", () => {
+  it("treats unset and non-production NODE_ENV as dev", () => {
     expect(resolveScriptMode(undefined)).toBe("dev");
     expect(resolveScriptMode("")).toBe("dev");
     expect(resolveScriptMode("test")).toBe("dev");
   });
-
 });

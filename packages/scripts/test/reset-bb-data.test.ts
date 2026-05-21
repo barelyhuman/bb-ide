@@ -7,7 +7,7 @@ import {
   renderHelpText,
   resolveResetTargets,
 } from "../src/commands/reset-bb-data.js";
-import { resolveCurrentWorktreeDevInstanceConfig } from "../src/lib/worktree-dev-instance.js";
+import { expectedDevDataDir } from "./dev-instance-expectations.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, "..", "..", "..");
@@ -26,7 +26,10 @@ describe("reset-bb-data", () => {
     vi.stubEnv("NODE_ENV", "development");
 
     expect(resolveResetTargets(new Set())).toEqual([
-      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
+      expectedDevDataDir({
+        homeDir: os.homedir(),
+        repoRoot,
+      }),
     ]);
   });
 
@@ -37,9 +40,25 @@ describe("reset-bb-data", () => {
 
     expect(targets).toEqual([
       join(os.homedir(), ".bb"),
-      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
+      expectedDevDataDir({
+        homeDir: os.homedir(),
+        repoRoot,
+      }),
     ]);
     expect(targets).not.toContain(join(os.homedir(), ".bb-dev"));
+  });
+
+  it("lets BB_DATA_DIR override the production target for --all", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
+
+    expect(resolveResetTargets(new Set(["--all"]))).toEqual([
+      join(os.homedir(), "custom-bb"),
+      expectedDevDataDir({
+        homeDir: os.homedir(),
+        repoRoot,
+      }),
+    ]);
   });
 
   it("lets BB_DATA_DIR override the single reset target", () => {

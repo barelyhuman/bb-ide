@@ -1,24 +1,17 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  migrateLegacyDevData,
-  resolveWorktreeDevInstanceConfig,
-  toWorktreeDevProcessEnv,
-} from "../src/lib/worktree-dev-instance.js";
+import { resolveDevInstanceConfig, toDevProcessEnv } from "@bb/config/runtime";
 import { createDevTurboCommand } from "../src/commands/run-dev.js";
+import { migrateLegacyDevData } from "../src/lib/legacy-dev-data-migration.js";
+import {
+  expectedDevDataDir,
+  expectedDevInstanceId,
+  expectedDevPorts,
+  expectedDevServerUrl,
+} from "./dev-instance-expectations.js";
 
-interface ExpectedPortSet {
-  appPort: number;
-  devEnvPort: number;
-  hostDaemonPort: number;
-  serverPort: number;
-}
-
-const PORT_BUCKETS = 8_000;
-const HASH_LENGTH = 12;
 const tempDirs: string[] = [];
 
 async function makeTempDir(prefix: string): Promise<string> {
@@ -48,38 +41,18 @@ afterEach(async () => {
   );
 });
 
-function repoRootHash(repoRoot: string): string {
-  return createHash("sha256").update(repoRoot).digest("hex");
-}
-
-function expectedPorts(repoRoot: string): ExpectedPortSet {
-  const offset =
-    Number.parseInt(repoRootHash(repoRoot).slice(0, 8), 16) % PORT_BUCKETS;
-  return {
-    appPort: 11_000 + offset,
-    devEnvPort: 43_000 + offset,
-    hostDaemonPort: 27_000 + offset,
-    serverPort: 19_000 + offset,
-  };
-}
-
 describe("run-dev", () => {
-  it("derives stable data and ports from a managed worktree checkout", () => {
+  it("derives stable data and ports from a managed checkout", () => {
     const homeDir = "/Users/tester";
-    const repoRoot = "/Users/tester/.bb-dev/worktrees/env_q7e5i54kxt/bb";
-    const hash = repoRootHash(repoRoot);
-    const config = resolveWorktreeDevInstanceConfig({ homeDir, repoRoot });
+    const repoRoot = "/Users/tester/.bb-dev/projects/env_q7e5i54kxt/bb";
+    const config = resolveDevInstanceConfig({ homeDir, repoRoot });
 
     expect(config.instanceId).toBe(
-      `bb-dev-worktrees-env_q7e5i54kxt-bb-${hash.slice(0, HASH_LENGTH)}`,
+      expectedDevInstanceId({ homeDir, repoRoot }),
     );
-    expect(config.dataDir).toBe(
-      path.join(homeDir, ".bb-dev", config.instanceId),
-    );
-    expect(config.ports).toEqual(expectedPorts(repoRoot));
-    expect(config.serverUrl).toBe(
-      `http://localhost:${config.ports.serverPort}`,
-    );
+    expect(config.dataDir).toBe(expectedDevDataDir({ homeDir, repoRoot }));
+    expect(config.ports).toEqual(expectedDevPorts(repoRoot));
+    expect(config.serverUrl).toBe(expectedDevServerUrl(repoRoot));
     expect(new Set(Object.values(config.ports))).toHaveLength(4);
     expect(Object.values(config.ports)).not.toContain(5173);
     expect(Object.values(config.ports)).not.toContain(3334);
@@ -88,22 +61,21 @@ describe("run-dev", () => {
     expect(Object.values(config.ports)).not.toContain(38887);
   });
 
-  it("uses the home-relative checkout path for non-managed worktree paths", () => {
+  it("uses the home-relative checkout path for non-managed checkout paths", () => {
     const homeDir = "/Users/tester";
     const repoRoot = "/Users/tester/src/work/bb-feature-copy";
-    const hash = repoRootHash(repoRoot);
 
-    const config = resolveWorktreeDevInstanceConfig({ homeDir, repoRoot });
+    const config = resolveDevInstanceConfig({ homeDir, repoRoot });
 
     expect(config.instanceId).toBe(
-      `src-work-bb-feature-copy-${hash.slice(0, HASH_LENGTH)}`,
+      expectedDevInstanceId({ homeDir, repoRoot }),
     );
   });
 
   it("overrides instance selectors while preserving unrelated environment", () => {
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir: "/Users/tester",
-      repoRoot: "/Users/tester/.bb-dev/worktrees/env_q7e5i54kxt/bb",
+      repoRoot: "/Users/tester/.bb-dev/projects/env_q7e5i54kxt/bb",
     });
     const baseEnv: NodeJS.ProcessEnv = {
       BB_DATA_DIR: "/Users/tester/.bb-dev",
@@ -112,7 +84,7 @@ describe("run-dev", () => {
       OPENAI_API_KEY: "test-key",
     };
 
-    const env = toWorktreeDevProcessEnv({ baseEnv, config });
+    const env = toDevProcessEnv({ baseEnv, config });
 
     expect(env.OPENAI_API_KEY).toBe("test-key");
     expect(env.NODE_ENV).toBe("development");
@@ -146,9 +118,9 @@ describe("run-dev", () => {
   });
 
   it("migrates legacy flat dev data into the checkout instance", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
+    const homeDir = await makeTempDir("bb-dev-home-");
     const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });
@@ -232,9 +204,9 @@ describe("run-dev", () => {
   });
 
   it("migrates event spool SQLite WAL sidecars", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
+    const homeDir = await makeTempDir("bb-dev-home-");
     const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });
@@ -277,9 +249,9 @@ describe("run-dev", () => {
   });
 
   it("skips migration when the target instance already has data", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
+    const homeDir = await makeTempDir("bb-dev-home-");
     const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });
@@ -301,8 +273,8 @@ describe("run-dev", () => {
   });
 
   it("skips migration when legacy dev data is absent", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
-    const config = resolveWorktreeDevInstanceConfig({
+    const homeDir = await makeTempDir("bb-dev-home-");
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });
@@ -315,9 +287,9 @@ describe("run-dev", () => {
   });
 
   it("skips migration when legacy dev data has no migratable entries", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
+    const homeDir = await makeTempDir("bb-dev-home-");
     const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });
@@ -332,9 +304,9 @@ describe("run-dev", () => {
   });
 
   it("rolls back already moved entries when migration rename fails", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
+    const homeDir = await makeTempDir("bb-dev-home-");
     const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });
@@ -378,9 +350,9 @@ describe("run-dev", () => {
   });
 
   it("does not migrate legacy data while a legacy dev supervisor is running", async () => {
-    const homeDir = await makeTempDir("bb-worktree-dev-home-");
+    const homeDir = await makeTempDir("bb-dev-home-");
     const legacyDataDir = path.join(homeDir, ".bb-dev");
-    const config = resolveWorktreeDevInstanceConfig({
+    const config = resolveDevInstanceConfig({
       homeDir,
       repoRoot: path.join(homeDir, "src", "bb"),
     });

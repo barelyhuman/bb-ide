@@ -1,18 +1,16 @@
-export type HostMode = "dev" | "prod";
+import { resolveRuntimeMode, type BbRuntimeMode } from "@bb/config/runtime";
 
-// Matches envsafe's convention: anything other than "production" is treated
-// as dev. Keeping these two systems in sync is load-bearing — if they drift,
-// scripts can pick the prod data dir while envsafe hands back dev defaults,
-// which leaves the host daemon reading one auth.json while trying to talk to
-// a different server URL.
+// Matches @bb/config runtime mode resolution: anything other than "production"
+// is treated as dev. Keeping scripts and runtime config in sync is
+// load-bearing because they derive the same data dir, ports, and server URL.
 export function resolveScriptMode(
   nodeEnv: string | undefined = process.env.NODE_ENV,
-): HostMode {
-  return nodeEnv === "production" ? "prod" : "dev";
+): BbRuntimeMode {
+  return resolveRuntimeMode(nodeEnv);
 }
 
 export function resolveNodeEnvironment(
-  mode: HostMode,
+  mode: BbRuntimeMode,
 ): "development" | "production" {
   return mode === "dev" ? "development" : "production";
 }

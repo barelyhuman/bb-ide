@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { commonConfig, hostDaemonConfig } from "@bb/config/host-daemon";
+import {
+  loadHostDaemonStartConfig,
+  type HostDaemonConnectionConfig,
+} from "@bb/config/host-daemon";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
 import { createLogger } from "@bb/logger";
@@ -27,6 +30,7 @@ import type { CreateReconnectingWebSocket } from "./server-connection.js";
 export interface StartHostDaemonOptions {
   dataDir?: string;
   serverUrl?: string;
+  hostDaemonPort?: number;
   enrollKey?: string;
   hostId?: string;
   hostName?: string;
@@ -47,11 +51,31 @@ export interface StartHostDaemonOptions {
   createWebSocket?: CreateReconnectingWebSocket;
 }
 
+function requireHostDaemonConfig(
+  config: HostDaemonConnectionConfig | undefined,
+): HostDaemonConnectionConfig {
+  if (config === undefined) {
+    throw new Error("Host daemon config is required");
+  }
+
+  return config;
+}
+
 export async function startHostDaemon(
   options: StartHostDaemonOptions = {},
 ): Promise<HostDaemon> {
-  const dataDir = options.dataDir ?? commonConfig.BB_DATA_DIR;
   const enableLocalApi = options.enableLocalApi ?? true;
+  const resolvedConfig = loadHostDaemonStartConfig({
+    dataDir: options.dataDir,
+    enableLocalApi,
+    hostDaemonPort: options.hostDaemonPort ?? options.localApi?.port,
+    serverUrl: options.serverUrl,
+  });
+  const dataDir = resolvedConfig.dataDir;
+  const hostDaemonConfig = resolvedConfig.connectionConfig;
+  if (dataDir === undefined) {
+    throw new Error("Host daemon data directory is required");
+  }
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
   let app: Awaited<ReturnType<typeof createHostDaemonApp>> | undefined;
@@ -64,7 +88,7 @@ export async function startHostDaemon(
     });
     const instanceId = (options.createInstanceId ?? randomUUID)();
     const serverUrl = resolveServerUrl({
-      providedServerUrl: options.serverUrl ?? hostDaemonConfig.BB_SERVER_URL,
+      providedServerUrl: options.serverUrl ?? hostDaemonConfig?.BB_SERVER_URL,
     });
     if (!serverUrl) {
       throw new Error("Host daemon server URL is required");
@@ -118,6 +142,9 @@ export async function startHostDaemon(
 
     const localApiConfig = enableLocalApi
       ? resolveHostDaemonLocalApiConfig({
+          hostDaemonPort:
+            options.hostDaemonPort ??
+            requireHostDaemonConfig(hostDaemonConfig).BB_HOST_DAEMON_PORT,
           hostType,
           localApi: options.localApi,
         })
@@ -132,9 +159,8 @@ export async function startHostDaemon(
       }));
     const runtimeShellEnv = prepareRuntimeShellEnv({
       bbExecutableDirectory,
+      hostDaemonPort: localApiConfig?.port,
       serverUrl,
-      localApiPort:
-        localApiConfig?.port ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
     });
     app = await createHostDaemonApp({
       dataDir,
@@ -145,6 +171,12 @@ export async function startHostDaemon(
       hostId: identity.hostId,
       hostName: identity.hostName,
       instanceId,
+      appUrl:
+        hostDaemonConfig?.BB_APP_URL === ""
+          ? undefined
+          : hostDaemonConfig?.BB_APP_URL,
+      devAppPort: hostDaemonConfig?.BB_DEV_APP_PORT,
+      devReplayCapture: hostDaemonConfig?.BB_DEV_REPLAY_CAPTURE ?? false,
       logger:
         options.logger ??
         createLogger({

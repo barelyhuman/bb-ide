@@ -1,7 +1,16 @@
 import { access, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isLoopbackHostname } from "@bb/config/loopback";
+import {
+  BB_PROD_HOST_DAEMON_PORT,
+  resolveCurrentDevInstanceConfig,
+  resolvePortFromEnv,
+  resolveRuntimeDataDir,
+  type BbRuntimeMode,
+} from "@bb/config/runtime";
+import { loadServerUrlValue } from "@bb/config/server-url";
 import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
@@ -13,20 +22,15 @@ import {
   createHostJoinResponseSchema,
   createPublicApiClient,
 } from "@bb/server-contract";
-import { resolveConfiguredDataDir } from "@bb/config/data-dir";
-import { DEFAULTS } from "@bb/config/defaults";
-import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
-import { hostDaemonConfig } from "@bb/config/host-daemon";
+import { loadHostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import type { HostDaemonRuntimeEnvironment } from "../lib/host-daemon-runtime.js";
 import { toHostDaemonProcessEnv } from "../lib/host-daemon-runtime.js";
 import {
-  type HostMode,
   resolveNodeEnvironment,
   resolveScriptMode,
 } from "../lib/script-config.js";
 import { runScriptProcess } from "../lib/process-helpers.js";
 import { waitForServerHealth } from "../lib/wait-for-server-health.js";
-import { resolveCurrentWorktreeDevInstanceConfig } from "../lib/worktree-dev-instance.js";
 
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
@@ -42,7 +46,12 @@ interface CreateAutoJoinRequestArgs {
   serverUrl: string;
 }
 
-function resolveMode(): HostMode {
+interface ResolveHostDaemonPortArgs {
+  mode: BbRuntimeMode;
+  requiresExplicitPort: boolean;
+}
+
+function resolveMode(): BbRuntimeMode {
   return resolveScriptMode();
 }
 
@@ -50,41 +59,27 @@ function shouldAutoJoin(): boolean {
   return process.argv.includes("--auto-join");
 }
 
-export function resolveDefaultDataDirName(mode: HostMode): string {
-  return mode === "dev" ? DEFAULTS.dataDir.dev : DEFAULTS.dataDir.prod;
-}
-
-function resolveDataDir(mode: HostMode): string {
-  if (mode === "dev" && process.env.BB_DATA_DIR === undefined) {
-    return join(
-      resolveCurrentWorktreeDevInstanceConfig(repoRoot).dataDir,
-      "extra-host",
+function resolveHostDaemonPort(args: ResolveHostDaemonPortArgs): number {
+  if (
+    args.requiresExplicitPort &&
+    process.env.BB_HOST_DAEMON_PORT === undefined
+  ) {
+    throw new Error(
+      "BB_HOST_DAEMON_PORT is required when running a dev extra-host daemon without BB_DATA_DIR. Set it to a port distinct from pnpm dev's host daemon port.",
     );
   }
 
-  return resolveConfiguredDataDir({
-    defaultDirName: resolveDefaultDataDirName(mode),
+  return resolvePortFromEnv({
+    defaultPort:
+      args.mode === "dev"
+        ? resolveCurrentDevInstanceConfig(repoRoot).ports.hostDaemonPort
+        : BB_PROD_HOST_DAEMON_PORT,
+    env: process.env,
+    name: "BB_HOST_DAEMON_PORT",
   });
 }
 
-function resolveServerUrl(mode: HostMode): string {
-  if (mode === "dev" && process.env.BB_SERVER_URL === undefined) {
-    return resolveCurrentWorktreeDevInstanceConfig(repoRoot).serverUrl;
-  }
-
-  if (mode === "dev" && process.env.BB_SERVER_URL !== undefined) {
-    const serverUrl = process.env.BB_SERVER_URL.trim();
-    if (serverUrl.length === 0) {
-      throw new Error("BB_SERVER_URL must not be empty");
-    }
-    new URL(serverUrl);
-    return serverUrl;
-  }
-
-  return hostDaemonConfig.BB_SERVER_URL;
-}
-
-function ensureDevOverridePair(mode: HostMode): void {
+function ensureDevOverridePair(mode: BbRuntimeMode): void {
   if (mode !== "dev") {
     return;
   }
@@ -99,13 +94,37 @@ function ensureDevOverridePair(mode: HostMode): void {
 }
 
 export function resolveHostDaemonRuntimeEnvironment(
-  mode: HostMode,
+  mode: BbRuntimeMode,
 ): HostDaemonRuntimeEnvironment {
   ensureDevOverridePair(mode);
+  const usesDefaultDevExtraHost =
+    mode === "dev" && process.env.BB_DATA_DIR === undefined;
+  const devDataDirSuffix = usesDefaultDevExtraHost ? "extra-host" : undefined;
+  const dataDir = resolveRuntimeDataDir({
+    env: process.env,
+    homeDir: homedir(),
+    mode,
+    repoRoot: mode === "dev" ? repoRoot : undefined,
+  });
+  const hostDaemonEntrypointConfig = loadHostDaemonEntrypointConfig();
   return {
     ...hostDaemonEntrypointConfig,
-    BB_DATA_DIR: resolveDataDir(mode),
-    BB_SERVER_URL: resolveServerUrl(mode),
+    BB_DATA_DIR:
+      devDataDirSuffix === undefined
+        ? dataDir
+        : join(dataDir, devDataDirSuffix),
+    BB_HOST_DAEMON_PORT: String(
+      resolveHostDaemonPort({
+        mode,
+        requiresExplicitPort: usesDefaultDevExtraHost,
+      }),
+    ),
+    BB_SERVER_URL: loadServerUrlValue({
+      env: process.env,
+      homeDir: homedir(),
+      mode,
+      repoRoot,
+    }),
     NODE_ENV: resolveNodeEnvironment(mode),
   };
 }
@@ -115,7 +134,7 @@ function isLoopbackServerUrl(serverUrl: string): boolean {
 }
 
 export function resolveHostDaemonProcessCommand(
-  mode: HostMode,
+  mode: BbRuntimeMode,
 ): HostDaemonProcessCommand {
   if (mode === "dev") {
     return {

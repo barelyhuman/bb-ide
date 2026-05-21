@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   access,
   mkdir,
@@ -8,33 +7,8 @@ import {
   rmdir,
   stat,
 } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative } from "node:path";
-
-interface WorktreeDevPortSet {
-  appPort: number;
-  devEnvPort: number;
-  hostDaemonPort: number;
-  serverPort: number;
-}
-
-export interface WorktreeDevInstanceConfig {
-  dataDir: string;
-  instanceId: string;
-  ports: WorktreeDevPortSet;
-  repoRoot: string;
-  serverUrl: string;
-}
-
-interface ResolveWorktreeDevInstanceConfigArgs {
-  homeDir: string;
-  repoRoot: string;
-}
-
-interface WorktreeDevProcessEnvArgs {
-  baseEnv: NodeJS.ProcessEnv;
-  config: WorktreeDevInstanceConfig;
-}
+import { dirname, join } from "node:path";
+import type { DevInstanceConfig } from "@bb/config/runtime";
 
 export interface LegacyDevDataMigrationResult {
   migratedEntries: string[];
@@ -48,7 +22,7 @@ export type LegacyDevDataMigrationSkippedReason =
   | "target-exists";
 
 interface MigrateLegacyDevDataArgs {
-  config: WorktreeDevInstanceConfig;
+  config: DevInstanceConfig;
   dependencies?: LegacyDevDataMigrationDependencies;
   output?: MigrationOutput;
 }
@@ -68,13 +42,6 @@ interface RollbackMigratedEntriesArgs {
   targetDataDir: string;
 }
 
-const WORKTREE_DEV_DATA_ROOT_DIR = ".bb-dev";
-const WORKTREE_DEV_HASH_LENGTH = 12;
-const WORKTREE_DEV_PORT_BUCKETS = 8_000;
-const WORKTREE_DEV_APP_PORT_BASE = 11_000;
-const WORKTREE_DEV_SERVER_PORT_BASE = 19_000;
-const WORKTREE_DEV_HOST_DAEMON_PORT_BASE = 27_000;
-const WORKTREE_DEV_ENV_PORT_BASE = 43_000;
 const LEGACY_DEV_DATA_DIR_NAME = ".bb-dev";
 const LEGACY_DEV_SUPERVISOR_DIR_NAME = "dev-supervisors";
 const LEGACY_DEV_SUPERVISOR_PID_FILE_NAMES = [
@@ -95,72 +62,6 @@ const MIGRATABLE_LEGACY_ENTRY_NAMES = new Set([
   "replays",
   "thread-storage",
 ]);
-
-function createRepoRootHash(repoRootPath: string): string {
-  return createHash("sha256").update(repoRootPath).digest("hex");
-}
-
-function sanitizeInstanceLabel(value: string): string {
-  const sanitized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/gu, "-")
-    .replace(/^[._-]+|[._-]+$/gu, "");
-  return sanitized.length > 0 ? sanitized : "worktree";
-}
-
-function resolveRepoRootLabel(
-  args: ResolveWorktreeDevInstanceConfigArgs,
-): string {
-  const homeRelativePath = relative(args.homeDir, args.repoRoot);
-  if (
-    homeRelativePath.length > 0 &&
-    !homeRelativePath.startsWith("../") &&
-    !homeRelativePath.startsWith("..\\") &&
-    homeRelativePath !== ".." &&
-    !isAbsolute(homeRelativePath)
-  ) {
-    return homeRelativePath;
-  }
-
-  return args.repoRoot;
-}
-
-function resolveInstanceId(args: ResolveWorktreeDevInstanceConfigArgs): string {
-  const hash = createRepoRootHash(args.repoRoot);
-  const label = resolveRepoRootLabel(args);
-  return `${sanitizeInstanceLabel(label)}-${hash.slice(0, WORKTREE_DEV_HASH_LENGTH)}`;
-}
-
-function resolvePortOffset(repoRootPath: string): number {
-  const hash = createRepoRootHash(repoRootPath);
-  return Number.parseInt(hash.slice(0, 8), 16) % WORKTREE_DEV_PORT_BUCKETS;
-}
-
-function resolvePorts(repoRootPath: string): WorktreeDevPortSet {
-  const offset = resolvePortOffset(repoRootPath);
-  return {
-    appPort: WORKTREE_DEV_APP_PORT_BASE + offset,
-    devEnvPort: WORKTREE_DEV_ENV_PORT_BASE + offset,
-    hostDaemonPort: WORKTREE_DEV_HOST_DAEMON_PORT_BASE + offset,
-    serverPort: WORKTREE_DEV_SERVER_PORT_BASE + offset,
-  };
-}
-
-export function resolveWorktreeDevInstanceConfig(
-  args: ResolveWorktreeDevInstanceConfigArgs,
-): WorktreeDevInstanceConfig {
-  const instanceId = resolveInstanceId(args);
-  const dataDir = join(args.homeDir, WORKTREE_DEV_DATA_ROOT_DIR, instanceId);
-  const ports = resolvePorts(args.repoRoot);
-  const serverUrl = `http://localhost:${ports.serverPort}`;
-  return {
-    dataDir,
-    instanceId,
-    ports,
-    repoRoot: args.repoRoot,
-    serverUrl,
-  };
-}
 
 async function pathExists(pathToCheck: string): Promise<boolean> {
   try {
@@ -349,38 +250,4 @@ export async function migrateLegacyDevData(
   return {
     migratedEntries: entries,
   };
-}
-
-export function resolveCurrentWorktreeDevInstanceConfig(
-  repoRoot: string,
-): WorktreeDevInstanceConfig {
-  return resolveWorktreeDevInstanceConfig({
-    homeDir: homedir(),
-    repoRoot,
-  });
-}
-
-export function toWorktreeDevProcessEnv(
-  args: WorktreeDevProcessEnvArgs,
-): NodeJS.ProcessEnv {
-  return {
-    ...args.baseEnv,
-    BB_DATA_DIR: args.config.dataDir,
-    BB_DEV_APP_PORT: String(args.config.ports.appPort),
-    BB_DEV_ENV_PORT: String(args.config.ports.devEnvPort),
-    BB_HOST_DAEMON_PORT: String(args.config.ports.hostDaemonPort),
-    BB_SERVER_PORT: String(args.config.ports.serverPort),
-    BB_SERVER_URL: args.config.serverUrl,
-    NODE_ENV: "development",
-  };
-}
-
-export function resolveCurrentWorktreeDevProcessEnv(
-  repoRoot: string,
-  baseEnv: NodeJS.ProcessEnv,
-): NodeJS.ProcessEnv {
-  return toWorktreeDevProcessEnv({
-    baseEnv,
-    config: resolveCurrentWorktreeDevInstanceConfig(repoRoot),
-  });
 }

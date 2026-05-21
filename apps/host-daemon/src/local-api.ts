@@ -2,7 +2,11 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
-import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
+import {
+  buildLocalAppOrigins,
+  type BuildLocalAppOriginsArgs,
+} from "@bb/config/local-app-origins";
+import { assignIfDefined } from "@bb/config/objects";
 import {
   healthResponseSchema,
   HOST_DAEMON_PROTOCOL_VERSION,
@@ -92,13 +96,20 @@ export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
   const app = new Hono();
-  const allowedCorsOrigins = new Set<string>(
-    buildLocalAppOrigins({
-      serverPort: options.serverPort,
-      devAppPort: options.devAppPort,
-      appUrl: options.appUrl,
-    }),
-  );
+  const originArgs: BuildLocalAppOriginsArgs = {
+    serverPort: options.serverPort,
+  };
+  assignIfDefined({
+    key: "appUrl",
+    target: originArgs,
+    value: options.appUrl,
+  });
+  assignIfDefined({
+    key: "devAppPort",
+    target: originArgs,
+    value: options.devAppPort,
+  });
+  const allowedCorsOrigins = new Set<string>(buildLocalAppOrigins(originArgs));
   app.use(
     "*",
     cors({

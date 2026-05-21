@@ -6,7 +6,6 @@
  * tooling entrypoints that only need the raw values.
  */
 export const DEFAULTS = {
-  dataDir: { prod: ".bb", dev: ".bb-dev" },
   logLevel: { prod: "info", dev: "debug" },
   secretToken: { dev: "dev-secret" },
   inferenceModel: "codex/gpt-5.4-mini",

@@ -1,38 +1,58 @@
-import { envsafe, invalidEnvError, makeValidator, str } from "envsafe";
+import {
+  readEnvVarWithDefault,
+  readOptionalEnvVar,
+  resolveEnvLoader,
+  type EnvLoaderArgs,
+} from "./env.js";
+import {
+  BB_DEV_APP_HOST_ENV,
+  BB_DEV_APP_PORT_ENV,
+  BB_DEV_ENV_PORT_ENV,
+  DEFAULT_BB_DEV_APP_HOST,
+} from "./env-vars.js";
+import { assignIfDefined } from "./objects.js";
 
-const OPTIONAL_PORT_UNSET = 0;
+export interface DevEnvConfig {
+  BB_DEV_APP_HOST: string;
+  BB_DEV_APP_PORT?: number;
+  BB_DEV_ENV_PORT?: number;
+}
 
-const optionalPort = makeValidator<number | undefined>((input) => {
-  if (input === undefined || input === OPTIONAL_PORT_UNSET) {
-    return undefined;
-  }
+export type LoadDevEnvConfigArgs = EnvLoaderArgs;
 
-  const coerced = +input;
-  if (
-    Number.isNaN(coerced) ||
-    `${coerced}` !== `${input}` ||
-    coerced % 1 !== 0 ||
-    coerced < 1 ||
-    coerced > 65_535
-  ) {
-    throw invalidEnvError("port", input);
-  }
-  return coerced;
-});
+export function loadDevEnvConfig(
+  args: LoadDevEnvConfigArgs = {},
+): DevEnvConfig {
+  const loader = resolveEnvLoader(args);
+  const config: DevEnvConfig = {
+    BB_DEV_APP_HOST: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_DEV_APP_HOST,
+      definition: BB_DEV_APP_HOST_ENV,
+      env: loader.env,
+    }),
+  };
+  const appPort = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DEV_APP_PORT_ENV,
+    env: loader.env,
+  });
+  const devEnvPort = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DEV_ENV_PORT_ENV,
+    env: loader.env,
+  });
 
-export const devEnvConfig = envsafe({
-  BB_DEV_APP_HOST: str({
-    desc: "Development-only Vite bind host for apps/app. Set to 0.0.0.0 to test from phones or other LAN devices. Does not affect production server binding or generated URLs.",
-    default: "",
-    allowEmpty: true,
-    devDefault: "",
-  }),
-  BB_DEV_APP_PORT: optionalPort({
-    desc: "Development-only Vite port for apps/app.",
-    default: OPTIONAL_PORT_UNSET,
-  }),
-  BB_DEV_ENV_PORT: optionalPort({
-    desc: "Development-only localhost port for the bb dev-env helper API.",
-    default: OPTIONAL_PORT_UNSET,
-  }),
-});
+  assignIfDefined({
+    key: "BB_DEV_APP_PORT",
+    target: config,
+    value: appPort,
+  });
+  assignIfDefined({
+    key: "BB_DEV_ENV_PORT",
+    target: config,
+    value: devEnvPort,
+  });
+
+  return config;
+}

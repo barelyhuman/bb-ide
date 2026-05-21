@@ -1,66 +1,132 @@
-import { envsafe, port, str } from "envsafe";
-import { commonConfig } from "./common.js";
-import { databaseConfig } from "./database.js";
-import { DEFAULTS } from "./defaults.js";
-import { featureFlags } from "./feature-flags.js";
+import type { FeatureFlags } from "@bb/domain";
 import {
-  validateInferenceModel,
-  validateTranscriptionModel,
-} from "./inference-model.js";
-import { validateOptionalUrl } from "./public-url.js";
-import { serverPortConfig } from "./server-port.js";
+  loadCommonConfig,
+  type CommonConfig,
+  type LoadCommonConfigArgs,
+} from "./common.js";
+import { loadDatabaseConfig, type DatabaseConfig } from "./database.js";
+import { loadDevEnvConfig } from "./dev-env.js";
+import { readEnvVarWithDefault, resolveEnvLoader } from "./env.js";
+import {
+  BB_APP_URL_ENV,
+  BB_APP_VERSION_ENV,
+  BB_EXTERNAL_URL_ENV,
+  BB_INFERENCE_ENV,
+  BB_TRANSCRIPTION_ENV,
+  DEFAULT_BB_APP_URL,
+  DEFAULT_BB_APP_VERSION,
+  DEFAULT_BB_EXTERNAL_URL,
+  DEFAULT_BB_INFERENCE,
+  DEFAULT_BB_TRANSCRIPTION,
+  DEFAULT_OPENAI_API_KEY,
+  OPENAI_API_KEY_ENV,
+} from "./env-vars.js";
+import { loadFeatureFlags } from "./feature-flags.js";
+import { assignIfDefined } from "./objects.js";
+import { loadHostDaemonPortValue } from "./ports.js";
+import { loadServerPortConfig, type ServerPortConfig } from "./server-port.js";
 
-export { commonConfig };
+export interface ServerConfig
+  extends CommonConfig, DatabaseConfig, ServerPortConfig {
+  BB_APP_URL: string;
+  BB_APP_VERSION: string;
+  BB_DEV_APP_PORT?: number;
+  BB_EXTERNAL_URL: string;
+  BB_HOST_DAEMON_PORT: number;
+  BB_INFERENCE: string;
+  BB_TRANSCRIPTION: string;
+  OPENAI_API_KEY: string;
+  featureFlags: FeatureFlags;
+}
 
-const rawServerConfig = envsafe({
-  BB_HOST_DAEMON_PORT: port({
-    desc: "Port the host daemon listens on for local API requests",
-  }),
-  BB_APP_VERSION: str({
-    desc: "Version of the running bb-app package. The bb-app launcher sets this from packages/bb-app/package.json; defaults to a sentinel for dev/source runs.",
-    default: "0.0.0-dev",
-    devDefault: "0.0.0-dev",
-  }),
-  BB_APP_URL: str({
-    desc: "Human-facing app/server base URL used for generated links and allowed browser origins. Does not control which host or port the server binds to.",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_EXTERNAL_URL: str({
-    desc: "Internet-facing HTTPS base URL used for generated public links. Does not control which host or port the server binds to.",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_INFERENCE: str({
-    desc: "Inference model used for server-side completions in provider/model format",
-    default: DEFAULTS.inferenceModel,
-    devDefault: DEFAULTS.inferenceModel,
-  }),
-  BB_TRANSCRIPTION: str({
-    desc: "Speech-to-text model used for voice transcription in provider/model format",
-    default: DEFAULTS.transcriptionModel,
-    devDefault: DEFAULTS.transcriptionModel,
-  }),
-  OPENAI_API_KEY: str({
-    desc: "OpenAI API key used when an explicit OpenAI provider route is configured (optional)",
-    default: "",
-    allowEmpty: true,
-    devDefault: "",
-  }),
-});
+export type LoadServerConfigArgs = LoadCommonConfigArgs;
 
-export const serverConfig = {
-  ...databaseConfig,
-  ...rawServerConfig,
-  ...serverPortConfig,
-  featureFlags,
-  BB_APP_URL: validateOptionalUrl("BB_APP_URL", rawServerConfig.BB_APP_URL),
-  BB_EXTERNAL_URL: validateOptionalUrl(
-    "BB_EXTERNAL_URL",
-    rawServerConfig.BB_EXTERNAL_URL,
-  ),
-  BB_INFERENCE: validateInferenceModel(rawServerConfig.BB_INFERENCE),
-  BB_TRANSCRIPTION: validateTranscriptionModel(
-    rawServerConfig.BB_TRANSCRIPTION,
-  ),
-};
+export function loadServerConfig(
+  args: LoadServerConfigArgs = {},
+): ServerConfig {
+  const loader = resolveEnvLoader(args);
+  const commonConfig = loadCommonConfig({
+    env: loader.env,
+    homeDir: loader.context.homeDir,
+    mode: loader.mode,
+    repoRoot: args.repoRoot,
+  });
+  const databaseConfig = loadDatabaseConfig({
+    commonConfig,
+    env: loader.env,
+    homeDir: loader.context.homeDir,
+    mode: loader.mode,
+    repoRoot: args.repoRoot,
+  });
+  const serverPortConfig = loadServerPortConfig({
+    env: loader.env,
+    homeDir: loader.context.homeDir,
+    mode: loader.mode,
+    repoRoot: args.repoRoot,
+  });
+  const devEnvConfig = loadDevEnvConfig({
+    env: loader.env,
+    homeDir: loader.context.homeDir,
+    mode: loader.mode,
+  });
+  const config: ServerConfig = {
+    ...commonConfig,
+    ...databaseConfig,
+    ...serverPortConfig,
+    BB_APP_URL: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_APP_URL,
+      definition: BB_APP_URL_ENV,
+      env: loader.env,
+    }),
+    BB_APP_VERSION: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_APP_VERSION,
+      definition: BB_APP_VERSION_ENV,
+      env: loader.env,
+    }),
+    BB_EXTERNAL_URL: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_EXTERNAL_URL,
+      definition: BB_EXTERNAL_URL_ENV,
+      env: loader.env,
+    }),
+    BB_HOST_DAEMON_PORT: loadHostDaemonPortValue({
+      env: loader.env,
+      homeDir: loader.context.homeDir,
+      mode: loader.mode,
+      repoRoot: args.repoRoot,
+    }),
+    BB_INFERENCE: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_INFERENCE,
+      definition: BB_INFERENCE_ENV,
+      env: loader.env,
+    }),
+    BB_TRANSCRIPTION: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_TRANSCRIPTION,
+      definition: BB_TRANSCRIPTION_ENV,
+      env: loader.env,
+    }),
+    OPENAI_API_KEY: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_OPENAI_API_KEY,
+      definition: OPENAI_API_KEY_ENV,
+      env: loader.env,
+    }),
+    featureFlags: loadFeatureFlags({
+      env: loader.env,
+      homeDir: loader.context.homeDir,
+      mode: loader.mode,
+    }),
+  };
+
+  assignIfDefined({
+    key: "BB_DEV_APP_PORT",
+    target: config,
+    value: devEnvConfig.BB_DEV_APP_PORT,
+  });
+
+  return config;
+}

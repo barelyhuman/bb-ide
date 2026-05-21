@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import pino from "pino";
 import type { Logger } from "pino";
-import { commonConfig } from "@bb/config/common";
+import { loadLoggerConfig } from "@bb/config/logger";
 
 export type { Logger };
 
@@ -26,10 +26,12 @@ function sanitizeComponentName(component: string): string {
 
 export function createLogger(options: CreateLoggerOptions): Logger {
   const component = sanitizeComponentName(options.component);
-  const logDir = join(options.dataDir ?? commonConfig.BB_DATA_DIR, "logs");
+  const loggerConfig = loadLoggerConfig({ dataDir: options.dataDir });
+  const dataDir = loggerConfig.BB_DATA_DIR;
+  const logDir = join(dataDir, "logs");
   mkdirSync(logDir, { recursive: true });
   const loggerOptions = {
-    level: commonConfig.BB_LOG_LEVEL,
+    level: loggerConfig.BB_LOG_LEVEL,
     base: {
       component,
       ...(options.base ?? {}),
@@ -63,7 +65,7 @@ export function createLogger(options: CreateLoggerOptions): Logger {
         limit: { count: 5 },
         size: "10m",
       },
-      level: commonConfig.BB_LOG_LEVEL,
+      level: loggerConfig.BB_LOG_LEVEL,
     },
   ];
 
@@ -80,7 +82,7 @@ export function createLogger(options: CreateLoggerOptions): Logger {
         singleLine: true,
         translateTime: "HH:mm:ss",
       },
-      level: commonConfig.BB_LOG_LEVEL,
+      level: loggerConfig.BB_LOG_LEVEL,
     });
   }
 

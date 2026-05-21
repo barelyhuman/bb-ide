@@ -9,10 +9,21 @@ import { registerProviderCommands } from "./commands/provider.js";
 import { registerReplayCommands } from "./commands/replay.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread/index.js";
-import { resolveContextSnapshot, resolveServerUrl } from "./context-env.js";
+import {
+  createCliRuntimeContext,
+  resolveContextSnapshot,
+  resolveServerUrl,
+  type CliRuntimeContext,
+} from "./context-env.js";
 import { resolveBbCliVersion } from "./version.js";
 
 const program = new Command();
+let cliRuntimeContext: CliRuntimeContext | undefined;
+
+function getCliRuntimeContext(): CliRuntimeContext {
+  cliRuntimeContext ??= createCliRuntimeContext();
+  return cliRuntimeContext;
+}
 
 program
   .name("bb")
@@ -20,7 +31,7 @@ program
   .version(resolveBbCliVersion());
 
 program.addHelpText("after", () => {
-  const context = resolveContextSnapshot();
+  const context = resolveContextSnapshot(getCliRuntimeContext());
   const project = context.projectId ?? "<unset>";
   const thread = context.threadId ?? "<unset>";
 
@@ -41,11 +52,15 @@ Quick start:
 
 // Helper to get the URL from the program's options
 function getUrl(): string {
-  return resolveServerUrl();
+  return resolveServerUrl(getCliRuntimeContext());
+}
+
+function getContext() {
+  return resolveContextSnapshot(getCliRuntimeContext());
 }
 
 // Register all command groups
-registerStatusCommand(program, getUrl);
+registerStatusCommand(program, getUrl, getContext);
 registerProjectCommands(program, getUrl);
 registerHostCommands(program, getUrl);
 registerProviderCommands(program, getUrl);

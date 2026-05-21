@@ -1,0 +1,273 @@
+import { defaultFeatureFlags, hostTypeSchema, type HostType } from "@bb/domain";
+import { DEFAULTS } from "./defaults.js";
+import { defineEnvVar, type EnvVarParseArgs } from "./env.js";
+import {
+  validateInferenceModel,
+  validateTranscriptionModel,
+} from "./inference-model.js";
+import { validateLogLevel } from "./log-level.js";
+import { validateOptionalUrl, validateRequiredUrl } from "./public-url.js";
+import { parseDataDirEnvValue, parsePortValue } from "./runtime.js";
+
+export function parseBooleanEnvValue(args: EnvVarParseArgs): boolean {
+  const normalizedValue = args.value.trim().toLowerCase();
+  if (
+    normalizedValue === "true" ||
+    normalizedValue === "1" ||
+    normalizedValue === "yes" ||
+    normalizedValue === "y"
+  ) {
+    return true;
+  }
+  if (
+    normalizedValue === "false" ||
+    normalizedValue === "0" ||
+    normalizedValue === "no" ||
+    normalizedValue === "n"
+  ) {
+    return false;
+  }
+
+  throw new Error(`${args.name} must be a boolean`);
+}
+
+export function parseOptionalPortEnvValue(
+  args: EnvVarParseArgs,
+): number | undefined {
+  if (args.value === "0") {
+    return undefined;
+  }
+
+  return parsePortValue({
+    name: args.name,
+    rawPort: args.value,
+  });
+}
+
+export function parseOptionalTrimmedStringEnvValue(
+  args: EnvVarParseArgs,
+): string | undefined {
+  const trimmedValue = args.value.trim();
+  return trimmedValue.length === 0 ? undefined : trimmedValue;
+}
+
+function parseStringEnvValue(args: EnvVarParseArgs): string {
+  return args.value;
+}
+
+function parseNonEmptyStringEnvValue(args: EnvVarParseArgs): string {
+  if (args.value.length === 0) {
+    throw new Error(`${args.name} must not be empty`);
+  }
+
+  return args.value;
+}
+
+function parsePortEnvValue(args: EnvVarParseArgs): number {
+  return parsePortValue({
+    name: args.name,
+    rawPort: args.value,
+  });
+}
+
+function parseRequiredUrlEnvValue(args: EnvVarParseArgs): string {
+  return validateRequiredUrl(args.name, args.value);
+}
+
+function parseOptionalUrlEnvValue(args: EnvVarParseArgs): string {
+  return validateOptionalUrl(args.name, args.value);
+}
+
+function parseDataDirValue(args: EnvVarParseArgs): string {
+  return parseDataDirEnvValue({
+    homeDir: args.context.homeDir,
+    rawDataDir: args.value,
+  });
+}
+
+function parseLogLevelValue(args: EnvVarParseArgs): string {
+  return validateLogLevel(args.value);
+}
+
+function parseInferenceModelValue(args: EnvVarParseArgs): string {
+  return validateInferenceModel(args.value);
+}
+
+function parseTranscriptionModelValue(args: EnvVarParseArgs): string {
+  return validateTranscriptionModel(args.value);
+}
+
+function parseHostTypeValue(args: EnvVarParseArgs): HostType | undefined {
+  const trimmedValue = args.value.trim();
+  if (trimmedValue.length === 0) {
+    return undefined;
+  }
+
+  const parsedHostType = hostTypeSchema.safeParse(trimmedValue);
+  if (!parsedHostType.success) {
+    throw new Error(`Invalid ${args.name} "${trimmedValue}"`);
+  }
+
+  return parsedHostType.data;
+}
+
+export const BB_DATA_DIR_ENV = defineEnvVar<string>({
+  description: "Root directory for all bb data (db, logs, host-id, etc.)",
+  name: "BB_DATA_DIR",
+  parse: parseDataDirValue,
+});
+
+export const BB_LOG_LEVEL_ENV = defineEnvVar<string>({
+  description: "Log level: trace, debug, info, warn, error, fatal",
+  name: "BB_LOG_LEVEL",
+  parse: parseLogLevelValue,
+});
+
+export const BB_SERVER_PORT_ENV = defineEnvVar<number>({
+  description: "HTTP port for the server",
+  name: "BB_SERVER_PORT",
+  parse: parsePortEnvValue,
+});
+
+export const BB_HOST_DAEMON_PORT_ENV = defineEnvVar<number>({
+  description: "Port the host daemon listens on for local API requests",
+  name: "BB_HOST_DAEMON_PORT",
+  parse: parsePortEnvValue,
+});
+
+export const BB_SERVER_URL_ENV = defineEnvVar<string>({
+  description: "URL of the bb server",
+  name: "BB_SERVER_URL",
+  parse: parseRequiredUrlEnvValue,
+});
+
+export const BB_APP_VERSION_ENV = defineEnvVar<string>({
+  description:
+    "Version of the running bb-app package. The bb-app launcher sets this from packages/bb-app/package.json; defaults to a sentinel for dev/source runs.",
+  name: "BB_APP_VERSION",
+  parse: parseNonEmptyStringEnvValue,
+});
+
+export const BB_APP_URL_ENV = defineEnvVar<string>({
+  description:
+    "Human-facing app/server base URL used for generated links and allowed browser origins. Does not control which host or port the server binds to.",
+  name: "BB_APP_URL",
+  parse: parseOptionalUrlEnvValue,
+});
+
+export const BB_EXTERNAL_URL_ENV = defineEnvVar<string>({
+  description:
+    "Internet-facing HTTPS base URL used for generated public links. Does not control which host or port the server binds to.",
+  name: "BB_EXTERNAL_URL",
+  parse: parseOptionalUrlEnvValue,
+});
+
+export const BB_INFERENCE_ENV = defineEnvVar<string>({
+  description: "Inference model used for server-side completions",
+  name: "BB_INFERENCE",
+  parse: parseInferenceModelValue,
+});
+
+export const BB_TRANSCRIPTION_ENV = defineEnvVar<string>({
+  description: "Speech-to-text model used for voice transcription",
+  name: "BB_TRANSCRIPTION",
+  parse: parseTranscriptionModelValue,
+});
+
+export const OPENAI_API_KEY_ENV = defineEnvVar<string>({
+  description:
+    "OpenAI API key used when an explicit OpenAI provider route is configured",
+  name: "OPENAI_API_KEY",
+  parse: parseStringEnvValue,
+});
+
+export const BB_FF_ASK_USER_QUESTION_ENV = defineEnvVar<boolean>({
+  description: "Enable the Ask User Question feature",
+  name: "BB_FF_ASK_USER_QUESTION",
+  parse: parseBooleanEnvValue,
+});
+
+export const BB_FF_TERMINALS_ENV = defineEnvVar<boolean>({
+  description: "Enable terminal sessions in threads",
+  name: "BB_FF_TERMINALS",
+  parse: parseBooleanEnvValue,
+});
+
+export const BB_DEV_APP_HOST_ENV = defineEnvVar<string>({
+  description:
+    "Development-only Vite bind host for apps/app. Set to 0.0.0.0 to test from phones or other LAN devices.",
+  name: "BB_DEV_APP_HOST",
+  parse: parseStringEnvValue,
+});
+
+export const BB_DEV_APP_PORT_ENV = defineEnvVar<number | undefined>({
+  description: "Development-only Vite port for apps/app.",
+  name: "BB_DEV_APP_PORT",
+  parse: parseOptionalPortEnvValue,
+});
+
+export const BB_DEV_ENV_PORT_ENV = defineEnvVar<number | undefined>({
+  description: "Development-only localhost port for the bb dev-env helper API.",
+  name: "BB_DEV_ENV_PORT",
+  parse: parseOptionalPortEnvValue,
+});
+
+export const BB_DEV_REPLAY_CAPTURE_ENV = defineEnvVar<boolean>({
+  description:
+    "When true, the daemon records live provider traffic as replay captures",
+  name: "BB_DEV_REPLAY_CAPTURE",
+  parse: parseBooleanEnvValue,
+});
+
+export const BB_CLI_DIR_ENV = defineEnvVar<string | undefined>({
+  description:
+    "Directory containing the bb CLI executable to inject into runtime shells",
+  name: "BB_CLI_DIR",
+  parse: parseOptionalTrimmedStringEnvValue,
+});
+
+export const BB_BRIDGE_DIR_ENV = defineEnvVar<string | undefined>({
+  description:
+    "Directory containing provider bridge bundles for the host daemon runtime",
+  name: "BB_BRIDGE_DIR",
+  parse: parseOptionalTrimmedStringEnvValue,
+});
+
+export const BB_HOST_ENROLL_KEY_ENV = defineEnvVar<string | undefined>({
+  description:
+    "One-time enrollment token used to bootstrap a host daemon with the bb server",
+  name: "BB_HOST_ENROLL_KEY",
+  parse: parseOptionalTrimmedStringEnvValue,
+});
+
+export const BB_HOST_ID_ENV = defineEnvVar<string | undefined>({
+  description:
+    "Preferred host ID to persist for the daemon instead of generating one locally",
+  name: "BB_HOST_ID",
+  parse: parseOptionalTrimmedStringEnvValue,
+});
+
+export const BB_HOST_NAME_ENV = defineEnvVar<string | undefined>({
+  description:
+    "Preferred host name to report instead of detecting the local hostname",
+  name: "BB_HOST_NAME",
+  parse: parseOptionalTrimmedStringEnvValue,
+});
+
+export const BB_HOST_TYPE_ENV = defineEnvVar<HostType | undefined>({
+  description: "Host type override for daemon bootstrap",
+  name: "BB_HOST_TYPE",
+  parse: parseHostTypeValue,
+});
+
+export const DEFAULT_BB_APP_VERSION = "0.0.0-dev";
+export const DEFAULT_BB_APP_URL = "";
+export const DEFAULT_BB_EXTERNAL_URL = "";
+export const DEFAULT_OPENAI_API_KEY = "";
+export const DEFAULT_BB_DEV_APP_HOST = "";
+export const DEFAULT_BB_DEV_REPLAY_CAPTURE = false;
+export const DEFAULT_BB_INFERENCE = DEFAULTS.inferenceModel;
+export const DEFAULT_BB_TRANSCRIPTION = DEFAULTS.transcriptionModel;
+export const DEFAULT_BB_FF_ASK_USER_QUESTION =
+  defaultFeatureFlags.askUserQuestion;
+export const DEFAULT_BB_FF_TERMINALS = defaultFeatureFlags.terminals;

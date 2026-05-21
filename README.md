@@ -95,13 +95,14 @@ without downloading from npm.
 To test an additional host against that dev server, use:
 
 ```bash
-pnpm dev:host-daemon -- --auto-join
+BB_HOST_DAEMON_PORT=39999 pnpm dev:host-daemon -- --auto-join
 ```
 
 That runs a second host daemon against the dev server and stores its state
-under the current checkout's dev data directory. On first run, it requests
-local enrollment from the dev server; after enrollment, the daemon persists its
-auth state locally.
+under the current checkout's dev data directory. The extra daemon requires an
+explicit unused `BB_HOST_DAEMON_PORT` so it does not collide with the primary
+dev daemon. On first run, it requests local enrollment from the dev server;
+after enrollment, the daemon persists its auth state locally.
 
 ```bash
 pnpm bb --help            # built CLI, targets the default/prod instance

@@ -143,8 +143,8 @@ describe("prepareRuntimeShellEnv", () => {
     expect(
       prepareRuntimeShellEnv({
         bbExecutableDirectory: "/tmp/bb-bin",
+        hostDaemonPort: 3002,
         inheritedPath: "/usr/bin",
-        localApiPort: 3002,
         serverUrl: "http://127.0.0.1:3334",
       }),
     ).toEqual({
@@ -160,13 +160,26 @@ describe("prepareRuntimeShellEnv", () => {
     expect(
       prepareRuntimeShellEnv({
         bbExecutableDirectory: "/tmp/bb-bin",
-        localApiPort: 3002,
+        hostDaemonPort: 3002,
         serverUrl: "http://127.0.0.1:3334",
       }),
     ).toEqual({
       PATH: `/tmp/bb-bin${delimiter}/usr/local/bin:/usr/bin`,
       BB_SERVER_URL: "http://127.0.0.1:3334",
       BB_HOST_DAEMON_PORT: "3002",
+    });
+  });
+
+  it("omits the host daemon port when the local API is disabled", () => {
+    expect(
+      prepareRuntimeShellEnv({
+        bbExecutableDirectory: "/tmp/bb-bin",
+        inheritedPath: "/usr/bin",
+        serverUrl: "http://127.0.0.1:3334",
+      }),
+    ).toEqual({
+      PATH: `/tmp/bb-bin${delimiter}/usr/bin`,
+      BB_SERVER_URL: "http://127.0.0.1:3334",
     });
   });
 });

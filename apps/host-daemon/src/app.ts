@@ -28,7 +28,6 @@ import {
   TerminalManager,
   type TerminalManagerOptions,
 } from "./terminals/terminal-manager.js";
-import { hostDaemonConfig } from "@bb/config/host-daemon";
 import { createReplayCaptureService } from "@bb/replay-capture/writer";
 import { createServerClient } from "./server-client.js";
 import {
@@ -282,6 +281,9 @@ export interface CreateHostDaemonAppOptions {
   hostId: string;
   hostName: string;
   instanceId: string;
+  appUrl?: string;
+  devAppPort?: number;
+  devReplayCapture?: boolean;
   logger: HostDaemonLogger;
   releaseLock: () => Promise<void>;
   localApiConfig: HostDaemonLocalApiConfig | null;
@@ -468,7 +470,7 @@ export async function createHostDaemonApp(
   }
   const replayCapture = createReplayCaptureService({
     dataDir: options.dataDir,
-    enabled: hostDaemonConfig.BB_DEV_REPLAY_CAPTURE,
+    enabled: options.devReplayCapture ?? false,
     logger: options.logger,
   });
 
@@ -734,8 +736,8 @@ export async function createHostDaemonApp(
         localApiConfig: options.localApiConfig,
         serverUrl: options.serverUrl,
         serverPort: Number(new URL(options.serverUrl).port) || 0,
-        devAppPort: hostDaemonConfig.BB_DEV_APP_PORT,
-        appUrl: hostDaemonConfig.BB_APP_URL || undefined,
+        devAppPort: options.devAppPort,
+        appUrl: options.appUrl,
         getConnected: () => connection.sessionId != null,
         pickFolder: options.pickFolder,
       })

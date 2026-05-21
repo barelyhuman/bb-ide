@@ -1,60 +1,146 @@
 import {
-  bool,
-  envsafe,
-  invalidEnvError,
-  makeValidator,
-  port,
-  str,
-  url,
-} from "envsafe";
-import { commonConfig } from "./common.js";
+  readEnvVarWithDefault,
+  readOptionalEnvVar,
+  resolveEnvLoader,
+  type EnvLoaderArgs,
+} from "./env.js";
+import {
+  loadCommonConfig,
+  type CommonConfig,
+  type LoadCommonConfigArgs,
+} from "./common.js";
+import {
+  BB_APP_URL_ENV,
+  BB_DEV_APP_PORT_ENV,
+  BB_DEV_REPLAY_CAPTURE_ENV,
+  DEFAULT_BB_APP_URL,
+  DEFAULT_BB_DEV_REPLAY_CAPTURE,
+} from "./env-vars.js";
+import { assignIfDefined } from "./objects.js";
+import { loadHostDaemonPortValue } from "./ports.js";
 import { validateOptionalUrl } from "./public-url.js";
+import { validatePortNumber } from "./runtime.js";
+import { loadServerUrlValue } from "./server-url.js";
 
-export { commonConfig };
+export interface HostDaemonConnectionConfig {
+  BB_APP_URL: string;
+  BB_DEV_APP_PORT?: number;
+  BB_DEV_REPLAY_CAPTURE: boolean;
+  BB_HOST_DAEMON_PORT: number;
+  BB_SERVER_URL: string;
+}
 
-const OPTIONAL_PORT_UNSET = 0;
+export interface HostDaemonConfig
+  extends CommonConfig, HostDaemonConnectionConfig {}
 
-const optionalPort = makeValidator<number | undefined>((input) => {
-  if (input === undefined || input === OPTIONAL_PORT_UNSET) {
-    return undefined;
+export interface LoadHostDaemonConnectionConfigArgs extends EnvLoaderArgs {
+  hostDaemonPort?: number;
+  repoRoot?: string;
+  serverUrl?: string;
+}
+
+export interface LoadHostDaemonConfigArgs
+  extends LoadCommonConfigArgs, LoadHostDaemonConnectionConfigArgs {}
+
+export interface HostDaemonStartConfig {
+  dataDir?: string;
+  connectionConfig?: HostDaemonConnectionConfig;
+}
+
+export interface LoadHostDaemonStartConfigArgs extends LoadHostDaemonConfigArgs {
+  dataDir?: string;
+  enableLocalApi: boolean;
+}
+
+function resolveHostDaemonPort(
+  args: LoadHostDaemonConnectionConfigArgs,
+): number {
+  if (args.hostDaemonPort !== undefined) {
+    return validatePortNumber({
+      name: "BB_HOST_DAEMON_PORT",
+      value: args.hostDaemonPort,
+    });
   }
 
-  const coerced = +input;
-  if (
-    Number.isNaN(coerced) ||
-    `${coerced}` !== `${input}` ||
-    coerced % 1 !== 0 ||
-    coerced < 1 ||
-    coerced > 65_535
-  ) {
-    throw invalidEnvError("port", input);
+  return loadHostDaemonPortValue(args);
+}
+
+export function loadHostDaemonConnectionConfig(
+  args: LoadHostDaemonConnectionConfigArgs = {},
+): HostDaemonConnectionConfig {
+  const loader = resolveEnvLoader(args);
+  const config: HostDaemonConnectionConfig = {
+    BB_APP_URL: validateOptionalUrl(
+      "BB_APP_URL",
+      readEnvVarWithDefault({
+        context: loader.context,
+        defaultValue: DEFAULT_BB_APP_URL,
+        definition: BB_APP_URL_ENV,
+        env: loader.env,
+      }),
+    ),
+    BB_DEV_REPLAY_CAPTURE: readEnvVarWithDefault({
+      context: loader.context,
+      defaultValue: DEFAULT_BB_DEV_REPLAY_CAPTURE,
+      definition: BB_DEV_REPLAY_CAPTURE_ENV,
+      env: loader.env,
+    }),
+    BB_HOST_DAEMON_PORT: resolveHostDaemonPort({
+      ...args,
+      env: loader.env,
+      homeDir: loader.context.homeDir,
+      mode: loader.mode,
+    }),
+    BB_SERVER_URL: loadServerUrlValue({
+      ...args,
+      env: loader.env,
+      homeDir: loader.context.homeDir,
+      mode: loader.mode,
+    }),
+  };
+  const devAppPort = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DEV_APP_PORT_ENV,
+    env: loader.env,
+  });
+
+  assignIfDefined({
+    key: "BB_DEV_APP_PORT",
+    target: config,
+    value: devAppPort,
+  });
+
+  return config;
+}
+
+export function loadHostDaemonConfig(
+  args: LoadHostDaemonConfigArgs = {},
+): HostDaemonConfig {
+  return {
+    ...loadCommonConfig(args),
+    ...loadHostDaemonConnectionConfig(args),
+  };
+}
+
+export function loadHostDaemonStartConfig(
+  args: LoadHostDaemonStartConfigArgs,
+): HostDaemonStartConfig {
+  if (args.dataDir === undefined) {
+    const config = loadHostDaemonConfig(args);
+    return {
+      connectionConfig: config,
+      dataDir: config.BB_DATA_DIR,
+    };
   }
-  return coerced;
-});
 
-const rawHostDaemonConfig = envsafe({
-  BB_SERVER_URL: url({
-    desc: "URL of the bb server this daemon connects to",
-  }),
-  BB_HOST_DAEMON_PORT: port({
-    desc: "Port for the host-daemon local API",
-  }),
-  BB_DEV_APP_PORT: optionalPort({
-    desc: "Vite port for the BB app frontend; allowed as a CORS origin for the daemon's local API when set.",
-    default: OPTIONAL_PORT_UNSET,
-  }),
-  BB_APP_URL: str({
-    desc: "Public app origin (e.g. https://app.example.com) — allowed as a CORS origin for the daemon's local API when the frontend is served from a non-localhost domain.",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_DEV_REPLAY_CAPTURE: bool({
-    desc: "When true, the daemon records live provider traffic as replay captures (development only)",
-    default: false,
-  }),
-});
+  if (args.serverUrl === undefined || args.enableLocalApi) {
+    return {
+      connectionConfig: loadHostDaemonConnectionConfig(args),
+      dataDir: args.dataDir,
+    };
+  }
 
-export const hostDaemonConfig = {
-  ...rawHostDaemonConfig,
-  BB_APP_URL: validateOptionalUrl("BB_APP_URL", rawHostDaemonConfig.BB_APP_URL),
-};
+  return {
+    dataDir: args.dataDir,
+  };
+}

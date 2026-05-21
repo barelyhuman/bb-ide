@@ -33,12 +33,17 @@ import {
 } from "@bb/config/inference-model";
 import { validateLogLevel } from "@bb/config/log-level";
 import { validateOptionalUrl } from "@bb/config/public-url";
+import {
+  BB_PROD_HOST_DAEMON_PORT,
+  BB_LOOPBACK_HOST,
+  BB_PROD_SERVER_PORT,
+  resolveConfiguredDataDir,
+  resolveDataDirDatabasePath,
+  resolvePortFromEnv,
+  resolveProdDataDir,
+} from "@bb/config/runtime";
 import { z } from "zod";
 
-const DEFAULT_SERVER_PORT = 38886;
-const DEFAULT_HOST_DAEMON_PORT = 38887;
-const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
-const DEFAULT_DATA_DIR_NAME = ".bb";
 const HOST_AUTH_FILE_NAME = "auth.json";
 const HOST_ID_FILE_NAME = "host-id";
 const HEALTH_CHECK_TIMEOUT_MS = 15_000;
@@ -553,42 +558,16 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
   };
 }
 
-function expandHomeDirectory(pathValue: string, homeDir: string): string {
-  if (pathValue === "~") {
-    return homeDir;
-  }
-  if (pathValue.startsWith("~/")) {
-    return resolve(homeDir, pathValue.slice(2));
-  }
-  return resolve(pathValue);
-}
-
 export function resolveDataDir(args: ResolveDataDirArgs): string {
-  const rawDataDir = args.env.BB_DATA_DIR;
-  if (rawDataDir === undefined) {
-    return join(args.homeDir, DEFAULT_DATA_DIR_NAME);
-  }
-
-  const trimmedDataDir = rawDataDir.trim();
-  if (trimmedDataDir.length === 0) {
-    throw new Error("BB_DATA_DIR must not be empty");
-  }
-
-  return expandHomeDirectory(trimmedDataDir, args.homeDir);
+  return resolveConfiguredDataDir({
+    defaultDataDir: resolveProdDataDir({ homeDir: args.homeDir }),
+    env: args.env,
+    homeDir: args.homeDir,
+  });
 }
 
 export function resolvePort(args: ResolvePortArgs): number {
-  const rawPort = trimToUndefined(args.env[args.name]);
-  if (rawPort === undefined) {
-    return args.defaultPort;
-  }
-
-  const port = Number(rawPort);
-  if (Number.isInteger(port) && port >= 1 && port <= 65535) {
-    return port;
-  }
-
-  throw new Error(`${args.name} must be a valid TCP port`);
+  return resolvePortFromEnv(args);
 }
 
 function createEnvFromOptions(
@@ -872,12 +851,12 @@ export function resolveBbAppStartContext(
   const packageRoot = resolve(entrypointDir, "..");
   const dataDir = resolveDataDir({ env: args.env, homeDir: args.homeDir });
   const serverPort = resolvePort({
-    defaultPort: DEFAULT_SERVER_PORT,
+    defaultPort: BB_PROD_SERVER_PORT,
     env: args.env,
     name: "BB_SERVER_PORT",
   });
   const daemonPort = resolvePort({
-    defaultPort: DEFAULT_HOST_DAEMON_PORT,
+    defaultPort: BB_PROD_HOST_DAEMON_PORT,
     env: args.env,
     name: "BB_HOST_DAEMON_PORT",
   });
@@ -893,7 +872,7 @@ export function resolveBbAppStartContext(
     daemonLockFile: join(dataDir, "daemon.lock"),
     daemonPort,
     dataDir,
-    dbPath: join(dataDir, "bb.db"),
+    dbPath: resolveDataDirDatabasePath({ dataDir }),
     envFile: formatBbAppEnvPath(dataDir),
     logDir: join(dataDir, "logs"),
     packageRoot,
@@ -901,7 +880,7 @@ export function resolveBbAppStartContext(
     serverPort,
     serverUrl:
       trimToUndefined(args.env.BB_SERVER_URL) ??
-      `http://127.0.0.1:${serverPort}`,
+      `http://${BB_LOOPBACK_HOST}:${serverPort}`,
   };
 }
 
@@ -1850,7 +1829,7 @@ async function runHostDaemonOnly(args: RunHostDaemonOnlyArgs): Promise<void> {
     try {
       await waitForHealth({
         childProcess: daemonProcess,
-        url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${args.context.daemonPort}/health`,
+        url: `http://${BB_LOOPBACK_HOST}:${args.context.daemonPort}/health`,
       });
     } catch {
       endStep(red("✗"), "Host daemon failed to start");
@@ -2127,7 +2106,7 @@ export async function runBbApp(
     try {
       await waitForHealth({
         childProcess: daemonProcess,
-        url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.daemonPort}/health`,
+        url: `http://${BB_LOOPBACK_HOST}:${context.daemonPort}/health`,
       });
     } catch {
       endStep(red("✗"), "Host daemon failed to start");

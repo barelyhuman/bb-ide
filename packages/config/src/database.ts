@@ -1,8 +1,25 @@
-import { commonConfig } from "./common.js";
-import { resolveDataDirDatabasePath } from "./data-dir.js";
+import {
+  loadCommonConfig,
+  type CommonConfig,
+  type LoadCommonConfigArgs,
+} from "./common.js";
+import { resolveDataDirDatabasePath } from "./runtime.js";
 
-export const databaseConfig = {
-  databasePath: resolveDataDirDatabasePath({
-    dataDir: commonConfig.BB_DATA_DIR,
-  }),
-};
+export interface DatabaseConfig {
+  databasePath: string;
+}
+
+export interface LoadDatabaseConfigArgs extends LoadCommonConfigArgs {
+  commonConfig?: CommonConfig;
+}
+
+export function loadDatabaseConfig(
+  args: LoadDatabaseConfigArgs = {},
+): DatabaseConfig {
+  const commonConfig = args.commonConfig ?? loadCommonConfig(args);
+  return {
+    databasePath: resolveDataDirDatabasePath({
+      dataDir: commonConfig.BB_DATA_DIR,
+    }),
+  };
+}

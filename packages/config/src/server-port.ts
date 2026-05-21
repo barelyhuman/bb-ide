@@ -1,7 +1,15 @@
-import { envsafe, port } from "envsafe";
+import { loadServerPortValue, type RuntimePortLoaderArgs } from "./ports.js";
 
-export const serverPortConfig = envsafe({
-  BB_SERVER_PORT: port({
-    desc: "HTTP port for the server",
-  }),
-});
+export interface ServerPortConfig {
+  BB_SERVER_PORT: number;
+}
+
+export type LoadServerPortConfigArgs = RuntimePortLoaderArgs;
+
+export function loadServerPortConfig(
+  args: LoadServerPortConfigArgs = {},
+): ServerPortConfig {
+  return {
+    BB_SERVER_PORT: loadServerPortValue(args),
+  };
+}

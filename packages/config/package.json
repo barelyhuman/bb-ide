@@ -23,6 +23,11 @@
       "types": "./src/dev-env.ts",
       "default": "./src/dev-env.ts"
     },
+    "./vite-dev": {
+      "source": "./src/vite-dev.ts",
+      "types": "./src/vite-dev.ts",
+      "default": "./src/vite-dev.ts"
+    },
     "./host-daemon": {
       "source": "./src/host-daemon.ts",
       "types": "./src/host-daemon.ts",
@@ -42,6 +47,11 @@
       "source": "./src/log-level.ts",
       "types": "./src/log-level.ts",
       "default": "./src/log-level.ts"
+    },
+    "./logger": {
+      "source": "./src/logger.ts",
+      "types": "./src/logger.ts",
+      "default": "./src/logger.ts"
     },
     "./cli": {
       "source": "./src/cli.ts",
@@ -68,15 +78,25 @@
       "types": "./src/database.ts",
       "default": "./src/database.ts"
     },
-    "./data-dir": {
-      "source": "./src/data-dir.ts",
-      "types": "./src/data-dir.ts",
-      "default": "./src/data-dir.ts"
+    "./runtime": {
+      "source": "./src/runtime.ts",
+      "types": "./src/runtime.ts",
+      "default": "./src/runtime.ts"
+    },
+    "./objects": {
+      "source": "./src/objects.ts",
+      "types": "./src/objects.ts",
+      "default": "./src/objects.ts"
     },
     "./strings": {
       "source": "./src/strings.ts",
       "types": "./src/strings.ts",
       "default": "./src/strings.ts"
+    },
+    "./server-url": {
+      "source": "./src/server-url.ts",
+      "types": "./src/server-url.ts",
+      "default": "./src/server-url.ts"
     },
     "./public-url": {
       "source": "./src/public-url.ts",
@@ -96,7 +116,6 @@
   },
   "dependencies": {
     "@bb/domain": "workspace:*",
-    "envsafe": "^2.0.3",
     "zod": "4.3.6"
   },
   "devDependencies": {

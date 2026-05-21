@@ -7,9 +7,12 @@ import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
 } from "@bb/host-daemon-contract";
+import {
+  expectedDevDataDir,
+  expectedDevServerUrl,
+} from "./dev-instance-expectations.js";
 import type * as RunHostDaemonModule from "../src/commands/run-host-daemon.js";
 import type { HostDaemonRuntimeEnvironment } from "../src/lib/host-daemon-runtime.js";
-import { resolveCurrentWorktreeDevInstanceConfig } from "../src/lib/worktree-dev-instance.js";
 
 const tempDirs: string[] = [];
 const testDir = path.dirname(fileURLToPath(import.meta.url));
@@ -37,6 +40,7 @@ function createTestRuntimeEnv({
     BB_CLI_DIR: undefined,
     BB_DATA_DIR: dataDir,
     BB_HOST_ENROLL_KEY: undefined,
+    BB_HOST_DAEMON_PORT: "3002",
     BB_HOST_ID: undefined,
     BB_HOST_NAME: undefined,
     BB_HOST_TYPE: undefined,
@@ -70,9 +74,13 @@ afterEach(async () => {
 });
 
 describe("run-host-daemon auto join", () => {
-  it("resolves the default data dir by mode", () => {
-    expect(runHostDaemon.resolveDefaultDataDirName("dev")).toBe(".bb-dev");
-    expect(runHostDaemon.resolveDefaultDataDirName("prod")).toBe(".bb");
+  it("uses the production data dir when production overrides are absent", () => {
+    vi.stubEnv("BB_DATA_DIR", undefined);
+
+    const env = runHostDaemon.resolveHostDaemonRuntimeEnvironment("prod");
+
+    expect(env.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb"));
+    expect(env.NODE_ENV).toBe("production");
   });
 
   it("runs the daemon from source in dev and from dist in prod", () => {
@@ -91,17 +99,36 @@ describe("run-host-daemon auto join", () => {
     });
   });
 
-  it("uses the current checkout instance when dev overrides are absent", () => {
+  it("requires an explicit port when dev extra-host overrides are absent", () => {
     vi.stubEnv("BB_DATA_DIR", undefined);
+    vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
     vi.stubEnv("BB_SERVER_URL", undefined);
-    const instanceConfig = resolveCurrentWorktreeDevInstanceConfig(repoRoot);
+
+    expect(() =>
+      runHostDaemon.resolveHostDaemonRuntimeEnvironment("dev"),
+    ).toThrow(
+      "BB_HOST_DAEMON_PORT is required when running a dev extra-host daemon without BB_DATA_DIR. Set it to a port distinct from pnpm dev's host daemon port.",
+    );
+  });
+
+  it("uses the current checkout instance when only the dev extra-host port is explicit", () => {
+    vi.stubEnv("BB_DATA_DIR", undefined);
+    vi.stubEnv("BB_HOST_DAEMON_PORT", "39999");
+    vi.stubEnv("BB_SERVER_URL", undefined);
 
     const env = runHostDaemon.resolveHostDaemonRuntimeEnvironment("dev");
 
     expect(env.BB_DATA_DIR).toBe(
-      path.join(instanceConfig.dataDir, "extra-host"),
+      path.join(
+        expectedDevDataDir({
+          homeDir: os.homedir(),
+          repoRoot,
+        }),
+        "extra-host",
+      ),
     );
-    expect(env.BB_SERVER_URL).toBe(instanceConfig.serverUrl);
+    expect(env.BB_HOST_DAEMON_PORT).toBe("39999");
+    expect(env.BB_SERVER_URL).toBe(expectedDevServerUrl(repoRoot));
     expect(env.NODE_ENV).toBe("development");
   });
 

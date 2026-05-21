@@ -25,6 +25,7 @@ export interface ServerRuntimeConfig {
   threadStorageRootPath: string;
   transcriptionModel: string;
   appUrl?: string;
+  devAppPort?: number;
 }
 
 export interface AppDeps {

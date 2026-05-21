@@ -2,7 +2,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveCliExecution } from "../src/commands/run-cli.js";
-import { resolveCurrentWorktreeDevInstanceConfig } from "../src/lib/worktree-dev-instance.js";
+import {
+  expectedDevPorts,
+  expectedDevServerUrl,
+} from "./dev-instance-expectations.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(testDir, "..", "..", "..");
@@ -23,13 +26,9 @@ describe("run-cli", () => {
       "thread",
       "list",
     ]);
-    expect(execution.env.BB_SERVER_URL).toBe(
-      resolveCurrentWorktreeDevInstanceConfig(repoRoot).serverUrl,
-    );
+    expect(execution.env.BB_SERVER_URL).toBe(expectedDevServerUrl(repoRoot));
     expect(execution.env.BB_HOST_DAEMON_PORT).toBe(
-      String(
-        resolveCurrentWorktreeDevInstanceConfig(repoRoot).ports.hostDaemonPort,
-      ),
+      String(expectedDevPorts(repoRoot).hostDaemonPort),
     );
   });
 

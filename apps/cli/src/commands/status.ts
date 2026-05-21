@@ -2,7 +2,10 @@ import { Command } from "commander";
 import type { Thread, ThreadTimelinePendingTodos } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { action } from "../action.js";
-import { resolveContextSnapshot } from "../context-env.js";
+import {
+  resolveContextSnapshot,
+  type ContextSnapshot,
+} from "../context-env.js";
 import { type Client, createClient, unwrap } from "../client.js";
 import { outputJson } from "./helpers.js";
 import {
@@ -36,6 +39,9 @@ interface StatusPayload {
 interface StatusCommandOptions {
   json?: boolean;
 }
+
+type ResolveServerUrl = () => string;
+type ResolveStatusContext = () => ContextSnapshot;
 
 async function fetchSilent<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
@@ -90,7 +96,8 @@ function fetchManagedThreads(args: {
 
 export function registerStatusCommand(
   program: Command,
-  getUrl: () => string,
+  getUrl: ResolveServerUrl,
+  getContext: ResolveStatusContext = resolveContextSnapshot,
 ): void {
   program
     .command("status")
@@ -98,7 +105,7 @@ export function registerStatusCommand(
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (opts: StatusCommandOptions) => {
-        const context = resolveContextSnapshot();
+        const context = getContext();
 
         const payload: StatusPayload = {
           project: null,

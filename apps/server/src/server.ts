@@ -4,9 +4,10 @@ import { performance } from "node:perf_hooks";
 import { extname, join, resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
-import { devEnvConfig } from "@bb/config/dev-env";
-import { serverConfig } from "@bb/config/server";
+import {
+  buildLocalAppOrigins,
+  type BuildLocalAppOriginsArgs,
+} from "@bb/config/local-app-origins";
 import type { AppDeps, ServerAppDeps } from "./types.js";
 import { ApiError, errorToResponse } from "./errors.js";
 import { registerAutomationRoutes } from "./routes/automations.js";
@@ -107,13 +108,17 @@ function shouldLogSlowApiRequest(args: ShouldLogSlowApiRequestArgs): boolean {
 }
 
 function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
-  return new Set<string>(
-    buildLocalAppOrigins({
-      serverPort: serverConfig.BB_SERVER_PORT,
-      devAppPort: devEnvConfig.BB_DEV_APP_PORT,
-      appUrl: deps.config.appUrl,
-    }),
-  );
+  const originArgs: BuildLocalAppOriginsArgs = {
+    serverPort: deps.config.serverPort,
+  };
+  if (deps.config.appUrl !== undefined) {
+    originArgs.appUrl = deps.config.appUrl;
+  }
+  if (deps.config.devAppPort !== undefined) {
+    originArgs.devAppPort = deps.config.devAppPort;
+  }
+
+  return new Set<string>(buildLocalAppOrigins(originArgs));
 }
 
 function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {

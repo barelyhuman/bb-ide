@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { toOptionalString } from "@bb/config/strings";
-import { commonConfig, serverConfig } from "@bb/config/server";
+import { loadServerConfig } from "@bb/config/server";
 import { createLogger } from "@bb/logger";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
@@ -23,7 +23,11 @@ import type { ServerRuntimeConfig } from "./types.js";
 import { NotificationHub } from "./ws/hub.js";
 
 async function main(): Promise<void> {
-  const logger = createLogger({ component: "server" });
+  const serverConfig = loadServerConfig();
+  const logger = createLogger({
+    component: "server",
+    dataDir: serverConfig.BB_DATA_DIR,
+  });
   const db = initDb(serverConfig.databasePath, { logger });
   const hub = new NotificationHub();
   const hostLifecycle = createHostLifecycleService();
@@ -52,7 +56,7 @@ async function main(): Promise<void> {
     isProduction && existsSync(appDistDir) ? appDistDir : undefined;
   const runtimeConfig: ServerRuntimeConfig = {
     appVersion: serverConfig.BB_APP_VERSION,
-    dataDir: commonConfig.BB_DATA_DIR,
+    dataDir: serverConfig.BB_DATA_DIR,
     featureFlags: serverConfig.featureFlags,
     hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
     inferenceModel: serverConfig.BB_INFERENCE,
@@ -66,6 +70,9 @@ async function main(): Promise<void> {
   if (appUrl !== undefined) {
     runtimeConfig.appUrl = appUrl;
   }
+  if (serverConfig.BB_DEV_APP_PORT !== undefined) {
+    runtimeConfig.devAppPort = serverConfig.BB_DEV_APP_PORT;
+  }
   const bbAppManagedConfig = await createBbAppManagedConfigReloader({
     config: runtimeConfig,
     hub,
@@ -73,7 +80,7 @@ async function main(): Promise<void> {
   });
 
   const machineAuth = await createMachineAuthService({
-    dataDir: commonConfig.BB_DATA_DIR,
+    dataDir: serverConfig.BB_DATA_DIR,
     db,
     logger,
   });
@@ -118,7 +125,7 @@ async function main(): Promise<void> {
   logger.info(
     {
       port: serverConfig.BB_SERVER_PORT,
-      dataDir: commonConfig.BB_DATA_DIR,
+      dataDir: serverConfig.BB_DATA_DIR,
     },
     "Server listening",
   );

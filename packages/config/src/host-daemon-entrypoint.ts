@@ -1,60 +1,96 @@
-import { envsafe, makeValidator } from "envsafe";
-import { hostTypeSchema } from "@bb/domain";
 import type { HostType } from "@bb/domain";
+import {
+  readOptionalEnvVar,
+  resolveEnvLoader,
+  type EnvLoaderArgs,
+} from "./env.js";
+import {
+  BB_BRIDGE_DIR_ENV,
+  BB_CLI_DIR_ENV,
+  BB_HOST_ENROLL_KEY_ENV,
+  BB_HOST_ID_ENV,
+  BB_HOST_NAME_ENV,
+  BB_HOST_TYPE_ENV,
+} from "./env-vars.js";
+import { assignIfDefined } from "./objects.js";
 
-export const optionalTrimmedString = makeValidator<string | undefined>(
-  (input) => {
-    const trimmedInput = input?.trim() ?? "";
-    return trimmedInput.length === 0 ? undefined : trimmedInput;
-  },
-);
+export interface HostDaemonEntrypointConfig {
+  BB_BRIDGE_DIR?: string;
+  BB_CLI_DIR?: string;
+  BB_HOST_ENROLL_KEY?: string;
+  BB_HOST_ID?: string;
+  BB_HOST_NAME?: string;
+  BB_HOST_TYPE?: HostType;
+}
 
-export const optionalHostType = makeValidator<HostType | undefined>((input) => {
-  const trimmedInput = input?.trim() ?? "";
-  if (trimmedInput.length === 0) {
-    return undefined;
-  }
+export type LoadHostDaemonEntrypointConfigArgs = EnvLoaderArgs;
 
-  const parsedHostType = hostTypeSchema.safeParse(trimmedInput);
-  if (!parsedHostType.success) {
-    throw new Error(`Invalid BB_HOST_TYPE "${trimmedInput}"`);
-  }
+export function loadHostDaemonEntrypointConfig(
+  args: LoadHostDaemonEntrypointConfigArgs = {},
+): HostDaemonEntrypointConfig {
+  const loader = resolveEnvLoader(args);
+  const config: HostDaemonEntrypointConfig = {};
+  const bridgeDir = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_BRIDGE_DIR_ENV,
+    env: loader.env,
+  });
+  const cliDir = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_CLI_DIR_ENV,
+    env: loader.env,
+  });
+  const enrollKey = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_HOST_ENROLL_KEY_ENV,
+    env: loader.env,
+  });
+  const hostId = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_HOST_ID_ENV,
+    env: loader.env,
+  });
+  const hostName = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_HOST_NAME_ENV,
+    env: loader.env,
+  });
+  const hostType = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_HOST_TYPE_ENV,
+    env: loader.env,
+  });
 
-  return parsedHostType.data;
-});
+  assignIfDefined({
+    key: "BB_BRIDGE_DIR",
+    target: config,
+    value: bridgeDir,
+  });
+  assignIfDefined({
+    key: "BB_CLI_DIR",
+    target: config,
+    value: cliDir,
+  });
+  assignIfDefined({
+    key: "BB_HOST_ENROLL_KEY",
+    target: config,
+    value: enrollKey,
+  });
+  assignIfDefined({
+    key: "BB_HOST_ID",
+    target: config,
+    value: hostId,
+  });
+  assignIfDefined({
+    key: "BB_HOST_NAME",
+    target: config,
+    value: hostName,
+  });
+  assignIfDefined({
+    key: "BB_HOST_TYPE",
+    target: config,
+    value: hostType,
+  });
 
-export const hostDaemonEntrypointConfig = envsafe({
-  BB_CLI_DIR: optionalTrimmedString({
-    desc: "Directory containing the bb CLI executable to inject into runtime shells",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_BRIDGE_DIR: optionalTrimmedString({
-    desc: "Directory containing provider bridge bundles for the host daemon runtime",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_HOST_ENROLL_KEY: optionalTrimmedString({
-    desc: "One-time enrollment token used to bootstrap a host daemon with the bb server",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_HOST_ID: optionalTrimmedString({
-    desc: "Preferred host ID to persist for the daemon instead of generating one locally",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_HOST_NAME: optionalTrimmedString({
-    desc: "Preferred host name to report instead of detecting the local hostname",
-    default: "",
-    allowEmpty: true,
-  }),
-  BB_HOST_TYPE: optionalHostType({
-    desc: "Host type override for daemon bootstrap",
-    default: undefined,
-    allowEmpty: true,
-    input: process.env.BB_HOST_TYPE ?? "",
-  }),
-});
-
-export type HostDaemonEntrypointConfig = typeof hostDaemonEntrypointConfig;
+  return config;
+}

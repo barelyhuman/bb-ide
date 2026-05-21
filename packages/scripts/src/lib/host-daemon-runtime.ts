@@ -2,6 +2,7 @@ import type { HostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoi
 
 export interface HostDaemonRuntimeEnvironment extends HostDaemonEntrypointConfig {
   BB_DATA_DIR: string;
+  BB_HOST_DAEMON_PORT: string;
   BB_SERVER_URL: string;
   NODE_ENV: "development" | "production";
 }

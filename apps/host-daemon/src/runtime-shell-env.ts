@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { delimiter, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
+import { assignIfDefined } from "@bb/config/objects";
 
 export interface ResolveLocalBbExecutableDirectoryOptions {
   cliExecutablePath?: string;
@@ -10,7 +11,7 @@ export interface ResolveLocalBbExecutableDirectoryOptions {
 
 export interface PrepareRuntimeShellEnvOptions {
   bbExecutableDirectory: string;
-  localApiPort: number;
+  hostDaemonPort?: number;
   serverUrl: string;
   inheritedPath?: string;
 }
@@ -91,12 +92,21 @@ export async function resolveLocalBbExecutableDirectory(
 export function prepareRuntimeShellEnv(
   options: PrepareRuntimeShellEnvOptions,
 ): NonNullable<AgentRuntimeOptions["shellEnv"]> {
-  return {
+  const shellEnv: NonNullable<AgentRuntimeOptions["shellEnv"]> = {
     PATH: prependPath(
       options.bbExecutableDirectory,
       options.inheritedPath ?? process.env.PATH,
     ),
     BB_SERVER_URL: options.serverUrl,
-    BB_HOST_DAEMON_PORT: String(options.localApiPort),
   };
+  assignIfDefined({
+    key: "BB_HOST_DAEMON_PORT",
+    target: shellEnv,
+    value:
+      options.hostDaemonPort === undefined
+        ? undefined
+        : String(options.hostDaemonPort),
+  });
+
+  return shellEnv;
 }
