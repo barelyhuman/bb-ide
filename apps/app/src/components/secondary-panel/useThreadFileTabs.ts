@@ -7,13 +7,13 @@ import {
 import {
   areFixedPanelTabsEquivalent,
   createHostFilePreviewFixedPanelTab,
-  createOpenFileSearchFixedPanelTab,
+  createNewTabFixedPanelTab,
   createThreadStorageFilePreviewFixedPanelTab,
   createWorkspaceFilePreviewFixedPanelTab,
   type FixedPanelTab,
   type FixedPanelTabsState,
   type HostFilePreviewFixedPanelTab,
-  type OpenFileSearchFixedPanelTab,
+  type NewTabFixedPanelTab,
   type SecondaryFileFixedPanelTab,
   type ThreadStorageFilePreviewFixedPanelTab,
   type WorkspaceFilePreviewFixedPanelTab,
@@ -42,24 +42,24 @@ interface SetSecondaryTabsArgs {
   tabs: readonly FixedPanelTab[];
 }
 
-interface ReplaceOpenFileSearchTabArgs {
+interface ReplaceNewTabArgs {
   nextTab: FixedPanelTab;
   state: FixedPanelTabsState;
 }
 
-export interface OpenFileSearchWorkspaceSelection {
+export interface FileSearchWorkspaceSelection {
   source: "workspace";
   path: string;
 }
 
-export interface OpenFileSearchThreadStorageSelection {
+export interface FileSearchThreadStorageSelection {
   source: "thread-storage";
   path: string;
 }
 
-export type OpenFileSearchSelection =
-  | OpenFileSearchWorkspaceSelection
-  | OpenFileSearchThreadStorageSelection;
+export type FileSearchSelection =
+  | FileSearchWorkspaceSelection
+  | FileSearchThreadStorageSelection;
 
 function isWorkspaceFilePreviewTab(
   tab: FixedPanelTab,
@@ -79,10 +79,8 @@ function isStorageFilePreviewTab(
   return tab.kind === "thread-storage-file-preview";
 }
 
-function isOpenFileSearchTab(
-  tab: FixedPanelTab,
-): tab is OpenFileSearchFixedPanelTab {
-  return tab.kind === "open-file-search";
+function isNewTab(tab: FixedPanelTab): tab is NewTabFixedPanelTab {
+  return tab.kind === "new-tab";
 }
 
 function getActiveSecondaryTab(
@@ -249,27 +247,27 @@ function findStorageFileTab(
   return null;
 }
 
-function findOpenFileSearchTab(
+function findNewTab(
   tabs: readonly FixedPanelTab[],
-): OpenFileSearchFixedPanelTab | null {
+): NewTabFixedPanelTab | null {
   for (const tab of tabs) {
-    if (isOpenFileSearchTab(tab)) {
+    if (isNewTab(tab)) {
       return tab;
     }
   }
   return null;
 }
 
-function replaceOpenFileSearchTab({
+function replaceNewTab({
   nextTab,
   state,
-}: ReplaceOpenFileSearchTabArgs): FixedPanelTabsState {
-  const searchTab = findOpenFileSearchTab(state.secondary.tabs);
-  const tabsWithoutSearch =
-    searchTab === null
+}: ReplaceNewTabArgs): FixedPanelTabsState {
+  const newTab = findNewTab(state.secondary.tabs);
+  const tabsWithoutNewTab =
+    newTab === null
       ? state.secondary.tabs
-      : removeSecondaryTab(state.secondary.tabs, searchTab.id);
-  const existingPreviewTab = tabsWithoutSearch.find(
+      : removeSecondaryTab(state.secondary.tabs, newTab.id);
+  const existingPreviewTab = tabsWithoutNewTab.find(
     (tab) => tab.id === nextTab.id,
   );
 
@@ -278,15 +276,15 @@ function replaceOpenFileSearchTab({
       activeTabId: existingPreviewTab.id,
       isOpen: true,
       state,
-      tabs: tabsWithoutSearch,
+      tabs: tabsWithoutNewTab,
     });
   }
 
   const tabs =
-    searchTab === null
-      ? upsertSecondaryTab(tabsWithoutSearch, nextTab)
+    newTab === null
+      ? upsertSecondaryTab(tabsWithoutNewTab, nextTab)
       : state.secondary.tabs.map((tab) =>
-          tab.id === searchTab.id ? nextTab : tab,
+          tab.id === newTab.id ? nextTab : tab,
         );
 
   return setSecondaryTabs({
@@ -310,7 +308,7 @@ function isPinnedStorageTab(tab: SecondaryFileFixedPanelTab): boolean {
 /**
  * Flattens the secondary panel's tabs into the closable file-tab strip, in the
  * order the user opened them. The pinned manager status tab is floated to the
- * front; everything else (workspace, host, storage, file search) keeps its
+ * front; everything else (workspace, host, storage, new tab) keeps its
  * insertion order regardless of type.
  */
 function buildOrderedSecondaryFileTabs({
@@ -330,7 +328,7 @@ function buildOrderedSecondaryFileTabs({
         }
         break;
       case "host-file-preview":
-      case "open-file-search":
+      case "new-tab":
         displayable.push(tab);
         break;
       case "thread-storage-file-preview":
@@ -702,19 +700,19 @@ export function useThreadFileTabs({
     [isManagerThread, updateFixedPanelTabsState],
   );
 
-  const openFileSearchTab = useCallback(() => {
-    const searchTab = createOpenFileSearchFixedPanelTab();
+  const openNewTab = useCallback(() => {
+    const newTab = createNewTabFixedPanelTab();
     updateFixedPanelTabsState((state) => {
-      const tabs = upsertSecondaryTab(state.secondary.tabs, searchTab);
+      const tabs = upsertSecondaryTab(state.secondary.tabs, newTab);
       if (
         tabs === state.secondary.tabs &&
-        state.secondary.activeTabId === searchTab.id &&
+        state.secondary.activeTabId === newTab.id &&
         state.secondary.isOpen
       ) {
         return state;
       }
       return setSecondaryTabs({
-        activeTabId: searchTab.id,
+        activeTabId: newTab.id,
         isOpen: true,
         state,
         tabs,
@@ -722,21 +720,21 @@ export function useThreadFileTabs({
     });
   }, [updateFixedPanelTabsState]);
 
-  const activateOpenFileSearchTab = useCallback(() => {
-    const searchTab = createOpenFileSearchFixedPanelTab();
+  const activateNewTab = useCallback(() => {
+    const newTab = createNewTabFixedPanelTab();
     updateFixedPanelTabsState((state) => {
-      const existingTab = findOpenFileSearchTab(state.secondary.tabs);
+      const existingTab = findNewTab(state.secondary.tabs);
       if (!existingTab) {
         return state;
       }
       if (
-        state.secondary.activeTabId === searchTab.id &&
+        state.secondary.activeTabId === newTab.id &&
         state.secondary.isOpen
       ) {
         return state;
       }
       return setSecondaryTabs({
-        activeTabId: searchTab.id,
+        activeTabId: newTab.id,
         isOpen: true,
         state,
         tabs: state.secondary.tabs,
@@ -744,16 +742,16 @@ export function useThreadFileTabs({
     });
   }, [updateFixedPanelTabsState]);
 
-  const closeOpenFileSearchTab = useCallback(() => {
-    const searchTab = createOpenFileSearchFixedPanelTab();
+  const closeNewTab = useCallback(() => {
+    const newTab = createNewTabFixedPanelTab();
     updateFixedPanelTabsState((state) => {
-      const tabs = removeSecondaryTab(state.secondary.tabs, searchTab.id);
+      const tabs = removeSecondaryTab(state.secondary.tabs, newTab.id);
       if (tabs === state.secondary.tabs) {
         return state;
       }
       return setSecondaryTabs({
         activeTabId:
-          state.secondary.activeTabId === searchTab.id
+          state.secondary.activeTabId === newTab.id
             ? null
             : state.secondary.activeTabId,
         isOpen: state.secondary.isOpen,
@@ -763,8 +761,8 @@ export function useThreadFileTabs({
     });
   }, [updateFixedPanelTabsState]);
 
-  const selectOpenFileSearchResult = useCallback(
-    (selection: OpenFileSearchSelection) => {
+  const selectFileSearchResult = useCallback(
+    (selection: FileSearchSelection) => {
       if (selection.source === "workspace") {
         if (resolvedEnvironmentId === undefined) return;
         const nextTab = createWorkspaceFilePreviewFixedPanelTab({
@@ -777,7 +775,7 @@ export function useThreadFileTabs({
           },
         });
         updateFixedPanelTabsState((state) =>
-          replaceOpenFileSearchTab({ nextTab, state }),
+          replaceNewTab({ nextTab, state }),
         );
         return;
       }
@@ -785,7 +783,7 @@ export function useThreadFileTabs({
       if (!isManagerThread) return;
       const nextTab = createStorageTab(selection.path, pinnedStorageFilePath);
       updateFixedPanelTabsState((state) =>
-        replaceOpenFileSearchTab({ nextTab, state }),
+        replaceNewTab({ nextTab, state }),
       );
     },
     [
@@ -833,12 +831,11 @@ export function useThreadFileTabs({
       : null;
   const activeHostFileTab =
     activeTab?.kind === "host-file-preview" ? activeTab : null;
-  const activeOpenFileSearchTab =
-    activeTab?.kind === "open-file-search" ? activeTab : null;
+  const activeNewTab = activeTab?.kind === "new-tab" ? activeTab : null;
 
   return {
     orderedSecondaryFileTabs,
-    activateOpenFileSearchTab,
+    activateNewTab,
     activateHostFileTab,
     activateStorageFileTab,
     activateWorkspaceFileTab,
@@ -851,17 +848,16 @@ export function useThreadFileTabs({
     activeWorkspaceFileStatusLabel: activeWorkspaceFileTab?.statusLabel ?? null,
     clearActiveFileTabs,
     closeHostFileTab,
-    closeOpenFileSearchTab,
+    closeNewTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
-    hasOpenFileSearchTab:
-      findOpenFileSearchTab(fixedPanelTabsState.secondary.tabs) !== null,
-    isOpenFileSearchActive: activeOpenFileSearchTab !== null,
-    openFileSearchTab,
+    hasNewTab: findNewTab(fixedPanelTabsState.secondary.tabs) !== null,
+    isNewTabActive: activeNewTab !== null,
+    openNewTab,
     openHostFile,
     openStorageFile,
     openWorkspaceFile,
     pinnedStorageFilePath,
-    selectOpenFileSearchResult,
+    selectFileSearchResult,
   };
 }

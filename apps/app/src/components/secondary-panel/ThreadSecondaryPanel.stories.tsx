@@ -74,7 +74,7 @@ function ShellRow({
             onPanelChange={noop}
             onCollapse={noop}
             onClose={noop}
-            onOpenFileSearch={noop}
+            onOpenNewTab={noop}
             renderAsDrawer
           />
         </PanelStage>
@@ -84,7 +84,7 @@ function ShellRow({
 }
 
 const placeholderFileContent = (
-  <div className="space-y-2 pt-1 text-sm text-muted-foreground">
+  <div className="space-y-2 px-4 py-2 text-sm text-muted-foreground">
     <p>File tab content placeholder.</p>
   </div>
 );
@@ -149,7 +149,7 @@ function FileTabsShellInner({
         }}
         onCollapse={noop}
         onClose={noop}
-        onOpenFileSearch={noop}
+        onOpenNewTab={noop}
         renderAsDrawer
       />
     </PanelStage>

@@ -78,7 +78,7 @@ import {
   ThreadStorageFilePreviewTabContent,
   WorkspaceFilePreviewTabContent,
 } from "@/components/secondary-panel/ThreadSecondaryPanelTabContent";
-import { OpenFileSearchTabContent } from "@/components/secondary-panel/OpenFileSearchTabContent";
+import { NewTabPage } from "@/components/secondary-panel/NewTabPage";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
@@ -239,8 +239,7 @@ export function ThreadDetailView() {
   });
   const [hasRequestedMergeBaseOptions, setHasRequestedMergeBaseOptions] =
     useState(false);
-  const [openFileSearchFocusRequest, setOpenFileSearchFocusRequest] =
-    useState(0);
+  const [newTabFocusRequest, setNewTabFocusRequest] = useState(0);
   const isSecondaryPanelActive = activeSecondaryPanel !== null;
   const shouldLoadManagerStorageFiles =
     isSecondaryPanelActive && isManagerThread;
@@ -257,7 +256,7 @@ export function ThreadDetailView() {
     threadType: thread?.type,
   });
   const {
-    activateOpenFileSearchTab,
+    activateNewTab,
     activateHostFileTab,
     activateStorageFileTab,
     activateWorkspaceFileTab,
@@ -270,17 +269,17 @@ export function ThreadDetailView() {
     activeWorkspaceFileStatusLabel,
     clearActiveFileTabs,
     closeHostFileTab,
-    closeOpenFileSearchTab,
+    closeNewTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
-    isOpenFileSearchActive,
-    openFileSearchTab,
+    isNewTabActive,
+    openNewTab,
     openHostFile,
     openStorageFile,
     openWorkspaceFile,
     orderedSecondaryFileTabs,
     pinnedStorageFilePath,
-    selectOpenFileSearchResult,
+    selectFileSearchResult,
   } = useThreadFileTabs({
     threadId,
     environmentId: thread?.environmentId,
@@ -436,10 +435,10 @@ export function ThreadDetailView() {
   const handleSecondaryPanelFocus = useCallback(() => {
     touchFixedPanelTabsState();
   }, [touchFixedPanelTabsState]);
-  const handleOpenFileSearch = useCallback(() => {
-    openFileSearchTab();
-    setOpenFileSearchFocusRequest((current) => current + 1);
-  }, [openFileSearchTab]);
+  const handleOpenNewTab = useCallback(() => {
+    openNewTab();
+    setNewTabFocusRequest((current) => current + 1);
+  }, [openNewTab]);
   const handleTerminalPanelResize = useCallback(
     (sizePercent: number) => {
       const panelHeightPercent = Math.round(sizePercent);
@@ -503,20 +502,20 @@ export function ThreadDetailView() {
             onSelect: () => activateStorageFileTab(tab.path),
             onClose: () => closeStorageFileTab(tab.path),
           };
-        case "open-file-search":
+        case "new-tab":
           return {
             id: tab.id,
-            filename: "Open file",
-            isActive: isOpenFileSearchActive,
+            filename: "New tab",
+            isActive: isNewTabActive,
             statusLabel: null,
-            onSelect: activateOpenFileSearchTab,
-            onClose: closeOpenFileSearchTab,
+            onSelect: activateNewTab,
+            onClose: closeNewTab,
           };
       }
     });
     return tabs.length > 0 ? tabs : undefined;
   }, [
-    activateOpenFileSearchTab,
+    activateNewTab,
     activateHostFileTab,
     activateStorageFileTab,
     activateWorkspaceFileTab,
@@ -524,10 +523,10 @@ export function ThreadDetailView() {
     activeStorageFilePath,
     activeWorkspaceFilePath,
     closeHostFileTab,
-    closeOpenFileSearchTab,
+    closeNewTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
-    isOpenFileSearchActive,
+    isNewTabActive,
     orderedSecondaryFileTabs,
   ]);
   const requestedMergeBaseBranch =
@@ -992,14 +991,14 @@ export function ThreadDetailView() {
         rootPath: threadStorageRootPath,
       })
     : null;
-  const fileTabContent = isOpenFileSearchActive ? (
-    <OpenFileSearchTabContent
+  const fileTabContent = isNewTabActive ? (
+    <NewTabPage
       projectId={projectId ?? undefined}
       environmentId={thread.environmentId ?? null}
       currentThreadId={thread.id}
       currentThreadType={thread.type}
-      focusRequest={openFileSearchFocusRequest}
-      onSelect={selectOpenFileSearchResult}
+      focusRequest={newTabFocusRequest}
+      onSelect={selectFileSearchResult}
     />
   ) : activeWorkspaceFilePath ? (
     <WorkspaceFilePreviewTabContent
@@ -1071,7 +1070,7 @@ export function ThreadDetailView() {
           onClose: closeSecondaryPanel,
           onCollapse: closeSecondaryPanel,
           onOpenFileInEditor: handleOpenFileInEditor,
-          onOpenFileSearch: handleOpenFileSearch,
+          onOpenNewTab: handleOpenNewTab,
           onOpenFilePreview: (relativePath: string) => {
             openWorkspaceFile({
               lineNumber: null,

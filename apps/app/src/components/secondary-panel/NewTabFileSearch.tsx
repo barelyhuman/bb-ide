@@ -14,20 +14,20 @@ import {
   useFileSearchSuggestions,
   type FileSearchSuggestion,
 } from "@/hooks/useFileSearchSuggestions";
-import type { OpenFileSearchSelection } from "./useThreadFileTabs";
+import type { FileSearchSelection } from "./useThreadFileTabs";
 import { cn } from "@/lib/utils";
 
-interface OpenFileSearchTabContentProps {
+export interface NewTabFileSearchProps {
   projectId: string | undefined;
   environmentId: string | null;
   currentThreadId: string;
   currentThreadType: ThreadType | undefined;
   focusRequest: number;
   initialQuery?: string;
-  onSelect: (selection: OpenFileSearchSelection) => void;
+  onSelect: (selection: FileSearchSelection) => void;
 }
 
-interface OpenFileSearchResultRowProps {
+interface FileSearchResultRowProps {
   id: string;
   suggestion: FileSearchSuggestion;
   isActive: boolean;
@@ -35,7 +35,7 @@ interface OpenFileSearchResultRowProps {
   onSelect: (suggestion: FileSearchSuggestion) => void;
 }
 
-interface OpenFileSearchMessageProps {
+interface FileSearchMessageProps {
   iconName: "AlertCircle" | "File" | "FileQuestion" | "Spinner";
   iconClassName?: string;
   message: string;
@@ -99,8 +99,8 @@ function getAvailableFileSearchSources({
   return sources;
 }
 
-function getOpenFileResultId(suggestion: FileSearchSuggestion): string {
-  return `open-file-result-${suggestion.source}-${encodeURIComponent(
+function getFileSearchResultId(suggestion: FileSearchSuggestion): string {
+  return `file-search-result-${suggestion.source}-${encodeURIComponent(
     suggestion.path,
   )}`;
 }
@@ -116,7 +116,7 @@ function splitPath(path: string): SplitPathResult {
   };
 }
 
-function getOpenFileResultTitle(suggestion: FileSearchSuggestion): string {
+function getFileSearchResultTitle(suggestion: FileSearchSuggestion): string {
   return `${FILE_SEARCH_SECTION_LABELS[suggestion.source]}: ${suggestion.path}`;
 }
 
@@ -167,11 +167,11 @@ function groupFileSearchSections({
   });
 }
 
-function OpenFileSearchMessage({
+function FileSearchMessage({
   iconName,
   iconClassName,
   message,
-}: OpenFileSearchMessageProps) {
+}: FileSearchMessageProps) {
   return (
     <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
       <div className="flex max-w-64 flex-col items-center gap-2">
@@ -182,13 +182,13 @@ function OpenFileSearchMessage({
   );
 }
 
-function OpenFileSearchResultRow({
+function FileSearchResultRow({
   id,
   suggestion,
   isActive,
   onActivate,
   onSelect,
-}: OpenFileSearchResultRowProps) {
+}: FileSearchResultRowProps) {
   const { directory } = splitPath(suggestion.path);
   const secondaryDirectory = directory || null;
   const handleSelect = useCallback(() => {
@@ -203,7 +203,7 @@ function OpenFileSearchResultRow({
       aria-selected={isActive}
       onClick={handleSelect}
       onMouseEnter={onActivate}
-      title={getOpenFileResultTitle(suggestion)}
+      title={getFileSearchResultTitle(suggestion)}
       className={cn(
         "w-full scroll-mt-7 rounded px-2 py-1.5 text-left text-xs transition-colors",
         isActive ? "bg-state-active" : "hover:bg-state-hover",
@@ -226,7 +226,7 @@ function OpenFileSearchResultRow({
   );
 }
 
-export function OpenFileSearchTabContent({
+export function NewTabFileSearch({
   projectId,
   environmentId,
   currentThreadId,
@@ -234,7 +234,7 @@ export function OpenFileSearchTabContent({
   focusRequest,
   initialQuery = "",
   onSelect,
-}: OpenFileSearchTabContentProps) {
+}: NewTabFileSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(initialQuery);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -279,8 +279,8 @@ export function OpenFileSearchTabContent({
 
   useEffect(() => {
     // Focus synchronously, then again on the next frame to win the focus race
-    // against the dropdown menu that opened this tab — its FocusScope can pull
-    // focus back while it animates closed in the same commit.
+    // against the panel/tab content mounting in the same commit, which can
+    // otherwise pull focus away from the input.
     inputRef.current?.focus();
     const frame = requestAnimationFrame(() => {
       inputRef.current?.focus();
@@ -331,7 +331,7 @@ export function OpenFileSearchTabContent({
   );
 
   return (
-    <div className="flex min-h-full flex-col gap-2 px-4 pt-1">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="relative">
         <Icon
           name="Search"
@@ -345,7 +345,7 @@ export function OpenFileSearchTabContent({
           disabled={isUnavailable}
           aria-label="Search files"
           aria-activedescendant={
-            activeSuggestion ? getOpenFileResultId(activeSuggestion) : undefined
+            activeSuggestion ? getFileSearchResultId(activeSuggestion) : undefined
           }
           placeholder={isUnavailable ? "No searchable source" : "Search files"}
           className="h-8 pl-8 pr-8 text-xs focus-visible:ring-0"
@@ -359,17 +359,17 @@ export function OpenFileSearchTabContent({
       </div>
 
       {isUnavailable ? (
-        <OpenFileSearchMessage
+        <FileSearchMessage
           iconName="FileQuestion"
           message="No searchable file source is available."
         />
       ) : isError ? (
-        <OpenFileSearchMessage
+        <FileSearchMessage
           iconName="AlertCircle"
           message="File search failed."
         />
       ) : isLoading ? (
-        <OpenFileSearchMessage
+        <FileSearchMessage
           iconName="Spinner"
           iconClassName="animate-spin"
           message="Searching files..."
@@ -395,9 +395,9 @@ export function OpenFileSearchTabContent({
               </div>
               <div className="flex flex-col gap-px">
                 {section.items.map(({ suggestion, index }) => (
-                  <OpenFileSearchResultRow
+                  <FileSearchResultRow
                     key={`${suggestion.source}:${suggestion.path}`}
-                    id={getOpenFileResultId(suggestion)}
+                    id={getFileSearchResultId(suggestion)}
                     suggestion={suggestion}
                     isActive={index === activeIndex}
                     onActivate={() => setActiveIndex(index)}
@@ -409,7 +409,7 @@ export function OpenFileSearchTabContent({
           ))}
         </div>
       ) : (
-        <OpenFileSearchMessage
+        <FileSearchMessage
           iconName={hasQuery ? "FileQuestion" : "File"}
           message={hasQuery ? "No files match." : "Type to search files."}
         />

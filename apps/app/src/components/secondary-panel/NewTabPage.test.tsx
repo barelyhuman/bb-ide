@@ -5,8 +5,8 @@ import type { WorkspacePathEntry } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import { OpenFileSearchTabContent } from "./OpenFileSearchTabContent";
-import type { OpenFileSearchSelection } from "./useThreadFileTabs";
+import { NewTabPage } from "./NewTabPage";
+import type { FileSearchSelection } from "./useThreadFileTabs";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -30,11 +30,11 @@ interface PathListFixtureResponse {
   truncated: boolean;
 }
 
-interface RenderOpenFileSearchArgs {
+interface RenderNewTabPageArgs {
   projectId?: string;
   currentThreadId?: string;
   currentThreadType?: "manager" | "standard";
-  onSelect?: (selection: OpenFileSearchSelection) => void;
+  onSelect?: (selection: FileSearchSelection) => void;
 }
 
 function getPathName(pathValue: string): string {
@@ -60,14 +60,14 @@ function makePathResponse(
   };
 }
 
-function renderOpenFileSearch(args: RenderOpenFileSearchArgs = {}) {
+function renderNewTabPage(args: RenderNewTabPageArgs = {}) {
   const { wrapper } = createQueryClientTestHarness();
-  const onSelect: (selection: OpenFileSearchSelection) => void =
+  const onSelect: (selection: FileSearchSelection) => void =
     args.onSelect ?? vi.fn();
   return {
     onSelect,
     ...render(
-      <OpenFileSearchTabContent
+      <NewTabPage
         projectId={args.projectId}
         environmentId="env-1"
         currentThreadId={args.currentThreadId ?? "thr-standard"}
@@ -85,7 +85,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("OpenFileSearchTabContent", () => {
+describe("NewTabPage", () => {
   it("autofocuses search and selects a workspace result", async () => {
     vi.mocked(api.searchProjectPaths).mockResolvedValue(
       makePathResponse([
@@ -96,7 +96,7 @@ describe("OpenFileSearchTabContent", () => {
         },
       ]),
     );
-    const { onSelect } = renderOpenFileSearch({ projectId: "proj-1" });
+    const { onSelect } = renderNewTabPage({ projectId: "proj-1" });
 
     const input = screen.getByRole("textbox", { name: "Search files" });
     expect(document.activeElement).toBe(input);
@@ -135,7 +135,7 @@ describe("OpenFileSearchTabContent", () => {
       ]),
       storageRootPath: "/tmp/thread-storage",
     });
-    const { onSelect } = renderOpenFileSearch({
+    const { onSelect } = renderNewTabPage({
       projectId: "proj-1",
       currentThreadId: "thr-manager",
       currentThreadType: "manager",
@@ -155,7 +155,7 @@ describe("OpenFileSearchTabContent", () => {
   });
 
   it("renders an unavailable state without querying", () => {
-    renderOpenFileSearch();
+    renderNewTabPage();
 
     expect(
       screen.getByText("No searchable file source is available."),

@@ -155,8 +155,8 @@ function hostFileTabId(path: string): string {
   return `host-file-preview:${encodeURIComponent(path)}`;
 }
 
-function openFileSearchTabId(): string {
-  return "open-file-search";
+function newTabId(): string {
+  return "new-tab";
 }
 
 function createStoredWorkspaceTab(
@@ -410,47 +410,47 @@ describe("useThreadFileTabs", () => {
     ]);
   });
 
-  it("opens the transient open file search tab once and does not persist it", () => {
+  it("opens the transient new tab once and does not persist it", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
       threadType: "standard",
       storageFiles: undefined,
-      threadId: "thr-open-file-search",
+      threadId: "thr-new-tab",
     });
 
     act(() => {
-      result.current.openFileSearchTab();
-      result.current.openFileSearchTab();
+      result.current.openNewTab();
+      result.current.openNewTab();
     });
 
-    expect(result.current.hasOpenFileSearchTab).toBe(true);
-    expect(result.current.isOpenFileSearchActive).toBe(true);
+    expect(result.current.hasNewTab).toBe(true);
+    expect(result.current.isNewTabActive).toBe(true);
     expect(result.current.fixedPanelTabsState.secondary.tabs).toEqual([
       {
-        id: openFileSearchTabId(),
-        kind: "open-file-search",
+        id: newTabId(),
+        kind: "new-tab",
       },
     ]);
-    expect(readStoredState("thr-open-file-search").secondary.tabs).toEqual([]);
+    expect(readStoredState("thr-new-tab").secondary.tabs).toEqual([]);
   });
 
-  it("replaces the open file search tab with a selected workspace preview", () => {
+  it("replaces the new tab with a selected workspace preview", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
       threadType: "standard",
       storageFiles: undefined,
-      threadId: "thr-open-file-workspace",
+      threadId: "thr-new-tab-workspace",
     });
 
     act(() => {
-      result.current.openFileSearchTab();
-      result.current.selectOpenFileSearchResult({
+      result.current.openNewTab();
+      result.current.selectFileSearchResult({
         source: "workspace",
         path: "src/open.ts",
       });
     });
 
-    expect(result.current.hasOpenFileSearchTab).toBe(false);
+    expect(result.current.hasNewTab).toBe(false);
     expect(result.current.activeWorkspaceFilePath).toBe("src/open.ts");
     expect(result.current.fixedPanelTabsState.secondary.tabs).toEqual([
       {
@@ -465,12 +465,12 @@ describe("useThreadFileTabs", () => {
     ]);
   });
 
-  it("focuses an already-open workspace preview and removes the search tab", () => {
+  it("focuses an already-open workspace preview and removes the new tab", () => {
     const { result } = renderThreadFileTabsHook({
       environmentId: "env-one",
       threadType: "standard",
       storageFiles: undefined,
-      threadId: "thr-open-file-dedupe",
+      threadId: "thr-new-tab-dedupe",
     });
     const workspaceTab = buildWorkspaceFileTab({
       lineNumber: 7,
@@ -479,14 +479,14 @@ describe("useThreadFileTabs", () => {
 
     act(() => {
       result.current.openWorkspaceFile(workspaceTab);
-      result.current.openFileSearchTab();
-      result.current.selectOpenFileSearchResult({
+      result.current.openNewTab();
+      result.current.selectFileSearchResult({
         source: "workspace",
         path: "src/existing.ts",
       });
     });
 
-    expect(result.current.hasOpenFileSearchTab).toBe(false);
+    expect(result.current.hasNewTab).toBe(false);
     expect(result.current.activeWorkspaceFilePath).toBe("src/existing.ts");
     expect(result.current.activeWorkspaceFileLineNumber).toBe(7);
     expect(result.current.fixedPanelTabsState.secondary.tabs).toHaveLength(1);

@@ -13,11 +13,11 @@ import {
 } from "@/hooks/queries/query-keys";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import type { SecondaryPanelFileTab } from "./ThreadSecondaryPanel";
-import { OpenFileSearchTabContent } from "./OpenFileSearchTabContent";
-import type { OpenFileSearchSelection } from "./useThreadFileTabs";
+import { NewTabPage } from "./NewTabPage";
+import type { FileSearchSelection } from "./useThreadFileTabs";
 
 export default {
-  title: "secondary-panel/Open file",
+  title: "secondary-panel/New tab",
 };
 
 const PROJECT_ID = "proj_bb";
@@ -28,9 +28,9 @@ const STORY_SOURCE_LIMIT = 40;
 
 const noop = () => {};
 
-const OPEN_FILE_SEARCH_TAB: SecondaryPanelFileTab = {
-  id: "open-file-search",
-  filename: "Open file",
+const NEW_TAB: SecondaryPanelFileTab = {
+  id: "new-tab",
+  filename: "New tab",
   isActive: true,
   statusLabel: null,
   onSelect: noop,
@@ -139,15 +139,13 @@ function useStoryQueryClient() {
   }, []);
 }
 
-function OpenFilePanelStory() {
-  const [selection, setSelection] = useState<OpenFileSearchSelection | null>(
-    null,
-  );
+function NewTabPanelStory() {
+  const [selection, setSelection] = useState<FileSearchSelection | null>(null);
   const queryClient = useStoryQueryClient();
   const fileTabs = useMemo<SecondaryPanelFileTab[]>(
     () =>
       selection === null
-        ? [OPEN_FILE_SEARCH_TAB]
+        ? [NEW_TAB]
         : [
             {
               id: `${selection.source}:${selection.path}`,
@@ -163,7 +161,7 @@ function OpenFilePanelStory() {
   const content =
     selection === null ? (
       <QueryClientProvider client={queryClient}>
-        <OpenFileSearchTabContent
+        <NewTabPage
           projectId={PROJECT_ID}
           environmentId={ENVIRONMENT_ID}
           currentThreadId={THREAD_ID}
@@ -199,7 +197,7 @@ function OpenFilePanelStory() {
         metadataContent={null}
         onCollapse={noop}
         onClose={noop}
-        onOpenFileSearch={() => setSelection(null)}
+        onOpenNewTab={() => setSelection(null)}
         onPanelChange={noop}
         onPanelFocus={noop}
         renderAsDrawer
@@ -209,14 +207,14 @@ function OpenFilePanelStory() {
   );
 }
 
-export function OpenFileSearchTab() {
+export function NewTab() {
   return (
     <StoryCard>
       <StoryRow
         label="transient tab"
-        hint="active Open file tab seeded with workspace and manager thread-storage matches"
+        hint="active New tab seeded with workspace and manager thread-storage matches"
       >
-        <OpenFilePanelStory />
+        <NewTabPanelStory />
       </StoryRow>
     </StoryCard>
   );

@@ -210,4 +210,52 @@ describe("usePathSuggestions", () => {
 
     expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
   });
+
+  it("does not query any source for an empty query", () => {
+    const { wrapper } = createQueryClientTestHarness();
+    renderHook(
+      () =>
+        usePathSuggestions({
+          projectId: "proj-1",
+          query: "",
+          environmentId: "env-1",
+          currentThreadId: "thr-manager",
+          currentThreadType: "manager",
+          includeDirectories: false,
+        }),
+      { wrapper },
+    );
+
+    expect(api.searchProjectPaths).not.toHaveBeenCalled();
+    expect(api.listThreadStoragePaths).not.toHaveBeenCalled();
+  });
+
+  it("reports no error once the query is cleared, even after a failed search", async () => {
+    vi.mocked(api.searchProjectPaths).mockRejectedValue(
+      new Error("search failed"),
+    );
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result, rerender } = renderHook(
+      ({ query }: { query: string }) =>
+        usePathSuggestions({
+          projectId: "proj-1",
+          query,
+          environmentId: "env-1",
+          currentThreadId: "thr-standard",
+          currentThreadType: "standard",
+          includeDirectories: false,
+        }),
+      { wrapper, initialProps: { query: "src" } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+
+    rerender({ query: "" });
+
+    expect(result.current.isError).toBe(false);
+    expect(result.current.suggestions).toEqual([]);
+  });
 });

@@ -115,7 +115,10 @@ export function usePathSuggestions(
     args.currentThreadId ?? "",
     threadStorageOptions,
     {
-      enabled: includeThreadStorage,
+      // Match the workspace query: only search once there is a (debounced)
+      // query. Without this an empty input still fires a storage request whose
+      // results we discard, and whose failure surfaces as a spurious error.
+      enabled: includeThreadStorage && debouncedTrimmedQuery.length > 0,
     },
   );
 
@@ -170,8 +173,9 @@ export function usePathSuggestions(
     suggestions.length === 0 &&
     (isDebouncing || isPending || isFetching);
   const isError =
-    workspaceQuery.isError ||
-    (includeThreadStorage && threadStorageQuery.isError);
+    hasQuery &&
+    (workspaceQuery.isError ||
+      (includeThreadStorage && threadStorageQuery.isError));
 
   return {
     suggestions,

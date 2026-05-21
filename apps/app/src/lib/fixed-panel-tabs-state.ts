@@ -14,7 +14,7 @@ export const FIXED_PANEL_TABS_IDLE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
 
 const THREAD_INFO_TAB_ID = "thread-info";
 const GIT_DIFF_TAB_ID = "git-diff";
-const OPEN_FILE_SEARCH_TAB_ID = "open-file-search";
+const NEW_TAB_TAB_ID = "new-tab";
 
 const environmentFilePreviewSourceSchema: z.ZodType<EnvironmentFilePreviewSource> =
   z.discriminatedUnion("kind", [
@@ -76,10 +76,10 @@ const threadStorageFilePreviewFixedPanelTabSchema = z
     path: z.string().min(1),
   })
   .strict();
-const openFileSearchFixedPanelTabSchema = z
+const newTabFixedPanelTabSchema = z
   .object({
-    id: z.literal(OPEN_FILE_SEARCH_TAB_ID),
-    kind: z.literal("open-file-search"),
+    id: z.literal(NEW_TAB_TAB_ID),
+    kind: z.literal("new-tab"),
   })
   .strict();
 const terminalFixedPanelTabSchema = z
@@ -95,7 +95,7 @@ const secondaryFixedPanelTabSchema = z.discriminatedUnion("kind", [
   workspaceFilePreviewFixedPanelTabSchema,
   hostFilePreviewFixedPanelTabSchema,
   threadStorageFilePreviewFixedPanelTabSchema,
-  openFileSearchFixedPanelTabSchema,
+  newTabFixedPanelTabSchema,
 ]);
 const bottomFixedPanelTabSchema = z.discriminatedUnion("kind", [
   terminalFixedPanelTabSchema,
@@ -172,9 +172,9 @@ export interface ThreadStorageFilePreviewFixedPanelTab {
   path: string;
 }
 
-export interface OpenFileSearchFixedPanelTab {
-  id: typeof OPEN_FILE_SEARCH_TAB_ID;
-  kind: "open-file-search";
+export interface NewTabFixedPanelTab {
+  id: typeof NEW_TAB_TAB_ID;
+  kind: "new-tab";
 }
 
 export interface TerminalFixedPanelTab {
@@ -189,7 +189,7 @@ export type SecondaryFixedPanelTab =
   | WorkspaceFilePreviewFixedPanelTab
   | HostFilePreviewFixedPanelTab
   | ThreadStorageFilePreviewFixedPanelTab
-  | OpenFileSearchFixedPanelTab;
+  | NewTabFixedPanelTab;
 
 /**
  * The subset of secondary-panel tabs rendered as closable file tabs in the tab
@@ -200,7 +200,7 @@ export type SecondaryFileFixedPanelTab =
   | WorkspaceFilePreviewFixedPanelTab
   | HostFilePreviewFixedPanelTab
   | ThreadStorageFilePreviewFixedPanelTab
-  | OpenFileSearchFixedPanelTab;
+  | NewTabFixedPanelTab;
 
 export type BottomFixedPanelTab = TerminalFixedPanelTab;
 
@@ -346,10 +346,10 @@ export function createThreadStorageFilePreviewFixedPanelTab({
   };
 }
 
-export function createOpenFileSearchFixedPanelTab(): OpenFileSearchFixedPanelTab {
+export function createNewTabFixedPanelTab(): NewTabFixedPanelTab {
   return {
-    id: OPEN_FILE_SEARCH_TAB_ID,
-    kind: "open-file-search",
+    id: NEW_TAB_TAB_ID,
+    kind: "new-tab",
   };
 }
 
@@ -374,7 +374,7 @@ function isTabSupportedInRegion(
 }
 
 function isTransientFixedPanelTab(tab: FixedPanelTab): boolean {
-  return tab.kind === "open-file-search";
+  return tab.kind === "new-tab";
 }
 
 function normalizeFixedPanelTabGroupState({
@@ -599,7 +599,7 @@ export function areFixedPanelTabsEquivalent(
   switch (a.kind) {
     case "thread-info":
     case "git-diff":
-    case "open-file-search":
+    case "new-tab":
       return true;
     case "workspace-file-preview":
       return (

@@ -5,7 +5,7 @@ import {
   EMPTY_FIXED_PANEL_TABS_STATE,
   FIXED_PANEL_TABS_IDLE_EXPIRY_MS,
   createEmptyFixedPanelTabsState,
-  createOpenFileSearchFixedPanelTab,
+  createNewTabFixedPanelTab,
   getFixedPanelTabsStateStorageKey,
   normalizeFixedPanelTabsState,
   parseFixedPanelTabsState,
@@ -258,8 +258,8 @@ describe("fixed panel tabs normalization", () => {
     expect(normalized.bottom.activeTabId).toBe(terminalTabId("term_1"));
   });
 
-  it("removes transient open file search tabs from persisted state", () => {
-    const searchTab = createOpenFileSearchFixedPanelTab();
+  it("removes transient new tabs from persisted state", () => {
+    const searchTab = createNewTabFixedPanelTab();
     const workspaceTab: WorkspaceFilePreviewFixedPanelTab = {
       environmentId: "env-current",
       id: workspaceFileTabId("src/app.ts"),
@@ -285,7 +285,7 @@ describe("fixed panel tabs normalization", () => {
 
     const storedValue = serializeFixedPanelTabsState({ state });
 
-    expect(storedValue).not.toContain("open-file-search");
+    expect(storedValue).not.toContain("new-tab");
     expect(
       parseFixedPanelTabsState({
         initialValue: EMPTY_FIXED_PANEL_TABS_STATE,
