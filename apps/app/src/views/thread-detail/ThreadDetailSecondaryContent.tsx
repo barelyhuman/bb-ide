@@ -42,6 +42,7 @@ type ThreadSecondaryPanelProps = Omit<
   ComponentProps<typeof ThreadSecondaryPanel>,
   "metadataContent" | "renderAsDrawer"
 >;
+type TerminalPanelDraggingHandler = (isDragging: boolean) => void;
 
 interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
@@ -77,7 +78,15 @@ export function ThreadDetailSecondaryContent({
 
   const terminalPanelRef = useRef<ImperativePanelHandle | null>(null);
   const lastTerminalSizeRef = useRef(terminalPanelHeightPercent);
+  const isTerminalPanelDraggingRef = useRef(false);
   const didMountTerminalRef = useRef(false);
+
+  useEffect(() => {
+    if (isTerminalPanelDraggingRef.current) {
+      return;
+    }
+    lastTerminalSizeRef.current = terminalPanelHeightPercent;
+  }, [terminalPanelHeightPercent]);
 
   useEffect(() => {
     // Skip initial mount — Panel's defaultSize handles it.
@@ -96,16 +105,37 @@ export function ThreadDetailSecondaryContent({
     }
   }, [terminalPanelOpen]);
 
+  const persistTerminalPanelSize = useCallback(() => {
+    const size = lastTerminalSizeRef.current;
+    if (size <= 0) {
+      return;
+    }
+    onTerminalPanelResize(size);
+  }, [onTerminalPanelResize]);
+
   const handleTerminalPanelResize = useCallback(
     (size: number) => {
       if (size <= 0) {
         return;
       }
       lastTerminalSizeRef.current = size;
-      onTerminalPanelResize(size);
+      if (!isTerminalPanelDraggingRef.current) {
+        onTerminalPanelResize(size);
+      }
     },
     [onTerminalPanelResize],
   );
+
+  const handleTerminalPanelDragging =
+    useCallback<TerminalPanelDraggingHandler>(
+      (isDragging) => {
+        isTerminalPanelDraggingRef.current = isDragging;
+        if (!isDragging) {
+          persistTerminalPanelSize();
+        }
+      },
+      [persistTerminalPanelSize],
+    );
 
   const metadataContent = hasAnyThreadMetadata(metadata) ? (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -173,7 +203,10 @@ export function ThreadDetailSecondaryContent({
         </Panel>
         {terminalPanel ? (
           <>
-            <TerminalPanelResizeHandle isOpen={terminalPanelOpen} />
+            <TerminalPanelResizeHandle
+              isOpen={terminalPanelOpen}
+              onDragging={handleTerminalPanelDragging}
+            />
             <Panel
               ref={terminalPanelRef}
               id="thread-detail-terminal-panel"
@@ -221,11 +254,20 @@ export function ThreadDetailSecondaryContent({
   );
 }
 
-function TerminalPanelResizeHandle({ isOpen }: { isOpen: boolean }) {
+interface TerminalPanelResizeHandleProps {
+  isOpen: boolean;
+  onDragging: TerminalPanelDraggingHandler;
+}
+
+function TerminalPanelResizeHandle({
+  isOpen,
+  onDragging,
+}: TerminalPanelResizeHandleProps) {
   return (
     <PanelResizeHandle
       id="thread-detail-terminal-panel-handle"
       disabled={!isOpen}
+      onDragging={onDragging}
       className={cn(
         "group relative shrink-0 cursor-row-resize overflow-visible bg-transparent transition-[height,opacity,background-color]",
         TERMINAL_PANEL_TRANSITION_CLASS,

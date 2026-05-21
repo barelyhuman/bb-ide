@@ -10,6 +10,13 @@ import { buildTerminalWebSocketUrl } from "./terminal-websocket-url";
 const TERMINAL_FONT_FAMILY =
   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
 
+type TerminalFitScheduler = () => void;
+
+interface HasVisibleTerminalSizeArgs {
+  containerElement: HTMLElement;
+  entries?: readonly ResizeObserverEntry[];
+}
+
 function readResolvedCssColor(
   probe: HTMLElement,
   varName: string,
@@ -134,6 +141,16 @@ function sendTerminalResize({
   );
 }
 
+function hasVisibleTerminalSize({
+  containerElement,
+  entries,
+}: HasVisibleTerminalSizeArgs): boolean {
+  const entry = entries?.[0];
+  const width = entry?.contentRect.width ?? containerElement.clientWidth;
+  const height = entry?.contentRect.height ?? containerElement.clientHeight;
+  return width > 0 && height > 0;
+}
+
 function writeTerminalStatus({ terminal, text }: WriteTerminalStatusArgs): void {
   terminal.write(`\r\n\x1b[2m${text}\x1b[0m\r\n`);
 }
@@ -209,6 +226,7 @@ export function ThreadTerminalView({
   );
   const onUserInputRef = useRef<(() => void) | undefined>(onUserInput);
   const isPanelOpenRef = useRef(isPanelOpen);
+  const scheduleFitRef = useRef<TerminalFitScheduler | null>(null);
   const preferredTheme = usePreferredTheme();
 
   isPanelOpenRef.current = isPanelOpen;
@@ -229,6 +247,7 @@ export function ThreadTerminalView({
     const replayWriteState: TerminalReplayWriteState = {
       suppressedWriteCount: 0,
     };
+    let resizeAnimationFrame: number | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
     async function mountTerminal(containerElement: HTMLDivElement): Promise<void> {
@@ -259,7 +278,32 @@ export function ThreadTerminalView({
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(new WebLinksAddon());
       terminal.open(containerElement);
-      fitAddon.fit();
+      const fitTerminal = () => {
+        if (!fitAddon || !terminal) {
+          return;
+        }
+        if (!hasVisibleTerminalSize({ containerElement })) {
+          return;
+        }
+        fitAddon.fit();
+        if (socket) {
+          sendTerminalResize({
+            socket,
+            terminal,
+          });
+        }
+      };
+      const scheduleFit: TerminalFitScheduler = () => {
+        if (resizeAnimationFrame !== null) {
+          return;
+        }
+        resizeAnimationFrame = window.requestAnimationFrame(() => {
+          resizeAnimationFrame = null;
+          fitTerminal();
+        });
+      };
+      fitTerminal();
+      scheduleFitRef.current = scheduleFit;
       if (isPanelOpenRef.current) {
         terminal.focus();
       }
@@ -333,15 +377,11 @@ export function ThreadTerminalView({
         onTitleChangeRef.current?.(title);
       });
 
-      resizeObserver = new ResizeObserver(() => {
-        if (!fitAddon || !terminal || !socket) {
+      resizeObserver = new ResizeObserver((entries) => {
+        if (!hasVisibleTerminalSize({ containerElement, entries })) {
           return;
         }
-        fitAddon.fit();
-        sendTerminalResize({
-          socket,
-          terminal,
-        });
+        scheduleFit();
       });
       resizeObserver.observe(containerElement);
     }
@@ -355,10 +395,14 @@ export function ThreadTerminalView({
 
     return () => {
       disposed = true;
+      if (resizeAnimationFrame !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrame);
+      }
       resizeObserver?.disconnect();
       socket?.close();
       terminal?.dispose();
       terminalRef.current = null;
+      scheduleFitRef.current = null;
     };
   }, [session.id, threadId]);
 
@@ -367,6 +411,7 @@ export function ThreadTerminalView({
       return;
     }
     terminalRef.current?.focus();
+    scheduleFitRef.current?.();
   }, [isPanelOpen]);
 
   useEffect(() => {
@@ -378,9 +423,11 @@ export function ThreadTerminalView({
   }, [preferredTheme]);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full min-h-0 w-full overflow-hidden bg-background p-2"
-    />
+    <div className="h-full min-h-0 w-full overflow-hidden bg-background p-2">
+      <div
+        ref={containerRef}
+        className="h-full min-h-0 w-full overflow-hidden"
+      />
+    </div>
   );
 }

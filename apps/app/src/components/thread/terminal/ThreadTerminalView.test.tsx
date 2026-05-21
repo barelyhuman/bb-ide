@@ -9,6 +9,16 @@ type TerminalDataHandler = (data: string) => void;
 type TerminalTitleHandler = (title: string) => void;
 type TerminalWriteCallback = () => void;
 
+interface PendingAnimationFrame {
+  callback: FrameRequestCallback;
+  id: number;
+}
+
+interface ResizeObserverTriggerSize {
+  height: number;
+  width: number;
+}
+
 const xtermMocks = vi.hoisted(() => {
   class MockTerminal {
     static instances: MockTerminal[] = [];
@@ -65,7 +75,13 @@ const xtermMocks = vi.hoisted(() => {
   }
 
   class MockFitAddon {
+    static instances: MockFitAddon[] = [];
+
     readonly fit = vi.fn();
+
+    constructor() {
+      MockFitAddon.instances.push(this);
+    }
   }
 
   class MockWebLinksAddon {}
@@ -90,9 +106,58 @@ vi.mock("@xterm/addon-web-links", () => ({
 }));
 
 class FakeResizeObserver {
-  disconnect(): void {}
+  static instances: FakeResizeObserver[] = [];
 
-  observe(): void {}
+  private readonly callback: ResizeObserverCallback;
+  private readonly observedTargets: Element[] = [];
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    FakeResizeObserver.instances.push(this);
+  }
+
+  disconnect(): void {
+    this.observedTargets.length = 0;
+  }
+
+  observe(target: Element): void {
+    this.observedTargets.push(target);
+  }
+
+  unobserve(target: Element): void {
+    const index = this.observedTargets.indexOf(target);
+    if (index >= 0) {
+      this.observedTargets.splice(index, 1);
+    }
+  }
+
+  trigger({ height, width }: ResizeObserverTriggerSize): void {
+    const target = this.observedTargets[0] ?? document.body;
+    Object.defineProperty(target, "clientWidth", {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(target, "clientHeight", {
+      configurable: true,
+      value: height,
+    });
+    const size = {
+      blockSize: height,
+      inlineSize: width,
+    };
+    this.callback(
+      [
+        {
+          borderBoxSize: [size],
+          contentBoxSize: [size],
+          contentRect: new DOMRect(0, 0, width, height),
+          devicePixelContentBoxSize: [size],
+          target,
+        },
+      ],
+      this,
+    );
+  }
 }
 
 class FakeTerminalWebSocket {
@@ -147,9 +212,37 @@ const terminalSession: TerminalSession = {
   updatedAt: 1,
 };
 
+let nextAnimationFrameId = 1;
+let pendingAnimationFrames: PendingAnimationFrame[] = [];
+
+function requestAnimationFrameMock(callback: FrameRequestCallback): number {
+  const id = nextAnimationFrameId;
+  nextAnimationFrameId += 1;
+  pendingAnimationFrames.push({ callback, id });
+  return id;
+}
+
+function cancelAnimationFrameMock(id: number): void {
+  pendingAnimationFrames = pendingAnimationFrames.filter((frame) => {
+    return frame.id !== id;
+  });
+}
+
+function flushAnimationFrames(): void {
+  const frames = pendingAnimationFrames;
+  pendingAnimationFrames = [];
+  for (const frame of frames) {
+    frame.callback(performance.now());
+  }
+}
+
 beforeEach(() => {
   xtermMocks.MockTerminal.instances.length = 0;
+  xtermMocks.MockFitAddon.instances.length = 0;
+  FakeResizeObserver.instances.length = 0;
   FakeTerminalWebSocket.instances.length = 0;
+  nextAnimationFrameId = 1;
+  pendingAnimationFrames = [];
   Object.defineProperty(globalThis, "ResizeObserver", {
     configurable: true,
     value: FakeResizeObserver,
@@ -157,6 +250,14 @@ beforeEach(() => {
   Object.defineProperty(globalThis, "WebSocket", {
     configurable: true,
     value: FakeTerminalWebSocket,
+  });
+  Object.defineProperty(globalThis, "requestAnimationFrame", {
+    configurable: true,
+    value: requestAnimationFrameMock,
+  });
+  Object.defineProperty(globalThis, "cancelAnimationFrame", {
+    configurable: true,
+    value: cancelAnimationFrameMock,
   });
 });
 
@@ -423,5 +524,78 @@ describe("ThreadTerminalView", () => {
     );
 
     expect(terminal.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fit the terminal when the panel reports a hidden size", async () => {
+    render(
+      <ThreadTerminalView
+        isPanelOpen={true}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(xtermMocks.MockFitAddon.instances).toHaveLength(1);
+      expect(FakeResizeObserver.instances).toHaveLength(1);
+    });
+
+    const fitAddon = xtermMocks.MockFitAddon.instances[0];
+    const resizeObserver = FakeResizeObserver.instances[0];
+    if (!fitAddon || !resizeObserver) {
+      throw new Error("Expected fit addon and resize observer instances");
+    }
+    fitAddon.fit.mockClear();
+
+    resizeObserver.trigger({ height: 0, width: 640 });
+    flushAnimationFrames();
+
+    expect(fitAddon.fit).not.toHaveBeenCalled();
+  });
+
+  it("fits and reports terminal size after a visible panel resize", async () => {
+    render(
+      <ThreadTerminalView
+        isPanelOpen={true}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeTerminalWebSocket.instances).toHaveLength(1);
+      expect(xtermMocks.MockFitAddon.instances).toHaveLength(1);
+      expect(xtermMocks.MockTerminal.instances).toHaveLength(1);
+      expect(FakeResizeObserver.instances).toHaveLength(1);
+    });
+
+    const socket = FakeTerminalWebSocket.instances[0];
+    const terminal = xtermMocks.MockTerminal.instances[0];
+    const fitAddon = xtermMocks.MockFitAddon.instances[0];
+    const resizeObserver = FakeResizeObserver.instances[0];
+    if (!socket || !terminal || !fitAddon || !resizeObserver) {
+      throw new Error("Expected terminal resize harness instances");
+    }
+
+    socket.open();
+    socket.sentMessages.length = 0;
+    terminal.cols = 120;
+    terminal.rows = 40;
+    fitAddon.fit.mockClear();
+
+    resizeObserver.trigger({ height: 420, width: 900 });
+
+    expect(fitAddon.fit).not.toHaveBeenCalled();
+
+    flushAnimationFrames();
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+    expect(socket.sentMessages.map((message) => JSON.parse(message))).toEqual([
+      {
+        type: "resize",
+        cols: 120,
+        rows: 40,
+      },
+    ]);
   });
 });
