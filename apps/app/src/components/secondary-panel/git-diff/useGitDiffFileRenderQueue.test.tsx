@@ -351,6 +351,51 @@ describe("useGitDiffFileRenderQueue", () => {
     expect(store.get(gitDiffLoadingFileKeysAtom)).toEqual(new Set());
   });
 
+  it("requeues unchanged parsed entries when only the diff identity changes", () => {
+    vi.useFakeTimers();
+    const entries = buildEntries(["src/shared.ts"]);
+    const entry = entries[0];
+    expect(entry).toBeDefined();
+    if (!entry) return;
+    const { result, rerender, store } = renderQueueHook({
+      environmentId: "env-test",
+      expectedGitDiffFileCount: entries.length,
+      gitDiffIdentity: "env-test:all:main:merge-base",
+      isDiffPanelActive: true,
+      isParsingGitDiffFiles: false,
+      parsedGitDiffFileEntries: entries,
+    });
+
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(store.get(gitDiffLoadingFileKeysAtom)).toEqual(new Set());
+    expect(result.current.queuedGitDiffFileRenderKeys.has(entry.key)).toBe(
+      true,
+    );
+
+    rerender({
+      environmentId: "env-test",
+      expectedGitDiffFileCount: entries.length,
+      gitDiffIdentity: "env-test:commit:abc123",
+      isDiffPanelActive: true,
+      isParsingGitDiffFiles: false,
+      parsedGitDiffFileEntries: entries,
+    });
+
+    expect(result.current.queuedGitDiffFileRenderKeys.has(entry.key)).toBe(
+      true,
+    );
+    expect(store.get(gitDiffLoadingFileKeysAtom)).toEqual(
+      new Set([entry.key]),
+    );
+
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(store.get(gitDiffLoadingFileKeysAtom)).toEqual(new Set());
+  });
+
   it("toggles all files between collapsed and render-queued expanded states", () => {
     vi.useFakeTimers();
     const entries = buildEntries(["src/a.ts", "src/b.ts"]);

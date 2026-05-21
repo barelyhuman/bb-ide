@@ -304,6 +304,8 @@ export function useGitDiffFileRenderQueue({
     clearAllScheduledGitDiffFileRenders,
     expectedGitDiffFileCount,
     getCollapsedFileKeys,
+    // Dependency-only: the reset effect keys on identity, so placeholder-stable entries must requeue after identity-only changes.
+    gitDiffIdentity,
     isDiffPanelActive,
     isParsingGitDiffFiles,
     parsedGitDiffFileEntries,
