@@ -8,6 +8,8 @@ import tailwindcss from "@tailwindcss/vite";
 // here crashes Ladle's transform pipeline with "Missing field `moduleType`".
 export default defineConfig({
   plugins: [tailwindcss()],
+  // Keep app and Ladle dep optimization metadata from clobbering each other.
+  cacheDir: "node_modules/.vite/ladle",
   resolve: {
     conditions: ["source"],
     alias: {

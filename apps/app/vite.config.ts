@@ -7,6 +7,8 @@ import { serverPortConfig } from "../../packages/config/src/server-port.js";
 
 const sharedConfig = {
   plugins: [react(), tailwindcss()],
+  // Keep app and Ladle dep optimization metadata from clobbering each other.
+  cacheDir: "node_modules/.vite/app",
   build: {
     // Skip compressed-size calculation to keep production app builds fast.
     reportCompressedSize: false,
