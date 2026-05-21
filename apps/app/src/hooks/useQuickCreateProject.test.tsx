@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 
 import { Suspense, useEffect, type ReactNode } from "react";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { Host } from "@bb/domain";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import {
@@ -22,6 +30,11 @@ interface QuickCreateFetchState {
 
 interface SuspenseWrapperProps {
   children: ReactNode;
+}
+
+interface SuspenseWrapperArgs {
+  initialEntry?: string;
+  onPathname?: (pathname: string) => void;
 }
 
 type QuickCreateProjectSnapshot = ReturnType<
@@ -47,12 +60,52 @@ function makeHost(overrides: HostOverrides = {}): Host {
 }
 
 function createSuspenseWrapper() {
+  return createRoutedSuspenseWrapper({});
+}
+
+function createRoutedSuspenseWrapper(args: SuspenseWrapperArgs) {
   const { wrapper: baseWrapper } = createQueryClientTestHarness();
 
   return ({ children }: SuspenseWrapperProps) =>
     baseWrapper({
-      children: <Suspense fallback={null}>{children}</Suspense>,
+      children: (
+        <MemoryRouter initialEntries={[args.initialEntry ?? "/"]}>
+          {args.onPathname ? (
+            <LocationCapture onPathname={args.onPathname} />
+          ) : null}
+          <Suspense fallback={null}>{children}</Suspense>
+        </MemoryRouter>
+      ),
     });
+}
+
+interface LocationCaptureProps {
+  onPathname: (pathname: string) => void;
+}
+
+function LocationCapture({ onPathname }: LocationCaptureProps) {
+  const location = useLocation();
+
+  useEffect(() => {
+    onPathname(location.pathname);
+  }, [location.pathname, onPathname]);
+
+  return null;
+}
+
+function BackButton() {
+  const navigate = useNavigate();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigate(-1);
+      }}
+    >
+      Go back
+    </button>
+  );
 }
 
 function QuickCreateProjectCapture({
@@ -188,8 +241,9 @@ describe("useQuickCreateProject", () => {
     ).toEqual({ kind: "create" });
   });
 
-  it("creates a project from the submitted absolute path and closes the dialog on success", async () => {
+  it("creates a project from the submitted absolute path, closes the dialog, and navigates to the project", async () => {
     const createdProjectRequests: CreateProjectRequest[] = [];
+    const pathnames: string[] = [];
     installQuickCreateFetchRoutes(
       {
         daemonConnected: true,
@@ -205,13 +259,22 @@ describe("useQuickCreateProject", () => {
     };
     await act(async () => {
       render(
-        <QuickCreateProjectCapture
-          onSnapshot={(snapshot) => {
-            latestSnapshot.current = snapshot;
-          }}
-          useQuickCreateProject={useQuickCreateProject}
-        />,
-        { wrapper: createSuspenseWrapper() },
+        <>
+          <QuickCreateProjectCapture
+            onSnapshot={(snapshot) => {
+              latestSnapshot.current = snapshot;
+            }}
+            useQuickCreateProject={useQuickCreateProject}
+          />
+          <BackButton />
+        </>,
+        {
+          wrapper: createRoutedSuspenseWrapper({
+            onPathname: (pathname) => {
+              pathnames.push(pathname);
+            },
+          }),
+        },
       );
     });
 
@@ -250,6 +313,80 @@ describe("useQuickCreateProject", () => {
         requireQuickCreateProjectSnapshot(latestSnapshot.current)
           .projectPathDialog.isOpen,
       ).toBe(false);
+    });
+    await waitFor(() => {
+      expect(pathnames.at(-1)).toBe("/projects/proj-1");
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Go back" }));
+    });
+
+    expect(pathnames.at(-1)).toBe("/projects/proj-1");
+    expect(pathnames.at(-1)).not.toBe("/");
+  });
+
+  it("pushes created-project navigation from non-root routes so back returns to the previous project", async () => {
+    const createdProjectRequests: CreateProjectRequest[] = [];
+    const pathnames: string[] = [];
+    installQuickCreateFetchRoutes(
+      {
+        daemonConnected: true,
+        hostDaemonPort: 4123,
+        hosts: [makeHost()],
+      },
+      createdProjectRequests,
+    );
+
+    const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
+    const latestSnapshot: { current: QuickCreateProjectSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <>
+          <QuickCreateProjectCapture
+            onSnapshot={(snapshot) => {
+              latestSnapshot.current = snapshot;
+            }}
+            useQuickCreateProject={useQuickCreateProject}
+          />
+          <BackButton />
+        </>,
+        {
+          wrapper: createRoutedSuspenseWrapper({
+            initialEntry: "/projects/proj-existing",
+            onPathname: (pathname) => {
+              pathnames.push(pathname);
+            },
+          }),
+        },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        requireQuickCreateProjectSnapshot(latestSnapshot.current).isAvailable,
+      ).toBe(true);
+    });
+
+    act(() => {
+      requireQuickCreateProjectSnapshot(
+        latestSnapshot.current,
+      ).submitProjectPath({ kind: "create" }, "/srv/repos/demo");
+    });
+
+    await waitFor(() => {
+      expect(createdProjectRequests).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(pathnames.at(-1)).toBe("/projects/proj-1");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Go back" }));
+
+    await waitFor(() => {
+      expect(pathnames.at(-1)).toBe("/projects/proj-existing");
     });
   });
 

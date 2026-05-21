@@ -5,6 +5,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { deriveProjectNameFromPath } from "@bb/domain";
 import type { HostPlatform } from "@bb/host-daemon-contract";
 import { useCreateProject } from "@/hooks/mutations/project-mutations";
@@ -12,6 +13,7 @@ import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
 } from "@/hooks/useLocalPathPicker";
+import { APP_ROOT_ROUTE_PATH } from "@/lib/app-route-paths";
 import type {
   ProjectPathDialogSubmitHandler,
   ProjectPathDialogTarget,
@@ -37,6 +39,9 @@ const quickCreateProjectContext =
 
 export function useQuickCreateProject(): QuickCreateProjectController {
   const { mutate, isPending } = useCreateProject();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const shouldReplaceRoute = location.pathname === APP_ROOT_ROUTE_PATH;
 
   const submit = useCallback(
     ({ path, hostId, target, closeDialog }: LocalPathSubmitParams) => {
@@ -49,10 +54,17 @@ export function useQuickCreateProject(): QuickCreateProjectController {
           name,
           source: { type: "local_path", hostId, path },
         },
-        { onSuccess: closeDialog },
+        {
+          onSuccess: (project) => {
+            closeDialog();
+            void navigate(`/projects/${project.id}`, {
+              replace: shouldReplaceRoute,
+            });
+          },
+        },
       );
     },
-    [mutate],
+    [mutate, navigate, shouldReplaceRoute],
   );
 
   const controller = useLocalPathPicker({
