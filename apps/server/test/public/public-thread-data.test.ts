@@ -1680,7 +1680,7 @@ describe("public thread data routes", () => {
       expect(
         bootstrap.executionOptions.providers[0]?.capabilities
           .supportsUserQuestion,
-      ).toBe(false);
+      ).toBe(true);
       expect(bootstrap.executionOptions.models[0]?.model).toBe("gpt-5.5");
       expect(bootstrap.queuedMessages[0]?.content).toEqual([
         { type: "text", text: "Queued message" },
