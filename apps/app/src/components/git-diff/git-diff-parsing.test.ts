@@ -23,6 +23,21 @@ const SAMPLE_DIFF = [
   "",
 ].join("\n");
 
+const DIFF_WITH_CONTEXT = [
+  "diff --git a/src/context.ts b/src/context.ts",
+  "index 1111111..2222222 100644",
+  "--- a/src/context.ts",
+  "+++ b/src/context.ts",
+  "@@ -1,5 +1,5 @@",
+  " const first = 1;",
+  " const second = 2;",
+  "-const value = 3;",
+  "+const value = 4;",
+  " const fourth = 4;",
+  " const fifth = 5;",
+  "",
+].join("\n");
+
 const NEW_FILE_DIFF = [
   "diff --git a/src/new-file.ts b/src/new-file.ts",
   "new file mode 100644",
@@ -82,6 +97,18 @@ describe("threadDetailGitDiff", () => {
 
   it("falls back to raw diff counting before parsed files are available", () => {
     expect(summarizeGitDiff([], SAMPLE_DIFF)).toEqual({
+      filesCount: 1,
+      insertions: 1,
+      deletions: 1,
+    });
+  });
+
+  it("summarizes parsed diffs from changed lines, not hunk range sizes", () => {
+    const [file] = parseGitDiffFiles(DIFF_WITH_CONTEXT);
+    expect(file).toBeDefined();
+    if (!file) return;
+
+    expect(summarizeGitDiff([file], DIFF_WITH_CONTEXT)).toEqual({
       filesCount: 1,
       insertions: 1,
       deletions: 1,

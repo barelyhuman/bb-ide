@@ -87,10 +87,9 @@ export function summarizeGitDiff(
     let insertions = 0;
     let deletions = 0;
     for (const file of files) {
-      for (const hunk of file.hunks) {
-        insertions += hunk.additionCount;
-        deletions += hunk.deletionCount;
-      }
+      const fileStats = summarizeGitDiffFile(file);
+      insertions += fileStats.insertions;
+      deletions += fileStats.deletions;
     }
     return { filesCount: files.length, insertions, deletions };
   }
@@ -127,8 +126,8 @@ export function summarizeGitDiffFile(
   let insertions = 0;
   let deletions = 0;
   for (const hunk of file.hunks) {
-    insertions += hunk.additionCount;
-    deletions += hunk.deletionCount;
+    insertions += hunk.additionLines;
+    deletions += hunk.deletionLines;
   }
   return { insertions, deletions };
 }
