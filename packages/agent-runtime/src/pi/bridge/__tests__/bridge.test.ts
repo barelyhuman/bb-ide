@@ -401,7 +401,7 @@ describe("pi bridge", () => {
     }
   });
 
-  it("waits for queued steer consumption before responding to turn/steer", async () => {
+  it("responds to turn/steer after the SDK accepts queued steer input", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     const piSession = createControlledPiAgentSession();
     piSession.isStreaming = true;
@@ -429,9 +429,6 @@ describe("pi bridge", () => {
       expect(piSession.prompt).toHaveBeenCalledWith("interrupting steer", {
         streamingBehavior: "steer",
       });
-      expect(bridge.hasResponse(22)).toBe(false);
-
-      piSession.emit(createQueueUpdateEvent([]));
       await expect(bridge.waitForResponse(22)).resolves.toMatchObject({
         id: 22,
         result: { threadId: "thread-steer-consumption" },
@@ -441,7 +438,7 @@ describe("pi bridge", () => {
     }
   });
 
-  it("returns an error when a queued steer is not consumed before agent end", async () => {
+  it("emits an error when a queued steer is not consumed before agent end", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     const piSession = createControlledPiAgentSession();
     piSession.isStreaming = true;
@@ -466,16 +463,24 @@ describe("pi bridge", () => {
       });
       await bridge.flushWork();
 
-      expect(bridge.hasResponse(32)).toBe(false);
-
-      piSession.emit(createAgentEndEvent());
       await expect(bridge.waitForResponse(32)).resolves.toMatchObject({
         id: 32,
-        error: {
-          code: -32000,
-          message: "Pi turn ended before steer was consumed",
-        },
+        result: { threadId: "thread-undelivered-steer" },
       });
+
+      piSession.emit(createAgentEndEvent());
+      await bridge.flushWork();
+      await bridge.flushWork();
+
+      expect(bridge.messages).toContainEqual(
+        expect.objectContaining({
+          method: "error",
+          params: {
+            threadId: "thread-undelivered-steer",
+            message: "Pi turn ended before steer was consumed",
+          },
+        }),
+      );
     } finally {
       bridge.restore();
     }

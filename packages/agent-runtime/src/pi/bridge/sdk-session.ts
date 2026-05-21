@@ -299,7 +299,7 @@ export class PiSdkSession {
         text,
       });
       if (result.steerConsumptionPromise) {
-        await result.steerConsumptionPromise;
+        this.monitorSteerConsumption(result.steerConsumptionPromise);
       }
     } catch (error) {
       this.onDone(error);
@@ -507,6 +507,12 @@ export class PiSdkSession {
     for (const pending of pendingSteers) {
       pending.reject(new Error(message));
     }
+  }
+
+  private monitorSteerConsumption(promise: Promise<void>): void {
+    void promise.catch((error) => {
+      this.onDone(error);
+    });
   }
 
   private ensureCustomToolsActive(): void {

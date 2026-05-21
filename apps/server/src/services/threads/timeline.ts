@@ -198,6 +198,7 @@ interface BuildThreadTimelineInternalOptions extends BuildThreadTimelineOptions 
 }
 
 interface TimelineEventRowSelection {
+  acceptedClientRequestContextRows: StoredEventRow[];
   paginationPage: ThreadTimelinePageRequest;
   responsePageKind: ThreadTimelinePageKind;
   rows: StoredEventRow[];
@@ -212,6 +213,21 @@ interface EnsureTimelineWindowTurnStartedRowsArgs {
 interface SelectAcceptedClientRequestContextRowsArgs {
   rows: readonly StoredEventRow[];
   threadId: string;
+}
+
+interface CollectSteerClientRequestIdsBeforeCursorArgs {
+  beforeCursor: TimelinePaginationCursor;
+  rows: readonly StoredEventRow[];
+}
+
+interface SplitFutureSteerAcceptedContextRowsArgs {
+  beforeCursor: TimelinePaginationCursor;
+  rows: readonly StoredEventRow[];
+}
+
+interface SplitFutureSteerAcceptedContextRowsResult {
+  contextRows: StoredEventRow[];
+  rows: StoredEventRow[];
 }
 
 export interface ResolveThreadTimelineServiceViewModeArgs {
@@ -329,6 +345,70 @@ function collectSteerClientRequestIdsNeedingAcceptedContext(
     clientRequestIds.add(clientRequestId);
   }
   return [...clientRequestIds];
+}
+
+function collectSteerClientRequestIdsBeforeCursor(
+  args: CollectSteerClientRequestIdsBeforeCursorArgs,
+): ReadonlySet<ClientTurnRequestId> {
+  const clientRequestIds = new Set<ClientTurnRequestId>();
+  for (const row of args.rows) {
+    if (row.sequence >= args.beforeCursor.anchorSeq) {
+      continue;
+    }
+    const clientRequestId = tryReadSteerClientTurnRequestedRequestId(row);
+    if (clientRequestId !== null) {
+      clientRequestIds.add(clientRequestId);
+    }
+  }
+  return clientRequestIds;
+}
+
+function splitFutureSteerAcceptedContextRows(
+  args: SplitFutureSteerAcceptedContextRowsArgs,
+): SplitFutureSteerAcceptedContextRowsResult {
+  const steerClientRequestIds = collectSteerClientRequestIdsBeforeCursor(args);
+  if (steerClientRequestIds.size === 0) {
+    return {
+      contextRows: [],
+      rows: [...args.rows],
+    };
+  }
+
+  const contextRows: StoredEventRow[] = [];
+  const rows: StoredEventRow[] = [];
+  for (const row of args.rows) {
+    if (
+      row.type !== "turn/input/accepted" ||
+      row.sequence <= args.beforeCursor.anchorSeq
+    ) {
+      rows.push(row);
+      continue;
+    }
+
+    const clientRequestId = parseAcceptedInputClientRequestId(row);
+    if (steerClientRequestIds.has(clientRequestId)) {
+      contextRows.push(row);
+      continue;
+    }
+    rows.push(row);
+  }
+
+  return {
+    contextRows,
+    rows,
+  };
+}
+
+function mergeStoredEventRowsById(
+  rows: readonly StoredEventRow[],
+): StoredEventRow[] {
+  const rowsById = new Map<string, StoredEventRow>();
+  for (const row of rows) {
+    rowsById.set(row.id, row);
+  }
+  return [...rowsById.values()].sort(
+    (left, right) => left.sequence - right.sequence,
+  );
 }
 
 function selectAcceptedClientRequestContextRows(
@@ -584,6 +664,7 @@ function selectFullTimelineEventRows(
   page: ThreadTimelinePageRequest,
 ): TimelineEventRowSelection {
   return {
+    acceptedClientRequestContextRows: [],
     paginationPage: page,
     responsePageKind: page.kind,
     rows: listRecentStoredEventRows(db, {
@@ -718,7 +799,28 @@ function selectStandardTimelineEventRows(
       ? 0
       : (anchors[windowAnchorIndex]?.sequence ?? 0);
 
+  const selectedRows = ensureTimelineWindowTurnStartedRows(db, {
+    threadId: thread.id,
+    rows: listStoredTimelineWindowEventRows(db, {
+      beforeSequence,
+      excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+      sequenceStart,
+      threadId: thread.id,
+    }),
+  });
+  const selectedRowsWithContext =
+    page.kind === "older"
+      ? splitFutureSteerAcceptedContextRows({
+          beforeCursor: page.beforeCursor,
+          rows: selectedRows,
+        })
+      : {
+          contextRows: [],
+          rows: selectedRows,
+        };
+
   return {
+    acceptedClientRequestContextRows: selectedRowsWithContext.contextRows,
     paginationPage:
       page.kind === "older"
         ? page
@@ -727,15 +829,7 @@ function selectStandardTimelineEventRows(
             segmentLimit: page.segmentLimit,
           },
     responsePageKind: page.kind,
-    rows: ensureTimelineWindowTurnStartedRows(db, {
-      threadId: thread.id,
-      rows: listStoredTimelineWindowEventRows(db, {
-        beforeSequence,
-        excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
-        sequenceStart,
-        threadId: thread.id,
-      }),
-    }),
+    rows: selectedRowsWithContext.rows,
     strategy:
       sequenceStart === 0 && beforeSequence === undefined
         ? "full"
@@ -804,6 +898,7 @@ function selectManagerConversationTimelineEventRows(
       : (anchors[windowAnchorIndex]?.sequence ?? 0);
 
   return {
+    acceptedClientRequestContextRows: [],
     paginationPage:
       page.kind === "older"
         ? page
@@ -956,10 +1051,13 @@ function buildThreadTimelineInternal(
     "accepted-client-request-context-query",
     () =>
       viewMode === "standard"
-        ? selectAcceptedClientRequestContextRows(db, {
-            rows: rawEventRows,
-            threadId: thread.id,
-          })
+        ? mergeStoredEventRowsById([
+            ...eventSelection.acceptedClientRequestContextRows,
+            ...selectAcceptedClientRequestContextRows(db, {
+              rows: rawEventRows,
+              threadId: thread.id,
+            }),
+          ])
         : [],
   );
   const decodedRawEvents = measureThreadTimelineStage(

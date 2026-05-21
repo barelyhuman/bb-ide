@@ -282,7 +282,7 @@ describe("codex provider adapter", () => {
     expect(adapter.process.args).toMatchObject(["app-server"]);
   });
 
-  it("waits for steer user-message echoes before emitting input accepted", () => {
+  it("emits input accepted when a steer command is accepted and suppresses later user-message echoes", () => {
     const adapter = createCodexProviderAdapter();
 
     expect(
@@ -297,6 +297,7 @@ describe("codex provider adapter", () => {
         },
       }),
     ).toMatchObject([]);
+
     expect(
       adapter.translateAcceptedCommand({
         command: {
@@ -309,23 +310,6 @@ describe("codex provider adapter", () => {
           options: fullProviderExecutionContext,
         },
       }),
-    ).toEqual([]);
-
-    expect(
-      adapter.translateEvent(
-        codexEvent("item/started", {
-          threadId: "provider-thread-1",
-          turnId: "turn-1",
-          startedAtMs: 0,
-          item: {
-            type: "userMessage",
-            id: "provider-user-1",
-            content: [
-              { type: "text", text: "steer turn", text_elements: [] },
-            ],
-          },
-        }),
-      ),
     ).toEqual([
       {
         type: "turn/input/accepted",
@@ -335,41 +319,7 @@ describe("codex provider adapter", () => {
         clientRequestId: "creq_23456789af",
       },
     ]);
-  });
 
-  it("does not ack a pending steer for an unrelated user-message echo", () => {
-    const adapter = createCodexProviderAdapter();
-
-    expect(
-      adapter.translateAcceptedCommand({
-        command: {
-          type: "turn/steer",
-          threadId: "thread-1",
-          providerThreadId: "provider-thread-1",
-          expectedTurnId: "turn-1",
-          clientRequestId: "creq_23456789af",
-          input: [{ type: "text", text: "steer turn" }],
-          options: fullProviderExecutionContext,
-        },
-      }),
-    ).toEqual([]);
-
-    expect(
-      adapter.translateEvent(
-        codexEvent("item/started", {
-          threadId: "provider-thread-1",
-          turnId: "turn-1",
-          startedAtMs: 0,
-          item: {
-            type: "userMessage",
-            id: "provider-user-1",
-            content: [
-              { type: "text", text: "different input", text_elements: [] },
-            ],
-          },
-        }),
-      ),
-    ).toEqual([]);
     expect(
       adapter.translateEvent(
         codexEvent("item/completed", {
@@ -385,18 +335,10 @@ describe("codex provider adapter", () => {
           },
         }),
       ),
-    ).toEqual([
-      {
-        type: "turn/input/accepted",
-        threadId: "thread-1",
-        providerThreadId: "provider-thread-1",
-        scope: turnScope("turn-1"),
-        clientRequestId: "creq_23456789af",
-      },
-    ]);
+    ).toEqual([]);
   });
 
-  it("matches empty text steer echoes after user-message normalization", () => {
+  it("emits input accepted for empty steer input when command acceptance succeeds", () => {
     const adapter = createCodexProviderAdapter();
 
     expect(
@@ -411,21 +353,6 @@ describe("codex provider adapter", () => {
           options: fullProviderExecutionContext,
         },
       }),
-    ).toEqual([]);
-
-    expect(
-      adapter.translateEvent(
-        codexEvent("item/started", {
-          threadId: "provider-thread-1",
-          turnId: "turn-1",
-          startedAtMs: 0,
-          item: {
-            type: "userMessage",
-            id: "provider-user-empty",
-            content: [{ type: "text", text: "", text_elements: [] }],
-          },
-        }),
-      ),
     ).toEqual([
       {
         type: "turn/input/accepted",
@@ -433,64 +360,6 @@ describe("codex provider adapter", () => {
         providerThreadId: "provider-thread-1",
         scope: turnScope("turn-1"),
         clientRequestId: "creq_23456789ah",
-      },
-    ]);
-  });
-
-  it("does not treat empty steer input as a wildcard ack", () => {
-    const adapter = createCodexProviderAdapter();
-
-    expect(
-      adapter.translateAcceptedCommand({
-        command: {
-          type: "turn/steer",
-          threadId: "thread-1",
-          providerThreadId: "provider-thread-1",
-          expectedTurnId: "turn-1",
-          clientRequestId: "creq_23456789ai",
-          input: [],
-          options: fullProviderExecutionContext,
-        },
-      }),
-    ).toEqual([]);
-
-    expect(
-      adapter.translateEvent(
-        codexEvent("item/started", {
-          threadId: "provider-thread-1",
-          turnId: "turn-1",
-          startedAtMs: 0,
-          item: {
-            type: "userMessage",
-            id: "provider-user-nonempty",
-            content: [
-              { type: "text", text: "different input", text_elements: [] },
-            ],
-          },
-        }),
-      ),
-    ).toEqual([]);
-
-    expect(
-      adapter.translateEvent(
-        codexEvent("item/completed", {
-          threadId: "provider-thread-1",
-          turnId: "turn-1",
-          completedAtMs: 1,
-          item: {
-            type: "userMessage",
-            id: "provider-user-empty",
-            content: [],
-          },
-        }),
-      ),
-    ).toEqual([
-      {
-        type: "turn/input/accepted",
-        threadId: "thread-1",
-        providerThreadId: "provider-thread-1",
-        scope: turnScope("turn-1"),
-        clientRequestId: "creq_23456789ai",
       },
     ]);
   });
