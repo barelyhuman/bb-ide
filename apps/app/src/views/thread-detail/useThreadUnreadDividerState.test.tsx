@@ -7,12 +7,12 @@ import { ThreadTimelineRows } from "@/components/thread/timeline";
 import { BottomAnchoredScrollBody } from "@/components/ui/bottom-anchored-scroll-body";
 import { conversationRow } from "@/test/fixtures/thread-timeline-rows";
 import {
-  useThreadUnreadDividerPlacement,
-  type UseThreadUnreadDividerPlacementArgs,
-} from "./useThreadUnreadDividerPlacement";
+  useThreadUnreadDividerState,
+  type UseThreadUnreadDividerStateArgs,
+} from "./useThreadUnreadDividerState";
 
 type UnreadDividerThreadState = NonNullable<
-  UseThreadUnreadDividerPlacementArgs["thread"]
+  UseThreadUnreadDividerStateArgs["thread"]
 >;
 
 interface ThreadUnreadTimelineHarnessProps {
@@ -71,7 +71,7 @@ function ThreadUnreadTimelineHarness({
   timelineRows,
   useStandardManagerTimeline = false,
 }: ThreadUnreadTimelineHarnessProps) {
-  const unreadDividerPlacement = useThreadUnreadDividerPlacement({
+  const unreadDividerState = useThreadUnreadDividerState({
     routeThreadId: thread?.id,
     thread,
     useStandardManagerTimeline,
@@ -86,7 +86,8 @@ function ThreadUnreadTimelineHarness({
       timelineRows={timelineRows}
       turnSummaryRowsById={{}}
       turnSummaryRowsIdentity="thread-unread-test"
-      unreadDividerPlacement={unreadDividerPlacement}
+      unreadDividerAutoScroll={unreadDividerState.autoScroll}
+      unreadDividerPlacement={unreadDividerState.placement}
       workspaceRootPath={undefined}
     />
   );
@@ -112,7 +113,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("useThreadUnreadDividerPlacement", () => {
+describe("useThreadUnreadDividerState", () => {
   it("re-arms when a mounted read standard thread gets a new attention epoch", async () => {
     const readThread: UnreadDividerThreadState = {
       id: "thread-1",
@@ -245,6 +246,92 @@ describe("useThreadUnreadDividerPlacement", () => {
           left: 0,
           right: 100,
           top: 520,
+          width: 100,
+        }),
+      );
+
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(scrollArea.scrollTop).toBe(900);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not scroll to the divider for a live attention epoch on a mounted read thread", async () => {
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.useFakeTimers();
+
+    try {
+      const readThread: UnreadDividerThreadState = {
+        id: "thread-1",
+        lastReadAt: 1_000,
+        latestAttentionAt: 1_000,
+        type: "standard",
+      };
+      const unreadThread: UnreadDividerThreadState = {
+        ...readThread,
+        latestAttentionAt: 2_000,
+      };
+      const timelineRows = [
+        conversationRow({
+          id: "already-read-row",
+          sourceSeqStart: 1_000,
+          text: "Already-read thread context",
+        }),
+        conversationRow({
+          id: "live-update-row",
+          sourceSeqStart: 2_000,
+          text: "Live update requiring attention",
+        }),
+      ];
+
+      const view = render(
+        <ThreadUnreadScrollTimelineHarness
+          thread={readThread}
+          timelineRows={timelineRows}
+        />,
+      );
+      const scrollArea = requireHTMLElement(
+        view.container.querySelector(".scroll-area"),
+      );
+      setScrollMetrics(scrollArea, {
+        clientHeight: 100,
+        scrollHeight: 1_000,
+        scrollTop: 900,
+      });
+      vi.spyOn(scrollArea, "getBoundingClientRect").mockReturnValue(
+        buildDomRect({
+          bottom: 100,
+          height: 100,
+          left: 0,
+          right: 100,
+          top: 0,
+          width: 100,
+        }),
+      );
+
+      view.rerender(
+        <ThreadUnreadScrollTimelineHarness
+          thread={unreadThread}
+          timelineRows={timelineRows}
+        />,
+      );
+
+      const divider = screen.getByRole("separator", {
+        name: "New messages",
+      });
+      vi.spyOn(divider, "getBoundingClientRect").mockReturnValue(
+        buildDomRect({
+          bottom: -380,
+          height: 20,
+          left: 0,
+          right: 100,
+          top: -400,
           width: 100,
         }),
       );

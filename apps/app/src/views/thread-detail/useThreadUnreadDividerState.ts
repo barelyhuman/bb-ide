@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ThreadTimelineUnreadDividerPlacement } from "@/components/thread/timeline";
 import type { ThreadType } from "@bb/domain";
 
@@ -11,8 +11,14 @@ interface ThreadUnreadDividerThreadState {
 
 interface ThreadUnreadDividerSnapshot {
   attentionAt: number;
+  autoScroll: boolean;
   placement: ThreadTimelineUnreadDividerPlacement | null;
   threadId: string;
+}
+
+export interface ThreadUnreadDividerState {
+  autoScroll: boolean;
+  placement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
 interface ShouldTrackThreadUnreadDividerArgs {
@@ -27,11 +33,16 @@ interface IsThreadUnreadArgs {
   latestAttentionAt: number | undefined;
 }
 
-export interface UseThreadUnreadDividerPlacementArgs {
+export interface UseThreadUnreadDividerStateArgs {
   routeThreadId: string | undefined;
   thread: ThreadUnreadDividerThreadState | undefined;
   useStandardManagerTimeline: boolean;
 }
+
+const NO_UNREAD_DIVIDER_STATE: ThreadUnreadDividerState = {
+  autoScroll: false,
+  placement: null,
+};
 
 function shouldTrackThreadUnreadDivider({
   routeThreadId,
@@ -72,14 +83,15 @@ function buildUnreadDividerPlacement(
   return null;
 }
 
-export function useThreadUnreadDividerPlacement({
+export function useThreadUnreadDividerState({
   routeThreadId,
   thread,
   useStandardManagerTimeline,
-}: UseThreadUnreadDividerPlacementArgs): ThreadTimelineUnreadDividerPlacement | null {
+}: UseThreadUnreadDividerStateArgs): ThreadUnreadDividerState {
   const [snapshot, setSnapshot] = useState<ThreadUnreadDividerSnapshot | null>(
     null,
   );
+  const trackedThreadIdRef = useRef<string | null>(null);
   const threadId = thread?.id;
   const threadLastReadAt = thread?.lastReadAt;
   const threadLatestAttentionAt = thread?.latestAttentionAt;
@@ -98,10 +110,13 @@ export function useThreadUnreadDividerPlacement({
         useStandardManagerTimeline,
       })
     ) {
+      trackedThreadIdRef.current = null;
       setSnapshot(null);
       return;
     }
 
+    const isFirstTrackedThreadState = trackedThreadIdRef.current !== threadId;
+    trackedThreadIdRef.current = threadId;
     const threadState: ThreadUnreadDividerThreadState = {
       id: threadId,
       lastReadAt: threadLastReadAt,
@@ -115,8 +130,13 @@ export function useThreadUnreadDividerPlacement({
         currentSnapshot.attentionAt === threadLatestAttentionAt
       ) {
         if (threadLastReadAt === null) {
+          // Preserve the existing scroll decision when a manual unread mark
+          // moves the divider from the cutoff row to the top.
+          const autoScroll =
+            currentSnapshot.placement !== null && currentSnapshot.autoScroll;
           return {
             attentionAt: threadLatestAttentionAt,
+            autoScroll,
             placement: { kind: "before-first" },
             threadId,
           };
@@ -124,9 +144,11 @@ export function useThreadUnreadDividerPlacement({
         return currentSnapshot;
       }
 
+      const placement = buildUnreadDividerPlacement(threadState);
       return {
         attentionAt: threadLatestAttentionAt,
-        placement: buildUnreadDividerPlacement(threadState),
+        autoScroll: isFirstTrackedThreadState && placement !== null,
+        placement,
         threadId,
       };
     });
@@ -154,8 +176,11 @@ export function useThreadUnreadDividerPlacement({
         latestAttentionAt: threadLatestAttentionAt,
       }))
   ) {
-    return null;
+    return NO_UNREAD_DIVIDER_STATE;
   }
 
-  return snapshot.placement;
+  return {
+    autoScroll: snapshot.autoScroll && snapshot.placement !== null,
+    placement: snapshot.placement,
+  };
 }

@@ -36,6 +36,7 @@ function renderLoadingTimelinePane(): RenderResult {
       threadRuntimeDisplayStatus="idle"
       turnSummaryRowsIdentity="thread-1:default"
       turnSummaryRowsById={{}}
+      unreadDividerAutoScroll={false}
       unreadDividerPlacement={null}
       workspaceRootPath={undefined}
     />,
@@ -88,6 +89,7 @@ describe("ThreadTimelinePane", () => {
         threadRuntimeDisplayStatus="idle"
         turnSummaryRowsIdentity="thread-1:default"
         turnSummaryRowsById={{}}
+        unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
         workspaceRootPath={undefined}
       />,
@@ -118,6 +120,7 @@ describe("ThreadTimelinePane", () => {
         threadRuntimeDisplayStatus="active"
         turnSummaryRowsIdentity="thread-1:default"
         turnSummaryRowsById={{}}
+        unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
         workspaceRootPath={undefined}
       />,
@@ -165,6 +168,7 @@ describe("ThreadTimelinePane", () => {
         threadRuntimeDisplayStatus="idle"
         turnSummaryRowsIdentity="thread-1:default"
         turnSummaryRowsById={{}}
+        unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
         workspaceRootPath={undefined}
       />,

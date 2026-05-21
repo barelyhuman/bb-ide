@@ -48,6 +48,7 @@ interface ThreadTimelinePaneProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  unreadDividerAutoScroll: boolean;
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
   workspaceRootPath: string | undefined;
 }
@@ -147,6 +148,7 @@ export function ThreadTimelinePane({
   threadRuntimeDisplayStatus,
   turnSummaryRowsIdentity,
   turnSummaryRowsById,
+  unreadDividerAutoScroll,
   unreadDividerPlacement,
   workspaceRootPath,
 }: ThreadTimelinePaneProps) {
@@ -209,6 +211,7 @@ export function ThreadTimelinePane({
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
               turnSummaryRowsIdentity={turnSummaryRowsIdentity}
               turnSummaryRowsById={turnSummaryRowsById}
+              unreadDividerAutoScroll={unreadDividerAutoScroll}
               unreadDividerPlacement={unreadDividerPlacement}
               workspaceRootPath={workspaceRootPath}
             />

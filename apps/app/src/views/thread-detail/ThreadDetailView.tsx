@@ -85,7 +85,7 @@ import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadS
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
-import { useThreadUnreadDividerPlacement } from "./useThreadUnreadDividerPlacement";
+import { useThreadUnreadDividerState } from "./useThreadUnreadDividerState";
 import { useThreadTimelinePages } from "./useThreadTimelinePages";
 import { terminalsEnabledAtom } from "@/lib/system-config-atoms";
 import {
@@ -232,7 +232,7 @@ export function ThreadDetailView() {
   const managerTimelineView = useStandardManagerTimeline
     ? "standard"
     : undefined;
-  const unreadDividerPlacement = useThreadUnreadDividerPlacement({
+  const unreadDividerState = useThreadUnreadDividerState({
     routeThreadId: threadId,
     thread,
     useStandardManagerTimeline,
@@ -1125,7 +1125,8 @@ export function ThreadDetailView() {
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           turnSummaryRowsIdentity,
           turnSummaryRowsById,
-          unreadDividerPlacement,
+          unreadDividerAutoScroll: unreadDividerState.autoScroll,
+          unreadDividerPlacement: unreadDividerState.placement,
           workspaceRootPath: environment?.path ?? undefined,
         }}
       />

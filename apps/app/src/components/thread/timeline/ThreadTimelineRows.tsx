@@ -81,6 +81,8 @@ export interface ThreadTimelineRowsProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  /** Omit for standalone initial-unread rendering, pass false for live updates. */
+  unreadDividerAutoScroll?: boolean;
   unreadDividerPlacement?: ThreadTimelineUnreadDividerPlacement | null;
   /**
    * Workspace root path the agent ran in (`environment.path`). Forwarded to
@@ -127,7 +129,12 @@ interface TimelineRowsListProps {
   scopeActive: boolean;
   spacing: TimelineRowsListSpacing;
   className?: string;
+  unreadDividerAutoScroll: boolean;
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
+}
+
+interface TimelineUnreadDividerProps {
+  autoScroll: boolean;
 }
 
 interface TimelineRowViewProps {
@@ -542,13 +549,13 @@ function ConversationRow({ row }: ConversationRowProps) {
   );
 }
 
-function TimelineUnreadDivider() {
+function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
   const bottomAnchor = useBottomAnchoredScroll();
   const dividerRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
 
   useEffect(() => {
-    if (!bottomAnchor || hasScrolledRef.current) {
+    if (!autoScroll || !bottomAnchor || hasScrolledRef.current) {
       return;
     }
 
@@ -565,7 +572,7 @@ function TimelineUnreadDivider() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [bottomAnchor]);
+  }, [autoScroll, bottomAnchor]);
 
   return (
     <div
@@ -634,6 +641,7 @@ function TimelineExpandableBody({
           scopeActive={false}
           compactActivityIntents={true}
           spacing="bundle"
+          unreadDividerAutoScroll={false}
           unreadDividerPlacement={null}
         />
       );
@@ -689,6 +697,7 @@ function TimelineExpandableBody({
                   scopeActive={delegationActive}
                   compactActivityIntents={false}
                   spacing="nested"
+                  unreadDividerAutoScroll={false}
                   unreadDividerPlacement={null}
                 />
               ) : null}
@@ -800,6 +809,7 @@ function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
         className={NESTED_ROWS_GROUP_LINE_CLASS}
+        unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
       />
     );
@@ -1010,6 +1020,7 @@ function TimelineRowsList({
   scopeActive,
   spacing,
   className,
+  unreadDividerAutoScroll,
   unreadDividerPlacement,
 }: TimelineRowsListProps) {
   const activeLatestBundleId = useMemo(
@@ -1031,7 +1042,12 @@ function TimelineRowsList({
     >
       {items.map((item) => {
         if (item.kind === "unread-divider") {
-          return <TimelineUnreadDivider key={item.id} />;
+          return (
+            <TimelineUnreadDivider
+              key={item.id}
+              autoScroll={unreadDividerAutoScroll}
+            />
+          );
         }
 
         return (
@@ -1168,6 +1184,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
             scopeActive={scopeActive}
             compactActivityIntents={false}
             spacing="top-level"
+            unreadDividerAutoScroll={props.unreadDividerAutoScroll ?? true}
             unreadDividerPlacement={props.unreadDividerPlacement ?? null}
           />
         </AutoHeightContainer>
