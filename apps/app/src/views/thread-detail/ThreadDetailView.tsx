@@ -206,6 +206,7 @@ export function ThreadDetailView() {
     {
       enabled: threadQueryState.status === "ready" && Boolean(thread?.id),
       environmentId: thread?.environmentId ?? undefined,
+      providerId: thread?.providerId ?? undefined,
     },
   );
   const hasThreadComposerBootstrapSettled =

@@ -220,7 +220,7 @@ export function useThreadTimelinePages({
   threadId,
 }: UseThreadTimelinePagesArgs): UseThreadTimelinePagesResult {
   const latestTimelineQuery = useThreadTimeline(threadId, {
-    refetchOnMount: "always",
+    refetchOnMount: true,
     managerTimelineView,
   });
   const surfaceKey = buildSurfaceKey({ managerTimelineView, threadId });

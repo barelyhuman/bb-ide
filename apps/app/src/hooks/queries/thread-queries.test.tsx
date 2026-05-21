@@ -2,6 +2,10 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { Environment, Host, ThreadWithRuntime } from "@bb/domain";
+import type {
+  ThreadComposerBootstrapResponse,
+  ThreadTimelineResponse,
+} from "@bb/server-contract";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
@@ -16,6 +20,7 @@ import {
   useThreadDetailBootstrap,
   useThreadDefaultExecutionOptions,
   useThreadHostFilePreview,
+  useThreadTimeline,
   useThreadQueuedMessages,
   useThreadPendingInteractions,
   useThreadPromptHistory,
@@ -24,6 +29,7 @@ import {
 import {
   hostsQueryKey,
   systemExecutionOptionsQueryKey,
+  threadComposerBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadHostFilePreviewQueryKey,
   threadQueuedMessagesQueryKey,
@@ -31,6 +37,7 @@ import {
   threadPromptHistoryQueryKey,
   threadQueryKey,
   threadStatusVersionQueryKey,
+  threadTimelineQueryKey,
 } from "./query-keys";
 
 interface TestWrapperProps {
@@ -237,6 +244,269 @@ describe("thread query bootstraps", () => {
     expect(leanThreadRequestCount).toBe(1);
   });
 
+  it("canonicalizes standard thread timeline prefetches to the default timeline key", async () => {
+    const thread = makeThread();
+    const environment = makeEnvironment();
+    const host = makeHost();
+    const timeline: ThreadTimelineResponse = {
+      activeThinking: null,
+      pendingTodos: null,
+      rows: [],
+      timelinePage: {
+        kind: "latest",
+        segmentLimit: 20,
+        returnedSegmentCount: 0,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
+    };
+    let includeThreadRequestCount = 0;
+    let timelineRequestCount = 0;
+    const timelineRequestUrlRef: { current: URL | null } = { current: null };
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1",
+        handler: () => {
+          includeThreadRequestCount += 1;
+          return jsonResponse({
+            ...thread,
+            environment,
+            host,
+          });
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/timeline",
+        handler: (request) => {
+          timelineRequestCount += 1;
+          timelineRequestUrlRef.current = new URL(request.url);
+          return jsonResponse(timeline);
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () =>
+        useThreadDetailBootstrap("thread-1", {
+          timelinePrefetch: {
+            managerTimelineView: "standard",
+          },
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+      expect(timelineRequestCount).toBe(1);
+    });
+    expect(includeThreadRequestCount).toBe(1);
+    expect(
+      timelineRequestUrlRef.current?.searchParams.get("managerTimelineView"),
+    ).toBeNull();
+    expect(
+      queryClient.getQueryData(threadTimelineQueryKey("thread-1", undefined)),
+    ).toEqual(timeline);
+    expect(
+      queryClient.getQueryData(threadTimelineQueryKey("thread-1", "standard")),
+    ).toBeUndefined();
+
+    const timelineResult = renderHook(
+      () => useThreadTimeline("thread-1"),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(timelineResult.result.current.data).toEqual(timeline);
+    });
+    expect(timelineRequestCount).toBe(1);
+  });
+
+  it("preserves manager thread standard timeline prefetches", async () => {
+    const thread = {
+      ...makeThread(),
+      type: "manager",
+    };
+    const environment = makeEnvironment();
+    const host = makeHost();
+    const timeline: ThreadTimelineResponse = {
+      activeThinking: null,
+      pendingTodos: null,
+      rows: [],
+      timelinePage: {
+        kind: "latest",
+        segmentLimit: 20,
+        returnedSegmentCount: 0,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
+    };
+    let includeThreadRequestCount = 0;
+    let timelineRequestCount = 0;
+    const timelineRequestUrlRef: { current: URL | null } = { current: null };
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1",
+        handler: () => {
+          includeThreadRequestCount += 1;
+          return jsonResponse({
+            ...thread,
+            environment,
+            host,
+          });
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/timeline",
+        handler: (request) => {
+          timelineRequestCount += 1;
+          timelineRequestUrlRef.current = new URL(request.url);
+          return jsonResponse(timeline);
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () =>
+        useThreadDetailBootstrap("thread-1", {
+          timelinePrefetch: {
+            managerTimelineView: "standard",
+          },
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+      expect(timelineRequestCount).toBe(1);
+    });
+    expect(includeThreadRequestCount).toBe(1);
+    expect(
+      timelineRequestUrlRef.current?.searchParams.get("managerTimelineView"),
+    ).toBe("standard");
+    expect(
+      queryClient.getQueryData(threadTimelineQueryKey("thread-1", "standard")),
+    ).toEqual(timeline);
+
+    const timelineResult = renderHook(
+      () =>
+        useThreadTimeline("thread-1", {
+          managerTimelineView: "standard",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(timelineResult.result.current.data).toEqual(timeline);
+    });
+    expect(timelineRequestCount).toBe(1);
+  });
+
+  it("prefetches composer bootstrap from the thread detail bootstrap", async () => {
+    const thread = makeThread();
+    const environment = makeEnvironment();
+    const host = makeHost();
+    const composerBootstrap: ThreadComposerBootstrapResponse = {
+      defaultExecutionOptions: {
+        model: "gpt-5.5",
+        permissionMode: "workspace-write",
+        reasoningLevel: "medium",
+        serviceTier: "default",
+        source: "client/turn/requested",
+      },
+      executionOptions: {
+        providers: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            available: true,
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportsUserQuestion: true,
+              supportedPermissionModes: [
+                "full",
+                "workspace-write",
+                "readonly",
+              ],
+            },
+          },
+        ],
+        models: [],
+        selectedOnlyModels: [],
+      },
+      pendingInteractions: [],
+      promptHistory: [],
+      queuedMessages: [],
+    };
+    let includeThreadRequestCount = 0;
+    let composerBootstrapRequestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1",
+        handler: () => {
+          includeThreadRequestCount += 1;
+          return jsonResponse({
+            ...thread,
+            environment,
+            host,
+          });
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/composer-bootstrap",
+        handler: () => {
+          composerBootstrapRequestCount += 1;
+          return jsonResponse(composerBootstrap);
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () =>
+        useThreadDetailBootstrap("thread-1", {
+          composerBootstrapPrefetch: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+      expect(composerBootstrapRequestCount).toBe(1);
+    });
+    expect(includeThreadRequestCount).toBe(1);
+    expect(
+      queryClient.getQueryData(
+        threadComposerBootstrapQueryKey("thread-1", "environment-1"),
+      ),
+    ).toEqual(composerBootstrap);
+    expect(
+      queryClient.getQueryData(
+        systemExecutionOptionsQueryKey({
+          environmentId: "environment-1",
+          providerId: "provider-1",
+        }),
+      ),
+    ).toEqual(composerBootstrap.executionOptions);
+
+    const composerResult = renderHook(
+      () =>
+        useThreadComposerBootstrap("thread-1", {
+          environmentId: "environment-1",
+          providerId: "provider-1",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(composerResult.result.current.data).toEqual(composerBootstrap);
+    });
+    expect(composerBootstrapRequestCount).toBe(1);
+  });
+
   it("primes composer caches from the thread composer bootstrap", async () => {
     const defaultExecutionOptions = {
       model: "gpt-5.5",
@@ -269,6 +539,17 @@ describe("thread query bootstraps", () => {
         {
           id: "codex",
           displayName: "Codex",
+          available: true,
+          capabilities: {
+            supportsArchive: true,
+            supportsRename: true,
+            supportsServiceTier: true,
+            supportedPermissionModes: ["full", "workspace-write", "readonly"],
+          },
+        },
+        {
+          id: "claude-code",
+          displayName: "Claude Code",
           available: true,
           capabilities: {
             supportsArchive: true,
@@ -362,6 +643,7 @@ describe("thread query bootstraps", () => {
       () => {
         const bootstrap = useThreadComposerBootstrap("thread-1", {
           environmentId: "environment-1",
+          providerId: "claude-code",
         });
         const canonicalEnabled = bootstrap.isSuccess || bootstrap.isError;
         const seededStaleTime = bootstrap.isSuccess ? 10_000 : undefined;
@@ -389,7 +671,7 @@ describe("thread query bootstraps", () => {
           enabled: canonicalEnabled,
           environmentId: "environment-1",
           initialModel: "gpt-5.5",
-          initialProviderId: "codex",
+          initialProviderId: "claude-code",
           resetKey: "thread-1",
           scope: "component-local",
         });
@@ -409,7 +691,9 @@ describe("thread query bootstraps", () => {
       expect(result.current.bootstrap.status).toBe("success");
       expect(result.current.defaultExecution.data?.model).toBe("gpt-5.5");
       expect(result.current.queuedMessageList.data).toEqual(queuedMessages);
-      expect(result.current.creationOptions.selectedProviderId).toBe("codex");
+      expect(result.current.creationOptions.selectedProviderId).toBe(
+        "claude-code",
+      );
       expect(result.current.creationOptions.modelOptions).toEqual([
         {
           label: "GPT-5.5",
@@ -437,7 +721,7 @@ describe("thread query bootstraps", () => {
       queryClient.getQueryData(
         systemExecutionOptionsQueryKey({
           environmentId: "environment-1",
-          providerId: "codex",
+          providerId: "claude-code",
         }),
       ),
     ).toEqual(executionOptions);
@@ -450,7 +734,7 @@ describe("thread query bootstraps", () => {
       await queryClient.invalidateQueries({
         queryKey: systemExecutionOptionsQueryKey({
           environmentId: "environment-1",
-          providerId: "codex",
+          providerId: "claude-code",
         }),
       });
     });

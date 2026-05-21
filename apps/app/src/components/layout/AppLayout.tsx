@@ -40,6 +40,7 @@ import {
 } from "@/lib/bb-desktop";
 import { useNewManagerDialog } from "@/hooks/useNewManagerDialog";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
+import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
 const SIDEBAR_OPEN_KEY = "bb.sidebar.open";
@@ -317,8 +318,19 @@ export function AppLayout({ children }: AppLayoutProps) {
   const projects = projectsQuery.data;
   const projectsLoading =
     sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
+  const [storedUseStandardManagerTimeline] =
+    useStandardManagerTimelinePreference();
+  const prefetchedManagerTimelineView =
+    storedUseStandardManagerTimeline ? "standard" : undefined;
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "", {
+    composerBootstrapPrefetch: isThreadView && Boolean(threadId),
     enabled: isThreadView && Boolean(threadId),
+    timelinePrefetch:
+      isThreadView && threadId
+        ? {
+            managerTimelineView: prefetchedManagerTimelineView,
+          }
+        : undefined,
   });
   const hasThreadDetailBootstrapSettled =
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;

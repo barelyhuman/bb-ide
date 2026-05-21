@@ -18,7 +18,8 @@ import type {
 } from "@bb/server-contract";
 import {
   listContextWindowUsageRows,
-  listFilteredStoredEventRows,
+  listFilteredStoredTimelineWindowEventRows,
+  listManagerConversationTimelineSegmentAnchorRows,
   listRecentStoredEventRows,
   listStandardTimelineSegmentAnchorRows,
   listStoredClientTurnRequestIdsInRange,
@@ -29,6 +30,7 @@ import {
 } from "@bb/db";
 import type {
   DbConnection,
+  ManagerConversationTimelineSegmentAnchorRow,
   StandardTimelineSegmentAnchorRow,
   StoredEventRow,
 } from "@bb/db";
@@ -138,7 +140,7 @@ export type ThreadTimelineBuildProfileStage =
 
 export type ThreadTimelineEventSelectionStrategy =
   | "full"
-  | "manager-conversation-filtered"
+  | "manager-conversation-window"
   | "standard-window";
 
 export interface ThreadTimelineBuildProfileStageTiming {
@@ -615,10 +617,19 @@ function selectStandardTimelineEventRows(
     return selectFullTimelineEventRows(db, thread, page);
   }
 
-  const candidateAnchorEndExclusive =
-    page.kind === "older"
-      ? requireStandardTimelineAnchorCursorIndex(anchors, page.beforeCursor)
-      : anchors.length;
+  let beforeSequence: number | undefined;
+  let candidateAnchorEndExclusive: number;
+  if (page.kind === "older") {
+    const cursorAnchorIndex = requireStandardTimelineAnchorCursorIndex(
+      anchors,
+      page.beforeCursor,
+    );
+    candidateAnchorEndExclusive = cursorAnchorIndex;
+    beforeSequence = anchors[cursorAnchorIndex + 1]?.sequence;
+  } else {
+    candidateAnchorEndExclusive = anchors.length;
+    beforeSequence = undefined;
+  }
   const selectedAnchorStartIndex = Math.max(
     0,
     candidateAnchorEndExclusive - page.segmentLimit,
@@ -629,14 +640,15 @@ function selectStandardTimelineEventRows(
     windowAnchorIndex === null
       ? 0
       : (anchors[windowAnchorIndex]?.sequence ?? 0);
-  const beforeSequence =
-    page.kind === "older" ? page.beforeCursor.anchorSeq : undefined;
 
   return {
-    paginationPage: {
-      kind: "latest",
-      segmentLimit: page.segmentLimit,
-    },
+    paginationPage:
+      page.kind === "older"
+        ? page
+        : {
+            kind: "latest",
+            segmentLimit: page.segmentLimit,
+          },
     responsePageKind: page.kind,
     rows: ensureTimelineWindowTurnStartedRows(db, {
       threadId: thread.id,
@@ -654,6 +666,88 @@ function selectStandardTimelineEventRows(
   };
 }
 
+function isManagerConversationTimelineAnchorCursorMatch(
+  anchor: ManagerConversationTimelineSegmentAnchorRow,
+  cursor: TimelinePaginationCursor,
+): boolean {
+  return (
+    anchor.sequence === cursor.anchorSeq && anchor.rowId === cursor.anchorId
+  );
+}
+
+function requireManagerConversationTimelineAnchorCursorIndex(
+  anchors: readonly ManagerConversationTimelineSegmentAnchorRow[],
+  cursor: TimelinePaginationCursor,
+): number {
+  const index = anchors.findIndex((anchor) =>
+    isManagerConversationTimelineAnchorCursorMatch(anchor, cursor),
+  );
+  if (index !== -1) {
+    return index;
+  }
+
+  throw new ApiError(
+    400,
+    "invalid_request",
+    "Timeline pagination cursor is no longer available",
+  );
+}
+
+function selectManagerConversationTimelineEventRows(
+  db: DbConnection,
+  thread: Thread,
+  page: ThreadTimelinePageRequest,
+): TimelineEventRowSelection {
+  const anchors = listManagerConversationTimelineSegmentAnchorRows(db, {
+    threadId: thread.id,
+  });
+  let beforeSequence: number | undefined;
+  let candidateAnchorEndExclusive: number;
+  if (page.kind === "older") {
+    const cursorAnchorIndex =
+      requireManagerConversationTimelineAnchorCursorIndex(
+        anchors,
+        page.beforeCursor,
+      );
+    candidateAnchorEndExclusive = cursorAnchorIndex;
+    beforeSequence = anchors[cursorAnchorIndex + 1]?.sequence;
+  } else {
+    candidateAnchorEndExclusive = anchors.length;
+    beforeSequence = undefined;
+  }
+  const selectedAnchorStartIndex = Math.max(
+    0,
+    candidateAnchorEndExclusive - page.segmentLimit,
+  );
+  const windowAnchorIndex =
+    selectedAnchorStartIndex > 0 ? selectedAnchorStartIndex - 1 : null;
+  const sequenceStart =
+    windowAnchorIndex === null
+      ? 0
+      : (anchors[windowAnchorIndex]?.sequence ?? 0);
+
+  return {
+    paginationPage:
+      page.kind === "older"
+        ? page
+        : {
+            kind: "latest",
+            segmentLimit: page.segmentLimit,
+          },
+    responsePageKind: page.kind,
+    rows: ensureTimelineWindowTurnStartedRows(db, {
+      threadId: thread.id,
+      rows: listFilteredStoredTimelineWindowEventRows(db, {
+        beforeSequence,
+        filter: MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
+        sequenceStart,
+        threadId: thread.id,
+      }),
+    }),
+    strategy: "manager-conversation-window",
+  };
+}
+
 function selectTimelineEventRows(
   db: DbConnection,
   thread: Thread,
@@ -661,15 +755,11 @@ function selectTimelineEventRows(
   systemClientRequestVisibility: SystemClientRequestVisibility,
 ): TimelineEventRowSelection {
   if (options.timelineViewMode === "manager-conversation") {
-    return {
-      paginationPage: options.page,
-      responsePageKind: options.page.kind,
-      rows: listFilteredStoredEventRows(db, {
-        filter: MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
-        threadId: thread.id,
-      }),
-      strategy: "manager-conversation-filtered",
-    };
+    return selectManagerConversationTimelineEventRows(
+      db,
+      thread,
+      options.page,
+    );
   }
 
   return selectStandardTimelineEventRows(

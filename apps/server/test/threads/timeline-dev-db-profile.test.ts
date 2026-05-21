@@ -62,7 +62,7 @@ const PROFILE_WARMUP_ITERATIONS = parsePositiveInteger(
 const PROFILE_SCENARIOS: readonly TimelineProfileScenario[] = [
   {
     id: "target-manager-conversation",
-    expectedSelectionStrategies: ["manager-conversation-filtered"],
+    expectedSelectionStrategies: ["manager-conversation-window"],
     maxSelectedEventRowRatio: 0.6,
     threadId: "thr_bj3p5vk9py",
     timelineViewMode: "manager-conversation",
@@ -175,7 +175,10 @@ function expectProfileMatchesScenario(
   );
 
   expect(profile.eventRowCount).toBeLessThanOrEqual(fullEventRowCount);
-  if (profile.selectionStrategy === "standard-window") {
+  if (
+    profile.selectionStrategy === "standard-window" ||
+    profile.selectionStrategy === "manager-conversation-window"
+  ) {
     expect(profile.eventRowCount).toBeLessThan(fullEventRowCount);
   }
   if (scenario.maxSelectedEventRowRatio === undefined) {

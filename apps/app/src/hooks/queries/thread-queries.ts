@@ -3,6 +3,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import type {
   Host,
@@ -69,6 +70,20 @@ const THREAD_STATUS_VERSION_REFETCH_INTERVAL_MS = 2_000;
 
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
+  providerId?: string;
+}
+
+interface ThreadTimelinePrefetchOptions {
+  managerTimelineView?: ManagerTimelineView;
+}
+
+interface ThreadDetailBootstrapQueryOptions extends QueryOptions {
+  composerBootstrapPrefetch?: boolean;
+  timelinePrefetch?: ThreadTimelinePrefetchOptions;
+}
+
+interface ThreadTimelineQueryOptions extends QueryOptions {
+  managerTimelineView?: ManagerTimelineView;
 }
 
 type HostList = Host[];
@@ -77,6 +92,14 @@ type HostListQueryData = HostList | undefined;
 interface UpsertHostListArgs {
   host: Host;
   hosts: HostListQueryData;
+}
+
+interface SeedThreadComposerBootstrapCachesArgs {
+  bootstrap: ThreadComposerBootstrapResponse;
+  environmentId: string | null;
+  providerId: string | null;
+  queryClient: QueryClient;
+  threadId: string;
 }
 
 export interface UseThreadsFilters extends Omit<
@@ -222,7 +245,46 @@ function upsertHostList({ host, hosts }: UpsertHostListArgs): HostList {
   return found ? nextHosts : [...hosts, host];
 }
 
-export function useThreadDetailBootstrap(id: string, options?: QueryOptions) {
+function seedThreadComposerBootstrapCaches({
+  bootstrap,
+  environmentId,
+  providerId,
+  queryClient,
+  threadId,
+}: SeedThreadComposerBootstrapCachesArgs): void {
+  queryClient.setQueryData(
+    threadDefaultExecutionOptionsQueryKey(threadId),
+    bootstrap.defaultExecutionOptions,
+  );
+  queryClient.setQueryData(
+    threadQueuedMessagesQueryKey(threadId),
+    bootstrap.queuedMessages,
+  );
+  queryClient.setQueryData(
+    threadPromptHistoryQueryKey(threadId),
+    bootstrap.promptHistory,
+  );
+  queryClient.setQueryData(
+    threadPendingInteractionsQueryKey(threadId),
+    bootstrap.pendingInteractions,
+  );
+  const resolvedProviderId =
+    providerId ?? bootstrap.executionOptions.providers[0]?.id;
+  if (resolvedProviderId) {
+    queryClient.setQueryData(
+      systemExecutionOptionsQueryKey({
+        environmentId,
+        providerId: resolvedProviderId,
+      }),
+      bootstrap.executionOptions,
+    );
+  }
+}
+
+export function useThreadDetailBootstrap(
+  id: string,
+  options?: ThreadDetailBootstrapQueryOptions,
+) {
   const queryClient = useQueryClient();
 
   return useQuery<ThreadWithIncludesResponse>({
@@ -248,6 +310,38 @@ export function useThreadDetailBootstrap(id: string, options?: QueryOptions) {
           upsertHostList({ host, hosts }),
         );
       }
+      if (options?.timelinePrefetch) {
+        const managerTimelineView =
+          thread.type === "manager"
+            ? options.timelinePrefetch.managerTimelineView
+            : undefined;
+        void queryClient.prefetchQuery({
+          queryKey: threadTimelineQueryKey(thread.id, managerTimelineView),
+          queryFn: () =>
+            api.getThreadTimeline({
+              id: thread.id,
+              managerTimelineView,
+            }),
+        });
+      }
+      if (options?.composerBootstrapPrefetch) {
+        const environmentId = thread.environmentId ?? null;
+        const providerId = thread.providerId ?? null;
+        void queryClient.prefetchQuery({
+          queryKey: threadComposerBootstrapQueryKey(thread.id, environmentId),
+          queryFn: async () => {
+            const bootstrap = await api.getThreadComposerBootstrap(thread.id);
+            seedThreadComposerBootstrapCaches({
+              bootstrap,
+              environmentId,
+              providerId,
+              queryClient,
+              threadId: thread.id,
+            });
+            return bootstrap;
+          },
+        });
+      }
       return thread;
     },
     enabled: (options?.enabled ?? true) && Boolean(id),
@@ -261,6 +355,7 @@ export function useThreadComposerBootstrap(
 ) {
   const queryClient = useQueryClient();
   const environmentId = options?.environmentId ?? null;
+  const providerId = options?.providerId ?? null;
 
   return useQuery<ThreadComposerBootstrapResponse>({
     queryKey: threadComposerBootstrapQueryKey(id, environmentId),
@@ -268,35 +363,21 @@ export function useThreadComposerBootstrap(
       const bootstrap = await api.getThreadComposerBootstrap(
         requireThreadId(id, "useThreadComposerBootstrap"),
       );
-      queryClient.setQueryData(
-        threadDefaultExecutionOptionsQueryKey(id),
-        bootstrap.defaultExecutionOptions,
-      );
-      queryClient.setQueryData(
-        threadQueuedMessagesQueryKey(id),
-        bootstrap.queuedMessages,
-      );
-      queryClient.setQueryData(
-        threadPromptHistoryQueryKey(id),
-        bootstrap.promptHistory,
-      );
-      queryClient.setQueryData(
-        threadPendingInteractionsQueryKey(id),
-        bootstrap.pendingInteractions,
-      );
-      const providerId = bootstrap.executionOptions.providers[0]?.id;
-      if (providerId) {
-        queryClient.setQueryData(
-          systemExecutionOptionsQueryKey({ environmentId, providerId }),
-          bootstrap.executionOptions,
-        );
-      }
+      seedThreadComposerBootstrapCaches({
+        bootstrap,
+        environmentId,
+        providerId,
+        queryClient,
+        threadId: id,
+      });
       return bootstrap;
     },
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
-    staleTime: options?.staleTime,
+    ...(options?.staleTime === undefined
+      ? {}
+      : { staleTime: options.staleTime }),
   });
 }
 
@@ -459,11 +540,7 @@ export function useThreadHostFilePreview(
 
 export function useThreadTimeline(
   id: string,
-  options?: {
-    enabled?: boolean;
-    refetchOnMount?: boolean | "always";
-    managerTimelineView?: ManagerTimelineView;
-  },
+  options?: ThreadTimelineQueryOptions,
 ) {
   const managerTimelineView = options?.managerTimelineView;
 
@@ -476,6 +553,9 @@ export function useThreadTimeline(
       }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
+    ...(options?.staleTime === undefined
+      ? {}
+      : { staleTime: options.staleTime }),
     placeholderData: (previousData, previousQuery) =>
       resolveThreadTimelinePlaceholder(
         previousData,

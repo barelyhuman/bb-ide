@@ -61,7 +61,7 @@ function stripProjectThreads(
   return projectResponse;
 }
 
-export function useSidebarBootstrap() {
+export function useSidebarBootstrap(options?: QueryOptions) {
   const queryClient = useQueryClient();
 
   return useQuery<ProjectWithThreadsResponse[]>({
@@ -80,6 +80,7 @@ export function useSidebarBootstrap() {
       }
       return projects;
     },
+    enabled: options?.enabled ?? true,
     staleTime: Infinity,
   });
 }

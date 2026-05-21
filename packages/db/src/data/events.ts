@@ -708,6 +708,10 @@ export interface ListStandardTimelineSegmentAnchorRowsArgs {
   threadId: string;
 }
 
+export interface ListManagerConversationTimelineSegmentAnchorRowsArgs {
+  threadId: string;
+}
+
 export interface StoredEventRowTypeFilter {
   eventTypes: readonly ThreadEventType[];
   itemEventTypes: readonly ThreadEventType[];
@@ -717,6 +721,11 @@ export interface StoredEventRowTypeFilter {
 export interface ListFilteredStoredEventRowsArgs {
   filter: StoredEventRowTypeFilter;
   threadId: string;
+}
+
+export interface ListFilteredStoredTimelineWindowEventRowsArgs
+  extends ListStoredTimelineWindowEventRowsArgs {
+  filter: StoredEventRowTypeFilter;
 }
 
 export interface ListStoredTimelineWindowEventRowsArgs {
@@ -1104,6 +1113,11 @@ export interface StandardTimelineSegmentAnchorRow {
   sequence: number;
 }
 
+export interface ManagerConversationTimelineSegmentAnchorRow {
+  rowId: string;
+  sequence: number;
+}
+
 export function listStandardTimelineSegmentAnchorRows(
   db: DbConnection,
   args: ListStandardTimelineSegmentAnchorRowsArgs,
@@ -1147,6 +1161,45 @@ export function listStandardTimelineSegmentAnchorRows(
     .all();
 }
 
+export function listManagerConversationTimelineSegmentAnchorRows(
+  db: DbConnection,
+  args: ListManagerConversationTimelineSegmentAnchorRowsArgs,
+): ManagerConversationTimelineSegmentAnchorRow[] {
+  return db
+    .select({
+      rowId: sql<string>`${events.threadId} || ':user-seed:' || ${events.sequence}`,
+      sequence: events.sequence,
+    })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "client/turn/requested"),
+        sql`COALESCE(json_extract(${events.data}, '$.initiator'), 'user') = 'user'`,
+        sql`(
+          COALESCE(json_extract(${events.data}, '$.target.kind'), 'new-turn')
+            IN ('thread-start', 'new-turn')
+          OR (
+            json_extract(${events.data}, '$.target.kind') = 'auto'
+            AND json_extract(${events.data}, '$.target.expectedTurnId') IS NULL
+          )
+        )`,
+        sql`EXISTS (
+          SELECT 1
+          FROM json_each(${events.data}, '$.input') AS input_part
+          WHERE (
+            json_extract(input_part.value, '$.type') = 'text'
+            AND COALESCE(json_extract(input_part.value, '$.text'), '') <> ''
+          )
+          OR json_extract(input_part.value, '$.type')
+            IN ('image', 'localImage', 'localFile')
+        )`,
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+}
+
 export function listStoredTimelineWindowEventRows(
   db: DbConnection,
   args: ListStoredTimelineWindowEventRowsArgs,
@@ -1154,6 +1207,30 @@ export function listStoredTimelineWindowEventRows(
   const conditions: SQL[] = [
     eq(events.threadId, args.threadId),
     gte(events.sequence, args.sequenceStart),
+  ];
+  if (args.beforeSequence !== undefined) {
+    conditions.push(lt(events.sequence, args.beforeSequence));
+  }
+  if (args.excludedTypes && args.excludedTypes.length > 0) {
+    conditions.push(notInArray(events.type, [...args.excludedTypes]));
+  }
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(and(...conditions))
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listFilteredStoredTimelineWindowEventRows(
+  db: DbConnection,
+  args: ListFilteredStoredTimelineWindowEventRowsArgs,
+): StoredEventRow[] {
+  const conditions: SQL[] = [
+    eq(events.threadId, args.threadId),
+    gte(events.sequence, args.sequenceStart),
+    buildStoredEventRowTypeFilterCondition(args.filter),
   ];
   if (args.beforeSequence !== undefined) {
     conditions.push(lt(events.sequence, args.beforeSequence));

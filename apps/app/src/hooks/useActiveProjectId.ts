@@ -1,11 +1,18 @@
 import { useEffect } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
-import { useProjects } from "@/hooks/queries/project-queries";
+import {
+  useProjects,
+  useSidebarBootstrap,
+} from "@/hooks/queries/project-queries";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
 
 const LAST_ACTIVE_PROJECT_ID_KEY = "bb.lastActiveProjectId";
+
+interface ActiveProjectCandidate {
+  id: string;
+}
 
 const lastActiveProjectIdStorage = createLocalStorageSyncStorage<string | null>(
   {
@@ -35,9 +42,16 @@ const lastActiveProjectIdAtom = atomWithStorage<string | null>(
  */
 export function useActiveProjectId(): string | undefined {
   const { projectId: urlProjectId } = useAppRoute();
-  const { data: projects } = useProjects({ enabled: !urlProjectId });
+  const sidebarBootstrapQuery = useSidebarBootstrap({ enabled: !urlProjectId });
+  const hasSidebarBootstrapSettled =
+    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const { data: projectsFallback } = useProjects({
+    enabled: !urlProjectId && hasSidebarBootstrapSettled,
+  });
   const setLastActive = useSetAtom(lastActiveProjectIdAtom);
   const lastActive = useAtomValue(lastActiveProjectIdAtom);
+  const projects: readonly ActiveProjectCandidate[] | undefined =
+    sidebarBootstrapQuery.data ?? projectsFallback;
 
   useEffect(() => {
     if (urlProjectId) {

@@ -16,6 +16,7 @@ import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js"
 import {
   buildThreadTimeline as buildThreadTimelineWithResolvedMode,
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
+  profileThreadTimeline,
   resolveThreadTimelineServiceViewMode,
   type ThreadTimelinePageRequest,
 } from "../../src/services/threads/timeline.js";
@@ -72,6 +73,20 @@ interface SeedTimelineClientTurnRequestedArgs {
 interface ProjectedTimelineSegmentAnchorRow {
   rowId: string;
   sequence: number;
+}
+
+interface ReconstructManagerConversationTimelineByPagesArgs {
+  db: DbConnection;
+  isDevelopment: boolean;
+  segmentLimit: number;
+  thread: Thread;
+}
+
+interface ReconstructThreadTimelineByPagesArgs {
+  db: DbConnection;
+  isDevelopment: boolean;
+  segmentLimit: number;
+  thread: Thread;
 }
 
 function flattenTimelineSourceRows(
@@ -157,6 +172,70 @@ function buildManagerConversationTimeline(
     },
     timelineViewMode: "manager-conversation",
   });
+}
+
+function reconstructThreadTimelineByPages({
+  db,
+  isDevelopment,
+  segmentLimit,
+  thread,
+}: ReconstructThreadTimelineByPagesArgs): TimelineRow[] {
+  const latestPage = buildThreadTimeline(db, thread, {
+    isDevelopment,
+    page: {
+      kind: "latest",
+      segmentLimit,
+    },
+  });
+  const rows = [...latestPage.rows];
+  let olderCursor = latestPage.timelinePage.olderCursor;
+
+  while (olderCursor !== null) {
+    const olderPage = buildThreadTimeline(db, thread, {
+      isDevelopment,
+      page: {
+        kind: "older",
+        beforeCursor: olderCursor,
+        segmentLimit,
+      },
+    });
+    rows.unshift(...olderPage.rows);
+    olderCursor = olderPage.timelinePage.olderCursor;
+  }
+
+  return rows;
+}
+
+function reconstructManagerConversationTimelineByPages({
+  db,
+  isDevelopment,
+  segmentLimit,
+  thread,
+}: ReconstructManagerConversationTimelineByPagesArgs): TimelineRow[] {
+  const latestPage = buildManagerConversationTimeline(db, thread, {
+    isDevelopment,
+    page: {
+      kind: "latest",
+      segmentLimit,
+    },
+  });
+  const rows = [...latestPage.rows];
+  let olderCursor = latestPage.timelinePage.olderCursor;
+
+  while (olderCursor !== null) {
+    const olderPage = buildManagerConversationTimeline(db, thread, {
+      isDevelopment,
+      page: {
+        kind: "older",
+        beforeCursor: olderCursor,
+        segmentLimit,
+      },
+    });
+    rows.unshift(...olderPage.rows);
+    olderCursor = olderPage.timelinePage.olderCursor;
+  }
+
+  return rows;
 }
 
 function buildTimelineTurnSummaryDetails(
@@ -535,6 +614,323 @@ describe("buildThreadTimeline", () => {
       hasOlderRows: false,
       olderCursor: null,
     });
+  });
+
+  it("keeps standard timeline rows that cross the older-page cursor anchor", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+    const crossingAssistantText = "Crossing response from turn 2";
+
+    for (let index = 0; index < 4; index += 1) {
+      const turnNumber = index + 1;
+      const sequenceBase = turnNumber * 10;
+      const requestId = `creq_23456789a${["b", "c", "d", "e"][index]}`;
+      seedTimelineClientTurnRequested(harness, {
+        environmentId,
+        requestId,
+        sequence: sequenceBase + 1,
+        target: { kind: "new-turn" },
+        text: `Standard request ${turnNumber}`,
+        threadId: thread.id,
+      });
+
+      const crossesCursorAnchor = turnNumber === 2;
+      const lifecycleSequenceBase =
+        turnNumber === 3 ? sequenceBase + 3 : sequenceBase + 1;
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: lifecycleSequenceBase + 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: lifecycleSequenceBase + 2,
+        type: "turn/input/accepted",
+        data: {
+          clientRequestId: requestId,
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: crossesCursorAnchor ? 32 : lifecycleSequenceBase + 3,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "agentMessage",
+            id: `assistant-${turnNumber}`,
+            text: crossesCursorAnchor
+              ? crossingAssistantText
+              : `Standard response ${turnNumber}`,
+          },
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: crossesCursorAnchor ? 33 : lifecycleSequenceBase + 4,
+        type: "turn/completed",
+        data: {
+          status: "completed",
+        },
+      });
+    }
+
+    const fullTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    const olderPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "older",
+        beforeCursor: {
+          anchorSeq: 31,
+          anchorId: `${thread.id}:user-seed:31`,
+        },
+        segmentLimit: 1,
+      },
+    });
+    const reconstructedRows = reconstructThreadTimelineByPages({
+      db: harness.db,
+      isDevelopment: true,
+      segmentLimit: 1,
+      thread,
+    });
+
+    expect(olderPage.rows).toContainEqual(
+      expect.objectContaining({
+        kind: "conversation",
+        role: "assistant",
+        text: crossingAssistantText,
+      }),
+    );
+    expect(reconstructedRows.map((row) => row.id)).toEqual(
+      fullTimeline.rows.map((row) => row.id),
+    );
+  });
+
+  it("paginates manager conversation timeline rows from an event window", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "manager",
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      const turnNumber = index + 1;
+      const sequenceBase = turnNumber * 10;
+      const includesPostAnchorOperation = turnNumber === 3;
+      const lifecycleSequenceOffset = includesPostAnchorOperation ? 1 : 0;
+      seedTimelineClientTurnRequested(harness, {
+        environmentId,
+        requestId: `creq_23456789a${["b", "c", "d", "e", "f"][index]}`,
+        sequence: sequenceBase + 1,
+        target: { kind: "new-turn" },
+        text: `Manager request ${turnNumber}`,
+        threadId: thread.id,
+      });
+      if (includesPostAnchorOperation) {
+        seedEvent(harness.deps, {
+          threadId: thread.id,
+          environmentId,
+          providerThreadId: "provider-thread-1",
+          scope: threadScope(),
+          sequence: sequenceBase + 2,
+          type: "provider/unhandled",
+          data: {
+            providerId: "codex",
+            rawType: "remoteControl/status/changed",
+            rawEvent: {
+              jsonrpc: "2.0",
+              method: "remoteControl/status/changed",
+              params: {
+                threadId: thread.id,
+              },
+            },
+          },
+        });
+      }
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: sequenceBase + 2 + lifecycleSequenceOffset,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: sequenceBase + 3 + lifecycleSequenceOffset,
+        type: "turn/input/accepted",
+        data: {
+          clientRequestId: `creq_23456789a${["b", "c", "d", "e", "f"][index]}`,
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        sequence: sequenceBase + 4 + lifecycleSequenceOffset,
+        type: "system/manager/user_message",
+        scope: threadScope(),
+        data: {
+          text: `Manager response ${turnNumber}`,
+          toolCallId: `tool-${turnNumber}`,
+          turnId: `turn-${turnNumber}`,
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope(`turn-${turnNumber}`),
+        sequence: sequenceBase + 5 + lifecycleSequenceOffset,
+        type: "turn/completed",
+        data: {
+          status: "completed",
+        },
+      });
+    }
+
+    const fullTimeline = buildManagerConversationTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    const crossingOperationRowId = `${thread.id}:op:provider-unhandled:32`;
+    const directOlderPage = buildManagerConversationTimeline(
+      harness.db,
+      thread,
+      {
+        isDevelopment: true,
+        page: {
+          kind: "older",
+          beforeCursor: {
+            anchorSeq: 31,
+            anchorId: `${thread.id}:user-seed:31`,
+          },
+          segmentLimit: 1,
+        },
+      },
+    );
+    const reconstructedRows = reconstructManagerConversationTimelineByPages({
+      db: harness.db,
+      isDevelopment: true,
+      segmentLimit: 1,
+      thread,
+    });
+    const latestPage = buildManagerConversationTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 2,
+      },
+    });
+    const latestOlderCursor = latestPage.timelinePage.olderCursor;
+    expect(latestOlderCursor).not.toBeNull();
+    if (latestOlderCursor === null) {
+      throw new Error("Expected an older cursor for the latest page");
+    }
+    const olderPage = buildManagerConversationTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "older",
+        beforeCursor: latestOlderCursor,
+        segmentLimit: 3,
+      },
+    });
+    const pagedRows = [...olderPage.rows, ...latestPage.rows];
+
+    expect(directOlderPage.rows.map((row) => row.id)).toContain(
+      crossingOperationRowId,
+    );
+    expect(reconstructedRows.map((row) => row.id)).toEqual(
+      fullTimeline.rows.map((row) => row.id),
+    );
+    expect(pagedRows.map((row) => row.id)).toEqual(
+      fullTimeline.rows.map((row) => row.id),
+    );
+
+    const fullProfile = profileThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: UNPAGINATED_TIMELINE_SEGMENT_LIMIT,
+      },
+      timelineViewMode: "manager-conversation",
+    }).profile;
+    const latestProfile = profileThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 2,
+      },
+      timelineViewMode: "manager-conversation",
+    }).profile;
+
+    expect(latestProfile.selectionStrategy).toBe(
+      "manager-conversation-window",
+    );
+    expect(latestProfile.eventRowCount).toBeLessThan(
+      fullProfile.eventRowCount,
+    );
+  });
+
+  it("uses the same manager conversation range selector without anchors", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "manager",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      type: "system/thread-provisioning",
+      scope: threadScope(),
+      data: {
+        provisioningId: "tpv-1",
+        status: "completed",
+        environmentId,
+        entries: [
+          {
+            type: "step",
+            key: "workspace-path",
+            text: "Using workspace: /tmp/test",
+            status: "completed",
+          },
+        ],
+      },
+    });
+
+    const profile = profileThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 20,
+      },
+      timelineViewMode: "manager-conversation",
+    }).profile;
+
+    expect(profile.selectionStrategy).toBe("manager-conversation-window");
+    expect(profile.eventRowCount).toBe(1);
+    expect(profile.responseRowCount).toBeGreaterThan(0);
   });
 
   it("keeps accepted in-turn steers inside the primary message segment", async () => {
