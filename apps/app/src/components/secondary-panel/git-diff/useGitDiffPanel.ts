@@ -59,11 +59,8 @@ export function useGitDiffPanel({
   }, [openThreadSecondaryPanel]);
 
   const closeThreadSecondaryPanel = useCallback(() => {
-    if (activeSecondaryPanel === null) {
-      return;
-    }
     setThreadSecondaryPanel(null);
-  }, [activeSecondaryPanel, setThreadSecondaryPanel]);
+  }, [setThreadSecondaryPanel]);
 
   const openDiffFile = useCallback(
     (path: string) => {
