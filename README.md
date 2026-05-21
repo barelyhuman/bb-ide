@@ -65,10 +65,6 @@ a data directory under
 checkout path. The checkout instance id is the sanitized path to the checkout,
 relative to your home directory, plus a short hash suffix. Separate worktrees
 can run alongside each other and the packaged `npx bb-app@latest` instance.
-`pnpm dev:worktree` is kept as an
-explicit alias for the same isolated launcher. On first run, legacy flat
-`~/.bb-dev` state is migrated into the current checkout's instance directory
-when no old dev server or host daemon is still running.
 
 Development behavior is intentionally split:
 

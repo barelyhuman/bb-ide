@@ -113,13 +113,8 @@ applies to source development. `pnpm dev` loads `.env`, `.env.local`,
 selectors (`BB_DATA_DIR`, server URL/port, host-daemon local API port, Vite
 port, and dev-env port) with deterministic values derived from the checkout
 path. The SQLite database path is always derived from `BB_DATA_DIR`.
-`pnpm dev:worktree` is an alias for the same isolated launcher. On first run,
-known legacy flat `~/.bb-dev` state such as the dev DB,
-logs, auth, thread storage, manager templates, replays, and event spool files is
-migrated into the current checkout's instance directory. The migration leaves
-top-level `worktrees/`, lock files, and PID files in place, and it refuses to
-run while an old dev server or host daemon is still running. `pnpm start` loads
-`.env`, `.env.local`, `.env.production`, and `.env.production.local`.
+`pnpm start` loads `.env`, `.env.local`, `.env.production`, and
+`.env.production.local`.
 
 Production startup from source goes through the packaged launcher path:
 `pnpm start` runs `packages/bb-app/dist/bb-app.js`, and

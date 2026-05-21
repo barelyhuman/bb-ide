@@ -344,7 +344,7 @@ export async function migrateLegacyDevData(
   }
 
   args.output?.write(
-    `[dev:worktree] Migrated legacy dev data into ${args.config.dataDir}: ${formatMigratedEntries(entries)}\n`,
+    `[dev] Migrated legacy dev data into ${args.config.dataDir}: ${formatMigratedEntries(entries)}\n`,
   );
   return {
     migratedEntries: entries,

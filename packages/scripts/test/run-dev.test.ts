@@ -8,7 +8,7 @@ import {
   resolveWorktreeDevInstanceConfig,
   toWorktreeDevProcessEnv,
 } from "../src/lib/worktree-dev-instance.js";
-import { createDevTurboCommand } from "../src/commands/run-worktree-dev.js";
+import { createDevTurboCommand } from "../src/commands/run-dev.js";
 
 interface ExpectedPortSet {
   appPort: number;
@@ -63,7 +63,7 @@ function expectedPorts(repoRoot: string): ExpectedPortSet {
   };
 }
 
-describe("run-worktree-dev", () => {
+describe("run-dev", () => {
   it("derives stable data and ports from a managed worktree checkout", () => {
     const homeDir = "/Users/tester";
     const repoRoot = "/Users/tester/.bb-dev/worktrees/env_q7e5i54kxt/bb";
@@ -174,12 +174,7 @@ describe("run-worktree-dev", () => {
       "utf8",
     );
     await fs.writeFile(
-      path.join(
-        legacyDataDir,
-        "attachments",
-        "proj_test",
-        "screenshot.png",
-      ),
+      path.join(legacyDataDir, "attachments", "proj_test", "screenshot.png"),
       "image",
       "utf8",
     );

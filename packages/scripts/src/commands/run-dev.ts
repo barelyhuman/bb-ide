@@ -49,12 +49,12 @@ export function createDevTurboCommand(): DevTurboCommand {
 
 function formatConfig(config: WorktreeDevInstanceConfig): string {
   return [
-    `[dev:worktree] Instance ${config.instanceId}`,
-    `[dev:worktree] Data dir ${config.dataDir}`,
-    `[dev:worktree] App http://localhost:${config.ports.appPort}`,
-    `[dev:worktree] Server ${config.serverUrl}`,
-    `[dev:worktree] Host daemon http://127.0.0.1:${config.ports.hostDaemonPort}`,
-    `[dev:worktree] Dev-env http://127.0.0.1:${config.ports.devEnvPort}`,
+    `[dev] Instance ${config.instanceId}`,
+    `[dev] Data dir ${config.dataDir}`,
+    `[dev] App http://localhost:${config.ports.appPort}`,
+    `[dev] Server ${config.serverUrl}`,
+    `[dev] Host daemon http://127.0.0.1:${config.ports.hostDaemonPort}`,
+    `[dev] Dev-env http://127.0.0.1:${config.ports.devEnvPort}`,
   ].join("\n");
 }
 
@@ -64,7 +64,7 @@ function checkPortAvailable(check: PortAvailabilityCheck): Promise<void> {
     const rejectWithPortError = (error: Error) => {
       rejectPromise(
         new Error(
-          `[dev:worktree] ${check.label} port ${check.port} is unavailable: ${error.message}`,
+          `[dev] ${check.label} port ${check.port} is unavailable: ${error.message}`,
         ),
       );
     };
@@ -108,7 +108,7 @@ export async function main(): Promise<void> {
   });
   if (migration.skippedReason === "legacy-dev-process-running") {
     throw new Error(
-      "[dev:worktree] Legacy ~/.bb-dev data was found, but an old dev server or host-daemon is still running. Stop the old dev process and rerun pnpm dev to migrate it.",
+      "[dev] Legacy ~/.bb-dev data was found, but an old dev server or host-daemon is still running. Stop the old dev process and rerun pnpm dev to migrate it.",
     );
   }
   await assertPortsAvailable(config);
