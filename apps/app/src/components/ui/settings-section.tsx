@@ -16,7 +16,12 @@ export function SettingsSection({
 }: SettingsSectionProps) {
   return (
     <section className="space-y-2">
-      <div className="flex items-start justify-between gap-3">
+      <div
+        className={cn(
+          "flex justify-between gap-3",
+          description ? "items-start" : "items-center",
+        )}
+      >
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
           {description ? (

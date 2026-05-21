@@ -211,7 +211,7 @@ export function AppSettingsView() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full justify-between sm:w-48"
+                  className="w-full justify-between border-border/60 bg-card sm:w-48"
                   aria-label="Theme"
                 >
                   {THEME_PREFERENCE_LABELS[themePreference]}
