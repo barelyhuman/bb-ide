@@ -1646,6 +1646,7 @@ describe("public thread manager and ownership routes", () => {
       ).toEqual([]);
       expect(loggerError).toHaveBeenCalledWith(
         expect.objectContaining({
+          err: expect.any(Error),
           managedThreadId: thread.id,
           managerThreadId: managerThread.id,
           reason: "assigned",

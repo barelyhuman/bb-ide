@@ -1,10 +1,8 @@
 import { renderTemplate } from "@bb/templates";
 import type { LoggedWorkSessionDeps } from "../../types.js";
 import { Type } from "@mariozechner/pi-ai";
-import {
-  InferenceTimeoutError,
-  inferenceComplete,
-} from "./inference.js";
+import { InferenceTimeoutError, inferenceComplete } from "./inference.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 const commitMessageSchema = Type.Object({
   message: Type.String({ minLength: 1 }),
@@ -133,7 +131,7 @@ async function generateCommitMessageWithOutcome(
         {
           attempts: outcome.attempts,
           durationMs: outcome.durationMs,
-          err,
+          ...runtimeErrorLogFields(deps.config, err),
           reason: outcome.reason,
         },
         "Failed to generate commit message",

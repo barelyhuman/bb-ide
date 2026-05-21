@@ -6,6 +6,7 @@ import {
   generateThreadMetadataWithOutcome,
   type ThreadMetadataGenerationOutcome,
 } from "./title-generation.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 type ThreadMetadataInferenceDeps = LoggedWorkSessionDeps;
 
@@ -170,7 +171,10 @@ export async function inferThreadMetadata(
       });
     } catch (error) {
       deps.logger.warn(
-        { err: error, threadId: args.threadId },
+        {
+          threadId: args.threadId,
+          ...runtimeErrorLogFields(deps.config, error),
+        },
         "Failed to apply generated thread title",
       );
     }

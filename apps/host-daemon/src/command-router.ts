@@ -12,6 +12,7 @@ import {
 import { isExpectedCommandDispatchError } from "./command-dispatch-support.js";
 import type { HostDaemonLogger } from "./logger.js";
 import { RuntimeManager } from "./runtime-manager.js";
+import { runtimeErrorLogFields } from "./error-utils.js";
 
 type CommandResultReport = HostDaemonCommandResultReportWithoutSession;
 
@@ -112,7 +113,7 @@ export class CommandRouter {
       .catch((error) => {
         this.pendingResults.push(report);
         this.logger.warn(
-          { err: error },
+          runtimeErrorLogFields(error),
           "failed to report command result, will retry on next completion",
         );
       });
@@ -144,7 +145,7 @@ export class CommandRouter {
         this.pendingResults.shift();
       } catch (error) {
         this.logger.warn(
-          { err: error },
+          runtimeErrorLogFields(error),
           "failed to report pending command result, will retry on next completion",
         );
         return;
@@ -211,9 +212,9 @@ export class CommandRouter {
       if (!isExpectedCommandDispatchError(error)) {
         this.logger.warn(
           {
-            err: error,
             commandId: envelope.id,
             type: envelope.command.type,
+            err: error,
           },
           "command execution failed",
         );
@@ -258,10 +259,9 @@ export class CommandRouter {
     const previousTail = state.tail;
     // Reads only wait for earlier writes, so adjacent reads can run together.
     // They still join the full tail so later writes wait for every active read.
-    const tail = Promise.all([
-      previousTail.catch(() => undefined),
-      done,
-    ]).then(() => undefined);
+    const tail = Promise.all([previousTail.catch(() => undefined), done]).then(
+      () => undefined,
+    );
     state.tail = tail;
     this.deleteEnvironmentLaneWhenIdle(environmentId, state, tail);
     return next;

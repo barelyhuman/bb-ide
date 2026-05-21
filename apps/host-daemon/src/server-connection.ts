@@ -25,7 +25,7 @@ import {
   type ServerConnectionOptions,
   type TimeoutHandle,
 } from "./server-connection-support.js";
-import { normalizeCaughtError } from "./error-utils.js";
+import { normalizeCaughtError, runtimeErrorLogFields } from "./error-utils.js";
 
 export type {
   CreateReconnectingWebSocket,
@@ -328,7 +328,10 @@ export class ServerConnection {
     void Promise.resolve(this.options.onTerminalMessage?.(message.data)).catch(
       (error) => {
         this.options.logger.warn(
-          { err: error, type: message.data.type },
+          {
+            type: message.data.type,
+            ...runtimeErrorLogFields(error),
+          },
           "Terminal websocket message handler failed",
         );
       },

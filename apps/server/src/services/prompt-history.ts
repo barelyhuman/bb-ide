@@ -19,6 +19,7 @@ import {
 import { z } from "zod";
 import { toThreadQueuedMessage } from "./threads/thread-queued-messages.js";
 import type { AppDeps, ServerLogger } from "../types.js";
+import { productionErrorLogFields } from "./lib/error-log-fields.js";
 
 const storedPromptHistoryInputSchema = z.array(promptInputSchema).min(1);
 
@@ -148,7 +149,7 @@ function buildPromptHistoryEntries<TRow>({
       logger.warn(
         {
           ...describeRow(row),
-          err: error,
+          ...productionErrorLogFields(error),
         },
         "Skipping malformed prompt history row",
       );

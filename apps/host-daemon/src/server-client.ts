@@ -33,6 +33,7 @@ import {
 import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 import type { EventPostResult } from "./event-buffer.js";
+import { runtimeErrorLogFields } from "./error-utils.js";
 import type {
   FetchedProjectAttachment,
   FetchProjectAttachmentArgs,
@@ -420,7 +421,7 @@ export function createServerClient(
       }
     } catch (error) {
       options.logger.warn(
-        { err: error },
+        runtimeErrorLogFields(error),
         "error while reporting command error",
       );
     }
@@ -619,9 +620,9 @@ export function createServerClient(
           onFailedAttempt(context): void {
             options.logger.warn(
               {
-                err: context,
                 attempt: context.attemptNumber,
                 retriesLeft: context.retriesLeft,
+                ...runtimeErrorLogFields(context),
               },
               "command result POST failed, retrying",
             );
@@ -736,9 +737,9 @@ export function createServerClient(
           onFailedAttempt(context): void {
             options.logger.warn(
               {
-                err: context,
                 attempt: context.attemptNumber,
                 retriesLeft: context.retriesLeft,
+                ...runtimeErrorLogFields(context),
               },
               "interactive request registration failed, retrying",
             );

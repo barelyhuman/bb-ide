@@ -14,6 +14,7 @@ import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { verifyAuthenticatedDaemon } from "../internal/auth.js";
 import type { AppDeps } from "../types.js";
+import { runtimeErrorLogFields } from "../services/lib/error-log-fields.js";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
@@ -127,7 +128,10 @@ export function onDaemonSocketMessage(
 
     if (error instanceof ApiError && error.status === 403) {
       deps.logger.warn(
-        { sessionId: args.sessionId, err: error },
+        {
+          sessionId: args.sessionId,
+          ...runtimeErrorLogFields(deps.config, error),
+        },
         "Daemon heartbeat for unauthorized session, closing socket",
       );
       args.socket.close(1008, "unauthorized-session");
@@ -135,7 +139,10 @@ export function onDaemonSocketMessage(
     }
 
     deps.logger.warn(
-      { sessionId: args.sessionId, err: error },
+      {
+        sessionId: args.sessionId,
+        ...runtimeErrorLogFields(deps.config, error),
+      },
       "Daemon heartbeat rejected, closing socket",
     );
     args.socket.close(1008, "inactive-session");

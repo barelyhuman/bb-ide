@@ -197,6 +197,7 @@ export function requestProjectDeletionAdvance(
   args: ProjectDeletionArgs,
 ): void {
   scheduleAfterDaemonIngressResponse({
+    config: deps.config,
     context: {
       projectId: args.projectId,
     },

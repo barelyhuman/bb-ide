@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { HostDaemonCommandType } from "@bb/host-daemon-contract";
-import type { ServerLogger } from "../../types.js";
+import type { ServerLogger, ServerRuntimeConfig } from "../../types.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 export type DaemonCommandWaitOperation = "queue-and-wait" | "wait";
 
@@ -24,6 +25,7 @@ export interface AssertDaemonCommandWaitAllowedArgs {
 }
 
 export interface ScheduleAfterDaemonIngressResponseArgs {
+  config: Pick<ServerRuntimeConfig, "isDevelopment">;
   context?: Record<string, boolean | number | string | null | undefined>;
   logger: Pick<ServerLogger, "warn">;
   name: string;
@@ -83,7 +85,7 @@ export function scheduleAfterDaemonIngressResponse(
           args.logger.warn(
             {
               ...args.context,
-              err: error,
+              ...runtimeErrorLogFields(args.config, error),
             },
             `${args.name} failed`,
           );

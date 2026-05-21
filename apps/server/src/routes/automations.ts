@@ -20,6 +20,7 @@ import {
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
+import { runtimeErrorLogFields } from "../services/lib/error-log-fields.js";
 import {
   buildStableThreadRequestProjectData,
   parseAutomationAction,
@@ -252,8 +253,8 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
           deps.logger.warn(
             {
               automationId: automation.id,
-              err: error,
               projectId,
+              ...runtimeErrorLogFields(deps.config, error),
             },
             "Skipping malformed automation row in list response",
           );

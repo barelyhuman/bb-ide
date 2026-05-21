@@ -135,7 +135,12 @@ export class InteractiveRequestRegistry {
       const response = await this.options.registerRequest(request);
       if (response.outcome === "rejected") {
         this.pendingEntries.delete(key);
-        entry.reject(new Error(response.reason));
+        entry.reject(
+          new InteractiveRequestRegistryError(
+            "interactive_request_rejected",
+            response.reason,
+          ),
+        );
         return promise;
       }
 

@@ -11,6 +11,7 @@ import type {
 import { ApiError } from "../../errors.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { requireDefaultConnectedPersistentHostId } from "../lib/entity-lookup.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 export interface TranscribeVoiceInputArgs {
   file: File;
@@ -199,7 +200,7 @@ async function transcribeWithOpenAi(
       throw buildTranscriptionTimeoutError();
     }
     deps.logger.warn(
-      { err: error },
+      runtimeErrorLogFields(deps.config, error),
       "OpenAI voice transcription request failed",
     );
     throw new ApiError(

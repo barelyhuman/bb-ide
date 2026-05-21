@@ -33,6 +33,7 @@ export async function dispatchCommandResultPostCommitActions(
     }
 
     scheduleAfterDaemonIngressResponse({
+      config: args.deps.config,
       context: {
         ...action.context,
         commandId: args.command.id,

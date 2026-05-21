@@ -8,6 +8,7 @@ import type { HostDaemonDaemonWsMessage } from "@bb/host-daemon-contract";
 import type { HostDaemonServerTerminalMessage } from "../server-connection-support.js";
 import type { HostDaemonLogger } from "../logger.js";
 import { RuntimeManager } from "../runtime-manager.js";
+import { runtimeErrorLogFields } from "../error-utils.js";
 
 const DEFAULT_SCROLLBACK_MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_SCROLLBACK_MAX_CHUNKS = 10_000;
@@ -273,7 +274,10 @@ export class TerminalManager {
         session.pty.kill();
       } catch (error) {
         this.options.logger.warn(
-          { err: error, terminalId: session.terminalId },
+          {
+            terminalId: session.terminalId,
+            ...runtimeErrorLogFields(error),
+          },
           "Failed to kill terminal during shutdown",
         );
       }
@@ -422,7 +426,10 @@ export class TerminalManager {
       session.pty.kill();
     } catch (error) {
       this.options.logger.warn(
-        { err: error, terminalId: args.terminalId },
+        {
+          terminalId: args.terminalId,
+          ...runtimeErrorLogFields(error),
+        },
         "Failed to kill terminal",
       );
       this.finishTerminalSession({

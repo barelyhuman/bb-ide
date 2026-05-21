@@ -23,6 +23,7 @@ import {
   getActiveTurnId,
   getLastProviderThreadId,
 } from "../threads/thread-events.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
@@ -487,9 +488,9 @@ async function prepareDueNudge(
   } catch (error) {
     deps.logger.warn(
       {
-        err: error,
         nudgeId: nudge.id,
         threadId: thread.id,
+        ...runtimeErrorLogFields(deps.config, error),
       },
       "Skipping due manager nudge after runtime preparation failed",
     );

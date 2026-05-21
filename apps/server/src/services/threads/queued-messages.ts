@@ -23,6 +23,10 @@ import type {
 import { ApiError } from "../../errors.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import {
+  isCommandTimeoutError,
+  runtimeErrorLogFields,
+} from "../lib/error-log-fields.js";
 import { toThreadQueuedMessage } from "./thread-queued-messages.js";
 import {
   requireEnvironment,
@@ -379,10 +383,21 @@ export async function sendNextQueuedMessageIfPresent(
     if (isQueuedMessageClaimLostError(error)) {
       return false;
     }
+    if (isCommandTimeoutError(error)) {
+      deps.logger.debug(
+        {
+          queuedMessageId: nextQueuedMessage.id,
+          ...runtimeErrorLogFields(deps.config, error),
+          threadId: args.threadId,
+        },
+        "Queued message auto-send deferred by host timeout",
+      );
+      throw error;
+    }
     deps.logger.warn(
       {
         queuedMessageId: nextQueuedMessage.id,
-        err: error,
+        ...runtimeErrorLogFields(deps.config, error),
         threadId: args.threadId,
       },
       "Queued message auto-send failed",
@@ -411,6 +426,7 @@ export function requestQueuedMessageAutoSendForThread(
   args: QueuedMessageAutoSendRequestArgs,
 ): void {
   scheduleAfterDaemonIngressResponse({
+    config: deps.config,
     context: {
       queuedMessageId: args.queuedMessageId,
       threadId: args.threadId,
@@ -437,9 +453,19 @@ export async function runQueuedMessageAutoSendSweep(
         threadId: candidate.threadId,
       });
     } catch (error) {
+      if (isCommandTimeoutError(error)) {
+        deps.logger.debug(
+          {
+            ...runtimeErrorLogFields(deps.config, error),
+            threadId: candidate.threadId,
+          },
+          "Queued message auto-send sweep deferred by host timeout",
+        );
+        continue;
+      }
       deps.logger.warn(
         {
-          err: error,
+          ...runtimeErrorLogFields(deps.config, error),
           threadId: candidate.threadId,
         },
         "Queued message auto-send sweep failed",

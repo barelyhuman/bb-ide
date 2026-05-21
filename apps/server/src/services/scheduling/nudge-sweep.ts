@@ -42,9 +42,9 @@ export async function sweepDueNudges(
       } catch (error) {
         deps.logger.error(
           {
-            err: error,
             nudgeId: nudge.id,
             threadId: nudge.threadId,
+            err: error,
           },
           "Failed to process a due manager nudge",
         );

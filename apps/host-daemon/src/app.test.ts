@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeOptions } from "@bb/agent-runtime";
-import type { PendingInteractionCreate } from "@bb/domain";
+import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
 import {
   hostDaemonInteractiveInterruptRequestSchema,
   type HostDaemonInteractiveRequestResponse,
@@ -36,6 +36,11 @@ interface RecordedFetchRequest {
 interface FetchRecorder {
   fetchFn: typeof fetch;
   requests: RecordedFetchRequest[];
+}
+
+interface CreateFetchRecorderArgs {
+  interactiveRequestError?: Error;
+  interactiveRequestResponse?: HostDaemonInteractiveRequestResponse;
 }
 
 interface RuntimeOptionsRef {
@@ -106,7 +111,9 @@ function readFetchBody(init: RequestInit | undefined): string | null {
   throw new Error("Expected string request body");
 }
 
-function createFetchRecorder(): FetchRecorder {
+function createFetchRecorder(
+  args: CreateFetchRecorderArgs = {},
+): FetchRecorder {
   const requests: RecordedFetchRequest[] = [];
   const fetchFn: typeof fetch = async (input, init) => {
     const url = readFetchUrl(input);
@@ -138,11 +145,15 @@ function createFetchRecorder(): FetchRecorder {
       });
     }
     if (url.pathname === "/internal/session/interactive-request") {
-      const response: HostDaemonInteractiveRequestResponse = {
-        outcome: "created",
-        interactionId: "pint_app_test",
-        status: "pending",
-      };
+      if (args.interactiveRequestError) {
+        throw args.interactiveRequestError;
+      }
+      const response: HostDaemonInteractiveRequestResponse =
+        args.interactiveRequestResponse ?? {
+          outcome: "created",
+          interactionId: "pint_app_test",
+          status: "pending",
+        };
       return Response.json(response);
     }
     if (url.pathname === "/internal/session/interactive-request/interrupt") {
@@ -243,6 +254,20 @@ function createCommandApprovalRequest(): PendingInteractionCreate {
   };
 }
 
+function createToolCallRequest(): ToolCallRequest {
+  return {
+    requestId: "provider-tool-request-app-test",
+    threadId: "thr_app_tool",
+    providerThreadId: "provider-thread-app-tool",
+    turnId: "turn_app_tool",
+    callId: "call-app-tool",
+    tool: "message_user",
+    arguments: {
+      text: "hello",
+    },
+  };
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -253,9 +278,11 @@ afterEach(async () => {
   );
 });
 
-async function createAppFixture(): Promise<HostDaemonAppFixture> {
+async function createAppFixture(
+  args: CreateFetchRecorderArgs = {},
+): Promise<HostDaemonAppFixture> {
   const dataDir = await makeTempDir("bb-host-daemon-app-test-");
-  const fetchRecorder = createFetchRecorder();
+  const fetchRecorder = createFetchRecorder(args);
   const logger = createLogger();
   const runtimeOptions: RuntimeOptionsRef = { current: null };
   const app = await createHostDaemonApp({
@@ -305,7 +332,10 @@ describe("createCommandFetchLoop", () => {
     await loop.request();
 
     expect(fetchCommands).toHaveBeenCalledTimes(1);
-    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      { err: expect.any(Error) },
+      "Failed to fetch host-daemon commands",
+    );
 
     await vi.advanceTimersByTimeAsync(1_999);
     expect(fetchCommands).toHaveBeenCalledTimes(1);
@@ -621,6 +651,129 @@ describe("createHostDaemonApp", () => {
         threadIds: [request.threadId],
         reason: 'Provider "codex" exited while awaiting user interaction',
       });
+    } finally {
+      await app.daemon.shutdown("test");
+    }
+  });
+
+  it("logs stack-bearing fields for dynamic tool forwarding failures", async () => {
+    const { app, logger, runtimeOptions } = await createAppFixture();
+    try {
+      const workspacePath = await makeTempDir("bb-host-daemon-app-tool-");
+      await app.runtimeManager.ensureEnvironment({
+        environmentId: "env-app-tool",
+        workspacePath,
+      });
+      await app.connection.start();
+      const options = runtimeOptions.current;
+      if (!options?.onToolCall) {
+        throw new Error("Expected tool call callback to be captured");
+      }
+
+      const request = createToolCallRequest();
+      await expect(options.onToolCall(request)).rejects.toThrow(
+        "Failed to call tool",
+      );
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callId: request.callId,
+          err: expect.any(Error),
+          providerThreadId: request.providerThreadId,
+          threadId: request.threadId,
+          tool: request.tool,
+          turnId: request.turnId,
+        }),
+        "Failed to forward dynamic tool call to server",
+      );
+    } finally {
+      await app.daemon.shutdown("test");
+    }
+  });
+
+  it("logs stack-bearing fields for unexpected interactive forwarding failures", async () => {
+    const registrationError = new Error("registration transport failed");
+    const { app, logger, runtimeOptions } = await createAppFixture({
+      interactiveRequestError: registrationError,
+    });
+    try {
+      const workspacePath = await makeTempDir(
+        "bb-host-daemon-app-interactive-error-",
+      );
+      await app.runtimeManager.ensureEnvironment({
+        environmentId: "env-app-interactive-error",
+        workspacePath,
+      });
+      await app.connection.start();
+      const options = runtimeOptions.current;
+      if (!options?.onInteractiveRequest) {
+        throw new Error("Expected interactive request callback to be captured");
+      }
+
+      const request = createCommandApprovalRequest();
+      await expect(options.onInteractiveRequest(request)).rejects.toThrow(
+        "registration transport failed",
+      );
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          err: registrationError,
+          kind: request.payload.kind,
+          providerRequestId: request.providerRequestId,
+          providerThreadId: request.providerThreadId,
+          threadId: request.threadId,
+          turnId: request.turnId,
+        }),
+        "Failed to forward interactive provider request to server",
+      );
+    } finally {
+      await app.daemon.shutdown("test");
+    }
+  });
+
+  it("logs rejected interactive request registrations with a structured code", async () => {
+    const { app, logger, runtimeOptions } = await createAppFixture({
+      interactiveRequestResponse: {
+        outcome: "rejected",
+        reason: "Ask User Question feature is disabled",
+      },
+    });
+    try {
+      const workspacePath = await makeTempDir(
+        "bb-host-daemon-app-rejected-interactive-",
+      );
+      await app.runtimeManager.ensureEnvironment({
+        environmentId: "env-app-rejected-interactive",
+        workspacePath,
+      });
+      await app.connection.start();
+      const options = runtimeOptions.current;
+      if (!options?.onInteractiveRequest) {
+        throw new Error("Expected interactive request callback to be captured");
+      }
+
+      const request = createCommandApprovalRequest();
+      await expect(options.onInteractiveRequest(request)).rejects.toThrow(
+        "Ask User Question feature is disabled",
+      );
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorMessage: "Ask User Question feature is disabled",
+          errorName: "InteractiveRequestRegistryError",
+          interactiveRequestErrorCode: "interactive_request_rejected",
+          kind: request.payload.kind,
+          providerRequestId: request.providerRequestId,
+          providerThreadId: request.providerThreadId,
+          threadId: request.threadId,
+          turnId: request.turnId,
+        }),
+        "Interactive provider request rejected by server",
+      );
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.anything(),
+        "Failed to forward interactive provider request to server",
+      );
     } finally {
       await app.daemon.shutdown("test");
     }

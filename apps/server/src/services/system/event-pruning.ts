@@ -185,10 +185,10 @@ export function pruneThreadEventHistoryBestEffort(
     deps.logger.warn(
       {
         durationMs: roundDurationMs(performance.now() - startedAt),
-        err: error,
         mode: args.mode,
         step: getThreadEventPruningFailureStep(error),
         threadId: args.threadId,
+        err: error,
       },
       "Failed to prune thread event history",
     );

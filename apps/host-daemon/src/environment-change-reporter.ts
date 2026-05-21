@@ -1,5 +1,6 @@
 import type { HostDaemonEnvironmentChangePayload } from "@bb/host-daemon-contract";
 import type { HostDaemonLogger } from "./logger.js";
+import { runtimeErrorLogFields } from "./error-utils.js";
 
 type ReportEnvironmentChange = (
   change: HostDaemonEnvironmentChangePayload,
@@ -58,7 +59,7 @@ export function createEnvironmentChangeReporter(
         args.logger.warn(
           {
             change: entry.change,
-            err: error,
+            ...runtimeErrorLogFields(error),
           },
           "Failed to report environment change",
         );

@@ -28,6 +28,7 @@ import {
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
+import { productionErrorLogFields } from "../lib/error-log-fields.js";
 import {
   appendPendingInteractionTimelineEvent,
   appendPendingInteractionTimelineEventInTransaction,
@@ -603,9 +604,9 @@ export class PendingInteractionLifecycle {
         if (error instanceof PendingInteractionSerializationError) {
           this.deps.logger.warn(
             {
-              err: error,
               field: error.field,
               interactionId: error.interactionId,
+              ...productionErrorLogFields(error),
             },
             "Skipping corrupt pending interaction row",
           );

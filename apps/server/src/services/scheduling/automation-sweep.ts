@@ -154,8 +154,8 @@ async function runAutomation(
     deps.logger.error(
       {
         automationId: automation.id,
-        err: error,
         restored,
+        err: error,
       },
       "Failed to create a thread for a due automation",
     );

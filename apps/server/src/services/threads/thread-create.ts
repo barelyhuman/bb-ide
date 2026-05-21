@@ -14,6 +14,7 @@ import { ApiError } from "../../errors.js";
 import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import { seedManagerThreadStorage } from "./manager-storage-templates.js";
@@ -108,7 +109,10 @@ function scheduleThreadProvisioningAdvance(
     threadId,
   }).catch((error) => {
     deps.logger.warn(
-      { err: error, threadId },
+      {
+        threadId,
+        ...runtimeErrorLogFields(deps.config, error),
+      },
       "Failed to advance thread provisioning after thread creation",
     );
   });

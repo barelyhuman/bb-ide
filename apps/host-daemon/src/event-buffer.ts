@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ServerResponseError } from "./server-client.js";
 import type { HostDaemonLogger } from "./logger.js";
+import { runtimeErrorLogFields } from "./error-utils.js";
 
 const DEFAULT_DEBOUNCE_MS = 100;
 const DEFAULT_MAX_WAIT_MS = 500;
@@ -907,7 +908,6 @@ export function createEventBuffer(
             if (isNonRetryableServerPostError(error)) {
               nonRetryablePostFailureCount++;
               const logContext = {
-                err: error,
                 bufferDepth: snapshot.events.length,
                 code: error.code,
                 events: summarizeBufferedEvents(snapshot.events),
@@ -915,12 +915,16 @@ export function createEventBuffer(
                 nonRetryableFailureLimit: MAX_NON_RETRYABLE_POST_FAILURES,
                 retryable: error.retryable,
                 status: error.status,
+                ...runtimeErrorLogFields(error),
               };
               if (
                 nonRetryablePostFailureCount >= MAX_NON_RETRYABLE_POST_FAILURES
               ) {
                 options.logger.error(
-                  logContext,
+                  {
+                    ...logContext,
+                    err: error,
+                  },
                   "event flush received non-retryable server response; failing closed",
                 );
                 throw new Error(
@@ -936,8 +940,8 @@ export function createEventBuffer(
             }
             options.logger.warn(
               {
-                err: error,
                 bufferDepth: snapshot.events.length,
+                ...runtimeErrorLogFields(error),
               },
               "event flush failed, will retry",
             );
@@ -971,13 +975,17 @@ export function createEventBuffer(
               consecutiveNoProgressFlushes >=
               MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES
             ) {
-              options.logger.error(
-                logContext,
-                "event flush made no progress; failing closed",
-              );
-              throw new Error(
+              const noProgressError = new Error(
                 `Event spool flush made no progress after ${consecutiveNoProgressFlushes} attempts`,
               );
+              options.logger.error(
+                {
+                  ...logContext,
+                  err: noProgressError,
+                },
+                "event flush made no progress; failing closed",
+              );
+              throw noProgressError;
             }
             options.logger.warn(logContext, "event flush made no progress");
             scheduleFlush();

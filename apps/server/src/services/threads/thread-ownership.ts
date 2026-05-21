@@ -66,10 +66,10 @@ async function queueManagerSystemMessageBestEffort(
   } catch (error) {
     deps.logger.error(
       {
-        err: error,
         managedThreadId: args.managedThreadId,
         managerThreadId: args.managerThreadId,
         reason: args.reason,
+        err: error,
       },
       "Failed to queue manager ownership system message",
     );
@@ -80,7 +80,9 @@ export async function handleThreadOwnershipChange(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: HandleThreadOwnershipChangeArgs,
 ): Promise<void> {
-  if (args.updatedThread.parentThreadId === args.previousThread.parentThreadId) {
+  if (
+    args.updatedThread.parentThreadId === args.previousThread.parentThreadId
+  ) {
     return;
   }
 

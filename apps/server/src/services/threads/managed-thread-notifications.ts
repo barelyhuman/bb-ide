@@ -60,10 +60,10 @@ export async function queueManagedThreadTurnNotificationBestEffort(
   } catch (error) {
     deps.logger.error(
       {
-        err: error,
         managedThreadId: args.managedThreadId,
         managerThreadId: args.managerThreadId,
         turnStatus: args.turnStatus,
+        err: error,
       },
       "Failed to queue manager turn notification",
     );

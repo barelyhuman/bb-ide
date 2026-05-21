@@ -10,6 +10,7 @@ import {
   type DbTransaction,
   updateThread,
 } from "@bb/db";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import {
   markThreadOperationRecordFailed,
   setEnvironmentStatus,
@@ -460,7 +461,10 @@ async function resolveMetadataIfNeeded(
         })
         .catch((error) => {
           deps.logger.warn(
-            { err: error, threadId: args.thread.id },
+            {
+              threadId: args.thread.id,
+              ...runtimeErrorLogFields(deps.config, error),
+            },
             "Failed to generate thread title",
           );
         });

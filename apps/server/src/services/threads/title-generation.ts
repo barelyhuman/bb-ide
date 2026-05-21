@@ -6,6 +6,7 @@ import { Type } from "@mariozechner/pi-ai";
 import { InferenceTimeoutError, inferenceComplete } from "../ai/inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
 const MAX_GENERATED_TITLE_WORDS = 5;
@@ -205,7 +206,10 @@ export async function generateThreadMetadataWithOutcome(
       }
 
       deps.logger.warn(
-        { err: error, threadId: args.threadId },
+        {
+          threadId: args.threadId,
+          ...runtimeErrorLogFields(deps.config, error),
+        },
         "Failed to generate thread metadata",
       );
       return complete(null, "failed");
@@ -291,7 +295,10 @@ export async function generateThreadTitle(
     });
   } catch (error) {
     deps.logger.warn(
-      { err: error, threadId: args.threadId },
+      {
+        threadId: args.threadId,
+        ...runtimeErrorLogFields(deps.config, error),
+      },
       "Failed to generate thread title",
     );
   }

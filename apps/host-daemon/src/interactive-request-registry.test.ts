@@ -194,9 +194,11 @@ describe("InteractiveRequestRegistry", () => {
       }),
     });
 
-    await expect(registry.registerAndWait(request)).rejects.toThrow(
-      "Thread is already awaiting user interaction",
-    );
+    await expect(registry.registerAndWait(request)).rejects.toMatchObject({
+      code: "interactive_request_rejected",
+      message: "Thread is already awaiting user interaction",
+      name: "InteractiveRequestRegistryError",
+    });
   });
 
   it("rejects provider waits when the provider exits", async () => {

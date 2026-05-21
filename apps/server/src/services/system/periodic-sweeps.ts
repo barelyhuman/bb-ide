@@ -37,6 +37,10 @@ import type {
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
 import { advanceEnvironmentCleanup } from "../environments/environment-cleanup.js";
 import {
+  isCommandTimeoutError,
+  runtimeErrorLogFields,
+} from "../lib/error-log-fields.js";
+import {
   advanceEnvironmentProvisioning,
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
@@ -126,10 +130,20 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
         environmentId: environment.id,
       });
     } catch (error) {
+      if (isCommandTimeoutError(error)) {
+        deps.logger.debug(
+          {
+            environmentId: environment.id,
+            ...runtimeErrorLogFields(deps.config, error),
+          },
+          "Managed environment archive cleanup deferred by host timeout",
+        );
+        continue;
+      }
       deps.logger.warn(
         {
-          err: error,
           environmentId: environment.id,
+          err: error,
         },
         "Managed environment archive cleanup sweep failed",
       );

@@ -75,6 +75,27 @@ export interface ReplayCaptureLogger {
   warn(fields: object, message: string): void;
 }
 
+interface ErrorSummary {
+  errorMessage: string;
+  errorName: string;
+}
+
+type LoggableError = unknown;
+
+function summarizeError(error: LoggableError): ErrorSummary {
+  if (error instanceof Error) {
+    return {
+      errorMessage: error.message,
+      errorName: error.name,
+    };
+  }
+
+  return {
+    errorMessage: String(error),
+    errorName: "NonError",
+  };
+}
+
 export interface ReplayCaptureThreadMetadata {
   environmentId: string;
   projectId: string;
@@ -325,7 +346,10 @@ export function createReplayCaptureService(
     options.finalizedCaptureGraceMs ?? DEFAULT_FINALIZED_CAPTURE_GRACE_MS;
   const now = options.now ?? Date.now;
   const metadataByThreadId = new Map<string, ReplayCaptureThreadMetadata>();
-  const pendingTurnRequestByThreadId = new Map<string, ReplayTurnRequestInput>();
+  const pendingTurnRequestByThreadId = new Map<
+    string,
+    ReplayTurnRequestInput
+  >();
   const activeByThreadId = new Map<string, ActiveCapture>();
   const allCapturesById = new Map<string, ActiveCapture>();
   const latestCaptureByThreadId = new Map<string, ActiveCapture>();
@@ -354,14 +378,14 @@ export function createReplayCaptureService(
         capture.manifest.errorMessage =
           error instanceof Error ? error.message : String(error);
         options.logger.warn(
-          { err: error, captureId: capture.captureId, label },
+          { captureId: capture.captureId, label, ...summarizeError(error) },
           "failed to write replay capture record",
         );
         try {
           await writeManifest(capture);
         } catch (manifestError) {
           options.logger.warn(
-            { err: manifestError, captureId: capture.captureId },
+            { captureId: capture.captureId, ...summarizeError(manifestError) },
             "failed to write replay capture failure state",
           );
         }
@@ -485,7 +509,9 @@ export function createReplayCaptureService(
             createdAt: capturedAt,
           },
         ],
-        userInputPreview: deriveReplayCaptureUserInputPreview(turnRequest.input),
+        userInputPreview: deriveReplayCaptureUserInputPreview(
+          turnRequest.input,
+        ),
         execution: turnRequest.execution,
         eventCounts: {
           rawProviderEvents: 0,
@@ -523,10 +549,7 @@ export function createReplayCaptureService(
     scheduleCaptureWrite(capture, "append", async () => {
       const record: ReplayRawProviderEventRecord = {
         ordinal: capture.rawProviderRecordWriteState.expectedOrdinal,
-        relativeMs: Math.max(
-          0,
-          entry.capturedAt - capture.manifest.capturedAt,
-        ),
+        relativeMs: Math.max(0, entry.capturedAt - capture.manifest.capturedAt),
         entry,
       };
       const serialized = serializeReplayRawProviderEventRecord({
@@ -655,7 +678,7 @@ export function createReplayCaptureService(
       const parsedEntry = replayRawProviderCaptureEntrySchema.safeParse(entry);
       if (!parsedEntry.success) {
         options.logger.warn(
-          { err: parsedEntry.error, captureId: entry.captureId },
+          { captureId: entry.captureId, ...summarizeError(parsedEntry.error) },
           "skipping invalid replay raw provider capture entry",
         );
         return;
@@ -800,7 +823,7 @@ export function createReplayCaptureService(
   void mkdir(replayCaptureRoot(options.dataDir), { recursive: true }).catch(
     (error) => {
       options.logger.warn(
-        { err: error },
+        summarizeError(error),
         "failed to create replay capture root",
       );
     },

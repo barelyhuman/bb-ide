@@ -689,6 +689,7 @@ describe("internal event side effects", () => {
       expect(getThread(harness.db, childThread.id)?.status).toBe("active");
       expect(loggerError).toHaveBeenCalledWith(
         expect.objectContaining({
+          err: expect.any(Error),
           managedThreadId: childThread.id,
           managerThreadId: managerThread.id,
           turnStatus: "completed",

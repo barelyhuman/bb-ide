@@ -55,6 +55,10 @@ import {
   runWithDaemonCommandWaitForbidden,
   scheduleAfterDaemonIngressResponse,
 } from "../services/hosts/command-wait-context.js";
+import {
+  isCommandTimeoutError,
+  runtimeErrorLogFields,
+} from "../services/lib/error-log-fields.js";
 import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
 import { getAuthenticatedDaemon } from "./auth.js";
@@ -500,6 +504,16 @@ async function executeEventFollowUpBestEffort(
   try {
     await executeEventFollowUp(deps, followUp);
   } catch (error) {
+    if (isCommandTimeoutError(error)) {
+      deps.logger.warn(
+        {
+          ...eventFollowUpLogContext(followUp),
+          ...runtimeErrorLogFields(deps.config, error),
+        },
+        "Event follow-up deferred by host timeout",
+      );
+      return;
+    }
     deps.logger.error(
       {
         ...eventFollowUpLogContext(followUp),
@@ -529,6 +543,7 @@ function deferEventFollowUpBatch(
   }
 
   scheduleAfterDaemonIngressResponse({
+    config: deps.config,
     logger: deps.logger,
     name: "Event follow-up scheduling",
     work: () => executeEventFollowUpBatch(deps, followUps),
@@ -810,7 +825,11 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             }
             if (error instanceof MissingStoredTurnStartedError) {
               deps.logger.warn(
-                { err: error, ...error.details, sessionId: session.id },
+                {
+                  ...error.details,
+                  sessionId: session.id,
+                  ...runtimeErrorLogFields(deps.config, error),
+                },
                 "Rejected daemon event before turn/started",
               );
               throw new ApiError(409, "invalid_request", error.message);

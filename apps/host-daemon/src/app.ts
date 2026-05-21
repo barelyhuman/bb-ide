@@ -6,7 +6,10 @@ import {
   type EventBuffer,
 } from "./event-buffer.js";
 import { createEnvironmentChangeReporter } from "./environment-change-reporter.js";
-import { InteractiveRequestRegistry } from "./interactive-request-registry.js";
+import {
+  InteractiveRequestRegistry,
+  InteractiveRequestRegistryError,
+} from "./interactive-request-registry.js";
 import {
   defaultListModels,
   type ReplayTaskRegistry,
@@ -30,6 +33,7 @@ import {
   ServerConnection,
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
+import { runtimeErrorLogFields, summarizeError } from "./error-utils.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import {
@@ -414,9 +418,9 @@ export async function createHostDaemonApp(
         } catch (error) {
           options.logger.warn(
             {
-              err: error,
               providerId: request.providerId,
               threadIds: request.threadIds,
+              ...runtimeErrorLogFields(error),
             },
             "Failed to flush pending interactive interrupt request",
           );
@@ -550,12 +554,12 @@ export async function createHostDaemonApp(
         } catch (error) {
           options.logger.error(
             {
-              err: error,
               tool: request.tool,
               threadId: request.threadId,
               providerThreadId: request.providerThreadId,
               turnId: request.turnId,
               callId: request.callId,
+              err: error,
             },
             "Failed to forward dynamic tool call to server",
           );
@@ -566,14 +570,32 @@ export async function createHostDaemonApp(
       try {
         return await interactiveRequestRegistry.registerAndWait(request);
       } catch (error) {
+        if (
+          error instanceof InteractiveRequestRegistryError &&
+          error.code === "interactive_request_rejected"
+        ) {
+          options.logger.warn(
+            {
+              interactiveRequestErrorCode: error.code,
+              ...summarizeError(error),
+              threadId: request.threadId,
+              providerThreadId: request.providerThreadId,
+              turnId: request.turnId,
+              providerRequestId: request.providerRequestId,
+              kind: request.payload.kind,
+            },
+            "Interactive provider request rejected by server",
+          );
+          throw error;
+        }
         options.logger.error(
           {
-            err: error,
             threadId: request.threadId,
             providerThreadId: request.providerThreadId,
             turnId: request.turnId,
             providerRequestId: request.providerRequestId,
-            kind: "approval",
+            kind: request.payload.kind,
+            err: error,
           },
           "Failed to forward interactive provider request to server",
         );
@@ -673,7 +695,10 @@ export async function createHostDaemonApp(
       );
       void eventBuffer.flush().catch((error) => {
         options.logger.warn(
-          { err: error, sessionId: session.sessionId },
+          {
+            sessionId: session.sessionId,
+            ...runtimeErrorLogFields(error),
+          },
           "Failed to flush buffered events after session opened",
         );
       });

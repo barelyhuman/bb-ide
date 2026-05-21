@@ -21,12 +21,14 @@ import {
   validateScheduleDefinition,
 } from "./schedule-helpers.js";
 import { requireThreadStoragePath } from "../threads/thread-storage.js";
+import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 const ASYNC_FILE_NAME = "ASYNC.md";
 const DEFAULT_ASYNC_TIMEZONE = "UTC";
 const MAX_MANAGER_SCHEDULES = 20;
 const MAX_ASYNC_FILE_BYTES = 256 * 1024;
 const ASYNC_FRONTMATTER_DELIMITER = "---";
+const loggedInvalidScheduleKeys = new Set<string>();
 
 const asyncScheduleFrontmatterSchema = z.object({
   // Parse entries individually so one malformed schedule does not poison the
@@ -43,6 +45,45 @@ const asyncScheduleEntrySchema = z.object({
 
 interface SyncManagerThreadSchedulesArgs {
   threadId: string;
+}
+
+interface InvalidScheduleLogContext {
+  [key: string]: CompactScheduleValidationIssue[] | number | string | undefined;
+}
+
+interface LogInvalidScheduleArgs {
+  context: InvalidScheduleLogContext;
+  key: string;
+  message: string;
+}
+
+interface CompactScheduleValidationIssue {
+  code: string;
+  message: string;
+  path: string;
+}
+
+function compactScheduleValidationIssues(
+  issues: z.ZodIssue[],
+): CompactScheduleValidationIssue[] {
+  return issues.map((issue) => ({
+    code: issue.code,
+    message: issue.message,
+    path: issue.path.join("."),
+  }));
+}
+
+function logInvalidScheduleOnce(
+  deps: Pick<AppDeps, "logger">,
+  args: LogInvalidScheduleArgs,
+): void {
+  if (loggedInvalidScheduleKeys.has(args.key)) {
+    deps.logger.debug(args.context, args.message);
+    return;
+  }
+
+  loggedInvalidScheduleKeys.add(args.key);
+  deps.logger.warn(args.context, args.message);
 }
 
 function hasFrontmatterPrefix(content: string): boolean {
@@ -99,13 +140,17 @@ function toDesiredManagerThreadNudges(
   for (const rawEntry of limitedSchedules) {
     const parsedSchedule = asyncScheduleEntrySchema.safeParse(rawEntry);
     if (!parsedSchedule.success) {
-      deps.logger.warn(
-        {
-          issues: parsedSchedule.error.issues,
+      logInvalidScheduleOnce(deps, {
+        context: {
+          issues: compactScheduleValidationIssues(parsedSchedule.error.issues),
+          issueCount: parsedSchedule.error.issues.length,
           threadId: args.threadId,
         },
-        "Skipping invalid ASYNC.md schedule entry",
-      );
+        key: `${args.threadId}:schema:${JSON.stringify(
+          parsedSchedule.error.issues,
+        )}`,
+        message: "Skipping invalid ASYNC.md schedule entry",
+      });
       continue;
     }
 
@@ -131,14 +176,15 @@ function toDesiredManagerThreadNudges(
       });
     } catch (error) {
       if (error instanceof ScheduleValidationError) {
-        deps.logger.warn(
-          {
+        logInvalidScheduleOnce(deps, {
+          context: {
             name: rawSchedule.name,
             reason: error.message,
             threadId: args.threadId,
           },
-          "Skipping invalid ASYNC.md schedule",
-        );
+          key: `${args.threadId}:definition:${rawSchedule.name}:${error.message}`,
+          message: "Skipping invalid ASYNC.md schedule",
+        });
         continue;
       }
       throw error;
@@ -261,8 +307,8 @@ export async function syncManagerThreadSchedules(
   } catch (error) {
     deps.logger.warn(
       {
-        err: error,
         threadId: thread.id,
+        ...runtimeErrorLogFields(deps.config, error),
       },
       "Failed to parse ASYNC.md",
     );

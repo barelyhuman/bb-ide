@@ -591,6 +591,7 @@ export function requestEnvironmentCleanupAdvance(
   const environmentId = args.environmentId;
 
   scheduleAfterDaemonIngressResponse({
+    config: deps.config,
     context: {
       environmentId,
     },

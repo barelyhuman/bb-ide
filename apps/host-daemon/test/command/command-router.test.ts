@@ -413,6 +413,7 @@ describe("CommandRouter", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         commandId: "read-missing-root",
+        err: expect.any(Error),
         type: "host.read_file",
       }),
       "command execution failed",
