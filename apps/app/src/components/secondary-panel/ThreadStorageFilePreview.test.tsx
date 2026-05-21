@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FilePreview } from "@/lib/file-preview";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import {
   MANAGER_STATUS_FILE_PATH,
+  MANAGER_STATUS_HTML_FILE_PATH,
+  MANAGER_STATUS_INDEX_FILE_PATH,
   MANAGER_STATUS_MARKDOWN_FILE_PATH,
 } from "./managerStorage";
 import { ThreadStorageFilePreview } from "./ThreadStorageFilePreview";
@@ -123,23 +125,36 @@ describe("ThreadStorageFilePreview", () => {
     );
   }, 8_000);
 
-  it("renders STATUS.md through the markdown preview path", () => {
+  it.each([
+    MANAGER_STATUS_HTML_FILE_PATH,
+    MANAGER_STATUS_INDEX_FILE_PATH,
+    MANAGER_STATUS_MARKDOWN_FILE_PATH,
+  ])("renders %s through the unified STATUS route", (activePath) => {
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thr_manager/status-version",
+        handler: () => jsonResponse({ source: "html", hash: "status-hash" }),
+      },
+    ]);
     const { wrapper } = createQueryClientTestHarness();
     const { container } = render(
       <ThreadStorageFilePreview
-        activePath={MANAGER_STATUS_MARKDOWN_FILE_PATH}
+        activePath={activePath}
         filePreview={makeTextPreview({
           content: "# Status",
-          path: MANAGER_STATUS_MARKDOWN_FILE_PATH,
+          path: activePath,
         })}
         isLoading={false}
-        pinnedPath={MANAGER_STATUS_MARKDOWN_FILE_PATH}
+        pinnedPath={MANAGER_STATUS_FILE_PATH}
         threadId="thr_manager"
       />,
       { wrapper },
     );
 
-    expect(screen.getByRole("heading", { name: "Status" })).toBeTruthy();
-    expect(container.querySelector("iframe")).toBeNull();
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute("src")).toBe(
+      "/api/v1/threads/thr_manager/status/",
+    );
   });
 });

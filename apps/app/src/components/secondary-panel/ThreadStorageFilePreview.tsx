@@ -1,5 +1,5 @@
 import { FilePreview as FilePreviewSurface } from "./FilePreview";
-import { MANAGER_STATUS_FILE_PATH } from "./managerStorage";
+import { isManagerStatusStorageFilePath } from "./managerStorage";
 import { useThreadStatusVersion } from "@/hooks/queries/thread-queries";
 import { HttpError } from "@/lib/api";
 import { buildThreadStatusContentUrl } from "@/lib/file-content-urls";
@@ -142,11 +142,12 @@ export function ThreadStorageFilePreview({
   pinnedPath,
   threadId,
 }: ThreadStorageFilePreviewProps) {
+  const isManagerStatusTab = isManagerStatusStorageFilePath(activePath);
   const statusVersion = useThreadStatusVersion(threadId, {
-    enabled: activePath === MANAGER_STATUS_FILE_PATH,
+    enabled: isManagerStatusTab,
   });
 
-  if (activePath === MANAGER_STATUS_FILE_PATH) {
+  if (isManagerStatusTab) {
     return (
       <FilePreviewSurface
         path={activePath}

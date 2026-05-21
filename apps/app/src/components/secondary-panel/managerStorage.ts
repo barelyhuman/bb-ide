@@ -1,4 +1,5 @@
 export const MANAGER_STATUS_FILE_PATH = "STATUS";
+export const MANAGER_STATUS_INDEX_FILE_PATH = "STATUS/index.html";
 export const MANAGER_STATUS_MARKDOWN_FILE_PATH = "STATUS.md";
 export const MANAGER_STATUS_HTML_FILE_PATH = "STATUS.html";
 
@@ -11,9 +12,16 @@ export type ManagerStorageFiles = readonly ManagerStorageFileEntry[];
 export function isManagerStatusStorageFilePath(path: string): boolean {
   return (
     path === MANAGER_STATUS_FILE_PATH ||
+    path === MANAGER_STATUS_INDEX_FILE_PATH ||
     path === MANAGER_STATUS_MARKDOWN_FILE_PATH ||
     path === MANAGER_STATUS_HTML_FILE_PATH
   );
+}
+
+export function resolveManagerStatusStorageTabPath(path: string): string {
+  return isManagerStatusStorageFilePath(path)
+    ? MANAGER_STATUS_FILE_PATH
+    : path;
 }
 
 export function resolvePinnedManagerStorageFilePath(

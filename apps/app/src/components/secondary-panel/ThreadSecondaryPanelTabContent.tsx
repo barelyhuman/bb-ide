@@ -20,7 +20,7 @@ import {
   SecondaryPanelFilePreview,
   ThreadStorageFilePreview,
 } from "./ThreadStorageFilePreview";
-import { MANAGER_STATUS_FILE_PATH } from "./managerStorage";
+import { isManagerStatusStorageFilePath } from "./managerStorage";
 
 const GIT_DIFF_SKELETON_FILE_COUNT = 3;
 const PANEL_SCROLL_SLOT_CLASS =
@@ -327,7 +327,7 @@ export function ThreadStorageFilePreviewTabContent({
   pinnedPath,
   threadId,
 }: ThreadStorageFilePreviewTabContentProps) {
-  const isManagerStatusTab = activePath === MANAGER_STATUS_FILE_PATH;
+  const isManagerStatusTab = isManagerStatusStorageFilePath(activePath);
   const {
     data: threadStorageFilePreview,
     error: threadStorageFilePreviewError,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import type { ThreadType } from "@bb/domain";
 import {
   useFixedPanelTabsState,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/file-preview";
 import {
   isManagerStatusStorageFilePath,
+  resolveManagerStatusStorageTabPath,
   resolvePinnedManagerStorageFilePath,
 } from "./managerStorage";
 
@@ -194,9 +195,10 @@ function createStorageTab(
   path: string,
   pinnedStorageFilePath: string,
 ): ThreadStorageFilePreviewFixedPanelTab {
+  const tabPath = resolveManagerStatusStorageTabPath(path);
   return createThreadStorageFilePreviewFixedPanelTab({
-    isPinned: path === pinnedStorageFilePath,
-    path,
+    isPinned: tabPath === pinnedStorageFilePath,
+    path: tabPath,
   });
 }
 
@@ -408,26 +410,19 @@ export function useThreadFileTabs({
     });
   }, [isManagerThread, isThreadResolved, updateFixedPanelTabsState]);
 
-  const lastAppliedPinnedStorageFilePath = useRef<string | null>(null);
   useEffect(() => {
     if (!isManagerThread) {
-      lastAppliedPinnedStorageFilePath.current = null;
       return;
     }
-    const pinnedPathChanged =
-      lastAppliedPinnedStorageFilePath.current !== pinnedStorageFilePath;
-    lastAppliedPinnedStorageFilePath.current = pinnedStorageFilePath;
     updateFixedPanelTabsState((state) => {
       const pinnedTab = createStorageTab(
         pinnedStorageFilePath,
         pinnedStorageFilePath,
       );
-      const baseTabs = pinnedPathChanged
-        ? removeMismatchedManagerStatusTabs(
-            state.secondary.tabs,
-            pinnedStorageFilePath,
-          )
-        : state.secondary.tabs;
+      const baseTabs = removeMismatchedManagerStatusTabs(
+        state.secondary.tabs,
+        pinnedStorageFilePath,
+      );
       const tabs = upsertSecondaryTab(baseTabs, pinnedTab);
       const activeTabId = isActiveTabStillOpen(
         tabs,
@@ -444,6 +439,7 @@ export function useThreadFileTabs({
     });
   }, [
     fixedPanelTabsState.secondary.activeTabId,
+    fixedPanelTabsState.secondary.tabs,
     isManagerThread,
     pinnedStorageFilePath,
     updateFixedPanelTabsState,

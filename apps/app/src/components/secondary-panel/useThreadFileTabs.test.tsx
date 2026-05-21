@@ -28,6 +28,7 @@ import { useFixedPanelTabsState } from "@/lib/fixed-panel-tabs";
 import {
   MANAGER_STATUS_FILE_PATH,
   MANAGER_STATUS_HTML_FILE_PATH,
+  MANAGER_STATUS_INDEX_FILE_PATH,
   MANAGER_STATUS_MARKDOWN_FILE_PATH,
 } from "./managerStorage";
 import { useThreadFileTabs } from "./useThreadFileTabs";
@@ -606,12 +607,16 @@ describe("useThreadFileTabs", () => {
 
     act(() => {
       result.current.openStorageFile(MANAGER_STATUS_HTML_FILE_PATH);
+      result.current.openStorageFile(MANAGER_STATUS_MARKDOWN_FILE_PATH);
+      result.current.openStorageFile(MANAGER_STATUS_INDEX_FILE_PATH);
     });
 
     expect(storageFilePaths(result.current.orderedSecondaryFileTabs)).toEqual([
       MANAGER_STATUS_FILE_PATH,
-      MANAGER_STATUS_HTML_FILE_PATH,
     ]);
+    expect(result.current.activeStorageFilePath).toBe(
+      MANAGER_STATUS_FILE_PATH,
+    );
   });
 
   it("uses STATUS for the pinned manager storage tab without STATUS.html", async () => {
