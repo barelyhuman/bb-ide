@@ -426,7 +426,8 @@ describe("prompt history service", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         entryId: "phist_malformed",
-        err: expect.anything(),
+        errorName: expect.any(String),
+        errorMessage: expect.any(String),
         requestSequence: 1,
         threadId: malformedThread.id,
       }),
