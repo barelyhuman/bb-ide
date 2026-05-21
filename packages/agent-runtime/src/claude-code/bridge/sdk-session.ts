@@ -32,13 +32,19 @@ export interface SdkSessionOptions {
 type SdkSessionMessageHandler = (message: SDKMessage) => void;
 type SdkSessionDoneHandler = (error?: unknown) => void;
 
+interface QueuedSdkInputMessage {
+  message: SDKUserMessage;
+  rejectConsumed: (error: Error) => void;
+  resolveConsumed: () => void;
+}
+
 export class SdkSession {
   private query: Query | undefined;
   private sessionId: string | undefined;
   private inputResolve:
     | ((value: IteratorResult<SDKUserMessage>) => void)
     | null = null;
-  private readonly inputQueue: SDKUserMessage[] = [];
+  private readonly inputQueue: QueuedSdkInputMessage[] = [];
   private inputDone = false;
   private readonly abortController = new AbortController();
   private isProcessing = false;
@@ -124,7 +130,7 @@ export class SdkSession {
     void this.consumeStream();
   }
 
-  pushInput(text: string): void {
+  pushInput(text: string): Promise<void> {
     const message: SDKUserMessage = {
       type: "user",
       message: { role: "user", content: text },
@@ -132,20 +138,36 @@ export class SdkSession {
       session_id: this.sessionId ?? "",
     };
 
-    if (this.inputDone) return;
+    if (this.inputDone) {
+      return Promise.reject(new Error("Claude SDK input stream is closed"));
+    }
+
+    let resolveConsumed = (): void => {};
+    let rejectConsumed = (_error: Error): void => {};
+    const consumed = new Promise<void>((resolve, reject) => {
+      resolveConsumed = resolve;
+      rejectConsumed = reject;
+    });
 
     if (this.inputResolve) {
       const resolve = this.inputResolve;
       this.inputResolve = null;
       resolve({ value: message, done: false });
-      return;
+      resolveConsumed();
+      return consumed;
     }
 
-    this.inputQueue.push(message);
+    this.inputQueue.push({
+      message,
+      rejectConsumed,
+      resolveConsumed,
+    });
+    return consumed;
   }
 
   stop(): void {
     this.inputDone = true;
+    this.rejectQueuedInputs("Claude SDK session stopped before input consumed");
     this.resolveInputDone();
     this.abortController.abort();
     this.query?.close();
@@ -155,6 +177,7 @@ export class SdkSession {
 
   async closeGracefully(timeoutMs: number): Promise<void> {
     this.inputDone = true;
+    this.rejectQueuedInputs("Claude SDK session closed before input consumed");
     this.resolveInputDone();
 
     if (!this.query) {
@@ -191,11 +214,12 @@ export class SdkSession {
         return {
           async next(): Promise<IteratorResult<SDKUserMessage>> {
             if (self.inputQueue.length > 0) {
-              const value = self.inputQueue.shift();
-              if (!value) {
+              const queued = self.inputQueue.shift();
+              if (!queued) {
                 return { value: undefined, done: true };
               }
-              return { value, done: false };
+              queued.resolveConsumed();
+              return { value: queued.message, done: false };
             }
             if (self.inputDone) {
               return { value: undefined, done: true };
@@ -206,6 +230,9 @@ export class SdkSession {
           },
           async return(): Promise<IteratorResult<SDKUserMessage>> {
             self.inputDone = true;
+            self.rejectQueuedInputs(
+              "Claude SDK input iterator closed before input consumed",
+            );
             self.resolveInputDone();
             return { value: undefined, done: true };
           },
@@ -219,6 +246,17 @@ export class SdkSession {
     const resolve = this.inputResolve;
     this.inputResolve = null;
     resolve({ value: undefined, done: true });
+  }
+
+  private rejectQueuedInputs(message: string): void {
+    const error = new Error(message);
+    while (this.inputQueue.length > 0) {
+      const queued = this.inputQueue.shift();
+      if (!queued) {
+        return;
+      }
+      queued.rejectConsumed(error);
+    }
   }
 
   private async consumeStream(): Promise<void> {
@@ -237,6 +275,9 @@ export class SdkSession {
       this.isProcessing = false;
       this.onDone(error);
     } finally {
+      this.inputDone = true;
+      this.rejectQueuedInputs("Claude SDK stream ended before input consumed");
+      this.resolveInputDone();
       this.query = undefined;
       if (this.complete) {
         this.complete();

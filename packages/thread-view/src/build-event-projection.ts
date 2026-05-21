@@ -36,6 +36,11 @@ export type { ThreadEventWithMeta } from "./group-event-projection-turns.js";
 import { shouldSuppressLowValueToolCall } from "./tool-call-suppression.js";
 import {
   buildAcceptedClientRequestById,
+  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+  type AcceptedClientRequest,
+  type AcceptedClientRequestContext,
+} from "./accepted-client-request-context.js";
+import {
   parseAcceptedSteerFromClientRequest,
   parseUserFromClientRequest,
   parseManagerUserMessage,
@@ -87,7 +92,13 @@ interface ClientTurnRequestedWithMeta {
   meta: ThreadEventWithMeta["meta"];
 }
 
+type ClientTurnRequestedEvent = Extract<
+  ThreadEvent,
+  { type: "client/turn/requested" }
+>;
+
 interface BuildFlatProjectionDataArgs {
+  acceptedClientRequestContext: AcceptedClientRequestContext;
   events: ThreadEventWithMeta[];
   includeActiveThinking: boolean;
   options?: BuildEventProjectionMessagesOptions;
@@ -129,6 +140,48 @@ function buildClientTurnRequestById(
     });
   }
   return requestById;
+}
+
+function buildSelectedStartedTurnIds(
+  events: ThreadEventWithMeta[],
+): ReadonlySet<string> {
+  const turnIds = new Set<string>();
+  for (const { event } of events) {
+    if (event.type !== "turn/started") {
+      continue;
+    }
+    turnIds.add(
+      requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      }),
+    );
+  }
+  return turnIds;
+}
+
+function canUseAcceptedClientRequestForVisibleProjection(
+  acceptedClientRequest: AcceptedClientRequest,
+  decoded: ClientTurnRequestedEvent,
+  selectedStartedTurnIds: ReadonlySet<string>,
+): boolean {
+  // Context-only accepted rows can point at turns outside the selected page.
+  // Use them to classify fallback messages only when that turn root is already
+  // visible; otherwise pending-steer suppression handles the correlation.
+  switch (decoded.target.kind) {
+    case "auto":
+    case "steer":
+      if (decoded.target.expectedTurnId === null) {
+        return true;
+      }
+      if (acceptedClientRequest.turnId === decoded.target.expectedTurnId) {
+        return true;
+      }
+      return selectedStartedTurnIds.has(acceptedClientRequest.turnId);
+    case "new-turn":
+    case "thread-start":
+      return true;
+  }
 }
 
 function appendProjectedUserMessage(
@@ -208,9 +261,12 @@ function buildFlatProjectionData(
   const shouldTrackActiveThinking = args.includeActiveThinking;
 
   const orderedEvents = args.events;
-  const acceptedClientRequestById =
-    buildAcceptedClientRequestById(orderedEvents);
+  const acceptedClientRequestById = buildAcceptedClientRequestById({
+    context: args.acceptedClientRequestContext,
+    events: orderedEvents,
+  });
   const clientRequestById = buildClientTurnRequestById(orderedEvents);
+  const selectedStartedTurnIds = buildSelectedStartedTurnIds(orderedEvents);
   for (const { event: decoded, meta } of orderedEvents) {
     const eventType = decoded.type;
     const eventTurnId = getEventTurnId(decoded);
@@ -286,11 +342,22 @@ function buildFlatProjectionData(
       continue;
     }
 
+    const acceptedClientRequest =
+      decoded.type === "client/turn/requested"
+        ? acceptedClientRequestById.get(decoded.requestId)
+        : undefined;
+    const visibleProjectionAcceptedClientRequest =
+      acceptedClientRequest &&
+      decoded.type === "client/turn/requested" &&
+      canUseAcceptedClientRequestForVisibleProjection(
+        acceptedClientRequest,
+        decoded,
+        selectedStartedTurnIds,
+      )
+        ? acceptedClientRequest
+        : undefined;
     const userFromClientRequest = parseUserFromClientRequest({
-      acceptedClientRequest:
-        decoded.type === "client/turn/requested"
-          ? acceptedClientRequestById.get(decoded.requestId)
-          : undefined,
+      acceptedClientRequest: visibleProjectionAcceptedClientRequest,
       decoded,
       meta,
       options: args.options,
@@ -558,6 +625,9 @@ function buildFullEventProjection(
   options: BuildEventProjectionOptions,
 ): EventProjection {
   const flatProjection = buildFlatProjectionData({
+    acceptedClientRequestContext:
+      options.acceptedClientRequestContext ??
+      EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     events,
     includeActiveThinking: true,
     options,
@@ -581,6 +651,7 @@ export function buildEventProjectionMessages(
   const orderedEvents = getOrderedThreadEvents(events);
   return normalizeEventProjectionMessages(
     buildFlatProjectionData({
+      acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
       events: orderedEvents,
       includeActiveThinking: false,
       options,
@@ -603,6 +674,9 @@ export function buildEventProjectionEntries(
 
   const orderedEvents = getOrderedThreadEvents(events);
   const flatProjection = buildFlatProjectionData({
+    acceptedClientRequestContext:
+      options.acceptedClientRequestContext ??
+      EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     events: orderedEvents,
     includeActiveThinking: false,
     options,

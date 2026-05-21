@@ -4,6 +4,7 @@ import {
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   buildThreadTimelineTurnDetailsFromEvents,
   compactThreadTimelineSummaryEvents,
+  type AcceptedClientRequestContext,
   type SystemClientRequestVisibility,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
@@ -130,6 +131,7 @@ interface PaginatedTimelineRowsResult {
 
 export type ThreadTimelineBuildProfileStage =
   | "event-query"
+  | "accepted-client-request-context-query"
   | "event-json-decode"
   | "summary-compaction"
   | "context-window-query"
@@ -207,6 +209,11 @@ interface EnsureTimelineWindowTurnStartedRowsArgs {
   threadId: string;
 }
 
+interface SelectAcceptedClientRequestContextRowsArgs {
+  rows: readonly StoredEventRow[];
+  threadId: string;
+}
+
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
   thread: Thread;
@@ -269,6 +276,76 @@ function tryReadClientTurnRequestedRequestId(
     return null;
   }
   return event.requestId;
+}
+
+function tryReadSteerClientTurnRequestedRequestId(
+  row: StoredEventRow,
+): ClientTurnRequestId | null {
+  if (row.type !== "client/turn/requested") {
+    return null;
+  }
+  const event = parseStoredEvent(row);
+  if (event.type !== "client/turn/requested") {
+    return null;
+  }
+
+  switch (event.target.kind) {
+    case "auto":
+    case "steer":
+      return event.target.expectedTurnId === null ? null : event.requestId;
+    case "new-turn":
+    case "thread-start":
+      return null;
+  }
+}
+
+function collectVisibleAcceptedClientRequestIds(
+  rows: readonly StoredEventRow[],
+): ReadonlySet<ClientTurnRequestId> {
+  const acceptedClientRequestIds = new Set<ClientTurnRequestId>();
+  for (const row of rows) {
+    if (row.type !== "turn/input/accepted") {
+      continue;
+    }
+    acceptedClientRequestIds.add(parseAcceptedInputClientRequestId(row));
+  }
+  return acceptedClientRequestIds;
+}
+
+function collectSteerClientRequestIdsNeedingAcceptedContext(
+  rows: readonly StoredEventRow[],
+): ClientTurnRequestId[] {
+  const visibleAcceptedClientRequestIds =
+    collectVisibleAcceptedClientRequestIds(rows);
+  const clientRequestIds = new Set<ClientTurnRequestId>();
+  for (const row of rows) {
+    const clientRequestId = tryReadSteerClientTurnRequestedRequestId(row);
+    if (
+      clientRequestId === null ||
+      visibleAcceptedClientRequestIds.has(clientRequestId)
+    ) {
+      continue;
+    }
+    clientRequestIds.add(clientRequestId);
+  }
+  return [...clientRequestIds];
+}
+
+function selectAcceptedClientRequestContextRows(
+  db: DbConnection,
+  args: SelectAcceptedClientRequestContextRowsArgs,
+): StoredEventRow[] {
+  const clientRequestIds =
+    collectSteerClientRequestIdsNeedingAcceptedContext(args.rows);
+  if (clientRequestIds.length === 0) {
+    return [];
+  }
+
+  return listStoredTurnInputAcceptedRowsByClientRequestIds(db, {
+    afterSequence: maxStoredEventSequence(args.rows),
+    clientRequestIds,
+    threadId: args.threadId,
+  });
 }
 
 function partitionAcceptedInputRowsByRequestedTurn(
@@ -874,6 +951,17 @@ function buildThreadTimelineInternal(
     profile.eventRowCount = rawEventRows.length;
     profile.selectionStrategy = eventSelection.strategy;
   }
+  const acceptedClientRequestContextRows = measureThreadTimelineStage(
+    profile,
+    "accepted-client-request-context-query",
+    () =>
+      viewMode === "standard"
+        ? selectAcceptedClientRequestContextRows(db, {
+            rows: rawEventRows,
+            threadId: thread.id,
+          })
+        : [],
+  );
   const decodedRawEvents = measureThreadTimelineStage(
     profile,
     "event-json-decode",
@@ -916,11 +1004,17 @@ function buildThreadTimelineInternal(
     "context-window-json-decode",
     () => contextWindowUsageRows.map((row) => toThreadEventWithMeta(row)),
   );
+  const acceptedClientRequestContext: AcceptedClientRequestContext = {
+    acceptedClientRequestEvents: acceptedClientRequestContextRows.map((row) =>
+      toThreadEventWithMeta(row),
+    ),
+  };
   const timeline = measureThreadTimelineStage(
     profile,
     "thread-view-projection",
     () =>
       buildThreadTimelineFromEvents({
+        acceptedClientRequestContext,
         contextWindowEvents,
         events: decodedEvents,
         options:

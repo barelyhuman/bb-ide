@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+
+type ControlledPiAgentSessionListener = (event: AgentSessionEvent) => void;
 
 interface MockPiResourceLoaderOptions {
   cwd?: string;
@@ -74,9 +77,11 @@ const originalPiBridgeSessionDir = process.env[PI_BRIDGE_SESSION_DIR_ENV];
 interface ControlledPiAgentSession {
   abort: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
+  emit(event: AgentSessionEvent): void;
   finishAbort(): void;
   getActiveToolNames: ReturnType<typeof vi.fn>;
   getContextUsage: ReturnType<typeof vi.fn>;
+  isStreaming: boolean;
   prompt: ReturnType<typeof vi.fn>;
   setActiveToolsByName: ReturnType<typeof vi.fn>;
   subscribe: ReturnType<typeof vi.fn>;
@@ -84,6 +89,7 @@ interface ControlledPiAgentSession {
 
 function createControlledPiAgentSession(): ControlledPiAgentSession {
   let finishAbort: (() => void) | undefined;
+  const listeners: ControlledPiAgentSessionListener[] = [];
   const abort = vi.fn(
     () =>
       new Promise<void>((resolve) => {
@@ -93,6 +99,11 @@ function createControlledPiAgentSession(): ControlledPiAgentSession {
   return {
     abort,
     dispose: vi.fn(),
+    emit(event: AgentSessionEvent): void {
+      for (const listener of [...listeners]) {
+        listener(event);
+      }
+    },
     finishAbort() {
       if (!finishAbort) {
         throw new Error("Expected Pi abort to be waiting");
@@ -102,9 +113,33 @@ function createControlledPiAgentSession(): ControlledPiAgentSession {
     },
     getActiveToolNames: vi.fn(() => []),
     getContextUsage: vi.fn(() => undefined),
+    isStreaming: false,
     prompt: vi.fn(async () => {}),
     setActiveToolsByName: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn((listener: ControlledPiAgentSessionListener) => {
+      listeners.push(listener);
+      return () => {
+        const index = listeners.indexOf(listener);
+        if (index !== -1) {
+          listeners.splice(index, 1);
+        }
+      };
+    }),
+  };
+}
+
+function createQueueUpdateEvent(steering: readonly string[]): AgentSessionEvent {
+  return {
+    type: "queue_update",
+    steering,
+    followUp: [],
+  };
+}
+
+function createAgentEndEvent(): AgentSessionEvent {
+  return {
+    type: "agent_end",
+    messages: [],
   };
 }
 
@@ -361,6 +396,86 @@ describe("pi bridge", () => {
       await bridge.flushWork();
       sessions[1]?.finishAbort();
       await bridge.waitForResponse(14);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("waits for queued steer consumption before responding to turn/steer", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const piSession = createControlledPiAgentSession();
+    piSession.isStreaming = true;
+    piSession.prompt.mockImplementation(async () => {
+      piSession.emit(createQueueUpdateEvent(["expanded steer"]));
+    });
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: piSession,
+    }));
+
+    try {
+      bridge.sendRequest(21, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-steer-consumption",
+      });
+      await bridge.waitForResponse(21);
+
+      bridge.sendRequest(22, "turn/steer", {
+        threadId: "thread-steer-consumption",
+        expectedTurnId: "turn-active",
+        input: [{ type: "text", text: "interrupting steer" }],
+      });
+      await bridge.flushWork();
+
+      expect(piSession.prompt).toHaveBeenCalledWith("interrupting steer", {
+        streamingBehavior: "steer",
+      });
+      expect(bridge.hasResponse(22)).toBe(false);
+
+      piSession.emit(createQueueUpdateEvent([]));
+      await expect(bridge.waitForResponse(22)).resolves.toMatchObject({
+        id: 22,
+        result: { threadId: "thread-steer-consumption" },
+      });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("returns an error when a queued steer is not consumed before agent end", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const piSession = createControlledPiAgentSession();
+    piSession.isStreaming = true;
+    piSession.prompt.mockImplementation(async () => {
+      piSession.emit(createQueueUpdateEvent(["undelivered steer"]));
+    });
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: piSession,
+    }));
+
+    try {
+      bridge.sendRequest(31, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-undelivered-steer",
+      });
+      await bridge.waitForResponse(31);
+
+      bridge.sendRequest(32, "turn/steer", {
+        threadId: "thread-undelivered-steer",
+        expectedTurnId: "turn-active",
+        input: [{ type: "text", text: "undelivered steer" }],
+      });
+      await bridge.flushWork();
+
+      expect(bridge.hasResponse(32)).toBe(false);
+
+      piSession.emit(createAgentEndEvent());
+      await expect(bridge.waitForResponse(32)).resolves.toMatchObject({
+        id: 32,
+        error: {
+          code: -32000,
+          message: "Pi turn ended before steer was consumed",
+        },
+      });
     } finally {
       bridge.restore();
     }

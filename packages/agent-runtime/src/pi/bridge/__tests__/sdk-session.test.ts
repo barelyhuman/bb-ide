@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import type {
+  AgentSessionEvent,
+  ToolDefinition,
+} from "@mariozechner/pi-coding-agent";
+
+type MockAgentSessionEventListener = (event: AgentSessionEvent) => void;
+
+interface MockSubscribe {
+  (listener: MockAgentSessionEventListener): () => void;
+}
 
 interface MockBashSpawnContext {
   command: string;
@@ -47,12 +56,22 @@ const {
   mockSettingsInMemory,
   mockCreateAgentSession,
   mockSessionState,
+  mockSessionEventListeners,
   mockAbort,
   mockDispose,
   mockPrompt,
   mockGetModel,
 } = vi.hoisted(() => {
-  const mockSubscribe = vi.fn(() => () => {});
+  const mockSessionEventListeners: MockAgentSessionEventListener[] = [];
+  const mockSubscribe = vi.fn<MockSubscribe>((listener) => {
+    mockSessionEventListeners.push(listener);
+    return () => {
+      const index = mockSessionEventListeners.indexOf(listener);
+      if (index !== -1) {
+        mockSessionEventListeners.splice(index, 1);
+      }
+    };
+  });
   const mockSessionState = { isStreaming: false };
   const mockPrompt = vi.fn();
   const mockAbort = vi.fn(async () => {});
@@ -109,6 +128,7 @@ const {
     mockSettingsInMemory,
     mockCreateAgentSession,
     mockSessionState,
+    mockSessionEventListeners,
     mockAbort,
     mockDispose,
     mockPrompt,
@@ -141,10 +161,64 @@ function rejectPromptWithTransientAuthError(count: number, error: Error): void {
   }
 }
 
+function emitSessionEvent(event: AgentSessionEvent): void {
+  for (const listener of [...mockSessionEventListeners]) {
+    listener(event);
+  }
+}
+
+function createQueueUpdateEvent(
+  steering: readonly string[],
+): AgentSessionEvent {
+  return {
+    type: "queue_update",
+    steering,
+    followUp: [],
+  };
+}
+
+function createAgentEndEvent(): AgentSessionEvent {
+  return {
+    type: "agent_end",
+    messages: [],
+  };
+}
+
+function createAutoRetryStartEvent(): AgentSessionEvent {
+  return {
+    type: "auto_retry_start",
+    attempt: 1,
+    maxAttempts: 2,
+    delayMs: 1,
+    errorMessage: "retryable failure",
+  };
+}
+
+function createAutoRetryEndEvent(success: boolean): AgentSessionEvent {
+  return {
+    type: "auto_retry_end",
+    success,
+    attempt: 1,
+    ...(success ? {} : { finalError: "Retry cancelled" }),
+  };
+}
+
+async function flushAsyncWork(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+async function flushDeferredSteerSettlement(): Promise<void> {
+  await flushAsyncWork();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await flushAsyncWork();
+}
+
 describe("PiSdkSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSessionState.isStreaming = false;
+    mockSessionEventListeners.length = 0;
     mockGetActiveToolNames.mockReturnValue([]);
     mockAbort.mockResolvedValue(undefined);
   });
@@ -367,16 +441,177 @@ describe("PiSdkSession", () => {
     });
   });
 
-  it("queues explicit steering as steer while the SDK is still streaming", async () => {
+  it("waits for queued steer consumption using the SDK queued text", async () => {
     mockSessionState.isStreaming = true;
+    mockPrompt.mockImplementationOnce(async () => {
+      emitSessionEvent(createQueueUpdateEvent(["expanded steer"]));
+    });
     const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+    let steerConsumed = false;
 
     await session.start();
-    await session.steer("interrupting steer");
+    const steerPromise = session.steer("interrupting steer").then(() => {
+      steerConsumed = true;
+    });
+    await flushAsyncWork();
 
     expect(mockPrompt).toHaveBeenCalledWith("interrupting steer", {
       streamingBehavior: "steer",
     });
+    expect(steerConsumed).toBe(false);
+
+    emitSessionEvent(createQueueUpdateEvent([]));
+    await steerPromise;
+
+    expect(steerConsumed).toBe(true);
+  });
+
+  it("resolves handled steers when the SDK does not queue input", async () => {
+    mockSessionState.isStreaming = true;
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+
+    await session.start();
+    await session.steer("handled steer");
+
+    expect(mockPrompt).toHaveBeenCalledWith("handled steer", {
+      streamingBehavior: "steer",
+    });
+  });
+
+  it("rejects steer consumption when the SDK prompt rejects", async () => {
+    mockSessionState.isStreaming = true;
+    const promptError = new Error("prompt rejected");
+    mockPrompt.mockRejectedValueOnce(promptError);
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+
+    await session.start();
+
+    await expect(session.steer("rejected steer")).rejects.toThrow(
+      "prompt rejected",
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledWith(promptError);
+  });
+
+  it("resolves duplicate queued steer text one consumed entry at a time", async () => {
+    mockSessionState.isStreaming = true;
+    let queuedSteerCount = 0;
+    mockPrompt.mockImplementation(async () => {
+      queuedSteerCount += 1;
+      emitSessionEvent(
+        createQueueUpdateEvent(
+          Array.from({ length: queuedSteerCount }, () => "same steer"),
+        ),
+      );
+    });
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+    let firstConsumed = false;
+    let secondConsumed = false;
+
+    await session.start();
+    const firstPromise = session.steer("same steer").then(() => {
+      firstConsumed = true;
+    });
+    await flushAsyncWork();
+    const secondPromise = session.steer("same steer").then(() => {
+      secondConsumed = true;
+    });
+    await flushAsyncWork();
+
+    expect(firstConsumed).toBe(false);
+    expect(secondConsumed).toBe(false);
+
+    emitSessionEvent(createQueueUpdateEvent(["same steer"]));
+    await flushAsyncWork();
+
+    expect(firstConsumed).toBe(true);
+    expect(secondConsumed).toBe(false);
+
+    emitSessionEvent(createQueueUpdateEvent([]));
+    await Promise.all([firstPromise, secondPromise]);
+
+    expect(secondConsumed).toBe(true);
+  });
+
+  it("rejects queued steer consumption when the turn ends before delivery", async () => {
+    mockSessionState.isStreaming = true;
+    mockPrompt.mockImplementationOnce(async () => {
+      emitSessionEvent(createQueueUpdateEvent(["undelivered steer"]));
+    });
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+
+    await session.start();
+    const steerPromise = session.steer("undelivered steer");
+    await flushAsyncWork();
+
+    emitSessionEvent(createAgentEndEvent());
+
+    await expect(steerPromise).rejects.toThrow(
+      "Pi turn ended before steer was consumed",
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps queued steer consumption pending when auto retry starts", async () => {
+    mockSessionState.isStreaming = true;
+    mockPrompt.mockImplementationOnce(async () => {
+      emitSessionEvent(createQueueUpdateEvent(["retry steer"]));
+    });
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+    let consumed = false;
+    let steerError: Error | undefined;
+
+    await session.start();
+    const steerPromise = session.steer("retry steer").then(
+      () => {
+        consumed = true;
+      },
+      (error) => {
+        steerError = error instanceof Error ? error : new Error(String(error));
+      },
+    );
+    await flushAsyncWork();
+
+    emitSessionEvent(createAgentEndEvent());
+    emitSessionEvent(createAutoRetryStartEvent());
+    await flushDeferredSteerSettlement();
+
+    expect(consumed).toBe(false);
+    expect(steerError).toBeUndefined();
+
+    emitSessionEvent(createAutoRetryEndEvent(true));
+    emitSessionEvent(createQueueUpdateEvent([]));
+    await steerPromise;
+
+    expect(consumed).toBe(true);
+    expect(steerError).toBeUndefined();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("rejects queued steer consumption when auto retry ends unsuccessfully", async () => {
+    mockSessionState.isStreaming = true;
+    mockPrompt.mockImplementationOnce(async () => {
+      emitSessionEvent(createQueueUpdateEvent(["retry failed steer"]));
+    });
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+
+    await session.start();
+    const steerPromise = session.steer("retry failed steer");
+    await flushAsyncWork();
+
+    emitSessionEvent(createAgentEndEvent());
+    emitSessionEvent(createAutoRetryStartEvent());
+    await flushDeferredSteerSettlement();
+    emitSessionEvent(createAutoRetryEndEvent(false));
+
+    await expect(steerPromise).rejects.toThrow(
+      "Pi auto retry ended before steer was consumed",
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   it("omits streaming behavior while the SDK is idle", async () => {
@@ -388,6 +623,26 @@ describe("PiSdkSession", () => {
 
     expect(mockPrompt).toHaveBeenNthCalledWith(1, "idle follow-up", {});
     expect(mockPrompt).toHaveBeenNthCalledWith(2, "idle steer", {});
+  });
+
+  it("rejects pending steer consumption when the session closes", async () => {
+    mockSessionState.isStreaming = true;
+    mockPrompt.mockImplementationOnce(async () => {
+      emitSessionEvent(createQueueUpdateEvent(["closing steer"]));
+    });
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+
+    await session.start();
+    const steerPromise = session.steer("closing steer");
+    await flushAsyncWork();
+
+    session.stop();
+
+    await expect(steerPromise).rejects.toThrow(
+      "Pi SDK session stopped before steer consumed",
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   it("allows eight transient Pi auth storage misses before succeeding", async () => {

@@ -30,6 +30,7 @@ import type {
 import {
   buildThreadTimelineFromEvents,
   decodeThreadEventRow,
+  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
   formatThreadTimelineText,
 } from "../src/index.js";
 import { flattenEventProjectionMessagesDeep } from "../src/event-projection-flatten.js";
@@ -1083,6 +1084,7 @@ export function renderTimelineFixture(
     threadStatus: args.projectionOptions.threadStatus ?? "idle",
   };
   const timeline = buildThreadTimelineFromEvents({
+    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     contextWindowEvents: [],
     events: decodedEvents,
     options:

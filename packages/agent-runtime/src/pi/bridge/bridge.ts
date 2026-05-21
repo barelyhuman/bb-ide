@@ -716,11 +716,16 @@ async function handleTurnSteer(
     return;
   }
 
-  void threadSession.session.steer(
-    text,
-    images.length > 0 ? images : undefined,
-  );
-  sendResult(id, { threadId: params.threadId });
+  try {
+    await threadSession.session.steer(
+      text,
+      images.length > 0 ? images : undefined,
+    );
+    sendResult(id, { threadId: params.threadId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendError(id, -32000, message);
+  }
 }
 
 async function handleThreadStop(

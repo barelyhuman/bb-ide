@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { turnScope } from "@bb/domain";
 import {
   createTimelineEventFactory,
   type TimelineEventFactory,
 } from "./timeline-test-harness.js";
 import { decodeThreadEventRow } from "../src/event-decode.js";
 import type { BuildEventProjectionMessagesOptions } from "../src/event-projection-types.js";
+import type { AcceptedClientRequest } from "../src/accepted-client-request-context.js";
 import {
-  type AcceptedClientRequest,
   parsePromptInput,
   parseAcceptedSteerFromClientRequest,
   parsePendingSteerFromClientRequest,
@@ -16,6 +17,10 @@ import {
 type ClientTurnRequestedEventRow = ReturnType<
   TimelineEventFactory["clientTurnRequested"]
 >;
+
+interface AcceptedClientRequestFixtureArgs {
+  turnId?: string;
+}
 
 const AGENT_STEER_TEXT = "Please account for the restart";
 const SENDER_THREAD_ID = "thr_sender";
@@ -86,14 +91,25 @@ function userSteerRequest(): ClientTurnRequestedEventRow {
   });
 }
 
-function acceptedClientRequest(): AcceptedClientRequest {
+function userSteerRequestWithoutExpectedTurn(): ClientTurnRequestedEventRow {
+  const event = createTimelineEventFactory({ threadId: "thread-1" });
+  return event.clientTurnRequested({
+    initiator: "user",
+    target: { kind: "steer", expectedTurnId: null },
+    text: "Fallback message",
+  });
+}
+
+function acceptedClientRequest(
+  args: AcceptedClientRequestFixtureArgs = {},
+): AcceptedClientRequest {
   return {
     meta: {
       id: "event-accepted",
       seq: 2,
       createdAt: 2,
     },
-    turnId: "turn-1",
+    turnId: args.turnId ?? "turn-1",
   };
 }
 
@@ -282,6 +298,62 @@ describe("user message parsing", () => {
         options: managerConversationVisibilityOptions,
       }),
     ).toBeNull();
+  });
+
+  it("renders a steer accepted by a different turn as a message", () => {
+    const { event, meta } = decodeThreadEventRow(userSteerRequest());
+    const accepted = acceptedClientRequest({ turnId: "turn-2" });
+
+    expect(
+      parseAcceptedSteerFromClientRequest({
+        acceptedClientRequest: accepted,
+        decoded: event,
+        meta,
+        options: standardVisibilityOptions,
+      }),
+    ).toBeNull();
+
+    expect(
+      parseUserFromClientRequest({
+        acceptedClientRequest: accepted,
+        decoded: event,
+        meta,
+        options: standardVisibilityOptions,
+      }),
+    ).toMatchObject({
+      kind: "user",
+      scope: turnScope("turn-2"),
+      sourceSeqStart: meta.seq,
+      text: "Mid-turn steer",
+      turnRequest: { kind: "message", status: "accepted" },
+    });
+  });
+
+  it("renders an explicit steer without an expected turn as a message", () => {
+    const { event, meta } = decodeThreadEventRow(
+      userSteerRequestWithoutExpectedTurn(),
+    );
+
+    expect(
+      parsePendingSteerFromClientRequest({
+        acceptedClientRequest: undefined,
+        decoded: event,
+        meta,
+        options: standardVisibilityOptions,
+      }),
+    ).toBeNull();
+
+    expect(
+      parseUserFromClientRequest({
+        decoded: event,
+        meta,
+        options: standardVisibilityOptions,
+      }),
+    ).toMatchObject({
+      kind: "user",
+      text: "Fallback message",
+      turnRequest: { kind: "message", status: "pending" },
+    });
   });
 
   it("hides system-originated turns in non-manager-standard views", () => {

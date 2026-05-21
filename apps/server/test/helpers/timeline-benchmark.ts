@@ -16,6 +16,7 @@ import {
 } from "@bb/db";
 import {
   buildThreadTimelineFromEvents,
+  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
@@ -181,6 +182,7 @@ function createTimelineBenchmarkScenario(
     summaryEventRows.map((row) => toThreadEventWithMeta(row));
   const buildFullSummaryRowsOnly = () =>
     buildThreadTimelineFromEvents({
+      acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
       contextWindowEvents: [],
       events: decodedSummaryEvents,
       options:
@@ -206,6 +208,7 @@ function createTimelineBenchmarkScenario(
     }).rows;
   const buildSummaryRowsOnly = () =>
     buildThreadTimelineFromEvents({
+      acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
       contextWindowEvents: [],
       events: decodedSummaryEvents,
       options:

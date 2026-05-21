@@ -2087,6 +2087,42 @@ describe("bridge", () => {
     }
   });
 
+  it("delays turn steer responses until the SDK prompt consumes the input", async () => {
+    const threadId = "thread-steer-consumed";
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      await startBridgeThread({ bridge, threadId });
+
+      bridge.sendRequest(2, "turn/steer", {
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "Please account for the restart" }],
+        providerThreadId: null,
+        threadId,
+      });
+      await bridge.flushWork();
+
+      expect(bridge.hasResponse(2)).toBe(false);
+      await expect(readNextPromptText(getLatestQueryCall())).resolves.toBe(
+        "Please account for the restart",
+      );
+      await expect(bridge.waitForResponse(2)).resolves.toMatchObject({
+        result: { threadId },
+      });
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      queries[0]?.finish();
+      bridge.restore();
+    }
+  });
+
   describe("prompt attachment text markers", () => {
     async function sendTurnAndReadPrompt(
       bridge: BridgeJsonRpcTestHarness,

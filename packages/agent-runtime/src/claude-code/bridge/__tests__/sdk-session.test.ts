@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKMessage,
+  SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 
 const mockQueryInstance = {
   close: vi.fn(),
@@ -20,6 +23,30 @@ const defaultOptions: SdkSessionOptions = {
   cwd: "/tmp/test",
   systemPrompt: "You are a test assistant.",
 };
+
+interface ClaudeQueryPromptCall {
+  prompt: AsyncIterable<SDKUserMessage>;
+}
+
+function getLatestPrompt(): AsyncIterable<SDKUserMessage> {
+  const latestCall = queryMock.mock.calls.at(-1)?.[0];
+  if (
+    latestCall === null ||
+    typeof latestCall !== "object" ||
+    !("prompt" in latestCall)
+  ) {
+    throw new Error("Expected Claude SDK prompt");
+  }
+  const call: ClaudeQueryPromptCall = latestCall;
+  return call.prompt;
+}
+
+function keepSdkStreamOpen(): void {
+  mockQueryInstance[Symbol.asyncIterator].mockReturnValue({
+    next: vi.fn(() => new Promise<IteratorResult<SDKMessage>>(() => {})),
+    return: vi.fn().mockResolvedValue({ value: undefined, done: true }),
+  });
+}
 
 describe("SdkSession", () => {
   beforeEach(() => {
@@ -46,6 +73,38 @@ describe("SdkSession", () => {
     const session = new SdkSession(defaultOptions, onMessage, onDone);
     // Should not throw before start
     session.pushInput("hello");
+  });
+
+  it("resolves pushed input after the SDK prompt iterator yields it", async () => {
+    keepSdkStreamOpen();
+    const session = new SdkSession(defaultOptions, vi.fn(), vi.fn());
+
+    session.start();
+    const consumed = session.pushInput("hello");
+    let consumedResolved = false;
+    void consumed.then(() => {
+      consumedResolved = true;
+    });
+    await Promise.resolve();
+
+    expect(consumedResolved).toBe(false);
+    const result = await getLatestPrompt()[Symbol.asyncIterator]().next();
+    expect(result.done).toBe(false);
+    expect(result.value?.message.content).toBe("hello");
+    await consumed;
+    expect(consumedResolved).toBe(true);
+    session.stop();
+  });
+
+  it("rejects queued input when the SDK input stream closes before consumption", async () => {
+    const session = new SdkSession(defaultOptions, vi.fn(), vi.fn());
+    const consumed = session.pushInput("hello");
+
+    session.stop();
+
+    await expect(consumed).rejects.toThrow(
+      "Claude SDK session stopped before input consumed",
+    );
   });
 
   it("stop cleans up state", () => {

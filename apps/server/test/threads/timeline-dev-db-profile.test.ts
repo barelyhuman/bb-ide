@@ -203,6 +203,7 @@ function stageDurations(
   profile: ThreadTimelineBuildProfile,
 ): TimelineProfileStageDurations {
   const durations: TimelineProfileStageDurations = {
+    "accepted-client-request-context-query": 0,
     "context-window-json-decode": 0,
     "context-window-query": 0,
     "event-json-decode": 0,
@@ -227,6 +228,9 @@ function roundedStageDurations(
 ): TimelineProfileStageDurations {
   const durations = stageDurations(profile);
   return {
+    "accepted-client-request-context-query": roundMetric(
+      durations["accepted-client-request-context-query"],
+    ),
     "context-window-json-decode": roundMetric(
       durations["context-window-json-decode"],
     ),

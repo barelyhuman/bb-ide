@@ -403,6 +403,10 @@ function sendError(id: string | number, code: number, message: string): void {
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
+function ignoreInputConsumption(promise: Promise<void>): void {
+  void promise.catch(() => {});
+}
+
 function sendSdkMessage(threadId: string, message: SDKMessage): void {
   send({
     jsonrpc: "2.0",
@@ -548,7 +552,9 @@ function replaceThreadSession(args: ReplaceThreadSessionArgs): void {
   sendThreadIdentity(args.threadId, args.providerThreadId);
 
   for (const inputText of args.acceptedInputTexts) {
-    args.replacementSession.session.pushInput(inputText);
+    ignoreInputConsumption(
+      args.replacementSession.session.pushInput(inputText),
+    );
   }
 }
 
@@ -1151,7 +1157,7 @@ async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
       handleTurnStart(request.id, request.params);
       break;
     case "turn/steer":
-      handleTurnSteer(request.id, request.params);
+      await handleTurnSteer(request.id, request.params);
       break;
     case "thread/stop":
       sendResult(request.id, await handleThreadStop(request.params));
@@ -1274,11 +1280,14 @@ function handleTurnStart(id: string | number, params: TurnStartParams): void {
   }
 
   threadSession.resumeRecovery?.acceptedInputTexts.push(input);
-  threadSession.session.pushInput(input);
+  ignoreInputConsumption(threadSession.session.pushInput(input));
   sendResult(id, { threadId: params.threadId });
 }
 
-function handleTurnSteer(id: string | number, params: TurnSteerParams): void {
+async function handleTurnSteer(
+  id: string | number,
+  params: TurnSteerParams,
+): Promise<void> {
   const threadSession = sessions.get(params.threadId);
   if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
@@ -1291,9 +1300,14 @@ function handleTurnSteer(id: string | number, params: TurnSteerParams): void {
     return;
   }
 
-  threadSession.resumeRecovery?.acceptedInputTexts.push(input);
-  threadSession.session.pushInput(input);
-  sendResult(id, { threadId: params.threadId });
+  try {
+    await threadSession.session.pushInput(input);
+    threadSession.resumeRecovery?.acceptedInputTexts.push(input);
+    sendResult(id, { threadId: params.threadId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendError(id, -32000, message);
+  }
 }
 
 async function handleThreadStop(

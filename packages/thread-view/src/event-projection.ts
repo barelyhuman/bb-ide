@@ -1,4 +1,5 @@
 import type { ActiveThinking } from "@bb/domain";
+import type { AcceptedClientRequestContext } from "./accepted-client-request-context.js";
 import type {
   BuildEventProjectionMessagesOptions,
   EventProjectionMessage,
@@ -35,6 +36,7 @@ export interface EventProjectionState {
 }
 
 export interface BuildEventProjectionOptions extends BuildEventProjectionMessagesOptions {
+  acceptedClientRequestContext?: AcceptedClientRequestContext;
   turnMessageDetail: EventProjectionTurnMessageDetail;
 }
 

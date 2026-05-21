@@ -46,6 +46,9 @@ import {
 } from "./build-event-projection.js";
 import {
   buildAcceptedClientRequestById,
+  type AcceptedClientRequestContext,
+} from "./accepted-client-request-context.js";
+import {
   parsePendingSteerFromClientRequest,
 } from "./user-message-parsing.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
@@ -117,6 +120,7 @@ export type ThreadTimelineFromEventsOptions =
   | ManagerConversationTimelineFromEventsOptions;
 
 export interface BuildThreadTimelineFromEventsArgs {
+  acceptedClientRequestContext: AcceptedClientRequestContext;
   contextWindowEvents: ThreadEventWithMeta[];
   events: ThreadEventWithMeta[];
   options: ThreadTimelineFromEventsOptions;
@@ -711,12 +715,15 @@ function convertPendingSteerMessage(
 }
 
 function buildPendingSteerRowsFromEvents(
+  acceptedClientRequestContext: AcceptedClientRequestContext,
   events: ThreadEventWithMeta[],
   options: ThreadTimelineFromEventsBaseOptions,
 ): TimelineUserConversationRow[] {
   const orderedEvents = getOrderedThreadEvents(events);
-  const acceptedClientRequestById =
-    buildAcceptedClientRequestById(orderedEvents);
+  const acceptedClientRequestById = buildAcceptedClientRequestById({
+    context: acceptedClientRequestContext,
+    events: orderedEvents,
+  });
   const pendingSteerRows: TimelineUserConversationRow[] = [];
 
   for (const { event, meta } of orderedEvents) {
@@ -1016,6 +1023,7 @@ export function buildThreadTimelineFromEvents(
   args: BuildThreadTimelineFromEventsArgs,
 ): ThreadTimelineFromEventsResult {
   const projectionOptions = {
+    acceptedClientRequestContext: args.acceptedClientRequestContext,
     includeDebugRawEvents: args.options.includeDebugRawEvents,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
@@ -1041,7 +1049,11 @@ export function buildThreadTimelineFromEvents(
             includeNestedRows: args.options.includeNestedRows,
             rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
           }),
-          ...buildPendingSteerRowsFromEvents(args.events, args.options),
+          ...buildPendingSteerRowsFromEvents(
+            args.acceptedClientRequestContext,
+            args.events,
+            args.options,
+          ),
         ];
 
   return {

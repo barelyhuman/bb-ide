@@ -1,13 +1,14 @@
 import {
-  requireThreadEventScopeTurnId,
   type PromptInput,
   type ThreadEvent,
   type ThreadType,
 } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
+import type { AcceptedClientRequest } from "./accepted-client-request-context.js";
 import type {
   BuildEventProjectionMessagesOptions,
   EventProjectionAssistantTextMessage,
+  EventProjectionTurnRequestKind,
   EventProjectionTurnRequest,
   EventProjectionUserMessage,
 } from "./event-projection-types.js";
@@ -189,55 +190,60 @@ type ClientTurnRequestedEvent = Extract<
   { type: "client/turn/requested" }
 >;
 
-export interface AcceptedClientRequest {
-  meta: EventMeta;
-  turnId: string;
+interface ResolveTurnRequestKindArgs {
+  acceptedClientRequest: AcceptedClientRequest | undefined;
+  decoded: ClientTurnRequestedEvent;
 }
 
-export interface ThreadEventWithMetaLike {
-  event: ThreadEvent;
-  meta: EventMeta;
-}
-
-export function buildAcceptedClientRequestById(
-  events: readonly ThreadEventWithMetaLike[],
-): Map<string, AcceptedClientRequest> {
-  const acceptedById = new Map<string, AcceptedClientRequest>();
-  for (const { event, meta } of events) {
-    if (event.type !== "turn/input/accepted") {
-      continue;
-    }
-    acceptedById.set(event.clientRequestId, {
-      meta,
-      turnId: requireThreadEventScopeTurnId({
-        type: event.type,
-        scope: event.scope,
-      }),
-    });
-  }
-  return acceptedById;
-}
-
-export function isSteerRequest(decoded: ClientTurnRequestedEvent): boolean {
+function expectedSteerTurnId(decoded: ClientTurnRequestedEvent): string | null {
   switch (decoded.target.kind) {
     case "auto":
-      return decoded.target.expectedTurnId !== null;
     case "steer":
-      return true;
+      return decoded.target.expectedTurnId;
     case "thread-start":
     case "new-turn":
-      return false;
+      return null;
     default:
       return assertNever(decoded.target);
   }
 }
 
+function resolveTurnRequestKind({
+  acceptedClientRequest,
+  decoded,
+}: ResolveTurnRequestKindArgs): EventProjectionTurnRequestKind {
+  const expectedTurnId = expectedSteerTurnId(decoded);
+  if (expectedTurnId === null) {
+    return "message";
+  }
+  if (
+    acceptedClientRequest !== undefined &&
+    acceptedClientRequest.turnId !== expectedTurnId
+  ) {
+    return "message";
+  }
+  return "steer";
+}
+
+export function isSteerRequest(decoded: ClientTurnRequestedEvent): boolean {
+  return (
+    resolveTurnRequestKind({
+      acceptedClientRequest: undefined,
+      decoded,
+    }) === "steer"
+  );
+}
+
 function buildTurnRequest(
   decoded: ClientTurnRequestedEvent,
   status: EventProjectionTurnRequest["status"],
+  acceptedClientRequest: AcceptedClientRequest | undefined,
 ): EventProjectionTurnRequest {
   return {
-    kind: isSteerRequest(decoded) ? "steer" : "message",
+    kind: resolveTurnRequestKind({
+      acceptedClientRequest,
+      decoded,
+    }),
     status,
   };
 }
@@ -274,8 +280,13 @@ function buildClientUserMessage({
     decoded,
     acceptedClientRequest,
   );
+  const turnRequest = buildTurnRequest(
+    decoded,
+    requestStatus,
+    acceptedClientRequest,
+  );
   const rowMeta =
-    isSteerRequest(decoded) && acceptedClientRequest
+    acceptedClientRequest && turnRequest.kind === "steer"
       ? acceptedClientRequest.meta
       : meta;
 
@@ -291,7 +302,7 @@ function buildClientUserMessage({
       : { scope: decoded.scope }),
     initiator: decoded.initiator,
     senderThreadId: decoded.senderThreadId,
-    turnRequest: buildTurnRequest(decoded, requestStatus),
+    turnRequest,
     text: parsedInput.text,
     attachments: buildAttachments(parsedInput),
   };
@@ -317,7 +328,12 @@ export function parseUserFromClientRequest(
   // Steers flow through parsePendingSteer / parseAcceptedSteer regardless of
   // initiator — the steer-vs-message distinction is about turn shape, not who
   // initiated it.
-  if (isSteerRequest(decoded)) {
+  if (
+    resolveTurnRequestKind({
+      acceptedClientRequest,
+      decoded,
+    }) !== "message"
+  ) {
     return null;
   }
 
@@ -366,7 +382,12 @@ export function parseAcceptedSteerFromClientRequest(
   if (decoded.type !== "client/turn/requested") {
     return null;
   }
-  if (!isSteerRequest(decoded)) {
+  if (
+    resolveTurnRequestKind({
+      acceptedClientRequest,
+      decoded,
+    }) !== "steer"
+  ) {
     return null;
   }
   if (!shouldRenderClientRequestInitiator(decoded, options)) {

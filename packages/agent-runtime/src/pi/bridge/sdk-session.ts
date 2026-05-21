@@ -42,6 +42,21 @@ interface RunPromptArgs {
   text: string;
 }
 
+interface RunPromptResult {
+  steerConsumptionPromise: Promise<void> | null;
+}
+
+interface PendingSteerConsumption {
+  queuedText: string | null;
+  reject: (error: Error) => void;
+  resolve: () => void;
+}
+
+interface TrackedSteerConsumption {
+  pending: PendingSteerConsumption;
+  promise: Promise<void>;
+}
+
 type PiStreamingBehavior = NonNullable<PromptOptions["streamingBehavior"]>;
 
 const PI_TRANSIENT_AUTH_RETRY_DELAY_MS = 250;
@@ -122,6 +137,23 @@ function isTransientPiAuthStorageError(error: Error): boolean {
   return error.message.startsWith("No API key found for ");
 }
 
+function listMultisetDifference(
+  source: readonly string[],
+  subtract: readonly string[],
+): string[] {
+  const remaining = [...subtract];
+  const difference: string[] = [];
+  for (const entry of source) {
+    const index = remaining.indexOf(entry);
+    if (index === -1) {
+      difference.push(entry);
+      continue;
+    }
+    remaining.splice(index, 1);
+  }
+  return difference;
+}
+
 async function waitForTransientAuthRetry(): Promise<void> {
   await new Promise((resolve) =>
     setTimeout(resolve, PI_TRANSIENT_AUTH_RETRY_DELAY_MS),
@@ -137,6 +169,12 @@ export class PiSdkSession {
   private session: AgentSession | undefined;
   private unsubscribe: (() => void) | undefined;
   private isProcessing = false;
+  private readonly pendingSteerConsumptions: PendingSteerConsumption[] = [];
+  private lastObservedSteeringQueue: string[] = [];
+  private autoRetryInProgress = false;
+  private terminalSteerSettlementTimeout:
+    | ReturnType<typeof setTimeout>
+    | undefined;
 
   constructor(
     private readonly options: PiSdkSessionOptions,
@@ -226,6 +264,8 @@ export class PiSdkSession {
     // Subscribe to session events
     this.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       this.trackProcessingState(event);
+      this.observeSteerConsumption(event);
+      this.observeTerminalSteerSettlement(event);
       this.onEvent(event);
     });
   }
@@ -241,24 +281,36 @@ export class PiSdkSession {
       });
     } catch (error) {
       this.isProcessing = false;
+      this.rejectPendingSteerConsumptions(
+        "Pi SDK prompt failed before steer consumed",
+      );
       this.onDone(error);
     }
   }
 
   async steer(text: string, images?: ImageContent[]): Promise<void> {
-    if (!this.session) return;
+    if (!this.session) {
+      throw new Error("No active Pi SDK session");
+    }
     try {
-      await this.runPromptWithTransientAuthRetry({
+      const result = await this.runPromptWithTransientAuthRetry({
         images,
         streamingBehavior: "steer",
         text,
       });
+      if (result.steerConsumptionPromise) {
+        await result.steerConsumptionPromise;
+      }
     } catch (error) {
       this.onDone(error);
+      throw error;
     }
   }
 
   detach(): void {
+    this.rejectPendingSteerConsumptions(
+      "Pi SDK session detached before steer consumed",
+    );
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = undefined;
@@ -267,6 +319,9 @@ export class PiSdkSession {
   }
 
   stop(): void {
+    this.rejectPendingSteerConsumptions(
+      "Pi SDK session stopped before steer consumed",
+    );
     this.detach();
     if (this.session) {
       this.session.dispose();
@@ -276,6 +331,9 @@ export class PiSdkSession {
 
   async closeGracefully(timeoutMs: number): Promise<void> {
     const session = this.session;
+    this.rejectPendingSteerConsumptions(
+      "Pi SDK session closed before steer consumed",
+    );
     this.detach();
     if (!session) {
       return;
@@ -313,6 +371,144 @@ export class PiSdkSession {
     }
   }
 
+  private trackPendingSteerConsumption(): TrackedSteerConsumption {
+    let resolvePromise: (() => void) | undefined;
+    let rejectPromise: ((error: Error) => void) | undefined;
+    const promise = new Promise<void>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    if (!resolvePromise || !rejectPromise) {
+      throw new Error("Failed to track Pi steer consumption");
+    }
+
+    const pending: PendingSteerConsumption = {
+      queuedText: null,
+      reject: rejectPromise,
+      resolve: resolvePromise,
+    };
+    this.pendingSteerConsumptions.push(pending);
+    void promise.catch(() => undefined);
+    return { pending, promise };
+  }
+
+  private observeSteerConsumption(event: AgentSessionEvent): void {
+    if (event.type !== "queue_update") {
+      return;
+    }
+
+    const addedQueuedTexts = listMultisetDifference(
+      event.steering,
+      this.lastObservedSteeringQueue,
+    );
+    const removedQueuedTexts = listMultisetDifference(
+      this.lastObservedSteeringQueue,
+      event.steering,
+    );
+    this.lastObservedSteeringQueue = [...event.steering];
+
+    for (const queuedText of addedQueuedTexts) {
+      // Pi queue_update exposes SDK-transformed text, so correlate by FIFO queue
+      // additions rather than by the raw BB steer text.
+      const pending = this.pendingSteerConsumptions.find(
+        (entry) => entry.queuedText === null,
+      );
+      if (!pending) {
+        break;
+      }
+      pending.queuedText = queuedText;
+    }
+
+    for (const queuedText of removedQueuedTexts) {
+      const pending = this.pendingSteerConsumptions.find(
+        (entry) => entry.queuedText === queuedText,
+      );
+      if (pending) {
+        this.resolvePendingSteerConsumption(pending);
+      }
+    }
+  }
+
+  private observeTerminalSteerSettlement(event: AgentSessionEvent): void {
+    if (event.type === "agent_end") {
+      this.scheduleTerminalSteerSettlement();
+      return;
+    }
+
+    if (event.type === "auto_retry_start") {
+      this.autoRetryInProgress = true;
+      this.clearTerminalSteerSettlement();
+      return;
+    }
+
+    if (event.type === "auto_retry_end") {
+      this.autoRetryInProgress = false;
+      if (!event.success) {
+        this.rejectPendingSteerConsumptions(
+          "Pi auto retry ended before steer was consumed",
+        );
+      }
+    }
+  }
+
+  private scheduleTerminalSteerSettlement(): void {
+    if (
+      this.pendingSteerConsumptions.length === 0 ||
+      this.terminalSteerSettlementTimeout !== undefined
+    ) {
+      return;
+    }
+
+    this.terminalSteerSettlementTimeout = setTimeout(() => {
+      this.terminalSteerSettlementTimeout = undefined;
+      if (this.autoRetryInProgress) {
+        return;
+      }
+      this.rejectPendingSteerConsumptions(
+        "Pi turn ended before steer was consumed",
+      );
+    }, 0);
+  }
+
+  private clearTerminalSteerSettlement(): void {
+    if (this.terminalSteerSettlementTimeout === undefined) {
+      return;
+    }
+    clearTimeout(this.terminalSteerSettlementTimeout);
+    this.terminalSteerSettlementTimeout = undefined;
+  }
+
+  private resolvePendingSteerConsumption(
+    pending: PendingSteerConsumption,
+  ): void {
+    const index = this.pendingSteerConsumptions.indexOf(pending);
+    if (index === -1) {
+      return;
+    }
+    this.pendingSteerConsumptions.splice(index, 1);
+    pending.resolve();
+  }
+
+  private rejectPendingSteerConsumption(
+    pending: PendingSteerConsumption,
+    error: Error,
+  ): void {
+    const index = this.pendingSteerConsumptions.indexOf(pending);
+    if (index === -1) {
+      return;
+    }
+    this.pendingSteerConsumptions.splice(index, 1);
+    pending.reject(error);
+  }
+
+  private rejectPendingSteerConsumptions(message: string): void {
+    this.clearTerminalSteerSettlement();
+    const pendingSteers = this.pendingSteerConsumptions.splice(0);
+    for (const pending of pendingSteers) {
+      pending.reject(new Error(message));
+    }
+  }
+
   private ensureCustomToolsActive(): void {
     if (
       !this.session ||
@@ -338,11 +534,10 @@ export class PiSdkSession {
 
   private async runPromptWithTransientAuthRetry(
     args: RunPromptArgs,
-  ): Promise<void> {
+  ): Promise<RunPromptResult> {
     for (let attempt = 0; ; attempt += 1) {
       try {
-        await this.runPromptOnce(args);
-        return;
+        return await this.runPromptOnce(args);
       } catch (error) {
         if (
           !(error instanceof Error) ||
@@ -356,25 +551,43 @@ export class PiSdkSession {
     }
   }
 
-  private async runPromptOnce(args: RunPromptArgs): Promise<void> {
+  private async runPromptOnce(args: RunPromptArgs): Promise<RunPromptResult> {
     if (!this.session) {
-      return;
+      throw new Error("No active Pi SDK session");
     }
     this.ensureCustomToolsActive();
     if (this.session.isStreaming) {
-      await this.session.prompt(args.text, {
-        streamingBehavior: args.streamingBehavior,
-        ...(args.images && args.images.length > 0
-          ? { images: args.images }
-          : {}),
-      });
-      return;
+      const steerConsumption =
+        args.streamingBehavior === "steer"
+          ? this.trackPendingSteerConsumption()
+          : null;
+      try {
+        await this.session.prompt(args.text, {
+          streamingBehavior: args.streamingBehavior,
+          ...(args.images && args.images.length > 0
+            ? { images: args.images }
+            : {}),
+        });
+      } catch (error) {
+        if (steerConsumption) {
+          this.rejectPendingSteerConsumption(
+            steerConsumption.pending,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
+        throw error;
+      }
+      if (steerConsumption && steerConsumption.pending.queuedText === null) {
+        this.resolvePendingSteerConsumption(steerConsumption.pending);
+      }
+      return { steerConsumptionPromise: steerConsumption?.promise ?? null };
     }
     await this.session.prompt(args.text, {
       ...(args.images && args.images.length > 0
         ? { images: args.images }
         : {}),
     });
+    return { steerConsumptionPromise: null };
   }
 }
 

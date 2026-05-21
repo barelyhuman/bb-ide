@@ -39,6 +39,14 @@ export {
   MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
 } from "./build-thread-timeline.js";
 export type { ThreadTimelineEventSelection } from "./build-thread-timeline.js";
+export {
+  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+  buildAcceptedClientRequestById,
+} from "./accepted-client-request-context.js";
+export type {
+  AcceptedClientRequest,
+  AcceptedClientRequestContext,
+} from "./accepted-client-request-context.js";
 export type { SystemClientRequestVisibility } from "./event-projection-message.js";
 export {
   buildTimelineViewRows,

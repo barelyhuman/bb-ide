@@ -1068,6 +1068,102 @@ describe("buildThreadTimeline", () => {
     ]);
   });
 
+  it("uses later accepted rows as context for older-page pending steer projection", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      status: "active",
+      type: "standard",
+    });
+
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      requestId: "creq_23456789ab",
+      text: "Initial request",
+      target: { kind: "thread-start" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789ab",
+      },
+    });
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 4,
+      requestId: "creq_3456789abc",
+      text: "Context-only steer",
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+    });
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 5,
+      requestId: "creq_456789abcd",
+      text: "Later request",
+      target: { kind: "new-turn" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 6,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_3456789abc",
+      },
+    });
+
+    const anchors = listStandardTimelineSegmentAnchorRows(harness.db, {
+      includeSystemClientRequests: false,
+      threadId: thread.id,
+    });
+    const laterAnchor = anchors.find((anchor) => anchor.sequence === 5);
+    expect(laterAnchor).toBeDefined();
+    if (!laterAnchor) {
+      throw new Error("Expected anchor for later request");
+    }
+
+    const olderPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "older",
+        beforeCursor: {
+          anchorId: laterAnchor.rowId,
+          anchorSeq: laterAnchor.sequence,
+        },
+        segmentLimit: 1,
+      },
+    });
+    const userRows = flattenTimelineSourceRows(olderPage.rows).filter(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+
+    expect(userRows.map((row) => row.text)).toEqual(["Initial request"]);
+    expect(userRows.map((row) => row.turnRequest)).toEqual([
+      { kind: "message", status: "accepted" },
+    ]);
+  });
+
   it("builds a paged timeline when the selected window needs an earlier turn start", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

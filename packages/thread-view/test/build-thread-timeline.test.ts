@@ -21,9 +21,14 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   buildThreadTimelineFromEvents,
+  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
   type ThreadEventWithMeta,
 } from "../src/index.js";
 import { parseOperationMessage } from "../src/parse-operation-message.js";
+import {
+  createTimelineEventFactory,
+  fromRows,
+} from "./timeline-test-harness.js";
 
 interface ContextWindowUsageEventArgs {
   estimated: boolean;
@@ -402,6 +407,7 @@ function buildContextWindowUsage(
   contextWindowEvents: ThreadEventWithMeta[],
 ): ThreadContextWindowUsage | null {
   return buildThreadTimelineFromEvents({
+    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     contextWindowEvents,
     events: [],
     options: {
@@ -422,6 +428,7 @@ function buildTimelineRows(
   threadStatus: BuildTimelineRowsThreadStatus = "idle",
 ): TimelineRow[] {
   return buildThreadTimelineFromEvents({
+    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     contextWindowEvents: [],
     events,
     options: {
@@ -431,6 +438,29 @@ function buildTimelineRows(
       isLatestPage: true,
       systemClientRequestVisibility: "hidden",
       threadStatus,
+      turnMessageDetail: "full",
+      viewMode: "standard",
+    },
+  }).rows;
+}
+
+function buildTimelineRowsWithAcceptedContext(
+  events: ThreadEventWithMeta[],
+  acceptedClientRequestEvents: ThreadEventWithMeta[],
+): TimelineRow[] {
+  return buildThreadTimelineFromEvents({
+    acceptedClientRequestContext: {
+      acceptedClientRequestEvents,
+    },
+    contextWindowEvents: [],
+    events,
+    options: {
+      includeDebugRawEvents: false,
+      includeNestedRows: true,
+      includeProviderUnhandledOperations: false,
+      isLatestPage: true,
+      systemClientRequestVisibility: "hidden",
+      threadStatus: "idle",
       turnMessageDetail: "full",
       viewMode: "standard",
     },
@@ -552,6 +582,63 @@ function fileChangeRowIdByPath(
 }
 
 describe("buildThreadTimelineFromEvents", () => {
+  it("uses accepted context to suppress pending steers without rendering future accepted rows", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const turnStarted = event.turnStarted({ turnId: "turn-1" });
+    const steerRequest = event.clientTurnRequested({
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+      text: "Please account for the restart",
+    });
+    const acceptedContext = fromRows([
+      event.inputAccepted({
+        clientRequestId: steerRequest.data.requestId,
+        turnId: "turn-1",
+      }),
+    ]);
+
+    const rows = buildTimelineRowsWithAcceptedContext(
+      fromRows([turnStarted, steerRequest]),
+      acceptedContext,
+    );
+
+    expect(
+      rows.filter((row) => row.kind === "conversation" && row.role === "user"),
+    ).toHaveLength(0);
+  });
+
+  it("uses accepted context to classify stale steers as messages when the accepted turn is visible", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const turnStarted = event.turnStarted({ turnId: "turn-1" });
+    const steerRequest = event.clientTurnRequested({
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+      text: "Start a fresh attempt",
+    });
+    const fallbackTurnStarted = event.turnStarted({ turnId: "turn-2" });
+    const acceptedContext = fromRows([
+      event.inputAccepted({
+        clientRequestId: steerRequest.data.requestId,
+        turnId: "turn-2",
+      }),
+    ]);
+
+    const rows = buildTimelineRowsWithAcceptedContext(
+      fromRows([turnStarted, steerRequest, fallbackTurnStarted]),
+      acceptedContext,
+    );
+    const userRows = rows.filter(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+
+    expect(userRows).toHaveLength(1);
+    expect(userRows[0]).toMatchObject({
+      text: "Start a fresh attempt",
+      turnRequest: {
+        kind: "message",
+        status: "accepted",
+      },
+    });
+  });
+
   it.each(ownershipOperationCases)(
     "uses $action ownership metadata rather than event message for operation titles",
     ({

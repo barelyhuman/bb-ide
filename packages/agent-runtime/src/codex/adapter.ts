@@ -24,6 +24,7 @@ import type {
   ReasoningLevel,
   ServiceTier,
   ThreadEvent,
+  ThreadEventUserContent,
 } from "@bb/domain";
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
 import type { ReasoningEffort as CodexReasoningEffort } from "./generated/codex-app-server/schema/ReasoningEffort.js";
@@ -78,6 +79,23 @@ interface CodexPermissionSettings {
 interface CodexThreadPermissionSettings {
   approvalPolicy: AskForApproval;
   sandbox: CodexSandboxMode;
+}
+
+interface PendingSteerInputAcceptance {
+  clientRequestId: ClientTurnRequestId;
+  inputFingerprint: string;
+  threadId: string;
+  turnId: string;
+}
+
+interface QueuePendingSteerInputAcceptanceArgs {
+  command: Extract<AdapterCommand, { type: "turn/steer" }>;
+}
+
+interface ShiftPendingSteerInputAcceptanceArgs {
+  content: readonly ThreadEventUserContent[];
+  providerThreadId: string;
+  turnId: string;
 }
 
 interface ToCodexPermissionSettingsArgs {
@@ -657,6 +675,42 @@ function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
   });
 }
 
+function promptInputAcceptanceFingerprint(input: PromptInput[]): string {
+  return input
+    .flatMap((chunk): string[] => {
+      switch (chunk.type) {
+        case "text":
+          return chunk.text.length > 0 ? [`text:${chunk.text}`] : [];
+        case "image":
+          return [`image:${chunk.url}`];
+        case "localImage":
+          return [`localImage:${chunk.path}`];
+        case "localFile":
+          return [`text:[Attached file: ${chunk.path}]`];
+      }
+    })
+    .join("\n");
+}
+
+function userMessageAcceptanceFingerprint(
+  content: readonly ThreadEventUserContent[],
+): string {
+  return content
+    .map((chunk) => {
+      switch (chunk.type) {
+        case "text":
+          return `text:${chunk.text}`;
+        case "image":
+          return `image:${chunk.url}`;
+        case "localImage":
+          return `localImage:${chunk.path}`;
+        case "localFile":
+          return `localFile:${chunk.path}`;
+      }
+    })
+    .join("\n");
+}
+
 function buildCodexConfig(
   args: BuildCodexConfigArgs,
 ): { [key in string]?: JsonValue } | undefined {
@@ -892,6 +946,10 @@ export function createCodexProviderAdapter(
     string,
     ClientTurnRequestId[]
   >();
+  const pendingSteerInputAcceptancesByProviderThreadId = new Map<
+    string,
+    PendingSteerInputAcceptance[]
+  >();
   const pendingWorkspaceWriteGitWritableRootsByThreadId = new Map<
     string,
     string[]
@@ -1024,6 +1082,9 @@ export function createCodexProviderAdapter(
       return;
     }
     rawCommandOutputStateByProviderThreadId.delete(paramsResult.data.threadId);
+    pendingSteerInputAcceptancesByProviderThreadId.delete(
+      paramsResult.data.threadId,
+    );
     clearGitWritableRootsByProviderThreadId({
       providerThreadId: paramsResult.data.threadId,
     });
@@ -1108,12 +1169,69 @@ export function createCodexProviderAdapter(
     return clientRequestId;
   }
 
+  function queuePendingSteerInputAcceptance({
+    command,
+  }: QueuePendingSteerInputAcceptanceArgs): void {
+    const providerThreadId = command.providerThreadId;
+    pendingSteerInputAcceptancesByProviderThreadId.set(providerThreadId, [
+      ...(pendingSteerInputAcceptancesByProviderThreadId.get(
+        providerThreadId,
+      ) ?? []),
+      {
+        clientRequestId: command.clientRequestId,
+        inputFingerprint: promptInputAcceptanceFingerprint(command.input),
+        threadId: command.threadId,
+        turnId: command.expectedTurnId,
+      },
+    ]);
+  }
+
+  function shiftPendingSteerInputAcceptance({
+    content,
+    providerThreadId,
+    turnId,
+  }: ShiftPendingSteerInputAcceptanceArgs):
+    | PendingSteerInputAcceptance
+    | null {
+    const pendingAcceptances =
+      pendingSteerInputAcceptancesByProviderThreadId.get(providerThreadId);
+    if (!pendingAcceptances || pendingAcceptances.length === 0) {
+      return null;
+    }
+
+    const inputFingerprint = userMessageAcceptanceFingerprint(content);
+    const matchingIndex = pendingAcceptances.findIndex(
+      (pending) =>
+        pending.turnId === turnId &&
+        pending.inputFingerprint === inputFingerprint,
+    );
+    if (matchingIndex === -1) {
+      return null;
+    }
+
+    const nextPendingAcceptances = [...pendingAcceptances];
+    const pendingAcceptance = nextPendingAcceptances[matchingIndex];
+    nextPendingAcceptances.splice(matchingIndex, 1);
+    if (nextPendingAcceptances.length === 0) {
+      pendingSteerInputAcceptancesByProviderThreadId.delete(providerThreadId);
+    } else {
+      pendingSteerInputAcceptancesByProviderThreadId.set(
+        providerThreadId,
+        nextPendingAcceptances,
+      );
+    }
+    return pendingAcceptance ?? null;
+  }
+
   function attachAcceptedUserMessageCorrelation(
     event: ThreadEvent,
   ): ThreadEvent[] {
     if (event.type === "turn/completed") {
       if (event.providerThreadId !== null) {
         nativeTurnStartClientRequestIdsByProviderThreadId.delete(
+          event.providerThreadId,
+        );
+        pendingSteerInputAcceptancesByProviderThreadId.delete(
           event.providerThreadId,
         );
       }
@@ -1148,6 +1266,24 @@ export function createCodexProviderAdapter(
       event.item.type !== "userMessage"
     ) {
       return [event];
+    }
+
+    const turnId = requireThreadEventScopeTurnId({
+      type: event.type,
+      scope: event.scope,
+    });
+    const pendingAcceptance = shiftPendingSteerInputAcceptance({
+      content: event.item.content,
+      providerThreadId: event.providerThreadId,
+      turnId,
+    });
+    if (pendingAcceptance) {
+      return buildAcceptedUserMessageEvent({
+        clientRequestId: pendingAcceptance.clientRequestId,
+        providerThreadId: event.providerThreadId,
+        threadId: pendingAcceptance.threadId,
+        turnId,
+      });
     }
 
     return [];
@@ -1500,12 +1636,10 @@ export function createCodexProviderAdapter(
       if (command.type !== "turn/steer") {
         return [];
       }
-      return buildAcceptedUserMessageEvent({
-        clientRequestId: command.clientRequestId,
-        providerThreadId: command.providerThreadId,
-        threadId: command.threadId,
-        turnId: command.expectedTurnId,
+      queuePendingSteerInputAcceptance({
+        command,
       });
+      return [];
     },
 
     decodeToolCallRequest(
