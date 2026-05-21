@@ -186,14 +186,18 @@ export function ThreadDetailView() {
     data: thread,
     isFetching,
     isLoadingError,
-    isPlaceholderData,
     error,
   } = useThread(threadId ?? "", {
     enabled: hasThreadDetailBootstrapSettled,
     refetchOnMount: threadDetailBootstrapQuery.isSuccess ? true : "always",
   });
+  // Treat placeholder data (a full thread row primed from the sidebar list
+  // cache) as resolved so switching to an uncached thread renders the shell
+  // immediately instead of flashing a full-page "Loading..." while the
+  // bootstrap request is in flight. The timeline pane shows its own loading
+  // state as content streams in.
   const threadQueryState = useConnectionAwareQueryState({
-    hasResolvedData: thread !== undefined && !isPlaceholderData,
+    hasResolvedData: thread !== undefined,
     isFetching: threadDetailBootstrapQuery.isFetching || isFetching,
     isLoadingError,
   });
