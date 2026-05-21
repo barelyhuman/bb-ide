@@ -1,11 +1,12 @@
-import path from "path";
-import { defineConfig } from "vite";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { devEnvConfig } from "../../packages/config/src/dev-env.js";
-import { serverPortConfig } from "../../packages/config/src/server-port.js";
 
-const sharedConfig = {
+const appDir = dirname(fileURLToPath(import.meta.url));
+
+export const sharedViteConfig = {
   plugins: [react(), tailwindcss()],
   // Keep app and Ladle dep optimization metadata from clobbering each other.
   cacheDir: "node_modules/.vite/app",
@@ -22,47 +23,9 @@ const sharedConfig = {
   resolve: {
     conditions: ["source"],
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": resolve(appDir, "./src"),
     },
   },
-};
+} satisfies UserConfig;
 
-export default defineConfig(({ command }) => {
-  if (command !== "serve") {
-    return sharedConfig;
-  }
-
-  const appPort = devEnvConfig.BB_DEV_APP_PORT;
-  if (appPort === undefined) {
-    throw new Error("BB_DEV_APP_PORT is required to run the app dev server");
-  }
-  const appHost =
-    devEnvConfig.BB_DEV_APP_HOST === ""
-      ? undefined
-      : devEnvConfig.BB_DEV_APP_HOST;
-  const serverPort = serverPortConfig.BB_SERVER_PORT;
-  const serverHttpOrigin = `http://localhost:${serverPort}`;
-  const serverWsOrigin = `ws://localhost:${serverPort}`;
-
-  return {
-    ...sharedConfig,
-    define: {
-      // In dev mode, connect the WebSocket directly to the server instead of
-      // going through Vite's proxy. Vite's WS proxy (node-http-proxy) does not
-      // handle reconnection when the upstream server restarts — it's a known
-      // limitation (vitejs/vite#8117, chimurai/http-proxy-middleware#44).
-      // In production the server serves the app directly so this isn't needed.
-      __BB_DEV_WS_URL__: JSON.stringify(`${serverWsOrigin}/ws`),
-    },
-    server: {
-      host: appHost,
-      port: appPort,
-      proxy: {
-        "/api": {
-          target: serverHttpOrigin,
-          changeOrigin: true,
-        },
-      },
-    },
-  };
-});
+export default defineConfig(sharedViteConfig);

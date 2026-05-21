@@ -163,15 +163,15 @@ describe("consumer-specific config", () => {
     expect(serverPortConfig.BB_SERVER_PORT).toBe(4444);
   });
 
-  it("defers server port validation until the port getter is read", async () => {
+  it("validates server port env at import time", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_PORT", undefined);
 
-    const { serverPortConfig } = await importFresh<
-      typeof import("../src/server-port.js")
-    >("../src/server-port.js");
-
-    expect(() => serverPortConfig.BB_SERVER_PORT).toThrow(/BB_SERVER_PORT/u);
+    await expect(
+      importFresh<typeof import("../src/server-port.js")>(
+        "../src/server-port.js",
+      ),
+    ).rejects.toThrow(/BB_SERVER_PORT/u);
   });
 
   it("derives the database path from data dir without validating unrelated server env", async () => {
