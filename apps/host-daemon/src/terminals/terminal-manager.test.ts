@@ -213,6 +213,7 @@ function createHarness(): TerminalManagerHarness {
   });
   const manager = new TerminalManager({
     logger: {
+      debug: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -430,6 +431,7 @@ describe("TerminalManager", () => {
     const harness = createHarness();
     const manager = new TerminalManager({
       logger: {
+        debug: vi.fn(),
         error: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
@@ -487,6 +489,7 @@ describe("TerminalManager", () => {
       });
       const manager = new TerminalManager({
         logger: {
+          debug: vi.fn(),
           error: vi.fn(),
           info: vi.fn(),
           warn: vi.fn(),

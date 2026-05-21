@@ -16,6 +16,7 @@ const TEST_REPORTER_DEBOUNCE_MS = 100;
 
 function createLogger() {
   return {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),

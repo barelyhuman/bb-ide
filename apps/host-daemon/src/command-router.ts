@@ -3,6 +3,7 @@ import type {
   HostDaemonCommandEnvelope,
   HostDaemonCommandResultReportWithoutSession,
 } from "@bb/host-daemon-contract";
+import { performance } from "node:perf_hooks";
 import { shouldFlushEventsBeforeReportingCommandResult } from "@bb/host-daemon-contract";
 import {
   dispatchCommand,
@@ -16,12 +17,17 @@ import { runtimeErrorLogFields } from "./error-utils.js";
 
 type CommandResultReport = HostDaemonCommandResultReportWithoutSession;
 
+interface CommandRouterLogger extends Pick<HostDaemonLogger, "warn"> {
+  debug?: HostDaemonLogger["debug"];
+}
+
 interface PendingCommandResultReport {
   command: HostDaemonCommand;
   result: CommandResultReport;
 }
 
 type EnvironmentLaneMode = "read" | "write";
+type CommandLifecycleOutcome = "reported" | "report_deferred";
 
 interface EnvironmentLaneState {
   /** All admitted read and write work. Writes wait on this tail. */
@@ -34,6 +40,36 @@ type FileWriteLaneCommand = Extract<
   HostDaemonCommandEnvelope["command"],
   { type: "host.write_file_relative" | "host.delete_file_relative" }
 >;
+
+interface EnvironmentLaneWorkMetrics {
+  startedAtMs: number | null;
+}
+
+interface ExecutedCommandResult {
+  handlerMs: number;
+  result: CommandResultReport;
+}
+
+interface CommandLifecycleTiming {
+  commandId: string;
+  commandType: HostDaemonCommand["type"];
+  cursor: number;
+  daemonQueueWaitMs: number;
+  environmentId: string | undefined;
+  fetchedAt: string;
+  handlerMs: number;
+  laneMode: EnvironmentLaneMode | null;
+  laneWaitMs: number;
+  ok: boolean;
+  outcome: CommandLifecycleOutcome;
+  reportMs: number;
+  reportQueueWaitMs: number;
+  totalMs: number;
+}
+
+type ReadCommandFetchedAt = (
+  envelope: HostDaemonCommandEnvelope,
+) => number | undefined;
 
 export interface CommandRouterOptions {
   dataDir: CommandDispatchOptions["dataDir"];
@@ -48,14 +84,35 @@ export interface CommandRouterOptions {
   recordReplayCaptureTurnRequest?: CommandDispatchOptions["recordReplayCaptureTurnRequest"];
   replayTasks?: CommandDispatchOptions["replayTasks"];
   threadStorageRootPath: string;
-  logger: Pick<HostDaemonLogger, "warn">;
+  logger: CommandRouterLogger;
+  readFetchedAt?: ReadCommandFetchedAt;
   now?: () => number;
+}
+
+const HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS = 1_000;
+
+function roundDurationMs(durationMs: number): number {
+  return Math.round(durationMs * 10) / 10;
+}
+
+function elapsedMs(startedAtMs: number): number {
+  return performance.now() - startedAtMs;
+}
+
+function readCommandEnvironmentId(
+  command: HostDaemonCommand,
+): string | undefined {
+  if ("environmentId" in command) {
+    return command.environmentId;
+  }
+  return undefined;
 }
 
 export class CommandRouter {
   private readonly reportResult;
   private readonly logger;
   private readonly now;
+  private readonly readFetchedAt;
   private readonly environmentLanes = new Map<string, EnvironmentLaneState>();
   private readonly fileWriteLaneTails = new Map<string, Promise<void>>();
   // Stale failed reports retry in the background after the current result is
@@ -68,6 +125,7 @@ export class CommandRouter {
     this.reportResult = options.reportResult ?? (async () => undefined);
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
+    this.readFetchedAt = options.readFetchedAt ?? (() => undefined);
   }
 
   async handleCommands(commands: HostDaemonCommandEnvelope[]): Promise<void> {
@@ -79,12 +137,20 @@ export class CommandRouter {
   private async dispatchEnvelope(
     envelope: HostDaemonCommandEnvelope,
   ): Promise<void> {
-    let task: Promise<CommandResultReport>;
+    const routerReceivedAtWallMs = this.now();
+    const fetchedAtWallMs =
+      this.readFetchedAt(envelope) ?? routerReceivedAtWallMs;
+    const fetchedAt = new Date(fetchedAtWallMs).toISOString();
+    const receivedAtMs = performance.now();
+    const laneWorkMetrics: EnvironmentLaneWorkMetrics = {
+      startedAtMs: null,
+    };
+    let task: Promise<ExecutedCommandResult>;
     const fileWriteLaneKey = this.getFileWriteLaneKey(envelope.command);
     const environmentLaneMode = this.getEnvironmentLaneMode(envelope.command);
     if (fileWriteLaneKey) {
       task = this.runInFileWriteLane(fileWriteLaneKey, () =>
-        this.executeCommand(envelope),
+        this.executeCommandWithLaneStart(envelope, laneWorkMetrics),
       );
     } else if (environmentLaneMode && "environmentId" in envelope.command) {
       const { environmentId } = envelope.command;
@@ -94,23 +160,32 @@ export class CommandRouter {
         );
       }
       task = this.runInEnvironmentLane(environmentId, environmentLaneMode, () =>
-        this.executeCommand(envelope),
+        this.executeCommandWithLaneStart(envelope, laneWorkMetrics),
       );
     } else {
+      laneWorkMetrics.startedAtMs = receivedAtMs;
       task = this.executeCommand(envelope);
     }
 
-    const result = await task;
+    const executed = await task;
     const report: PendingCommandResultReport = {
       command: envelope.command,
-      result,
+      result: executed.result,
     };
+    const reportQueuedAtMs = performance.now();
+    let reportStartedAtMs = reportQueuedAtMs;
+    let reportMs = 0;
+    let outcome: CommandLifecycleOutcome = "reported";
     this.reportingPromise = this.reportingPromise
       .then(async () => {
+        reportStartedAtMs = performance.now();
         await this.reportCommandResult(report);
+        reportMs = elapsedMs(reportStartedAtMs);
         this.schedulePendingResultRetry();
       })
       .catch((error) => {
+        reportMs = elapsedMs(reportStartedAtMs);
+        outcome = "report_deferred";
         this.pendingResults.push(report);
         this.logger.warn(
           runtimeErrorLogFields(error),
@@ -118,6 +193,28 @@ export class CommandRouter {
         );
       });
     await this.reportingPromise;
+    const laneStartedAtMs = laneWorkMetrics.startedAtMs ?? receivedAtMs;
+    const routerTotalMs = elapsedMs(receivedAtMs);
+    const daemonQueueWaitMs = Math.max(
+      0,
+      routerReceivedAtWallMs - fetchedAtWallMs,
+    );
+    this.logCommandLifecycle({
+      commandId: envelope.id,
+      commandType: envelope.command.type,
+      cursor: envelope.cursor,
+      daemonQueueWaitMs,
+      environmentId: readCommandEnvironmentId(envelope.command),
+      fetchedAt,
+      handlerMs: executed.handlerMs,
+      laneMode: environmentLaneMode,
+      laneWaitMs: laneStartedAtMs - receivedAtMs,
+      ok: executed.result.ok,
+      outcome,
+      reportMs,
+      reportQueueWaitMs: reportStartedAtMs - reportQueuedAtMs,
+      totalMs: daemonQueueWaitMs + routerTotalMs,
+    });
   }
 
   private schedulePendingResultRetry(): void {
@@ -179,7 +276,8 @@ export class CommandRouter {
 
   private async executeCommand(
     envelope: HostDaemonCommandEnvelope,
-  ): Promise<CommandResultReport> {
+  ): Promise<ExecutedCommandResult> {
+    const handlerStartedAtMs = performance.now();
     const baseReport = {
       commandId: envelope.id,
       type: envelope.command.type,
@@ -202,10 +300,13 @@ export class CommandRouter {
         threadStorageRootPath: this.options.threadStorageRootPath,
       });
       return {
-        ...baseReport,
-        completedAt: this.now(),
-        ok: true,
-        result,
+        handlerMs: elapsedMs(handlerStartedAtMs),
+        result: {
+          ...baseReport,
+          completedAt: this.now(),
+          ok: true,
+          result,
+        },
       };
     } catch (error) {
       const errorCode = getErrorCode(error);
@@ -220,13 +321,59 @@ export class CommandRouter {
         );
       }
       return {
-        ...baseReport,
-        completedAt: this.now(),
-        ok: false,
-        errorCode,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        handlerMs: elapsedMs(handlerStartedAtMs),
+        result: {
+          ...baseReport,
+          completedAt: this.now(),
+          ok: false,
+          errorCode,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
       };
     }
+  }
+
+  private executeCommandWithLaneStart(
+    envelope: HostDaemonCommandEnvelope,
+    metrics: EnvironmentLaneWorkMetrics,
+  ): Promise<ExecutedCommandResult> {
+    metrics.startedAtMs = performance.now();
+    return this.executeCommand(envelope);
+  }
+
+  private logCommandLifecycle(timing: CommandLifecycleTiming): void {
+    const shouldLog =
+      timing.totalMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS ||
+      timing.daemonQueueWaitMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS ||
+      timing.handlerMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS ||
+      timing.laneWaitMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS ||
+      timing.reportMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS ||
+      timing.reportQueueWaitMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS ||
+      timing.outcome !== "reported" ||
+      !timing.ok;
+    if (!shouldLog) {
+      return;
+    }
+
+    this.logger.debug?.(
+      {
+        commandId: timing.commandId,
+        commandType: timing.commandType,
+        cursor: timing.cursor,
+        daemonQueueWaitMs: roundDurationMs(timing.daemonQueueWaitMs),
+        environmentId: timing.environmentId,
+        fetchedAt: timing.fetchedAt,
+        handlerMs: roundDurationMs(timing.handlerMs),
+        laneMode: timing.laneMode,
+        laneWaitMs: roundDurationMs(timing.laneWaitMs),
+        ok: timing.ok,
+        outcome: timing.outcome,
+        reportMs: roundDurationMs(timing.reportMs),
+        reportQueueWaitMs: roundDurationMs(timing.reportQueueWaitMs),
+        totalMs: roundDurationMs(timing.totalMs),
+      },
+      "Host command lifecycle",
+    );
   }
 
   private getOrCreateEnvironmentLane(

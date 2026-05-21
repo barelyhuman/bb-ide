@@ -24,6 +24,15 @@ export interface RunGitOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+export interface GitTimeoutOptions {
+  timeoutMs?: number;
+}
+
+export interface RunShellPipelineOptions extends GitTimeoutOptions {
+  cwd: string;
+  allowFailure?: boolean;
+}
+
 export interface GitCommandResult {
   stdout: string;
   stderr: string;
@@ -113,11 +122,48 @@ function isMaxBufferExceededError(error: unknown): boolean {
   );
 }
 
+function readCommandTimeoutMs(
+  error: ExecFileException | undefined,
+  timeoutMs: number | undefined,
+): number | null {
+  if (
+    typeof timeoutMs === "number" &&
+    error?.killed === true &&
+    error.signal === "SIGTERM"
+  ) {
+    return timeoutMs;
+  }
+  return null;
+}
+
 function isMissingGitBlobTargetError(stderr: string): boolean {
   return (
     /^fatal: path '.+' does not exist in '.+'$/u.test(stderr) ||
     /^fatal: invalid object name '.+'\.$/u.test(stderr) ||
     /^fatal: Not a valid object name .+$/u.test(stderr)
+  );
+}
+
+function createGitCommandTimedOutError(
+  args: string[],
+  timeoutMs: number,
+  cause?: unknown,
+): WorkspaceError {
+  return new WorkspaceError(
+    "git_command_timeout",
+    `git ${args.join(" ")} timed out after ${timeoutMs}ms`,
+    { cause },
+  );
+}
+
+function createShellPipelineTimedOutError(
+  timeoutMs: number,
+  cause?: unknown,
+): WorkspaceError {
+  return new WorkspaceError(
+    "shell_pipeline_timeout",
+    `shell pipeline timed out after ${timeoutMs}ms`,
+    { cause },
   );
 }
 
@@ -153,6 +199,10 @@ export async function runGit(
     };
   } catch (error) {
     const execError = toExecError(error);
+    const timeoutMs = readCommandTimeoutMs(execError, options.timeoutMs);
+    if (timeoutMs !== null) {
+      throw createGitCommandTimedOutError(args, timeoutMs, error);
+    }
     if (options.allowFailure) {
       return {
         stdout: execError?.stdout ?? "",
@@ -210,7 +260,7 @@ export async function getGitCommonDir(cwd: string): Promise<string> {
 export async function runShellPipeline(
   script: string,
   positionalArgs: string[],
-  options: { cwd: string; allowFailure?: boolean },
+  options: RunShellPipelineOptions,
 ): Promise<GitCommandResult> {
   try {
     const result = await execFileAsync(
@@ -220,11 +270,16 @@ export async function runShellPipeline(
         cwd: options.cwd,
         encoding: "utf8",
         maxBuffer: DEFAULT_BUFFER_BYTES,
+        timeout: options.timeoutMs,
       },
     );
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (error) {
     const execError = toExecError(error);
+    const timeoutMs = readCommandTimeoutMs(execError, options.timeoutMs);
+    if (timeoutMs !== null) {
+      throw createShellPipelineTimedOutError(timeoutMs, error);
+    }
     if (options.allowFailure) {
       return {
         stdout: execError?.stdout ?? "",
@@ -277,16 +332,23 @@ async function findWorkspaceGitOperationMarker(
   return undefined;
 }
 
-export async function detectGitRepo(cwd: string): Promise<boolean> {
+export async function detectGitRepo(
+  cwd: string,
+  options: GitTimeoutOptions = {},
+): Promise<boolean> {
   const result = await runGit(["rev-parse", "--is-inside-work-tree"], {
     cwd,
     allowFailure: true,
+    timeoutMs: options.timeoutMs,
   });
   return result.exitCode === 0 && trimOutput(result.stdout) === "true";
 }
 
-export async function ensureGitRepo(cwd: string): Promise<void> {
-  if (await detectGitRepo(cwd)) {
+export async function ensureGitRepo(
+  cwd: string,
+  options: GitTimeoutOptions = {},
+): Promise<void> {
+  if (await detectGitRepo(cwd, options)) {
     return;
   }
 
@@ -311,14 +373,16 @@ async function readHeadSha(cwd: string): Promise<string | null> {
 
 export async function getCurrentBranch(
   cwd: string,
+  options: GitTimeoutOptions = {},
 ): Promise<string | undefined> {
-  if (!(await detectGitRepo(cwd))) {
+  if (!(await detectGitRepo(cwd, options))) {
     return undefined;
   }
 
   const result = await runGit(["symbolic-ref", "--quiet", "--short", "HEAD"], {
     cwd,
     allowFailure: true,
+    timeoutMs: options.timeoutMs,
   });
   if (result.exitCode !== 0) {
     return undefined;
@@ -659,12 +723,13 @@ function parseNumstatCount(text: string): number | null {
 
 export async function readDefaultBranch(
   cwd: string,
+  options: GitTimeoutOptions = {},
 ): Promise<string | undefined> {
-  await ensureGitRepo(cwd);
+  await ensureGitRepo(cwd, options);
 
   const originHead = await runGit(
     ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-    { cwd, allowFailure: true },
+    { cwd, allowFailure: true, timeoutMs: options.timeoutMs },
   );
   const remoteHead = trimOutput(originHead.stdout);
   if (remoteHead.startsWith("refs/remotes/origin/")) {
@@ -673,7 +738,7 @@ export async function readDefaultBranch(
 
   const branches = await runGit(
     ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
-    { cwd },
+    { cwd, timeoutMs: options.timeoutMs },
   );
   const localBranches = branches.stdout
     .split("\n")
@@ -702,11 +767,13 @@ export async function hasRef(cwd: string, ref: string): Promise<boolean> {
 export async function readMergeBaseRef(
   cwd: string,
   ref: string,
+  options: GitTimeoutOptions = {},
 ): Promise<string | undefined> {
-  await ensureGitRepo(cwd);
+  await ensureGitRepo(cwd, options);
   const result = await runGit(["merge-base", ref, "HEAD"], {
     cwd,
     allowFailure: true,
+    timeoutMs: options.timeoutMs,
   });
   if (result.exitCode !== 0) {
     return undefined;

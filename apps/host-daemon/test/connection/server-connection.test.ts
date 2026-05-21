@@ -40,6 +40,7 @@ async function waitFor(
 
 function createLogger(): HostDaemonLogger {
   return {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),

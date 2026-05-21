@@ -5,6 +5,7 @@ import { createServerClient, ServerResponseError } from "./server-client.js";
 
 function createLogger() {
   return {
+    debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),

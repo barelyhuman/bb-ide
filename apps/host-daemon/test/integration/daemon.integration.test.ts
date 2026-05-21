@@ -149,6 +149,7 @@ function eventSpoolHasEvent(args: EventSpoolHasEventArgs): boolean {
 
 function createTestLogger(): HostDaemonLogger {
   return {
+    debug: () => undefined,
     error: () => undefined,
     info: () => undefined,
     warn: () => undefined,

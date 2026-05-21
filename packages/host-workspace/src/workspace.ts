@@ -130,6 +130,7 @@ interface ListWorkspaceFilesRecursivelyArgs {
 }
 
 const UNTRACKED_DIFF_BATCH_SIZE = 10;
+const WORKSPACE_STATUS_GIT_TIMEOUT_MS = 15_000;
 
 function parseWorktreeList(porcelainOutput: string): WorktreeEntry[] {
   const entries: WorktreeEntry[] = [];
@@ -331,10 +332,14 @@ function formatShortstat(args: {
   return `${parts.join(", ")}\n`;
 }
 
-async function readHeadNumstat(workspacePath: string): Promise<string> {
+async function readHeadNumstat(
+  workspacePath: string,
+  timeoutMs?: number,
+): Promise<string> {
   const result = await runGit(["diff", "--numstat", "-z", "HEAD", "--"], {
     cwd: workspacePath,
     allowFailure: true,
+    timeoutMs,
   });
   if (result.exitCode === 0) {
     return result.stdout;
@@ -383,7 +388,9 @@ export class Workspace {
   }
 
   async getStatus(options: StatusOptions = {}): Promise<WorkspaceStatus> {
-    await ensureGitRepo(this.path);
+    await ensureGitRepo(this.path, {
+      timeoutMs: WORKSPACE_STATUS_GIT_TIMEOUT_MS,
+    });
 
     const mergeBaseBranch = options.mergeBaseBranch;
     const [
@@ -395,12 +402,21 @@ export class Workspace {
     ] = await Promise.all([
       runGit(
         ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
-        { cwd: this.path },
+        { cwd: this.path, timeoutMs: WORKSPACE_STATUS_GIT_TIMEOUT_MS },
       ),
-      readHeadNumstat(this.path),
-      this.currentBranch,
-      readDefaultBranch(this.path),
-      mergeBaseBranch ? this.readMergeBaseStatus(mergeBaseBranch) : null,
+      readHeadNumstat(this.path, WORKSPACE_STATUS_GIT_TIMEOUT_MS),
+      getCurrentBranch(this.path, {
+        timeoutMs: WORKSPACE_STATUS_GIT_TIMEOUT_MS,
+      }),
+      readDefaultBranch(this.path, {
+        timeoutMs: WORKSPACE_STATUS_GIT_TIMEOUT_MS,
+      }),
+      mergeBaseBranch
+        ? this.readMergeBaseStatus(
+            mergeBaseBranch,
+            WORKSPACE_STATUS_GIT_TIMEOUT_MS,
+          )
+        : null,
     ]);
 
     const entries = parsePorcelainEntries(statusOutput.stdout);
@@ -845,6 +861,7 @@ export class Workspace {
 
   private async readPatchUniqueCommitSummaries(
     mergeBaseBranch: string,
+    timeoutMs?: number,
   ): Promise<WorkspaceCommitSummary[]> {
     const log = await runGit(
       [
@@ -855,7 +872,7 @@ export class Workspace {
         "--format=%H%x1f%h%x1f%s%x1f%an%x1f%at",
         `${mergeBaseBranch}...HEAD`,
       ],
-      { cwd: this.path, allowFailure: true },
+      { cwd: this.path, allowFailure: true, timeoutMs },
     );
 
     return log.stdout
@@ -876,10 +893,11 @@ export class Workspace {
 
   private async readMergeBaseStatus(
     mergeBaseBranch: string,
+    timeoutMs?: number,
   ): Promise<WorkspaceStatus["mergeBase"]> {
     const [mergeBaseRef, aheadBehindCounts, commits, nameStatus, numstat] =
       await Promise.all([
-        readMergeBaseRef(this.path, mergeBaseBranch),
+        readMergeBaseRef(this.path, mergeBaseBranch, { timeoutMs }),
         runGit(
           [
             "rev-list",
@@ -889,9 +907,9 @@ export class Workspace {
             "--count",
             `${mergeBaseBranch}...HEAD`,
           ],
-          { cwd: this.path },
+          { cwd: this.path, timeoutMs },
         ),
-        this.readPatchUniqueCommitSummaries(mergeBaseBranch),
+        this.readPatchUniqueCommitSummaries(mergeBaseBranch, timeoutMs),
         runGit(
           [
             "diff",
@@ -900,7 +918,7 @@ export class Workspace {
             "-z",
             `${mergeBaseBranch}...HEAD`,
           ],
-          { cwd: this.path, allowFailure: true },
+          { cwd: this.path, allowFailure: true, timeoutMs },
         ),
         runGit(
           [
@@ -910,7 +928,7 @@ export class Workspace {
             "-z",
             `${mergeBaseBranch}...HEAD`,
           ],
-          { cwd: this.path, allowFailure: true },
+          { cwd: this.path, allowFailure: true, timeoutMs },
         ),
       ]);
     const [behindCount, aheadCount] = aheadBehindCounts.stdout
@@ -954,6 +972,7 @@ export class Workspace {
       const squashMerged = await this.detectSquashMerge(
         mergeBaseRef,
         mergeBaseBranch,
+        timeoutMs,
       );
       if (squashMerged) {
         normalizedAheadCount = 0;
@@ -1002,11 +1021,12 @@ export class Workspace {
   private async detectSquashMerge(
     mergeBaseRef: string,
     mergeBaseBranch: string,
+    timeoutMs?: number,
   ): Promise<boolean> {
     const branchPatchIdResult = await runShellPipeline(
       'git diff "$1".."$2" | git patch-id --stable',
       [mergeBaseRef, "HEAD"],
-      { cwd: this.path, allowFailure: true },
+      { cwd: this.path, allowFailure: true, timeoutMs },
     );
     if (branchPatchIdResult.exitCode !== 0) {
       return false;
@@ -1031,7 +1051,7 @@ export class Workspace {
     const basePatchIdsResult = await runShellPipeline(
       'git log -p -n 1000 --format="commit %H" "$1".."$2" | git patch-id --stable',
       [mergeBaseRef, mergeBaseBranch],
-      { cwd: this.path, allowFailure: true },
+      { cwd: this.path, allowFailure: true, timeoutMs },
     );
     if (basePatchIdsResult.exitCode !== 0) {
       return false;

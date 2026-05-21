@@ -5,6 +5,7 @@ import { createTestServer, type TestServer } from "../helpers/test-server.js";
 
 function createLogger(): HostDaemonLogger {
   return {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),

@@ -10,6 +10,7 @@ import {
   InteractiveRequestRegistry,
   InteractiveRequestRegistryError,
 } from "./interactive-request-registry.js";
+import { startEventLoopStallMonitor } from "./event-loop-stall-monitor.js";
 import {
   defaultListModels,
   type ReplayTaskRegistry,
@@ -18,6 +19,7 @@ import {
 import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import type { HostDaemonLogger } from "./logger.js";
+import type { HostDaemonCommandEnvelope } from "@bb/host-daemon-contract";
 import {
   RuntimeManager,
   type RuntimeManagerOptions,
@@ -453,6 +455,10 @@ export async function createHostDaemonApp(
     postEvents: (events) => serverClient.postEvents(events),
   });
   const replayTasks: ReplayTaskRegistry = new Map();
+  const commandFetchedAtByEnvelope = new WeakMap<
+    HostDaemonCommandEnvelope,
+    number
+  >();
   async function abortReplayTasks(): Promise<void> {
     const tasks = [...replayTasks.values()];
     for (const task of tasks) {
@@ -655,6 +661,7 @@ export async function createHostDaemonApp(
     replayTasks,
     threadStorageRootPath,
     logger: options.logger,
+    readFetchedAt: (command) => commandFetchedAtByEnvelope.get(command),
     recordReplayCaptureThreadMetadata: (metadata) =>
       replayCapture?.recordThreadMetadata(metadata),
     recordReplayCaptureTurnRequest: (input) =>
@@ -670,7 +677,14 @@ export async function createHostDaemonApp(
 
   const commandFetchLoop = createCommandFetchLoop({
     logger: options.logger,
-    fetchCommands: () => serverClient.fetchCommands(),
+    fetchCommands: async () => {
+      const commands = await serverClient.fetchCommands();
+      const fetchedAt = Date.now();
+      for (const command of commands) {
+        commandFetchedAtByEnvelope.set(command, fetchedAt);
+      }
+      return commands;
+    },
     handleCommands: (commands) => router.handleCommands(commands),
   });
 
@@ -726,6 +740,9 @@ export async function createHostDaemonApp(
         pickFolder: options.pickFolder,
       })
     : null;
+  const eventLoopStallMonitor = startEventLoopStallMonitor({
+    logger: options.logger,
+  });
 
   const daemon = createDaemon({
     identity: {
@@ -741,6 +758,7 @@ export async function createHostDaemonApp(
       await eventBuffer.flush();
     },
     shutdownRuntimes: async () => {
+      eventLoopStallMonitor.stop();
       environmentChangeReporter.dispose();
       await localApi?.close();
       await terminalManager.shutdownAll();

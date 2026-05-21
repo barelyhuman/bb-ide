@@ -1,3 +1,6 @@
 import type { Logger } from "@bb/logger";
 
-export type HostDaemonLogger = Pick<Logger, "info" | "warn" | "error">;
+export type HostDaemonLogger = Pick<
+  Logger,
+  "debug" | "info" | "warn" | "error"
+>;

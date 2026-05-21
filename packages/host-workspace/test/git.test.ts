@@ -11,6 +11,7 @@ import {
   parsePorcelainEntries,
   readGitBlob,
   runGit,
+  runShellPipeline,
   summarizeNumstat,
 } from "../src/git.js";
 
@@ -134,6 +135,38 @@ describe("getWorkspaceGitOperation", () => {
     await expect(getWorkspaceGitOperation(repoPath)).resolves.toEqual({
       kind: "rebase",
       hasConflicts: true,
+    });
+  });
+});
+
+describe("command timeouts", () => {
+  it("classifies git command timeouts as hard failures when allowFailure is true", async () => {
+    const repoPath = await initEmptyRepo();
+
+    await expect(
+      runGit(["-c", "alias.bb-sleep=!sleep 5", "bb-sleep"], {
+        cwd: repoPath,
+        allowFailure: true,
+        timeoutMs: 10,
+      }),
+    ).rejects.toMatchObject({
+      code: "git_command_timeout",
+      name: "WorkspaceError",
+    });
+  });
+
+  it("classifies shell pipeline timeouts as hard failures when allowFailure is true", async () => {
+    const repoPath = await initEmptyRepo();
+
+    await expect(
+      runShellPipeline("sleep 5", [], {
+        cwd: repoPath,
+        allowFailure: true,
+        timeoutMs: 10,
+      }),
+    ).rejects.toMatchObject({
+      code: "shell_pipeline_timeout",
+      name: "WorkspaceError",
     });
   });
 });
