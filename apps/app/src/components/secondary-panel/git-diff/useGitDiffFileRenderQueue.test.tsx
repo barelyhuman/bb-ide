@@ -120,6 +120,18 @@ function makeThreadGitDiffResponse(diff: string): MockThreadGitDiffResponse {
   };
 }
 
+function buildLargeUpdatedDiff(): string {
+  return buildPatchDiff(
+    Array.from({ length: 25 }, (_, index) =>
+      index === 0
+        ? "src/a.ts"
+        : index === 1
+          ? "src/b.ts"
+          : `src/updated-${index}.ts`,
+    ),
+  );
+}
+
 function resetEnvironmentQueryMocks(): void {
   mockEnvironmentQueries.gitDiff.data = undefined;
   mockEnvironmentQueries.gitDiff.error = null;
@@ -431,6 +443,81 @@ describe("useGitDiffPanelState pending scroll", () => {
     expect(result.current.currentGitDiff).toBe(diff);
     expect(result.current.isPreparingGitDiff).toBe(false);
     expect(result.current.parsedGitDiffFileEntries).toHaveLength(1);
+  });
+
+  it("keeps rendered file entries mounted while an updated diff is parsing", async () => {
+    const initialDiff = buildPatchDiff(["src/a.ts", "src/b.ts"]);
+    const updatedDiff = buildLargeUpdatedDiff();
+    mockEnvironmentQueries.gitDiff.data =
+      makeThreadGitDiffResponse(initialDiff);
+    const store = createStore();
+    const { result, rerender } = renderPanelStateHook(store);
+
+    await waitFor(() => {
+      expect(result.current.parsedGitDiffFileEntries).toHaveLength(2);
+    });
+    const initialKeys = result.current.parsedGitDiffFileEntries.map(
+      (entry) => entry.key,
+    );
+
+    vi.useFakeTimers();
+    mockEnvironmentQueries.gitDiff.data =
+      makeThreadGitDiffResponse(updatedDiff);
+    rerender();
+
+    expect(result.current.currentGitDiff).toBe(updatedDiff);
+    expect(result.current.isParsingGitDiffFiles).toBe(true);
+    expect(
+      result.current.parsedGitDiffFileEntries.map((entry) => entry.key),
+    ).toEqual(initialKeys);
+
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    expect(result.current.parsedGitDiffFileEntries).toHaveLength(25);
+  });
+
+  it("preserves collapsed file keys across an updated diff parse", async () => {
+    const initialDiff = buildPatchDiff(["src/a.ts", "src/b.ts"]);
+    const updatedDiff = buildLargeUpdatedDiff();
+    mockEnvironmentQueries.gitDiff.data =
+      makeThreadGitDiffResponse(initialDiff);
+    const store = createStore();
+    const { result, rerender } = renderPanelStateHook(store);
+
+    await waitFor(() => {
+      expect(result.current.parsedGitDiffFileEntries).toHaveLength(2);
+    });
+    const expandedEntry = result.current.parsedGitDiffFileEntries[0];
+    const collapsedEntry = result.current.parsedGitDiffFileEntries[1];
+    expect(expandedEntry).toBeDefined();
+    expect(collapsedEntry).toBeDefined();
+    if (!expandedEntry || !collapsedEntry) return;
+
+    act(() => {
+      result.current.toggleGitDiffFileCollapsed(collapsedEntry.key);
+    });
+    expect(store.get(gitDiffCollapsedFileKeysAtom)).toEqual(
+      new Set([collapsedEntry.key]),
+    );
+
+    vi.useFakeTimers();
+    mockEnvironmentQueries.gitDiff.data =
+      makeThreadGitDiffResponse(updatedDiff);
+    rerender();
+
+    expect(store.get(gitDiffCollapsedFileKeysAtom)).toEqual(
+      new Set([collapsedEntry.key]),
+    );
+
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    const collapsedFileKeys = store.get(gitDiffCollapsedFileKeysAtom);
+    expect(collapsedFileKeys.has(collapsedEntry.key)).toBe(true);
+    expect(collapsedFileKeys.has(expandedEntry.key)).toBe(false);
   });
 
   it("keeps a pending scroll path while the current diff is still parsing", async () => {

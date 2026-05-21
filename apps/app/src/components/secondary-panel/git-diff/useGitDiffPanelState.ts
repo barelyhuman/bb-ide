@@ -83,9 +83,11 @@ export function useGitDiffPanelState({
   const [parsedGitDiffFiles, setParsedGitDiffFiles] = useState<
     ParsedGitDiffFile[]
   >([]);
+  const parsedGitDiffFilesRef = useRef<ParsedGitDiffFile[]>([]);
   const [expectedGitDiffFileCount, setExpectedGitDiffFileCount] = useState(0);
   const [isParsingGitDiffFiles, setIsParsingGitDiffFiles] = useState(false);
   const [lastParsedGitDiffKey, setLastParsedGitDiffKey] = useState("");
+  const lastParsedGitDiffKeyRef = useRef("");
   const [displayedGitDiffState, setDisplayedGitDiffState] =
     useState<DisplayedGitDiffState | null>(null);
 
@@ -208,29 +210,44 @@ export function useGitDiffPanelState({
     });
 
     if (parsePlan.kind === "reset") {
+      parsedGitDiffFilesRef.current = [];
       setParsedGitDiffFiles([]);
       setExpectedGitDiffFileCount(0);
       setIsParsingGitDiffFiles(false);
+      lastParsedGitDiffKeyRef.current = "";
       setLastParsedGitDiffKey("");
       return;
     }
 
-    setParsedGitDiffFiles([]);
-    setExpectedGitDiffFileCount(parsePlan.patchChunks.length);
     if (parsePlan.kind === "empty") {
+      parsedGitDiffFilesRef.current = [];
+      setParsedGitDiffFiles([]);
+      setExpectedGitDiffFileCount(0);
       setIsParsingGitDiffFiles(false);
+      lastParsedGitDiffKeyRef.current = parsePlan.gitDiffKey;
       setLastParsedGitDiffKey(parsePlan.gitDiffKey);
       return;
     }
 
     if (parsePlan.kind === "immediate") {
-      setParsedGitDiffFiles(parseGitDiffFiles(currentGitDiff));
+      const parsedFiles = parseGitDiffFiles(currentGitDiff);
+      parsedGitDiffFilesRef.current = parsedFiles;
+      setParsedGitDiffFiles(parsedFiles);
+      setExpectedGitDiffFileCount(parsePlan.patchChunks.length);
       setIsParsingGitDiffFiles(false);
+      lastParsedGitDiffKeyRef.current = parsePlan.gitDiffKey;
       setLastParsedGitDiffKey(parsePlan.gitDiffKey);
       return;
     }
 
     const patchChunks = parsePlan.patchChunks;
+    // Keep the previous rendered file list mounted during same-target
+    // refetches. Replacing it with an empty or partial parse collapses the
+    // scrollable content and remounts cards, which loses client-side state.
+    const shouldBufferNextFiles =
+      parsedGitDiffFilesRef.current.length > 0 &&
+      lastParsedGitDiffKeyRef.current !== parsePlan.gitDiffKey;
+    let nextParsedFiles: ParsedGitDiffFile[] = [];
     let cancelled = false;
     let timerId: number | null = null;
     let nextPatchIndex = 0;
@@ -249,6 +266,7 @@ export function useGitDiffPanelState({
       );
       if (batchChunks.length === 0) {
         setIsParsingGitDiffFiles(false);
+        lastParsedGitDiffKeyRef.current = parsePlan.gitDiffKey;
         setLastParsedGitDiffKey(parsePlan.gitDiffKey);
         return;
       }
@@ -257,15 +275,27 @@ export function useGitDiffPanelState({
       if (cancelled) return;
 
       nextPatchIndex += batchChunks.length;
-      setParsedGitDiffFiles((currentFiles) =>
-        appliedFirstBatch
-          ? [...currentFiles, ...parsedBatchFiles]
-          : parsedBatchFiles,
-      );
+      if (shouldBufferNextFiles) {
+        nextParsedFiles = [...nextParsedFiles, ...parsedBatchFiles];
+      } else {
+        setParsedGitDiffFiles((currentFiles) => {
+          const nextFiles = appliedFirstBatch
+            ? [...currentFiles, ...parsedBatchFiles]
+            : parsedBatchFiles;
+          parsedGitDiffFilesRef.current = nextFiles;
+          return nextFiles;
+        });
+      }
       appliedFirstBatch = true;
 
       if (nextPatchIndex >= patchChunks.length || cancelled) {
+        if (shouldBufferNextFiles) {
+          parsedGitDiffFilesRef.current = nextParsedFiles;
+          setParsedGitDiffFiles(nextParsedFiles);
+          setExpectedGitDiffFileCount(parsePlan.patchChunks.length);
+        }
         setIsParsingGitDiffFiles(false);
+        lastParsedGitDiffKeyRef.current = parsePlan.gitDiffKey;
         setLastParsedGitDiffKey(parsePlan.gitDiffKey);
         return;
       }
@@ -276,6 +306,11 @@ export function useGitDiffPanelState({
       );
     };
 
+    if (!shouldBufferNextFiles) {
+      parsedGitDiffFilesRef.current = [];
+      setParsedGitDiffFiles([]);
+      setExpectedGitDiffFileCount(parsePlan.patchChunks.length);
+    }
     setIsParsingGitDiffFiles(true);
     parseNextBatch();
 
