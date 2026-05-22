@@ -9,6 +9,9 @@ fallback only.
 
 - Publish only from `main`.
 - Publish only a version that exists in `packages/bb-app/package.json`.
+- Keep `packages/bb-app/package.json` and `apps/desktop/package.json` versions
+  locked together. The desktop app displays the same release version and CI
+  rejects mismatches.
 - Do not ask for an npm OTP during the normal release path.
 - Do not run `npm publish` locally unless the user explicitly asks for the
   emergency fallback.
@@ -47,27 +50,31 @@ If any input is unclear, ask before bumping the version.
    npm view bb-app version dist-tags versions --json
    ```
 
-3. Bump only `packages/bb-app/package.json`.
+3. Bump the lockstep release versions.
 
    For the normal stable loop:
 
    ```bash
-   cd packages/bb-app
-   npm version patch --no-git-tag-version
+   node scripts/bump-version.mjs --patch
    ```
 
    When promoting from a prerelease to the first stable version, set the exact
    version instead:
 
    ```bash
-   npm version 0.0.1 --no-git-tag-version
+   node scripts/bump-version.mjs 0.0.1
    ```
+
+   This updates `packages/bb-app/package.json` and
+   `apps/desktop/package.json`. Do not run `npm version` directly in
+   `packages/bb-app`; CI enforces these versions in lockstep.
 
 4. Make any release documentation updates requested by the user.
 
 5. Run validation.
 
    ```bash
+   node .github/workflows/check-version-lockstep.mjs
    pnpm exec turbo run typecheck test --filter=@bb/config --filter=@bb/server --filter=bb-app
    pnpm exec turbo run smoke:tarball --filter=bb-app --force
    git diff --check
@@ -76,7 +83,7 @@ If any input is unclear, ask before bumping the version.
 6. Commit the release change.
 
    ```bash
-   git add README.md docs packages/bb-app/package.json packages/bb-app/README.md
+   git add README.md docs packages/bb-app/package.json packages/bb-app/README.md apps/desktop/package.json
    git commit -m "Prepare bb-app <version>"
    ```
 
