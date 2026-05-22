@@ -243,90 +243,103 @@ export function AppSettingsView() {
           </SettingsWithControl>
         </SettingsSection>
 
-        <SettingsSection
-          title="Hosts"
-          action={
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={hostJoinActionPending}
-              onClick={() => {
-                void handleCreateHostJoin();
-              }}
-            >
-              <Icon name="Plus" className="size-3.5" />
-              New host
-            </Button>
-          }
-        >
-          {hostsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : hosts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No registered hosts.
-            </p>
-          ) : (
-            <SettingsRowList>
-              {hosts.map((host) => {
-                const isConnected = host.status === "connected";
-                return (
-                  <SettingsRow key={host.id}>
-                    <span className="min-w-0 flex-1 truncate">
-                      {host.name}
-                      <span className="ml-1.5 text-xs text-muted-foreground">
-                        {host.id}
-                      </span>
+        <div className="space-y-2">
+          <SettingsSection title="Hosts">
+            {hostsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <SettingsRowList>
+                {hosts.length === 0 ? (
+                  <SettingsRow>
+                    <span className="text-sm text-muted-foreground">
+                      No registered hosts.
                     </span>
-                    {isConnected ? (
-                      <span className={CONNECTED_DOT_CLASS} title="Connected" />
-                    ) : host.lastSeenAt !== null ? (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        Offline · {timeAgo(host.lastSeenAt)}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        Never connected
-                      </span>
-                    )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          aria-label="Host actions"
-                        >
-                          <Icon name="MoreHorizontal" className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            setRenameTarget({
-                              id: host.id,
-                              currentName: host.name,
-                            })
-                          }
-                        >
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onSelect={() =>
-                            setDeleteTarget({ id: host.id, name: host.name })
-                          }
-                        >
-                          Remove
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </SettingsRow>
-                );
-              })}
-            </SettingsRowList>
-          )}
-        </SettingsSection>
+                ) : (
+                  hosts.map((host) => {
+                    const isConnected = host.status === "connected";
+                    return (
+                      <SettingsRow key={host.id}>
+                        <span className="min-w-0 flex-1 truncate">
+                          {host.name}
+                          <span className="ml-1.5 text-xs text-muted-foreground">
+                            {host.id}
+                          </span>
+                        </span>
+                        {isConnected ? (
+                          <span
+                            className={CONNECTED_DOT_CLASS}
+                            title="Connected"
+                          />
+                        ) : host.lastSeenAt !== null ? (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            Offline · {timeAgo(host.lastSeenAt)}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            Never connected
+                          </span>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0"
+                              aria-label="Host actions"
+                            >
+                              <Icon name="MoreHorizontal" className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setRenameTarget({
+                                  id: host.id,
+                                  currentName: host.name,
+                                })
+                              }
+                            >
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() =>
+                                setDeleteTarget({
+                                  id: host.id,
+                                  name: host.name,
+                                })
+                              }
+                            >
+                              Remove
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </SettingsRow>
+                    );
+                  })
+                )}
+              </SettingsRowList>
+            )}
+          </SettingsSection>
+          {!hostsLoading ? (
+            <div className="flex justify-start">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-auto justify-start gap-1.5 px-2 py-1 text-muted-foreground"
+                disabled={hostJoinActionPending}
+                onClick={() => {
+                  void handleCreateHostJoin();
+                }}
+              >
+                <Icon name="Plus" className="size-3.5" />
+                Add another host
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <HostRenameDialog
