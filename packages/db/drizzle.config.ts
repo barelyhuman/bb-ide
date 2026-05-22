@@ -1,5 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 import {
+  type BbRuntimeMode,
+  resolveCurrentDevInstanceConfig,
   resolveDataDirDatabasePath,
   resolveRuntimeDataDir,
   resolveRuntimeMode,
@@ -11,12 +13,20 @@ import { fileURLToPath } from "node:url";
 const packageRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(packageRoot, "..", "..");
 const runtimeMode = resolveRuntimeMode();
-const dataDir = resolveRuntimeDataDir({
-  env: process.env,
-  homeDir: homedir(),
-  mode: runtimeMode,
-  repoRoot: runtimeMode === "dev" ? repoRoot : undefined,
-});
+
+export function resolveDrizzleDataDir(mode: BbRuntimeMode): string {
+  if (mode === "dev") {
+    return resolveCurrentDevInstanceConfig(repoRoot).dataDir;
+  }
+
+  return resolveRuntimeDataDir({
+    env: process.env,
+    homeDir: homedir(),
+    mode,
+  });
+}
+
+const dataDir = resolveDrizzleDataDir(runtimeMode);
 const dbPath = resolve(resolveDataDirDatabasePath({ dataDir }));
 
 export default defineConfig({

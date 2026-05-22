@@ -16,6 +16,8 @@ import {
 import type { AgentRuntimeOptions } from "./types.js";
 
 interface CreateProviderProcessManagerArgs {
+  env?: Record<string, string>;
+  onStderr?: NonNullable<AgentRuntimeOptions["onStderr"]>;
   onProcessExit: NonNullable<AgentRuntimeOptions["onProcessExit"]>;
   scriptPath: string;
   workspacePath: string;
@@ -31,6 +33,7 @@ describe("createAgentRuntime process lifecycle", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -46,7 +49,7 @@ describe("createAgentRuntime process lifecycle", () => {
       createProviderIdentityState: (providerId) =>
         identityRegistry.createProviderState({ providerId }),
       emitCapture: () => undefined,
-      env: undefined,
+      env: args.env,
       getNextRequestId: () => nextRequestId++,
       handleStdoutLine: () => undefined,
       onProcessExit: args.onProcessExit,
@@ -54,7 +57,7 @@ describe("createAgentRuntime process lifecycle", () => {
         identityRegistry.resolvePendingIdentityWaiters(providerProcess.identity),
       onProviderThreadDetached: (threadId) =>
         identityRegistry.clearThread(threadId),
-      onStderr: () => undefined,
+      onStderr: args.onStderr,
       workspacePath: args.workspacePath,
     });
   }
@@ -248,6 +251,52 @@ describe("createAgentRuntime process lifecycle", () => {
     );
     replacementProcess.child.kill("SIGTERM");
     await manager.shutdown();
+  });
+
+  it("scrubs inherited bb runtime env vars before spawning provider processes", async () => {
+    vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
+    vi.stubEnv("BB_SERVER_PORT", "38886");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("OPENAI_API_KEY", "external-secret");
+    const envScript = join(tmpDir, "env-provider.cjs");
+    writeFileSync(
+      envScript,
+      `const values = [
+        process.env.BB_DATA_DIR ?? "missing",
+        process.env.BB_SERVER_PORT ?? "missing",
+        process.env.NODE_ENV ?? "missing",
+        process.env.OPENAI_API_KEY ?? "missing",
+        process.env.BB_THREAD_ID ?? "missing"
+      ];
+      process.stderr.write(values.join("|") + "\\n");
+      setInterval(() => {}, 1000);`,
+    );
+    const stderrLines: string[] = [];
+    const manager = createProviderProcessManager({
+      env: {
+        BB_THREAD_ID: "thr_explicit",
+      },
+      onProcessExit: vi.fn(),
+      onStderr: (line) => {
+        stderrLines.push(line);
+      },
+      scriptPath: envScript,
+      workspacePath: tmpDir,
+    });
+
+    try {
+      await manager.ensureProvider({ providerId: "fake" });
+      await waitForRuntimeState({
+        label: "provider env stderr",
+        predicate: () => stderrLines.length > 0,
+      });
+
+      expect(stderrLines[0]).toBe(
+        "missing|missing|missing|external-secret|thr_explicit",
+      );
+    } finally {
+      await manager.shutdown();
+    }
   });
 
   it("ignores provider stdout emitted after shutdown starts", async () => {

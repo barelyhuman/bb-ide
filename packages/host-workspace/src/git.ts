@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { GitCheckoutRef, WorkspaceGitOperation } from "@bb/domain";
+import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
@@ -22,6 +23,10 @@ export interface RunGitOptions {
   timeoutMs?: number;
   allowFailure?: boolean;
   env?: NodeJS.ProcessEnv;
+}
+
+interface ResolveGitProcessEnvArgs {
+  env: NodeJS.ProcessEnv | undefined;
 }
 
 export interface GitTimeoutOptions {
@@ -114,6 +119,15 @@ function getExitCode(error: ExecFileException | undefined): number {
   return 1;
 }
 
+function resolveGitProcessEnv(
+  args: ResolveGitProcessEnvArgs,
+): NodeJS.ProcessEnv {
+  return {
+    ...sanitizeInheritedChildProcessEnv({ env: process.env }),
+    ...args.env,
+  };
+}
+
 function isMaxBufferExceededError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -188,7 +202,7 @@ export async function runGit(
     const result = await execFileAsync("git", args, {
       cwd: options.cwd,
       encoding: "utf8",
-      ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
+      env: resolveGitProcessEnv({ env: options.env }),
       maxBuffer: DEFAULT_BUFFER_BYTES,
       timeout: options.timeoutMs,
     });
@@ -269,6 +283,7 @@ export async function runShellPipeline(
       {
         cwd: options.cwd,
         encoding: "utf8",
+        env: resolveGitProcessEnv({ env: undefined }),
         maxBuffer: DEFAULT_BUFFER_BYTES,
         timeout: options.timeoutMs,
       },
@@ -876,6 +891,7 @@ export async function readGitBlob(
     const result = await execFileAsync("git", ["cat-file", "blob", target], {
       cwd,
       encoding: "buffer",
+      env: resolveGitProcessEnv({ env: undefined }),
       maxBuffer: maxBytes,
     });
     const contents = Buffer.from(result.stdout);

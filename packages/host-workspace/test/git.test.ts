@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getCheckoutRef,
   getWorkspaceGitOperation,
@@ -60,11 +60,29 @@ async function initConflictRepo() {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     tempDirs
       .splice(0)
       .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
+});
+
+describe("runShellPipeline", () => {
+  it("scrubs inherited bb runtime env vars and node mode", async () => {
+    const repoPath = await initEmptyRepo();
+    vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("OPENAI_API_KEY", "external-secret");
+
+    const result = await runShellPipeline(
+      `printf '%s|%s|%s' "\${BB_DATA_DIR-missing}" "\${NODE_ENV-missing}" "\${OPENAI_API_KEY-missing}"`,
+      [],
+      { cwd: repoPath },
+    );
+
+    expect(result.stdout).toBe("missing|missing|external-secret");
+  });
 });
 
 describe("getCheckoutRef", () => {

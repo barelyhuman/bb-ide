@@ -19,11 +19,28 @@ afterEach(() => {
 describe("reset-bb-data", () => {
   it("documents the NODE_ENV-based reset contract", () => {
     expect(renderHelpText()).not.toContain("--mode");
-    expect(renderHelpText()).toContain("Respects BB_DATA_DIR");
+    expect(renderHelpText()).toContain(
+      "Production resets respect BB_DATA_DIR",
+    );
+    expect(renderHelpText()).toContain(
+      "Development resets always target this checkout's dev data directory",
+    );
   });
 
   it("selects the current mode directory when no explicit target is provided", () => {
     vi.stubEnv("NODE_ENV", "development");
+
+    expect(resolveResetTargets(new Set())).toEqual([
+      expectedDevDataDir({
+        homeDir: os.homedir(),
+        repoRoot,
+      }),
+    ]);
+  });
+
+  it("ignores BB_DATA_DIR for the development target", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
 
     expect(resolveResetTargets(new Set())).toEqual([
       expectedDevDataDir({

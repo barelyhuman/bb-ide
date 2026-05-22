@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { HOST_ID_FILE_NAME } from "@bb/host-daemon-contract";
+import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 
-const execFile = promisify(execFileCallback);
+const execFileAsync = promisify(execFileCallback);
 
 type ExecFileResult = {
   stdout?: string | Buffer;
@@ -42,6 +43,16 @@ async function resolveHostId(options: ResolveHostIdOptions): Promise<string> {
   }
   return options.providedHostId ?? options.createId?.() ?? randomUUID();
 }
+
+const defaultExecFile: ExecFileFn = async (file, args = []) => {
+  const result = await execFileAsync(file, [...args], {
+    env: sanitizeInheritedChildProcessEnv({ env: process.env }),
+  });
+  return {
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+};
 
 // Writes the host ID file. Idempotent: if a value is already persisted and
 // matches, this is a no-op. Callers must only invoke this once the host has
@@ -83,7 +94,7 @@ export async function detectHostName(
   } = {},
 ): Promise<string> {
   const platform = options.platform ?? process.platform;
-  const exec = options.execFile ?? execFile;
+  const exec = options.execFile ?? defaultExecFile;
   const fallbackHostName = options.fallbackHostName ?? os.hostname;
 
   const candidates: Array<[string, string[]]> =

@@ -29,11 +29,14 @@ function resolveMode(): BbRuntimeMode {
 }
 
 export function resolveResetDataDir(mode: BbRuntimeMode): string {
+  if (mode === "dev") {
+    return resolveCurrentDevInstanceConfig(repoRoot).dataDir;
+  }
+
   return resolveRuntimeDataDir({
     env: process.env,
     homeDir: homedir(),
     mode,
-    repoRoot: mode === "dev" ? repoRoot : undefined,
   });
 }
 
@@ -89,7 +92,7 @@ export function renderHelpText(): string {
   ${dim("Notes")}
     Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev/<checkout-instance>")}).
     Does not touch external provider config managed by other tools.
-    Respects BB_DATA_DIR for production reset targets.
+    Production resets respect BB_DATA_DIR. Development resets always target this checkout's dev data directory.
 \n`;
 }
 

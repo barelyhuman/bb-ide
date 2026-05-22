@@ -5,6 +5,7 @@ import {
   type ProvisioningTranscriptEntry,
 } from "@bb/domain";
 import {
+  sanitizeInheritedChildProcessEnv,
   spawnPortableOutputProcess,
   type PortableOutputChildProcess,
 } from "@bb/process-utils";
@@ -322,6 +323,7 @@ export async function runSetupScript(
     args: command.args,
     cwd: args.workspacePath,
     detached: shouldRunSetupScriptInProcessGroup(),
+    env: sanitizeInheritedChildProcessEnv({ env: process.env }),
   });
 
   const outputChunks: string[] = [];

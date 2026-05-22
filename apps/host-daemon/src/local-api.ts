@@ -18,6 +18,7 @@ import {
   type OpenInTargetRequest,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
+import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
@@ -240,10 +241,16 @@ async function pathExists(path: string): Promise<boolean> {
 async function pickLocalFolder(): Promise<string | null> {
   let stdout: string;
   try {
-    const result = await execFileAsync("osascript", [
-      "-e",
-      'try\nPOSIX path of (choose folder with prompt "Choose a project folder")\non error number -128\nreturn ""\nend try',
-    ]);
+    const result = await execFileAsync(
+      "osascript",
+      [
+        "-e",
+        'try\nPOSIX path of (choose folder with prompt "Choose a project folder")\non error number -128\nreturn ""\nend try',
+      ],
+      {
+        env: sanitizeInheritedChildProcessEnv({ env: process.env }),
+      },
+    );
     stdout = result.stdout;
   } catch (error) {
     throw new HTTPException(500, {

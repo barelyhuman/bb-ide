@@ -34,6 +34,11 @@ interface ResolveHostDaemonProtocolCompatibilityArgs {
   hostDaemonLocalPort: number;
 }
 
+interface ReadRunningSupervisorPidArgs {
+  pidPath?: string;
+  serviceName: string;
+}
+
 const restartTargets: Record<RestartTarget, RestartTargetConfig> = {
   both: {
     filters: ["@bb/server", "@bb/host-daemon"],
@@ -109,12 +114,12 @@ export async function resolveEffectiveRestartTarget(
 }
 
 export async function readRunningSupervisorPid(
-  serviceName: string,
+  args: ReadRunningSupervisorPidArgs,
 ): Promise<number> {
-  const pidPath = resolveSupervisorPidPath(serviceName);
+  const pidPath = args.pidPath ?? resolveSupervisorPidPath(args.serviceName);
   return readRunningPid({
     pidPath,
-    serviceName,
+    serviceName: args.serviceName,
   });
 }
 
@@ -142,7 +147,7 @@ export async function main(
   for (const serviceName of targetConfig.services) {
     supervisorPids.set(
       serviceName,
-      await readRunningSupervisorPid(serviceName),
+      await readRunningSupervisorPid({ serviceName }),
     );
   }
 

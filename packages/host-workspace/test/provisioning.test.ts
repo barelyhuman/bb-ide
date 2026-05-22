@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
 import { shellSingleQuote, waitForSetupMarkerCount } from "@bb/test-helpers";
 import { Workspace } from "../src/workspace.js";
@@ -43,6 +43,7 @@ async function initRepoWithOptionalSetup(
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     tempDirs
       .splice(0)
@@ -233,6 +234,33 @@ describe("workspace provisioning", () => {
 
     expect(result.ran).toBe(true);
     expect(result.output).toContain("stdin-closed");
+  });
+
+  it("scrubs inherited bb runtime env vars before running setup scripts", async () => {
+    vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
+    vi.stubEnv("BB_SERVER_PORT", "38886");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("EXTERNAL_SETUP_ENV", "external-value");
+    const workspacePath = await makeTempDir("bb-setup-env-");
+    await fs.writeFile(
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      [
+        'printf "%s|%s|%s|%s\\n" \\',
+        '  "${BB_DATA_DIR-missing}" \\',
+        '  "${BB_SERVER_PORT-missing}" \\',
+        '  "${NODE_ENV-missing}" \\',
+        '  "${EXTERNAL_SETUP_ENV-missing}"',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await runSetupScript({
+      workspacePath,
+      timeoutMs: 900000,
+    });
+
+    expect(result.ran).toBe(true);
+    expect(result.output).toBe("missing|missing|missing|external-value\n");
   });
 
   it("builds a bash command for the supported setup script", () => {

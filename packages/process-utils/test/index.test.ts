@@ -4,6 +4,7 @@ import {
   assertPortableOutputProcess,
   assertPortablePipedProcess,
   resolveContainedPath,
+  sanitizeInheritedChildProcessEnv,
   spawnPortableOutputProcess,
   spawnPortablePipedProcess,
   spawnPortableProcess,
@@ -104,5 +105,39 @@ describe("process utils", () => {
         candidatePath: "/tmp/root/../escape",
       }),
     ).toBeNull();
+  });
+
+  it("scrubs inherited bb runtime env vars and node mode", () => {
+    const env: NodeJS.ProcessEnv = {
+      BB_DATA_DIR: "/tmp/bb-data",
+      BB_HOST_DAEMON_PORT: "38887",
+      NODE_ENV: "development",
+      NODE_OPTIONS: "--enable-source-maps",
+      OPENAI_API_KEY: "external-secret",
+      PATH: "/bin",
+      SKIP_ME: undefined,
+    };
+
+    const sanitizedEnv = sanitizeInheritedChildProcessEnv({ env });
+    expect(sanitizedEnv).toEqual({
+      NODE_OPTIONS: "--enable-source-maps",
+      OPENAI_API_KEY: "external-secret",
+      PATH: "/bin",
+    });
+    expect("SKIP_ME" in sanitizedEnv).toBe(false);
+  });
+
+  it("does not mutate the inherited env", () => {
+    const env: NodeJS.ProcessEnv = {
+      BB_DATA_DIR: "/tmp/bb-data",
+      NODE_ENV: "development",
+      PATH: "/bin",
+    };
+    const originalEnv: NodeJS.ProcessEnv = { ...env };
+
+    expect(sanitizeInheritedChildProcessEnv({ env })).toEqual({
+      PATH: "/bin",
+    });
+    expect(env).toEqual(originalEnv);
   });
 });

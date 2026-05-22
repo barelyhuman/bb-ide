@@ -288,6 +288,7 @@ async function openTerminal(
 
 describe("TerminalManager", () => {
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await cleanupTempDirs();
   });
 
@@ -321,6 +322,26 @@ describe("TerminalManager", () => {
     await expect(harness.runtimeManager.evictIdleEnvironments()).resolves.toEqual(
       [],
     );
+  });
+
+  it("scrubs inherited bb runtime env vars before spawning a terminal", async () => {
+    vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
+    vi.stubEnv("BB_HOST_DAEMON_PORT", "38887");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("OPENAI_API_KEY", "external-secret");
+
+    const harness = createHarness();
+    await openTerminal(harness);
+
+    const env = harness.adapter.spawned[0]?.args.env;
+    expect(env).toMatchObject({
+      BB_BASE_ENV: "1",
+      BB_TERMINAL_SESSION_ID: "term-1",
+      OPENAI_API_KEY: "external-secret",
+    });
+    expect(env?.BB_DATA_DIR).toBeUndefined();
+    expect(env?.BB_HOST_DAEMON_PORT).toBeUndefined();
+    expect(env?.NODE_ENV).toBeUndefined();
   });
 
   it("forwards output and replays scrollback on attach", async () => {

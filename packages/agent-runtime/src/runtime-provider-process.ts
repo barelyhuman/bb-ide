@@ -1,7 +1,10 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { spawnPortablePipedProcess } from "@bb/process-utils";
+import {
+  sanitizeInheritedChildProcessEnv,
+  spawnPortablePipedProcess,
+} from "@bb/process-utils";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   ProviderAdapter,
@@ -213,7 +216,7 @@ export class RuntimeProviderProcessManager {
     adapter: ProviderAdapter,
   ): RuntimeProviderProcess {
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...sanitizeInheritedChildProcessEnv({ env: process.env }),
       ...this.args.env,
     };
     const processConfig = adapter.process;

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
-import path from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import {
@@ -8,11 +9,22 @@ import {
   readRunningSupervisorPid,
   resolveEffectiveRestartTarget,
 } from "../src/commands/request-dev-restart.js";
+import {
+  resolveDevDataDir,
+  resolveDevHostDaemonPort,
+  resolveSupervisorPidPath,
+} from "../src/lib/dev-restart-utils.js";
+import {
+  expectedDevDataDir,
+  expectedDevPorts,
+} from "./dev-instance-expectations.js";
 
 const tempDirs: string[] = [];
+const testDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(testDir, "..", "..", "..");
 
 async function makeTempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  const dir = await fs.mkdtemp(join(os.tmpdir(), prefix));
   tempDirs.push(dir);
   return dir;
 }
@@ -36,16 +48,31 @@ describe("request-dev-restart", () => {
 
   it("reads a valid running supervisor pid", async () => {
     const dataDir = await makeTempDir("bb-request-restart-");
-    vi.stubEnv("BB_DATA_DIR", dataDir);
-    const serviceDir = path.join(dataDir, "dev-supervisors");
+    const serviceDir = join(dataDir, "dev-supervisors");
+    const pidPath = join(serviceDir, "server.pid");
     await fs.mkdir(serviceDir, { recursive: true });
-    await fs.writeFile(
-      path.join(serviceDir, "server.pid"),
-      `${process.pid}\n`,
-      "utf8",
-    );
+    await fs.writeFile(pidPath, `${process.pid}\n`, "utf8");
 
-    await expect(readRunningSupervisorPid("server")).resolves.toBe(process.pid);
+    await expect(
+      readRunningSupervisorPid({ pidPath, serviceName: "server" }),
+    ).resolves.toBe(process.pid);
+  });
+
+  it("resolves restart supervisor files from the current checkout data dir", () => {
+    vi.stubEnv("BB_DATA_DIR", "/tmp/wrong-bb-data");
+    vi.stubEnv("BB_HOST_DAEMON_PORT", "1234");
+    const expectedDataDir = expectedDevDataDir({
+      homeDir: os.homedir(),
+      repoRoot,
+    });
+
+    expect(resolveDevDataDir()).toBe(expectedDataDir);
+    expect(resolveSupervisorPidPath("server")).toBe(
+      join(expectedDataDir, "dev-supervisors", "server.pid"),
+    );
+    expect(resolveDevHostDaemonPort()).toBe(
+      expectedDevPorts(repoRoot).hostDaemonPort,
+    );
   });
 
   it("keeps server-only restarts when the running host-daemon protocol matches", async () => {
@@ -136,9 +163,8 @@ describe("request-dev-restart", () => {
 
   it("removes stale pid files", async () => {
     const dataDir = await makeTempDir("bb-request-restart-");
-    vi.stubEnv("BB_DATA_DIR", dataDir);
-    const serviceDir = path.join(dataDir, "dev-supervisors");
-    const pidPath = path.join(serviceDir, "server.pid");
+    const serviceDir = join(dataDir, "dev-supervisors");
+    const pidPath = join(serviceDir, "server.pid");
     await fs.mkdir(serviceDir, { recursive: true });
     await fs.writeFile(pidPath, "456789\n", "utf8");
 
@@ -151,9 +177,9 @@ describe("request-dev-restart", () => {
       return true;
     });
 
-    await expect(readRunningSupervisorPid("server")).rejects.toThrow(
-      `Stale PID file for server: ${pidPath}`,
-    );
+    await expect(
+      readRunningSupervisorPid({ pidPath, serviceName: "server" }),
+    ).rejects.toThrow(`Stale PID file for server: ${pidPath}`);
     await expect(fs.access(pidPath)).rejects.toThrow();
   });
 });

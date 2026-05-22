@@ -40,6 +40,10 @@ export interface ResolveContainedPathArgs {
   allowRoot?: boolean;
 }
 
+export interface SanitizeInheritedChildProcessEnvArgs {
+  env: NodeJS.ProcessEnv;
+}
+
 export function spawnPortableProcess(
   request: PortableSpawnRequest,
 ): PortableChildProcess {
@@ -109,4 +113,24 @@ export function resolveContainedPath(
   }
 
   return resolvedCandidatePath;
+}
+
+/**
+ * Removes bb runtime-owned env from an inherited process env. Callers should
+ * overlay only the child-specific bb env they intentionally expose afterward.
+ */
+export function sanitizeInheritedChildProcessEnv(
+  args: SanitizeInheritedChildProcessEnvArgs,
+): NodeJS.ProcessEnv {
+  const sanitizedEnv: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(args.env)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (key === "NODE_ENV" || key.startsWith("BB_")) {
+      continue;
+    }
+    sanitizedEnv[key] = value;
+  }
+  return sanitizedEnv;
 }

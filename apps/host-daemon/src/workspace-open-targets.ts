@@ -8,6 +8,7 @@ import type {
   WorkspaceOpenTargetKind,
   WorkspaceOpenTargetId,
 } from "@bb/host-daemon-contract";
+import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 
 const execFileAsync = promisify(execFile);
 
@@ -261,7 +262,9 @@ async function defaultExecFile(
   file: string,
   args: string[],
 ): Promise<ExecFileResult> {
-  const result = await execFileAsync(file, args);
+  const result = await execFileAsync(file, args, {
+    env: sanitizeInheritedChildProcessEnv({ env: process.env }),
+  });
   return {
     stdout: result.stdout,
   };

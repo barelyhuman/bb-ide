@@ -1,11 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { homedir } from "node:os";
-import {
-  resolveCurrentDevInstanceConfig,
-  resolvePortFromEnv,
-  resolveRuntimeDataDir,
-} from "@bb/config/runtime";
+import { resolveCurrentDevInstanceConfig } from "@bb/config/runtime";
 
 interface TurboBuildCommand {
   args: string[];
@@ -41,20 +36,11 @@ export function createTurboBuildCommand(filters: string[]): TurboBuildCommand {
 }
 
 export function resolveDevDataDir(): string {
-  return resolveRuntimeDataDir({
-    env: process.env,
-    homeDir: homedir(),
-    mode: "dev",
-    repoRoot,
-  });
+  return resolveCurrentDevInstanceConfig(repoRoot).dataDir;
 }
 
 export function resolveDevHostDaemonPort(): number {
-  return resolvePortFromEnv({
-    defaultPort: resolveCurrentDevInstanceConfig(repoRoot).ports.hostDaemonPort,
-    env: process.env,
-    name: "BB_HOST_DAEMON_PORT",
-  });
+  return resolveCurrentDevInstanceConfig(repoRoot).ports.hostDaemonPort;
 }
 
 export function resolveSupervisorPidPath(serviceName: string): string {
