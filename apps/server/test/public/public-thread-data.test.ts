@@ -2928,6 +2928,9 @@ describe("public thread data routes", () => {
       const body = await statusResponse.text();
       expect(body).toContain("<h1>Markdown status</h1>");
       expect(body).toContain("<li>ready</li>");
+      expect(body).toContain("font-size: var(--status-markdown-text-sm)");
+      expect(body).toContain(".status-markdown h1");
+      expect(body).toContain(".status-markdown li");
     } finally {
       await harness.cleanup();
     }
