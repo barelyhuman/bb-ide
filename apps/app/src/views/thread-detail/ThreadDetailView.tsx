@@ -1115,12 +1115,15 @@ export function ThreadDetailView() {
           projectId,
           showOngoingIndicator:
             thread.stopRequestedAt === null &&
+            // A pending interaction (question or approval) already renders its
+            // own inline shimmer row, so the bottom indicator would just
+            // duplicate it.
+            !hasPendingInteraction &&
             (thread.runtime.displayStatus === "active" ||
               thread.runtime.displayStatus === "host-reconnecting") &&
             !isThreadTimelinePending,
-          ongoingIndicatorLabel: hasPendingInteraction
-            ? "Waiting for approval"
-            : thread.runtime.displayStatus === "host-reconnecting"
+          ongoingIndicatorLabel:
+            thread.runtime.displayStatus === "host-reconnecting"
               ? "Waiting for reconnection"
               : undefined,
           timelineRows,
