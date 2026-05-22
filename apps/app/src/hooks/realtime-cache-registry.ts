@@ -43,12 +43,14 @@ import {
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadPromptHistoryQueryKeyPrefix,
+  threadListQueryKey,
   threadQueryKey,
   threadTerminalsQueryKey,
   threadsQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
   threadStoragePathsForThreadQueryKeyPrefix,
+  threadStatusVersionQueryKey,
   threadTimelineQueryKeyPrefix,
 } from "./queries/query-keys";
 
@@ -135,6 +137,12 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
       dirtyThreadDetailQueries, // Detail metadata and managed-by UI render parentThreadId.
     ],
   },
+  "order-changed": {
+    flush: "debounced",
+    dirty: [
+      dirtyManagerOrderThreadListQueries, // Manager reorder only affects active manager ordering.
+    ],
+  },
   "terminals-changed": {
     flush: "debounced",
     dirty: [
@@ -215,6 +223,11 @@ export const REALTIME_PROJECT_CHANGE_REGISTRY = {
     dirty: [
       dirtyProjectListQueries, // Sidebar bootstrap includes thread membership per project.
       dirtyProjectPromptHistoryQueries, // Project thread changes can hide or reveal stored prompt history.
+    ],
+  },
+  "project-order-changed": {
+    dirty: [
+      dirtyProjectListQueries, // Sidebar order depends on project ordering.
     ],
   },
   "automations-changed": {
@@ -360,6 +373,29 @@ function dirtyThreadListQueries({
         queryClient,
       })
     : [threadsQueryKey()];
+}
+
+function dirtyManagerOrderThreadListQueries({
+  projectId,
+  queryClient,
+}: ThreadRealtimeDirtyContext): void {
+  if (!projectId) {
+    queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+    return;
+  }
+
+  queryClient.invalidateQueries({
+    exact: true,
+    queryKey: threadListQueryKey({ projectId, archived: false }),
+  });
+  queryClient.invalidateQueries({
+    exact: true,
+    queryKey: threadListQueryKey({
+      projectId,
+      archived: false,
+      type: "manager",
+    }),
+  });
 }
 
 function dirtyThreadDetailQueries({
@@ -529,6 +565,7 @@ function dirtyThreadStorageQueriesForEnvironment({
     queryKeys.push(threadStorageFilesForThreadQueryKeyPrefix(threadId));
     queryKeys.push(threadStoragePathsForThreadQueryKeyPrefix(threadId));
     queryKeys.push(threadStorageFilePreviewQueryKeyPrefix(threadId));
+    queryKeys.push(threadStatusVersionQueryKey(threadId));
   }
   return queryKeys;
 }

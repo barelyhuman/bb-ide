@@ -62,6 +62,8 @@ import type {
   PromptHistoryResponse,
   ProjectResponse,
   ProjectWithThreadsResponse,
+  ReorderManagerThreadRequest,
+  ReorderProjectRequest,
   ReorderQueuedMessageRequest,
   SendQueuedMessageRequest,
   SendQueuedMessageResponse,
@@ -113,6 +115,7 @@ import type {
 import type { ApiError } from "./errors.js";
 
 type PathProjectSourceId = { param: { id: string; sourceId: string } };
+type PathProjectManagerThreadId = { param: { id: string; threadId: string } };
 type PathThreadStatusDataKey = { param: { id: string; key: string } };
 
 export type PublicApiSchema = {
@@ -149,6 +152,12 @@ export type PublicApiSchema = {
     >;
     /** Also cleans up attachment files for the project. */
     $delete: Endpoint<PathProjectId, { ok: true }>;
+  };
+  "/projects/:id/order": {
+    $patch: Endpoint<
+      PathProjectId & { json: ReorderProjectRequest },
+      ProjectResponse[]
+    >;
   };
   "/projects/:id/default-execution-options": {
     /** Returns the last remembered provider and execution options for the project and thread type. */
@@ -259,6 +268,12 @@ export type PublicApiSchema = {
       201
     >;
   };
+  "/projects/:id/managers/:threadId/order": {
+    $patch: Endpoint<
+      PathProjectManagerThreadId & { json: ReorderManagerThreadRequest },
+      ThreadListResponse
+    >;
+  };
 
   // ─── Manager Templates ──────────────────────────────────────────────
 
@@ -268,10 +283,7 @@ export type PublicApiSchema = {
      * this to decide whether to surface a template choice in the
      * new-manager dialog (hidden when fewer than two templates exist).
      */
-    $get: Endpoint<
-      { query?: ManagerTemplatesQuery },
-      ManagerTemplatesResponse
-    >;
+    $get: Endpoint<{ query?: ManagerTemplatesQuery }, ManagerTemplatesResponse>;
   };
 
   // ─── Hosts ───────────────────────────────────────────────────────────

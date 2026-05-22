@@ -1,4 +1,33 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type MouseEventHandler,
+} from "react";
+import { flushSync } from "react-dom";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
+} from "@dnd-kit/core";
+import {
+  sortableKeyboardCoordinates,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -38,10 +67,16 @@ import {
 } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
+import {
+  applyNeighborReorder,
+  buildNeighborReorderRequest,
+  type NeighborReorderRequest,
+} from "@/lib/neighbor-reorder";
 import { toast } from "sonner";
 import {
   ThreadRow,
   ThreadStatusGlyph,
+  type ThreadRowDragBindings,
   type ThreadRowOptions,
 } from "./ThreadRow";
 import {
@@ -59,6 +94,11 @@ import {
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
 } from "./sidebarRowClasses";
+import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
+import {
+  useDragClickSuppression,
+  type ConsumeDragClickSuppression,
+} from "./useDragClickSuppression";
 
 const THREAD_ROW_DEFAULT_OPTIONS: ThreadRowOptions = { kind: "default" };
 const THREAD_ROW_MANAGED_CHILD_OPTIONS: ThreadRowOptions = {
@@ -88,7 +128,18 @@ export type ProjectThreadListState =
       status: "unavailable";
     };
 
-interface ProjectRowProps {
+export interface ProjectRowDragBindings {
+  attributes: DraggableAttributes;
+  disabled: boolean;
+  listeners: DraggableSyntheticListeners;
+  setActivatorNodeRef: (element: HTMLDivElement | null) => void;
+}
+
+export interface ProjectManagerReorderCallbacks {
+  onSettled: () => void;
+}
+
+export interface ProjectRowProps {
   project: ProjectResponse;
   threadListState: ProjectThreadListState;
   selectedThreadId?: string;
@@ -101,9 +152,45 @@ interface ProjectRowProps {
   onToggleProjectCollapsed: (projectId: string) => void;
   onToggleManagerCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
+  isManagerReorderPending?: boolean;
+  isProjectDragging?: boolean;
+  onReorderManager?: (
+    projectId: string,
+    request: NeighborReorderRequest,
+    callbacks: ProjectManagerReorderCallbacks,
+  ) => void;
+  consumeProjectClickSuppression?: ConsumeDragClickSuppression;
+  projectDragBindings?: ProjectRowDragBindings;
+  projectRowRef?: (element: HTMLLIElement | null) => void;
+  projectRowStyle?: CSSProperties;
 }
 
+type ProjectItemClickCaptureHandler = MouseEventHandler<HTMLLIElement>;
+type ProjectThreadListClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
+
 const EMPTY_PROJECT_THREADS: ThreadListEntry[] = [];
+
+interface ManagerThreadOrderEntry {
+  id: string;
+}
+
+function getManagerThreadGroupId(
+  managerThreadGroup: ManagerThreadGroup,
+): string {
+  return managerThreadGroup.managerThread.id;
+}
+
+function hasSameManagerThreadOrder(
+  order: readonly ManagerThreadOrderEntry[],
+  managerThreadGroups: readonly ManagerThreadGroup[],
+): boolean {
+  if (order.length !== managerThreadGroups.length) {
+    return false;
+  }
+  return order.every(
+    (item, index) => item.id === managerThreadGroups[index]?.managerThread.id,
+  );
+}
 
 interface ManagerThreadGroupRowProps {
   projectId: string;
@@ -114,6 +201,15 @@ interface ManagerThreadGroupRowProps {
   onProjectSelect?: () => void;
   onToggleManagerCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
+  consumeClickSuppression?: ConsumeDragClickSuppression;
+  isDragging?: boolean;
+  dragBindings?: ThreadRowDragBindings;
+  sortableRef?: (element: HTMLDivElement | null) => void;
+  sortableStyle?: CSSProperties;
+}
+
+interface SortableManagerThreadGroupRowProps extends ManagerThreadGroupRowProps {
+  disabled: boolean;
 }
 
 interface EnvironmentThreadGroupHeaderProps {
@@ -544,6 +640,11 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   onProjectSelect,
   onToggleManagerCollapsed,
   onToggleEnvironmentCollapsed,
+  consumeClickSuppression,
+  isDragging = false,
+  dragBindings,
+  sortableRef,
+  sortableStyle,
 }: ManagerThreadGroupRowProps) {
   const { managerThread, managedItems, stats } = managerThreadGroup;
   const managerOptions = useMemo<ThreadRowOptions>(
@@ -553,8 +654,12 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
       managedChildCount: stats.managedChildCount,
       managedChildActivity: stats.managedChildActivity,
       onToggleCollapsed: onToggleManagerCollapsed,
+      ...(consumeClickSuppression ? { consumeClickSuppression } : {}),
+      ...(dragBindings ? { dragBindings } : {}),
     }),
     [
+      consumeClickSuppression,
+      dragBindings,
       isManagerCollapsed,
       onToggleManagerCollapsed,
       stats.managedChildCount,
@@ -563,7 +668,11 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   );
   const showManagedChildren = !isManagerCollapsed && managedItems.length > 0;
   return (
-    <div className="space-y-0.5">
+    <div
+      ref={sortableRef}
+      style={sortableStyle}
+      className={cn("space-y-0.5", isDragging && "relative z-20")}
+    >
       <ThreadRow
         projectId={projectId}
         thread={managerThread}
@@ -608,6 +717,52 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   );
 });
 
+const SortableManagerThreadGroupRow = memo(
+  function SortableManagerThreadGroupRow({
+    disabled,
+    managerThreadGroup,
+    ...props
+  }: SortableManagerThreadGroupRowProps) {
+    const managerThreadId = managerThreadGroup.managerThread.id;
+    const {
+      attributes,
+      isDragging,
+      listeners,
+      setActivatorNodeRef,
+      setNodeRef,
+      transform,
+      transition,
+    } = useSortable({
+      id: managerThreadId,
+      disabled,
+      transition: SIDEBAR_SORTABLE_TRANSITION,
+    });
+    const style = useMemo<CSSProperties>(
+      () => ({
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }),
+      [transform, transition],
+    );
+
+    return (
+      <ManagerThreadGroupRow
+        {...props}
+        managerThreadGroup={managerThreadGroup}
+        isDragging={isDragging}
+        dragBindings={{
+          attributes,
+          disabled,
+          listeners,
+          setActivatorNodeRef,
+        }}
+        sortableRef={setNodeRef}
+        sortableStyle={style}
+      />
+    );
+  },
+);
+
 function ProjectRowComponent({
   project,
   threadListState,
@@ -621,6 +776,13 @@ function ProjectRowComponent({
   onToggleProjectCollapsed,
   onToggleManagerCollapsed,
   onToggleEnvironmentCollapsed,
+  isManagerReorderPending = false,
+  isProjectDragging = false,
+  onReorderManager,
+  consumeProjectClickSuppression,
+  projectDragBindings,
+  projectRowRef,
+  projectRowStyle,
 }: ProjectRowProps) {
   const [isDropdownActionsOpen, setIsDropdownActionsOpen] = useState(false);
   const [isContextActionsOpen, setIsContextActionsOpen] = useState(false);
@@ -633,25 +795,172 @@ function ProjectRowComponent({
     () => buildProjectThreadGroups(projectThreads),
     [projectThreads],
   );
+  const [optimisticManagerThreadOrder, setOptimisticManagerThreadOrder] =
+    useState<ManagerThreadOrderEntry[] | null>(null);
+  const renderedManagerThreadGroups = useMemo(() => {
+    if (!optimisticManagerThreadOrder) {
+      return managerThreadGroups;
+    }
+    const groupsById = new Map(
+      managerThreadGroups.map((managerThreadGroup) => [
+        getManagerThreadGroupId(managerThreadGroup),
+        managerThreadGroup,
+      ]),
+    );
+    const orderedGroups: ManagerThreadGroup[] = [];
+    for (const item of optimisticManagerThreadOrder) {
+      const managerThreadGroup = groupsById.get(item.id);
+      if (!managerThreadGroup) {
+        return managerThreadGroups;
+      }
+      orderedGroups.push(managerThreadGroup);
+    }
+    return orderedGroups;
+  }, [managerThreadGroups, optimisticManagerThreadOrder]);
+  const renderedManagerThreadIds = useMemo(
+    () => renderedManagerThreadGroups.map(getManagerThreadGroupId),
+    [renderedManagerThreadGroups],
+  );
+  const managerReorderDisabled =
+    isManagerReorderPending ||
+    !onReorderManager ||
+    renderedManagerThreadGroups.length < 2;
+  const {
+    beginDragClickSuppression: beginManagerDragClickSuppression,
+    clearDragClickSuppressionSoon: clearManagerDragClickSuppressionSoon,
+    consumeDragClickSuppression: consumeManagerClickSuppression,
+  } = useDragClickSuppression();
+  const managerSensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const handleManagerDragStart = useCallback((_event: DragStartEvent) => {
+    beginManagerDragClickSuppression();
+  }, [beginManagerDragClickSuppression]);
+  const handleManagerDragCancel = useCallback(() => {
+    clearManagerDragClickSuppressionSoon();
+  }, [clearManagerDragClickSuppressionSoon]);
+  const handleManagerDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      clearManagerDragClickSuppressionSoon();
+      if (isManagerReorderPending) {
+        return;
+      }
+      const { active, over } = event;
+      if (
+        !over ||
+        typeof active.id !== "string" ||
+        typeof over.id !== "string"
+      ) {
+        return;
+      }
+      const request = buildNeighborReorderRequest({
+        activeId: active.id,
+        overId: over.id,
+        items: renderedManagerThreadGroups.map(
+          (managerThreadGroup) => managerThreadGroup.managerThread,
+        ),
+      });
+      if (!request) {
+        return;
+      }
+      const nextOrder = applyNeighborReorder({
+        items: renderedManagerThreadGroups.map((managerThreadGroup) => ({
+          id: managerThreadGroup.managerThread.id,
+        })),
+        request,
+      });
+      flushSync(() => {
+        setOptimisticManagerThreadOrder(nextOrder);
+      });
+      onReorderManager?.(project.id, request, {
+        onSettled: () => {
+          setOptimisticManagerThreadOrder(null);
+        },
+      });
+    },
+    [
+      clearManagerDragClickSuppressionSoon,
+      isManagerReorderPending,
+      onReorderManager,
+      project.id,
+      renderedManagerThreadGroups,
+    ],
+  );
+  useEffect(() => {
+    if (!optimisticManagerThreadOrder) {
+      return;
+    }
+    if (
+      hasSameManagerThreadOrder(
+        optimisticManagerThreadOrder,
+        managerThreadGroups,
+      )
+    ) {
+      setOptimisticManagerThreadOrder(null);
+    }
+  }, [managerThreadGroups, optimisticManagerThreadOrder]);
+  const handleProjectRowClickCapture = useCallback<ProjectItemClickCaptureHandler>(
+    (event) => {
+      if (!consumeProjectClickSuppression?.()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [consumeProjectClickSuppression],
+  );
+  const handleManagerListClickCapture =
+    useCallback<ProjectThreadListClickCaptureHandler>(
+      (event) => {
+        if (!consumeManagerClickSuppression()) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      [consumeManagerClickSuppression],
+    );
   return (
-    <SidebarMenuItem data-sidebar-sticky-project-item="">
+    <SidebarMenuItem
+      ref={projectRowRef}
+      style={projectRowStyle}
+      data-sidebar-sticky-project-item=""
+      className={cn(isProjectDragging && "relative z-30")}
+      onClickCapture={handleProjectRowClickCapture}
+    >
       <ProjectActionsContextMenu
         project={project}
         onOpenChange={setIsContextActionsOpen}
       >
         <SidebarStickyTier
+          ref={projectDragBindings?.setActivatorNodeRef}
           tier="project"
           className={cn(
             "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
             isActive
               ? "bg-sidebar-border text-sidebar-foreground"
               : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            projectDragBindings &&
+              !projectDragBindings.disabled &&
+              "select-none cursor-grab active:cursor-grabbing",
           )}
           title={project.name}
+          {...projectDragBindings?.attributes}
+          {...(projectDragBindings?.listeners ?? {})}
         >
           <NavLink
             to={`/projects/${project.id}`}
-            onClick={onProjectSelect}
+            onClick={() => {
+              onProjectSelect?.();
+            }}
             className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
           />
           <button
@@ -756,22 +1065,59 @@ function ProjectRowComponent({
               "relative space-y-0.5 group-data-[collapsible=icon]:hidden",
               SIDEBAR_PROJECT_GROUP_LINE_CLASS,
             )}
+            onClickCapture={handleManagerListClickCapture}
           >
-            {managerThreadGroups.map((managerThreadGroup) => (
-              <ManagerThreadGroupRow
-                key={managerThreadGroup.managerThread.id}
-                projectId={project.id}
-                managerThreadGroup={managerThreadGroup}
-                selectedThreadId={selectedThreadId}
-                isManagerCollapsed={collapsedManagerIds.has(
-                  managerThreadGroup.managerThread.id,
-                )}
-                collapsedEnvironmentIds={collapsedEnvironmentIds}
-                onProjectSelect={onProjectSelect}
-                onToggleManagerCollapsed={onToggleManagerCollapsed}
-                onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-              />
-            ))}
+            {renderedManagerThreadGroups.length > 1 ? (
+              <DndContext
+                sensors={managerSensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleManagerDragStart}
+                onDragCancel={handleManagerDragCancel}
+                onDragEnd={handleManagerDragEnd}
+              >
+                <SortableContext
+                  items={renderedManagerThreadIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {renderedManagerThreadGroups.map((managerThreadGroup) => (
+                    <SortableManagerThreadGroupRow
+                      key={managerThreadGroup.managerThread.id}
+                      disabled={managerReorderDisabled}
+                      projectId={project.id}
+                      managerThreadGroup={managerThreadGroup}
+                      selectedThreadId={selectedThreadId}
+                      isManagerCollapsed={collapsedManagerIds.has(
+                        managerThreadGroup.managerThread.id,
+                      )}
+                      collapsedEnvironmentIds={collapsedEnvironmentIds}
+                      onProjectSelect={onProjectSelect}
+                      onToggleManagerCollapsed={onToggleManagerCollapsed}
+                      onToggleEnvironmentCollapsed={
+                        onToggleEnvironmentCollapsed
+                      }
+                      consumeClickSuppression={consumeManagerClickSuppression}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            ) : (
+              renderedManagerThreadGroups.map((managerThreadGroup) => (
+                <ManagerThreadGroupRow
+                  key={managerThreadGroup.managerThread.id}
+                  projectId={project.id}
+                  managerThreadGroup={managerThreadGroup}
+                  selectedThreadId={selectedThreadId}
+                  isManagerCollapsed={collapsedManagerIds.has(
+                    managerThreadGroup.managerThread.id,
+                  )}
+                  collapsedEnvironmentIds={collapsedEnvironmentIds}
+                  onProjectSelect={onProjectSelect}
+                  onToggleManagerCollapsed={onToggleManagerCollapsed}
+                  onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+                  consumeClickSuppression={consumeManagerClickSuppression}
+                />
+              ))
+            )}
             {unmanagedItems.map((item) =>
               item.kind === "thread" ? (
                 <ThreadRow
@@ -879,7 +1225,15 @@ function areProjectRowPropsEqual(
     prev.onProjectSelect !== next.onProjectSelect ||
     prev.onToggleProjectCollapsed !== next.onToggleProjectCollapsed ||
     prev.onToggleManagerCollapsed !== next.onToggleManagerCollapsed ||
-    prev.onToggleEnvironmentCollapsed !== next.onToggleEnvironmentCollapsed
+    prev.onToggleEnvironmentCollapsed !== next.onToggleEnvironmentCollapsed ||
+    prev.isManagerReorderPending !== next.isManagerReorderPending ||
+    prev.isProjectDragging !== next.isProjectDragging ||
+    prev.onReorderManager !== next.onReorderManager ||
+    prev.consumeProjectClickSuppression !==
+      next.consumeProjectClickSuppression ||
+    prev.projectDragBindings !== next.projectDragBindings ||
+    prev.projectRowRef !== next.projectRowRef ||
+    prev.projectRowStyle !== next.projectRowStyle
   ) {
     return false;
   }

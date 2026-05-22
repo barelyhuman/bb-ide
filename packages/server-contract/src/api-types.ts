@@ -580,6 +580,20 @@ export const createProjectRequestSchema = z.object({
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
+export const reorderProjectRequestSchema = z.object({
+  previousProjectId: z.string().min(1).nullable(),
+  nextProjectId: z.string().min(1).nullable(),
+});
+export type ReorderProjectRequest = z.infer<typeof reorderProjectRequestSchema>;
+
+export const reorderManagerThreadRequestSchema = z.object({
+  previousThreadId: z.string().min(1).nullable(),
+  nextThreadId: z.string().min(1).nullable(),
+});
+export type ReorderManagerThreadRequest = z.infer<
+  typeof reorderManagerThreadRequestSchema
+>;
+
 const persistentHostJoinRequestSchema = z
   .object({
     hostId: z.string().min(1).optional(),

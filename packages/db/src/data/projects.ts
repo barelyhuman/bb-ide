@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
-import type { DbConnection } from "../connection.js";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import type { DbConnection, DbQueryConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { projects, projectOperations, projectSources } from "../schema.js";
 import { createProjectId, createProjectSourceId } from "../ids.js";
 import { toProjectSource } from "./project-sources.js";
+import { createOrderKeyAfter, createOrderKeyBetween } from "./order-keys.js";
 
 export interface CreateProjectLocalPathSourceInput {
   type: "local_path";
@@ -18,6 +19,106 @@ export interface CreateProjectInput {
   source: CreateProjectSourceInput;
 }
 
+export type ProjectRow = typeof projects.$inferSelect;
+
+export interface ReorderProjectArgs {
+  db: DbConnection;
+  nextProjectId: string | null;
+  notifier: DbNotifier;
+  previousProjectId: string | null;
+  projectId: string;
+}
+
+interface ResolveProjectNeighborArgs {
+  movedProjectId: string;
+  neighborProjectId: string | null;
+}
+
+export interface ReorderProjectSuccess {
+  kind: "reordered";
+  projects: ProjectRow[];
+}
+
+export interface ReorderProjectUnchanged {
+  kind: "unchanged";
+  projects: ProjectRow[];
+}
+
+export interface ReorderProjectNotFound {
+  kind: "not_found";
+}
+
+export interface ReorderProjectStaleNeighbor {
+  kind: "stale_neighbor";
+}
+
+export interface ReorderProjectInvalidNeighborOrder {
+  kind: "invalid_neighbor_order";
+}
+
+export type ReorderProjectResult =
+  | ReorderProjectSuccess
+  | ReorderProjectUnchanged
+  | ReorderProjectNotFound
+  | ReorderProjectStaleNeighbor
+  | ReorderProjectInvalidNeighborOrder;
+
+function publicProjectFilter() {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM ${projectOperations}
+    WHERE ${projectOperations.projectId} = ${projects.id}
+    AND ${projectOperations.kind} = 'delete'
+  )`;
+}
+
+function listOrderedPublicProjects(db: DbQueryConnection): ProjectRow[] {
+  return db
+    .select()
+    .from(projects)
+    .where(publicProjectFilter())
+    .orderBy(asc(projects.sortKey), asc(projects.id))
+    .all();
+}
+
+function getLastPublicProject(db: DbQueryConnection): ProjectRow | null {
+  return (
+    db
+      .select()
+      .from(projects)
+      .where(publicProjectFilter())
+      .orderBy(desc(projects.sortKey), desc(projects.id))
+      .limit(1)
+      .get() ?? null
+  );
+}
+
+function getPublicProjectForMutation(
+  db: DbQueryConnection,
+  id: string,
+): ProjectRow | null {
+  return (
+    db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, id), publicProjectFilter()))
+      .get() ?? null
+  );
+}
+
+function resolveProjectNeighbor(
+  db: DbQueryConnection,
+  args: ResolveProjectNeighborArgs,
+): ProjectRow | null | false {
+  if (args.neighborProjectId === null) {
+    return null;
+  }
+  if (args.neighborProjectId === args.movedProjectId) {
+    return false;
+  }
+
+  return getPublicProjectForMutation(db, args.neighborProjectId) ?? false;
+}
+
 export function createProject(
   db: DbConnection,
   notifier: DbNotifier,
@@ -28,11 +129,16 @@ export function createProject(
   const sourceId = createProjectSourceId();
 
   const { project, source } = db.transaction((tx) => {
+    const lastProject = getLastPublicProject(tx);
+    const sortKey = lastProject
+      ? createOrderKeyAfter({ previousKey: lastProject.sortKey })
+      : createOrderKeyBetween({ previousKey: null, nextKey: null });
     const p = tx
       .insert(projects)
       .values({
         id: projectId,
         name: input.name,
+        sortKey,
         createdAt: now,
         updatedAt: now,
       })
@@ -65,21 +171,15 @@ export function getProject(db: DbConnection, id: string) {
 }
 
 export function listProjects(db: DbConnection) {
-  return db.select().from(projects).all();
-}
-
-export function listPublicProjects(db: DbConnection) {
   return db
     .select()
     .from(projects)
-    .where(
-      sql`NOT EXISTS (
-        SELECT 1 FROM ${projectOperations}
-        WHERE ${projectOperations.projectId} = ${projects.id}
-        AND ${projectOperations.kind} = 'delete'
-      )`,
-    )
+    .orderBy(asc(projects.sortKey), asc(projects.id))
     .all();
+}
+
+export function listPublicProjects(db: DbConnection) {
+  return listOrderedPublicProjects(db);
 }
 
 export interface UpdateProjectInput {
@@ -103,6 +203,84 @@ export function updateProject(
     notifier.notifyProject(id, ["project-updated"]);
   }
   return updated ?? null;
+}
+
+export function reorderProject({
+  db,
+  nextProjectId,
+  notifier,
+  previousProjectId,
+  projectId,
+}: ReorderProjectArgs): ReorderProjectResult {
+  const result = db.transaction(
+    (tx): ReorderProjectResult => {
+      const movedProject = getPublicProjectForMutation(tx, projectId);
+      if (!movedProject) {
+        return { kind: "not_found" };
+      }
+
+      const previousProject = resolveProjectNeighbor(tx, {
+        movedProjectId: projectId,
+        neighborProjectId: previousProjectId,
+      });
+      const nextProject = resolveProjectNeighbor(tx, {
+        movedProjectId: projectId,
+        neighborProjectId: nextProjectId,
+      });
+      if (previousProject === false || nextProject === false) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
+        previousProject !== null &&
+        nextProject !== null &&
+        previousProject.sortKey >= nextProject.sortKey
+      ) {
+        return { kind: "invalid_neighbor_order" };
+      }
+
+      const currentProjects = listOrderedPublicProjects(tx);
+      const currentIndex = currentProjects.findIndex(
+        (project) => project.id === projectId,
+      );
+      const currentPreviousProjectId =
+        currentProjects[currentIndex - 1]?.id ?? null;
+      const currentNextProjectId = currentProjects[currentIndex + 1]?.id ?? null;
+      if (
+        currentPreviousProjectId === previousProjectId &&
+        currentNextProjectId === nextProjectId
+      ) {
+        return {
+          kind: "unchanged",
+          projects: currentProjects,
+        };
+      }
+
+      const sortKey = createOrderKeyBetween({
+        previousKey: previousProject?.sortKey ?? null,
+        nextKey: nextProject?.sortKey ?? null,
+      });
+      const updated = tx
+        .update(projects)
+        .set({ sortKey, updatedAt: Date.now() })
+        .where(eq(projects.id, projectId))
+        .returning({ id: projects.id })
+        .get();
+      if (!updated) {
+        return { kind: "stale_neighbor" };
+      }
+
+      return {
+        kind: "reordered",
+        projects: listOrderedPublicProjects(tx),
+      };
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result.kind === "reordered") {
+    notifier.notifyProject(projectId, ["project-order-changed"]);
+  }
+  return result;
 }
 
 export function deleteProject(

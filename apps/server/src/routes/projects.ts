@@ -10,9 +10,14 @@ import {
   listPublicProjects,
   listProjectSourcesByProjectIds,
   listThreads,
+  listThreadsWithPendingInteractionState,
   listThreadsWithPendingInteractionStateForProjects,
+  reorderManagerThread,
+  reorderProject,
   updateProject,
   updateProjectSource,
+  type ReorderManagerThreadResult,
+  type ReorderProjectResult,
 } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import {
@@ -27,6 +32,8 @@ import {
   projectListIncludeOptionSchema,
   projectListQuerySchema,
   promptHistoryQuerySchema,
+  reorderManagerThreadRequestSchema,
+  reorderProjectRequestSchema,
   typedRoutes,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
@@ -35,6 +42,7 @@ import {
   type ProjectResponse,
   type ProjectWithThreadsResponse,
   type PublicApiSchema,
+  type ThreadListResponse,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import { renderTemplate } from "@bb/templates";
@@ -66,13 +74,24 @@ import {
 import { listProjectPromptHistory } from "../services/prompt-history.js";
 import { parsePathKindInclusion } from "./path-list-inclusion.js";
 
-function buildProjectResponses(
+type ProjectResponseProjectFields = Omit<ProjectResponse, "sources">;
+type ProjectResponseRow = ProjectResponseProjectFields;
+
+function toProjectResponseProjectFields(
+  project: ProjectResponseRow,
+): ProjectResponseProjectFields {
+  return {
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
+}
+
+function buildProjectResponsesFromRows(
   deps: AppDeps,
-  projectId?: string,
+  projects: ProjectResponseRow[],
 ): ProjectResponse[] {
-  const projects = projectId
-    ? [requirePublicProject(deps.db, projectId)]
-    : listPublicProjects(deps.db);
   if (projects.length === 0) {
     return [];
   }
@@ -90,9 +109,72 @@ function buildProjectResponses(
   }
 
   return projects.map((project) => ({
-    ...project,
+    ...toProjectResponseProjectFields(project),
     sources: sourcesByProjectId.get(project.id) ?? [],
   }));
+}
+
+function buildProjectResponses(
+  deps: AppDeps,
+  projectId?: string,
+): ProjectResponse[] {
+  const projects = projectId
+    ? [requirePublicProject(deps.db, projectId)]
+    : listPublicProjects(deps.db);
+  return buildProjectResponsesFromRows(deps, projects);
+}
+
+function toProjectOrderResponse(
+  deps: AppDeps,
+  result: ReorderProjectResult,
+): ProjectResponse[] {
+  switch (result.kind) {
+    case "reordered":
+    case "unchanged":
+      return buildProjectResponsesFromRows(deps, result.projects);
+    case "not_found":
+      throw new ApiError(404, "project_not_found", "Project not found");
+    case "stale_neighbor":
+      throw new ApiError(409, "invalid_request", "Project order changed");
+    case "invalid_neighbor_order":
+      throw new ApiError(409, "invalid_request", "Project order is invalid");
+  }
+}
+
+function buildProjectThreadListResponse(
+  deps: AppDeps,
+  projectId: string,
+): ThreadListResponse {
+  return toThreadListEntryResponses(deps, {
+    threads: listThreadsWithPendingInteractionState(deps.db, {
+      archived: false,
+      projectId,
+    }),
+  });
+}
+
+function assertManagerThreadOrderResult(
+  result: ReorderManagerThreadResult,
+): void {
+  switch (result.kind) {
+    case "reordered":
+    case "unchanged":
+      return;
+    case "not_found":
+      throw new ApiError(404, "thread_not_found", "Thread not found");
+    case "stale_neighbor":
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Manager thread order changed",
+      );
+    case "invalid_neighbor_order":
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Manager thread order is invalid",
+      );
+  }
 }
 
 function parseProjectListIncludes(
@@ -298,6 +380,27 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         throw new ApiError(404, "project_not_found", "Project not found");
       }
       return context.json(buildProjectResponses(deps, project.id)[0]);
+    },
+  );
+
+  patch(
+    "/projects/:id/order",
+    reorderProjectRequestSchema,
+    async (context, payload) => {
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
+      return context.json(
+        toProjectOrderResponse(
+          deps,
+          reorderProject({
+            db: deps.db,
+            notifier: deps.hub,
+            projectId,
+            previousProjectId: payload.previousProjectId,
+            nextProjectId: payload.nextProjectId,
+          }),
+        ),
+      );
     },
   );
 
@@ -611,6 +714,26 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         },
       });
       return context.json(toThreadResponseFromThread(deps, { thread }), 201);
+    },
+  );
+
+  patch(
+    "/projects/:id/managers/:threadId/order",
+    reorderManagerThreadRequestSchema,
+    async (context, payload) => {
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
+      assertManagerThreadOrderResult(
+        reorderManagerThread({
+          db: deps.db,
+          notifier: deps.hub,
+          projectId,
+          threadId: context.req.param("threadId"),
+          previousThreadId: payload.previousThreadId,
+          nextThreadId: payload.nextThreadId,
+        }),
+      );
+      return context.json(buildProjectThreadListResponse(deps, projectId));
     },
   );
 }

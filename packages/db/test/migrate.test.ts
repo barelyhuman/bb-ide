@@ -12,6 +12,8 @@ import {
 type InsertMigrationParameters = [string, number];
 type TableNameParameters = [string];
 type QueuedMessageMigrationInsertParameters = [string, string, number, number];
+type ProjectSortKeyMigrationInsertParameters = [string, string, number, number];
+type ThreadSortKeyMigrationInsertParameters = [string, string, string, number];
 
 interface IndexNameRow {
   name: string;
@@ -27,6 +29,16 @@ interface MigratedQueuedMessageRow {
   threadId: string;
 }
 
+interface MigratedProjectRow {
+  id: string;
+  sortKey: string;
+}
+
+interface MigratedThreadSortKeyRow {
+  id: string;
+  sortKey: string | null;
+}
+
 interface ReadIndexNamesArgs {
   db: DbConnection;
   tableName: string;
@@ -37,12 +49,18 @@ const baselineWhen = 1778891867195;
 const publishedTerminalSessionUserInputWhen = 1779139400000;
 const closedSessionPruneIndexesWhen = 1779139400001;
 const threadDynamicContextFileStatesWhen = 1779139400002;
-const queuedMessageSortKeyWhen = 1779230683658;
+const sidebarOrderingWhen = 1779417575414;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
   "drizzle",
   "0004_wild_justice.sql",
+);
+const sidebarOrderingMigrationPath = resolve(
+  __dirname,
+  "..",
+  "drizzle",
+  "0005_strong_exodus.sql",
 );
 
 function closeConnection(db: DbConnection): void {
@@ -76,10 +94,22 @@ function runQueuedMessageSortKeyMigration(db: DbConnection): void {
   }
 }
 
+function runSidebarOrderingMigration(db: DbConnection): void {
+  const migrationSql = readFileSync(sidebarOrderingMigrationPath, "utf-8");
+  const statements = migrationSql
+    .split("--> statement-breakpoint")
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+
+  for (const statement of statements) {
+    db.$client.exec(statement);
+  }
+}
+
 describe("migrate", () => {
   it("warns when applied migration timestamps are in the future", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(queuedMessageSortKeyWhen + 10_000);
+    vi.setSystemTime(sidebarOrderingWhen + 10_000);
 
     const db = createConnection(":memory:");
     const logger = {
@@ -132,9 +162,15 @@ describe("migrate", () => {
         .prepare("DROP INDEX host_daemon_sessions_closed_prune_idx")
         .run();
       db.$client
-        .prepare("DROP INDEX thread_dynamic_context_file_states_thread_file_idx")
+        .prepare(
+          "DROP INDEX thread_dynamic_context_file_states_thread_file_idx",
+        )
         .run();
+      db.$client.prepare("DROP INDEX projects_sort_idx").run();
+      db.$client.prepare("DROP INDEX threads_project_type_sort_idx").run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
+      db.$client.prepare("ALTER TABLE projects DROP COLUMN sort_key").run();
+      db.$client.prepare("ALTER TABLE threads DROP COLUMN sort_key").run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -180,9 +216,7 @@ describe("migrate", () => {
         .all()
         .map((row) => row.createdAt);
       expect(migrationCreatedAts).toContain(closedSessionPruneIndexesWhen);
-      expect(migrationCreatedAts).toContain(
-        threadDynamicContextFileStatesWhen,
-      );
+      expect(migrationCreatedAts).toContain(threadDynamicContextFileStatesWhen);
     } finally {
       closeConnection(db);
     }
@@ -257,6 +291,85 @@ describe("migrate", () => {
           threadId: "thr_b",
           sortKey: "0000000000000001",
         },
+      ]);
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("backfills project and manager thread sort keys", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      db.$client.exec(`
+        CREATE TABLE projects (
+          id text PRIMARY KEY NOT NULL,
+          name text NOT NULL,
+          created_at integer NOT NULL,
+          updated_at integer NOT NULL
+        );
+        CREATE TABLE threads (
+          id text PRIMARY KEY NOT NULL,
+          project_id text NOT NULL,
+          type text NOT NULL,
+          created_at integer NOT NULL
+        );
+      `);
+      const insertProject =
+        db.$client.prepare<ProjectSortKeyMigrationInsertParameters>(
+          `
+            INSERT INTO projects (id, name, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+          `,
+        );
+      insertProject.run("proj_b", "Project B", 1_000, 1_000);
+      insertProject.run("proj_a", "Project A", 1_000, 1_000);
+      insertProject.run("proj_c", "Project C", 2_000, 2_000);
+
+      const insertThread =
+        db.$client.prepare<ThreadSortKeyMigrationInsertParameters>(
+          `
+            INSERT INTO threads (id, project_id, type, created_at)
+            VALUES (?, ?, ?, ?)
+          `,
+        );
+      insertThread.run("thr_manager_b", "proj_a", "manager", 1_000);
+      insertThread.run("thr_manager_a", "proj_a", "manager", 2_000);
+      insertThread.run("thr_standard", "proj_a", "standard", 3_000);
+      insertThread.run("thr_other", "proj_b", "manager", 500);
+
+      runSidebarOrderingMigration(db);
+
+      expect(
+        db.$client
+          .prepare<[], MigratedProjectRow>(
+            `
+              SELECT id, sort_key AS sortKey
+              FROM projects
+              ORDER BY sort_key
+            `,
+          )
+          .all(),
+      ).toEqual([
+        { id: "proj_a", sortKey: "0000000000000001" },
+        { id: "proj_b", sortKey: "0000000000000002" },
+        { id: "proj_c", sortKey: "0000000000000003" },
+      ]);
+      expect(
+        db.$client
+          .prepare<[], MigratedThreadSortKeyRow>(
+            `
+              SELECT id, sort_key AS sortKey
+              FROM threads
+              WHERE project_id = 'proj_a'
+              ORDER BY sort_key
+            `,
+          )
+          .all(),
+      ).toEqual([
+        { id: "thr_standard", sortKey: null },
+        { id: "thr_manager_a", sortKey: "0000000000000001" },
+        { id: "thr_manager_b", sortKey: "0000000000000002" },
       ]);
     } finally {
       closeConnection(db);

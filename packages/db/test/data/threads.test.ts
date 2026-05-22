@@ -20,6 +20,7 @@ import {
   markThreadDeleted,
   markThreadAttentionRequested,
   markThreadStopRequested,
+  reorderManagerThread,
   unarchiveThread,
   transitionThreadStatus,
   InvalidThreadStatusTransitionError,
@@ -60,6 +61,153 @@ describe("threads", () => {
 
     const fetched = getThread(db, thread.id);
     expect(fetched).toMatchObject({ id: thread.id });
+  });
+
+  it("orders and reorders active manager threads by sort key", () => {
+    const { db, project } = setup();
+    const firstManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const secondManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+
+    expect(
+      listThreads(db, { projectId: project.id, type: "manager" }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual([secondManager.id, firstManager.id]);
+
+    const result = reorderManagerThread({
+      db,
+      notifier: noopNotifier,
+      projectId: project.id,
+      threadId: firstManager.id,
+      previousThreadId: null,
+      nextThreadId: secondManager.id,
+    });
+
+    expect(result.kind).toBe("reordered");
+    expect(
+      listThreads(db, { projectId: project.id, type: "manager" }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual([firstManager.id, secondManager.id]);
+  });
+
+  it("returns unchanged when manager thread order already matches neighboring threads", () => {
+    const { db, project } = setup();
+    const firstManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const secondManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+
+    const result = reorderManagerThread({
+      db,
+      notifier: noopNotifier,
+      projectId: project.id,
+      threadId: secondManager.id,
+      previousThreadId: null,
+      nextThreadId: firstManager.id,
+    });
+
+    expect(result.kind).toBe("unchanged");
+    if (result.kind !== "unchanged") {
+      throw new Error(`Expected unchanged reorder, received ${result.kind}`);
+    }
+    expect(result.threads.map((thread) => thread.id)).toEqual([
+      secondManager.id,
+      firstManager.id,
+    ]);
+  });
+
+  it("returns not_found when reordering a missing manager thread", () => {
+    const { db, project } = setup();
+
+    expect(
+      reorderManagerThread({
+        db,
+        notifier: noopNotifier,
+        projectId: project.id,
+        threadId: "thr_missing",
+        previousThreadId: null,
+        nextThreadId: null,
+      }).kind,
+    ).toBe("not_found");
+  });
+
+  it("rejects manager reorder neighbors that are in reverse order", () => {
+    const { db, project } = setup();
+    const firstManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const secondManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const thirdManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+
+    expect(
+      reorderManagerThread({
+        db,
+        notifier: noopNotifier,
+        projectId: project.id,
+        threadId: firstManager.id,
+        previousThreadId: secondManager.id,
+        nextThreadId: thirdManager.id,
+      }).kind,
+    ).toBe("invalid_neighbor_order");
+    expect(
+      listThreads(db, { projectId: project.id, type: "manager" }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual([thirdManager.id, secondManager.id, firstManager.id]);
+  });
+
+  it("rejects manager reorder neighbors from another project", () => {
+    const { db, host, project } = setup();
+    const { project: otherProject } = createProject(db, noopNotifier, {
+      name: "other-project",
+      source: { type: "local_path", hostId: host.id, path: "/tmp/other" },
+    });
+    const manager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const otherManager = createThread(db, noopNotifier, {
+      projectId: otherProject.id,
+      providerId: "codex",
+      type: "manager",
+    });
+
+    expect(
+      reorderManagerThread({
+        db,
+        notifier: noopNotifier,
+        projectId: project.id,
+        threadId: manager.id,
+        previousThreadId: otherManager.id,
+        nextThreadId: null,
+      }).kind,
+    ).toBe("stale_neighbor");
   });
 
   it("lists threads by project", () => {

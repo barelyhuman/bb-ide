@@ -1,5 +1,5 @@
 import { Fragment, type CSSProperties, type Ref, type ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
@@ -18,6 +18,7 @@ import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mut
 import {
   useProjects,
   useSidebarBootstrap,
+  stripProjectThreads,
 } from "@/hooks/queries/project-queries";
 import {
   useThread,
@@ -315,9 +316,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   const hasSidebarBootstrapSettled =
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
   const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
-  const projects = projectsQuery.data;
-  const projectsLoading =
-    sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
+  const sidebarBootstrapProjects = useMemo(
+    () => sidebarBootstrapQuery.data?.map(stripProjectThreads),
+    [sidebarBootstrapQuery.data],
+  );
+  const projects = projectsQuery.data ?? sidebarBootstrapProjects;
   const [storedUseStandardManagerTimeline] =
     useStandardManagerTimelinePreference();
   const prefetchedManagerTimelineView =
@@ -357,13 +360,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     ? projects?.find((candidate) => candidate.id === projectId)
     : undefined;
   const projectName = projectId ? project?.name : undefined;
-  const projectLabel =
-    projectName ??
-    (projectId
-      ? projectsLoading
-        ? "Loading project…"
-        : projectId
-      : undefined);
+  const projectLabel = projectName ?? (projectId ? projectId : undefined);
   const { data: thread } = useThread(threadId ?? "", {
     enabled:
       Boolean(threadId) && (!isThreadView || hasThreadDetailBootstrapSettled),

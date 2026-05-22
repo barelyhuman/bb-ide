@@ -45,9 +45,13 @@ interface CreateThreadWithEnvironmentArgs {
   status?: Thread["status"];
 }
 
+interface ThreadWithSortKey extends Thread {
+  sortKey: string | null;
+}
+
 interface CreateThreadListEntryArgs {
   environmentHostId: string | null;
-  thread: Thread;
+  thread: ThreadWithSortKey;
 }
 
 function setup(): SetupResult {

@@ -114,19 +114,19 @@ describe("buildProjectThreadGroups", () => {
 
     expect(
       groups.managerThreadGroups.map((group) => group.managerThread.id),
-    ).toEqual(["manager-new", "manager-old"]);
+    ).toEqual(["manager-old", "manager-new"]);
     expect(groups.managerThreadGroups[0]?.stats).toEqual({
-      managedChildActivity: { pending: false, working: false, unread: false },
-      managedChildCount: 0,
-    });
-    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
-      .toEqual([]);
-    expect(groups.managerThreadGroups[1]?.stats).toEqual({
       managedChildActivity: { pending: false, working: true, unread: false },
       managedChildCount: 2,
     });
-    expect(looseThreadIds(groups.managerThreadGroups[1]?.managedItems ?? []))
+    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
       .toEqual(["child-idle", "child-busy"]);
+    expect(groups.managerThreadGroups[1]?.stats).toEqual({
+      managedChildActivity: { pending: false, working: false, unread: false },
+      managedChildCount: 0,
+    });
+    expect(looseThreadIds(groups.managerThreadGroups[1]?.managedItems ?? []))
+      .toEqual([]);
     expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "orphan-child",
       "root-old",
@@ -588,8 +588,8 @@ describe("buildProjectThreadGroups", () => {
         looseThreadIds(group.managedItems),
       ]),
     ).toEqual([
-      ["manager-newer", ["newer-manager-older-child"]],
       ["manager-older", ["older-manager-recent-child"]],
+      ["manager-newer", ["newer-manager-older-child"]],
     ]);
     expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "unmanaged-standard",

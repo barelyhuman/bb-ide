@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { ThreadType } from "@bb/domain";
 import { buildPathMentionSuggestions } from "./pathMentionSuggestions";
-import { useThreads, type UseThreadsFilters } from "./queries/thread-queries";
+import {
+  useProjectThreadSubset,
+  type ProjectThreadSubsetFilters,
+} from "./queries/thread-queries";
 import {
   buildThreadMentionSuggestions,
   getThreadMentionSectionMode,
@@ -15,6 +18,10 @@ import type {
 } from "@/components/promptbox/mentions/types";
 
 const PROMPT_MENTION_LIMIT = 8;
+const EMPTY_THREAD_SUBSET_FILTERS = {} satisfies ProjectThreadSubsetFilters;
+const MANAGER_THREAD_SUBSET_FILTERS = {
+  type: "manager",
+} satisfies ProjectThreadSubsetFilters;
 
 export interface UsePromptMentionsOptions {
   threadSuggestionMode?: ThreadSuggestionMode;
@@ -49,12 +56,14 @@ export function usePromptMentions(
   });
   const threadSuggestionMode = options.threadSuggestionMode ?? "none";
   const threadSectionMode = getThreadMentionSectionMode(threadSuggestionMode);
-  const threadFilters: UseThreadsFilters =
+  const threadSubsetFilters =
     threadSuggestionMode === "managers"
-      ? { archived: false, projectId, type: "manager" }
-      : { archived: false, projectId };
-  const threadsQuery = useThreads(threadFilters, {
+      ? MANAGER_THREAD_SUBSET_FILTERS
+      : EMPTY_THREAD_SUBSET_FILTERS;
+  const threadsQuery = useProjectThreadSubset({
     enabled: threadSuggestionMode !== "none",
+    filters: threadSubsetFilters,
+    projectId,
   });
 
   const hasQuery = (query?.trim().length ?? 0) > 0;

@@ -3,10 +3,17 @@ export {
   getProject,
   listProjects,
   listPublicProjects,
+  reorderProject,
   updateProject,
   deleteProject,
 } from "./projects.js";
-export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
+export type {
+  CreateProjectInput,
+  ProjectRow,
+  ReorderProjectArgs,
+  ReorderProjectResult,
+  UpdateProjectInput,
+} from "./projects.js";
 
 export {
   createPromptHistoryEntry,
@@ -94,6 +101,7 @@ export {
   listThreads,
   listThreadsWithPendingInteractionState,
   listThreadsWithPendingInteractionStateForProjects,
+  reorderManagerThread,
   updateThread,
   deleteThread,
   archiveThread,
@@ -114,6 +122,8 @@ export type {
   HasNonTerminalThreadInEnvironmentArgs,
   ListUnarchivedAssignedChildThreadsArgs,
   ListThreadsOptions,
+  ReorderManagerThreadArgs,
+  ReorderManagerThreadResult,
   StopRequestedThreadRow,
   TransitionThreadStatusInTransactionArgs,
   ListThreadEnvironmentAssignmentsOnHostArgs,

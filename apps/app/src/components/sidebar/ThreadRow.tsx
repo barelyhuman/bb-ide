@@ -1,4 +1,8 @@
-import { memo, useState } from "react";
+import { memo, useCallback, useState, type MouseEventHandler } from "react";
+import type {
+  DraggableAttributes,
+  DraggableSyntheticListeners,
+} from "@dnd-kit/core";
 import type { ThreadListEntry } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { SidebarStickyTier } from "@/components/ui/sidebar.js";
@@ -36,6 +40,7 @@ import {
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   SIDEBAR_UNREAD_DOT_CLASS,
 } from "./sidebarRowClasses";
+import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
 
 export type ThreadRowOptions =
   | {
@@ -56,7 +61,16 @@ export type ThreadRowOptions =
       managedChildCount: number;
       managedChildActivity: CollapsedChildActivity;
       onToggleCollapsed: (threadId: string) => void;
+      consumeClickSuppression?: ConsumeDragClickSuppression;
+      dragBindings?: ThreadRowDragBindings;
     };
+
+export interface ThreadRowDragBindings {
+  attributes: DraggableAttributes;
+  disabled: boolean;
+  listeners: DraggableSyntheticListeners;
+  setActivatorNodeRef: (element: HTMLDivElement | null) => void;
+}
 
 interface ThreadRowProps {
   projectId: string;
@@ -74,6 +88,7 @@ interface ManagerChevronProps {
 
 const ROW_GLYPH_SLOT_CLASS =
   "inline-flex shrink-0 items-center justify-center text-subtle-foreground";
+type ThreadRowClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
 function ManagerChevron({
   isCollapsed,
@@ -252,10 +267,7 @@ function ThreadTrailingIcon({
   return environmentIcon ? (
     <Icon
       name={environmentIcon}
-      className={cn(
-        "text-muted-foreground",
-        COARSE_POINTER_ICON_SIZE_CLASS,
-      )}
+      className={cn("text-muted-foreground", COARSE_POINTER_ICON_SIZE_CLASS)}
       aria-label={environmentIconLabel ?? undefined}
     />
   ) : null;
@@ -338,12 +350,25 @@ function ThreadRowComponent({
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   );
   const isActionsOpen = isDropdownActionsOpen || isContextActionsOpen;
+  const managerDragBindings = managerOptions?.dragBindings;
+  const handleManagerClickCapture = useCallback<ThreadRowClickCaptureHandler>(
+    (event) => {
+      if (!managerOptions?.consumeClickSuppression?.()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [managerOptions],
+  );
 
   const rowContent = (
     <>
       <NavLink
         to={`/projects/${projectId}/threads/${thread.id}`}
-        onClick={onProjectSelect}
+        onClick={() => {
+          onProjectSelect?.();
+        }}
         aria-label={`Open ${threadTitle}`}
         title={`Open ${threadTitle}`}
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
@@ -411,7 +436,19 @@ function ThreadRowComponent({
   );
 
   const row = isManager ? (
-    <SidebarStickyTier tier="manager" className={rowClassName}>
+    <SidebarStickyTier
+      ref={managerDragBindings?.setActivatorNodeRef}
+      tier="manager"
+      className={cn(
+        rowClassName,
+        managerDragBindings &&
+          !managerDragBindings.disabled &&
+          "select-none cursor-grab active:cursor-grabbing",
+      )}
+      {...managerDragBindings?.attributes}
+      {...(managerDragBindings?.listeners ?? {})}
+      onClickCapture={handleManagerClickCapture}
+    >
       {rowContent}
     </SidebarStickyTier>
   ) : (

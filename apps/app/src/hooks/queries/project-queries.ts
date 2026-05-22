@@ -31,7 +31,7 @@ interface UseProjectPathSuggestionsArgs {
   includeDirectories: boolean;
 }
 
-const PROJECT_SOURCE_BRANCHES_REFETCH_INTERVAL_MS = 5_000;
+const PROJECT_SOURCE_BRANCHES_STALE_TIME_MS = 5_000;
 
 function requireProjectId(
   projectId: string | undefined,
@@ -54,7 +54,7 @@ export function useProjects(options?: QueryOptions) {
   });
 }
 
-function stripProjectThreads(
+export function stripProjectThreads(
   project: ProjectWithThreadsResponse,
 ): ProjectResponse {
   const { threads, ...projectResponse } = project;
@@ -100,12 +100,9 @@ export function useProjectSourceBranches(
         hostId ?? "",
       ),
     enabled,
-    refetchInterval: enabled
-      ? PROJECT_SOURCE_BRANCHES_REFETCH_INTERVAL_MS
-      : false,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
-    staleTime: PROJECT_SOURCE_BRANCHES_REFETCH_INTERVAL_MS,
+    staleTime: PROJECT_SOURCE_BRANCHES_STALE_TIME_MS,
   });
 }
 

@@ -6,6 +6,7 @@ import {
   PROJECT_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
 } from "@bb/domain";
+import type { ThreadStatusVersionResponse } from "@bb/server-contract";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
   archivedThreadsListQueryKey,
@@ -21,6 +22,7 @@ import {
   threadPromptHistoryQueryKey,
   threadQueryKey,
   threadTerminalsQueryKey,
+  threadStatusVersionQueryKey,
   threadTimelineQueryKey,
 } from "./queries/query-keys";
 import { createRealtimeCacheEffects } from "./realtime-cache-effects";
@@ -223,6 +225,82 @@ describe("createRealtimeCacheEffects", () => {
     effects.dispose();
   });
 
+  it("refetches active manager order lists without refetching managed child lists for order changes", async () => {
+    vi.useFakeTimers();
+    const { effects, queryClient } = createRealtimeEffectsTestContext();
+    const activeProjectThreadListKey = threadListQueryKey({
+      projectId: "project-1",
+      archived: false,
+    });
+    const managerThreadListKey = threadListQueryKey({
+      projectId: "project-1",
+      archived: false,
+      type: "manager",
+    });
+    const managedChildThreadListKey = threadListQueryKey({
+      projectId: "project-1",
+      parentThreadId: "thr_1",
+      archived: false,
+    });
+    const archivedThreadListKey = archivedThreadsListQueryKey({
+      kind: "all",
+      projectId: "project-1",
+    });
+    queryClient.setQueryData(activeProjectThreadListKey, []);
+    queryClient.setQueryData(managerThreadListKey, []);
+    queryClient.setQueryData(managedChildThreadListKey, []);
+    queryClient.setQueryData(archivedThreadListKey, []);
+    const activeProjectThreadListQueryFn = vi.fn(async () => []);
+    const managerThreadListQueryFn = vi.fn(async () => []);
+    const managedChildThreadListQueryFn = vi.fn(async () => []);
+    const activeProjectThreadListObserver = new QueryObserver(queryClient, {
+      queryKey: activeProjectThreadListKey,
+      queryFn: activeProjectThreadListQueryFn,
+      staleTime: Infinity,
+    });
+    const managerThreadListObserver = new QueryObserver(queryClient, {
+      queryKey: managerThreadListKey,
+      queryFn: managerThreadListQueryFn,
+      staleTime: Infinity,
+    });
+    const managedChildThreadListObserver = new QueryObserver(queryClient, {
+      queryKey: managedChildThreadListKey,
+      queryFn: managedChildThreadListQueryFn,
+      staleTime: Infinity,
+    });
+    const unsubscribeActiveProjectThreadList =
+      activeProjectThreadListObserver.subscribe(() => {});
+    const unsubscribeManagerThreadList = managerThreadListObserver.subscribe(
+      () => {},
+    );
+    const unsubscribeManagedChildThreadList =
+      managedChildThreadListObserver.subscribe(() => {});
+    activeProjectThreadListQueryFn.mockClear();
+    managerThreadListQueryFn.mockClear();
+    managedChildThreadListQueryFn.mockClear();
+
+    effects.handleChanged({
+      type: "changed",
+      entity: "thread",
+      id: "thr_1",
+      metadata: { projectId: "project-1" },
+      changes: ["order-changed"],
+    });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(activeProjectThreadListQueryFn).toHaveBeenCalledTimes(1);
+    expect(managerThreadListQueryFn).toHaveBeenCalledTimes(1);
+    expect(managedChildThreadListQueryFn).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryState(archivedThreadListKey)?.isInvalidated,
+    ).not.toBe(true);
+
+    unsubscribeActiveProjectThreadList();
+    unsubscribeManagerThreadList();
+    unsubscribeManagedChildThreadList();
+    effects.dispose();
+  });
+
   it("falls back to invalidating all cached thread lists when a thread list event has no project metadata", () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
@@ -381,6 +459,50 @@ describe("createRealtimeCacheEffects", () => {
 
     unsubscribeGitDiff();
     unsubscribeWorkStatus();
+    effects.dispose();
+  });
+
+  it("refetches active status version queries for thread storage changes", async () => {
+    vi.useFakeTimers();
+    const { effects, queryClient } = createRealtimeEffectsTestContext();
+    const threadKey = threadQueryKey("thr_1");
+    const statusVersionKey = threadStatusVersionQueryKey("thr_1");
+    const initialStatusVersion: ThreadStatusVersionResponse = {
+      source: "folder",
+      hash: "status-old",
+    };
+    const nextStatusVersion: ThreadStatusVersionResponse = {
+      source: "folder",
+      hash: "status-new",
+    };
+    queryClient.setQueryData(threadKey, {
+      id: "thr_1",
+      environmentId: "env-1",
+    });
+    queryClient.setQueryData(statusVersionKey, initialStatusVersion);
+    const statusVersionQueryFn = vi.fn(async () => nextStatusVersion);
+    const statusVersionObserver = new QueryObserver(queryClient, {
+      queryKey: statusVersionKey,
+      queryFn: statusVersionQueryFn,
+      staleTime: Infinity,
+    });
+    const unsubscribeStatusVersion = statusVersionObserver.subscribe(() => {});
+    statusVersionQueryFn.mockClear();
+
+    effects.handleChanged({
+      type: "changed",
+      entity: "environment",
+      id: "env-1",
+      changes: ["thread-storage-changed"],
+    });
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(statusVersionQueryFn).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData(statusVersionKey)).toEqual(
+      nextStatusVersion,
+    );
+
+    unsubscribeStatusVersion();
     effects.dispose();
   });
 

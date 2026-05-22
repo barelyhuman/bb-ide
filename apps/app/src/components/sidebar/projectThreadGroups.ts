@@ -109,9 +109,7 @@ function compareProjectThreadItems(
   );
 }
 
-function buildSortedItems(
-  threads: ThreadListEntry[],
-): ProjectThreadItem[] {
+function buildSortedItems(threads: ThreadListEntry[]): ProjectThreadItem[] {
   const { environmentThreadGroups, looseThreads } =
     bucketWorktreeEnvironmentGroups(threads);
   const items: ProjectThreadItem[] = [
@@ -139,9 +137,9 @@ function getKnownManagerParentId({
 export function buildProjectThreadGroups(
   projectThreads: ThreadListEntry[],
 ): ProjectThreadGroups {
-  const managerThreads = projectThreads
-    .filter((thread) => thread.type === "manager")
-    .sort(compareByCreatedAtDescending);
+  const managerThreads = projectThreads.filter(
+    (thread) => thread.type === "manager",
+  );
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
   const childrenByManagerId = new Map<string, ThreadListEntry[]>();
   const unmanagedStandardThreads: ThreadListEntry[] = [];
@@ -198,7 +196,8 @@ function bucketWorktreeEnvironmentGroups(
   const threadsByEnvironmentId = new Map<string, ThreadListEntry[]>();
   for (const thread of threads) {
     if (thread.environmentId === null) continue;
-    if (!isWorktreeDisplayKind(thread.environmentWorkspaceDisplayKind)) continue;
+    if (!isWorktreeDisplayKind(thread.environmentWorkspaceDisplayKind))
+      continue;
     let bucket = threadsByEnvironmentId.get(thread.environmentId);
     if (!bucket) {
       bucket = [];

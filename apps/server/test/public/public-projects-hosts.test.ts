@@ -192,6 +192,100 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("reorders projects by neighboring project ids", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-order",
+      });
+      const { project: firstProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "First Project",
+      });
+      const { project: secondProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Second Project",
+      });
+      const { project: thirdProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Third Project",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${thirdProject.id}/order`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            previousProjectId: firstProject.id,
+            nextProjectId: secondProject.id,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const responseJson = await readJson(response);
+      expect(JSON.stringify(responseJson)).not.toContain("sortKey");
+      const orderedProjects = z
+        .array(projectResponseSchema)
+        .parse(responseJson);
+      expect(orderedProjects.map((project) => project.id)).toEqual([
+        firstProject.id,
+        thirdProject.id,
+        secondProject.id,
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reorders project manager threads by neighboring thread ids", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-order",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const firstManager = createThread(harness.db, harness.deps.hub, {
+        projectId: project.id,
+        providerId: "codex",
+        type: "manager",
+      });
+      const secondManager = createThread(harness.db, harness.deps.hub, {
+        projectId: project.id,
+        providerId: "codex",
+        type: "manager",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers/${firstManager.id}/order`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            previousThreadId: null,
+            nextThreadId: secondManager.id,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const responseJson = await readJson(response);
+      expect(JSON.stringify(responseJson)).not.toContain("sortKey");
+      const threadsResponse = z
+        .array(threadListEntrySchema)
+        .parse(responseJson);
+      expect(threadsResponse.map((thread) => thread.id)).toEqual([
+        firstManager.id,
+        secondManager.id,
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("embeds unarchived sidebar threads when requested", async () => {
     const harness = await createTestAppHarness();
     try {

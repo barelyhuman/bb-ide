@@ -32,6 +32,8 @@ import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
+  ReorderManagerThreadRequest,
+  ReorderProjectRequest,
   ReorderQueuedMessageRequest,
   SendQueuedMessageRequest,
   SendQueuedMessageResponse,
@@ -463,12 +465,34 @@ export async function hireProjectManager(
   );
 }
 
+export async function reorderProjectManager(
+  projectId: string,
+  threadId: string,
+  req: ReorderManagerThreadRequest,
+): Promise<ThreadListResponse> {
+  return request<ThreadListResponse>(
+    apiClient.projects[":id"].managers[":threadId"].order.$patch({
+      param: { id: projectId, threadId },
+      json: req,
+    }),
+  );
+}
+
 export async function updateProject(
   id: string,
   req: UpdateProjectRequest,
 ): Promise<Project> {
   return request<Project>(
     apiClient.projects[":id"].$patch({ param: { id }, json: req }),
+  );
+}
+
+export async function reorderProject(
+  id: string,
+  req: ReorderProjectRequest,
+): Promise<ProjectResponse[]> {
+  return request<ProjectResponse[]>(
+    apiClient.projects[":id"].order.$patch({ param: { id }, json: req }),
   );
 }
 

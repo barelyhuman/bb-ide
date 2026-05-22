@@ -5,10 +5,12 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type {
   Host,
   PendingInteraction,
   ResolvedThreadExecutionOptions,
+  ThreadType,
 } from "@bb/domain";
 import type {
   PromptHistoryResponse,
@@ -66,7 +68,7 @@ interface QueryOptions {
   staleTime?: number;
 }
 
-const THREAD_STATUS_VERSION_REFETCH_INTERVAL_MS = 2_000;
+const THREAD_LIST_STALE_TIME_MS = 10_000;
 
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
@@ -110,6 +112,31 @@ export interface UseThreadsFilters extends Omit<
   projectId?: string;
 }
 
+export interface ProjectThreadSubsetFilters {
+  parentThreadId?: string;
+  type?: ThreadType;
+}
+
+export interface UseProjectThreadSubsetArgs {
+  enabled?: boolean;
+  filters: ProjectThreadSubsetFilters;
+  projectId: string | undefined;
+}
+
+export interface UseProjectThreadSubsetResult {
+  data: ThreadListResponse | undefined;
+  isError: boolean;
+  isFetching: boolean;
+  isLoading: boolean;
+}
+
+interface BuildThreadSubsetListFiltersArgs {
+  filters: ProjectThreadSubsetFilters;
+  projectId: string | undefined;
+}
+
+type ThreadListItem = ThreadListResponse[number];
+
 interface ThreadTimelineTurnSummaryDetailsMutationRequest extends TimelineTurnSummaryDetailsRequest {
   id: string;
 }
@@ -120,6 +147,50 @@ function requireThreadId(id: string, hookName: string): string {
   }
 
   return id;
+}
+
+function buildThreadSubsetListFilters({
+  filters,
+  projectId,
+}: BuildThreadSubsetListFiltersArgs): UseThreadsFilters {
+  const listFilters: UseThreadsFilters = {
+    archived: false,
+    projectId,
+  };
+
+  if (filters.parentThreadId !== undefined) {
+    listFilters.parentThreadId = filters.parentThreadId;
+  }
+  if (filters.type !== undefined) {
+    listFilters.type = filters.type;
+  }
+
+  return listFilters;
+}
+
+function threadMatchesProjectThreadSubset(
+  thread: ThreadListItem,
+  filters: ProjectThreadSubsetFilters,
+): boolean {
+  if (
+    filters.parentThreadId !== undefined &&
+    thread.parentThreadId !== filters.parentThreadId
+  ) {
+    return false;
+  }
+  if (filters.type !== undefined && thread.type !== filters.type) {
+    return false;
+  }
+  return true;
+}
+
+function filterProjectThreadSubset(
+  threads: ThreadListResponse,
+  filters: ProjectThreadSubsetFilters,
+): ThreadListResponse {
+  return threads.filter((thread) =>
+    threadMatchesProjectThreadSubset(thread, filters),
+  );
 }
 
 export interface UseArchivedThreadsFilters {
@@ -179,7 +250,7 @@ export function useArchivedThreads(
       return allPages.reduce((sum, page) => sum + page.length, 0);
     },
     enabled,
-    staleTime: 10_000,
+    staleTime: THREAD_LIST_STALE_TIME_MS,
   });
 }
 
@@ -202,8 +273,74 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
         signal,
       ),
     enabled,
-    staleTime: 10_000,
+    staleTime: THREAD_LIST_STALE_TIME_MS,
   });
+}
+
+export function useProjectThreadSubset({
+  enabled: enabledOption,
+  filters,
+  projectId,
+}: UseProjectThreadSubsetArgs): UseProjectThreadSubsetResult {
+  const queryClient = useQueryClient();
+  const enabled = (enabledOption ?? true) && Boolean(projectId);
+  const { parentThreadId, type } = filters;
+  const activeProjectThreadListQueryKey =
+    enabled && projectId
+      ? threadListQueryKey({ archived: false, projectId })
+      : disabledThreadListQueryKey(
+          projectId ? { archived: false, projectId } : { archived: false },
+        );
+  const activeProjectThreadListIsCached =
+    enabled &&
+    projectId !== undefined &&
+    queryClient.getQueryData<ThreadListResponse>(
+      threadListQueryKey({ archived: false, projectId }),
+    ) !== undefined;
+  const activeProjectThreadsQuery = useQuery<ThreadListResponse>({
+    queryKey: activeProjectThreadListQueryKey,
+    queryFn: ({ signal }) =>
+      api.listThreads(
+        {
+          archived: false,
+          projectId: requireThreadId(projectId ?? "", "useProjectThreadSubset"),
+        },
+        signal,
+      ),
+    enabled: enabled && activeProjectThreadListIsCached,
+    staleTime: THREAD_LIST_STALE_TIME_MS,
+  });
+  const hasActiveProjectThreadList =
+    activeProjectThreadsQuery.data !== undefined;
+  const targetedThreadsQuery = useThreads(
+    buildThreadSubsetListFilters({ filters, projectId }),
+    {
+      enabled: enabled && !hasActiveProjectThreadList,
+    },
+  );
+  const derivedThreads = useMemo(
+    () =>
+      activeProjectThreadsQuery.data
+        ? filterProjectThreadSubset(activeProjectThreadsQuery.data, {
+            parentThreadId,
+            type,
+          })
+        : undefined,
+    [activeProjectThreadsQuery.data, parentThreadId, type],
+  );
+
+  return {
+    data: derivedThreads ?? targetedThreadsQuery.data,
+    isError: hasActiveProjectThreadList
+      ? activeProjectThreadsQuery.isError
+      : targetedThreadsQuery.isError,
+    isFetching: hasActiveProjectThreadList
+      ? activeProjectThreadsQuery.isFetching
+      : targetedThreadsQuery.isFetching,
+    isLoading: hasActiveProjectThreadList
+      ? activeProjectThreadsQuery.isLoading
+      : targetedThreadsQuery.isLoading,
+  };
 }
 
 export function useThread(id: string, options?: QueryOptions) {
@@ -508,8 +645,6 @@ export function useThreadStatusVersion(id: string, options?: QueryOptions) {
         signal,
       ),
     enabled: (options?.enabled ?? true) && Boolean(id),
-    refetchInterval: THREAD_STATUS_VERSION_REFETCH_INTERVAL_MS,
-    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     staleTime: options?.staleTime,
   });

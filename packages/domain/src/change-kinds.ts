@@ -23,6 +23,7 @@ export const THREAD_CHANGE_KINDS = [
   "parent-changed",
   "read-state-changed",
   "manager-assignment-changed",
+  "order-changed",
   "terminals-changed",
 ] as const;
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
@@ -33,6 +34,7 @@ export const PROJECT_CHANGE_KINDS = [
   "project-deleted",
   "project-sources-changed",
   "threads-changed",
+  "project-order-changed",
   "automations-changed",
   "nudges-changed",
 ] as const;

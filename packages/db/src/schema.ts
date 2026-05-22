@@ -105,10 +105,14 @@ export const projects = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    sortKey: text("sort_key").notNull().default("V"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (table) => [index("projects_updated_idx").on(table.updatedAt)],
+  (table) => [
+    index("projects_updated_idx").on(table.updatedAt),
+    index("projects_sort_idx").on(table.sortKey, table.id),
+  ],
 );
 
 export const projectExecutionDefaults = sqliteTable(
@@ -257,6 +261,7 @@ export const threads = sqliteTable(
     }),
     providerId: text("provider_id").notNull(),
     type: text("type").$type<ThreadType>().notNull().default("standard"),
+    sortKey: text("sort_key"),
     title: text("title"),
     titleFallback: text("title_fallback"),
     status: text("status", { enum: threadStatusValues })
@@ -280,6 +285,12 @@ export const threads = sqliteTable(
       table.projectId,
       table.archivedAt,
       table.deletedAt,
+      table.id,
+    ),
+    index("threads_project_type_sort_idx").on(
+      table.projectId,
+      table.type,
+      table.sortKey,
       table.id,
     ),
     index("threads_environment_idx").on(table.environmentId),

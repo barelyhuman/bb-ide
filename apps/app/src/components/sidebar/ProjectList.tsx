@@ -1,5 +1,32 @@
-import { memo, useCallback, useMemo, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { flushSync } from "react-dom";
 import { useAtom } from "jotai";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  sortableKeyboardCoordinates,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useQueries,
   type QueryFunctionContext,
@@ -9,6 +36,7 @@ import {
   findLocalPathProjectSourceForHost,
   type ThreadListEntry,
 } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import {
   getConnectionAwareQueryState,
@@ -21,6 +49,10 @@ import {
   useSidebarBootstrap,
 } from "@/hooks/queries/project-queries";
 import {
+  useReorderProject,
+  useReorderProjectManager,
+} from "@/hooks/mutations/project-mutations";
+import {
   isLocalPathMissing,
   useLocalPathExistence,
 } from "@/hooks/queries/host-path-queries";
@@ -32,6 +64,10 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
+import {
+  applyNeighborReorder,
+  buildNeighborReorderRequest,
+} from "@/lib/neighbor-reorder";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -42,10 +78,26 @@ import {
 } from "@/components/ui/dropdown-menu.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
-import { SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuSkeleton, SidebarStickyStack, SidebarStickyTier } from "@/components/ui/sidebar.js";
-import { COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_HEIGHT_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+  SidebarStickyStack,
+  SidebarStickyTier,
+} from "@/components/ui/sidebar.js";
+import {
+  COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_HEIGHT_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectRow } from "./ProjectRow";
-import type { ProjectThreadListState } from "./ProjectRow";
+import type {
+  ProjectRowDragBindings,
+  ProjectRowProps,
+  ProjectThreadListState,
+} from "./ProjectRow";
 import {
   collapsedEnvironmentIdsAtom,
   collapsedManagerIdsAtom,
@@ -56,6 +108,8 @@ import {
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
 } from "./sidebarRowClasses";
+import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
+import { useDragClickSuppression } from "./useDragClickSuppression";
 
 interface ProjectListProps {
   onNewProject?: () => void;
@@ -139,6 +193,24 @@ interface ToggleCollapsedIdListArgs {
 }
 
 type ToggleCollapsedId = (id: string) => void;
+
+interface SortableProjectRowProps extends ProjectRowProps {
+  reorderDisabled: boolean;
+}
+
+interface ItemOrderEntry {
+  id: string;
+}
+
+function hasSameItemOrder(
+  left: readonly ItemOrderEntry[],
+  right: readonly ItemOrderEntry[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, index) => item.id === right[index]?.id);
+}
 
 function buildProjectThreadQueryAggregation({
   projectIds,
@@ -251,6 +323,53 @@ function ProjectListSectionOptions({
     </DropdownMenu>
   );
 }
+
+const SortableProjectRow = memo(function SortableProjectRow({
+  project,
+  reorderDisabled,
+  ...props
+}: SortableProjectRowProps) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id: project.id,
+    disabled: reorderDisabled,
+    transition: SIDEBAR_SORTABLE_TRANSITION,
+  });
+  const style = useMemo<CSSProperties>(
+    () => ({
+      transform: CSS.Transform.toString(transform),
+      transition,
+    }),
+    [transform, transition],
+  );
+  const projectDragBindings = useMemo<ProjectRowDragBindings>(
+    () => ({
+      attributes,
+      disabled: reorderDisabled,
+      listeners,
+      setActivatorNodeRef,
+    }),
+    [attributes, listeners, reorderDisabled, setActivatorNodeRef],
+  );
+
+  return (
+    <ProjectRow
+      {...props}
+      project={project}
+      isProjectDragging={isDragging}
+      projectDragBindings={projectDragBindings}
+      projectRowRef={setNodeRef}
+      projectRowStyle={style}
+    />
+  );
+});
 
 function ProjectListSectionLabel({
   onNewProject,
@@ -433,6 +552,119 @@ function ProjectListComponent({
     return localSourceTargets.map((target) => target.path);
   }, [localHostId, localSourceTargets]);
   const pathExistence = useLocalPathExistence(localPaths);
+  const { isPending: isProjectReorderPending, mutate: reorderProjectMutate } =
+    useReorderProject();
+  const {
+    isPending: isManagerReorderPending,
+    mutate: reorderProjectManagerMutate,
+  } = useReorderProjectManager();
+  const [optimisticProjectOrder, setOptimisticProjectOrder] = useState<
+    ProjectResponse[] | null
+  >(null);
+  const renderedProjects = optimisticProjectOrder ?? projects;
+  const renderedProjectIds = useMemo(
+    () => (renderedProjects ?? []).map((project) => project.id),
+    [renderedProjects],
+  );
+  const projectReorderDisabled =
+    isProjectReorderPending || (renderedProjects?.length ?? 0) < 2;
+  const {
+    beginDragClickSuppression: beginProjectDragClickSuppression,
+    clearDragClickSuppressionSoon: clearProjectDragClickSuppressionSoon,
+    consumeDragClickSuppression: consumeProjectClickSuppression,
+  } = useDragClickSuppression();
+  const projectSensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const handleProjectDragStart = useCallback((_event: DragStartEvent) => {
+    beginProjectDragClickSuppression();
+  }, [beginProjectDragClickSuppression]);
+  const handleProjectDragCancel = useCallback(() => {
+    clearProjectDragClickSuppressionSoon();
+  }, [clearProjectDragClickSuppressionSoon]);
+  const handleProjectDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      clearProjectDragClickSuppressionSoon();
+      if (!renderedProjects || isProjectReorderPending) {
+        return;
+      }
+      const { active, over } = event;
+      if (
+        !over ||
+        typeof active.id !== "string" ||
+        typeof over.id !== "string"
+      ) {
+        return;
+      }
+      const request = buildNeighborReorderRequest({
+        activeId: active.id,
+        overId: over.id,
+        items: renderedProjects,
+      });
+      if (!request) {
+        return;
+      }
+      const nextProjects = applyNeighborReorder({
+        items: renderedProjects,
+        request,
+      });
+      flushSync(() => {
+        setOptimisticProjectOrder(nextProjects);
+      });
+      reorderProjectMutate(
+        {
+          projectId: request.itemId,
+          previousProjectId: request.previousItemId,
+          nextProjectId: request.nextItemId,
+        },
+        {
+          onSettled: () => {
+            setOptimisticProjectOrder(null);
+          },
+        },
+      );
+    },
+    [
+      clearProjectDragClickSuppressionSoon,
+      isProjectReorderPending,
+      renderedProjects,
+      reorderProjectMutate,
+    ],
+  );
+  const handleReorderManager = useCallback<
+    NonNullable<ProjectRowProps["onReorderManager"]>
+  >(
+    (projectId, request, callbacks) => {
+      reorderProjectManagerMutate(
+        {
+          projectId,
+          threadId: request.itemId,
+          previousThreadId: request.previousItemId,
+          nextThreadId: request.nextItemId,
+        },
+        {
+          onSettled: callbacks.onSettled,
+        },
+      );
+    },
+    [reorderProjectManagerMutate],
+  );
+  useEffect(() => {
+    if (!optimisticProjectOrder || !projects) {
+      return;
+    }
+    if (hasSameItemOrder(optimisticProjectOrder, projects)) {
+      setOptimisticProjectOrder(null);
+    }
+  }, [optimisticProjectOrder, projects]);
 
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(
     collapsedProjectIdsAtom,
@@ -474,7 +706,7 @@ function ProjectListComponent({
   // bail out of memo when none of its data changed.
   const threadListStatesByProjectId = useMemo(() => {
     const map = new Map<string, ProjectThreadListState>();
-    for (const project of projects ?? []) {
+    for (const project of renderedProjects ?? []) {
       const status = threadStatesByProjectId.get(project.id)?.status;
       const projectThreads = threadsByProject.get(project.id);
       map.set(
@@ -483,7 +715,7 @@ function ProjectListComponent({
       );
     }
     return map;
-  }, [projects, threadStatesByProjectId, threadsByProject]);
+  }, [renderedProjects, threadStatesByProjectId, threadsByProject]);
 
   const toggleProjectCollapsed = useCallback<ToggleCollapsedId>(
     (projectId) => {
@@ -522,8 +754,59 @@ function ProjectListComponent({
           <SidebarMenuSkeleton />
           <SidebarMenuSkeleton />
         </>
-      ) : projects && projects.length > 0 ? (
-        projects.map((project) => {
+      ) : renderedProjects && renderedProjects.length > 1 ? (
+        <DndContext
+          sensors={projectSensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleProjectDragStart}
+          onDragCancel={handleProjectDragCancel}
+          onDragEnd={handleProjectDragEnd}
+        >
+          <SortableContext
+            items={renderedProjectIds}
+            strategy={verticalListSortingStrategy}
+          >
+            {renderedProjects.map((project) => {
+              const threadListState =
+                threadListStatesByProjectId.get(project.id) ??
+                EMPTY_PROJECT_THREAD_LIST_STATE;
+              const localSourcePath = localSourcePathsByProjectId.get(
+                project.id,
+              );
+              const isLocalPathInvalid = isLocalPathMissing(
+                pathExistence,
+                localSourcePath,
+              );
+              return (
+                <SortableProjectRow
+                  key={project.id}
+                  project={project}
+                  reorderDisabled={projectReorderDisabled}
+                  threadListState={threadListState}
+                  selectedThreadId={selectedThreadId}
+                  isActive={
+                    selectedProjectId === project.id && isProjectMainView
+                  }
+                  isCollapsed={collapsedProjectIds.has(project.id)}
+                  collapsedManagerIds={collapsedManagerIds}
+                  collapsedEnvironmentIds={collapsedEnvironmentIds}
+                  isLocalPathInvalid={isLocalPathInvalid}
+                  onProjectSelect={onProjectSelect}
+                  onToggleProjectCollapsed={toggleProjectCollapsed}
+                  onToggleManagerCollapsed={toggleManagerCollapsed}
+                  onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
+                  isManagerReorderPending={isManagerReorderPending}
+                  onReorderManager={handleReorderManager}
+                  consumeProjectClickSuppression={
+                    consumeProjectClickSuppression
+                  }
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
+      ) : renderedProjects && renderedProjects.length > 0 ? (
+        renderedProjects.map((project) => {
           const threadListState =
             threadListStatesByProjectId.get(project.id) ??
             EMPTY_PROJECT_THREAD_LIST_STATE;
@@ -547,6 +830,8 @@ function ProjectListComponent({
               onToggleProjectCollapsed={toggleProjectCollapsed}
               onToggleManagerCollapsed={toggleManagerCollapsed}
               onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
+              isManagerReorderPending={isManagerReorderPending}
+              onReorderManager={handleReorderManager}
             />
           );
         })

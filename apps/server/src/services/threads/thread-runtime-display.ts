@@ -86,6 +86,28 @@ function getDaemonDisconnectGraceExpiresAt(
   return session.closedAt + DAEMON_DISCONNECT_GRACE_MS;
 }
 
+function toPublicThread(thread: Thread): Thread {
+  return {
+    id: thread.id,
+    projectId: thread.projectId,
+    environmentId: thread.environmentId,
+    automationId: thread.automationId,
+    providerId: thread.providerId,
+    type: thread.type,
+    title: thread.title,
+    titleFallback: thread.titleFallback,
+    status: thread.status,
+    parentThreadId: thread.parentThreadId,
+    archivedAt: thread.archivedAt,
+    stopRequestedAt: thread.stopRequestedAt,
+    deletedAt: thread.deletedAt,
+    lastReadAt: thread.lastReadAt,
+    latestAttentionAt: thread.latestAttentionAt,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+  };
+}
+
 export function resolveThreadRuntimeState(
   deps: ThreadRuntimeDisplayDeps,
   args: ResolveThreadRuntimeStateArgs,
@@ -151,12 +173,13 @@ export function toThreadResponseWithHost(
   deps: ThreadRuntimeDisplayDeps,
   args: ToThreadResponseWithHostArgs,
 ): ThreadWithRuntime {
+  const thread = toPublicThread(args.thread);
   return {
-    ...args.thread,
+    ...thread,
     runtime: resolveThreadRuntimeState(deps, {
       environmentHostId: args.environmentHostId,
       now: args.now,
-      status: args.thread.status,
+      status: thread.status,
     }),
   };
 }
@@ -212,7 +235,7 @@ export function toThreadListEntryResponses(
       latestSession:
         thread.environmentHostId === null
           ? null
-          : latestSessionByHostId.get(thread.environmentHostId) ?? null,
+          : (latestSessionByHostId.get(thread.environmentHostId) ?? null),
       now: args.now,
       thread,
     }),
@@ -222,13 +245,19 @@ export function toThreadListEntryResponses(
 function toThreadListEntryResponseFromLatestSession(
   args: ToThreadListEntryResponseFromLatestSessionArgs,
 ): ThreadListEntry {
+  const thread = toPublicThread(args.thread);
   return {
-    ...args.thread,
+    ...thread,
+    environmentBranchName: args.thread.environmentBranchName,
+    environmentHostId: args.thread.environmentHostId,
+    environmentWorkspaceDisplayKind:
+      args.thread.environmentWorkspaceDisplayKind,
+    hasPendingInteraction: args.thread.hasPendingInteraction,
     runtime: resolveThreadRuntimeStateFromLatestSession({
       environmentHostId: args.thread.environmentHostId,
       latestSession: args.latestSession,
       now: args.now,
-      status: args.thread.status,
+      status: thread.status,
     }),
   };
 }

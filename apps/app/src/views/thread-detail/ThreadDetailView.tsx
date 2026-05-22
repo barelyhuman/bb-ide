@@ -31,11 +31,12 @@ import {
 } from "../../hooks/queries/environment-queries";
 import {
   getLatestPendingInteraction,
+  useProjectThreadSubset,
   useThread,
   useThreadComposerBootstrap,
   useThreadDetailBootstrap,
   useThreadPendingInteractions,
-  useThreads,
+  type ProjectThreadSubsetFilters,
 } from "../../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/dialogs/ThreadGitActionDialog";
 import { PageShell } from "@/components/ui/page-shell.js";
@@ -119,6 +120,10 @@ import {
 } from "./threadSecondaryPanelSelection";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
+const EMPTY_PROJECT_THREAD_SUBSET_FILTERS = {} satisfies ProjectThreadSubsetFilters;
+const MANAGER_THREAD_SUBSET_FILTERS = {
+  type: "manager",
+} satisfies ProjectThreadSubsetFilters;
 
 type MergeBasePickerOpenChangeHandler = NonNullable<
   ContextBannerMergeBaseConfig["onPickerOpenChange"]
@@ -330,17 +335,29 @@ export function ThreadDetailView() {
   const isUnassignedStandard = isUnassignedStandardThread(thread);
   const shouldLoadManagerThreads =
     threadQueryState.status === "ready" && isUnassignedStandard;
-  const managerThreadsQuery = useThreads(
-    {
-      archived: false,
-      projectId,
-      type: "manager",
-    },
-    {
-      enabled: shouldLoadManagerThreads,
-    },
+  const shouldLoadActiveProjectThreads =
+    shouldLoadManagerThreads || isManagerThread;
+  const projectThreadSubsetFilters = useMemo<ProjectThreadSubsetFilters>(() => {
+    if (shouldLoadManagerThreads) {
+      return MANAGER_THREAD_SUBSET_FILTERS;
+    }
+    if (isManagerThread && thread?.id) {
+      return { parentThreadId: thread.id };
+    }
+    return EMPTY_PROJECT_THREAD_SUBSET_FILTERS;
+  }, [isManagerThread, shouldLoadManagerThreads, thread?.id]);
+  const projectThreadSubsetQuery = useProjectThreadSubset({
+    enabled: shouldLoadActiveProjectThreads,
+    filters: projectThreadSubsetFilters,
+    projectId,
+  });
+  const managerThreads = useMemo(
+    () =>
+      shouldLoadManagerThreads
+        ? (projectThreadSubsetQuery.data ?? EMPTY_MANAGER_THREADS)
+        : EMPTY_MANAGER_THREADS,
+    [projectThreadSubsetQuery.data, shouldLoadManagerThreads],
   );
-  const managerThreads = managerThreadsQuery.data ?? EMPTY_MANAGER_THREADS;
   const {
     activeThinking,
     contextWindowUsage,
@@ -589,16 +606,6 @@ export function ThreadDetailView() {
   const { data: environmentHost } = useEffectiveHost(environment?.hostId, {
     enabled: !bootstrapResolvedMissingEnvironmentHost,
   });
-  const managedChildrenQuery = useThreads(
-    {
-      archived: false,
-      projectId,
-      parentThreadId: thread?.id,
-    },
-    {
-      enabled: isManagerThread && Boolean(thread?.id),
-    },
-  );
   const managedBySection: ThreadPromptManagedBySection | null = useMemo(() => {
     if (!thread?.parentThreadId) return null;
     const href = `/projects/${projectId}/threads/${thread.parentThreadId}`;
@@ -628,9 +635,7 @@ export function ThreadDetailView() {
   const managerChildrenSection: ThreadPromptManagerChildrenSection | null =
     useMemo(() => {
       if (!isManagerThread) return null;
-      const list = managedChildrenQuery.data ?? [];
-      // Server already filters archived: false; the banner predicate only
-      // gates on runtime display status.
+      const list = projectThreadSubsetQuery.data ?? [];
       const activeItems = list
         .filter((entry) =>
           isThreadDisplayStatusBannerActive(entry.runtime.displayStatus),
@@ -642,7 +647,7 @@ export function ThreadDetailView() {
         }));
       if (activeItems.length === 0) return null;
       return { items: activeItems };
-    }, [isManagerThread, managedChildrenQuery.data, projectId]);
+    }, [isManagerThread, projectId, projectThreadSubsetQuery.data]);
   const isThreadTimelinePending = timelineLoading && timelineRows.length === 0;
   const {
     erroredTurnSummaryIds,

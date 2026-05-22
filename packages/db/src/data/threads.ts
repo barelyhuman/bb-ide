@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -8,6 +9,7 @@ import {
   isNotNull,
   isNull,
   ne,
+  sql,
 } from "drizzle-orm";
 import type {
   EnvironmentWorkspaceDisplayKind,
@@ -18,6 +20,7 @@ import type {
 } from "@bb/domain";
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
+import type { DbQueryConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
   environments,
@@ -25,6 +28,9 @@ import {
   threads,
 } from "../schema.js";
 import { createThreadId } from "../ids.js";
+import {
+  createOrderKeyBetween,
+} from "./order-keys.js";
 
 type ThreadWriteConnection = DbConnection | DbTransaction;
 
@@ -59,26 +65,35 @@ export function createThread(
 ) {
   const now = Date.now();
   const id = createThreadId();
-  const thread = db
-    .insert(threads)
-    .values({
-      id,
-      projectId: input.projectId,
-      environmentId: input.environmentId ?? null,
-      automationId: input.automationId ?? null,
-      providerId: input.providerId,
-      type: input.type ?? "standard",
-      title: input.title ?? null,
-      titleFallback: input.titleFallback ?? null,
-      status: input.status ?? "created",
-      parentThreadId: input.parentThreadId ?? null,
-      lastReadAt: now,
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  const type = input.type ?? "standard";
+  const thread = db.transaction(
+    (tx) => {
+      const sortKey =
+        type === "manager" ? createNewManagerThreadSortKey(tx, input.projectId) : null;
+      return tx
+        .insert(threads)
+        .values({
+          id,
+          projectId: input.projectId,
+          environmentId: input.environmentId ?? null,
+          automationId: input.automationId ?? null,
+          providerId: input.providerId,
+          type,
+          sortKey,
+          title: input.title ?? null,
+          titleFallback: input.titleFallback ?? null,
+          status: input.status ?? "created",
+          parentThreadId: input.parentThreadId ?? null,
+          lastReadAt: now,
+          latestAttentionAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+    },
+    { behavior: "immediate" },
+  );
   notifier.notifyThread(id, ["thread-created"], {
     projectId: input.projectId,
   });
@@ -106,6 +121,144 @@ type ThreadRow = typeof threads.$inferSelect;
 export interface ListThreadsForProjectsOptions {
   projectIds: readonly string[];
   archived?: boolean;
+}
+
+export interface ReorderManagerThreadArgs {
+  db: DbConnection;
+  nextThreadId: string | null;
+  notifier: DbNotifier;
+  previousThreadId: string | null;
+  projectId: string;
+  threadId: string;
+}
+
+interface ResolveManagerThreadNeighborArgs {
+  movedThreadId: string;
+  neighborThreadId: string | null;
+  projectId: string;
+}
+
+export interface ReorderManagerThreadSuccess {
+  kind: "reordered";
+  threads: ThreadRow[];
+}
+
+export interface ReorderManagerThreadUnchanged {
+  kind: "unchanged";
+  threads: ThreadRow[];
+}
+
+export interface ReorderManagerThreadNotFound {
+  kind: "not_found";
+}
+
+export interface ReorderManagerThreadStaleNeighbor {
+  kind: "stale_neighbor";
+}
+
+export interface ReorderManagerThreadInvalidNeighborOrder {
+  kind: "invalid_neighbor_order";
+}
+
+export type ReorderManagerThreadResult =
+  | ReorderManagerThreadSuccess
+  | ReorderManagerThreadUnchanged
+  | ReorderManagerThreadNotFound
+  | ReorderManagerThreadStaleNeighbor
+  | ReorderManagerThreadInvalidNeighborOrder;
+
+function listActiveManagerThreads(
+  db: DbQueryConnection,
+  projectId: string,
+): ThreadRow[] {
+  return db
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.projectId, projectId),
+        eq(threads.type, "manager"),
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .orderBy(asc(threads.sortKey), asc(threads.id))
+    .all();
+}
+
+function getFirstActiveManagerThread(
+  db: DbQueryConnection,
+  projectId: string,
+): ThreadRow | null {
+  return (
+    db
+      .select()
+      .from(threads)
+      .where(
+        and(
+          eq(threads.projectId, projectId),
+          eq(threads.type, "manager"),
+          isNull(threads.archivedAt),
+          isNull(threads.deletedAt),
+        ),
+      )
+      .orderBy(asc(threads.sortKey), asc(threads.id))
+      .limit(1)
+      .get() ?? null
+  );
+}
+
+function createNewManagerThreadSortKey(
+  db: DbQueryConnection,
+  projectId: string,
+): string {
+  const firstManagerThread = getFirstActiveManagerThread(db, projectId);
+  return createOrderKeyBetween({
+    previousKey: null,
+    nextKey: firstManagerThread?.sortKey ?? null,
+  });
+}
+
+function getActiveManagerThreadForMutation(
+  db: DbQueryConnection,
+  projectId: string,
+  threadId: string,
+): ThreadRow | null {
+  return (
+    db
+      .select()
+      .from(threads)
+      .where(
+        and(
+          eq(threads.id, threadId),
+          eq(threads.projectId, projectId),
+          eq(threads.type, "manager"),
+          isNull(threads.archivedAt),
+          isNull(threads.deletedAt),
+        ),
+      )
+      .get() ?? null
+  );
+}
+
+function resolveManagerThreadNeighbor(
+  db: DbQueryConnection,
+  args: ResolveManagerThreadNeighborArgs,
+): ThreadRow | null | false {
+  if (args.neighborThreadId === null) {
+    return null;
+  }
+  if (args.neighborThreadId === args.movedThreadId) {
+    return false;
+  }
+
+  return (
+    getActiveManagerThreadForMutation(
+      db,
+      args.projectId,
+      args.neighborThreadId,
+    ) ?? false
+  );
 }
 
 interface InvalidThreadStatusTransitionErrorArgs {
@@ -284,9 +437,26 @@ function buildListThreadsForProjectsFilters(
 
 // Order archived listings by archive recency so paginated pages show the
 // most recently archived rows first.
+function buildActiveProjectThreadOrderBy() {
+  return [
+    asc(threads.projectId),
+    asc(sql`CASE WHEN ${threads.type} = 'manager' THEN 0 ELSE 1 END`),
+    asc(sql`CASE WHEN ${threads.type} = 'manager' THEN ${threads.sortKey} END`),
+    asc(sql`CASE WHEN ${threads.type} = 'manager' THEN ${threads.id} END`),
+    desc(sql`CASE WHEN ${threads.type} <> 'manager' THEN ${threads.createdAt} END`),
+    desc(sql`CASE WHEN ${threads.type} <> 'manager' THEN ${threads.id} END`),
+  ];
+}
+
 function buildListThreadsOrderBy(options: ListThreadsOptions) {
   if (options.archived === true) {
     return [desc(threads.archivedAt), desc(threads.id)];
+  }
+  if (options.type === "manager") {
+    return [asc(threads.sortKey), asc(threads.id)];
+  }
+  if (options.type === undefined) {
+    return buildActiveProjectThreadOrderBy();
   }
   return [desc(threads.createdAt)];
 }
@@ -297,7 +467,7 @@ function buildListThreadsForProjectsOrderBy(
   if (options.archived === true) {
     return [desc(threads.archivedAt), desc(threads.id)];
   }
-  return [desc(threads.createdAt)];
+  return buildActiveProjectThreadOrderBy();
 }
 
 function toThreadWithPendingInteractionState(
@@ -574,6 +744,108 @@ export function hasNonTerminalThreadInEnvironment(
     .get();
 
   return row !== undefined;
+}
+
+export function reorderManagerThread({
+  db,
+  nextThreadId,
+  notifier,
+  previousThreadId,
+  projectId,
+  threadId,
+}: ReorderManagerThreadArgs): ReorderManagerThreadResult {
+  const result = db.transaction(
+    (tx): ReorderManagerThreadResult => {
+      const movedThread = getActiveManagerThreadForMutation(
+        tx,
+        projectId,
+        threadId,
+      );
+      if (!movedThread) {
+        return { kind: "not_found" };
+      }
+
+      const previousThread = resolveManagerThreadNeighbor(tx, {
+        movedThreadId: threadId,
+        neighborThreadId: previousThreadId,
+        projectId,
+      });
+      const nextThread = resolveManagerThreadNeighbor(tx, {
+        movedThreadId: threadId,
+        neighborThreadId: nextThreadId,
+        projectId,
+      });
+      if (previousThread === false || nextThread === false) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
+        previousThread?.sortKey === null ||
+        nextThread?.sortKey === null
+      ) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
+        previousThread !== null &&
+        nextThread !== null &&
+        previousThread.sortKey >= nextThread.sortKey
+      ) {
+        return { kind: "invalid_neighbor_order" };
+      }
+
+      const currentThreads = listActiveManagerThreads(tx, projectId);
+      const currentIndex = currentThreads.findIndex(
+        (thread) => thread.id === threadId,
+      );
+      if (currentIndex === -1) {
+        return { kind: "stale_neighbor" };
+      }
+      const currentPreviousThreadId =
+        currentThreads[currentIndex - 1]?.id ?? null;
+      const currentNextThreadId = currentThreads[currentIndex + 1]?.id ?? null;
+      if (
+        currentPreviousThreadId === previousThreadId &&
+        currentNextThreadId === nextThreadId
+      ) {
+        return {
+          kind: "unchanged",
+          threads: currentThreads,
+        };
+      }
+
+      const sortKey = createOrderKeyBetween({
+        previousKey: previousThread?.sortKey ?? null,
+        nextKey: nextThread?.sortKey ?? null,
+      });
+      const updated = tx
+        .update(threads)
+        .set({ sortKey, updatedAt: Date.now() })
+        .where(
+          and(
+            eq(threads.id, threadId),
+            eq(threads.projectId, projectId),
+            eq(threads.type, "manager"),
+            isNull(threads.archivedAt),
+            isNull(threads.deletedAt),
+          ),
+        )
+        .returning({ id: threads.id })
+        .get();
+      if (!updated) {
+        return { kind: "stale_neighbor" };
+      }
+
+      return {
+        kind: "reordered",
+        threads: listActiveManagerThreads(tx, projectId),
+      };
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result.kind === "reordered") {
+    notifier.notifyThread(threadId, ["order-changed"], { projectId });
+  }
+  return result;
 }
 
 export interface UpdateThreadInput {

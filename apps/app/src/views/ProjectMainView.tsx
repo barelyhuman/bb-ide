@@ -17,6 +17,7 @@ import {
   useProjectSourceBranches,
   useProjects,
   useSidebarBootstrap,
+  stripProjectThreads,
 } from "@/hooks/queries/project-queries";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
@@ -112,9 +113,11 @@ export function ProjectMainView() {
   const hasSidebarBootstrapSettled =
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
   const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
-  const projects = projectsQuery.data;
-  const projectsLoading =
-    sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
+  const sidebarBootstrapProjects = useMemo(
+    () => sidebarBootstrapQuery.data?.map(stripProjectThreads),
+    [sidebarBootstrapQuery.data],
+  );
+  const projects = projectsQuery.data ?? sidebarBootstrapProjects;
   const createThread = useCreateThread();
   const { localHostId } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();
@@ -316,12 +319,12 @@ export function ProjectMainView() {
     ) {
       knownOptions.unshift({
         value: projectId,
-        label: projectsLoading ? "Loading project…" : projectId,
+        label: projectId,
       });
     }
 
     return knownOptions;
-  }, [projectId, projects, projectsLoading]);
+  }, [projectId, projects]);
 
   const selectedThreadModel = activeModel?.model ?? selectedModel;
   const handleProjectChange = useCallback(

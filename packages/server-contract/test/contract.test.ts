@@ -736,6 +736,7 @@ describe("server-contract canonical schemas", () => {
       "project-deleted",
       "project-sources-changed",
       "threads-changed",
+      "project-order-changed",
       "automations-changed",
       "nudges-changed",
     ]);
@@ -1030,6 +1031,9 @@ describe("server-contract clients", () => {
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
       threadStorageFilesQuerySchema: contract.threadStorageFilesQuerySchema,
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
+      reorderManagerThreadRequestSchema:
+        contract.reorderManagerThreadRequestSchema,
+      reorderProjectRequestSchema: contract.reorderProjectRequestSchema,
       reorderQueuedMessageRequestSchema:
         contract.reorderQueuedMessageRequestSchema,
       sendQueuedMessageRequestSchema: contract.sendQueuedMessageRequestSchema,

@@ -4,6 +4,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { Environment, Host, ThreadWithRuntime } from "@bb/domain";
 import type {
   ThreadComposerBootstrapResponse,
+  ThreadListResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import type { ReactNode } from "react";
@@ -15,6 +16,7 @@ import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { useEffectiveHost } from "./effective-hosts";
 import { useEnvironment } from "./environment-queries";
 import {
+  useProjectThreadSubset,
   useThread,
   useThreadComposerBootstrap,
   useThreadDetailBootstrap,
@@ -35,6 +37,7 @@ import {
   threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
+  threadListQueryKey,
   threadQueryKey,
   threadStatusVersionQueryKey,
   threadTimelineQueryKey,
@@ -43,6 +46,9 @@ import {
 interface TestWrapperProps {
   children: ReactNode;
 }
+
+type ThreadListEntryFixture = ThreadListResponse[number];
+type ThreadListEntryFixtureOverrides = Partial<ThreadListEntryFixture>;
 
 function makeThread(): ThreadWithRuntime {
   return {
@@ -67,6 +73,19 @@ function makeThread(): ThreadWithRuntime {
     titleFallback: "Thread title",
     type: "standard",
     updatedAt: 10,
+  };
+}
+
+function makeThreadListEntry(
+  overrides: ThreadListEntryFixtureOverrides = {},
+): ThreadListEntryFixture {
+  return {
+    ...makeThread(),
+    environmentBranchName: null,
+    environmentHostId: null,
+    environmentWorkspaceDisplayKind: "other",
+    hasPendingInteraction: false,
+    ...overrides,
   };
 }
 
@@ -749,6 +768,79 @@ describe("thread query bootstraps", () => {
   });
 });
 
+describe("project thread subset query", () => {
+  it("derives from the cached active project thread list without fetching a targeted list", async () => {
+    const fetchMock = installFetchRoutes([]);
+    const manager = makeThreadListEntry({
+      id: "manager-1",
+      type: "manager",
+    });
+    const child = makeThreadListEntry({
+      id: "child-1",
+      parentThreadId: "manager-1",
+    });
+    const otherChild = makeThreadListEntry({
+      id: "child-2",
+      parentThreadId: "manager-2",
+    });
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData<ThreadListResponse>(
+      threadListQueryKey({ archived: false, projectId: "project-1" }),
+      [manager, child, otherChild],
+    );
+
+    const { result } = renderHook(
+      () =>
+        useProjectThreadSubset({
+          filters: { parentThreadId: "manager-1" },
+          projectId: "project-1",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([child]);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the targeted list when the active project thread list is not cached", async () => {
+    const manager = makeThreadListEntry({
+      id: "manager-1",
+      type: "manager",
+    });
+    const requestUrlRef: { current: URL | null } = { current: null };
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads",
+        handler: (request) => {
+          requestUrlRef.current = new URL(request.url);
+          return jsonResponse([manager]);
+        },
+      },
+    ]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () =>
+        useProjectThreadSubset({
+          filters: { type: "manager" },
+          projectId: "project-1",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([manager]);
+    });
+    expect(requestUrlRef.current?.searchParams.get("projectId")).toBe(
+      "project-1",
+    );
+    expect(requestUrlRef.current?.searchParams.get("archived")).toBe("false");
+    expect(requestUrlRef.current?.searchParams.get("type")).toBe("manager");
+  });
+});
+
 describe("thread prompt history query", () => {
   it("passes AbortSignal through thread prompt history requests", async () => {
     const route = installAbortableJsonRoute({
@@ -773,7 +865,7 @@ describe("thread prompt history query", () => {
 });
 
 describe("thread status version query", () => {
-  it("polls every two seconds and stops when unmounted", async () => {
+  it("fetches once without background polling", async () => {
     vi.useFakeTimers();
     let requestCount = 0;
     installFetchRoutes([
@@ -801,19 +893,14 @@ describe("thread status version query", () => {
     expect(requestCount).toBe(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(10_000);
     });
-    expect(requestCount).toBe(2);
+    expect(requestCount).toBe(1);
     expect(
       queryClient.getQueryData(threadStatusVersionQueryKey("thread-1")),
-    ).toEqual({ source: "folder", hash: "status-hash-2" });
+    ).toEqual({ source: "folder", hash: "status-hash-1" });
 
     unmount();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_100);
-    });
-    expect(requestCount).toBe(2);
   });
 });
 
