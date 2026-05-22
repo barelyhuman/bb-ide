@@ -28,6 +28,7 @@ import {
 } from "../../services/environments/environment-cleanup.js";
 import {
   requirePublicThread,
+  requirePublicThreadEnvironmentAllowingDestroyed,
   requirePublicThreadEnvironment,
 } from "../../services/lib/entity-lookup.js";
 import {
@@ -94,10 +95,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     "/threads/:id/send",
     sendMessageRequestSchema,
     async (context, payload) => {
-      const { environment, thread } = requirePublicThreadEnvironment(
-        deps.db,
-        context.req.param("id"),
-      );
+      const { environment, thread } =
+        requirePublicThreadEnvironmentAllowingDestroyed(
+          deps.db,
+          context.req.param("id"),
+        );
       await sendThreadMessage(deps, {
         environment,
         payload,
@@ -206,10 +208,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/stop", async (context) => {
-    const { environment, thread } = requirePublicThreadEnvironment(
-      deps.db,
-      context.req.param("id"),
-    );
+    const { environment, thread } =
+      requirePublicThreadEnvironmentAllowingDestroyed(
+        deps.db,
+        context.req.param("id"),
+      );
     requestThreadStopIfNeeded(deps, thread, environment);
     return context.json({ ok: true });
   });

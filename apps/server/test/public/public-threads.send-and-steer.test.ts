@@ -1073,6 +1073,40 @@ describe("public thread send and steer routes", () => {
     }
   });
 
+  it("treats stopping an idle thread with a destroyed environment as a no-op success", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/destroyed-stop-noop",
+        status: "destroyed",
+      });
+      const idleThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${idleThread.id}/stop`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, idleThread.id)?.stopRequestedAt).toBeNull();
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("steers queued messages for active threads with auto mode", async () => {
     const harness = await createTestAppHarness();
     try {

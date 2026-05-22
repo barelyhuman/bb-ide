@@ -212,7 +212,12 @@ describe.sequential("fake provider smoke reuse integration", () => {
       });
       expect(secondSendResponse.status).toBe(409);
       await expect(secondSendResponse.json()).resolves.toMatchObject({
-        code: "invalid_request",
+        code: "environment_not_ready",
+        details: {
+          cleanupRequestedAt: null,
+          environmentStatus: "provisioning",
+          hasPath: true,
+        },
       });
       expect(countProvisionCommands(harness)).toBe(provisionCountBefore + 1);
 
@@ -257,7 +262,12 @@ describe.sequential("fake provider smoke reuse integration", () => {
       });
       expect(response.status).toBe(409);
       await expect(response.json()).resolves.toMatchObject({
-        code: "invalid_request",
+        code: "environment_not_ready",
+        details: {
+          cleanupRequestedAt: null,
+          environmentStatus: "error",
+          hasPath: false,
+        },
       });
       expect(countProvisionCommands(harness)).toBe(provisionCountBefore);
     }));

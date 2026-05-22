@@ -3,9 +3,7 @@ import {
   type PermissionMode,
   type ReasoningLevel,
   type Thread,
-  type ThreadStatus,
 } from "@bb/domain";
-import { assertNever } from "@bb/core-ui";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import {
@@ -267,16 +265,6 @@ export function registerActionsCommands(
       action(async (id: string | undefined, opts: ThreadStopCommandOptions) => {
         const client = createClient(getUrl());
         const threadId = requireThreadIdOrSelf(id, opts);
-        const thread = await unwrap<Thread>(
-          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
-        );
-        const blockedReason = getThreadStopBlockedReason(
-          threadId,
-          thread.status,
-        );
-        if (blockedReason) {
-          throw new Error(blockedReason);
-        }
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].stop.$post({ param: { id: threadId } }),
         );
@@ -325,25 +313,4 @@ function resolveThreadMessageMode(value: string | undefined): "auto" | "steer" {
   throw new Error(
     `Invalid message mode '${value}'. Expected 'auto' or 'steer'.`,
   );
-}
-
-function getThreadStopBlockedReason(
-  threadId: string,
-  status: ThreadStatus,
-): string | undefined {
-  switch (status) {
-    case "created":
-    case "provisioning":
-    case "active":
-      return undefined;
-    case "idle":
-      return `Thread ${threadId} is already idle.`;
-    case "error":
-      return (
-        `Thread ${threadId} is in status error. ` +
-        `Do not stop it to force idle; inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up.`
-      );
-    default:
-      return assertNever(status);
-  }
 }

@@ -27,6 +27,11 @@ import {
 
 type HostRow = NonNullable<ReturnType<typeof getHost>>;
 
+export interface ThreadEnvironmentLookupResult {
+  environment: Environment;
+  thread: Thread;
+}
+
 function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
   const host = getNonDestroyedHost(db, hostId);
   if (!host) {
@@ -205,46 +210,63 @@ export function requireReadyEnvironment(
   };
 }
 
-export function requireThreadEnvironment(
+function requireEnvironmentForThread(
   db: DbConnection,
-  threadId: string,
-): { environment: Environment; thread: Thread } {
-  const thread = requireThread(db, threadId);
+  thread: Thread,
+): Environment {
   if (!thread.environmentId) {
     throwThreadEnvironmentUnavailable(
       threadEnvironmentUnavailableDetails("never_attached", null),
     );
   }
-  const environment = requireEnvironment(db, thread.environmentId);
+  return requireEnvironment(db, thread.environmentId);
+}
+
+function ensureThreadEnvironmentAvailable(environment: Environment): void {
   const unavailableDetails = destroyedThreadEnvironmentDetails(environment);
   if (unavailableDetails) {
     throwThreadEnvironmentUnavailable(unavailableDetails);
   }
+}
+
+export function requireThreadEnvironmentAllowingDestroyed(
+  db: DbConnection,
+  threadId: string,
+): ThreadEnvironmentLookupResult {
+  const thread = requireThread(db, threadId);
   return {
     thread,
-    environment,
+    environment: requireEnvironmentForThread(db, thread),
+  };
+}
+
+export function requireThreadEnvironment(
+  db: DbConnection,
+  threadId: string,
+): ThreadEnvironmentLookupResult {
+  const result = requireThreadEnvironmentAllowingDestroyed(db, threadId);
+  ensureThreadEnvironmentAvailable(result.environment);
+  return result;
+}
+
+export function requirePublicThreadEnvironmentAllowingDestroyed(
+  db: DbConnection,
+  threadId: string,
+): ThreadEnvironmentLookupResult {
+  const thread = requirePublicThread(db, threadId);
+  return {
+    thread,
+    environment: requireEnvironmentForThread(db, thread),
   };
 }
 
 export function requirePublicThreadEnvironment(
   db: DbConnection,
   threadId: string,
-): { environment: Environment; thread: Thread } {
-  const thread = requirePublicThread(db, threadId);
-  if (!thread.environmentId) {
-    throwThreadEnvironmentUnavailable(
-      threadEnvironmentUnavailableDetails("never_attached", null),
-    );
-  }
-  const environment = requireEnvironment(db, thread.environmentId);
-  const unavailableDetails = destroyedThreadEnvironmentDetails(environment);
-  if (unavailableDetails) {
-    throwThreadEnvironmentUnavailable(unavailableDetails);
-  }
-  return {
-    thread,
-    environment,
-  };
+): ThreadEnvironmentLookupResult {
+  const result = requirePublicThreadEnvironmentAllowingDestroyed(db, threadId);
+  ensureThreadEnvironmentAvailable(result.environment);
+  return result;
 }
 
 export function requireDefaultConnectedPersistentHostId(

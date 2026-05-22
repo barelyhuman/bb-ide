@@ -2978,7 +2978,7 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
-  it("bb thread stop exits early when the thread is already idle", async () => {
+  it("bb thread stop lets the server no-op when the thread is already idle", async () => {
     const get = vi.fn(async () =>
       makeThread({
         id: "thread-stop-idle",
@@ -2990,7 +2990,7 @@ describe("CLI JSON output contracts", () => {
         updatedAt: 2,
       }),
     );
-    const stopPost = vi.fn();
+    const stopPost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -3008,19 +3008,18 @@ describe("CLI JSON output contracts", () => {
       }),
     );
 
-    await expect(
-      runCommand(["thread", "stop", "thread-stop-idle"], (program) =>
-        registerThreadCommands(program, () => "http://server"),
-      ),
-    ).rejects.toThrow("process.exit:1");
-
-    expect(collectLogLines(vi.mocked(console.error))).toContain(
-      "Error: Thread thread-stop-idle is already idle.",
+    await runCommand(["thread", "stop", "thread-stop-idle"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
     );
-    expect(stopPost).not.toHaveBeenCalled();
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-stop-idle stopped",
+    );
+    expect(get).not.toHaveBeenCalled();
+    expect(stopPost).toHaveBeenCalledTimes(1);
   });
 
-  it("bb thread stop refuses to clear error into idle", async () => {
+  it("bb thread stop lets the server no-op when the thread is in error", async () => {
     const get = vi.fn(async () =>
       makeThread({
         id: "thread-stop-error",
@@ -3032,7 +3031,7 @@ describe("CLI JSON output contracts", () => {
         updatedAt: 2,
       }),
     );
-    const stopPost = vi.fn();
+    const stopPost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -3050,16 +3049,15 @@ describe("CLI JSON output contracts", () => {
       }),
     );
 
-    await expect(
-      runCommand(["thread", "stop", "thread-stop-error"], (program) =>
-        registerThreadCommands(program, () => "http://server"),
-      ),
-    ).rejects.toThrow("process.exit:1");
-
-    expect(collectLogLines(vi.mocked(console.error))).toContain(
-      "Error: Thread thread-stop-error is in status error. Do not stop it to force idle; inspect it with 'bb thread show thread-stop-error' and recover by sending a follow-up.",
+    await runCommand(["thread", "stop", "thread-stop-error"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
     );
-    expect(stopPost).not.toHaveBeenCalled();
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-stop-error stopped",
+    );
+    expect(get).not.toHaveBeenCalled();
+    expect(stopPost).toHaveBeenCalledTimes(1);
   });
 
   it("bb thread stop still stops active threads", async () => {
