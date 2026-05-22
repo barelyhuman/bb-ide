@@ -1,4 +1,10 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import type {
   PendingInteractionUserQuestionOption,
   PendingInteractionUserQuestionQuestion,
@@ -6,6 +12,7 @@ import type {
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { TabPill } from "@/components/ui/tab-pill.js";
+import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { useStopThread } from "@/hooks/mutations/thread-runtime-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
@@ -59,6 +66,8 @@ interface QuestionInputBlockProps {
 }
 
 const OTHER_OPTION_LABEL = "Other…";
+const USER_QUESTION_FREE_TEXT_MIN_HEIGHT = 84;
+const USER_QUESTION_FREE_TEXT_MAX_HEIGHT = 158;
 
 function QuestionOptionRow({
   checked,
@@ -146,8 +155,24 @@ function QuestionInputBlock({
   onFreeTextChange,
   onShortcutSubmit,
 }: QuestionInputBlockProps) {
+  const freeTextRef = useRef<HTMLTextAreaElement>(null);
+  const resizeFreeTextArea = useAutoGrow(freeTextRef, {
+    minHeight: USER_QUESTION_FREE_TEXT_MIN_HEIGHT,
+    maxHeight: USER_QUESTION_FREE_TEXT_MAX_HEIGHT,
+  });
   const options = question.options ?? [];
   const freeTextLabel = `${question.shortLabel ?? question.prompt} answer`;
+
+  useLayoutEffect(() => {
+    if (!state.otherSelected) return;
+    resizeFreeTextArea();
+  }, [
+    question.id,
+    resizeFreeTextArea,
+    state.otherSelected,
+    state.otherText,
+  ]);
+
   const handleFreeTextKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
   ): void => {
@@ -191,14 +216,22 @@ function QuestionInputBlock({
       </div>
       {state.otherSelected ? (
         <textarea
+          ref={freeTextRef}
           aria-label={freeTextLabel}
           value={state.otherText}
-          rows={2}
+          rows={1}
           autoFocus
-          onChange={(event) => onFreeTextChange(event.target.value)}
+          onChange={(event) => {
+            onFreeTextChange(event.target.value);
+            resizeFreeTextArea(event.target);
+          }}
           onKeyDown={handleFreeTextKeyDown}
           placeholder="Type your own answer…"
-          className="mt-2 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="mt-2 w-full resize-none overflow-y-auto rounded-md border border-border bg-surface-raised px-3 py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:border-ring/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+          style={{
+            minHeight: `${USER_QUESTION_FREE_TEXT_MIN_HEIGHT}px`,
+            maxHeight: `${USER_QUESTION_FREE_TEXT_MAX_HEIGHT}px`,
+          }}
         />
       ) : null}
     </fieldset>
