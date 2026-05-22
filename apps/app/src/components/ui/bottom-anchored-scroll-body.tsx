@@ -7,8 +7,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { PAGE_SHELL_CONTENT_STYLE } from "./page-shell-content-style.js";
 
@@ -172,7 +172,7 @@ export function BottomAnchoredScrollBody({
   children,
 }: BottomAnchoredScrollBodyProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
   const userScrollIntentUntilRef = useRef(0);
   const pointerScrollIntentRef = useRef(false);
@@ -364,14 +364,14 @@ export function BottomAnchoredScrollBody({
 
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
-    const content = contentRef.current;
-    if (!scrollArea || !content) return;
+    const scrollContent = scrollContentRef.current;
+    if (!scrollArea || !scrollContent) return;
 
     let resizeObserver: ResizeObserver | undefined;
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(queueBottomRestore);
       resizeObserver.observe(scrollArea);
-      resizeObserver.observe(content);
+      resizeObserver.observe(scrollContent);
     }
 
     scrollArea.addEventListener("scroll", syncBottomStateFromScroll, {
@@ -431,20 +431,28 @@ export function BottomAnchoredScrollBody({
           )}
         >
           <div
-            ref={contentRef}
+            ref={scrollContentRef}
             className={cn(
-              "mx-auto flex w-full flex-col px-4 pb-4 pt-2",
+              "flex min-h-full flex-col",
               isAtBottom && "scroll-bottom-anchor-content",
-              maxWidthClassName,
-              contentClassName,
             )}
-            style={PAGE_SHELL_CONTENT_STYLE}
           >
-            {children}
-            <div className="scroll-bottom-anchor" aria-hidden />
+            <div
+              className={cn(
+                "mx-auto flex w-full flex-1 flex-col px-4 pb-4 pt-2",
+                maxWidthClassName,
+                contentClassName,
+              )}
+              style={PAGE_SHELL_CONTENT_STYLE}
+            >
+              {children}
+              <div className="scroll-bottom-anchor" aria-hidden />
+            </div>
+            {footer ? (
+              <div className="sticky bottom-0 z-20 shrink-0">{footer}</div>
+            ) : null}
           </div>
         </div>
-        {footer}
       </div>
     </BottomAnchorContext.Provider>
   );

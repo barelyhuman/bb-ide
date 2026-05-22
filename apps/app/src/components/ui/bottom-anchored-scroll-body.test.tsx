@@ -215,6 +215,13 @@ describe("BottomAnchoredScrollBody", () => {
     expect(getBottomState()).toBe("away");
   });
 
+  it("renders the footer inside the scroll area for native gutter scrolling", () => {
+    const { scrollArea } = renderBody();
+    const footer = screen.getByText("Footer");
+
+    expect(scrollArea.contains(footer)).toBe(true);
+  });
+
   it("ignores scroll-intent keys typed into editable controls", () => {
     const { scrollArea } = renderBody();
     const textarea = screen.getByRole("textbox", { name: "Prompt" });

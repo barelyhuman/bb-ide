@@ -77,7 +77,7 @@ function PinnedTimelineStage({
       <PageShell
         scrollBehavior="bottom-anchor"
         shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"
-        contentClassName="min-h-full gap-2 pt-4"
+        contentClassName="gap-2 pt-4"
         maxWidthClassName="max-w-none"
       >
         <ConversationTimeline className="flex-1">
