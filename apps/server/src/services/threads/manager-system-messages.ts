@@ -95,7 +95,9 @@ async function queueReadyManagerSystemMessage(
       environment: {
         id: args.environment.id,
         hostId: args.environment.hostId,
+        cleanupRequestedAt: args.environment.cleanupRequestedAt,
         path: args.environment.path,
+        status: args.environment.status,
         workspaceProvisionType: args.environment.workspaceProvisionType,
       },
     });
@@ -113,7 +115,9 @@ async function queueReadyManagerSystemMessage(
     environment: {
       id: args.environment.id,
       hostId: args.environment.hostId,
+      cleanupRequestedAt: args.environment.cleanupRequestedAt,
       path: args.environment.path,
+      status: args.environment.status,
       workspaceProvisionType: args.environment.workspaceProvisionType,
     },
   });

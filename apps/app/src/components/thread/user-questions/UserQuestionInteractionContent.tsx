@@ -281,6 +281,7 @@ export function UserQuestionAnswerForm({
     ? getMutationErrorMessage({
         error: resolvePendingInteraction.error,
         fallbackMessage: "Failed to submit answer.",
+        lifecycleOperation: "resolve_interaction",
       })
     : null;
   const disabled = resolvePendingInteraction.isPending || isResolving;

@@ -35,6 +35,7 @@ export function createAppQueryClient(
         showMutationErrorToast({
           error,
           fallbackMessage: meta.errorMessage ?? "Request failed.",
+          lifecycleOperation: meta.lifecycleOperation,
         });
       },
     }),

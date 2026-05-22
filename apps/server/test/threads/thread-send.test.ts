@@ -378,7 +378,13 @@ describe("sendThreadMessage", () => {
       ).rejects.toMatchObject({
         status: 502,
         body: {
-          code: "host_disconnected",
+          code: "host_unavailable",
+          details: {
+            reason: "disconnected",
+            hostStatus: "disconnected",
+            suspendedAt: null,
+            destroyedAt: null,
+          },
         },
       });
 

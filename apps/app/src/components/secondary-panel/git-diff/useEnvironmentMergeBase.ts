@@ -7,6 +7,10 @@ import {
 } from "@bb/domain";
 import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/pickers/BranchPicker";
+import {
+  describeLifecycleError,
+  parseLifecycleError,
+} from "@/lib/lifecycle-errors";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { useUpdateEnvironment } from "../../../hooks/mutations/environment-mutations";
 
@@ -212,10 +216,30 @@ export function useEnvironmentMergeBase({
             setSelectedMergeBaseBranch(
               environment.mergeBaseBranch ?? undefined,
             );
+            const lifecycleError = parseLifecycleError(error);
+            if (
+              lifecycleError?.code === "environment_not_ready" &&
+              lifecycleError.details.environmentStatus === "provisioning"
+            ) {
+              return;
+            }
+
+            const lifecycleErrorDescription = describeLifecycleError({
+              error,
+              operation: "update_merge_base",
+            });
+            if (lifecycleErrorDescription) {
+              toast.error(lifecycleErrorDescription.title, {
+                description: lifecycleErrorDescription.body,
+              });
+              return;
+            }
+
             toast.error(
               getMutationErrorMessage({
                 error,
                 fallbackMessage: "Failed to update merge base branch.",
+                lifecycleOperation: "update_merge_base",
               }),
             );
           },
@@ -225,7 +249,7 @@ export function useEnvironmentMergeBase({
     [
       environment,
       setSelectedMergeBaseBranch,
-      thread?.environmentId,
+      thread,
       updateEnvironment,
       workspaceStatus,
     ],

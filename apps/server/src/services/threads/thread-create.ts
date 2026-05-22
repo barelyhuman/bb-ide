@@ -15,6 +15,7 @@ import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
+import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import { seedManagerThreadStorage } from "./manager-storage-templates.js";
@@ -334,10 +335,10 @@ export async function createThreadFromRequest(
         environment.status !== "ready" &&
         environment.status !== "provisioning"
       ) {
-        throw new ApiError(409, "invalid_request", "Environment is not ready");
+        throwEnvironmentNotReady(environment);
       }
       if (environment.status === "ready" && !environment.path) {
-        throw new ApiError(409, "invalid_request", "Environment is not ready");
+        throwEnvironmentNotReady(environment);
       }
       if (environment.status === "provisioning") {
         requireNonDestroyedHostWithStatus(deps.db, environment.hostId);

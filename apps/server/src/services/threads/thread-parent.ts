@@ -1,7 +1,7 @@
 import { getThread } from "@bb/db";
 import type { Thread } from "@bb/domain";
-import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
+import { throwParentThreadInvalid } from "../lib/lifecycle-api-errors.js";
 
 export type ManagerParentThread = Pick<
   Thread,
@@ -17,9 +17,6 @@ export interface AssertValidManagerParentThreadArgs {
   parentThreadId: string;
   projectId: string;
 }
-
-const INVALID_MANAGER_PARENT_THREAD_MESSAGE =
-  "parentThreadId must reference a live manager thread in the same project";
 
 export function isLiveManagerParentThread(
   args: IsLiveManagerParentThreadArgs,
@@ -39,21 +36,21 @@ export function assertValidManagerParentThread(
 ): Thread {
   const parentThread = getThread(deps.db, args.parentThreadId);
   if (parentThread === null) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      INVALID_MANAGER_PARENT_THREAD_MESSAGE,
-    );
+    throwParentThreadInvalid("not_found");
   }
   const liveParentThread: Thread = parentThread;
 
-  if (
-    !isLiveManagerParentThread({
-      parentThread: liveParentThread,
-      projectId: args.projectId,
-    })
-  ) {
-    throw new ApiError(400, "invalid_request", INVALID_MANAGER_PARENT_THREAD_MESSAGE);
+  if (liveParentThread.projectId !== args.projectId) {
+    throwParentThreadInvalid("wrong_project");
+  }
+  if (liveParentThread.type !== "manager") {
+    throwParentThreadInvalid("not_a_manager");
+  }
+  if (liveParentThread.archivedAt !== null) {
+    throwParentThreadInvalid("archived");
+  }
+  if (liveParentThread.deletedAt !== null) {
+    throwParentThreadInvalid("deleted");
   }
 
   return liveParentThread;

@@ -656,6 +656,12 @@ export async function queueManagedEnvironmentReprovision(
       409,
       "invalid_request",
       "Environment cannot be reprovisioned automatically",
+      {
+        details: {
+          managed: args.environment.managed,
+          workspaceProvisionType: provisionType,
+        },
+      },
     );
   }
 

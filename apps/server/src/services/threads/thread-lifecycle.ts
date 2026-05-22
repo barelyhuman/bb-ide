@@ -47,7 +47,6 @@ import type {
   PendingInteractionWorkSessionDeps,
   WorkSessionDeps,
 } from "../../types.js";
-import { ApiError } from "../../errors.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
@@ -72,6 +71,7 @@ import {
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import { throwThreadNotWritable } from "../lib/lifecycle-api-errors.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { completeThreadProvisioningForStartHandoff } from "./thread-provisioning-handoff.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
@@ -91,9 +91,11 @@ export interface AdvanceThreadOperationArgs {
 
 export interface QueueReadyThreadTurnCommandArgs {
   environment: {
+    cleanupRequestedAt: number | null;
     hostId: string;
     id: string;
     path: string;
+    status: QueueThreadStartCommandArgs["environment"]["status"];
     workspaceProvisionType: WorkspaceProvisionType;
   };
   requestId: QueueThreadStartCommandArgs["requestId"];
@@ -326,13 +328,13 @@ export function queueSettledArchivedThreadProviderArchiveCommand(
 
 export function ensureThreadCanQueueStartRequest(
   deps: ThreadLifecycleReadDeps,
-  thread: Pick<Thread, "id" | "status">,
+  thread: Thread,
 ): void {
   if (
     isPreStartThreadStatus(thread.status) &&
     hasActiveThreadStartOperation(deps, thread.id)
   ) {
-    throw new ApiError(409, "invalid_request", "Thread is still starting");
+    throwThreadNotWritable(thread, "still_starting", "Thread is still starting");
   }
 }
 

@@ -16,10 +16,12 @@ import type {
   ThreadExecutionSource,
   ThreadTurnInitiator,
   WorkspaceProvisionType,
+  EnvironmentStatus,
 } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
+import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStorageContext } from "./thread-storage.js";
 import {
@@ -72,9 +74,11 @@ function resolveLocalTimezone(): string {
 }
 
 export interface ThreadRuntimeCommandEnvironment {
+  cleanupRequestedAt: number | null;
   hostId: string;
   id: string;
   path: string | null;
+  status: EnvironmentStatus;
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
@@ -115,7 +119,7 @@ function requireWorkspacePath(
   environment: ThreadRuntimeCommandEnvironment,
 ): string {
   if (!environment.path) {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
+    throwEnvironmentNotReady(environment);
   }
 
   return environment.path;

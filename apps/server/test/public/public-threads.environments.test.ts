@@ -848,7 +848,13 @@ describe("public thread environment routes", () => {
 
       expect(response.status).toBe(502);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_disconnected",
+        code: "host_unavailable",
+        details: {
+          reason: "disconnected",
+          hostStatus: "disconnected",
+          suspendedAt: null,
+          destroyedAt: null,
+        },
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");

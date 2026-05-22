@@ -31,6 +31,10 @@ import {
   requirePublicThreadEnvironment,
 } from "../../services/lib/entity-lookup.js";
 import {
+  threadEnvironmentUnavailableDetails,
+  throwThreadEnvironmentUnavailable,
+} from "../../services/lib/lifecycle-api-errors.js";
+import {
   requestQueuedMessageAutoSendForThread,
   sendQueuedMessage,
 } from "../../services/threads/queued-messages.js";
@@ -206,18 +210,25 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       context.req.param("id"),
     );
-    if (thread.status !== "active" && thread.stopRequestedAt === null) {
-      throw new ApiError(409, "invalid_request", "Thread is not active");
-    }
     requestThreadStopIfNeeded(deps, thread, environment);
     return context.json({ ok: true });
   });
 
   post("/threads/:id/archive", async (context) => {
-    const { environment, thread } = requirePublicThreadEnvironment(
-      deps.db,
-      context.req.param("id"),
-    );
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    if (!thread.environmentId) {
+      throwThreadEnvironmentUnavailable(
+        threadEnvironmentUnavailableDetails("never_attached", null),
+      );
+    }
+    const environment = getEnvironment(deps.db, thread.environmentId);
+    if (!environment) {
+      throw new ApiError(
+        404,
+        "environment_not_found",
+        "Environment not found",
+      );
+    }
     if (thread.archivedAt !== null) {
       deps.terminalSessions.closeArchivedThreadTerminals({
         threadId: thread.id,

@@ -193,6 +193,7 @@ export function useCreateThread() {
   return useMutation({
     meta: {
       errorMessage: "Failed to create thread.",
+      lifecycleOperation: "create_thread",
     },
     mutationFn: (request: AppCreateThreadRequest) => api.createThread(request),
     onMutate: async () => {
@@ -307,6 +308,7 @@ export function useSendThreadMessage() {
   return useMutation({
     meta: {
       errorMessage: "Failed to send message.",
+      lifecycleOperation: "send_message",
       showErrorToast: false,
     },
     mutationFn: ({
@@ -420,6 +422,7 @@ export function useCreateThreadQueuedMessage() {
   return useMutation({
     meta: {
       errorMessage: "Failed to queue message.",
+      lifecycleOperation: "queue_message",
       showErrorToast: false,
     },
     mutationFn: ({
@@ -454,6 +457,7 @@ export function useSendThreadQueuedMessage() {
   return useMutation({
     meta: {
       errorMessage: "Failed to send queued message.",
+      lifecycleOperation: "send_queued_message",
       showErrorToast: false,
     },
     mutationFn: ({
@@ -477,6 +481,7 @@ export function useReorderThreadQueuedMessage() {
   return useMutation({
     meta: {
       errorMessage: "Failed to reorder queued message.",
+      lifecycleOperation: "reorder_queued_message",
       showErrorToast: false,
     },
     mutationFn: ({
@@ -560,6 +565,7 @@ export function useStopThread() {
   return useMutation({
     meta: {
       errorMessage: "Failed to stop thread.",
+      lifecycleOperation: "stop_thread",
     },
     mutationFn: (threadId: string) => api.stopThread(threadId),
     onMutate: async (threadId) => {

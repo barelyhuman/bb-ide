@@ -137,8 +137,11 @@ describe("public thread send and steer routes", () => {
 
       expect(sendResponse.status).toBe(409);
       await expect(readJson(sendResponse)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "Thread is still starting",
+        code: "thread_not_writable",
+        details: {
+          reason: "still_starting",
+          threadStatus: "provisioning",
+        },
       });
 
       const requestedEvents = harness.db
@@ -640,8 +643,12 @@ describe("public thread send and steer routes", () => {
       );
       expect(invalidResponse.status).toBe(400);
       await expect(readJson(invalidResponse)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "senderThreadId must reference a live thread",
+        code: "parent_thread_invalid",
+        message: "Sender thread is invalid",
+        details: {
+          reason: "not_found",
+          subject: "sender",
+        },
       });
 
       const deletedSenderThread = seedThread(harness.deps, {
@@ -670,8 +677,12 @@ describe("public thread send and steer routes", () => {
       );
       expect(deletedResponse.status).toBe(400);
       await expect(readJson(deletedResponse)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "senderThreadId must reference a live thread",
+        code: "parent_thread_invalid",
+        message: "Sender thread is invalid",
+        details: {
+          reason: "deleted",
+          subject: "sender",
+        },
       });
     } finally {
       await harness.cleanup();
@@ -953,7 +964,7 @@ describe("public thread send and steer routes", () => {
     }
   });
 
-  it("rejects invalid send mode transitions", async () => {
+  it("rejects explicit start on active threads but sends steer on idle threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -974,6 +985,11 @@ describe("public thread send and steer routes", () => {
         environmentId: environment.id,
         status: "active",
       });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: idleThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-idle-for-steer-fallback",
+      });
 
       const startOnActive = await harness.app.request(
         `/api/v1/threads/${activeThread.id}/send`,
@@ -990,8 +1006,11 @@ describe("public thread send and steer routes", () => {
       );
       expect(startOnActive.status).toBe(409);
       await expect(readJson(startOnActive)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "Thread is already active",
+        code: "thread_not_writable",
+        details: {
+          reason: "already_active",
+          threadStatus: "active",
+        },
       });
 
       const steerOnIdle = await harness.app.request(
@@ -1003,15 +1022,52 @@ describe("public thread send and steer routes", () => {
           },
           body: JSON.stringify({
             mode: "steer",
-            input: [{ type: "text", text: "Should also fail" }],
+            input: [{ type: "text", text: "Send as a regular message" }],
           }),
         },
       );
-      expect(steerOnIdle.status).toBe(409);
-      await expect(readJson(steerOnIdle)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "Thread is not active",
+      expect(steerOnIdle.status).toBe(200);
+      const queuedSubmit = await waitForQueuedCommand(harness, ({ command }) => {
+        return (
+          command.type === "turn.submit" && command.threadId === idleThread.id
+        );
       });
+      if (queuedSubmit.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      expect(queuedSubmit.command.input).toEqual([
+        { type: "text", text: "Send as a regular message" },
+      ]);
+      expect(queuedSubmit.command.target).toEqual({ mode: "start" });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("treats stopping an idle thread as a no-op success", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const idleThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${idleThread.id}/stop`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, idleThread.id)?.stopRequestedAt).toBeNull();
     } finally {
       await harness.cleanup();
     }

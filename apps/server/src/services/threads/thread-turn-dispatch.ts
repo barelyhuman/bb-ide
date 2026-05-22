@@ -15,6 +15,7 @@ import {
   MANAGED_REPROVISION_QUEUED,
 } from "../environments/environment-provisioning.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
 import { appendThreadProvisioningEvent } from "./thread-events.js";
 import { requestThreadReprovision } from "./thread-provisioning.js";
 import { tryTransition } from "./thread-transitions.js";
@@ -50,7 +51,7 @@ export function requireReadyThreadEnvironment(
   environment: Environment,
 ): ReadyThreadEnvironment {
   if (environment.status !== "ready" || !environment.path) {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
+    throwEnvironmentNotReady(environment);
   }
 
   return {
@@ -68,7 +69,7 @@ export async function queueTurnDuringReprovision(
   }
 
   if (!args.environment.managed || args.environment.status === "provisioning") {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
+    throwEnvironmentNotReady(args.environment);
   }
   if (
     hasActiveManagedEnvironmentProvision(args.deps, {

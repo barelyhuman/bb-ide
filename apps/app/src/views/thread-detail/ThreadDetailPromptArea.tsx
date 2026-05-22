@@ -117,9 +117,9 @@ function getPromptPlaceholder(
 
   switch (displayStatus) {
     case "waiting-for-host":
-      return "Host daemon disconnected";
+      return "Host disconnected";
     case "host-reconnecting":
-      return "Waiting for host daemon to reconnect...";
+      return "Waiting for host to reconnect...";
     case "error":
       return "Retry by sending a follow-up message";
     case "idle":
@@ -400,7 +400,10 @@ export function ThreadDetailPromptArea({
           error: nextError,
           fallbackMessage: isQueuingMessage
             ? "Failed to queue message."
-            : "Failed to send follow-up.",
+            : "Failed to send message.",
+          lifecycleOperation: isQueuingMessage
+            ? "queue_message"
+            : "send_message",
         }),
       );
     }
@@ -457,7 +460,8 @@ export function ThreadDetailPromptArea({
       toast.error(
         getMutationErrorMessage({
           error: nextError,
-          fallbackMessage: "Failed to send steer.",
+          fallbackMessage: "Failed to send message.",
+          lifecycleOperation: "send_message",
         }),
       );
     } finally {
@@ -495,6 +499,7 @@ export function ThreadDetailPromptArea({
             getMutationErrorMessage({
               error: nextError,
               fallbackMessage: "Failed to send queued message.",
+              lifecycleOperation: "send_queued_message",
             }),
           );
         })
@@ -579,6 +584,7 @@ export function ThreadDetailPromptArea({
             getMutationErrorMessage({
               error: nextError,
               fallbackMessage: "Failed to reorder queued message.",
+              lifecycleOperation: "reorder_queued_message",
             }),
           );
         });

@@ -39,6 +39,8 @@ import {
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
+  "apiErrorSchema.details":
+    "Base error details are omitted unless a route has structured detail payloads.",
   "apiErrorSchema.retryable":
     "Error payloads may omit retryability when the server has no retry guidance.",
   "createAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
@@ -346,6 +348,110 @@ describe("public terminal contracts", () => {
 });
 
 describe("server-contract canonical schemas", () => {
+  it("parses lifecycle API error envelopes by code", () => {
+    expect(
+      contract.lifecycleApiErrorSchema.parse({
+        code: "environment_not_ready",
+        message: "Environment unavailable",
+        details: {
+          environmentStatus: "destroyed",
+          hasPath: false,
+          cleanupRequestedAt: 123,
+        },
+      }),
+    ).toMatchObject({
+      code: "environment_not_ready",
+      details: { environmentStatus: "destroyed" },
+    });
+
+    expect(
+      contract.lifecycleApiErrorSchema.parse({
+        code: "thread_not_writable",
+        message: "Thread is not writable",
+        details: {
+          reason: "not_active",
+          archivedAt: null,
+          stopRequestedAt: null,
+          threadStatus: "idle",
+        },
+      }),
+    ).toMatchObject({
+      code: "thread_not_writable",
+      details: { reason: "not_active" },
+    });
+
+    expect(
+      contract.lifecycleApiErrorSchema.parse({
+        code: "thread_environment_unavailable",
+        message: "Thread environment is unavailable",
+        details: {
+          reason: "never_attached",
+          environmentStatus: null,
+        },
+      }),
+    ).toMatchObject({
+      code: "thread_environment_unavailable",
+      details: { reason: "never_attached" },
+    });
+
+    expect(
+      contract.lifecycleApiErrorSchema.parse({
+        code: "host_unavailable",
+        message: "Host is unavailable",
+        details: {
+          reason: "disconnected",
+          hostStatus: "disconnected",
+          suspendedAt: null,
+          destroyedAt: null,
+        },
+      }),
+    ).toMatchObject({
+      code: "host_unavailable",
+      details: { reason: "disconnected" },
+    });
+
+    expect(
+      contract.lifecycleApiErrorSchema.parse({
+        code: "project_unavailable",
+        message: "Project is unavailable",
+        details: {
+          reason: "pending_deletion",
+          deletedAt: null,
+        },
+      }),
+    ).toMatchObject({
+      code: "project_unavailable",
+      details: { reason: "pending_deletion" },
+    });
+
+    expect(
+      contract.lifecycleApiErrorSchema.parse({
+        code: "parent_thread_invalid",
+        message: "Parent thread is invalid",
+        details: {
+          reason: "not_a_manager",
+          subject: "parent",
+        },
+      }),
+    ).toMatchObject({
+      code: "parent_thread_invalid",
+      details: { reason: "not_a_manager", subject: "parent" },
+    });
+
+    expect(() =>
+      contract.lifecycleApiErrorSchema.parse({
+        code: "thread_not_writable",
+        message: "Thread is not writable",
+        details: {
+          reason: "destroyed",
+          archivedAt: null,
+          stopRequestedAt: null,
+          threadStatus: "idle",
+        },
+      }),
+    ).toThrow();
+  });
+
   it("parses request contracts", () => {
     expect(
       createAutomationRequestSchema.parse({

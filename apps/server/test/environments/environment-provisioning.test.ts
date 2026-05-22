@@ -282,8 +282,14 @@ describe("environment reprovisioning", () => {
 
       expect(thrownError).toMatchObject({
         body: {
-          code: "host_disconnected",
+          code: "host_unavailable",
           message: "Host is not connected",
+          details: {
+            reason: "disconnected",
+            hostStatus: "disconnected",
+            suspendedAt: null,
+            destroyedAt: null,
+          },
         },
         status: 502,
       });

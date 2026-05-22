@@ -27,6 +27,10 @@ import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
 } from "../lib/error-log-fields.js";
+import {
+  threadEnvironmentUnavailableDetails,
+  throwThreadEnvironmentUnavailable,
+} from "../lib/lifecycle-api-errors.js";
 import { toThreadQueuedMessage } from "./thread-queued-messages.js";
 import {
   requireEnvironment,
@@ -178,7 +182,9 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
     return null;
   }
   if (!thread.environmentId) {
-    throw new ApiError(409, "invalid_request", "Thread has no environment");
+    throwThreadEnvironmentUnavailable(
+      threadEnvironmentUnavailableDetails("never_attached", null),
+    );
   }
 
   const providerThreadId = getLastProviderThreadId(deps, thread.id);
@@ -307,7 +313,9 @@ async function sendClaimedQueuedMessageForThread(
 
   const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
   if (!args.thread.environmentId) {
-    throw new ApiError(409, "invalid_request", "Thread has no environment");
+    throwThreadEnvironmentUnavailable(
+      threadEnvironmentUnavailableDetails("never_attached", null),
+    );
   }
   const environment = requireEnvironment(deps.db, args.thread.environmentId);
   await sendThreadMessage(deps, {

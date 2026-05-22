@@ -665,7 +665,9 @@ describe("internal command result idempotency", () => {
         environment: {
           id: environment.id,
           hostId: environment.hostId,
+          cleanupRequestedAt: environment.cleanupRequestedAt,
           path: environment.path,
+          status: environment.status,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         execution: {
@@ -814,7 +816,9 @@ describe("internal command result idempotency", () => {
             environment: {
               id: environment.id,
               hostId: environment.hostId,
+              cleanupRequestedAt: environment.cleanupRequestedAt,
               path: environment.path,
+              status: environment.status,
               workspaceProvisionType: environment.workspaceProvisionType,
             },
             requestId: provisionRequest.requestId,
@@ -1102,7 +1106,9 @@ describe("internal command result idempotency", () => {
         environment: {
           id: environment.id,
           hostId: environment.hostId,
+          cleanupRequestedAt: environment.cleanupRequestedAt,
           path: environment.path,
+          status: environment.status,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         requestId: "creq_23456789ab",
@@ -1134,7 +1140,9 @@ describe("internal command result idempotency", () => {
         environment: {
           id: environment.id,
           hostId: environment.hostId,
+          cleanupRequestedAt: environment.cleanupRequestedAt,
           path: environment.path,
+          status: environment.status,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         requestId: "creq_23456789ac",

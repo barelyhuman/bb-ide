@@ -144,8 +144,8 @@ function buildHostConnectionNotice(
   return {
     label:
       displayStatus === "host-reconnecting"
-        ? "Host daemon disconnected. Waiting for reconnection..."
-        : "Host daemon disconnected",
+        ? "Host disconnected. Waiting for reconnection..."
+        : "Host disconnected",
     tone: displayStatus === "host-reconnecting" ? "pending" : "error",
   };
 }
@@ -376,7 +376,10 @@ export function ThreadDetailView() {
   const requestEnvironmentAction = useRequestEnvironmentAction();
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
-  const updateThread = useUpdateThread();
+  const updateThread = useUpdateThread({
+    errorMessage: "Failed to assign manager.",
+    lifecycleOperation: "assign_manager",
+  });
   const terminalsEnabled = useAtomValue(terminalsEnabledAtom);
   const terminalsListQuery = useThreadTerminals(threadId ?? "", {
     enabled: terminalsEnabled,

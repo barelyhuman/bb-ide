@@ -30,6 +30,10 @@ import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { productionErrorLogFields } from "../lib/error-log-fields.js";
 import {
+  threadEnvironmentUnavailableDetails,
+  throwThreadEnvironmentUnavailable,
+} from "../lib/lifecycle-api-errors.js";
+import {
   appendPendingInteractionTimelineEvent,
   appendPendingInteractionTimelineEventInTransaction,
 } from "./pending-interaction-timeline.js";
@@ -540,19 +544,15 @@ export class PendingInteractionLifecycle {
   ): PendingInteractionRow | null {
     const thread = getThread(this.deps.db, args.interaction.threadId);
     if (!thread?.environmentId) {
-      throw new ApiError(
-        409,
-        "invalid_request",
-        "Cannot resolve pending interaction because its thread has no active environment",
+      throwThreadEnvironmentUnavailable(
+        threadEnvironmentUnavailableDetails("never_attached", null),
       );
     }
 
     const environment = getEnvironment(this.deps.db, thread.environmentId);
     if (!environment) {
-      throw new ApiError(
-        409,
-        "invalid_request",
-        "Cannot resolve pending interaction because its environment no longer exists",
+      throwThreadEnvironmentUnavailable(
+        threadEnvironmentUnavailableDetails("destroyed", null),
       );
     }
 

@@ -1,6 +1,7 @@
 import {
   getActiveSession,
   getEnvironment,
+  getHost,
   getNonDestroyedHost,
   getMostRecentlyUpdatedConnectedHostId,
   getProject,
@@ -13,6 +14,18 @@ import {
 import type { Environment, Host, Project, Thread } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../../errors.js";
+import {
+  destroyedHostUnavailableDetails,
+  destroyedThreadEnvironmentDetails,
+  disconnectedHostUnavailableDetails,
+  throwEnvironmentNotReady,
+  throwHostUnavailable,
+  throwProjectUnavailable,
+  throwThreadEnvironmentUnavailable,
+  threadEnvironmentUnavailableDetails,
+} from "./lifecycle-api-errors.js";
+
+type HostRow = NonNullable<ReturnType<typeof getHost>>;
 
 function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
   const host = getNonDestroyedHost(db, hostId);
@@ -29,7 +42,7 @@ function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
 }
 
 function toHostRecord(
-  row: NonNullable<ReturnType<typeof getNonDestroyedHost>>,
+  row: HostRow,
   status: Host["status"],
 ): Host {
   return {
@@ -63,9 +76,16 @@ export function requireNonDestroyedHostWithStatus(
   db: DbConnection,
   hostId: string,
 ): Host {
-  const host = getNonDestroyedHost(db, hostId);
+  const host = getHost(db, hostId);
   if (!host) {
     throwHostNotFound();
+  }
+  if (host.destroyedAt !== null) {
+    throwHostUnavailable(
+      404,
+      "Host is unavailable",
+      destroyedHostUnavailableDetails(host.destroyedAt),
+    );
   }
   return toHostRecord(host, toHostStatus(db, host.id));
 }
@@ -87,7 +107,23 @@ export function requireConnectedHostSession(
 ) {
   const session = getActiveSession(deps.db, hostId);
   if (!session) {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
+    const host = getHost(deps.db, hostId);
+    if (!host) {
+      throwHostNotFound();
+    }
+    if (host.destroyedAt !== null) {
+      throwHostUnavailable(
+        404,
+        "Host is unavailable",
+        destroyedHostUnavailableDetails(host.destroyedAt),
+      );
+    }
+    const hostStatus = toHostStatus(deps.db, hostId);
+    throwHostUnavailable(
+      502,
+      "Host is not connected",
+      disconnectedHostUnavailableDetails(hostStatus),
+    );
   }
   return session;
 }
@@ -105,13 +141,15 @@ export function requirePublicProject(
   projectId: string,
 ): Project {
   const project = requireProject(db, projectId);
-  if (
-    getProjectOperation(db, {
-      projectId,
-      kind: "delete",
-    }) !== null
-  ) {
-    throw new ApiError(404, "project_not_found", "Project not found");
+  const deleteOperation = getProjectOperation(db, {
+    projectId,
+    kind: "delete",
+  });
+  if (deleteOperation) {
+    throwProjectUnavailable({
+      reason: "pending_deletion",
+      deletedAt: null,
+    });
   }
   return project;
 }
@@ -158,7 +196,7 @@ export function requireReadyEnvironment(
 ): Environment & { path: string; status: "ready" } {
   const environment = requireEnvironment(db, environmentId);
   if (environment.status !== "ready" || !environment.path) {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
+    throwEnvironmentNotReady(environment);
   }
   return {
     ...environment,
@@ -173,11 +211,18 @@ export function requireThreadEnvironment(
 ): { environment: Environment; thread: Thread } {
   const thread = requireThread(db, threadId);
   if (!thread.environmentId) {
-    throw new ApiError(409, "invalid_request", "Thread has no environment");
+    throwThreadEnvironmentUnavailable(
+      threadEnvironmentUnavailableDetails("never_attached", null),
+    );
+  }
+  const environment = requireEnvironment(db, thread.environmentId);
+  const unavailableDetails = destroyedThreadEnvironmentDetails(environment);
+  if (unavailableDetails) {
+    throwThreadEnvironmentUnavailable(unavailableDetails);
   }
   return {
     thread,
-    environment: requireEnvironment(db, thread.environmentId),
+    environment,
   };
 }
 
@@ -187,11 +232,18 @@ export function requirePublicThreadEnvironment(
 ): { environment: Environment; thread: Thread } {
   const thread = requirePublicThread(db, threadId);
   if (!thread.environmentId) {
-    throw new ApiError(409, "invalid_request", "Thread has no environment");
+    throwThreadEnvironmentUnavailable(
+      threadEnvironmentUnavailableDetails("never_attached", null),
+    );
+  }
+  const environment = requireEnvironment(db, thread.environmentId);
+  const unavailableDetails = destroyedThreadEnvironmentDetails(environment);
+  if (unavailableDetails) {
+    throwThreadEnvironmentUnavailable(unavailableDetails);
   }
   return {
     thread,
-    environment: requireEnvironment(db, thread.environmentId),
+    environment,
   };
 }
 

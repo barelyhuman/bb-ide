@@ -1991,8 +1991,11 @@ describe("public thread data routes", () => {
 
       expect(sendResponse.status).toBe(409);
       await expect(readJson(sendResponse)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "Thread is still starting",
+        code: "thread_not_writable",
+        details: {
+          reason: "still_starting",
+          threadStatus: "provisioning",
+        },
       });
       expect(
         getQueuedThreadMessage(harness.db, createdQueuedMessage.id),
@@ -3396,9 +3399,12 @@ describe("public thread data routes", () => {
       );
 
       expect(response.status).toBe(409);
-      await expect(readJson(response)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Thread has no environment",
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "thread_environment_unavailable",
+        details: {
+          reason: "never_attached",
+          environmentStatus: null,
+        },
       });
     } finally {
       await harness.cleanup();

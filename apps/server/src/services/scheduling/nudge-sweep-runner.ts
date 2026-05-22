@@ -460,7 +460,9 @@ async function prepareDueNudge(
       environment: {
         id: environment.id,
         hostId: environment.hostId,
+        cleanupRequestedAt: environment.cleanupRequestedAt,
         path: environment.path,
+        status: environment.status,
         workspaceProvisionType: environment.workspaceProvisionType,
       },
       execution,

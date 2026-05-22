@@ -25,6 +25,7 @@ import type {
   RuntimeThreadExecutionOptions,
   Thread,
   ClientTurnRequestId,
+  EnvironmentStatus,
   ManagerTemplateName,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -60,9 +61,11 @@ export interface QueueThreadStopCommandArgs {
 }
 
 export interface QueueThreadStartCommandEnvironment {
+  cleanupRequestedAt: number | null;
   hostId: string;
   id: string;
   path: string | null;
+  status: EnvironmentStatus;
   workspaceProvisionType: WorkspaceProvisionType;
 }
 

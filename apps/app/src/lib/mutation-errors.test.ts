@@ -11,10 +11,12 @@ describe("getMutationErrorMeta", () => {
     expect(
       getMutationErrorMeta({
         errorMessage: " Failed to update thread. ",
+        lifecycleOperation: "send_message",
         showErrorToast: false,
       }),
     ).toEqual({
       errorMessage: "Failed to update thread.",
+      lifecycleOperation: "send_message",
       showErrorToast: false,
     });
   });
@@ -23,10 +25,37 @@ describe("getMutationErrorMeta", () => {
     expect(
       getMutationErrorMeta({
         errorMessage: 123,
+        lifecycleOperation: "nope",
         showErrorToast: "nope",
       }),
     ).toEqual({});
     expect(getMutationErrorMeta(undefined)).toEqual({});
+  });
+
+  it("uses lifecycle error descriptions before raw server messages", () => {
+    const lifecycleError = new HttpError({
+      body: {
+        code: "thread_not_writable",
+        message: "Thread is not active",
+        details: {
+          archivedAt: null,
+          reason: "not_started",
+          stopRequestedAt: null,
+          threadStatus: "provisioning",
+        },
+      },
+      code: "thread_not_writable",
+      message: "Thread is not active",
+      status: 409,
+    });
+
+    expect(
+      getMutationErrorMessage({
+        error: lifecycleError,
+        fallbackMessage: "Failed to send message.",
+        lifecycleOperation: "send_message",
+      }),
+    ).toBe("Failed to send message. The thread is still starting.");
   });
 });
 
@@ -35,10 +64,10 @@ describe("getMutationErrorMessage", () => {
     const contractError = new HttpError({
       body: {
         code: "invalid_request",
-        message: "Environment is not ready",
+        message: "Environment unavailable",
       },
       code: "invalid_request",
-      message: "Environment is not ready",
+      message: "Environment unavailable",
       status: 409,
     });
 
@@ -47,7 +76,7 @@ describe("getMutationErrorMessage", () => {
         error: contractError,
         fallbackMessage: "Request failed.",
       }),
-    ).toBe("Environment is not ready");
+    ).toBe("Environment unavailable");
     expect(
       getMutationErrorMessage({
         error: new TypeError("Failed to fetch"),

@@ -1148,7 +1148,12 @@ describe("public project and host routes", () => {
       );
       expect(destroyedResponse.status).toBe(404);
       await expect(readJson(destroyedResponse)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();
@@ -1180,7 +1185,12 @@ describe("public project and host routes", () => {
 
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();
@@ -1480,7 +1490,12 @@ describe("public project and host routes", () => {
       );
       expect(response.status).toBe(409);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
+        code: "environment_not_ready",
+        details: {
+          environmentStatus: "provisioning",
+          hasPath: true,
+          cleanupRequestedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();
@@ -1674,7 +1689,12 @@ describe("public project and host routes", () => {
 
       expect(patchResponse.status).toBe(404);
       await expect(readJson(patchResponse)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();
@@ -1715,7 +1735,12 @@ describe("public project and host routes", () => {
 
       expect(deleteResponse.status).toBe(404);
       await expect(readJson(deleteResponse)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();

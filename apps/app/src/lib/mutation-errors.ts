@@ -1,6 +1,11 @@
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import { toast } from "sonner";
 import { HttpError } from "./api";
+import {
+  describeLifecycleError,
+  formatLifecycleErrorDescription,
+  type LifecycleErrorOperation,
+} from "./lifecycle-errors";
 
 const HTTP_STATUS_PREFIX_PATTERN = /^HTTP \d{3}:\s*/u;
 const NETWORK_TRANSPORT_ERROR_MESSAGE =
@@ -9,10 +14,12 @@ const NETWORK_TRANSPORT_ERROR_MESSAGE =
 export interface MutationErrorMessageOptions {
   error: unknown;
   fallbackMessage: string;
+  lifecycleOperation?: LifecycleErrorOperation | undefined;
 }
 
 export interface MutationErrorMeta {
   errorMessage?: string;
+  lifecycleOperation?: LifecycleErrorOperation;
   showErrorToast?: boolean;
 }
 
@@ -53,6 +60,36 @@ function isNetworkTransportError(error: unknown): boolean {
   );
 }
 
+function toLifecycleErrorOperation(
+  value: unknown,
+): LifecycleErrorOperation | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  switch (value) {
+    case "archive_thread":
+    case "assign_manager":
+    case "commit":
+    case "create_thread":
+    case "load_diff":
+    case "load_git_status":
+    case "load_manager_storage":
+    case "open_terminal":
+    case "queue_message":
+    case "reorder_queued_message":
+    case "resolve_interaction":
+    case "send_message":
+    case "send_queued_message":
+    case "squash_merge":
+    case "stop_thread":
+    case "update_merge_base":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
 function getHttpErrorMessage(error: HttpError): string | null {
   const bodyMessage = extractErrorMessage(error.body);
   if (bodyMessage) {
@@ -80,9 +117,13 @@ export function getMutationErrorMeta(
     typeof value.showErrorToast === "boolean"
       ? value.showErrorToast
       : undefined;
+  const lifecycleOperation = toLifecycleErrorOperation(
+    value.lifecycleOperation,
+  );
 
   return {
     ...(errorMessage ? { errorMessage } : {}),
+    ...(lifecycleOperation ? { lifecycleOperation } : {}),
     ...(showErrorToast === undefined ? {} : { showErrorToast }),
   };
 }
@@ -90,7 +131,16 @@ export function getMutationErrorMeta(
 export function getMutationErrorMessage({
   error,
   fallbackMessage,
+  lifecycleOperation,
 }: MutationErrorMessageOptions): string {
+  const lifecycleErrorDescription = describeLifecycleError({
+    error,
+    operation: lifecycleOperation,
+  });
+  if (lifecycleErrorDescription) {
+    return formatLifecycleErrorDescription(lifecycleErrorDescription);
+  }
+
   if (error instanceof HttpError) {
     return getHttpErrorMessage(error) ?? fallbackMessage;
   }
@@ -117,6 +167,7 @@ export function shouldShowMutationErrorToast(error: unknown): boolean {
 export function showMutationErrorToast({
   error,
   fallbackMessage,
+  lifecycleOperation,
 }: MutationErrorMessageOptions): void {
   if (!shouldShowMutationErrorToast(error)) {
     return;
@@ -126,6 +177,7 @@ export function showMutationErrorToast({
     getMutationErrorMessage({
       error,
       fallbackMessage,
+      lifecycleOperation,
     }),
   );
 }

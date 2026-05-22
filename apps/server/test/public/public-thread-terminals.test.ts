@@ -318,7 +318,11 @@ describe("public thread terminal routes", () => {
 
     expect(response.status).toBe(409);
     expect(apiErrorSchema.parse(await readJson(response))).toMatchObject({
-      code: "invalid_request",
+      code: "thread_environment_unavailable",
+      details: {
+        reason: "never_attached",
+        environmentStatus: null,
+      },
     });
   });
 

@@ -1579,7 +1579,12 @@ describe("public environment and system routes", () => {
 
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();
@@ -1609,7 +1614,12 @@ describe("public environment and system routes", () => {
 
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
     } finally {
       await harness.cleanup();

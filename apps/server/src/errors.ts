@@ -5,6 +5,12 @@ import type { ServerLogger } from "./types.js";
 export interface ApiErrorBody {
   code: string;
   message: string;
+  details?: unknown;
+  retryable?: boolean;
+}
+
+export interface ApiErrorOptions {
+  details?: unknown;
   retryable?: boolean;
 }
 
@@ -22,13 +28,17 @@ export class ApiError extends HTTPException {
     status: ConstructorParameters<typeof HTTPException>[0],
     code: string,
     message: string,
-    retryable?: boolean,
+    options?: boolean | ApiErrorOptions,
   ) {
     super(status, { message });
-    this.body =
-      retryable === undefined
-        ? { code, message }
-        : { code, message, retryable };
+    const resolvedOptions = normalizeApiErrorOptions(options);
+    this.body = { code, message };
+    if (resolvedOptions.details !== undefined) {
+      this.body.details = resolvedOptions.details;
+    }
+    if (resolvedOptions.retryable !== undefined) {
+      this.body.retryable = resolvedOptions.retryable;
+    }
   }
 
   toResponse(): Response {
@@ -39,6 +49,15 @@ export class ApiError extends HTTPException {
       },
     });
   }
+}
+
+function normalizeApiErrorOptions(
+  options: boolean | ApiErrorOptions | undefined,
+): ApiErrorOptions {
+  if (typeof options === "boolean") {
+    return { retryable: options };
+  }
+  return options ?? {};
 }
 
 export class TurnStartGuardError extends ApiError {

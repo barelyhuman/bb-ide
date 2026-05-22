@@ -249,6 +249,7 @@ export function ThreadActionsProvider({
       getMutationErrorMessage({
         error,
         fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}.`,
+        lifecycleOperation: "archive_thread",
       }),
     );
   }, []);

@@ -37,6 +37,10 @@ import {
   requirePublicThread,
   requireReadyEnvironment,
 } from "../../services/lib/entity-lookup.js";
+import {
+  threadEnvironmentUnavailableDetails,
+  throwThreadEnvironmentUnavailable,
+} from "../../services/lib/lifecycle-api-errors.js";
 import { queueCommandAndWait } from "../../services/hosts/command-wait.js";
 import {
   createDaemonFileContentResponse,
@@ -266,7 +270,9 @@ export async function requireThreadStorageTarget(
 ): Promise<ThreadStorageTarget> {
   const thread = requirePublicThread(deps.db, args.threadId);
   if (!thread.environmentId) {
-    throw new ApiError(409, "invalid_request", "Thread has no environment");
+    throwThreadEnvironmentUnavailable(
+      threadEnvironmentUnavailableDetails("never_attached", null),
+    );
   }
   const environment = requireEnvironment(deps.db, thread.environmentId);
   return {
@@ -1306,7 +1312,9 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     async (context, query) => {
       const thread = requirePublicThread(deps.db, context.req.param("id"));
       if (!thread.environmentId) {
-        throw new ApiError(409, "invalid_request", "Thread has no environment");
+        throwThreadEnvironmentUnavailable(
+          threadEnvironmentUnavailableDetails("never_attached", null),
+        );
       }
       const environment = requireEnvironment(deps.db, thread.environmentId);
 

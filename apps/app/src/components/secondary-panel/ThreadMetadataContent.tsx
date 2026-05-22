@@ -704,7 +704,9 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         workspaceStatus={workspaceStatus}
         onChangedFileClick={onChangedFileClick}
       />
-      {storage ? <ManagerWorkspaceRow {...storage} /> : null}
+      {storage ? (
+        <ManagerWorkspaceRow {...storage} />
+      ) : null}
     </ThreadMetadataCard>
   );
 }

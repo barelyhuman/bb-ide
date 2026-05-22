@@ -202,7 +202,12 @@ describe("public thread creation routes", () => {
 
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_not_found",
+        code: "host_unavailable",
+        details: {
+          reason: "destroyed",
+          hostStatus: null,
+          suspendedAt: null,
+        },
       });
       expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
         0,

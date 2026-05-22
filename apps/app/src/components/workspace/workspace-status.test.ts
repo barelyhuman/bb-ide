@@ -155,4 +155,31 @@ describe("workspace-status", () => {
       summary: "Workspace not found.",
     });
   });
+
+  it("reports lifecycle-aware workspace errors before generic fallbacks", () => {
+    const error = new HttpError({
+      status: 409,
+      message: "Environment unavailable",
+      code: "environment_not_ready",
+      body: {
+        code: "environment_not_ready",
+        message: "Environment unavailable",
+        details: {
+          cleanupRequestedAt: 10,
+          environmentStatus: "destroyed",
+          hasPath: false,
+        },
+      },
+    });
+
+    expect(
+      getGitStatusDisplay(undefined, {
+        error,
+        workspaceDeleted: true,
+      }),
+    ).toMatchObject({
+      label: "Unknown",
+      summary: "Workspace no longer exists.",
+    });
+  });
 });

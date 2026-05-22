@@ -3,7 +3,6 @@ import type {
   Environment,
   PromptInput,
   Thread,
-  ThreadStatus,
   ThreadTurnInitiator,
   TurnRequestTarget,
 } from "@bb/domain";
@@ -37,6 +36,13 @@ import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
 import { tryTransition } from "./thread-transitions.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
+import {
+  disconnectedHostUnavailableDetails,
+  threadNotWritableReasonForStatus,
+  throwHostUnavailable,
+  throwSenderThreadInvalid,
+  throwThreadNotWritable,
+} from "../lib/lifecycle-api-errors.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
 type TextPromptInput = Extract<PromptInput, { type: "text" }>;
@@ -81,30 +87,40 @@ export function ensureThreadIsNotAwaitingUserInteraction(
 
 export function ensureThreadIsWritable(thread: Thread): void {
   if (thread.archivedAt) {
-    throw new ApiError(409, "invalid_request", "Thread is archived");
+    throwThreadNotWritable(thread, "archived", "Thread is archived");
   }
   if (thread.stopRequestedAt !== null) {
-    throw new ApiError(409, "invalid_request", "Thread is stopping");
+    throwThreadNotWritable(thread, "stopping", "Thread is stopping");
+  }
+  if (thread.deletedAt !== null) {
+    throwThreadNotWritable(thread, "deleted", "Thread is deleted");
   }
 }
 
 function resolveSendMode(
-  threadStatus: ThreadStatus,
+  thread: Thread,
   requestedMode: SendThreadMessageMode,
 ): "start" | "auto" | "steer" {
   if (requestedMode === "start") {
-    if (threadStatus === "active") {
-      throw new ApiError(409, "invalid_request", "Thread is already active");
+    if (thread.status === "active") {
+      throwThreadNotWritable(thread, "already_active", "Thread is already active");
     }
     return "start";
   }
   if (requestedMode === "steer") {
-    if (threadStatus !== "active") {
-      throw new ApiError(409, "invalid_request", "Thread is not active");
+    if (thread.status === "active") {
+      return "steer";
     }
-    return "steer";
+    if (thread.status === "idle") {
+      return "start";
+    }
+    throwThreadNotWritable(
+      thread,
+      threadNotWritableReasonForStatus(thread.status),
+      "Thread is not active",
+    );
   }
-  if (threadStatus === "active") {
+  if (thread.status === "active") {
     return "auto";
   }
   return "start";
@@ -126,7 +142,11 @@ function ensureRuntimeCanAcceptActiveSend(
     return;
   }
 
-  throw new ApiError(502, "host_disconnected", "Host daemon is not connected");
+  throwHostUnavailable(
+    502,
+    "Host daemon is not connected",
+    disconnectedHostUnavailableDetails(),
+  );
 }
 
 function resolveMessageSenderThreadId(
@@ -138,12 +158,11 @@ function resolveMessageSenderThreadId(
   }
 
   const senderThread = getThread(deps.db, args.senderThreadId);
-  if (!senderThread || senderThread.deletedAt !== null) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "senderThreadId must reference a live thread",
-    );
+  if (!senderThread) {
+    throwSenderThreadInvalid("not_found");
+  }
+  if (senderThread.deletedAt !== null) {
+    throwSenderThreadInvalid("deleted");
   }
 
   return senderThread.id;
@@ -197,7 +216,7 @@ export async function sendThreadMessage(
   if (args.trigger === "user") {
     ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
   }
-  const mode = resolveSendMode(thread.status, payload.mode);
+  const mode = resolveSendMode(thread, payload.mode);
   ensureRuntimeCanAcceptActiveSend(deps, args);
   if (mode === "start") {
     ensureThreadCanQueueStartRequest(deps, thread);
@@ -298,7 +317,9 @@ export async function sendThreadMessage(
         environment: {
           id: readyEnvironment.id,
           hostId: readyEnvironment.hostId,
+          cleanupRequestedAt: readyEnvironment.cleanupRequestedAt,
           path: readyEnvironment.path,
+          status: readyEnvironment.status,
           workspaceProvisionType: readyEnvironment.workspaceProvisionType,
         },
       });
@@ -322,7 +343,9 @@ export async function sendThreadMessage(
       environment: {
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,
+        cleanupRequestedAt: readyEnvironment.cleanupRequestedAt,
         path: readyEnvironment.path,
+        status: readyEnvironment.status,
         workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });

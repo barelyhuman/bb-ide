@@ -11,8 +11,52 @@ export type {
   Untyped,
 } from "./common.js";
 
-export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
-export type { ApiError, DomainErrorCode } from "./errors.js";
+export {
+  apiErrorSchema,
+  domainErrorCodeSchema,
+  environmentNotReadyApiErrorSchema,
+  environmentNotReadyErrorDetailsSchema,
+  hostUnavailableApiErrorSchema,
+  hostUnavailableErrorDetailsSchema,
+  hostUnavailableReasonSchema,
+  lifecycleApiErrorSchema,
+  parentThreadInvalidApiErrorSchema,
+  parentThreadInvalidErrorDetailsSchema,
+  parentThreadInvalidReasonSchema,
+  parentThreadInvalidSubjectSchema,
+  projectUnavailableApiErrorSchema,
+  projectUnavailableErrorDetailsSchema,
+  projectUnavailableReasonSchema,
+  threadEnvironmentUnavailableApiErrorSchema,
+  threadEnvironmentUnavailableErrorDetailsSchema,
+  threadEnvironmentUnavailableReasonSchema,
+  threadNotWritableApiErrorSchema,
+  threadNotWritableErrorDetailsSchema,
+  threadNotWritableReasonSchema,
+} from "./errors.js";
+export type {
+  ApiError,
+  DomainErrorCode,
+  EnvironmentNotReadyApiError,
+  EnvironmentNotReadyErrorDetails,
+  HostUnavailableApiError,
+  HostUnavailableErrorDetails,
+  HostUnavailableReason,
+  LifecycleApiError,
+  ParentThreadInvalidApiError,
+  ParentThreadInvalidErrorDetails,
+  ParentThreadInvalidReason,
+  ParentThreadInvalidSubject,
+  ProjectUnavailableApiError,
+  ProjectUnavailableErrorDetails,
+  ProjectUnavailableReason,
+  ThreadEnvironmentUnavailableApiError,
+  ThreadEnvironmentUnavailableErrorDetails,
+  ThreadEnvironmentUnavailableReason,
+  ThreadNotWritableApiError,
+  ThreadNotWritableErrorDetails,
+  ThreadNotWritableReason,
+} from "./errors.js";
 
 export {
   TERMINAL_COLS_MAX,

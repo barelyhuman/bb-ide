@@ -363,9 +363,11 @@ describe("thread runtime config", () => {
         {
           thread: managerThread,
           environment: {
+            cleanupRequestedAt: environment.cleanupRequestedAt,
             hostId: environment.hostId,
             id: environment.id,
             path: environment.path,
+            status: environment.status,
             workspaceProvisionType: environment.workspaceProvisionType,
           },
         },

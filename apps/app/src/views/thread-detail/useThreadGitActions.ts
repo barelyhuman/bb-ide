@@ -42,6 +42,7 @@ interface GitActionFailure {
 }
 
 interface ToGitActionFailureParams {
+  action: GitActionKind;
   error: unknown;
   mergeBaseBranch?: string;
 }
@@ -195,6 +196,7 @@ function buildAskAgentInputForGitOperation({
 }
 
 function toGitActionFailure({
+  action,
   error,
   mergeBaseBranch,
 }: ToGitActionFailureParams): GitActionFailure {
@@ -209,6 +211,7 @@ function toGitActionFailure({
       getMutationErrorMessage({
         error,
         fallbackMessage: "Failed to start git action.",
+        lifecycleOperation: action,
       }),
     askAgentInput: buildAskAgentInputForGitOperation({
       error,
@@ -267,7 +270,7 @@ function showGitActionErrorToast({
   threadId,
   toastId,
 }: ShowGitActionErrorToastParams): void {
-  const failure = toGitActionFailure({ error, mergeBaseBranch });
+  const failure = toGitActionFailure({ action, error, mergeBaseBranch });
   const askAgentInput = failure.askAgentInput;
   const title = getGitActionErrorTitle(action);
   const description = failure.message === title ? undefined : failure.message;
@@ -369,6 +372,7 @@ export function useThreadGitActions({
           description: getMutationErrorMessage({
             error,
             fallbackMessage: "Message was not sent.",
+            lifecycleOperation: "send_message",
           }),
         });
       }

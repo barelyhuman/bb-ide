@@ -97,6 +97,7 @@ export function useCreateThreadTerminal() {
   return useMutation({
     meta: {
       errorMessage: "Failed to start terminal.",
+      lifecycleOperation: "open_terminal",
     },
     mutationFn: ({ threadId, ...request }: CreateThreadTerminalMutationRequest) =>
       api.createThreadTerminal(threadId, request),

@@ -37,6 +37,10 @@ import {
   requirePublicThread,
   requireReadyEnvironment,
 } from "../lib/entity-lookup.js";
+import {
+  threadEnvironmentUnavailableDetails,
+  throwThreadEnvironmentUnavailable,
+} from "../lib/lifecycle-api-errors.js";
 
 const DEFAULT_TERMINAL_OPEN_TIMEOUT_MS = 10_000;
 
@@ -327,7 +331,9 @@ export class TerminalSessionLifecycle {
   ): Promise<TerminalSession> {
     const thread = requirePublicThread(this.options.db, args.threadId);
     if (!thread.environmentId) {
-      throw new ApiError(409, "invalid_request", "Thread has no environment");
+      throwThreadEnvironmentUnavailable(
+        threadEnvironmentUnavailableDetails("never_attached", null),
+      );
     }
     const environment = requireReadyEnvironment(
       this.options.db,

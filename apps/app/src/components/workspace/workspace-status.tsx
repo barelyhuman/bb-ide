@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
 import { HttpError } from "@/lib/api";
+import { describeLifecycleError } from "@/lib/lifecycle-errors";
 
 export interface ThreadGitStatusDisplay {
   label:
@@ -15,6 +16,13 @@ export interface ThreadGitStatusDisplay {
     | "Untracked";
   summary: string;
   summaryContent: ReactNode;
+}
+
+export interface GetGitStatusDisplayOptions {
+  error?: unknown;
+  mergeBaseBranch?: string;
+  showBranchComparison?: boolean;
+  workspaceDeleted?: boolean;
 }
 
 function formatComparisonSummary(
@@ -61,14 +69,20 @@ function plainDisplay(
  */
 export function getGitStatusDisplay(
   status: WorkspaceStatus | undefined,
-  options?: {
-    mergeBaseBranch?: string;
-    showBranchComparison?: boolean;
-    error?: unknown;
-    workspaceDeleted?: boolean;
-  },
+  options?: GetGitStatusDisplayOptions,
 ): ThreadGitStatusDisplay {
   if (!status) {
+    const lifecycleErrorDescription =
+      options?.error === undefined
+        ? null
+        : describeLifecycleError({
+            error: options.error,
+            operation: "load_git_status",
+          });
+    if (lifecycleErrorDescription) {
+      return plainDisplay("Unknown", lifecycleErrorDescription.body);
+    }
+
     const isPathNotFound =
       options?.error instanceof HttpError &&
       options.error.code === "path_not_found";

@@ -1300,13 +1300,13 @@ describe("public thread manager and ownership routes", () => {
       });
 
       const initialThreadCount = harness.db.select().from(threads).all().length;
-      const invalidParentThreadIds = [
-        crossProjectManager.id,
-        standardParent.id,
-        deletedManager.id,
+      const invalidParentCases = [
+        { parentThreadId: crossProjectManager.id, reason: "wrong_project" },
+        { parentThreadId: standardParent.id, reason: "not_a_manager" },
+        { parentThreadId: deletedManager.id, reason: "deleted" },
       ];
 
-      for (const parentThreadId of invalidParentThreadIds) {
+      for (const invalidParent of invalidParentCases) {
         const response = await harness.app.request("/api/v1/threads", {
           method: "POST",
           headers: {
@@ -1315,7 +1315,7 @@ describe("public thread manager and ownership routes", () => {
           body: JSON.stringify({
             origin: "app",
             projectId: project.id,
-            parentThreadId,
+            parentThreadId: invalidParent.parentThreadId,
             providerId: "codex",
             model: "gpt-5",
             input: [{ type: "text", text: "Invalid parent" }],
@@ -1329,9 +1329,11 @@ describe("public thread manager and ownership routes", () => {
 
         expect(response.status).toBe(400);
         await expect(readJson(response)).resolves.toMatchObject({
-          code: "invalid_request",
-          message:
-            "parentThreadId must reference a live manager thread in the same project",
+          code: "parent_thread_invalid",
+          details: {
+            reason: invalidParent.reason,
+            subject: "parent",
+          },
         });
       }
 
@@ -1385,13 +1387,13 @@ describe("public thread manager and ownership routes", () => {
         threadId: deletedManager.id,
       });
 
-      const invalidParentThreadIds = [
-        crossProjectManager.id,
-        standardParent.id,
-        deletedManager.id,
+      const invalidParentCases = [
+        { parentThreadId: crossProjectManager.id, reason: "wrong_project" },
+        { parentThreadId: standardParent.id, reason: "not_a_manager" },
+        { parentThreadId: deletedManager.id, reason: "deleted" },
       ];
 
-      for (const parentThreadId of invalidParentThreadIds) {
+      for (const invalidParent of invalidParentCases) {
         const response = await harness.app.request(
           `/api/v1/threads/${thread.id}`,
           {
@@ -1400,16 +1402,18 @@ describe("public thread manager and ownership routes", () => {
               "content-type": "application/json",
             },
             body: JSON.stringify({
-              parentThreadId,
+              parentThreadId: invalidParent.parentThreadId,
             }),
           },
         );
 
         expect(response.status).toBe(400);
         await expect(readJson(response)).resolves.toMatchObject({
-          code: "invalid_request",
-          message:
-            "parentThreadId must reference a live manager thread in the same project",
+          code: "parent_thread_invalid",
+          details: {
+            reason: invalidParent.reason,
+            subject: "parent",
+          },
         });
         expect(getThread(harness.db, thread.id)?.parentThreadId).toBeNull();
       }

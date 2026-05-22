@@ -14,6 +14,8 @@ import type {
   EnvironmentFilePreviewSource,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
+import { describeLifecycleError } from "@/lib/lifecycle-errors";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
 import {
   GitDiffCard,
@@ -194,14 +196,40 @@ export function GitDiffTabContent({
   workspaceRootPath,
 }: GitDiffTabContentProps) {
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
+  const gitDiffLifecycleErrorDescription = gitDiffError
+    ? describeLifecycleError({
+        error: gitDiffError,
+        operation: "load_diff",
+      })
+    : null;
+  const gitDiffErrorMessage =
+    gitDiffLifecycleErrorDescription?.body ??
+    (gitDiffError
+      ? getMutationErrorMessage({
+          error: gitDiffError,
+          fallbackMessage: "Failed to load git diff.",
+          lifecycleOperation: "load_diff",
+        })
+      : null);
   return (
     <div className={cn(PANEL_SCROLL_SLOT_CLASS, "px-4 pb-3")}>
       {isPreparingGitDiff ? (
         <ThreadDiffSkeleton />
       ) : gitDiffError ? (
-        <p className="rounded-lg border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-xs text-destructive">
-          {gitDiffError.message}
-        </p>
+        <div className="rounded-lg border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-xs text-destructive">
+          {gitDiffLifecycleErrorDescription ? (
+            <p className="font-medium">
+              {gitDiffLifecycleErrorDescription.title}
+            </p>
+          ) : null}
+          <p
+            className={
+              gitDiffLifecycleErrorDescription ? "mt-1 leading-5" : undefined
+            }
+          >
+            {gitDiffErrorMessage}
+          </p>
+        </div>
       ) : threadGitDiff && hasCurrentGitDiff ? (
         <>
           {parsedGitDiffFileEntries.length > 0 ? (

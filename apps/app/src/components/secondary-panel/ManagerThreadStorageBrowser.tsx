@@ -5,6 +5,11 @@ import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Input } from "@/components/ui/input.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import {
+  describeLifecycleError,
+  formatLifecycleErrorDescription,
+} from "@/lib/lifecycle-errors";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 
 interface FileTreeHostStyle extends CSSProperties {
@@ -86,9 +91,22 @@ export function ManagerThreadStorageBrowser({
 
   let body: ReactNode;
   if (filesError) {
+    const lifecycleErrorDescription = describeLifecycleError({
+      error: filesError,
+      operation: "load_manager_storage",
+    });
     body = (
       <EmptyState
-        message={filesError.message}
+        message={
+          (lifecycleErrorDescription
+            ? formatLifecycleErrorDescription(lifecycleErrorDescription)
+            : null) ??
+          getMutationErrorMessage({
+            error: filesError,
+            fallbackMessage: "Failed to load manager workspace.",
+            lifecycleOperation: "load_manager_storage",
+          })
+        }
         messageClassName="text-destructive"
       />
     );

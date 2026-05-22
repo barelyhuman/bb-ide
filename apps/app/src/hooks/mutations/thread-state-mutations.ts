@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadWithRuntime } from "@bb/domain";
 import type { ProjectResponse, UpdateThreadRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
+import type { LifecycleErrorOperation } from "@/lib/lifecycle-errors";
 import {
   invalidateThreadDeleteQueries,
   invalidateThreadListMembershipQueries,
@@ -27,6 +28,11 @@ interface ThreadMutationRequest {
 }
 
 type UpdateThreadMutationRequest = ThreadMutationRequest & UpdateThreadRequest;
+
+interface UpdateThreadMutationOptions {
+  errorMessage?: string | undefined;
+  lifecycleOperation?: LifecycleErrorOperation | undefined;
+}
 
 interface ArchiveThreadMutationRequest {
   id: string;
@@ -74,12 +80,15 @@ function updateThreadInLists({
   });
 }
 
-export function useUpdateThread() {
+export function useUpdateThread(options?: UpdateThreadMutationOptions) {
   const queryClient = useQueryClient();
 
   return useMutation({
     meta: {
-      errorMessage: "Failed to update thread.",
+      errorMessage: options?.errorMessage ?? "Failed to update thread.",
+      ...(options?.lifecycleOperation
+        ? { lifecycleOperation: options.lifecycleOperation }
+        : {}),
     },
     mutationFn: ({ id, ...request }: UpdateThreadMutationRequest) =>
       api.updateThread(id, request),
@@ -99,6 +108,7 @@ export function useArchiveThread() {
   return useMutation({
     meta: {
       errorMessage: "Failed to archive thread.",
+      lifecycleOperation: "archive_thread",
       showErrorToast: false,
     },
     mutationFn: ({ id }: ArchiveThreadMutationRequest) => api.archiveThread(id),

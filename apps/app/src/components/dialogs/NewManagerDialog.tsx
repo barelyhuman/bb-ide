@@ -502,6 +502,7 @@ export function NewManagerForm({
           getMutationErrorMessage({
             error: err,
             fallbackMessage: "Failed to hire manager.",
+            lifecycleOperation: "create_thread",
           }),
         );
       } finally {
