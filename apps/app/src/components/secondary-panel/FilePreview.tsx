@@ -7,6 +7,7 @@ import {
 } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
+import type { UrlTransform } from "react-markdown";
 import { Button } from "@/components/ui/button.js";
 import { CopyButton } from "@/components/ui/copy-button.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -44,7 +45,13 @@ export type FilePreviewState =
       iframe: IframeFilePreviewTarget;
       lineNumber: number | null;
     }
-  | { kind: "ready"; file: FilePreviewFile; lineNumber: number | null };
+  | {
+      kind: "ready";
+      file: FilePreviewFile;
+      lineNumber: number | null;
+      showMarkdownModeToggle: boolean;
+      markdownUrlTransform?: UrlTransform;
+    };
 
 export interface FilePreviewProps {
   state: FilePreviewState;
@@ -68,6 +75,26 @@ interface FilePreviewHeaderProps {
   toggleKind: FilePreviewToggleKind | null;
   viewMode: FilePreviewViewMode;
   onViewModeChange: (mode: FilePreviewViewMode) => void;
+}
+
+interface MarkdownFilePreviewProps {
+  file: FilePreviewFile;
+  urlTransform?: UrlTransform;
+}
+
+interface FilePreviewImageProps {
+  url: string;
+  alt: string;
+}
+
+interface FilePreviewMessageProps {
+  message: string;
+  role?: "alert";
+}
+
+interface FilePreviewCodeProps {
+  file: FilePreviewFile;
+  lineNumber: number | null;
 }
 
 type FilePreviewViewMode = "preview" | "source";
@@ -114,7 +141,11 @@ function getFilePreviewToggleKind(
   if (state.kind === "html") {
     return "html";
   }
-  if (state.kind === "ready" && isMarkdownFile(state.file.name)) {
+  if (
+    state.kind === "ready" &&
+    state.showMarkdownModeToggle &&
+    isMarkdownFile(state.file.name)
+  ) {
     return "markdown";
   }
   return null;
@@ -224,7 +255,12 @@ function FilePreviewBody({ state, path, viewMode }: FilePreviewBodyProps) {
     return <FilePreviewCode file={state.file} lineNumber={state.lineNumber} />;
   }
   if (isMarkdownFile(state.file.name) && viewMode === "preview") {
-    return <MarkdownFilePreview file={state.file} />;
+    return (
+      <MarkdownFilePreview
+        file={state.file}
+        urlTransform={state.markdownUrlTransform}
+      />
+    );
   }
   return (
     <FilePreviewCode file={state.file} lineNumber={state.lineNumber ?? null} />
@@ -317,15 +353,19 @@ function FilePreviewHeader({
   );
 }
 
-function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
+function MarkdownFilePreview({ file, urlTransform }: MarkdownFilePreviewProps) {
   return (
     <div className="px-4 pt-4">
-      <MarkdownPreview allowHtml content={file.contents} />
+      <MarkdownPreview
+        allowHtml
+        content={file.contents}
+        urlTransform={urlTransform}
+      />
     </div>
   );
 }
 
-function FilePreviewImage({ url, alt }: { url: string; alt: string }) {
+function FilePreviewImage({ url, alt }: FilePreviewImageProps) {
   return (
     <div className="pt-4">
       <img
@@ -418,10 +458,7 @@ function FilePreviewLoading() {
 function FilePreviewMessage({
   message,
   role,
-}: {
-  message: string;
-  role?: "alert";
-}) {
+}: FilePreviewMessageProps) {
   return (
     <p
       role={role}
@@ -435,10 +472,7 @@ function FilePreviewMessage({
 function FilePreviewCode({
   file,
   lineNumber,
-}: {
-  file: FilePreviewFile;
-  lineNumber: number | null;
-}) {
+}: FilePreviewCodeProps) {
   const preferredTheme = usePreferredTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const options = useMemo(

@@ -26,6 +26,7 @@ import {
   useThreadQueuedMessages,
   useThreadPendingInteractions,
   useThreadPromptHistory,
+  useThreadStatusMarkdownPreview,
   useThreadStatusVersion,
 } from "./thread-queries";
 import {
@@ -39,6 +40,7 @@ import {
   threadPromptHistoryQueryKey,
   threadListQueryKey,
   threadQueryKey,
+  threadStatusMarkdownPreviewQueryKey,
   threadStatusVersionQueryKey,
   threadTimelineQueryKey,
 } from "./query-keys";
@@ -865,7 +867,7 @@ describe("thread prompt history query", () => {
 });
 
 describe("thread status version query", () => {
-  it("fetches once without background polling", async () => {
+  it("polls every two seconds and stops when unmounted", async () => {
     vi.useFakeTimers();
     let requestCount = 0;
     installFetchRoutes([
@@ -893,14 +895,56 @@ describe("thread status version query", () => {
     expect(requestCount).toBe(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(2_000);
     });
-    expect(requestCount).toBe(1);
+    expect(requestCount).toBe(2);
     expect(
       queryClient.getQueryData(threadStatusVersionQueryKey("thread-1")),
-    ).toEqual({ source: "folder", hash: "status-hash-1" });
+    ).toEqual({ source: "folder", hash: "status-hash-2" });
 
     unmount();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+    expect(requestCount).toBe(2);
+  });
+});
+
+describe("thread status markdown preview query", () => {
+  it("loads STATUS.md through the existing storage preview route under the status hash", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/thread-storage/content",
+        handler: (request) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("path")).toBe("STATUS.md");
+          return new Response("# Status\n", {
+            headers: { "content-type": "text/markdown" },
+          });
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () => useThreadStatusMarkdownPreview("thread-1", "status-hash-1"),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+    expect(
+      queryClient.getQueryData(
+        threadStatusMarkdownPreviewQueryKey("thread-1", "status-hash-1"),
+      ),
+    ).toMatchObject({
+      kind: "text",
+      content: "# Status\n",
+      mimeType: "text/markdown",
+      path: "STATUS.md",
+    });
   });
 });
 

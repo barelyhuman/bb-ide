@@ -39,7 +39,14 @@ dynamic file previews opened from the timeline.
 \`\`\`ts
 import { FilePreview } from "@/components/secondary-panel/FilePreview";
 
-<FilePreview state={{ kind: "ready", lineNumber: null, file }} />;
+<FilePreview
+  state={{
+    kind: "ready",
+    lineNumber: null,
+    showMarkdownModeToggle: true,
+    file,
+  }}
+/>;
 \`\`\`
 `;
 
@@ -125,6 +132,7 @@ export function Overview() {
             state={{
               kind: "ready",
               lineNumber: null,
+              showMarkdownModeToggle: true,
               file: { name: "README.md", contents: SAMPLE_README_MD },
             }}
           />
@@ -141,6 +149,7 @@ export function Overview() {
             state={{
               kind: "ready",
               lineNumber: null,
+              showMarkdownModeToggle: true,
               file: {
                 name: "Button.tsx",
                 contents: SAMPLE_BUTTON_TSX,
@@ -162,6 +171,7 @@ export function Overview() {
             state={{
               kind: "ready",
               lineNumber: null,
+              showMarkdownModeToggle: true,
               file: {
                 name: "legacy-button.tsx",
                 contents: SAMPLE_BUTTON_TSX,

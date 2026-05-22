@@ -134,7 +134,7 @@ describe("ThreadStorageFilePreview", () => {
     expect(screen.queryByText("Empty file.")).toBeNull();
   });
 
-  it("renders the unified STATUS route in an unsandboxed iframe", async () => {
+  it("renders raw STATUS html and folder sources in an unsandboxed iframe", async () => {
     let resolveVersion = (response: Response) => response;
     const versionResponse = new Promise<Response>((resolve) => {
       resolveVersion = (response: Response) => {
@@ -160,23 +160,20 @@ describe("ThreadStorageFilePreview", () => {
       { wrapper },
     );
 
-    const iframe = container.querySelector("iframe");
+    expect(container.querySelector("iframe")).toBeNull();
 
-    expect(iframe).not.toBeNull();
-    expect(iframe?.getAttribute("src")).toBe(
-      "/api/v1/threads/thr_manager/status/",
-    );
-    expect(iframe?.hasAttribute("sandbox")).toBe(false);
-    expect(iframe?.style.width).toBe("100%");
-    expect(iframe?.style.height).toBe("100%");
-    expect(iframe?.style.border).toBe("0px");
-
-    resolveVersion(jsonResponse({ source: "folder", hash: "status-hash-1" }));
+    resolveVersion(jsonResponse({ source: "html", hash: "status-hash-1" }));
 
     await vi.waitFor(() => {
+      const iframe = container.querySelector("iframe");
+      expect(iframe).not.toBeNull();
       expect(iframe?.getAttribute("src")).toBe(
         "/api/v1/threads/thr_manager/status/?v=status-hash-1",
       );
+      expect(iframe?.hasAttribute("sandbox")).toBe(false);
+      expect(iframe?.style.width).toBe("100%");
+      expect(iframe?.style.height).toBe("100%");
+      expect(iframe?.style.border).toBe("0px");
     });
   });
 
@@ -206,16 +203,15 @@ describe("ThreadStorageFilePreview", () => {
       { wrapper },
     );
 
-    const iframe = container.querySelector("iframe");
     await waitFor(() => {
-      expect(iframe?.getAttribute("src")).toBe(
+      expect(container.querySelector("iframe")?.getAttribute("src")).toBe(
         "/api/v1/threads/thr_manager/status/?v=status-hash-1",
       );
     });
 
     await waitFor(
       () => {
-        expect(iframe?.getAttribute("src")).toBe(
+        expect(container.querySelector("iframe")?.getAttribute("src")).toBe(
           "/api/v1/threads/thr_manager/status/?v=status-hash-2",
         );
       },
@@ -254,7 +250,7 @@ describe("ThreadStorageFilePreview", () => {
     MANAGER_STATUS_HTML_FILE_PATH,
     MANAGER_STATUS_INDEX_FILE_PATH,
     MANAGER_STATUS_MARKDOWN_FILE_PATH,
-  ])("renders %s through the unified STATUS route", (activePath) => {
+  ])("renders %s through the unified STATUS route", async (activePath) => {
     installFetchRoutes([
       {
         pathname: "/api/v1/threads/thr_manager/status-version",
@@ -276,10 +272,84 @@ describe("ThreadStorageFilePreview", () => {
       { wrapper },
     );
 
-    const iframe = container.querySelector("iframe");
-    expect(iframe).not.toBeNull();
-    expect(iframe?.getAttribute("src")).toBe(
-      "/api/v1/threads/thr_manager/status/",
+    await waitFor(() => {
+      expect(container.querySelector("iframe")?.getAttribute("src")).toBe(
+        "/api/v1/threads/thr_manager/status/?v=status-hash",
+      );
+    });
+  });
+
+  it("renders STATUS.md directly with relative status assets resolved", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thr_manager/status-version",
+        handler: () => jsonResponse({ source: "md", hash: "status-hash" }),
+      },
+      {
+        pathname: "/api/v1/threads/thr_manager/thread-storage/content",
+        handler: (request) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("path")).toBe(
+            MANAGER_STATUS_MARKDOWN_FILE_PATH,
+          );
+          return new Response(
+            "![chart](./chart.png)\n\n[details](details.html)",
+            {
+              headers: { "content-type": "text/markdown" },
+            },
+          );
+        },
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+    const { container } = render(
+      <ThreadStorageFilePreview
+        activePath={MANAGER_STATUS_MARKDOWN_FILE_PATH}
+        filePreview={makeTextPreview({
+          content: "# Status",
+          path: MANAGER_STATUS_MARKDOWN_FILE_PATH,
+        })}
+        isLoading={false}
+        pinnedPath={MANAGER_STATUS_FILE_PATH}
+        threadId="thr_manager"
+      />,
+      { wrapper },
     );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("img", { name: "chart" }).getAttribute("src"),
+      ).toBe("/api/v1/threads/thr_manager/status/chart.png");
+    });
+    expect(
+      screen.getByRole("link", { name: "details" }).getAttribute("href"),
+    ).toBe("/api/v1/threads/thr_manager/status/details.html");
+    expect(
+      screen.queryByRole("tablist", { name: "Markdown view mode" }),
+    ).toBeNull();
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+
+  it("renders empty STATUS directly", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thr_manager/status-version",
+        handler: () => jsonResponse({ source: "empty", hash: "status-hash" }),
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+    const { container } = render(
+      <ThreadStorageFilePreview
+        activePath={MANAGER_STATUS_FILE_PATH}
+        filePreview={undefined}
+        isLoading={false}
+        pinnedPath={MANAGER_STATUS_FILE_PATH}
+        threadId="thr_manager"
+      />,
+      { wrapper },
+    );
+
+    await screen.findByText("Manager hasn't written a status yet.");
+    expect(container.querySelector("iframe")).toBeNull();
   });
 });

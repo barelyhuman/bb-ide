@@ -17,6 +17,7 @@ describe("FilePreview", () => {
         state={{
           kind: "ready",
           lineNumber: null,
+          showMarkdownModeToggle: true,
           file: {
             name: "README.md",
             contents: [

@@ -37,6 +37,7 @@ export interface MarkdownPreviewProps {
   expandedImageAlt?: string;
   imageLightboxTitle?: string;
   onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
+  urlTransform?: UrlTransform;
 }
 
 interface MarkdownAnchorProps
@@ -488,6 +489,7 @@ function MarkdownPreviewComponent({
   expandedImageAlt = "Expanded image",
   imageLightboxTitle = "Expanded image preview",
   onOpenLocalFileLink,
+  urlTransform,
 }: MarkdownPreviewProps) {
   const preferredTheme = usePreferredTheme();
   const contentRef = useMarkdownContentWidthVariable();
@@ -516,7 +518,7 @@ function MarkdownPreviewComponent({
           remarkPlugins={[remarkGfm]}
           components={markdownComponents}
           urlTransform={
-            onOpenLocalFileLink ? localFileAwareUrlTransform : undefined
+            onOpenLocalFileLink ? localFileAwareUrlTransform : urlTransform
           }
         >
           {content}

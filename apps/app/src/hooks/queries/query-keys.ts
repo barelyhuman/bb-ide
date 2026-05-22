@@ -35,6 +35,8 @@ export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_PATHS_QUERY_KEY = "threadStoragePaths";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 export const THREAD_STATUS_VERSION_QUERY_KEY = "threadStatusVersion";
+export const THREAD_STATUS_MARKDOWN_PREVIEW_QUERY_KEY =
+  "threadStatusMarkdownPreview";
 export const THREAD_HOST_FILE_PREVIEW_QUERY_KEY = "threadHostFilePreview";
 export const ENVIRONMENT_QUERY_KEY = "environment";
 export const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
@@ -240,6 +242,11 @@ export type ThreadStorageFilePreviewQueryKeyPrefix = readonly [
 export type ThreadStatusVersionQueryKey = readonly [
   typeof THREAD_STATUS_VERSION_QUERY_KEY,
   string,
+];
+export type ThreadStatusMarkdownPreviewQueryKey = readonly [
+  typeof THREAD_STATUS_MARKDOWN_PREVIEW_QUERY_KEY,
+  string,
+  string | null | undefined,
 ];
 export type AllThreadHostFilePreviewQueryKeyPrefix = readonly [
   typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
@@ -636,6 +643,13 @@ export function threadStatusVersionQueryKey(
   threadId: string,
 ): ThreadStatusVersionQueryKey {
   return [THREAD_STATUS_VERSION_QUERY_KEY, threadId];
+}
+
+export function threadStatusMarkdownPreviewQueryKey(
+  threadId: string,
+  versionHash: string | null | undefined,
+): ThreadStatusMarkdownPreviewQueryKey {
+  return [THREAD_STATUS_MARKDOWN_PREVIEW_QUERY_KEY, threadId, versionHash];
 }
 
 export function threadHostFilePreviewQueryKey(

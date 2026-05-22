@@ -1,16 +1,25 @@
+import { useMemo } from "react";
+import { defaultUrlTransform, type UrlTransform } from "react-markdown";
 import {
   FilePreview as FilePreviewSurface,
   type FilePreviewFile,
 } from "./FilePreview";
-import { isManagerStatusStorageFilePath } from "./managerStorage";
-import { useThreadStatusVersion } from "@/hooks/queries/thread-queries";
+import {
+  MANAGER_STATUS_MARKDOWN_FILE_PATH,
+  isManagerStatusStorageFilePath,
+} from "./managerStorage";
+import {
+  useThreadStatusMarkdownPreview,
+  useThreadStatusVersion,
+} from "@/hooks/queries/thread-queries";
 import { HttpError } from "@/lib/api";
 import {
   buildThreadStatusContentUrl,
   buildThreadStorageRawContentUrl,
 } from "@/lib/file-content-urls";
+import type { ThreadStatusVersionResponse } from "@bb/server-contract";
 import type {
-  FilePreview as ApiFilePreview,
+  FilePreview,
   TextFilePreview,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
@@ -25,7 +34,7 @@ interface FilePreviewBaseProps {
   activePath: string;
   copyPath?: string | null;
   error?: Error | null;
-  filePreview: ApiFilePreview | undefined;
+  filePreview: FilePreview | undefined;
   isLoading: boolean;
   lineNumber?: number | null;
   onOpenInEditor?: (path: string) => void;
@@ -55,6 +64,37 @@ function buildTextPreviewFile({
     name: filePreview.name ?? activePath,
     contents: filePreview.content,
   };
+}
+
+const STATUS_RELATIVE_ASSET_URL_PATTERN =
+  /^(?![a-z][a-z\d+.-]*:|\/\/|\/|#|\?)/iu;
+
+function isStatusRelativeAssetUrl(url: string): boolean {
+  return url.length > 0 && STATUS_RELATIVE_ASSET_URL_PATTERN.test(url);
+}
+
+function resolveStatusAssetUrl(assetBaseUrl: string, url: string): string {
+  const baseUrl = new URL(assetBaseUrl, window.location.origin);
+  const assetUrl = new URL(url, baseUrl);
+  return `${assetUrl.pathname}${assetUrl.search}${assetUrl.hash}`;
+}
+
+function createStatusMarkdownUrlTransform(assetBaseUrl: string): UrlTransform {
+  return (url) => {
+    const transformedUrl = defaultUrlTransform(url);
+    if (!isStatusRelativeAssetUrl(transformedUrl)) {
+      return transformedUrl;
+    }
+
+    return resolveStatusAssetUrl(assetBaseUrl, transformedUrl);
+  };
+}
+
+function buildManagerStatusPreviewUrl(
+  threadId: string,
+  version: ThreadStatusVersionResponse,
+): string {
+  return buildThreadStatusContentUrl(threadId, version.hash);
 }
 
 export function SecondaryPanelFilePreview({
@@ -164,6 +204,7 @@ export function SecondaryPanelFilePreview({
         state={{
           kind: "ready",
           lineNumber,
+          showMarkdownModeToggle: true,
           file: buildTextPreviewFile({ activePath, filePreview }),
         }}
       />
@@ -211,8 +252,118 @@ export function ThreadStorageFilePreview({
   const statusVersion = useThreadStatusVersion(threadId, {
     enabled: isManagerStatusTab,
   });
+  const statusMarkdownPreview = useThreadStatusMarkdownPreview(
+    threadId,
+    statusVersion.data?.hash,
+    {
+      enabled: isManagerStatusTab && statusVersion.data?.source === "md",
+    },
+  );
+  const statusMarkdownAssetBaseUrl = useMemo(
+    () => buildThreadStatusContentUrl(threadId),
+    [threadId],
+  );
+  const statusMarkdownUrlTransform = useMemo(() => {
+    return createStatusMarkdownUrlTransform(statusMarkdownAssetBaseUrl);
+  }, [statusMarkdownAssetBaseUrl]);
 
   if (isManagerStatusTab) {
+    if (statusVersion.isError) {
+      return (
+        <FilePreviewSurface
+          path={activePath}
+          copyPath={copyPath}
+          state={{
+            kind: "error",
+            message:
+              statusVersion.error instanceof Error
+                ? statusVersion.error.message
+                : "Failed to load manager status.",
+          }}
+        />
+      );
+    }
+
+    if (!statusVersion.data) {
+      return (
+        <FilePreviewSurface
+          path={activePath}
+          copyPath={copyPath}
+          state={{ kind: "loading" }}
+        />
+      );
+    }
+
+    if (statusVersion.data.source === "empty") {
+      return (
+        <FilePreviewSurface
+          path={activePath}
+          copyPath={copyPath}
+          state={{ kind: "manager-status-pending" }}
+        />
+      );
+    }
+
+    if (statusVersion.data.source === "md") {
+      if (statusMarkdownPreview.isError) {
+        return (
+          <FilePreviewSurface
+            path={activePath}
+            copyPath={copyPath}
+            state={{
+              kind: "error",
+              message:
+                statusMarkdownPreview.error instanceof Error
+                  ? statusMarkdownPreview.error.message
+                  : "Failed to load manager status.",
+            }}
+          />
+        );
+      }
+
+      if (!statusMarkdownPreview.data) {
+        return (
+          <FilePreviewSurface
+            path={activePath}
+            copyPath={copyPath}
+            state={{ kind: "loading" }}
+          />
+        );
+      }
+
+      if (statusMarkdownPreview.data.kind !== "text") {
+        return (
+          <FilePreviewSurface
+            path={activePath}
+            copyPath={copyPath}
+            state={{
+              kind: "error",
+              message: `Preview not available for ${statusMarkdownPreview.data.mimeType}.`,
+            }}
+          />
+        );
+      }
+
+      return (
+        <FilePreviewSurface
+          path={activePath}
+          copyPath={copyPath}
+          state={{
+            kind: "ready",
+            lineNumber: null,
+            showMarkdownModeToggle: false,
+            markdownUrlTransform: statusMarkdownUrlTransform,
+            file: {
+              name:
+                statusMarkdownPreview.data.name ??
+                MANAGER_STATUS_MARKDOWN_FILE_PATH,
+              contents: statusMarkdownPreview.data.content,
+            },
+          }}
+        />
+      );
+    }
+
     return (
       <FilePreviewSurface
         path={activePath}
@@ -221,7 +372,7 @@ export function ThreadStorageFilePreview({
           kind: "iframe",
           sandbox: null,
           title: "Manager status",
-          url: buildThreadStatusContentUrl(threadId, statusVersion.data?.hash),
+          url: buildManagerStatusPreviewUrl(threadId, statusVersion.data),
         }}
       />
     );

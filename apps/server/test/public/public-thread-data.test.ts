@@ -3035,81 +3035,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("renders STATUS.md server-side when folder and html status sources are missing", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const fixture = seedManagerThreadStorage(harness);
-      const markdown = "# Markdown status\n\n- ready";
-
-      const statusPromise = harness.app.request(
-        `/api/v1/threads/${fixture.threadId}/status/`,
-      );
-      const indexCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "host.read_file_relative" &&
-          command.rootPath === `${fixture.storageRootPath}/STATUS` &&
-          command.path === "index.html",
-      );
-      await reportQueuedCommandError(harness, indexCommand, {
-        errorCode: "ENOENT",
-        errorMessage: "Path does not exist: index.html",
-      });
-      const htmlCommand = await waitForQueuedCommandAfter(
-        harness,
-        indexCommand.row.cursor,
-        ({ command }) =>
-          command.type === "host.read_file_relative" &&
-          command.rootPath === fixture.storageRootPath &&
-          command.path === "STATUS.html",
-      );
-      await reportQueuedCommandError(harness, htmlCommand, {
-        errorCode: "ENOENT",
-        errorMessage: "Path does not exist: STATUS.html",
-      });
-      const markdownCommand = await waitForQueuedCommandAfter(
-        harness,
-        htmlCommand.row.cursor,
-        ({ command }) =>
-          command.type === "host.read_file_relative" &&
-          command.rootPath === fixture.storageRootPath &&
-          command.path === "STATUS.md",
-      );
-      expect(markdownCommand.command).toMatchObject({
-        type: "host.read_file_relative",
-        rootPath: fixture.storageRootPath,
-        path: "STATUS.md",
-        dotfiles: "allow",
-      });
-      await reportQueuedCommandSuccess(harness, markdownCommand, {
-        path: "STATUS.md",
-        content: markdown,
-        contentEncoding: "utf8",
-        mimeType: "text/markdown",
-        sizeBytes: Buffer.byteLength(markdown),
-      });
-
-      const statusResponse = await statusPromise;
-      expect(statusResponse.status).toBe(200);
-      expect(statusResponse.headers.get("content-type")).toBe(
-        "text/html; charset=utf-8",
-      );
-      expect(statusResponse.headers.get("cache-control")).toBe("no-store");
-      expect(statusResponse.headers.get("x-content-type-options")).toBe(
-        "nosniff",
-      );
-      const body = await statusResponse.text();
-      expect(body).toContain("<h1>Markdown status</h1>");
-      expect(body).toContain("<li>ready</li>");
-      expect(body).toContain("font-size: var(--status-markdown-text-sm)");
-      expect(body).toContain(".status-markdown h1");
-      expect(body).toContain(".status-markdown li");
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("returns an empty status page when no status source exists", async () => {
+  it("returns not found from the raw STATUS route when no raw HTML source exists", async () => {
     const harness = await createTestAppHarness();
     try {
       const fixture = seedManagerThreadStorage(harness);
@@ -3140,29 +3066,13 @@ describe("public thread data routes", () => {
         errorCode: "ENOENT",
         errorMessage: "Path does not exist: STATUS.html",
       });
-      const markdownCommand = await waitForQueuedCommandAfter(
-        harness,
-        htmlCommand.row.cursor,
-        ({ command }) =>
-          command.type === "host.read_file_relative" &&
-          command.rootPath === fixture.storageRootPath &&
-          command.path === "STATUS.md",
-      );
-      await reportQueuedCommandError(harness, markdownCommand, {
-        errorCode: "ENOENT",
-        errorMessage: "Path does not exist: STATUS.md",
-      });
 
       const statusResponse = await statusPromise;
-      expect(statusResponse.status).toBe(200);
-      expect(statusResponse.headers.get("content-type")).toBe(
-        "text/html; charset=utf-8",
-      );
-      expect(statusResponse.headers.get("cache-control")).toBe("no-store");
-      expect(statusResponse.headers.get("x-content-type-options")).toBe(
-        "nosniff",
-      );
-      expect(await statusResponse.text()).toContain("No manager status yet");
+      expect(statusResponse.status).toBe(404);
+      await expect(readJson(statusResponse)).resolves.toMatchObject({
+        code: "ENOENT",
+        message: "No raw manager status HTML source exists",
+      });
     } finally {
       await harness.cleanup();
     }
