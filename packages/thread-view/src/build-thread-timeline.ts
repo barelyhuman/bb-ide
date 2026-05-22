@@ -327,7 +327,9 @@ function buildTimelineRowBase(
   };
 }
 
-function isPendingErrorMessage(message: EventProjectionErrorMessage): boolean {
+function isReconnectErrorMessage(
+  message: EventProjectionErrorMessage,
+): boolean {
   return message.reconnectAttempt !== undefined || message.willRetry === true;
 }
 
@@ -667,15 +669,19 @@ function convertMessage(
     }
     case "error": {
       const errorDisplay = buildTimelineErrorDisplay(message);
-      const pendingError = isPendingErrorMessage(message);
+      const isReconnect = isReconnectErrorMessage(message);
       return [
         {
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "system",
-          systemKind: pendingError ? "reconnect" : "error",
+          systemKind: isReconnect ? "reconnect" : "error",
           title: errorDisplay.title,
           detail: errorDisplay.detail,
-          status: pendingError ? "pending" : "error",
+          // Reconnect rows are transient informational markers, not in-progress
+          // work, so they carry no lifecycle status. That keeps them from
+          // shimmering or lingering as "pending" once an attempt is superseded
+          // by the next one or by a terminal failure.
+          status: isReconnect ? null : "error",
         },
       ];
     }

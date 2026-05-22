@@ -31,9 +31,6 @@ export interface ExpandableTimelineRowProps {
 type ManualExpansionOverride = boolean | null;
 
 function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
-  if (title.tone === "destructive") {
-    return "text-destructive";
-  }
   if (title.tone === "summary") {
     return "text-subtle-foreground transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground";
   }

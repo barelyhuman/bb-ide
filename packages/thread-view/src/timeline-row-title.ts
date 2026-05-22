@@ -39,7 +39,7 @@ import {
   type TimelineViewWorkRow,
 } from "./timeline-view.js";
 
-export type TimelineTitleTone = "default" | "destructive" | "summary";
+export type TimelineTitleTone = "default" | "summary";
 export type TimelineStatusDecorationStatus =
   | "denied"
   | "error"
@@ -91,6 +91,13 @@ export type TimelineTitleDecoration =
       kind: "status";
       status: TimelineStatusDecorationStatus;
       durationMs: number | null;
+      /**
+       * Whether this status is the row's primary signal and should be colored
+       * (system error rows) rather than rendered as a muted annotation next to
+       * a work row's content (a failed command, an interrupted fetch). Only
+       * emphasized error statuses pick up the destructive color.
+       */
+      emphasis: boolean;
     }
   | {
       kind: "summary-status";
@@ -249,8 +256,14 @@ function completedTurnDurationDecoration(
 function statusDecoration(
   status: TimelineStatusDecorationStatus,
   durationMs: number | null,
+  options: { emphasis?: boolean } = {},
 ): TimelineTitleDecoration {
-  return { kind: "status", status, durationMs: visibleDurationMs(durationMs) };
+  return {
+    kind: "status",
+    status,
+    durationMs: visibleDurationMs(durationMs),
+    emphasis: options.emphasis ?? false,
+  };
 }
 
 function summaryStatusDecoration(
@@ -723,8 +736,7 @@ function mapDelegationTitle(
     );
   }
   // The verb prefix (Failed/Interrupted/Ran subagent) already conveys the
-  // status, so the decoration only carries duration. Tone stays neutral —
-  // destructive tone is reserved for the system-error row kind.
+  // status, so the decoration only carries duration.
   return makeTitle({
     segments,
     decorations: filterNull([
@@ -984,7 +996,7 @@ function mapWorkTitle(
         return assertNever(row);
     }
   })();
-  if (options.workStyle === "default" || title.tone === "destructive") {
+  if (options.workStyle === "default") {
     return title;
   }
   // Summary work-style mutes the title via tone; segment-level `em` is kept
@@ -1140,7 +1152,7 @@ function mapManagerAssignmentSystemTitle(
   const decorations: TimelineTitleDecoration[] = (() => {
     switch (row.status) {
       case "error":
-        return [statusDecoration("error", null)];
+        return [statusDecoration("error", null, { emphasis: true })];
       case "interrupted":
         return [statusDecoration("interrupted", null)];
       case "pending":
@@ -1154,12 +1166,11 @@ function mapManagerAssignmentSystemTitle(
   return makeTitle({
     segments,
     decorations,
-    tone: row.status === "error" ? "destructive" : "default",
   });
 }
 
 function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
-  const hasErrorTone = row.systemKind === "error" || row.status === "error";
+  const hasError = row.systemKind === "error" || row.status === "error";
   if (
     row.systemKind === "operation" &&
     row.operationKind === "manager-assignment"
@@ -1168,22 +1179,26 @@ function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
   }
   const isCompaction =
     row.systemKind === "operation" && row.operationKind === "compaction";
-  const decorations =
-    isCompaction && (row.status === "pending" || row.status === "completed")
-      ? filterNull([durationDecoration(row.startedAt, row.completedAt)])
-      : [];
   const titleText =
     isCompaction && row.status === "pending" ? `${row.title}…` : row.title;
+  // Error system rows read like every other terminal row: a neutral title plus
+  // a status decoration that carries the error color (see TimelineTitleView).
+  // They no longer recolor the whole title — full-destructive tone was unique
+  // among timeline rows and made error rows shout relative to their peers.
+  const decorations: TimelineTitleDecoration[] = hasError
+    ? [statusDecoration("error", null, { emphasis: true })]
+    : isCompaction && (row.status === "pending" || row.status === "completed")
+      ? filterNull([durationDecoration(row.startedAt, row.completedAt)])
+      : [];
+  // Shimmer means "in progress right now" — true only for pending rows. Only
+  // operations (provisioning, compaction) ever reach this branch with a pending
+  // status; error rows are terminal and reconnect rows carry no status, so this
+  // uniform rule leaves both static.
   return makeTitle({
     segments: [
-      segment(titleText, {
-        em: hasErrorTone,
-        shimmer: row.status === "pending",
-        truncate: true,
-      }),
+      segment(titleText, { shimmer: row.status === "pending", truncate: true }),
     ],
     decorations,
-    tone: hasErrorTone ? "destructive" : "default",
   });
 }
 

@@ -803,35 +803,56 @@ describe("buildThreadTimelineFromEvents", () => {
       }),
     ]);
 
+    // No category to summarize, so the message becomes the title and the
+    // duplicate detail is dropped — the row renders as a single line.
     expect(collectSystemRows(rows)).toEqual([
       expect.objectContaining({
         systemKind: "error",
         status: "error",
         title: "API Error: Overloaded",
-        detail: "API Error: Overloaded",
+        detail: null,
       }),
     ]);
   });
 
-  it("renders retrying provider errors as pending reconnect rows", () => {
-    const detail =
-      "Reconnecting... 3/5\nstream disconnected before completion: Network is unreachable (os error 51)";
+  it("titles retrying provider errors with their reconnect progress, error in the body", () => {
     const rows = buildTimelineRows([
       turnStartedEvent({ seq: 1 }),
       providerErrorEvent({
-        detail,
+        detail:
+          "Reconnecting... 3/5\nstream disconnected before completion: Network is unreachable (os error 51)",
         seq: 2,
         willRetry: true,
       }),
     ]);
 
+    // Reconnect rows are informational markers, not in-progress work, so they
+    // carry no lifecycle status.
     expect(collectSystemRows(rows)).toEqual([
       expect.objectContaining({
         systemKind: "reconnect",
-        status: "pending",
-        title:
+        status: null,
+        title: "Reconnecting... 3/5",
+        detail:
           "stream disconnected before completion: Network is unreachable (os error 51)",
-        detail,
+      }),
+    ]);
+  });
+
+  it("falls back to a generic title and keeps the full message in the body when an error is too long to read inline", () => {
+    const longMessage =
+      "There's an issue with the selected model (opus-4.7). It may not exist or you may not have access to it. Run --model to pick a different model.";
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      providerErrorEvent({ detail: longMessage, seq: 2 }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        status: "error",
+        title: "Provider error",
+        detail: longMessage,
       }),
     ]);
   });

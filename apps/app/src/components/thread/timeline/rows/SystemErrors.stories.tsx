@@ -54,91 +54,24 @@ const baseProps: TimelineRowsStoryBaseProps = {
 };
 
 // ---------------------------------------------------------------------------
-// System error rows from ~/.bb-dev/bb.db. These fixtures use the projected
+// System error rows drawn from the dev db. These fixtures are the projected
 // TimelineSystemRow shape emitted by packages/thread-view/src/build-thread-
-// timeline.ts, not raw event JSON. Source events were found with:
+// timeline.ts (via error-display.ts), not raw event JSON, so the titles/details
+// mirror exactly what the projector produces for the underlying events. Real
+// provider/error events carry `message: "Provider error"` plus a `detail`; the
+// projector derives the row title from the detail. Source events found with:
 //
-//   SELECT id, thread_id, turn_id, sequence, type, data
-//   FROM events
+//   SELECT type, data FROM events
 //   WHERE type IN ('provider/error', 'system/error')
 //   ORDER BY created_at DESC;
 // ---------------------------------------------------------------------------
 
-// thr_ggp8mmze2q, seq 5947..5952. The provider supplied willRetry=true on the
-// reconnect rows; these legacy rows use the first useful detail line as title.
-const providerStreamRetryAttempt1: TimelineNonOperationSystemRow = {
-  id: "thr_ggp8mmze2q:error:5947",
-  threadId: "thr_ggp8mmze2q",
-  turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
-  sourceSeqStart: 5947,
-  sourceSeqEnd: 5947,
-  startedAt: 1778992960204,
-  createdAt: 1778992960204,
-  kind: "system",
-  systemKind: "reconnect",
-  title:
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  detail:
-    "Reconnecting... 1/5\n" +
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  status: "pending",
-};
-
-const providerStreamRetryAttempt2: TimelineNonOperationSystemRow = {
-  id: "thr_ggp8mmze2q:error:5948",
-  threadId: "thr_ggp8mmze2q",
-  turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
-  sourceSeqStart: 5948,
-  sourceSeqEnd: 5948,
-  startedAt: 1778992963354,
-  createdAt: 1778992963354,
-  kind: "system",
-  systemKind: "reconnect",
-  title:
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  detail:
-    "Reconnecting... 2/5\n" +
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  status: "pending",
-};
-
-const providerStreamRetryAttempt3: TimelineNonOperationSystemRow = {
-  id: "thr_ggp8mmze2q:error:5949",
-  threadId: "thr_ggp8mmze2q",
-  turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
-  sourceSeqStart: 5949,
-  sourceSeqEnd: 5949,
-  startedAt: 1778992966974,
-  createdAt: 1778992966974,
-  kind: "system",
-  systemKind: "reconnect",
-  title:
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  detail:
-    "Reconnecting... 3/5\n" +
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  status: "pending",
-};
-
-const providerStreamRetryAttempt4: TimelineNonOperationSystemRow = {
-  id: "thr_ggp8mmze2q:error:5950",
-  threadId: "thr_ggp8mmze2q",
-  turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
-  sourceSeqStart: 5950,
-  sourceSeqEnd: 5950,
-  startedAt: 1778992970894,
-  createdAt: 1778992970894,
-  kind: "system",
-  systemKind: "reconnect",
-  title:
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  detail:
-    "Reconnecting... 4/5\n" +
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  status: "pending",
-};
-
-const providerStreamRetryAttempt5: TimelineNonOperationSystemRow = {
+// thr_ggp8mmze2q, seq 5947..5952. The provider emitted five willRetry=true
+// reconnect events then a final willRetry=false failure. `buildThreadTimeline`
+// collapses consecutive reconnect rows in place (appendRows), so the timeline
+// shows a single reconnect row holding the latest progress ("Reconnecting...
+// 5/5"), not one row per attempt. The terminal failure is a separate error row.
+const providerStreamReconnect: TimelineNonOperationSystemRow = {
   id: "thr_ggp8mmze2q:error:5951",
   threadId: "thr_ggp8mmze2q",
   turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
@@ -148,12 +81,10 @@ const providerStreamRetryAttempt5: TimelineNonOperationSystemRow = {
   createdAt: 1778992975767,
   kind: "system",
   systemKind: "reconnect",
-  title:
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
+  title: "Reconnecting... 5/5",
   detail:
-    "Reconnecting... 5/5\n" +
     "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
-  status: "pending",
+  status: null,
 };
 
 const providerStreamFinalFailure: TimelineNonOperationSystemRow = {
@@ -166,8 +97,10 @@ const providerStreamFinalFailure: TimelineNonOperationSystemRow = {
   createdAt: 1778992981527,
   kind: "system",
   systemKind: "error",
-  title:
-    "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
+  // willRetry=false terminal failure. The underlying message is too long to
+  // read as a one-line title, so the projector uses a generic "Provider error"
+  // title and keeps the full message in the (expandable) body.
+  title: "Provider error",
   detail:
     "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
   status: "error",
@@ -183,9 +116,9 @@ const providerChildProcessTimeout: TimelineNonOperationSystemRow = {
   createdAt: 1778993228124,
   kind: "system",
   systemKind: "reconnect",
-  title: "timeout waiting for child process to exit",
-  detail: "Reconnecting... 3/5\ntimeout waiting for child process to exit",
-  status: "pending",
+  title: "Reconnecting... 3/5",
+  detail: "timeout waiting for child process to exit",
+  status: null,
 };
 
 const providerOverloaded: TimelineNonOperationSystemRow = {
@@ -198,8 +131,10 @@ const providerOverloaded: TimelineNonOperationSystemRow = {
   createdAt: 1778871667729,
   kind: "system",
   systemKind: "error",
+  // Short enough to read inline, so the message is the title and the duplicate
+  // body is dropped — a single non-expandable line.
   title: "API Error: Overloaded",
-  detail: "API Error: Overloaded",
+  detail: null,
   status: "error",
 };
 
@@ -214,7 +149,7 @@ const providerRateLimit: TimelineNonOperationSystemRow = {
   kind: "system",
   systemKind: "error",
   title: "You've hit your limit · resets 7:50pm (America/Los_Angeles)",
-  detail: "You've hit your limit · resets 7:50pm (America/Los_Angeles)",
+  detail: null,
   status: "error",
 };
 
@@ -228,8 +163,10 @@ const providerModelUnavailable: TimelineNonOperationSystemRow = {
   createdAt: 1777871877997,
   kind: "system",
   systemKind: "error",
-  title:
-    "There's an issue with the selected model (opus-4.7). It may not exist or you may not have access to it. Run --model to pick a different model.",
+  // The message is too long to read as a one-line title, so the projector uses
+  // a generic "Provider error" title and keeps the full text in the expandable
+  // body — the whole error stays reachable instead of being truncated away.
+  title: "Provider error",
   detail:
     "There's an issue with the selected model (opus-4.7). It may not exist or you may not have access to it. Run --model to pick a different model.",
   status: "error",
@@ -276,11 +213,7 @@ const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = {
 };
 
 const providerStreamDisconnectRows: TimelineRow[] = [
-  providerStreamRetryAttempt1,
-  providerStreamRetryAttempt2,
-  providerStreamRetryAttempt3,
-  providerStreamRetryAttempt4,
-  providerStreamRetryAttempt5,
+  providerStreamReconnect,
   providerStreamFinalFailure,
 ];
 
@@ -290,8 +223,6 @@ const providerStreamFinalFailureExpanded = new Set<string>([
 const providerChildProcessTimeoutExpanded = new Set<string>([
   providerChildProcessTimeout.id,
 ]);
-const providerOverloadedExpanded = new Set<string>([providerOverloaded.id]);
-const providerRateLimitExpanded = new Set<string>([providerRateLimit.id]);
 const providerModelUnavailableExpanded = new Set<string>([
   providerModelUnavailable.id,
 ]);
@@ -306,8 +237,8 @@ export function Errors() {
   return (
     <StoryCard>
       <StoryRow
-        label="provider/error — reconnect burst"
-        hint="willRetry=true rows followed by a final willRetry=false failure; legacy detail supplies the row title"
+        label="provider/error — reconnect then failure"
+        hint="reconnect attempts collapse to one progress row; the final willRetry=false failure is a separate (error) row"
       >
         <ErrorRowsPreview
           initialExpanded={providerStreamFinalFailureExpanded}
@@ -316,7 +247,7 @@ export function Errors() {
       </StoryRow>
       <StoryRow
         label="provider/error — child process timeout"
-        hint="provider retry progress plus host process timeout detail"
+        hint="reconnect row titled by its progress; the host timeout is in the body"
       >
         <ErrorRowsPreview
           initialExpanded={providerChildProcessTimeoutExpanded}
@@ -325,25 +256,19 @@ export function Errors() {
       </StoryRow>
       <StoryRow
         label="provider/error — overloaded"
-        hint="short provider failure detail"
+        hint="short message — used directly as the title, single non-expandable line"
       >
-        <ErrorRowsPreview
-          initialExpanded={providerOverloadedExpanded}
-          rows={[providerOverloaded]}
-        />
+        <ErrorRowsPreview rows={[providerOverloaded]} />
       </StoryRow>
       <StoryRow
         label="provider/error — rate limit"
-        hint="provider quota text with reset time"
+        hint="short message — used directly as the title, single non-expandable line"
       >
-        <ErrorRowsPreview
-          initialExpanded={providerRateLimitExpanded}
-          rows={[providerRateLimit]}
-        />
+        <ErrorRowsPreview rows={[providerRateLimit]} />
       </StoryRow>
       <StoryRow
         label="provider/error — model unavailable"
-        hint="selected model does not exist or is inaccessible"
+        hint="message too long for a title — generic title, full error in the expandable body"
       >
         <ErrorRowsPreview
           initialExpanded={providerModelUnavailableExpanded}

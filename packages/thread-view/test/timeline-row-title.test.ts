@@ -414,7 +414,7 @@ describe("buildTimelineRowTitle", () => {
       "Ran pnpm exec turbo run test --filter=@bb/app (3s, interrupted)",
     );
     expect(title.decorations).toEqual([
-      { kind: "status", status: "interrupted", durationMs: 3_000 },
+      { kind: "status", status: "interrupted", durationMs: 3_000, emphasis: false },
     ]);
   });
 
@@ -435,7 +435,7 @@ describe("buildTimelineRowTitle", () => {
       "Ran tool: LookupTool { query: select:TodoWrite } (3s, interrupted)",
     );
     expect(title.decorations).toEqual([
-      { kind: "status", status: "interrupted", durationMs: 3_000 },
+      { kind: "status", status: "interrupted", durationMs: 3_000, emphasis: false },
     ]);
   });
 
@@ -480,7 +480,7 @@ describe("buildTimelineRowTitle", () => {
       } satisfies TimelineToolWorkRow,
     },
   ])(
-    "keeps denied $row.workKind titles muted (non-destructive) when summary work style is requested",
+    "keeps denied $row.workKind titles muted under summary tone when summary work style is requested",
     ({ expectedPlain, row }) => {
       const title = buildTimelineRowTitle(row, {
         summaryStyle: "background",
@@ -489,7 +489,7 @@ describe("buildTimelineRowTitle", () => {
 
       expect(title.plain).toBe(expectedPlain);
       expect(title.segments[0]?.text).toBe("Permission denied:");
-      expect(title.tone).not.toBe("destructive");
+      expect(title.tone).toBe("summary");
     },
   );
 
@@ -785,7 +785,6 @@ describe("buildTimelineRowTitle", () => {
       expectedPlain: "Thread assigned to Frontend Manager (error)",
       expectedShimmer: false,
       expectedDecorationText: "(error)",
-      expectedTone: "destructive",
       status: "error",
     },
     {
@@ -798,7 +797,6 @@ describe("buildTimelineRowTitle", () => {
     expectedPlain: string;
     expectedShimmer: boolean;
     expectedDecorationText: string;
-    expectedTone?: "destructive";
     status: Exclude<TimelineSystemRow["status"], "completed" | null>;
   }>)(
     "renders manager assignment $status status with typed wording",
@@ -806,7 +804,6 @@ describe("buildTimelineRowTitle", () => {
       expectedPlain,
       expectedShimmer,
       expectedDecorationText,
-      expectedTone,
       status,
     }) => {
       const title = buildTimelineRowTitle(
@@ -825,7 +822,7 @@ describe("buildTimelineRowTitle", () => {
 
       expect(title.plain).toBe(expectedPlain);
       expect(title.segments[0]?.shimmer).toBe(expectedShimmer);
-      expect(title.tone).toBe(expectedTone ?? "default");
+      expect(title.tone).toBe("default");
       if (expectedDecorationText.length > 0) {
         expect(title.decorations.map(formatTimelineDecorationText)).toContain(
           expectedDecorationText,
@@ -847,7 +844,7 @@ describe("buildTimelineRowTitle", () => {
     expect(title.plain).toBe("Read /repo/src/app.ts (error)");
     expect(title.tone).toBe("default");
     expect(title.decorations).toEqual([
-      { kind: "status", status: "error", durationMs: null },
+      { kind: "status", status: "error", durationMs: null, emphasis: false },
     ]);
   });
 
@@ -978,11 +975,14 @@ describe("buildTimelineRowTitle", () => {
     },
   );
 
-  it("uses destructive tone for failed system operation titles", () => {
+  it("flags failed system operation titles with an (error) decoration, not a destructive tone", () => {
     const title = buildTimelineRowTitle(systemOperationRow(), DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Thread release failed");
-    expect(title.tone).toBe("destructive");
+    expect(title.plain).toBe("Thread release failed (error)");
+    expect(title.tone).toBe("default");
+    expect(title.decorations).toEqual([
+      { kind: "status", status: "error", durationMs: null, emphasis: true },
+    ]);
   });
 
   it("renders elapsed duration on completed compaction rows", () => {
@@ -1143,7 +1143,7 @@ describe("buildTimelineRowTitle", () => {
 
       expect(title.plain).toBe(expectedPlain);
       expect(title.decorations).toEqual([
-        { kind: "status", status: "interrupted", durationMs: 3_000 },
+        { kind: "status", status: "interrupted", durationMs: 3_000, emphasis: false },
       ]);
     },
   );
@@ -1373,7 +1373,7 @@ describe("buildTimelineRowTitle", () => {
     expect(titles).toHaveLength(1);
     expect(titles[0]?.title.plain).toBe("Read src/app.ts (error)");
     expect(titles[0]?.title.decorations).toEqual([
-      { kind: "status", status: "error", durationMs: null },
+      { kind: "status", status: "error", durationMs: null, emphasis: false },
     ]);
   });
 
@@ -1392,7 +1392,7 @@ describe("buildTimelineRowTitle", () => {
       "Searched for TODO in src (interrupted)",
     );
     expect(titles[0]?.title.decorations).toEqual([
-      { kind: "status", status: "interrupted", durationMs: null },
+      { kind: "status", status: "interrupted", durationMs: null, emphasis: false },
     ]);
   });
 });
@@ -1499,7 +1499,7 @@ describe("buildTimelineRowTitle question rows", () => {
 
     expect(title.plain).toContain("Asked Which branch should I update?");
     expect(title.decorations).toEqual([
-      { kind: "status", status: "interrupted", durationMs: null },
+      { kind: "status", status: "interrupted", durationMs: null, emphasis: false },
     ]);
   });
 });

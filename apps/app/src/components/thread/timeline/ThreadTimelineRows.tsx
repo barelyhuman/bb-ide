@@ -168,7 +168,6 @@ interface TimelineExpandableBodyProps {
 interface TimelineSystemDetailBlockProps {
   detail: string;
   streaming: boolean;
-  tone: "default" | "danger";
 }
 
 interface BuildTimelineRowsListItemsArgs {
@@ -591,28 +590,20 @@ function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
 function TimelineSystemDetailBlock({
   detail,
   streaming,
-  tone,
 }: TimelineSystemDetailBlockProps) {
-  // Mirror the card chrome from TerminalOutputBlock so operation detail
-  // bodies (provisioning transcripts, provider-unhandled payloads) read as
-  // the same "output" surface as command output. Danger tone overlays the
-  // destructive palette without changing the card shape.
+  // Mirror the card chrome from TerminalOutputBlock so every system detail body
+  // (provisioning transcripts, provider-unhandled payloads, error messages)
+  // reads as the same neutral "output" surface as command output. Errors are
+  // flagged by the title's "(error)" tag, not by recoloring the body — that
+  // kept system errors visually consistent with failed command/tool rows.
   return (
     <TimelineDetailScroll
       size="base"
       streaming={streaming}
       contentKey={detail}
-      className={cn(
-        "overflow-hidden rounded-lg border bg-card",
-        tone === "danger" ? "border-destructive" : "border-border",
-      )}
+      className="overflow-hidden rounded-lg border border-border bg-card"
     >
-      <pre
-        className={cn(
-          "whitespace-pre px-4 py-3 font-mono text-xs leading-tight",
-          tone === "danger" ? "text-destructive" : "text-foreground",
-        )}
-      >
+      <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-tight text-foreground">
         {detail}
       </pre>
     </TimelineDetailScroll>
@@ -728,11 +719,6 @@ function TimelineExpandableBody({
         <TimelineSystemDetailBlock
           detail={row.detail}
           streaming={row.status === "pending"}
-          tone={
-            row.systemKind === "error" || row.status === "error"
-              ? "danger"
-              : "default"
-          }
         />
       ) : null;
     case "conversation":

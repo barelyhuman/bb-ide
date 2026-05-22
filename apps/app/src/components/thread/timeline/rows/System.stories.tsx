@@ -367,10 +367,10 @@ const errorSystemRow: TimelineRow = {
   "status": "error",
 };
 
-// Non-operation system row, systemKind="reconnect". Surfaced while the
-// client reconnects to a thread after a transport drop — the row sits in
-// pending until the stream reattaches. status is "pending"; use Date.now
-// so the streaming styling shows.
+// Non-operation system row, systemKind="reconnect". Surfaced while the client
+// reconnects to a thread after a transport drop. A reconnect row is a transient
+// informational marker, not in-progress work, so it carries no lifecycle status
+// (status=null) — it never shimmers or lingers as "pending" once superseded.
 const reconnectSystemRow: TimelineRow = {
   "id": "thr_zeb7z9afmw:reconnect:current",
   "threadId": "thr_zeb7z9afmw",
@@ -383,7 +383,7 @@ const reconnectSystemRow: TimelineRow = {
   "systemKind": "reconnect",
   "title": "Reconnecting to thread stream",
   "detail": null,
-  "status": "pending",
+  "status": null,
 };
 
 export function Operations() {
@@ -543,8 +543,8 @@ export function NonOperations() {
         </TimelineStage>
       </StoryRow>
       <StoryRow
-        label="reconnect — pending"
-        hint="systemKind=reconnect, status=pending while transport reattaches"
+        label="reconnect"
+        hint="systemKind=reconnect, status=null — a transient informational marker"
       >
         <TimelineStage>
           <ThreadTimelineRows

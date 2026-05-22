@@ -45,8 +45,6 @@ function emToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
       return "font-semibold text-foreground";
-    case "destructive":
-      return "text-destructive";
     case "summary":
       return "text-subtle-foreground";
     default:
@@ -58,8 +56,6 @@ function plainToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
       return "text-muted-foreground";
-    case "destructive":
-      return "text-destructive";
     case "summary":
       return "text-subtle-foreground";
     default:
@@ -71,8 +67,6 @@ function decorationToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
       return "text-muted-foreground";
-    case "destructive":
-      return "text-destructive";
     case "summary":
       return "text-subtle-foreground";
     default:
@@ -218,8 +212,18 @@ function renderDecoration(
     case "summary-status": {
       const text = formatTimelineDecorationText(decoration);
       if (text.length === 0) return null;
+      // Only an emphasized error status (a system error row, whose whole reason
+      // for existing is the failure) carries the destructive color. A work
+      // row's "(error)" tag stays a muted annotation next to its content.
+      const emphasized = decoration.kind === "status" && decoration.emphasis;
       return (
-        <span key={index} className={baseClass}>
+        <span
+          key={index}
+          className={cn(
+            "shrink-0 whitespace-pre",
+            emphasized ? "text-destructive" : decorationToneClass(tone),
+          )}
+        >
           {text}
         </span>
       );
