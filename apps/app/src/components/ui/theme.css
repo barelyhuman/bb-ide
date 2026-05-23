@@ -299,7 +299,7 @@
   --font-sans: "Inter Variable", Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "Fira Code", monospace;
-  --radius: 0.35rem;
+  --radius: 0.5rem;
   --bb-sidebar-row-height: 1.75rem;
   --bb-sidebar-row-height-coarse: 2.5rem;
   --shadow-x: 0px;
@@ -419,7 +419,7 @@
   --font-sans: "Inter Variable", Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "Fira Code", monospace;
-  --radius: 0.35rem;
+  --radius: 0.5rem;
   --shadow-x: 0px;
   --shadow-y: 2px;
   --shadow-blur: 0px;
