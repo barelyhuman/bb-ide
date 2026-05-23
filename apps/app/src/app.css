@@ -2,6 +2,23 @@
 @import "@/components/ui/theme.css";
 
 @layer base {
+  /*
+   * Keep the real app shell from becoming a second scroll container. These
+   * selectors are class-scoped because Ladle imports app.css but does not use
+   * the Vite index.html shell classes.
+   */
+  html.bb-app-shell-root,
+  body.bb-app-shell,
+  body.bb-app-shell #root {
+    height: 100%;
+  }
+
+  html.bb-app-shell-root,
+  body.bb-app-shell {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   .chat-prompt-box {
     padding-bottom: 0.5rem;
   }
