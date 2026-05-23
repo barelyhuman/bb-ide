@@ -21,6 +21,7 @@ import {
   rawStringLocalStorage,
 } from "@/lib/browser-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
+import { reconcileReasoningLevel } from "@/lib/reasoning-level-reconcile";
 import { useSystemExecutionOptions } from "./queries/system-queries";
 
 const MODEL_STORAGE_KEY = "bb.promptbox.model";
@@ -570,11 +571,14 @@ export function useThreadCreationOptions(
     if (reasoningOptions.length === 0) {
       return rawReasoningLevel;
     }
-    if (reasoningOptions.some((option) => option.value === rawReasoningLevel)) {
-      return rawReasoningLevel;
-    }
-    return activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value;
-  }, [activeModel, rawReasoningLevel, reasoningOptions]);
+    // Carry the user's previous reasoning level across model switches when
+    // the new model supports it; otherwise pick the closest supported level
+    // (tie-break upward). See reasoning-level-reconcile for the full policy.
+    return reconcileReasoningLevel(
+      rawReasoningLevel,
+      reasoningOptions.map((option) => option.value),
+    );
+  }, [rawReasoningLevel, reasoningOptions]);
 
   const permissionMode = resolvePermissionModeSelection({
     rawPermissionMode,

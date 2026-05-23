@@ -3,9 +3,8 @@ import type { PermissionMode, ReasoningLevel, ServiceTier } from "@bb/domain";
 import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { ModelLoadErrorMessage } from "@/components/pickers/model-load-error-message";
-import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
+import { ModelReasoningPicker } from "@/components/pickers/ModelReasoningPicker";
 import {
-  OptionPicker,
   OptionDisplay,
   type PickerOption,
 } from "@/components/pickers/OptionPicker";
@@ -100,7 +99,7 @@ export const ExecutionControls = memo(function ExecutionControls({
         />
       ) : null}
       {showModelPicker ? (
-        <ProviderModelPicker
+        <ModelReasoningPicker
           providerOptions={provider.options ?? []}
           selectedProviderId={selectedProviderId}
           onSelectedProviderChange={provider.onChange}
@@ -110,6 +109,9 @@ export const ExecutionControls = memo(function ExecutionControls({
           modelLoadError={model.loadError}
           onModelChange={model.onChange}
           formatModelLabel={formatModelLabel}
+          reasoningValue={reasoning.value}
+          reasoningOptions={reasoning.options}
+          onReasoningChange={reasoning.onChange}
           fastModeEnabled={serviceTier?.value === "fast"}
           onFastModeChange={(enabled) =>
             handleServiceTierChange(enabled ? "fast" : undefined)
@@ -126,15 +128,6 @@ export const ExecutionControls = memo(function ExecutionControls({
             providerLabel={selectedProviderLabel}
           />
         </span>
-      ) : null}
-      {reasoning.options.length > 0 ? (
-        <OptionPicker
-          label="Reasoning level"
-          value={reasoning.value}
-          options={reasoning.options}
-          onChange={reasoning.onChange}
-          muted
-        />
       ) : null}
     </>
   );

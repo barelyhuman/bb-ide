@@ -202,7 +202,7 @@ function findOptionLabel(text: string): HTMLElement {
 }
 
 function getProviderModelButton(): HTMLElement {
-  return screen.getByRole("button", { name: "Provider and model" });
+  return screen.getByRole("button", { name: "Provider, model and reasoning" });
 }
 
 function getCreateButton(): HTMLButtonElement {
@@ -221,7 +221,7 @@ async function waitForCreateButtonReady(): Promise<void> {
 
 async function openProviderModelPicker(): Promise<void> {
   fireEvent.click(
-    await screen.findByRole("button", { name: "Provider and model" }),
+    await screen.findByRole("button", { name: "Provider, model and reasoning" }),
   );
 }
 
@@ -670,12 +670,9 @@ describe("NewManagerDialog", () => {
     });
 
     await waitFor(() => {
-      expectProviderModelTitle(["Codex", "GPT-5.4"]);
-    });
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
-        "Medium",
-      );
+      // Reasoning is shown inline in the combined picker's title now —
+      // GPT-5.4's only supported effort is medium, so reconcile lands there.
+      expectProviderModelTitle(["Codex", "GPT-5.4", "Medium"]);
     });
 
     await waitForCreateButtonReady();
@@ -920,7 +917,7 @@ describe("NewManagerDialog", () => {
       "https://developers.openai.com/codex/cli",
     );
     expect(
-      screen.queryByRole("button", { name: "Provider and model" }),
+      screen.queryByRole("button", { name: "Provider, model and reasoning" }),
     ).toBeNull();
   });
 
@@ -952,22 +949,20 @@ describe("NewManagerDialog", () => {
 
     await renderNewManagerDialog({ wrapper });
 
+    // Reasoning now lives inside the combined picker — its label sits in the
+    // trigger title alongside provider + model. Open the combined picker,
+    // pick "Medium" from the reasoning section, close, and assert the title
+    // reflects the picked level. After a model-data refetch (which doesn't
+    // remove the level from the supported set), the level stays.
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
-        "Extra High",
-      );
+      expectProviderModelTitle(["Extra High"]);
     });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Reasoning" }), {
-      button: 0,
-      ctrlKey: false,
-    });
+    await openProviderModelPicker();
     fireEvent.click(await waitFor(() => findOptionLabel("Medium")));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
-        "Medium",
-      );
+      expectProviderModelTitle(["Medium"]);
     });
 
     modelResponsesByProvider.pi = [
@@ -992,9 +987,7 @@ describe("NewManagerDialog", () => {
     await refetchExecutionOptions({ queryClient, providerId: "pi" });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
-        "Medium",
-      );
+      expectProviderModelTitle(["Medium"]);
     });
   });
 });

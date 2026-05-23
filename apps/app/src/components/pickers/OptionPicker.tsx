@@ -7,8 +7,14 @@ import { cn } from "@/lib/utils";
 
 export const OPTION_BASE_CLASS_NAME =
   "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight";
+// `data-[state=open]:hover:bg-transparent` overrides the ghost button variant's
+// compound selector that otherwise paints bg-state-active when the trigger is
+// hovered while the menu is open. Hidden in production by `modal=true` (the
+// overlay blocks the hover), but visible whenever a picker is used non-modally
+// — fixing it on the shared constant keeps every OPTION-styled trigger correct
+// regardless of modal mode.
 export const OPTION_INTERACTIVE_CLASS_NAME =
-  "border-none bg-transparent shadow-none hover:bg-transparent data-[state=open]:bg-transparent";
+  "border-none bg-transparent shadow-none hover:bg-transparent data-[state=open]:bg-transparent data-[state=open]:hover:bg-transparent";
 export const OPTION_CONTENT_CLASS_NAME =
   "flex min-w-0 items-center gap-1.5";
 export const OPTION_MUTED_CLASS_NAME =

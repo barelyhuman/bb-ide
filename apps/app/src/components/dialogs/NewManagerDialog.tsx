@@ -46,12 +46,11 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProviderIconInfo } from "@/lib/provider-icon";
-import {
-  OptionPicker,
-  type PickerOption,
-} from "@/components/pickers/OptionPicker";
+import { reconcileReasoningLevel } from "@/lib/reasoning-level-reconcile";
+import { type PickerOption } from "@/components/pickers/OptionPicker";
 import { ManagerTemplatePicker } from "@/components/pickers/ManagerTemplatePicker";
-import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
+import { ModelReasoningPicker } from "@/components/pickers/ModelReasoningPicker";
+import { ProjectSelector } from "@/components/pickers/ProjectSelector";
 import { ModelLoadErrorMessage } from "@/components/pickers/model-load-error-message";
 import { HostPicker } from "@/components/pickers/HostPicker";
 
@@ -67,7 +66,6 @@ const EMPTY_MODELS: AvailableModel[] = [];
 const EMPTY_PROJECTS: ProjectResponse[] = [];
 const EMPTY_PROJECT_SOURCES: ProjectResponse["sources"] = [];
 const EMPTY_MANAGER_TEMPLATES: ManagerTemplateSummary[] = [];
-type ReasoningSelectionSource = "default" | "user";
 
 type IsLocalHostFn = (id: string | null | undefined) => boolean;
 
@@ -220,8 +218,6 @@ export function NewManagerForm({
   const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<
     ReasoningLevel | ""
   >("");
-  const [reasoningSelectionSource, setReasoningSelectionSource] =
-    useState<ReasoningSelectionSource>("default");
   const [selectedHostId, setSelectedHostId] = useState<string>("");
   const [selectedTemplateName, setSelectedTemplateName] = useState<string>("");
   const [isPending, setIsPending] = useState(false);
@@ -255,15 +251,6 @@ export function NewManagerForm({
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === effectiveProjectId) ?? null,
     [effectiveProjectId, projects],
-  );
-
-  const projectOptions = useMemo(
-    (): readonly PickerOption<string>[] =>
-      projects.map((project) => ({
-        value: project.id,
-        label: project.name,
-      })),
-    [projects],
   );
 
   const projectSources = selectedProject?.sources ?? EMPTY_PROJECT_SOURCES;
@@ -359,25 +346,28 @@ export function NewManagerForm({
       setSelectedReasoningLevel("");
       return;
     }
-
-    const currentReasoningStillSupported = reasoningOptions.some(
-      (option) => option.value === selectedReasoningLevel,
-    );
-    if (reasoningSelectionSource === "user" && currentReasoningStillSupported) {
+    if (reasoningOptions.length === 0) {
+      setSelectedReasoningLevel("");
       return;
     }
-
-    setSelectedReasoningLevel(
-      selectedModelData.defaultReasoningEffort ??
-        reasoningOptions[0]?.value ??
-        "",
+    // First selection: seed from the model's default. Subsequent model
+    // changes: reconcile the current level against the new model's supported
+    // efforts via the shared policy (exact-match wins; otherwise pick the
+    // closest supported level, tie-break upward).
+    if (selectedReasoningLevel === "") {
+      setSelectedReasoningLevel(
+        selectedModelData.defaultReasoningEffort ?? reasoningOptions[0].value,
+      );
+      return;
+    }
+    const reconciled = reconcileReasoningLevel(
+      selectedReasoningLevel,
+      reasoningOptions.map((option) => option.value),
     );
-  }, [
-    reasoningOptions,
-    reasoningSelectionSource,
-    selectedModelData,
-    selectedReasoningLevel,
-  ]);
+    if (reconciled !== selectedReasoningLevel) {
+      setSelectedReasoningLevel(reconciled);
+    }
+  }, [reasoningOptions, selectedModelData, selectedReasoningLevel]);
   const effectiveReasoningLevel =
     reasoningOptions.find((option) => option.value === selectedReasoningLevel)
       ?.value ?? reasoningOptions[0]?.value;
@@ -447,14 +437,12 @@ export function NewManagerForm({
 
   const handleModelChange = useCallback((model: string) => {
     setSelectedModel(model);
-    setReasoningSelectionSource("default");
     setError(null);
   }, []);
 
   const handleReasoningLevelChange = useCallback(
     (reasoningLevel: ReasoningLevel) => {
       setSelectedReasoningLevel(reasoningLevel);
-      setReasoningSelectionSource("user");
       setError(null);
     },
     [],
@@ -536,12 +524,13 @@ export function NewManagerForm({
     <form aria-label="Hire manager" className="space-y-3" onSubmit={handleHire}>
       <DetailCard appearance="flat" labelWidth="64px">
         <DetailRow label="Project" valueClassName="min-w-0">
-          {projectOptions.length > 0 ? (
-            <OptionPicker
-              label="Project"
+          {projects.length > 0 ? (
+            <ProjectSelector
+              projects={projects}
               value={effectiveProjectId}
-              options={projectOptions}
-              onChange={handleProjectChange}
+              onChange={(id) => {
+                if (id !== null) handleProjectChange(id);
+              }}
             />
           ) : (
             <LoadingOrEmptyText
@@ -569,32 +558,27 @@ export function NewManagerForm({
         <DetailRow label="Model" valueClassName="min-w-0">
           {hasSelectedProvider ? (
             showProviderModelPicker ? (
-              <div className="flex flex-wrap items-center gap-1">
-                <ProviderModelPicker
-                  providerOptions={providerOptions}
-                  selectedProviderId={selectedProviderValue}
-                  onSelectedProviderChange={handleProviderChange}
-                  hasMultipleProviders={canSwitchProviders}
-                  modelValue={selectedModel}
-                  modelOptions={modelOptions}
-                  modelLoadError={modelLoadError}
-                  onModelChange={handleModelChange}
-                  formatModelLabel={formatModelLabel}
-                  fastModeEnabled={false}
-                  onFastModeChange={() => {}}
-                  showFastModeToggle={false}
-                />
-                {reasoningOptions.length > 0 ? (
-                  <OptionPicker
-                    label="Reasoning"
-                    value={
-                      effectiveReasoningLevel ?? reasoningOptions[0]!.value
-                    }
-                    options={reasoningOptions}
-                    onChange={handleReasoningLevelChange}
-                  />
-                ) : null}
-              </div>
+              <ModelReasoningPicker
+                providerOptions={providerOptions}
+                selectedProviderId={selectedProviderValue}
+                onSelectedProviderChange={handleProviderChange}
+                hasMultipleProviders={canSwitchProviders}
+                modelValue={selectedModel}
+                modelOptions={modelOptions}
+                modelLoadError={modelLoadError}
+                onModelChange={handleModelChange}
+                formatModelLabel={formatModelLabel}
+                reasoningValue={
+                  effectiveReasoningLevel ??
+                  reasoningOptions[0]?.value ??
+                  "medium"
+                }
+                reasoningOptions={reasoningOptions}
+                onReasoningChange={handleReasoningLevelChange}
+                fastModeEnabled={false}
+                onFastModeChange={() => {}}
+                showFastModeToggle={false}
+              />
             ) : (
               <LoadingOrEmptyText
                 isLoading={modelsAreLoading}

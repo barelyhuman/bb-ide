@@ -48,7 +48,7 @@ describe("ExecutionControls", () => {
       { wrapper },
     );
 
-    const picker = screen.getByRole("button", { name: "Provider and model" });
+    const picker = screen.getByRole("button", { name: "Provider, model and reasoning" });
     expect(picker.textContent).toContain("Select model");
 
     fireEvent.click(picker);
@@ -89,7 +89,7 @@ describe("ExecutionControls", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: "Provider and model" }),
+      screen.queryByRole("button", { name: "Provider, model and reasoning" }),
     ).toBeNull();
     const link = screen.getByRole("link", { name: "Codex CLI" });
     expect(link.getAttribute("href")).toBe(CODEX_CLI_URL);
@@ -127,7 +127,7 @@ describe("ExecutionControls", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: "Provider and model" }),
+      screen.queryByRole("button", { name: "Provider, model and reasoning" }),
     ).toBeNull();
     const link = screen.getByRole("link", { name: "Codex CLI" });
     expect(link.getAttribute("href")).toBe(CODEX_CLI_URL);

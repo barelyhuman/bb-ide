@@ -188,7 +188,10 @@ describe("useThreadCreationOptions", () => {
     });
 
     expect(result.current.selectedModel).toBe("gpt-5.4");
-    expect(result.current.reasoningLevel).toBe("low");
+    // Stored level was "xhigh"; this model supports only ["low","medium"]. The
+    // reconcile policy picks the closest level by rank distance (xhigh→medium
+    // is distance 2; xhigh→low is distance 3), not the model's default.
+    expect(result.current.reasoningLevel).toBe("medium");
     expect(result.current.permissionMode).toBe("full");
     expect(result.current.permissionModeOptions).toEqual(
       PERMISSION_MODE_OPTIONS,

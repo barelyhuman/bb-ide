@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
+import type { ReasoningLevel } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import {
@@ -29,11 +30,11 @@ import {
   ModelLoadErrorMessage,
 } from "./model-load-error-message";
 
-interface ProviderModelPickerProps {
+interface ModelReasoningPickerProps {
   // Provider state
   providerOptions: readonly PickerOption<string>[];
   selectedProviderId: string;
-  /** Omit to render the provider as locked (provider tabs hidden, can't preview). */
+  /** Omit to render the provider as locked (tabs hidden, can't preview). */
   onSelectedProviderChange?: (value: string) => void;
   hasMultipleProviders: boolean;
   // Model state
@@ -42,6 +43,12 @@ interface ProviderModelPickerProps {
   modelLoadError?: SystemExecutionOptionsModelLoadError | null;
   onModelChange: (value: string) => void;
   formatModelLabel?: (displayName: string, providerId: string) => string;
+  // Reasoning state — supported efforts are per-model, so callers derive
+  // these options from the SELECTED model and reconcile the level on model
+  // change via `reconcileReasoningLevel` in src/lib.
+  reasoningValue: ReasoningLevel;
+  reasoningOptions: readonly PickerOption<ReasoningLevel>[];
+  onReasoningChange: (value: ReasoningLevel) => void;
   // Fast mode / service tier
   fastModeEnabled: boolean;
   onFastModeChange: (enabled: boolean) => void;
@@ -52,11 +59,11 @@ interface ProviderModelPickerProps {
   muted?: boolean;
   /** Render with the popover open on mount. Story-only escape hatch. */
   defaultOpen?: boolean;
-  /** Whether the popover blocks page interaction. Defaults to true; pass false in stories. */
+  /** Whether the popover blocks page interaction. Defaults to true. */
   modal?: boolean;
 }
 
-export function ProviderModelPicker({
+export function ModelReasoningPicker({
   providerOptions,
   selectedProviderId,
   onSelectedProviderChange,
@@ -66,6 +73,9 @@ export function ProviderModelPicker({
   modelLoadError,
   onModelChange,
   formatModelLabel,
+  reasoningValue,
+  reasoningOptions,
+  onReasoningChange,
   fastModeEnabled,
   onFastModeChange,
   showFastModeToggle,
@@ -74,11 +84,11 @@ export function ProviderModelPicker({
   muted,
   defaultOpen = false,
   modal = true,
-}: ProviderModelPickerProps) {
+}: ModelReasoningPickerProps) {
   const isCompactViewport = useIsCompactViewport();
   const [open, setOpen] = useState(defaultOpen);
   // While the popover is open, the user can browse other providers without
-  // committing. previewProviderId tracks which provider tab is active.
+  // committing. `previewProviderId` tracks which provider tab is active;
   // null means "showing the committed provider".
   const [previewProviderId, setPreviewProviderId] = useState<string | null>(
     null,
@@ -93,20 +103,21 @@ export function ProviderModelPicker({
   const selectedModelOption = modelOptions.find((m) => m.value === modelValue);
   const selectedModelLabel = selectedModelOption?.label ?? modelValue;
   const hasSelectedModel = selectedModelLabel.trim().length > 0;
-  const triggerModelLabel = hasSelectedModel
-    ? selectedModelLabel
-    : "Select model";
+  const triggerModelLabel = hasSelectedModel ? selectedModelLabel : "Select model";
+
+  const selectedReasoningOption = reasoningOptions.find(
+    (r) => r.value === reasoningValue,
+  );
+  const triggerReasoningLabel = selectedReasoningOption?.label ?? null;
 
   const showProviderTabs =
     hasMultipleProviders &&
     onSelectedProviderChange !== undefined &&
     providerOptions.length > 1;
 
-  // When previewing a different provider, fetch its models independently
-  // so we don't disturb the committed state in the hook. The query shares its
-  // cache key with the committed `useSystemExecutionOptions({ providerId })`
-  // call in `useThreadCreationOptions`, so committing the selection is a cache
-  // hit instead of a refetch.
+  // Preview other providers without committing. Shares its cache key with the
+  // committed `useSystemExecutionOptions` call in the caller's hook so
+  // committing is a cache hit, not a refetch.
   const isPreviewing =
     previewProviderId !== null && previewProviderId !== selectedProviderId;
   const previewQuery = useSystemExecutionOptions({
@@ -160,10 +171,7 @@ export function ProviderModelPicker({
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     setOpen(nextOpen);
-    if (!nextOpen) {
-      // Reset preview when closing without selecting a model
-      setPreviewProviderId(null);
-    }
+    if (!nextOpen) setPreviewProviderId(null);
   }, []);
 
   const handleModelSelect = useCallback(
@@ -181,7 +189,24 @@ export function ProviderModelPicker({
     [isPreviewing, onModelChange, onSelectedProviderChange, previewProviderId],
   );
 
+  const handleReasoningSelect = useCallback(
+    (level: ReasoningLevel) => {
+      onReasoningChange(level);
+      // Match the standalone Reasoning OptionPicker's behaviour: picking a
+      // value commits and closes. Provider preview is also discarded since
+      // the user moved their attention to reasoning.
+      setOpen(false);
+      setPreviewProviderId(null);
+    },
+    [onReasoningChange],
+  );
+
   const TriggerIcon = hasSelectedModel ? ProviderIcon : undefined;
+  const triggerTitle = [
+    `${selectedProvider?.label ?? selectedProviderId}: ${triggerModelLabel}`,
+    triggerReasoningLabel ? ` · ${triggerReasoningLabel} reasoning` : "",
+    showSelectedFastMode ? " (Fast mode)" : "",
+  ].join("");
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={modal}>
@@ -190,8 +215,8 @@ export function ProviderModelPicker({
           type="button"
           variant="ghost"
           size="sm"
-          aria-label="Provider and model"
-          title={`${selectedProvider?.label ?? selectedProviderId}: ${triggerModelLabel}${showSelectedFastMode ? " (Fast mode)" : ""}`}
+          aria-label="Provider, model and reasoning"
+          title={triggerTitle}
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
@@ -200,20 +225,27 @@ export function ProviderModelPicker({
           )}
         >
           <span className={OPTION_CONTENT_CLASS_NAME}>
-            {TriggerIcon ? <TriggerIcon className="size-3.5 shrink-0" /> : null}
             {showSelectedFastMode ? (
               <Icon
                 name="Zap"
                 className="size-3.5 shrink-0 fill-current text-subtle-foreground"
               />
+            ) : TriggerIcon ? (
+              <TriggerIcon className="size-3.5 shrink-0" />
             ) : null}
             <span className="truncate">{triggerModelLabel}</span>
+            {triggerReasoningLabel ? (
+              <span className="text-subtle-foreground">
+                {triggerReasoningLabel}
+              </span>
+            ) : null}
           </span>
           <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        mobileTitle="Model"
         className="flex w-52 flex-col p-0 max-md:w-full max-md:max-w-none"
       >
         {/* Provider icon tabs */}
@@ -227,7 +259,7 @@ export function ProviderModelPicker({
             )}
           >
             {providerOptions.map((provider) => {
-              const Icon = provider.icon;
+              const TabIcon = provider.icon;
               const isActive = provider.value === activeProviderId;
               return (
                 <button
@@ -244,15 +276,15 @@ export function ProviderModelPicker({
                     }
                   }}
                   className={cn(
-                    "flex items-center justify-center border-b-2 transition-colors",
+                    "flex items-center justify-center border-b-2 transition-colors focus-visible:outline-none",
                     COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
                     isActive
                       ? "border-foreground text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {Icon ? (
-                    <Icon className={COARSE_POINTER_ICON_SIZE_CLASS} />
+                  {TabIcon ? (
+                    <TabIcon className={COARSE_POINTER_ICON_SIZE_CLASS} />
                   ) : (
                     <span
                       className={cn(
@@ -272,11 +304,12 @@ export function ProviderModelPicker({
         {/* Model list */}
         <div
           className={cn(
-            "overflow-y-auto p-1",
+            "overflow-y-auto px-1 pb-1",
             !isCompactViewport &&
-              "max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)]",
+              "max-h-[min(250px,var(--radix-popover-content-available-height,250px)-80px)]",
           )}
         >
+          <MenuSectionLabel>Model</MenuSectionLabel>
           {isPreviewing && previewQuery.isLoading ? (
             <div
               className={cn(
@@ -284,32 +317,16 @@ export function ProviderModelPicker({
                 isCompactViewport ? "py-2" : "py-[0.3125rem]",
               )}
             >
-              Loading models...
+              Loading models…
             </div>
           ) : hasActiveModelOptions ? (
             activeModelOptions.map((option) => (
-              <button
+              <MenuRowButton
                 key={option.value}
-                type="button"
+                label={option.label}
+                selected={!isPreviewing && option.value === modelValue}
                 onClick={() => handleModelSelect(option.value)}
-                className={cn(
-                  "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground",
-                  isCompactViewport ? "py-2" : "py-[0.3125rem]",
-                )}
-              >
-                <span className="truncate" title={option.label}>
-                  {option.label}
-                </span>
-                <Icon
-                  name="Check"
-                  className={cn(
-                    COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
-                    !isPreviewing && option.value === modelValue
-                      ? "opacity-100"
-                      : "opacity-0",
-                  )}
-                />
-              </button>
+              />
             ))
           ) : (
             <div
@@ -330,6 +347,26 @@ export function ProviderModelPicker({
             </div>
           )}
         </div>
+
+        {/* Reasoning section — only shows for the committed model; previewing
+            other providers doesn't touch reasoning state, so the committed
+            model's reasoning options stay visible. */}
+        {reasoningOptions.length > 0 ? (
+          <>
+            <div className="border-t border-border" />
+            <div className="p-1">
+              <MenuSectionLabel>Reasoning</MenuSectionLabel>
+              {reasoningOptions.map((option) => (
+                <MenuRowButton
+                  key={option.value}
+                  label={option.label}
+                  selected={option.value === reasoningValue}
+                  onClick={() => handleReasoningSelect(option.value)}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
 
         {/* Fast mode toggle */}
         {effectiveShowFastModeToggle ? (
@@ -355,5 +392,51 @@ export function ProviderModelPicker({
         ) : null}
       </PopoverContent>
     </Popover>
+  );
+}
+
+// `sticky top-0` keeps "Model" pinned to the top of its scrolling parent
+// (no-op for "Reasoning" — its parent doesn't scroll). `flex h-7 items-center`
+// pins to an integer height so the sticky label doesn't subpixel-shift during
+// scroll. Matches DropdownMenuLabel's `text-xs font-medium text-muted-foreground`
+// styling for consistency with the rest of the design system.
+function MenuSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="sticky top-0 z-10 flex h-7 items-center bg-background px-2 text-xs font-medium text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function MenuRowButton({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const isCompactViewport = useIsCompactViewport();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground",
+        isCompactViewport ? "py-2" : "py-[0.3125rem]",
+      )}
+    >
+      <span className="truncate" title={label}>
+        {label}
+      </span>
+      <Icon
+        name="Check"
+        className={cn(
+          COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+          selected ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </button>
   );
 }
