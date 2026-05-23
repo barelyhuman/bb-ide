@@ -3,6 +3,7 @@ import { defaultUrlTransform, type UrlTransform } from "react-markdown";
 import {
   FilePreview as FilePreviewSurface,
   type FilePreviewFile,
+  type FilePreviewHeaderMode,
 } from "./FilePreview";
 import {
   MANAGER_STATUS_MARKDOWN_FILE_PATH,
@@ -29,6 +30,7 @@ import { isHtmlFilePreviewPath } from "@/lib/file-preview";
 // realistic previews, but omit allow-same-origin so the frame gets an opaque
 // origin and cannot read bb app cookies, storage, or same-origin APIs.
 const GENERIC_HTML_IFRAME_SANDBOX = "allow-scripts";
+const MANAGER_STATUS_HEADER_MODE: FilePreviewHeaderMode = "none";
 
 interface FilePreviewBaseProps {
   activePath: string;
@@ -273,6 +275,7 @@ export function ThreadStorageFilePreview({
         <FilePreviewSurface
           path={activePath}
           copyPath={copyPath}
+          headerMode={MANAGER_STATUS_HEADER_MODE}
           state={{
             kind: "error",
             message:
@@ -289,6 +292,7 @@ export function ThreadStorageFilePreview({
         <FilePreviewSurface
           path={activePath}
           copyPath={copyPath}
+          headerMode={MANAGER_STATUS_HEADER_MODE}
           state={{ kind: "loading" }}
         />
       );
@@ -299,6 +303,7 @@ export function ThreadStorageFilePreview({
         <FilePreviewSurface
           path={activePath}
           copyPath={copyPath}
+          headerMode={MANAGER_STATUS_HEADER_MODE}
           state={{ kind: "manager-status-pending" }}
         />
       );
@@ -310,6 +315,7 @@ export function ThreadStorageFilePreview({
           <FilePreviewSurface
             path={activePath}
             copyPath={copyPath}
+            headerMode={MANAGER_STATUS_HEADER_MODE}
             state={{
               kind: "error",
               message:
@@ -326,6 +332,7 @@ export function ThreadStorageFilePreview({
           <FilePreviewSurface
             path={activePath}
             copyPath={copyPath}
+            headerMode={MANAGER_STATUS_HEADER_MODE}
             state={{ kind: "loading" }}
           />
         );
@@ -336,6 +343,7 @@ export function ThreadStorageFilePreview({
           <FilePreviewSurface
             path={activePath}
             copyPath={copyPath}
+            headerMode={MANAGER_STATUS_HEADER_MODE}
             state={{
               kind: "error",
               message: `Preview not available for ${statusMarkdownPreview.data.mimeType}.`,
@@ -348,6 +356,7 @@ export function ThreadStorageFilePreview({
         <FilePreviewSurface
           path={activePath}
           copyPath={copyPath}
+          headerMode={MANAGER_STATUS_HEADER_MODE}
           state={{
             kind: "ready",
             lineNumber: null,
@@ -368,6 +377,7 @@ export function ThreadStorageFilePreview({
       <FilePreviewSurface
         path={activePath}
         copyPath={copyPath}
+        headerMode={MANAGER_STATUS_HEADER_MODE}
         state={{
           kind: "iframe",
           sandbox: null,

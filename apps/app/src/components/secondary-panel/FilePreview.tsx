@@ -57,6 +57,7 @@ export interface FilePreviewProps {
   state: FilePreviewState;
   path: string;
   copyPath?: string | null;
+  headerMode?: FilePreviewHeaderMode;
   onOpenInEditor?: (path: string) => void;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
@@ -99,6 +100,7 @@ interface FilePreviewCodeProps {
 
 type FilePreviewViewMode = "preview" | "source";
 type FilePreviewToggleKind = "html" | "markdown";
+export type FilePreviewHeaderMode = "file" | "none";
 type IframeLoadState = "loading" | "loaded" | "error";
 
 const MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -163,6 +165,7 @@ export function FilePreview({
   state,
   path,
   copyPath = null,
+  headerMode = "file",
   onOpenInEditor,
   statusLabel = null,
 }: FilePreviewProps) {
@@ -189,15 +192,17 @@ export function FilePreview({
       }
       style={FILE_PREVIEW_WRAPPER_STYLE}
     >
-      <FilePreviewHeader
-        path={path}
-        copyPath={copyPath}
-        onOpenInEditor={onOpenInEditor}
-        statusLabel={statusLabel}
-        toggleKind={toggleKind}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-      />
+      {headerMode === "file" ? (
+        <FilePreviewHeader
+          path={path}
+          copyPath={copyPath}
+          onOpenInEditor={onOpenInEditor}
+          statusLabel={statusLabel}
+          toggleKind={toggleKind}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+        />
+      ) : null}
       <FilePreviewBody
         state={state}
         path={path}

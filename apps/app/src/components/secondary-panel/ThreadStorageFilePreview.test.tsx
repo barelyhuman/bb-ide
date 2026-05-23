@@ -152,6 +152,7 @@ describe("ThreadStorageFilePreview", () => {
     const { container } = render(
       <ThreadStorageFilePreview
         activePath={MANAGER_STATUS_FILE_PATH}
+        copyPath="/Users/me/.bb/thread-storage/thr_manager/STATUS"
         filePreview={undefined}
         isLoading={false}
         pinnedPath={MANAGER_STATUS_FILE_PATH}
@@ -161,6 +162,10 @@ describe("ThreadStorageFilePreview", () => {
     );
 
     expect(container.querySelector("iframe")).toBeNull();
+    expect(screen.queryByText(MANAGER_STATUS_FILE_PATH)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Copy file path" }),
+    ).toBeNull();
 
     resolveVersion(jsonResponse({ source: "html", hash: "status-hash-1" }));
 
@@ -175,6 +180,10 @@ describe("ThreadStorageFilePreview", () => {
       expect(iframe?.style.height).toBe("100%");
       expect(iframe?.style.border).toBe("0px");
     });
+    expect(screen.queryByText(MANAGER_STATUS_FILE_PATH)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Copy file path" }),
+    ).toBeNull();
   });
 
   it("updates the STATUS iframe src when the polled hash changes", async () => {
@@ -305,6 +314,7 @@ describe("ThreadStorageFilePreview", () => {
     const { container } = render(
       <ThreadStorageFilePreview
         activePath={MANAGER_STATUS_MARKDOWN_FILE_PATH}
+        copyPath="/Users/me/.bb/thread-storage/thr_manager/STATUS.md"
         filePreview={makeTextPreview({
           content: "# Status",
           path: MANAGER_STATUS_MARKDOWN_FILE_PATH,
@@ -326,6 +336,10 @@ describe("ThreadStorageFilePreview", () => {
     ).toBe("/api/v1/threads/thr_manager/status/details.html");
     expect(
       screen.queryByRole("tablist", { name: "Markdown view mode" }),
+    ).toBeNull();
+    expect(screen.queryByText(MANAGER_STATUS_MARKDOWN_FILE_PATH)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Copy file path" }),
     ).toBeNull();
     expect(container.querySelector("iframe")).toBeNull();
   });
