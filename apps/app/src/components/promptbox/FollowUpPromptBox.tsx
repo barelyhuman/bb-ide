@@ -83,6 +83,7 @@ const FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT =
  * render submit/queue/stop affordances.
  */
 export type FollowUpBlockedReason =
+  | "loading-execution-options"
   | "pending-interaction"
   | "provisioning"
   | "stopping";

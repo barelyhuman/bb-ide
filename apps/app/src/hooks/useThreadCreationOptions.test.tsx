@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { AvailableModel } from "@bb/domain";
+import type { AvailableModel, PermissionMode } from "@bb/domain";
 import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
@@ -77,6 +77,11 @@ function mockExecutionOptions({
     selectedOnlyModels,
     modelLoadError,
   });
+}
+
+interface ThreadCreationOptionsHookProps {
+  initialPermissionMode?: PermissionMode;
+  resetKey: string;
 }
 
 afterEach(() => {
@@ -451,6 +456,144 @@ describe("useThreadCreationOptions", () => {
     await waitFor(() => {
       expect(result.current.selectedModel).toBe("gpt-5.4");
     });
+  });
+
+  it("uses arriving component-local permission defaults before effect state sync", async () => {
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const initialProps: ThreadCreationOptionsHookProps = {
+      resetKey: "thread-1",
+    };
+    const renderedPermissionModes: PermissionMode[] = [];
+    const { result, rerender } = renderHook(
+      ({ initialPermissionMode, resetKey }: ThreadCreationOptionsHookProps) => {
+        const options = useThreadCreationOptions({
+          environmentId: "environment-probe",
+          initialPermissionMode,
+          initialProviderId: "codex",
+          projectId: "project-probe",
+          resetKey,
+          scope: "component-local",
+        });
+        renderedPermissionModes.push(options.permissionMode);
+        return options;
+      },
+      {
+        initialProps,
+        wrapper,
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.permissionModeOptions).toEqual(
+        PERMISSION_MODE_OPTIONS,
+      );
+    });
+    expect(result.current.permissionMode).toBe("full");
+
+    renderedPermissionModes.length = 0;
+    rerender({
+      initialPermissionMode: "workspace-write",
+      resetKey: "thread-1",
+    });
+
+    expect(renderedPermissionModes[0]).toBe("workspace-write");
+    expect(result.current.permissionMode).toBe("workspace-write");
+
+    renderedPermissionModes.length = 0;
+    rerender({
+      initialPermissionMode: "readonly",
+      resetKey: "thread-2",
+    });
+
+    expect(renderedPermissionModes[0]).toBe("readonly");
+    expect(result.current.permissionMode).toBe("readonly");
+  });
+
+  it("preserves touched component-local permission mode until the reset key changes", async () => {
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const renderedPermissionModes: PermissionMode[] = [];
+    const { result, rerender } = renderHook(
+      ({ initialPermissionMode, resetKey }: ThreadCreationOptionsHookProps) => {
+        const options = useThreadCreationOptions({
+          environmentId: "environment-probe",
+          initialPermissionMode,
+          initialProviderId: "codex",
+          projectId: "project-probe",
+          resetKey,
+          scope: "component-local",
+        });
+        renderedPermissionModes.push(options.permissionMode);
+        return options;
+      },
+      {
+        initialProps: {
+          initialPermissionMode: "full",
+          resetKey: "thread-1",
+        },
+        wrapper,
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.permissionModeOptions).toEqual(
+        PERMISSION_MODE_OPTIONS,
+      );
+    });
+    expect(result.current.permissionMode).toBe("full");
+
+    act(() => {
+      result.current.setPermissionMode("readonly");
+    });
+
+    await waitFor(() => {
+      expect(result.current.permissionMode).toBe("readonly");
+    });
+
+    renderedPermissionModes.length = 0;
+    rerender({
+      initialPermissionMode: "workspace-write",
+      resetKey: "thread-1",
+    });
+
+    expect(renderedPermissionModes[0]).toBe("readonly");
+    expect(result.current.permissionMode).toBe("readonly");
+
+    renderedPermissionModes.length = 0;
+    rerender({
+      initialPermissionMode: "workspace-write",
+      resetKey: "thread-2",
+    });
+
+    expect(renderedPermissionModes[0]).toBe("workspace-write");
+    expect(result.current.permissionMode).toBe("workspace-write");
   });
 
   it("switches to the new provider default model when the provider changes", async () => {

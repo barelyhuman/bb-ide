@@ -2,7 +2,7 @@ import { useAtom } from "jotai";
 import {
   type ComponentType,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -358,32 +358,64 @@ export function useThreadCreationOptions(
   const threadResetKeyRef = useRef<string | number | null | undefined>(
     resetKey,
   );
+  const nextThreadSelections = useMemo(
+    () =>
+      getInitialThreadPromptSelections({
+        initialEnvironmentSelectionValue,
+        initialModel,
+        initialProviderId,
+        initialPermissionMode,
+        initialReasoningLevel,
+        initialServiceTier,
+      }),
+    [
+      initialEnvironmentSelectionValue,
+      initialModel,
+      initialProviderId,
+      initialPermissionMode,
+      initialReasoningLevel,
+      initialServiceTier,
+    ],
+  );
+  const renderedThreadSelections = useMemo(() => {
+    if (scope !== "component-local") {
+      return threadSelections;
+    }
+    if (threadResetKeyRef.current !== resetKey) {
+      return nextThreadSelections;
+    }
+    return syncUntouchedThreadPromptSelections({
+      currentSelections: threadSelections,
+      nextSelections: nextThreadSelections,
+      touchedFields: touchedThreadFieldsRef.current,
+    });
+  }, [nextThreadSelections, resetKey, scope, threadSelections]);
 
   const rawSelectedProviderId =
     scope === "new-thread"
       ? storedProviderId
-      : threadSelections.selectedProviderId;
+      : renderedThreadSelections.selectedProviderId;
   const rawSelectedModel =
     scope === "new-thread"
       ? storedSelectedModel
-      : threadSelections.selectedModel;
+      : renderedThreadSelections.selectedModel;
   const rawServiceTier =
     scope === "new-thread"
       ? storedServiceTier || undefined
-      : threadSelections.serviceTier;
+      : renderedThreadSelections.serviceTier;
   const rawReasoningLevel =
     scope === "new-thread"
       ? storedReasoningLevel
-      : threadSelections.reasoningLevel;
+      : renderedThreadSelections.reasoningLevel;
   const rawPermissionMode =
     scope === "new-thread"
       ? storedPermissionMode
-      : threadSelections.permissionMode;
+      : renderedThreadSelections.permissionMode;
   const rawEnvironmentSelectionValue =
     scope === "new-thread"
       ? (sessionReuseValue ??
-          sanitizeStoredEnvironmentValue(storedEnvironmentSelectionValue))
-      : threadSelections.environmentSelectionValue;
+        sanitizeStoredEnvironmentValue(storedEnvironmentSelectionValue))
+      : renderedThreadSelections.environmentSelectionValue;
 
   // --- Provider selection ---
   const executionOptionsEnvironmentId =
@@ -391,7 +423,8 @@ export function useThreadCreationOptions(
   const executionOptionsQuery = useSystemExecutionOptions({
     enabled:
       enabled &&
-      (scope !== "component-local" || executionOptionsEnvironmentId !== undefined),
+      (scope !== "component-local" ||
+        executionOptionsEnvironmentId !== undefined),
     environmentId: executionOptionsEnvironmentId,
     providerId: rawSelectedProviderId || undefined,
   });
@@ -549,39 +582,22 @@ export function useThreadCreationOptions(
   });
   const environmentSelectionValue = rawEnvironmentSelectionValue;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (scope !== "component-local") return;
-    const nextSelections = getInitialThreadPromptSelections({
-      initialEnvironmentSelectionValue,
-      initialModel,
-      initialProviderId,
-      initialPermissionMode,
-      initialReasoningLevel,
-      initialServiceTier,
-    });
     if (threadResetKeyRef.current !== resetKey) {
       threadResetKeyRef.current = resetKey;
       touchedThreadFieldsRef.current = new Set();
-      setThreadSelections(nextSelections);
+      setThreadSelections(nextThreadSelections);
       return;
     }
     setThreadSelections((currentSelections) =>
       syncUntouchedThreadPromptSelections({
         currentSelections,
-        nextSelections,
+        nextSelections: nextThreadSelections,
         touchedFields: touchedThreadFieldsRef.current,
       }),
     );
-  }, [
-    initialEnvironmentSelectionValue,
-    initialModel,
-    initialProviderId,
-    initialPermissionMode,
-    initialReasoningLevel,
-    initialServiceTier,
-    resetKey,
-    scope,
-  ]);
+  }, [nextThreadSelections, resetKey, scope]);
 
   const setSelectedProviderId = useCallback(
     (value: string) => {

@@ -9,8 +9,7 @@ import type { CreateQueuedMessageRequest } from "@bb/server-contract";
 import type { FollowUpSubmitMode } from "@/components/promptbox/FollowUpPromptBox";
 import type { SendMessageMutationRequest } from "./threadDetailMutationTypes";
 
-export interface CreateQueuedFollowUpRequest
-  extends CreateQueuedMessageRequest {
+export interface CreateQueuedFollowUpRequest extends CreateQueuedMessageRequest {
   id: string;
 }
 
@@ -20,7 +19,7 @@ export interface SendQueuedSteerRequest {
   queuedMessageId: string;
 }
 
-interface ThreadExecutionSelection {
+export interface ThreadExecutionSelection {
   model: string;
   permissionMode: PermissionMode;
   reasoningLevel: ReasoningLevel;
@@ -28,9 +27,12 @@ interface ThreadExecutionSelection {
   supportsServiceTier: boolean;
 }
 
+export type FollowUpExecutionSelection = ThreadExecutionSelection | null;
+
 interface SharedThreadExecutionRequestFields {
-  permissionMode: PermissionMode;
-  reasoningLevel: ReasoningLevel;
+  model?: string;
+  permissionMode?: PermissionMode;
+  reasoningLevel?: ReasoningLevel;
   serviceTier?: ServiceTier;
 }
 
@@ -39,16 +41,15 @@ interface BaseFollowUpRequestArgs {
   threadId: string;
 }
 
-export interface BuildAutoFollowUpRequestArgs
-  extends BaseFollowUpRequestArgs,
-    ThreadExecutionSelection {}
+export interface BuildAutoFollowUpRequestArgs extends BaseFollowUpRequestArgs {
+  execution: FollowUpExecutionSelection;
+}
 
-export interface BuildCreateQueuedFollowUpRequestArgs
-  extends BaseFollowUpRequestArgs,
-    ThreadExecutionSelection {}
+export interface BuildCreateQueuedFollowUpRequestArgs extends BaseFollowUpRequestArgs {
+  execution: FollowUpExecutionSelection;
+}
 
-export interface BuildSteerFollowUpRequestArgs
-  extends BaseFollowUpRequestArgs {}
+export interface BuildSteerFollowUpRequestArgs extends BaseFollowUpRequestArgs {}
 
 export interface BuildQueuedSteerRequestsArgs {
   queuedMessages: readonly QueuedMessageForSteer[];
@@ -64,9 +65,20 @@ export interface CanSubmitSteerBatchArgs {
   submitModeKind: FollowUpSubmitMode["kind"];
 }
 
+export interface ResolveDefaultExecutionOptionsStateArgs {
+  hasConcreteDefaultExecutionOptions: boolean;
+  hasResolvedDefaultExecutionOptions: boolean;
+  isError: boolean;
+}
+
 interface QueuedMessageForSteer {
   id: string;
 }
+
+export type DefaultExecutionOptionsState =
+  | "available"
+  | "loading"
+  | "unavailable";
 
 export function shouldQueueFollowUpMessage(
   displayStatus: ThreadRuntimeDisplayStatus,
@@ -91,10 +103,24 @@ export function canSubmitSteerBatch({
   );
 }
 
+export function resolveDefaultExecutionOptionsState({
+  hasConcreteDefaultExecutionOptions,
+  hasResolvedDefaultExecutionOptions,
+  isError,
+}: ResolveDefaultExecutionOptionsStateArgs): DefaultExecutionOptionsState {
+  if (hasConcreteDefaultExecutionOptions) {
+    return "available";
+  }
+  if (hasResolvedDefaultExecutionOptions || isError) {
+    return "unavailable";
+  }
+  return "loading";
+}
+
 export function buildAutoFollowUpRequest({
+  execution,
   input,
   threadId,
-  ...executionSelection
 }: BuildAutoFollowUpRequestArgs): SendMessageMutationRequest | null {
   if (input.length === 0) {
     return null;
@@ -104,8 +130,7 @@ export function buildAutoFollowUpRequest({
     id: threadId,
     input,
     mode: "auto",
-    ...(executionSelection.model ? { model: executionSelection.model } : {}),
-    ...buildSharedThreadExecutionRequestFields(executionSelection),
+    ...buildSharedThreadExecutionRequestFields(execution),
   };
 }
 
@@ -125,9 +150,9 @@ export function buildSteerFollowUpRequest({
 }
 
 export function buildCreateQueuedFollowUpRequest({
+  execution,
   input,
   threadId,
-  ...executionSelection
 }: BuildCreateQueuedFollowUpRequestArgs): CreateQueuedFollowUpRequest | null {
   if (input.length === 0) {
     return null;
@@ -136,8 +161,7 @@ export function buildCreateQueuedFollowUpRequest({
   return {
     id: threadId,
     input,
-    model: executionSelection.model,
-    ...buildSharedThreadExecutionRequestFields(executionSelection),
+    ...buildSharedThreadExecutionRequestFields(execution),
   };
 }
 
@@ -152,15 +176,19 @@ export function buildQueuedSteerRequests({
   }));
 }
 
-function buildSharedThreadExecutionRequestFields({
-  permissionMode,
-  reasoningLevel,
-  serviceTier,
-  supportsServiceTier,
-}: ThreadExecutionSelection): SharedThreadExecutionRequestFields {
+function buildSharedThreadExecutionRequestFields(
+  execution: FollowUpExecutionSelection,
+): SharedThreadExecutionRequestFields {
+  if (execution === null) {
+    return {};
+  }
+
   return {
-    ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-    reasoningLevel,
-    permissionMode,
+    model: execution.model,
+    ...(execution.supportsServiceTier && execution.serviceTier
+      ? { serviceTier: execution.serviceTier }
+      : {}),
+    reasoningLevel: execution.reasoningLevel,
+    permissionMode: execution.permissionMode,
   };
 }

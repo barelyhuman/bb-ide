@@ -6,6 +6,7 @@ import {
   buildQueuedSteerRequests,
   buildSteerFollowUpRequest,
   canSubmitSteerBatch,
+  resolveDefaultExecutionOptionsState,
   shouldQueueFollowUpMessage,
 } from "./threadDetailPromptSubmission";
 
@@ -48,12 +49,14 @@ describe("threadDetailPromptSubmission", () => {
   it("builds auto follow-up requests with selected execution options", () => {
     expect(
       buildAutoFollowUpRequest({
+        execution: {
+          model: "gpt-5",
+          permissionMode: "full",
+          reasoningLevel: "medium",
+          serviceTier: "default",
+          supportsServiceTier: true,
+        },
         input: textInput,
-        model: "gpt-5",
-        permissionMode: "full",
-        reasoningLevel: "medium",
-        serviceTier: "default",
-        supportsServiceTier: true,
         threadId: "thread-1",
       }),
     ).toEqual({
@@ -67,15 +70,31 @@ describe("threadDetailPromptSubmission", () => {
     });
   });
 
+  it("omits execution overrides when building auto follow-up requests without concrete defaults", () => {
+    expect(
+      buildAutoFollowUpRequest({
+        execution: null,
+        input: textInput,
+        threadId: "thread-1",
+      }),
+    ).toEqual({
+      id: "thread-1",
+      input: textInput,
+      mode: "auto",
+    });
+  });
+
   it("omits unsupported service tier when queueing a follow-up", () => {
     expect(
       buildCreateQueuedFollowUpRequest({
+        execution: {
+          model: "gpt-5",
+          permissionMode: "workspace-write",
+          reasoningLevel: "high",
+          serviceTier: "fast",
+          supportsServiceTier: false,
+        },
         input: textInput,
-        model: "gpt-5",
-        permissionMode: "workspace-write",
-        reasoningLevel: "high",
-        serviceTier: "fast",
-        supportsServiceTier: false,
         threadId: "thread-1",
       }),
     ).toEqual({
@@ -85,6 +104,50 @@ describe("threadDetailPromptSubmission", () => {
       permissionMode: "workspace-write",
       reasoningLevel: "high",
     });
+  });
+
+  it("omits execution overrides when queueing a follow-up without concrete defaults", () => {
+    expect(
+      buildCreateQueuedFollowUpRequest({
+        execution: null,
+        input: textInput,
+        threadId: "thread-1",
+      }),
+    ).toEqual({
+      id: "thread-1",
+      input: textInput,
+    });
+  });
+
+  it("treats default execution options errors as unavailable rather than loading", () => {
+    expect(
+      resolveDefaultExecutionOptionsState({
+        hasConcreteDefaultExecutionOptions: true,
+        hasResolvedDefaultExecutionOptions: true,
+        isError: false,
+      }),
+    ).toBe("available");
+    expect(
+      resolveDefaultExecutionOptionsState({
+        hasConcreteDefaultExecutionOptions: false,
+        hasResolvedDefaultExecutionOptions: false,
+        isError: false,
+      }),
+    ).toBe("loading");
+    expect(
+      resolveDefaultExecutionOptionsState({
+        hasConcreteDefaultExecutionOptions: false,
+        hasResolvedDefaultExecutionOptions: false,
+        isError: true,
+      }),
+    ).toBe("unavailable");
+    expect(
+      resolveDefaultExecutionOptionsState({
+        hasConcreteDefaultExecutionOptions: false,
+        hasResolvedDefaultExecutionOptions: true,
+        isError: false,
+      }),
+    ).toBe("unavailable");
   });
 
   it("gates queue and steer submission by runtime state and pending work", () => {

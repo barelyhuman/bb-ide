@@ -57,7 +57,9 @@ import {
   buildQueuedSteerRequests,
   buildSteerFollowUpRequest,
   canSubmitSteerBatch,
+  resolveDefaultExecutionOptionsState,
   shouldQueueFollowUpMessage,
+  type FollowUpExecutionSelection,
 } from "./threadDetailPromptSubmission";
 
 type ComposerQueryRefetchOnMount = boolean | "always";
@@ -158,7 +160,7 @@ export function ThreadDetailPromptArea({
   sendMessage,
   thread,
 }: ThreadDetailPromptAreaProps) {
-  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
+  const defaultExecutionOptionsQuery = useThreadDefaultExecutionOptions(
     thread.id,
     {
       enabled: composerQueriesEnabled,
@@ -166,6 +168,18 @@ export function ThreadDetailPromptArea({
       staleTime: composerQueriesStaleTime,
     },
   );
+  const defaultExecutionOptions = defaultExecutionOptionsQuery.data;
+  const hasResolvedDefaultExecutionOptions =
+    defaultExecutionOptions !== undefined;
+  const hasConcreteDefaultExecutionOptions =
+    defaultExecutionOptions !== undefined && defaultExecutionOptions !== null;
+  const defaultExecutionOptionsState = resolveDefaultExecutionOptionsState({
+    hasConcreteDefaultExecutionOptions,
+    hasResolvedDefaultExecutionOptions,
+    isError: defaultExecutionOptionsQuery.isError,
+  });
+  const isDefaultExecutionOptionsLoading =
+    defaultExecutionOptionsState === "loading";
   const { data: queuedMessages = [] } = useThreadQueuedMessages(thread.id, {
     enabled: composerQueriesEnabled,
     refetchOnMount: composerQueriesRefetchOnMount,
@@ -285,6 +299,9 @@ export function ThreadDetailPromptArea({
     if (isCreated || isProvisioning) {
       return { kind: "blocked", reason: "provisioning" };
     }
+    if (isDefaultExecutionOptionsLoading) {
+      return { kind: "blocked", reason: "loading-execution-options" };
+    }
     if (isWaitingForHost) {
       return { kind: "stop-only", onStop: handleStopThread };
     }
@@ -298,6 +315,7 @@ export function ThreadDetailPromptArea({
   }, [
     handleStopThread,
     hasPendingInteraction,
+    isDefaultExecutionOptionsLoading,
     isCreated,
     isProvisioning,
     isStopRequested,
@@ -306,7 +324,9 @@ export function ThreadDetailPromptArea({
   ]);
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
-    : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
+    : isDefaultExecutionOptionsLoading && !isCreated && !isProvisioning
+      ? "Loading thread options..."
+      : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
   const currentPromptDraft = useMemo(
     () => ({
       text: promptDraft.text,
@@ -327,6 +347,26 @@ export function ThreadDetailPromptArea({
     runtimeDisplayStatus,
     submitModeKind: submitMode.kind,
   });
+  const followUpExecutionSelection = useMemo<FollowUpExecutionSelection>(() => {
+    if (!hasConcreteDefaultExecutionOptions) {
+      return null;
+    }
+    return {
+      model: activeModel?.model ?? selectedModel,
+      supportsServiceTier,
+      serviceTier,
+      reasoningLevel,
+      permissionMode,
+    };
+  }, [
+    activeModel?.model,
+    hasConcreteDefaultExecutionOptions,
+    permissionMode,
+    reasoningLevel,
+    selectedModel,
+    serviceTier,
+    supportsServiceTier,
+  ]);
 
   const handleAttachFiles = useCallback(
     async (files: File[]) => {
@@ -357,7 +397,7 @@ export function ThreadDetailPromptArea({
   const handleSend = useCallback(async () => {
     const submittedDraft = currentPromptDraft;
     const submittedInput = currentPromptDraftInput;
-    if (submittedInput.length === 0) {
+    if (submittedInput.length === 0 || isDefaultExecutionOptionsLoading) {
       return;
     }
 
@@ -370,11 +410,7 @@ export function ThreadDetailPromptArea({
         const request = buildCreateQueuedFollowUpRequest({
           threadId: thread.id,
           input: submittedInput,
-          model: activeModel?.model ?? selectedModel,
-          supportsServiceTier,
-          serviceTier,
-          reasoningLevel,
-          permissionMode,
+          execution: followUpExecutionSelection,
         });
         if (request) {
           await createQueuedMessage.mutateAsync(request);
@@ -383,11 +419,7 @@ export function ThreadDetailPromptArea({
         const request = buildAutoFollowUpRequest({
           threadId: thread.id,
           input: submittedInput,
-          model: activeModel?.model ?? selectedModel,
-          supportsServiceTier,
-          serviceTier,
-          reasoningLevel,
-          permissionMode,
+          execution: followUpExecutionSelection,
         });
         if (request) {
           await sendMessage.mutateAsync(request);
@@ -408,17 +440,13 @@ export function ThreadDetailPromptArea({
       );
     }
   }, [
-    activeModel?.model,
     createQueuedMessage,
     currentPromptDraft,
     currentPromptDraftInput,
+    followUpExecutionSelection,
+    isDefaultExecutionOptionsLoading,
     promptDraft,
-    reasoningLevel,
-    permissionMode,
-    selectedModel,
     sendMessage,
-    serviceTier,
-    supportsServiceTier,
     thread.id,
     runtimeDisplayStatus,
   ]);
@@ -711,12 +739,14 @@ export function ThreadDetailPromptArea({
 
   const permissionConfig = useMemo(
     () => ({
-      value: permissionMode,
-      options: permissionModeOptions,
+      value: hasConcreteDefaultExecutionOptions ? permissionMode : undefined,
+      options: hasConcreteDefaultExecutionOptions ? permissionModeOptions : [],
       onChange: setPermissionMode,
-      supported: supportsPermissionModeSelection,
+      supported:
+        hasConcreteDefaultExecutionOptions && supportsPermissionModeSelection,
     }),
     [
+      hasConcreteDefaultExecutionOptions,
       permissionMode,
       permissionModeOptions,
       setPermissionMode,

@@ -17,7 +17,8 @@ export interface PermissionModePickerProps {
 
 /**
  * Permission mode picker. Returns null when the provider doesn't support
- * picking (`supported=false`) or there's nothing to choose between.
+ * picking (`supported=false`), the current value has not loaded yet, or
+ * there's nothing to choose between.
  */
 export function PermissionModePicker({
   value,
@@ -29,14 +30,13 @@ export function PermissionModePicker({
   defaultOpen,
   modal,
 }: PermissionModePickerProps) {
-  if (!supported || options.length <= 1) {
+  if (!supported || value === undefined || options.length <= 1) {
     return null;
   }
-  const resolved = value ?? options[0]?.value ?? "full";
   return (
     <OptionPicker
       label="Permission mode"
-      value={resolved}
+      value={value}
       options={options}
       onChange={onChange}
       className={className}
