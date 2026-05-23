@@ -6,7 +6,10 @@ import {
   encodeReuseValue,
   parseEnvironmentValue,
 } from "@/components/pickers/environment-picker-value";
-import { OptionPicker } from "@/components/pickers/OptionPicker";
+import {
+  ProjectSelector,
+  type ProjectSelectorOption,
+} from "@/components/pickers/ProjectSelector";
 import type { ReuseThreadOption } from "@/components/pickers/WorktreePicker";
 import { Icon } from "@/components/ui/icon.js";
 import { PageShell } from "@/components/ui/page-shell.js";
@@ -306,24 +309,17 @@ export function ProjectMainView() {
     [effectiveEnvironmentValue, projectId, selectedBranch],
   );
 
-  const projectOptions = useMemo(() => {
-    const knownOptions =
-      projects?.map((project) => ({
-        value: project.id,
-        label: project.name,
-      })) ?? [];
+  const projectOptions = useMemo((): readonly ProjectSelectorOption[] => {
+    const known: ProjectSelectorOption[] =
+      projects?.map((project) => ({ id: project.id, name: project.name })) ?? [];
 
-    if (
-      projectId &&
-      !knownOptions.some((option) => option.value === projectId)
-    ) {
-      knownOptions.unshift({
-        value: projectId,
-        label: projectId,
-      });
+    // If the URL points at a project that isn't loaded yet, prepend a
+    // placeholder option so the trigger has something to render.
+    if (projectId && !known.some((option) => option.id === projectId)) {
+      known.unshift({ id: projectId, name: projectId });
     }
 
-    return knownOptions;
+    return known;
   }, [projectId, projects]);
 
   const selectedThreadModel = activeModel?.model ?? selectedModel;
@@ -651,11 +647,12 @@ export function ProjectMainView() {
         <div className="flex items-center px-3.5">
           {projectId ? (
             <div className="flex items-center gap-3">
-              <OptionPicker
-                label="Project"
+              <ProjectSelector
+                projects={projectOptions}
                 value={projectId}
-                options={projectOptions}
-                onChange={handleProjectChange}
+                onChange={(id) => {
+                  if (id !== null) handleProjectChange(id);
+                }}
                 className="h-8 text-sm"
               />
             </div>
