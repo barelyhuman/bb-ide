@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
-import { assertNever } from "@bb/core-ui";
+import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
 import type {
   PendingInteraction,
   ThreadQueuedMessage,
-  ThreadRuntimeDisplayStatus,
   ThreadTimelinePendingTodos,
   ThreadWithRuntime,
 } from "@bb/domain";
@@ -107,31 +106,6 @@ interface ThreadDetailPromptAreaProps {
   managerChildrenSection: ThreadPromptManagerChildrenSection | null;
   sendMessage: SendMessageMutationLike;
   thread: ThreadWithRuntime;
-}
-
-function getPromptPlaceholder(
-  displayStatus: ThreadRuntimeDisplayStatus,
-  isManagerThread: boolean,
-): string {
-  if (displayStatus === "created" || displayStatus === "provisioning") {
-    return isManagerThread ? "Hiring manager..." : "Creating thread...";
-  }
-
-  switch (displayStatus) {
-    case "waiting-for-host":
-      return "Host disconnected";
-    case "host-reconnecting":
-      return "Waiting for host to reconnect...";
-    case "error":
-      return "Retry by sending a follow-up message";
-    case "idle":
-    case "active":
-      return isManagerThread
-        ? "Send a message. @ to mention threads, files, or folders"
-        : "Ask for follow-up changes. @ to mention files, or folders";
-    default:
-      return assertNever(displayStatus);
-  }
 }
 
 export function ThreadDetailPromptArea({
@@ -326,7 +300,10 @@ export function ThreadDetailPromptArea({
     ? "Stopping thread..."
     : isDefaultExecutionOptionsLoading && !isCreated && !isProvisioning
       ? "Loading thread options..."
-      : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
+      : getFollowUpPromptPlaceholder(
+          runtimeDisplayStatus,
+          thread.type === "manager",
+        );
   const currentPromptDraft = useMemo(
     () => ({
       text: promptDraft.text,

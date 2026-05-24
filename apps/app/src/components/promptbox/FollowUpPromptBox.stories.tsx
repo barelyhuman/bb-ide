@@ -9,6 +9,7 @@ import {
   FollowUpPromptBox,
   type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
+import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
 import { PersistentHostIconName } from "@/lib/host-display";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import type {
@@ -86,6 +87,10 @@ const worktreeEnvironmentSummary: ReactNode = (
     environmentLabel="Worktree"
     environmentIcon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
     environmentBranchName="bb/promptbox-stories"
+    // Worktree threads expose a "new thread in this worktree" affordance —
+    // production wires it to the new-thread route. The story just needs a
+    // non-null handler so the MessageSquarePlus icon renders.
+    onCreateNewThreadInWorktree={noop}
   />
 );
 
@@ -257,13 +262,20 @@ function Row({
   submitMode,
   isFollowUpSubmitting = false,
   threadRuntimeDisplayStatus = "idle",
-  promptPlaceholder = "Ask a follow-up...",
+  // Default placeholder derives from threadRuntimeDisplayStatus the same way
+  // production's `getFollowUpPromptPlaceholder` does, so the story tracks
+  // copy changes without per-row updates. Rows that need explicit copy
+  // (e.g. "blocked: pending interaction") still pass it through.
+  promptPlaceholder,
   environmentSummary = localEnvironmentSummary,
   contextWindowUsage = null,
   stack = null,
   zenModeResetKey = "thr_demo",
 }: RowConfig) {
   const [message, setMessage] = useState(initialMessage);
+  const resolvedPlaceholder =
+    promptPlaceholder ??
+    getFollowUpPromptPlaceholder(threadRuntimeDisplayStatus, false);
   return (
     <PromptStage>
       <FollowUpPromptBox
@@ -280,7 +292,7 @@ function Row({
           onChangeMessage: setMessage,
           onSteerSubmit: noop,
           onSubmit: noop,
-          promptPlaceholder,
+          promptPlaceholder: resolvedPlaceholder,
           canSteerSubmit: submitMode.kind === "queue",
           submitMode,
           threadRuntimeDisplayStatus,
@@ -314,22 +326,18 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="stop-only"
-        hint="waiting-for-host — can't queue; can stop"
+        hint="host-reconnecting — composer locked; only Stop available"
       >
         <Row
           submitMode={{ kind: "stop-only", onStop: noop }}
-          threadRuntimeDisplayStatus="waiting-for-host"
-          promptPlaceholder="Waiting for host to reconnect..."
+          threadRuntimeDisplayStatus="host-reconnecting"
         />
       </StoryRow>
       <StoryRow
         label="blocked: pending interaction"
         hint="agent is waiting on a tool decision — composer locked"
       >
-        <Row
-          submitMode={{ kind: "blocked", reason: "pending-interaction" }}
-          promptPlaceholder="Waiting for your tool decision above..."
-        />
+        <Row submitMode={{ kind: "blocked", reason: "pending-interaction" }} />
       </StoryRow>
       <StoryRow
         label="blocked: provisioning"
@@ -338,7 +346,6 @@ export function Overview() {
         <Row
           submitMode={{ kind: "blocked", reason: "provisioning" }}
           threadRuntimeDisplayStatus="provisioning"
-          promptPlaceholder="Provisioning environment..."
         />
       </StoryRow>
       <StoryRow
