@@ -39,12 +39,9 @@ export function Overview() {
           allowNoProject
         />
       </StoryRow>
-      <StoryRow label="open menu — required mode" hint="defaultOpen + modal=false">
-        <ProjectSelectorInteractive />
-      </StoryRow>
       <StoryRow
-        label="open menu — optional mode"
-        hint="includes the no-project item below a separator"
+        label="open menu"
+        hint="defaultOpen + modal=false (allowNoProject=true — shows the no-project item below a separator)"
       >
         <ProjectSelectorInteractive allowNoProject />
       </StoryRow>
