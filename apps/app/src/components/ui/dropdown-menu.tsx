@@ -11,7 +11,10 @@ import {
   ResponsiveDrawerShell,
   stripRadixContentProps,
 } from "./responsive-overlay.js";
-import { getOverlayTriggerClassName } from "./overlay-trigger.js";
+import {
+  getOverlayTriggerClassName,
+  preventOverlayTriggerSelection,
+} from "./overlay-trigger.js";
 import { Icon } from "@/components/ui/icon.js";
 
 // ---------------------------------------------------------------------------
@@ -98,6 +101,7 @@ const DropdownMenuTrigger = React.forwardRef<
       ref={ref}
       asChild={asChild}
       className={getOverlayTriggerClassName(className)}
+      onMouseDown={preventOverlayTriggerSelection}
       {...props}
     >
       {children}

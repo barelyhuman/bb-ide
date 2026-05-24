@@ -2,7 +2,10 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 
 import { Drawer, DrawerContent, DrawerTitle } from "./drawer.js";
-import { getOverlayTriggerClassName } from "./overlay-trigger.js";
+import {
+  getOverlayTriggerClassName,
+  preventOverlayTriggerSelection,
+} from "./overlay-trigger.js";
 import { useIsCompactViewport } from "./hooks/use-compact-viewport.js";
 
 // ---------------------------------------------------------------------------
@@ -101,6 +104,7 @@ export const MobileTrigger = React.forwardRef<
         <Slot
           ref={ref}
           onClick={handleClick}
+          onMouseDown={preventOverlayTriggerSelection}
           className={triggerClassName}
           {...ariaProps}
           {...domProps}
@@ -115,6 +119,7 @@ export const MobileTrigger = React.forwardRef<
         ref={ref}
         type="button"
         onClick={handleClick}
+        onMouseDown={preventOverlayTriggerSelection}
         className={triggerClassName}
         {...ariaProps}
         {...domProps}

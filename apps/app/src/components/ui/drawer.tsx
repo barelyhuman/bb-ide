@@ -3,7 +3,10 @@ import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils";
-import { getOverlayTriggerClassName } from "./overlay-trigger.js";
+import {
+  getOverlayTriggerClassName,
+  preventOverlayTriggerSelection,
+} from "./overlay-trigger.js";
 
 const Drawer = ({
   shouldScaleBackground = false,
@@ -23,6 +26,7 @@ const DrawerTrigger = React.forwardRef<
   <DrawerPrimitive.Trigger
     ref={ref}
     className={getOverlayTriggerClassName(className)}
+    onMouseDown={preventOverlayTriggerSelection}
     {...props}
   />
 ));

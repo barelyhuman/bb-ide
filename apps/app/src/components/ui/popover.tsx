@@ -10,7 +10,10 @@ import {
   ResponsiveDrawerShell,
   stripRadixContentProps,
 } from "./responsive-overlay.js";
-import { getOverlayTriggerClassName } from "./overlay-trigger.js";
+import {
+  getOverlayTriggerClassName,
+  preventOverlayTriggerSelection,
+} from "./overlay-trigger.js";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from DropdownMenu
@@ -96,6 +99,7 @@ const PopoverTrigger = React.forwardRef<
       ref={ref}
       asChild={asChild}
       className={getOverlayTriggerClassName(className)}
+      onMouseDown={preventOverlayTriggerSelection}
       {...props}
     >
       {children}
