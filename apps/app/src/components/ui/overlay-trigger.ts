@@ -24,3 +24,42 @@ export const getOverlayTriggerClassName: OverlayTriggerClassNameResolver = (
 export function preventOverlayTriggerSelection(event: MouseEvent): void {
   event.preventDefault();
 }
+
+// ---------------------------------------------------------------------------
+// Input-modality tracker — mirrors the pattern Radix's `Menu` uses internally
+// (isUsingKeyboardRef). Flips to "keyboard" on the next keydown, then back to
+// "pointer" on the next pointer event. Capture-phase listeners so we observe
+// the user's input before any component handlers consume the event.
+//
+// Used by DropdownMenuContent's onCloseAutoFocus to decide whether to restore
+// focus to the trigger. Radix's DropdownMenu trigger preventDefaults pointer-
+// down (so the trigger never gets mouse-set focus), and Radix then programm-
+// atically `.focus()`es the trigger on close — which the browser interprets
+// as keyboard-modality focus and paints :focus-visible. After a mouse-driven
+// close that's a stray ring; suppressing the auto-focus there leaves focus
+// where the user's click landed and avoids the visual jitter. Keyboard close
+// (Escape, item-Enter) still restores focus to the trigger as expected.
+// ---------------------------------------------------------------------------
+
+let lastInputModality: "pointer" | "keyboard" = "pointer";
+
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "keydown",
+    () => {
+      lastInputModality = "keyboard";
+    },
+    { capture: true },
+  );
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      lastInputModality = "pointer";
+    },
+    { capture: true },
+  );
+}
+
+export function isLastInputKeyboard(): boolean {
+  return lastInputModality === "keyboard";
+}

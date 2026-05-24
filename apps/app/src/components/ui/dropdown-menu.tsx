@@ -13,6 +13,7 @@ import {
 } from "./responsive-overlay.js";
 import {
   getOverlayTriggerClassName,
+  isLastInputKeyboard,
   preventOverlayTriggerSelection,
 } from "./overlay-trigger.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -120,7 +121,18 @@ const DropdownMenuContent = React.forwardRef<
     /** Title announced by screen readers when the mobile drawer opens. */
     mobileTitle?: string;
   }
->(({ className, sideOffset = 4, children, mobileTitle, ...props }, ref) => {
+>(
+  (
+    {
+      className,
+      sideOffset = 4,
+      children,
+      mobileTitle,
+      onCloseAutoFocus,
+      ...props
+    },
+    ref,
+  ) => {
   const { isCompactViewport, open, onOpenChange } = useResponsiveMenu();
 
   if (isCompactViewport) {
@@ -151,6 +163,19 @@ const DropdownMenuContent = React.forwardRef<
       <DropdownMenuPrimitive.Content
         ref={ref}
         sideOffset={sideOffset}
+        onCloseAutoFocus={(event) => {
+          // Radix's DropdownMenu trigger preventDefaults pointerdown so the
+          // menu can claim focus on open; that leaves the trigger without
+          // mouse-set focus, and the close-time `.focus()` then trips the
+          // browser's :focus-visible heuristic — painting a ring after every
+          // mouse-driven close. Suppress the trigger refocus when the user's
+          // last input was a pointer; keep it for keyboard close so Tab order
+          // and focus indication stay intact for keyboard users.
+          if (!isLastInputKeyboard()) {
+            event.preventDefault();
+          }
+          onCloseAutoFocus?.(event);
+        }}
         className={cn(
           "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           className,
@@ -161,7 +186,8 @@ const DropdownMenuContent = React.forwardRef<
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   );
-});
+  },
+);
 DropdownMenuContent.displayName = "DropdownMenuContent";
 
 // ---------------------------------------------------------------------------
