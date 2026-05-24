@@ -2,6 +2,7 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  ProjectSource,
   ReasoningLevel,
   Thread,
   ThreadListEntry,
@@ -12,6 +13,8 @@ import { ClaudeIcon } from "../src/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "../src/components/icons/OpenAiIcon";
 import { PiIcon } from "../src/components/icons/PiIcon";
 import type { PickerOption } from "../src/components/pickers/OptionPicker";
+import type { ProjectSelectorOption } from "../src/components/pickers/ProjectSelector";
+import type { ReuseThreadOption } from "../src/components/pickers/WorktreePicker";
 import type { ExecutionControlsProps } from "../src/components/promptbox/ExecutionControls";
 import type {
   AttachmentsConfig,
@@ -246,6 +249,84 @@ export const STORY_CLAUDE_CODE_AVAILABLE_MODELS: readonly AvailableModel[] = [
     defaultReasoningEffort: "low",
   }),
 ];
+
+// ---------------------------------------------------------------------------
+// Host / source / branch / worktree / project catalog. Every story that
+// renders the env strip (EnvironmentOptions, NewThreadPromptBox), the project
+// selector (NewThreadPromptBox), or the follow-up env summary
+// (FollowUpPromptBox) pulls from the same lists so adding a new branch state
+// flows everywhere without each story growing its own copy.
+// ---------------------------------------------------------------------------
+
+export const STORY_HOSTS: readonly Host[] = [
+  makeHost({ id: HOST_IDS.local, name: HOST_NAMES.local }),
+  makeHost({
+    id: HOST_IDS.remote,
+    name: HOST_NAMES.remote,
+  }),
+  makeHost({
+    id: "host_disconnected",
+    name: "Linux laptop",
+    status: "disconnected",
+  }),
+];
+
+export const STORY_PROJECT_SOURCES: readonly ProjectSource[] = [
+  {
+    id: "src_local",
+    projectId: PROJECT_IDS.bb,
+    type: "local_path",
+    hostId: HOST_IDS.local,
+    path: "/Users/michael/Projects/bb",
+    isDefault: true,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: "src_remote",
+    projectId: PROJECT_IDS.bb,
+    type: "local_path",
+    hostId: HOST_IDS.remote,
+    path: "/home/michael/bb",
+    isDefault: false,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+];
+
+export const STORY_BRANCH_OPTIONS: readonly string[] = [
+  "main",
+  "release/1.2",
+  "feat/sidebar-rail",
+  "fix/timeline-pagination",
+  "bb/refactor-project-creation-thr_jj65bdsiwa",
+];
+
+export const STORY_WORKTREE_OPTIONS: readonly ReuseThreadOption[] = [
+  {
+    environmentId: "env_review_flow",
+    branchName: "bb/review-flow-thr_4hge9xn14m",
+    threads: [
+      { id: "thr_review", title: "Review flow cleanup" },
+      { id: "thr_tests", title: "Backfill promptbox tests" },
+    ],
+  },
+  {
+    environmentId: "env_timeline",
+    branchName: "bb/timeline-pagination-thr_qfk8ksbxkk",
+    threads: [{ id: "thr_timeline", title: "Timeline pagination" }],
+  },
+];
+
+export const STORY_PROJECTS: readonly ProjectSelectorOption[] = [
+  { id: PROJECT_IDS.bb, name: PROJECT_NAMES.bb },
+  { id: PROJECT_IDS.pierre, name: PROJECT_NAMES.pierre },
+];
+
+/** Matches the production helper passed into EnvironmentPickerUI. */
+export const storyIsLocalHost = (
+  hostId: string | null | undefined,
+): boolean => hostId === HOST_IDS.local;
 
 /**
  * Codex / gpt-5.5 / medium reasoning — the default starting point most

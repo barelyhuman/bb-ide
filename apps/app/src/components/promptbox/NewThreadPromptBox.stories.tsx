@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Host, PermissionMode, ProjectSource } from "@bb/domain";
+import type { PermissionMode } from "@bb/domain";
 import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
@@ -10,9 +10,15 @@ import type { HistoryConfig } from "@/components/promptbox/PromptBoxInternal";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
+  HOST_IDS,
+  STORY_BRANCH_OPTIONS,
+  STORY_HOSTS,
+  STORY_PROJECT_SOURCES,
+  STORY_WORKTREE_OPTIONS,
   makeAttachmentsConfig as makeAttachments,
   makeExecutionControlsProps,
   makeMentionsConfig as makeMentions,
+  storyIsLocalHost,
 } from "../../../.ladle/story-fixtures";
 
 export default {
@@ -23,50 +29,19 @@ const noop = () => {};
 
 const baseExecution = makeExecutionControlsProps();
 
-const localHostId = "host_local";
-
-const localHost: Host = {
-  id: localHostId,
-  name: "Michael’s MacBook Pro",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: 0,
-  createdAt: 0,
-  updatedAt: 0,
-};
-
-const localSources: readonly ProjectSource[] = [
-  {
-    id: "src_local",
-    projectId: "proj_demo",
-    type: "local_path",
-    hostId: localHostId,
-    path: "/Users/michael/Projects/bb",
-    isDefault: true,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
-
 const baseEnvironment: NewThreadEnvironmentConfig = {
-  value: `host:${localHostId}:local`,
+  value: `host:${HOST_IDS.local}:local`,
   onChange: noop,
-  sources: localSources,
-  hosts: [localHost],
-  isLocalHost: (hostId) => hostId === localHostId,
+  sources: STORY_PROJECT_SOURCES,
+  hosts: STORY_HOSTS,
+  isLocalHost: storyIsLocalHost,
 };
 
 const baseBranch: NewThreadBranchConfig = {
   value: null,
   currentBranch: "main",
   isNew: false,
-  options: [
-    "main",
-    "develop",
-    "feat/timeline-pagination",
-    "fix/review-thread",
-    "chore/upgrade-react",
-  ],
+  options: STORY_BRANCH_OPTIONS,
   loading: false,
   currentOptionLabel: "Current: main",
   placeholder: "Current checkout",
@@ -78,7 +53,7 @@ const baseBranch: NewThreadBranchConfig = {
 };
 
 const baseWorktree: NewThreadWorktreeConfig = {
-  options: [],
+  options: STORY_WORKTREE_OPTIONS,
   value: null,
   onChange: noop,
 };

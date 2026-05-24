@@ -1,4 +1,4 @@
-import type { Host, ProjectSource } from "@bb/domain";
+import { useState } from "react";
 import {
   BranchPicker,
   type BranchPickerProps,
@@ -8,90 +8,25 @@ import {
   type EnvironmentPickerUIProps,
 } from "@/components/pickers/EnvironmentPicker";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
-import {
-  WorktreePicker,
-  type ReuseThreadOption,
-} from "@/components/pickers/WorktreePicker";
+import { ProjectSelector } from "@/components/pickers/ProjectSelector";
+import { WorktreePicker } from "@/components/pickers/WorktreePicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import { HOST_IDS, makeHost } from "../../../.ladle/story-fixtures";
+import {
+  HOST_IDS,
+  PROJECT_IDS,
+  STORY_BRANCH_OPTIONS,
+  STORY_HOSTS,
+  STORY_PROJECTS,
+  STORY_PROJECT_SOURCES,
+  STORY_WORKTREE_OPTIONS,
+  storyIsLocalHost,
+} from "../../../.ladle/story-fixtures";
 
 export default {
   title: "promptbox/Environment Options",
 };
 
 const noop = () => {};
-
-const hosts: readonly Host[] = [
-  makeHost({
-    id: HOST_IDS.local,
-    name: "Michael's MacBook Pro",
-  }),
-  makeHost({
-    id: HOST_IDS.remote,
-    name: "michael-build-box",
-  }),
-  makeHost({
-    id: "host_disconnected",
-    name: "Linux laptop",
-    status: "disconnected",
-  }),
-];
-
-interface MakeSourceArgs {
-  hostId: string;
-  id: string;
-  path: string;
-}
-
-function makeSource(args: MakeSourceArgs): ProjectSource {
-  return {
-    id: args.id,
-    projectId: "proj_demo",
-    type: "local_path",
-    hostId: args.hostId,
-    path: args.path,
-    isDefault: args.id === "src_local",
-    createdAt: 0,
-    updatedAt: 0,
-  };
-}
-
-const sources: readonly ProjectSource[] = [
-  makeSource({
-    id: "src_local",
-    hostId: HOST_IDS.local,
-    path: "/Users/michael/Projects/bb",
-  }),
-  makeSource({
-    id: "src_remote",
-    hostId: HOST_IDS.remote,
-    path: "/home/michael/bb",
-  }),
-];
-
-const branchOptions: readonly string[] = [
-  "main",
-  "release/1.2",
-  "feat/sidebar-rail",
-  "fix/timeline-pagination",
-  "bb/refactor-project-creation-thr_jj65bdsiwa",
-];
-
-const worktreeOptions: readonly ReuseThreadOption[] = [
-  {
-    environmentId: "env_review_flow",
-    branchName: "bb/review-flow-thr_4hge9xn14m",
-    threads: [
-      { id: "thr_review", title: "Review flow cleanup" },
-      { id: "thr_tests", title: "Backfill promptbox tests" },
-    ],
-  },
-  {
-    environmentId: "env_timeline",
-    branchName: "bb/timeline-pagination-thr_qfk8ksbxkk",
-    threads: [{ id: "thr_timeline", title: "Timeline pagination" }],
-  },
-];
 
 function getStoryBranchMenuKind(
   environmentValue: string,
@@ -104,34 +39,58 @@ function getStoryBranchMenuKind(
   return parsedEnvironment.mode === "worktree" ? "base" : "checkout";
 }
 
+// ---------------------------------------------------------------------------
+// EnvironmentOptionsStrip — composes ProjectSelector + EnvironmentPicker +
+// (BranchPicker | WorktreePicker), the same chain that lives below the
+// new-thread prompt box in production. Each row overrides just the slots it
+// cares about; everything else falls back to the shared fixture catalog so
+// adding a new branch / worktree state in `story-fixtures.ts` flows here
+// automatically.
+// ---------------------------------------------------------------------------
+
 interface EnvironmentOptionsStripProps {
-  branch?: Partial<BranchPickerProps>;
+  project?: { value: string | null; allowNoProject?: boolean };
   environment?: Partial<EnvironmentPickerUIProps>;
+  branch?: Partial<BranchPickerProps>;
   worktreeValue?: string | null;
 }
 
 function EnvironmentOptionsStrip({
-  branch,
+  project,
   environment,
+  branch,
   worktreeValue = null,
 }: EnvironmentOptionsStripProps) {
+  const [projectValue, setProjectValue] = useState<string | null>(
+    project?.value ?? PROJECT_IDS.bb,
+  );
   const environmentValue = environment?.value ?? `host:${HOST_IDS.local}:local`;
   const showWorktreePicker = environmentValue === "reuse";
+  // Mirrors NewThreadPromptBox's strip chrome: mt-1, transparent border, px-3
+  // so the content column aligns with the prompt-box card above.
   return (
-    <div className="flex min-w-0 max-w-full items-center gap-1 rounded-md border border-border/60 bg-card px-3.5 py-2">
+    <div className="mt-1 flex min-w-0 max-w-full items-center gap-1 border border-transparent px-3">
+      <ProjectSelector
+        projects={STORY_PROJECTS}
+        value={projectValue}
+        onChange={setProjectValue}
+        allowNoProject={project?.allowNoProject ?? false}
+        className="h-7 px-1.5"
+        modal={false}
+      />
       <EnvironmentPickerUI
         value={environmentValue}
         onChange={noop}
-        sources={sources}
-        hosts={hosts}
-        isLocalHost={(hostId) => hostId === HOST_IDS.local}
+        sources={STORY_PROJECT_SOURCES}
+        hosts={STORY_HOSTS}
+        isLocalHost={storyIsLocalHost}
         muted
         modal={false}
         {...environment}
       />
       {showWorktreePicker ? (
         <WorktreePicker
-          options={worktreeOptions}
+          options={STORY_WORKTREE_OPTIONS}
           value={worktreeValue}
           onChange={noop}
           muted
@@ -143,7 +102,7 @@ function EnvironmentOptionsStrip({
           muted
           value={null}
           currentBranch="main"
-          options={branchOptions}
+          options={STORY_BRANCH_OPTIONS}
           currentOptionLabel="Current: main"
           currentOptionTitle="Use the current checkout without switching branches"
           placeholder="Current checkout"
@@ -165,11 +124,14 @@ export function Overview() {
   return (
     <div className="flex flex-col">
       <StoryCard labelWidth="180px">
-        <StoryRow label="current branch" hint="no branch intent; use as-is">
+        <StoryRow
+          label="project · current branch"
+          hint="default: a project, the current checkout"
+        >
           <EnvironmentOptionsStrip />
         </StoryRow>
         <StoryRow
-          label="checkout branch"
+          label="project · checkout"
           hint="explicit existing branch intent"
         >
           <EnvironmentOptionsStrip
@@ -181,7 +143,7 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="new branch"
+          label="project · new branch"
           hint="server-minted branch in primary checkout"
         >
           <EnvironmentOptionsStrip
@@ -192,7 +154,10 @@ export function Overview() {
             }}
           />
         </StoryRow>
-        <StoryRow label="dirty checkout" hint="branch-changing choices blocked">
+        <StoryRow
+          label="project · dirty checkout"
+          hint="branch-changing choices blocked"
+        >
           <EnvironmentOptionsStrip
             branch={{
               optionDisabledReason: "Dirty",
@@ -203,7 +168,7 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="detached HEAD"
+          label="project · detached HEAD"
           hint="current checkout shown explicitly"
         >
           <EnvironmentOptionsStrip
@@ -220,7 +185,7 @@ export function Overview() {
             }}
           />
         </StoryRow>
-        <StoryRow label="empty repo" hint="unborn branch state">
+        <StoryRow label="project · empty repo" hint="unborn branch state">
           <EnvironmentOptionsStrip
             branch={{
               currentOptionLabel: "Current (empty repo)",
@@ -235,7 +200,7 @@ export function Overview() {
             }}
           />
         </StoryRow>
-        <StoryRow label="loading" hint="loading checkout state">
+        <StoryRow label="project · loading" hint="loading checkout state">
           <EnvironmentOptionsStrip
             branch={{
               loading: true,
@@ -245,7 +210,7 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="worktree default"
+          label="project · worktree from default"
           hint="new worktree from default base"
         >
           <EnvironmentOptionsStrip
@@ -258,7 +223,10 @@ export function Overview() {
             }}
           />
         </StoryRow>
-        <StoryRow label="worktree branch" hint="new worktree from named base">
+        <StoryRow
+          label="project · worktree from branch"
+          hint="new worktree from named base"
+        >
           <EnvironmentOptionsStrip
             environment={{ value: `host:${HOST_IDS.local}:worktree` }}
             branch={{
@@ -271,7 +239,7 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="reuse selected"
+          label="project · reuse selected"
           hint="reuse mode with a chosen worktree"
         >
           <EnvironmentOptionsStrip
@@ -280,13 +248,13 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="reuse empty"
+          label="project · reuse empty"
           hint="reuse mode before picking a worktree"
         >
           <EnvironmentOptionsStrip environment={{ value: "reuse" }} />
         </StoryRow>
         <StoryRow
-          label="reuse unavailable"
+          label="project · reuse unavailable"
           hint="environment row disabled in menu"
         >
           <EnvironmentOptionsStrip
@@ -296,12 +264,18 @@ export function Overview() {
             }}
           />
         </StoryRow>
-        <StoryRow label="remote checkout" hint="remote host, primary checkout">
+        <StoryRow
+          label="remote host · checkout"
+          hint="remote host, primary checkout"
+        >
           <EnvironmentOptionsStrip
             environment={{ value: `host:${HOST_IDS.remote}:local` }}
           />
         </StoryRow>
-        <StoryRow label="remote worktree" hint="remote host, new worktree">
+        <StoryRow
+          label="remote host · worktree"
+          hint="remote host, new worktree"
+        >
           <EnvironmentOptionsStrip
             environment={{ value: `host:${HOST_IDS.remote}:worktree` }}
             branch={{
@@ -310,6 +284,22 @@ export function Overview() {
               triggerTitle: "Branch from: main",
               onCreate: undefined,
             }}
+          />
+        </StoryRow>
+        <StoryRow
+          label="no project · allowed"
+          hint="allowNoProject flag on, no project chosen — trigger reads 'Work in a project'"
+        >
+          <EnvironmentOptionsStrip
+            project={{ value: null, allowNoProject: true }}
+          />
+        </StoryRow>
+        <StoryRow
+          label="other project · pierre"
+          hint="swapping project changes the env strip context"
+        >
+          <EnvironmentOptionsStrip
+            project={{ value: PROJECT_IDS.pierre }}
           />
         </StoryRow>
       </StoryCard>
