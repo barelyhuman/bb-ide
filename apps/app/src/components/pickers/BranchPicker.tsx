@@ -88,7 +88,6 @@ type BranchLabelParts =
 
 interface BranchPickerTextProps {
   label: string;
-  isCreatingNew: boolean;
   emphasizePlainLabel?: boolean;
   className?: string;
 }
@@ -142,7 +141,6 @@ interface BranchPickerRowButtonProps {
   label: string;
   title?: string;
   selected: boolean;
-  isCreatingNew?: boolean;
   emphasizeLabel?: boolean;
   onSelect: () => void;
 }
@@ -209,7 +207,6 @@ function splitBranchLabel(label: string): BranchLabelParts {
 
 function BranchPickerText({
   label,
-  isCreatingNew,
   emphasizePlainLabel = false,
   className,
 }: BranchPickerTextProps) {
@@ -219,9 +216,7 @@ function BranchPickerText({
       <span
         className={cn(
           "min-w-0 truncate",
-          isCreatingNew || emphasizePlainLabel
-            ? "font-medium text-foreground"
-            : undefined,
+          emphasizePlainLabel && "font-medium text-foreground",
           className,
         )}
       >
@@ -325,7 +320,6 @@ function BranchPickerRowButton({
   label,
   title,
   selected,
-  isCreatingNew = false,
   emphasizeLabel = false,
   onSelect,
 }: BranchPickerRowButtonProps) {
@@ -345,7 +339,6 @@ function BranchPickerRowButton({
       />
       <BranchPickerText
         label={label}
-        isCreatingNew={isCreatingNew}
         emphasizePlainLabel={emphasizeLabel}
         className="flex-1"
       />
@@ -538,8 +531,11 @@ export function BranchPicker({
     (isCreatingNew
       ? CREATE_NEW_BRANCH_LABEL
       : (value ?? unresolvedTriggerLabel));
+  // The trigger emphasises a plain branch value (or the "New branch" state) so
+  // the committed selection stands out from muted prefix copy like
+  // "Branch from:". Override callers can format their own label.
   const triggerHasPlainBranchValue =
-    !isCreatingNew && triggerLabelOverride === undefined && value !== null;
+    triggerLabelOverride === undefined && (isCreatingNew || value !== null);
   const showCreateItem = Boolean(onCreate);
   const createDisabledDescription = formatUnavailableDescription({
     title: createDisabledTitle,
@@ -645,7 +641,6 @@ export function BranchPicker({
               />
               <BranchPickerText
                 label={triggerLabel}
-                isCreatingNew={isCreatingNew}
                 emphasizePlainLabel={triggerHasPlainBranchValue}
                 className="truncate"
               />
@@ -653,7 +648,6 @@ export function BranchPicker({
           ) : (
             <BranchPickerText
               label={triggerLabel}
-              isCreatingNew={isCreatingNew}
               emphasizePlainLabel={triggerHasPlainBranchValue}
               className="truncate text-left"
             />
@@ -754,7 +748,6 @@ export function BranchPicker({
                         label={CREATE_NEW_BRANCH_LABEL}
                         title={createDisabledTitle}
                         selected={isCreatingNew}
-                        isCreatingNew
                         onSelect={() => {
                           onCreate();
                           setOpen(false);
