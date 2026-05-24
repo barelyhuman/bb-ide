@@ -664,9 +664,12 @@ describe("useThreadCreationOptions", () => {
       expect(result.current.selectedModel).toBe("claude-sonnet-4-6");
     });
 
+    // modelOptions carries the case-normalised raw label; the brand-prefix
+    // strip ("Claude " / "GPT-") is a render-time rule applied by the picker,
+    // not a data transform here. See `stripModelBrandPrefix`.
     expect(result.current.modelOptions).toEqual([
       {
-        label: "Sonnet 4.6",
+        label: "Claude Sonnet 4.6",
         value: "claude-sonnet-4-6",
       },
     ]);

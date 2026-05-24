@@ -296,17 +296,13 @@ export function NewManagerForm({
     [providers],
   );
 
-  const providerIdForLabel = selectedProvider?.id;
   const modelOptions = useMemo(
     (): readonly PickerOption<string>[] =>
       models.map((model) => ({
         value: model.model,
-        label: formatModelLabel(
-          model.displayName || model.model,
-          providerIdForLabel,
-        ),
+        label: formatModelLabel(model.displayName || model.model),
       })),
-    [models, providerIdForLabel],
+    [models],
   );
   const canSwitchProviders = providers.length > 1;
   const showProviderModelPicker = modelOptions.length > 0 || canSwitchProviders;

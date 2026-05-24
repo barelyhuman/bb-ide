@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import type { ReasoningLevel } from "@bb/domain";
+import { stripModelBrandPrefix } from "./model-brand-prefix";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import {
@@ -42,7 +43,12 @@ interface ModelReasoningPickerProps {
   modelOptions: readonly PickerOption<string>[];
   modelLoadError?: SystemExecutionOptionsModelLoadError | null;
   onModelChange: (value: string) => void;
-  formatModelLabel?: (displayName: string, providerId: string) => string;
+  /**
+   * Optional case-normaliser for raw model names returned by a previewed
+   * provider. The picker itself drops the brand prefix at render — callers
+   * only need to pass this when the preview API returns un-cased ids.
+   */
+  formatModelLabel?: (displayName: string) => string;
   // Reasoning state — supported efforts are per-model, so callers derive
   // these options from the SELECTED model and reconcile the level on model
   // change via `reconcileReasoningLevel` in src/lib.
@@ -103,7 +109,12 @@ export function ModelReasoningPicker({
   const selectedModelOption = modelOptions.find((m) => m.value === modelValue);
   const selectedModelLabel = selectedModelOption?.label ?? modelValue;
   const hasSelectedModel = selectedModelLabel.trim().length > 0;
-  const triggerModelLabel = hasSelectedModel ? selectedModelLabel : "Select model";
+  // Strip the brand prefix at render — the trigger always shows the committed
+  // provider, so we use `selectedProviderId` (not `activeProviderId`, which
+  // can be a preview).
+  const triggerModelLabel = hasSelectedModel
+    ? stripModelBrandPrefix(selectedModelLabel, selectedProviderId)
+    : "Select model";
 
   const selectedReasoningOption = reasoningOptions.find(
     (r) => r.value === reasoningValue,
@@ -132,7 +143,7 @@ export function ModelReasoningPicker({
     return models.map((model) => ({
       value: model.model,
       label: formatModelLabel
-        ? formatModelLabel(model.displayName || model.model, previewProviderId!)
+        ? formatModelLabel(model.displayName || model.model)
         : model.displayName || model.model,
     }));
   }, [
@@ -140,7 +151,6 @@ export function ModelReasoningPicker({
     modelOptions,
     previewQuery.data?.models,
     formatModelLabel,
-    previewProviderId,
   ]);
   const activeModelLoadError = isPreviewing
     ? (previewQuery.data?.modelLoadError ?? null)
@@ -323,7 +333,9 @@ export function ModelReasoningPicker({
             activeModelOptions.map((option) => (
               <MenuRowButton
                 key={option.value}
-                label={option.label}
+                // The menu always reflects the provider whose models it lists
+                // (either committed or previewed) — strip with `activeProviderId`.
+                label={stripModelBrandPrefix(option.label, activeProviderId)}
                 selected={!isPreviewing && option.value === modelValue}
                 onClick={() => handleModelSelect(option.value)}
               />

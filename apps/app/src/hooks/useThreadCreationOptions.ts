@@ -272,8 +272,12 @@ export function resolvePermissionModeSelection({
   return supportedPermissionModes[0] ?? "full";
 }
 
-export function formatModelLabel(value: string, providerId?: string): string {
-  let label = value
+export function formatModelLabel(value: string): string {
+  // Case-normalises a raw model id into a displayable label. The brand prefix
+  // strip ("Claude " / "GPT-") is a presentation rule applied by the picker
+  // itself (see `stripModelBrandPrefix`) so stories and prod render identically
+  // without anyone having to remember to format.
+  return value
     .split("-")
     .map((part) => {
       if (part.toLowerCase() === "gpt") return "GPT";
@@ -284,14 +288,6 @@ export function formatModelLabel(value: string, providerId?: string): string {
       return part;
     })
     .join("-");
-
-  // Strip "Claude " prefix for claude-code provider — the provider icon already
-  // identifies the brand, so "Sonnet 4.6" is cleaner than "Claude Sonnet 4.6".
-  if (providerId === "claude-code") {
-    label = label.replace(/^Claude\s+/i, "");
-  }
-
-  return label;
 }
 
 function sanitizeStoredEnvironmentValue(stored: string): string {
@@ -523,12 +519,9 @@ export function useThreadCreationOptions(
     (): PickerOption<string>[] =>
       availableModels.map((model) => ({
         value: model.model,
-        label: formatModelLabel(
-          model.displayName || model.model,
-          effectiveProviderId,
-        ),
+        label: formatModelLabel(model.displayName || model.model),
       })),
-    [availableModels, effectiveProviderId],
+    [availableModels],
   );
 
   const activeModel = useMemo(

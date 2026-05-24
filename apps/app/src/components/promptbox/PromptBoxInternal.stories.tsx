@@ -168,7 +168,6 @@ function DefaultRow() {
       value={value}
       onChange={onChange}
       onSubmit={noop}
-      placeholder="What do you want to build?"
       mentions={makeMentions()}
       mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
@@ -229,7 +228,7 @@ function RunningWithStopRow() {
       value={value}
       onChange={onChange}
       onSubmit={noop}
-      placeholder="Queue a follow-up while the agent runs..."
+      placeholder="Ask for a follow-up. @ to mention files or folders"
       mentions={makeMentions()}
       mentionMenuPlacement="bottom"
       attachments={makeAttachments()}
