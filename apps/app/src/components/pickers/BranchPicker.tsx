@@ -57,8 +57,12 @@ const DETACHED_LABEL_PREFIX = "Detached";
 // (text-xs, px-2 py-[0.3125rem]).
 const BRANCH_PICKER_ROW_CLASS_NAME =
   "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-left text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:bg-state-hover focus-visible:text-foreground";
-const BRANCH_PICKER_HEADER_CLASS_NAME =
-  "px-2 py-[0.3125rem] text-xs font-medium text-muted-foreground";
+// `sticky top-0` keeps the section label pinned to the top of the scrolling
+// branch list (stacking — each header pushes the previous one off). `bg-background`
+// makes the label opaque so rows scrolling underneath don't bleed through.
+// Matches ModelReasoningPicker's sticky pattern.
+const BRANCH_PICKER_HEADER_BASE_CLASS_NAME =
+  "sticky top-0 z-10 bg-background px-2 text-xs font-medium text-muted-foreground";
 
 interface BranchPlainLabelParts {
   kind: "plain";
@@ -254,24 +258,37 @@ function BranchPickerSectionHeader({
   subtitleTitle,
   className,
 }: BranchPickerSectionHeaderProps) {
+  // Label-only case: `flex h-7 items-center` pins the sticky label to an
+  // integer height so it doesn't subpixel-shift during scroll. The subtitle
+  // case is rare (only shows when a section is unavailable, and the disabled
+  // state means there's no scrolling underneath to jitter against), so the
+  // variable-height fallback is acceptable there.
+  if (!subtitle) {
+    return (
+      <div
+        className={cn(
+          BRANCH_PICKER_HEADER_BASE_CLASS_NAME,
+          "flex h-7 items-center",
+          className,
+        )}
+      >
+        {label}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
-        BRANCH_PICKER_HEADER_CLASS_NAME,
-        // Subtitle is a multi-line block underneath the label — give the
-        // header a little extra bottom padding so the subtitle doesn't sit
-        // flush against the row that follows.
-        subtitle && "pb-1.5",
+        BRANCH_PICKER_HEADER_BASE_CLASS_NAME,
+        "py-[0.3125rem] pb-1.5",
         className,
       )}
-      title={subtitle ? (subtitleTitle ?? subtitle) : undefined}
+      title={subtitleTitle ?? subtitle}
     >
       <div>{label}</div>
-      {subtitle ? (
-        <div className="mt-1 text-xs font-normal leading-snug text-muted-foreground">
-          <span className="min-w-0">{subtitle}</span>
-        </div>
-      ) : null}
+      <div className="mt-1 text-xs font-normal leading-snug text-muted-foreground">
+        <span className="min-w-0">{subtitle}</span>
+      </div>
     </div>
   );
 }
