@@ -122,6 +122,17 @@ export function Overview() {
           reuseDisabled
         />
       </StoryRow>
+      <StoryRow label="open menu" hint="defaultOpen + modal=false">
+        <EnvironmentPickerUI
+          value={`host:${HOST_IDS.local}:local`}
+          onChange={noop}
+          sources={multiHostSources}
+          hosts={mockHosts}
+          isLocalHost={isLocalHost}
+          defaultOpen
+          modal={false}
+        />
+      </StoryRow>
     </StoryCard>
   );
 }

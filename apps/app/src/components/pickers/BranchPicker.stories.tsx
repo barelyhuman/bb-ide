@@ -112,6 +112,11 @@ export function Overview() {
         picker={mergeBasePicker}
         variant="minimal"
       />
+      <BranchPickerStoryRow
+        label="open menu"
+        hint="defaultOpen + modal=false — shows the branch list with the current-checkout row pinned at top"
+        picker={{ ...currentCheckoutPicker, defaultOpen: true }}
+      />
     </StoryCard>
   );
 }
