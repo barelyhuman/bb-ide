@@ -309,18 +309,12 @@ export function ProjectMainView() {
     [effectiveEnvironmentValue, projectId, selectedBranch],
   );
 
-  const projectOptions = useMemo((): readonly ProjectSelectorOption[] => {
-    const known: ProjectSelectorOption[] =
-      projects?.map((project) => ({ id: project.id, name: project.name })) ?? [];
-
-    // If the URL points at a project that isn't loaded yet, prepend a
-    // placeholder option so the trigger has something to render.
-    if (projectId && !known.some((option) => option.id === projectId)) {
-      known.unshift({ id: projectId, name: projectId });
-    }
-
-    return known;
-  }, [projectId, projects]);
+  const projectOptions = useMemo(
+    (): readonly ProjectSelectorOption[] =>
+      projects?.map((project) => ({ id: project.id, name: project.name })) ??
+      [],
+    [projects],
+  );
 
   const selectedThreadModel = activeModel?.model ?? selectedModel;
   const handleProjectChange = useCallback(
@@ -631,11 +625,36 @@ export function ProjectMainView() {
     );
   }, [clearReuseEnvironment, parsedEnvironment]);
 
+  // Match ThreadDetailView's invalid-id pattern: distinguish missing param,
+  // loading, and not-found/error so the page never renders against a project
+  // the user can't see in the list. The selector inside the page therefore
+  // can rely on projectId existing in projectOptions — no synthetic
+  // placeholder, no surfacing the raw id to the user.
   if (!projectId) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-muted-foreground">
           Select a project.
+        </p>
+      </PageShell>
+    );
+  }
+  if (!hasSidebarBootstrapSettled) {
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Loading…
+        </p>
+      </PageShell>
+    );
+  }
+  if (!projects?.some((project) => project.id === projectId)) {
+    const errored =
+      sidebarBootstrapQuery.isError || projectsQuery.isError;
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">
+          {errored ? "Failed to load projects." : "Project not found"}
         </p>
       </PageShell>
     );
