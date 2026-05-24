@@ -1,11 +1,18 @@
 import type {
+  AvailableModel,
   Environment,
   Host,
+  ReasoningLevel,
   Thread,
   ThreadListEntry,
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
+import { ClaudeIcon } from "../src/components/icons/ClaudeIcon";
+import { OpenAiIcon } from "../src/components/icons/OpenAiIcon";
+import { PiIcon } from "../src/components/icons/PiIcon";
+import type { PickerOption } from "../src/components/pickers/OptionPicker";
+import type { ExecutionControlsProps } from "../src/components/promptbox/ExecutionControls";
 import type {
   AttachmentsConfig,
   MentionsConfig,
@@ -83,6 +90,195 @@ export function makeAttachmentsConfig(
     onRemove: noop,
     isAttaching: false,
     error: null,
+  };
+  return { ...base, ...overrides };
+}
+
+// ---------------------------------------------------------------------------
+// Provider + model + reasoning fixtures shared across every story that shows
+// the model & reasoning picker (directly, or via ExecutionControls). Match
+// the realistic catalog the prototype stories used so the picker looks like
+// production wherever it appears.
+//
+// Labels are the raw (un-stripped) form — `ModelReasoningPicker` applies the
+// brand-prefix strip at render via `stripModelBrandPrefix`, so callers don't
+// need to pre-format.
+// ---------------------------------------------------------------------------
+
+export const STORY_PROVIDER_OPTIONS: readonly PickerOption<string>[] = [
+  { value: "codex", label: "Codex", icon: OpenAiIcon },
+  { value: "claude-code", label: "Claude Code", icon: ClaudeIcon },
+  { value: "pi", label: "Pi", icon: PiIcon },
+];
+
+export const STORY_CODEX_MODELS: readonly PickerOption<string>[] = [
+  { value: "gpt-5.5", label: "GPT-5.5" },
+  { value: "gpt-5.4", label: "GPT-5.4" },
+  { value: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+  { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
+  { value: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark" },
+  { value: "gpt-5.2", label: "GPT-5.2" },
+];
+
+export const STORY_CLAUDE_CODE_MODELS: readonly PickerOption<string>[] = [
+  { value: "claude-opus-4-7-1m", label: "Claude Opus 4.7 (1M)" },
+  { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+];
+
+export const STORY_PI_MODELS: readonly PickerOption<string>[] = [
+  { value: "anthropic/claude-opus-4-7", label: "Claude Opus 4.7" },
+  { value: "anthropic/claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "anthropic/claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  { value: "openai-codex/gpt-5.5", label: "GPT-5.5" },
+  { value: "openai-codex/gpt-5.4", label: "GPT-5.4" },
+  { value: "openai-codex/gpt-5.4-mini", label: "GPT-5.4 Mini" },
+];
+
+export const STORY_CODEX_REASONING: readonly PickerOption<ReasoningLevel>[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra High" },
+];
+
+export const STORY_CLAUDE_REASONING: readonly PickerOption<ReasoningLevel>[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra High" },
+  { value: "max", label: "Max" },
+];
+
+/** Only codex supports the fast / standard service-tier toggle today. */
+export const STORY_SERVICE_TIER_SUPPORT: Record<string, boolean> = {
+  codex: true,
+  "claude-code": false,
+  pi: false,
+};
+
+// `AvailableModel`-shaped versions of the same catalog, for stories that go
+// through the real data path (e.g. NewManagerDialog feeds these into
+// `useThreadCreationOptions` rather than into the picker directly).
+const CODEX_EFFORTS: readonly ReasoningLevel[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+];
+const OPUS_EFFORTS: readonly ReasoningLevel[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+function makeAvailableModel(
+  override: Pick<AvailableModel, "model" | "displayName"> &
+    Partial<AvailableModel>,
+): AvailableModel {
+  return {
+    id: override.model,
+    description: "",
+    supportedReasoningEfforts: CODEX_EFFORTS.map((reasoningEffort) => ({
+      reasoningEffort,
+      description: "",
+    })),
+    defaultReasoningEffort: "medium",
+    isDefault: false,
+    ...override,
+  };
+}
+
+export const STORY_CODEX_AVAILABLE_MODELS: readonly AvailableModel[] = [
+  makeAvailableModel({
+    model: "gpt-5.5",
+    displayName: "GPT-5.5",
+    isDefault: true,
+  }),
+  makeAvailableModel({ model: "gpt-5.4", displayName: "GPT-5.4" }),
+  makeAvailableModel({ model: "gpt-5.4-mini", displayName: "GPT-5.4 Mini" }),
+  makeAvailableModel({ model: "gpt-5.3-codex", displayName: "GPT-5.3 Codex" }),
+  makeAvailableModel({
+    model: "gpt-5.3-codex-spark",
+    displayName: "GPT-5.3 Codex Spark",
+    defaultReasoningEffort: "high",
+  }),
+  makeAvailableModel({ model: "gpt-5.2", displayName: "GPT-5.2" }),
+];
+
+export const STORY_CLAUDE_CODE_AVAILABLE_MODELS: readonly AvailableModel[] = [
+  makeAvailableModel({
+    model: "claude-opus-4-7-1m",
+    displayName: "Claude Opus 4.7 (1M)",
+    supportedReasoningEfforts: OPUS_EFFORTS.map((reasoningEffort) => ({
+      reasoningEffort,
+      description: "",
+    })),
+  }),
+  makeAvailableModel({
+    model: "claude-opus-4-7",
+    displayName: "Claude Opus 4.7",
+    supportedReasoningEfforts: OPUS_EFFORTS.map((reasoningEffort) => ({
+      reasoningEffort,
+      description: "",
+    })),
+  }),
+  makeAvailableModel({
+    model: "claude-sonnet-4-6",
+    displayName: "Claude Sonnet 4.6",
+    isDefault: true,
+    supportedReasoningEfforts: ["low", "medium", "high", "max"].map(
+      (reasoningEffort) => ({
+        reasoningEffort: reasoningEffort as ReasoningLevel,
+        description: "",
+      }),
+    ),
+  }),
+  makeAvailableModel({
+    model: "claude-haiku-4-5",
+    displayName: "Claude Haiku 4.5",
+    supportedReasoningEfforts: [
+      { reasoningEffort: "low", description: "" },
+    ],
+    defaultReasoningEffort: "low",
+  }),
+];
+
+/**
+ * Codex / gpt-5.5 / medium reasoning — the default starting point most
+ * stories want. Spread + override individual sections for specific
+ * scenarios (locked provider, claude-code selected, fast mode on, etc.).
+ */
+export function makeExecutionControlsProps(
+  overrides: Partial<ExecutionControlsProps> = {},
+): ExecutionControlsProps {
+  const base: ExecutionControlsProps = {
+    provider: {
+      options: STORY_PROVIDER_OPTIONS,
+      selectedId: "codex",
+      onChange: noop,
+      hasMultiple: true,
+    },
+    model: {
+      active: { model: "gpt-5.5" },
+      selected: "gpt-5.5",
+      options: STORY_CODEX_MODELS,
+      onChange: noop,
+    },
+    serviceTier: {
+      value: undefined,
+      onChange: noop,
+      supported: true,
+      supportByProvider: STORY_SERVICE_TIER_SUPPORT,
+    },
+    reasoning: {
+      value: "medium",
+      options: STORY_CODEX_REASONING,
+      onChange: noop,
+    },
   };
   return { ...base, ...overrides };
 }

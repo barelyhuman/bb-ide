@@ -1,19 +1,17 @@
 import { useState } from "react";
 import type { Host, PermissionMode, ProjectSource } from "@bb/domain";
-import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
-import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
 import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
   type NewThreadWorktreeConfig,
 } from "@/components/promptbox/NewThreadPromptBox";
-import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
 import type { HistoryConfig } from "@/components/promptbox/PromptBoxInternal";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
   makeAttachmentsConfig as makeAttachments,
+  makeExecutionControlsProps,
   makeMentionsConfig as makeMentions,
 } from "../../../.ladle/story-fixtures";
 
@@ -23,46 +21,7 @@ export default {
 
 const noop = () => {};
 
-const codexModels: readonly PickerOption<string>[] = [
-  { value: "gpt-5-pro", label: "GPT-5 Pro" },
-  { value: "gpt-5.5", label: "GPT-5.5" },
-  { value: "gpt-5-mini", label: "GPT-5 mini" },
-];
-
-const providerOptions: readonly PickerOption<string>[] = [
-  { value: "codex", label: "Codex", icon: OpenAiIcon },
-  { value: "claude-code", label: "Claude Code", icon: ClaudeIcon },
-];
-
-const baseExecution: ExecutionControlsProps = {
-  provider: {
-    options: providerOptions,
-    selectedId: "codex",
-    onChange: noop,
-    hasMultiple: true,
-  },
-  model: {
-    active: { model: "gpt-5.5" },
-    selected: "gpt-5.5",
-    options: codexModels,
-    onChange: noop,
-  },
-  serviceTier: {
-    value: undefined,
-    onChange: noop,
-    supported: true,
-    supportByProvider: { codex: true, "claude-code": false },
-  },
-  reasoning: {
-    value: "medium",
-    options: [
-      { value: "low", label: "Low" },
-      { value: "medium", label: "Medium" },
-      { value: "high", label: "High" },
-    ],
-    onChange: noop,
-  },
-};
+const baseExecution = makeExecutionControlsProps();
 
 const localHostId = "host_local";
 

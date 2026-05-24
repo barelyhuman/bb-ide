@@ -18,12 +18,13 @@ import type {
 import { ThreadPromptContextBanner } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
-import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
-import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
-import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import {
+  makeExecutionControlsProps,
+  STORY_PROVIDER_OPTIONS,
+} from "../../../.ladle/story-fixtures";
 
 export default {
   title: "promptbox/Follow Up Prompt Box",
@@ -31,50 +32,17 @@ export default {
 
 const noop = () => {};
 
-// ---------------------------------------------------------------------------
-// Realistic execution controls — codex provider, gpt-5.5 model
-// ---------------------------------------------------------------------------
-
-const providerOptions: readonly PickerOption<string>[] = [
-  { value: "codex", label: "Codex", icon: OpenAiIcon },
-  { value: "claude-code", label: "Claude Code", icon: ClaudeIcon },
-];
-
-const baseExecution: ExecutionControlsProps = {
+// FollowUp commits the provider — omit `onChange` so the picker renders the
+// provider segment as locked, and pass `displayName` so the static label
+// shows even without a selectedId lookup.
+const baseExecution = makeExecutionControlsProps({
   provider: {
-    options: providerOptions,
+    options: STORY_PROVIDER_OPTIONS,
     selectedId: "codex",
-    // FollowUp omits onChange — the thread is committed to a provider, the
-    // picker renders the provider segment as locked.
     hasMultiple: true,
     displayName: "Codex",
   },
-  model: {
-    active: { model: "gpt-5.5" },
-    selected: "gpt-5.5",
-    options: [
-      { value: "gpt-5-pro", label: "GPT-5 Pro" },
-      { value: "gpt-5.5", label: "GPT-5.5" },
-      { value: "gpt-5-mini", label: "GPT-5 mini" },
-    ],
-    onChange: noop,
-  },
-  serviceTier: {
-    value: undefined,
-    onChange: noop,
-    supported: true,
-    supportByProvider: { codex: true, "claude-code": false },
-  },
-  reasoning: {
-    value: "medium",
-    options: [
-      { value: "low", label: "Low" },
-      { value: "medium", label: "Medium" },
-      { value: "high", label: "High" },
-    ],
-    onChange: noop,
-  },
-};
+});
 
 const permissionModeOptions: readonly PickerOption<PermissionMode>[] = [
   { value: "full", label: "Full Access", tone: "warning" },

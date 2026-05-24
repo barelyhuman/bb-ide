@@ -16,6 +16,7 @@ import {
   HOST_IDS,
   HOST_NAMES,
   PROJECT_IDS,
+  STORY_CODEX_AVAILABLE_MODELS,
   makeProject,
 } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
@@ -86,34 +87,7 @@ const claudeProvider: SystemProviderInfo = {
   },
 };
 
-const codexModels: readonly AvailableModel[] = [
-  {
-    id: "gpt-5.5",
-    model: "gpt-5.5",
-    displayName: "GPT-5.5",
-    description: "",
-    supportedReasoningEfforts: [
-      { reasoningEffort: "low", description: "" },
-      { reasoningEffort: "medium", description: "" },
-      { reasoningEffort: "high", description: "" },
-    ],
-    defaultReasoningEffort: "medium",
-    isDefault: true,
-  },
-  {
-    id: "gpt-5-pro",
-    model: "gpt-5-pro",
-    displayName: "GPT-5 Pro",
-    description: "",
-    supportedReasoningEfforts: [
-      { reasoningEffort: "medium", description: "" },
-      { reasoningEffort: "high", description: "" },
-      { reasoningEffort: "xhigh", description: "" },
-    ],
-    defaultReasoningEffort: "high",
-    isDefault: false,
-  },
-];
+const codexModels = STORY_CODEX_AVAILABLE_MODELS;
 
 const localHost: Host = {
   id: HOST_IDS.local,
