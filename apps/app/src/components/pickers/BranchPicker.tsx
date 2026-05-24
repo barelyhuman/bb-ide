@@ -695,7 +695,6 @@ export function BranchPicker({
                   label={currentOptionItemLabel}
                   title={currentOptionTitle ?? currentOptionItemLabel}
                   selected={!isCreatingNew && value === null}
-                  emphasizeLabel={menuKind === "base"}
                   onSelect={() => {
                     onClear();
                     setOpen(false);
@@ -754,7 +753,6 @@ export function BranchPicker({
                         label={branch}
                         title={branch}
                         selected={!isCreatingNew && branch === value}
-                        emphasizeLabel
                         onSelect={() => selectBranchAndClose(branch)}
                       />
                     ))
