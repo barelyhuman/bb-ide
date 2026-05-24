@@ -52,10 +52,13 @@ const BRANCH_LABEL_PREFIXES = [
 ] as const;
 const CURRENT_PARENTHESES_LABEL_PREFIX = "Current (";
 const DETACHED_LABEL_PREFIX = "Detached";
+// Match `DropdownMenuItem` / `DropdownMenuLabel` typography and density so the
+// branch popover reads as the same family of menu as the other pickers
+// (text-xs, px-2 py-[0.3125rem]).
 const BRANCH_PICKER_ROW_CLASS_NAME =
-  "flex w-full min-w-0 items-center gap-2 rounded-sm py-1.5 pl-3 pr-2 text-left text-sm outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:bg-state-hover focus-visible:text-foreground";
+  "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-left text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:bg-state-hover focus-visible:text-foreground";
 const BRANCH_PICKER_HEADER_CLASS_NAME =
-  "px-2 pt-1.5 text-sm font-medium text-muted-foreground";
+  "px-2 py-[0.3125rem] text-xs font-medium text-muted-foreground";
 
 interface BranchPlainLabelParts {
   kind: "plain";
@@ -255,14 +258,17 @@ function BranchPickerSectionHeader({
     <div
       className={cn(
         BRANCH_PICKER_HEADER_CLASS_NAME,
-        subtitle ? "pb-1.5" : "pb-1",
+        // Subtitle is a multi-line block underneath the label — give the
+        // header a little extra bottom padding so the subtitle doesn't sit
+        // flush against the row that follows.
+        subtitle && "pb-1.5",
         className,
       )}
       title={subtitle ? (subtitleTitle ?? subtitle) : undefined}
     >
       <div>{label}</div>
       {subtitle ? (
-        <div className="mt-1 py-1 text-xs font-normal leading-snug text-muted-foreground">
+        <div className="mt-1 text-xs font-normal leading-snug text-muted-foreground">
           <span className="min-w-0">{subtitle}</span>
         </div>
       ) : null}
@@ -280,7 +286,7 @@ function BranchPickerUnavailableRow({
     <div
       role="note"
       title={title ?? description}
-      className="flex w-full min-w-0 items-start gap-2 rounded-sm py-1.5 pl-3 pr-2 text-left text-sm text-muted-foreground"
+      className="flex w-full min-w-0 items-start gap-2 rounded-sm px-2 py-[0.3125rem] text-left text-xs text-muted-foreground"
     >
       <Icon
         name={icon}
@@ -371,7 +377,7 @@ function BranchPickerSearch({
             onEnterSelection(enterSelection);
           }}
           placeholder="Search branches"
-          className="h-8 border-0 bg-transparent pl-8 pr-2 text-sm shadow-none focus-visible:ring-0"
+          className="h-8 border-0 bg-transparent pl-8 pr-2 text-xs shadow-none focus-visible:ring-0"
         />
       </div>
     </div>
@@ -753,7 +759,7 @@ export function BranchPicker({
                       />
                     ))
                   ) : showCreateItem ? null : (
-                    <p className="px-2 py-3 text-center text-sm text-muted-foreground">
+                    <p className="px-2 py-3 text-center text-xs text-muted-foreground">
                       {loading ? "Loading branches..." : "No branches found."}
                     </p>
                   )}
@@ -761,7 +767,7 @@ export function BranchPicker({
               )}
             </>
           ) : hasCurrentItem ? null : (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+            <p className="px-2 py-6 text-center text-xs text-muted-foreground">
               {loading ? "Loading branches..." : "No branches found."}
             </p>
           )}
