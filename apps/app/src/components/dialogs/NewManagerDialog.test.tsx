@@ -61,6 +61,10 @@ type SystemProvidersFixture = ProviderInfo[] | (() => ProviderInfo[]);
 type RequestedModelProvider = string | null;
 type RequestedModelProviders = RequestedModelProvider[];
 
+const CODEX_MODEL_ID = "openai-codex/gpt-5.4";
+const CODEX_MODEL_DISPLAY_NAME = "GPT-5.4";
+const CODEX_MODEL_PICKER_LABEL = "5.4";
+
 interface RefetchExecutionOptionsArgs {
   providerId: string;
   queryClient: QueryClient;
@@ -576,8 +580,8 @@ describe("NewManagerDialog", () => {
       }),
     ];
     const codexModels = [
-      makeModel("openai-codex/gpt-5.4", {
-        displayName: "GPT-5.4",
+      makeModel(CODEX_MODEL_ID, {
+        displayName: CODEX_MODEL_DISPLAY_NAME,
         isDefault: true,
       }),
     ];
@@ -598,11 +602,11 @@ describe("NewManagerDialog", () => {
 
     await selectProviderModel({
       provider: "Codex",
-      model: "GPT-5.4",
+      model: CODEX_MODEL_PICKER_LABEL,
     });
 
     await waitFor(() => {
-      expectProviderModelTitle(["Codex", "GPT-5.4"]);
+      expectProviderModelTitle(["Codex", CODEX_MODEL_PICKER_LABEL]);
     });
 
     systemProviders = systemProviders.filter(
@@ -648,8 +652,8 @@ describe("NewManagerDialog", () => {
       }),
     ];
     const codexModels = [
-      makeModel("openai-codex/gpt-5.4", {
-        displayName: "GPT-5.4",
+      makeModel(CODEX_MODEL_ID, {
+        displayName: CODEX_MODEL_DISPLAY_NAME,
         isDefault: true,
       }),
     ];
@@ -666,13 +670,13 @@ describe("NewManagerDialog", () => {
 
     await selectProviderModel({
       provider: "Codex",
-      model: "GPT-5.4",
+      model: CODEX_MODEL_PICKER_LABEL,
     });
 
     await waitFor(() => {
       // Reasoning is shown inline in the combined picker's title now —
       // GPT-5.4's only supported effort is medium, so reconcile lands there.
-      expectProviderModelTitle(["Codex", "GPT-5.4", "Medium"]);
+      expectProviderModelTitle(["Codex", CODEX_MODEL_PICKER_LABEL, "Medium"]);
     });
 
     await waitForCreateButtonReady();
@@ -683,7 +687,7 @@ describe("NewManagerDialog", () => {
         {
           origin: "app",
           providerId: "codex",
-          model: "openai-codex/gpt-5.4",
+          model: CODEX_MODEL_ID,
           reasoningLevel: "medium",
           environment: { type: "host", hostId: "host-local" },
         },
@@ -834,8 +838,8 @@ describe("NewManagerDialog", () => {
 
   it("keeps provider switching reachable when the selected provider has no models", async () => {
     const codexModels = [
-      makeModel("openai-codex/gpt-5.4", {
-        displayName: "GPT-5.4",
+      makeModel(CODEX_MODEL_ID, {
+        displayName: CODEX_MODEL_DISPLAY_NAME,
         isDefault: true,
       }),
     ];
@@ -865,10 +869,12 @@ describe("NewManagerDialog", () => {
       expect(screen.getByText("Could not load models for Pi.")).toBeTruthy();
     });
     fireEvent.click(await screen.findByTitle("Codex"));
-    fireEvent.click(await waitFor(() => findOptionLabel("GPT-5.4")));
+    fireEvent.click(
+      await waitFor(() => findOptionLabel(CODEX_MODEL_PICKER_LABEL)),
+    );
 
     await waitFor(() => {
-      expectProviderModelTitle(["Codex", "GPT-5.4"]);
+      expectProviderModelTitle(["Codex", CODEX_MODEL_PICKER_LABEL]);
     });
 
     await waitForCreateButtonReady();
@@ -879,7 +885,7 @@ describe("NewManagerDialog", () => {
         {
           origin: "app",
           providerId: "codex",
-          model: "openai-codex/gpt-5.4",
+          model: CODEX_MODEL_ID,
           reasoningLevel: "medium",
           environment: { type: "host", hostId: "host-local" },
         },
