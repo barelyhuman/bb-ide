@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from "node:util";
+
 export type LocalViewModel = LoadingViewModel | StartupErrorViewModel;
 
 export interface LoadingViewModel {
@@ -35,6 +37,10 @@ function escapeHtml(value: string): string {
   });
 }
 
+function formatPlainLogText(value: string): string {
+  return stripVTControlCharacters(value).replace(/\r\n?/gu, "\n");
+}
+
 function renderLoadingView(viewModel: LoadingViewModel): string {
   return `
     <main class="shell">
@@ -46,10 +52,9 @@ function renderLoadingView(viewModel: LoadingViewModel): string {
 }
 
 function renderErrorView(viewModel: StartupErrorViewModel): string {
+  const logText = formatPlainLogText(viewModel.logText);
   const logs =
-    viewModel.logText.trim().length > 0
-      ? `<pre>${escapeHtml(viewModel.logText)}</pre>`
-      : "";
+    logText.trim().length > 0 ? `<pre>${escapeHtml(logText)}</pre>` : "";
   return `
     <main class="shell shell-error">
       <h1>${escapeHtml(viewModel.title)}</h1>

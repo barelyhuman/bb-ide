@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createLocalViewUrl,
-  type LocalViewModel,
-} from "../src/local-view.js";
+import { createLocalViewUrl, type LocalViewModel } from "../src/local-view.js";
 
 interface DecodeLocalViewHtmlArgs {
   viewModel: LocalViewModel;
@@ -60,4 +57,23 @@ describe("local desktop views", () => {
       );
     },
   );
+
+  it("renders startup error logs without terminal control sequences", () => {
+    const html = decodeLocalViewHtml({
+      viewModel: {
+        details: "The local service failed to start.",
+        kind: "error",
+        logText:
+          "\x1b[2K  \x1b[2m○\x1b[0m  Starting server\r\x1b[2K  \x1b[32m✓\x1b[0m  Server listening\nError: listen EADDRINUSE",
+        title: "Could not open bb",
+      },
+    });
+
+    expect(html).toContain("<pre>");
+    expect(html).toContain("Starting server");
+    expect(html).toContain("Server listening");
+    expect(html).toContain("Error: listen EADDRINUSE");
+    expect(html).not.toContain("\x1b[");
+    expect(html).not.toContain("\r");
+  });
 });

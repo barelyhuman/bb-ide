@@ -10,9 +10,22 @@ pnpm exec turbo run dev --filter=@bb/desktop
 ```
 
 The dev script builds `bb-app`, compiles the Electron main/preload files, and
-opens an unpacked Electron Builder app against `http://127.0.0.1:38886`.
-Using the unpacked app keeps native dependencies rebuilt for Electron's bundled
-Node runtime.
+opens Electron directly. By default it uses the same checkout-scoped
+`~/.bb-dev/<checkout-instance>` data directory and deterministic high ports as
+the main repo dev launcher; it prints the resolved data dir, server URL, and
+Electron user-data dir at startup. It intentionally overwrites inherited
+`BB_DATA_DIR`, `BB_SERVER_PORT`, `BB_SERVER_URL`, and `BB_HOST_DAEMON_PORT` so a
+desktop dev run launched from an existing bb session still targets the current
+checkout. Set `BB_DESKTOP_USER_DATA_DIR` to override only Electron's user-data
+directory.
+
+To run the slower unpacked Electron Builder app, which more closely matches the
+packaged runtime and keeps native dependencies rebuilt for Electron's bundled
+Node runtime:
+
+```bash
+pnpm exec turbo run start --filter=@bb/desktop
+```
 
 Electron is pinned to `41.7.0`, the highest stable line verified to rebuild the
 packaged native modules with the current dependency set. Electron 42.2.0 was
@@ -103,6 +116,7 @@ To verify a downloaded or unpacked build:
 spctl --assess --verbose /path/to/bb.app
 codesign --verify --deep --strict --verbose=2 /path/to/bb.app
 ```
+
 ## Debugging
 
 The Turbo dev task opens DevTools automatically. For a packaged app, run the

@@ -7,6 +7,15 @@ const packageRoot = process.cwd();
 const releaseDir = join(packageRoot, "release");
 const appBinaryRelativePath = join("bb.app", "Contents", "MacOS", "bb");
 
+function createElectronAppEnv(env) {
+  const childEnv = {
+    ...env,
+    BB_DESKTOP_OPEN_DEVTOOLS: env.BB_DESKTOP_OPEN_DEVTOOLS ?? "1",
+  };
+  delete childEnv.ELECTRON_RUN_AS_NODE;
+  return childEnv;
+}
+
 async function resolvePackagedAppBinary() {
   const entries = await readdir(releaseDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -19,10 +28,7 @@ async function resolvePackagedAppBinary() {
 }
 
 const child = spawn(await resolvePackagedAppBinary(), [], {
-  env: {
-    ...process.env,
-    BB_DESKTOP_OPEN_DEVTOOLS: process.env.BB_DESKTOP_OPEN_DEVTOOLS ?? "1",
-  },
+  env: createElectronAppEnv(process.env),
   stdio: "inherit",
 });
 

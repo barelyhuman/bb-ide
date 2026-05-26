@@ -12,11 +12,11 @@
     "clean": "rimraf dist release",
     "desktop:build": "pnpm run build && node scripts/run-electron-builder.mjs --mac --arm64 --publish always",
     "desktop:version-feed": "tsx scripts/generate-version-feed.mts",
-    "dev": "pnpm run package && node scripts/run-packaged-app.mjs",
+    "dev": "pnpm run build && node --conditions=source --import tsx scripts/run-electron-dev.mjs",
     "dist": "pnpm run prepare-runtime && pnpm run desktop:build",
     "package": "pnpm run prepare-runtime && pnpm run build && node scripts/run-electron-builder.mjs --mac --dir --arm64",
     "prepare-runtime": "pnpm exec turbo run build --filter=bb-app --output-logs=new-only",
-    "start": "electron .",
+    "start": "pnpm run package && node scripts/run-packaged-app.mjs",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -27,6 +27,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@bb/config": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/node": "^24.9.0",

@@ -165,6 +165,12 @@
       "persistent": true,
       "passThroughEnv": ["*"]
     },
+    "@bb/desktop#start": {
+      "dependsOn": ["bb-app#build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
     "bundle": {
       "dependsOn": [],
       "cache": false,
