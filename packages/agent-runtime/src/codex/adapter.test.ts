@@ -2062,6 +2062,34 @@ describe("codex provider adapter", () => {
     ).toEqual([]);
   });
 
+  it("translateEvent ignores native thread goal notifications", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.translateEvent(
+        codexEvent("thread/goal/cleared", { threadId: "t1" }),
+      ),
+    ).toEqual([]);
+    expect(
+      adapter.translateEvent(
+        codexEvent("thread/goal/updated", {
+          threadId: "t1",
+          turnId: null,
+          goal: {
+            threadId: "t1",
+            objective: "Finish the task",
+            status: "active",
+            tokenBudget: null,
+            tokensUsed: 0,
+            timeUsedSeconds: 0,
+            createdAt: 0,
+            updatedAt: 0,
+          },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it("translateEvent thread/compacted emits a compacted event", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
