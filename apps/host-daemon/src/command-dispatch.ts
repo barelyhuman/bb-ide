@@ -10,6 +10,7 @@ import type {
 import {
   defaultListModels,
   defaultListProviders,
+  ExpectedCommandDispatchError,
   requireExistingEnvironment,
   requireWorkspaceEnvironment,
   type CommandDispatchOptions,
@@ -130,6 +131,13 @@ type CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => Promise<HostDaemonCommandResult<TType>>;
 };
+
+function throwExpectedWorkspacePathNotFoundOrRethrow(error: unknown): never {
+  if (error instanceof WorkspaceError && error.code === "path_not_found") {
+    throw new ExpectedCommandDispatchError(error.code, error.message);
+  }
+  throw error;
+}
 
 const commandHandlers: CommandHandlerMap = {
   "thread.start": async (
@@ -392,9 +400,13 @@ function dispatchCommandByType<TType extends HostDaemonCommandType>(
   return commandHandlers[type](command, options);
 }
 
-export function dispatchCommand<TType extends HostDaemonCommandType>(
+export async function dispatchCommand<TType extends HostDaemonCommandType>(
   command: Extract<HostDaemonCommand, { type: TType }>,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<TType>> {
-  return dispatchCommandByType(command.type, command, options);
+  try {
+    return await dispatchCommandByType(command.type, command, options);
+  } catch (error) {
+    throwExpectedWorkspacePathNotFoundOrRethrow(error);
+  }
 }

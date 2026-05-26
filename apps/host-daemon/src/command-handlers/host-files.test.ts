@@ -13,6 +13,7 @@ import {
 import {
   readHostFile,
   readHostFileMetadata,
+  readHostRelativeFile,
   readHostStatusVersion,
   writeHostRelativeFile,
   deleteHostRelativeFile,
@@ -71,6 +72,18 @@ async function captureReadHostFileError(
   }
 
   throw new Error("Expected readHostFile to fail");
+}
+
+async function captureReadHostRelativeFileError(
+  command: CommandOf<"host.read_file_relative">,
+): Promise<unknown> {
+  try {
+    await readHostRelativeFile(command);
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error("Expected readHostRelativeFile to fail");
 }
 
 function makeStatusVersionCommand(
@@ -209,7 +222,7 @@ describe("readHostFile (no ref — disk read)", () => {
     expect(isExpectedCommandDispatchError(thrown)).toBe(true);
   });
 
-  it("does not mark missing roots as expected", async () => {
+  it("marks missing roots as expected", async () => {
     const parentPath = await makeTempDir("bb-host-files-missing-root-");
     const rootPath = path.join(parentPath, "missing-root");
     const missingPath = path.join(rootPath, "STATUS.md");
@@ -222,9 +235,27 @@ describe("readHostFile (no ref — disk read)", () => {
     expect(thrown).toMatchObject({
       code: "ENOENT",
       message: `Path does not exist: ${missingPath}`,
-      name: "CommandDispatchError",
+      name: "ExpectedCommandDispatchError",
     });
-    expect(isExpectedCommandDispatchError(thrown)).toBe(false);
+    expect(isExpectedCommandDispatchError(thrown)).toBe(true);
+  });
+
+  it("marks missing relative read roots as expected", async () => {
+    const parentPath = await makeTempDir("bb-host-files-relative-root-");
+    const rootPath = path.join(parentPath, "STATUS");
+    const thrown = await captureReadHostRelativeFileError({
+      type: "host.read_file_relative",
+      rootPath,
+      path: "index.html",
+      dotfiles: "deny",
+    });
+
+    expect(thrown).toMatchObject({
+      code: "ENOENT",
+      message: "Path does not exist: index.html",
+      name: "ExpectedCommandDispatchError",
+    });
+    expect(isExpectedCommandDispatchError(thrown)).toBe(true);
   });
 
   it("rejects rootless directory paths", async () => {

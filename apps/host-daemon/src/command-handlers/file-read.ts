@@ -111,13 +111,6 @@ function createMissingTargetError(
   );
 }
 
-function createMissingPathError(resultPath: string): CommandDispatchError {
-  return new CommandDispatchError(
-    "ENOENT",
-    `Path does not exist: ${resultPath}`,
-  );
-}
-
 function createDotfileDeniedError(
   resultPath: string,
 ): ExpectedCommandDispatchError {
@@ -170,7 +163,7 @@ async function resolveRootPathOrThrowMissingPath(
     });
   } catch (error) {
     if (isFsErrorWithCode(error, "ENOENT")) {
-      throw createMissingPathError(args.resultPath);
+      throw createMissingTargetError(args.resultPath);
     }
     throw error;
   }
