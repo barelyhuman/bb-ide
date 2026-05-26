@@ -17,7 +17,10 @@ export interface DialogStageProps {
 // for dialogs that customize their own DialogContent (e.g. p-0 wrappers used
 // by GitAction). DialogPrimitive.Root supplies the Radix context required by
 // DialogTitle / DialogDescription / DialogClose.
-export function DialogStage({ className, children }: DialogStageProps) {
+export function DialogStage({
+  className,
+  children,
+}: DialogStageProps) {
   return (
     <DialogPrimitive.Root open onOpenChange={noop}>
       <div

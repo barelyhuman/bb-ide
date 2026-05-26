@@ -2,29 +2,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { appToast } from "@/components/ui/app-toast";
 import type {
   ProviderCliInstallEvent,
+  ProviderCliInstallAction,
+  ProviderCliInstallActionKind,
   ProviderCliKey,
   ProviderCliStatus,
   ProviderCliStatusResponse,
 } from "@bb/host-daemon-contract";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Icon, type IconName } from "@/components/ui/icon";
-import { CopyButton } from "@/components/ui/copy-button";
 import { installProviderCli } from "@/lib/api-host-daemon";
 import {
   useLocalProviderCliStatus,
   useSystemConfig,
 } from "@/hooks/queries/system-queries";
+import {
+  ProviderCliInstallLogDialog,
+  type ProviderCliInstallLogDialogState,
+} from "@/components/dialogs/ProviderCliInstallLogDialog";
 
-type ProviderCliActionLabel = "Install" | "Update";
-type ProviderCliInstallStatus = "running" | "succeeded" | "failed";
 type ProviderCliInstallCompletedEvent = Extract<
   ProviderCliInstallEvent,
   { type: "completed" }
@@ -45,23 +38,59 @@ interface ProviderCliToastIssue {
   toastId: string;
 }
 
-interface ProviderCliInstallState {
-  provider: ProviderCliKey;
-  displayName: string;
-  actionLabel: ProviderCliActionLabel;
-  command: string;
-  status: ProviderCliInstallStatus;
-  log: string;
-  errorMessage: string | null;
+interface ProviderCliActionableToastIssue extends ProviderCliToastIssue {
+  action: ProviderCliInstallAction;
 }
 
-interface ProviderCliInstallDialogProps {
-  state: ProviderCliInstallState | null;
-  onClose: () => void;
+interface ShowProviderCliInstallFailureToastParams {
+  issue: ProviderCliActionableToastIssue;
+  log: string;
+  message: string;
+  onViewLog: ViewProviderCliInstallLog;
+  toastId: string;
+}
+
+type ViewProviderCliInstallLog = (
+  state: ProviderCliInstallLogDialogState,
+) => void;
+
+type ProviderCliTitlePhase = "progress" | "success" | "failure" | "log";
+
+type ProviderCliTitleTemplate = (displayName: string) => string;
+
+type StartProviderCliInstall = (
+  issue: ProviderCliActionableToastIssue,
+) => void;
+
+interface GetProviderCliTitleParams {
+  issue: ProviderCliActionableToastIssue;
+  phase: ProviderCliTitlePhase;
 }
 
 const PROVIDER_CLI_TOAST_DISMISSED_STORAGE_KEY_PREFIX =
   "bb:provider-cli-toast:dismissed-v2:";
+
+const PROVIDER_CLI_TITLE_TEMPLATES = {
+  progress: {
+    install: (displayName) => `Installing ${displayName}`,
+    update: (displayName) => `Updating ${displayName}`,
+  },
+  success: {
+    install: (displayName) => `${displayName} installed`,
+    update: (displayName) => `${displayName} is up to date`,
+  },
+  failure: {
+    install: (displayName) => `${displayName} install failed`,
+    update: (displayName) => `${displayName} update failed`,
+  },
+  log: {
+    install: (displayName) => `${displayName} install log`,
+    update: (displayName) => `${displayName} update log`,
+  },
+} satisfies Record<
+  ProviderCliTitlePhase,
+  Record<ProviderCliInstallActionKind, ProviderCliTitleTemplate>
+>;
 
 function getLocalStorage(): Storage | null {
   if (typeof window === "undefined") {
@@ -173,11 +202,10 @@ function isProviderCliToastIssue(
   return issue !== null;
 }
 
-function appendInstallLog(log: string, text: string): string {
-  if (text.length === 0) {
-    return log;
-  }
-  return `${log}${text}`;
+function hasProviderCliAction(
+  issue: ProviderCliToastIssue,
+): issue is ProviderCliActionableToastIssue {
+  return issue.action !== null;
 }
 
 function exitDescription(event: ProviderCliInstallCompletedEvent): string {
@@ -187,142 +215,41 @@ function exitDescription(event: ProviderCliInstallCompletedEvent): string {
   return `Command exited after signal ${event.signal ?? "unknown"}`;
 }
 
-function applyInstallEvent(
-  state: ProviderCliInstallState,
-  event: ProviderCliInstallEvent,
-): ProviderCliInstallState {
-  if (state.provider !== event.provider) {
-    return state;
-  }
-
-  switch (event.type) {
-    case "started":
-      return {
-        ...state,
-        command: event.command,
-        log: `$ ${event.command}\n`,
-      };
-    case "output":
-      return {
-        ...state,
-        log: appendInstallLog(state.log, event.text),
-      };
-    case "completed":
-      return {
-        ...state,
-        status: event.success ? "succeeded" : "failed",
-        errorMessage: event.success ? null : exitDescription(event),
-      };
-    case "error":
-      return {
-        ...state,
-        status: "failed",
-        errorMessage: event.message,
-        log: appendInstallLog(state.log, `\n${event.message}\n`),
-      };
-  }
+function getProviderCliRunToastId(provider: ProviderCliKey): string {
+  return `provider-cli-health-run:${provider}`;
 }
 
-function installDialogDescription(
-  state: ProviderCliInstallState | null,
-): string {
-  if (state === null) {
-    return "Provider CLI setup";
-  }
-  if (state.status === "running") {
-    return `Running ${state.command}. Keep bb open until the command finishes.`;
-  }
-  if (state.status === "succeeded") {
-    return `${state.command} completed successfully.`;
-  }
-  return `${state.command} failed. Review or copy the log below.`;
-}
-
-function ProviderCliInstallDialog({
-  state,
-  onClose,
-}: ProviderCliInstallDialogProps) {
-  const open = state !== null;
-  const isRunning = state?.status === "running";
-  const statusLabel =
-    state?.status === "running"
-      ? "Running"
-      : state?.status === "succeeded"
-        ? "Complete"
-        : "Failed";
-  const statusIcon: IconName =
-    state?.status === "succeeded"
-      ? "Check"
-      : state?.status === "failed"
-        ? "AlertCircle"
-        : "Spinner";
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen || isRunning) {
-          return;
-        }
-        onClose();
-      }}
-    >
-      <DialogContent className="gap-4 sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {state ? `${state.actionLabel} ${state.displayName}` : "CLI setup"}
-          </DialogTitle>
-          <DialogDescription>
-            {installDialogDescription(state)}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
-          <div className="flex min-w-0 items-center gap-2">
-            <Icon
-              name={statusIcon}
-              className={
-                state?.status === "running" ? "size-4 animate-spin" : "size-4"
-              }
-            />
-            <span className="font-medium">{statusLabel}</span>
-          </div>
-          {state?.log ? (
-            <CopyButton
-              text={state.log}
-              label="Copy install log"
-              successMessage="Install log copied"
-              className="size-8 rounded-md border bg-background"
-              iconClassName="size-4"
-            />
-          ) : null}
-        </div>
-
-        <pre className="max-h-80 min-h-32 overflow-auto rounded-md border bg-background p-3 text-xs whitespace-pre-wrap break-words text-foreground">
-          {state?.log || "Waiting for install output..."}
-        </pre>
-
-        {state?.errorMessage ? (
-          <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <Icon name="AlertCircle" className="mt-0.5 size-4 shrink-0" />
-            <p className="min-w-0 break-words">{state.errorMessage}</p>
-          </div>
-        ) : null}
-
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={isRunning}
-          >
-            <Icon name="X" />
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+function getProviderCliTitle({
+  issue,
+  phase,
+}: GetProviderCliTitleParams): string {
+  return PROVIDER_CLI_TITLE_TEMPLATES[phase][issue.action.kind](
+    issue.status.displayName,
   );
+}
+
+function showProviderCliInstallFailureToast({
+  issue,
+  log,
+  message,
+  onViewLog,
+  toastId,
+}: ShowProviderCliInstallFailureToastParams): void {
+  const logDialogState: ProviderCliInstallLogDialogState = {
+    displayName: issue.status.displayName,
+    log,
+    message,
+    title: getProviderCliTitle({ issue, phase: "log" }),
+  };
+
+  appToast.error(getProviderCliTitle({ issue, phase: "failure" }), {
+    id: toastId,
+    description: message,
+    action: {
+      label: "View log",
+      onClick: () => onViewLog(logDialogState),
+    },
+  });
 }
 
 export function ProviderCliHealthToasts() {
@@ -332,14 +259,15 @@ export function ProviderCliHealthToasts() {
     daemonPort,
     enabled: daemonPort !== null,
   });
+  const refetchProviderCliStatus = providerCliStatus.refetch;
   const dismissedFingerprintsRef = useRef<Set<string>>(new Set());
   const shownFingerprintsRef = useRef<Set<string>>(new Set());
   const activeIssuesRef = useRef<Map<string, ProviderCliToastIssue>>(
     new Map(),
   );
   const runningProviderRef = useRef<ProviderCliKey | null>(null);
-  const [installState, setInstallState] =
-    useState<ProviderCliInstallState | null>(null);
+  const [logDialogState, setLogDialogState] =
+    useState<ProviderCliInstallLogDialogState | null>(null);
 
   const markIssueDismissed = useCallback((issue: ProviderCliToastIssue) => {
     dismissedFingerprintsRef.current.add(issue.fingerprint);
@@ -359,11 +287,13 @@ export function ProviderCliHealthToasts() {
     [markIssueDismissed],
   );
 
-  const startInstall = useCallback(
-    (issue: ProviderCliToastIssue) => {
-      if (issue.action === null) {
-        return;
-      }
+  const handleCloseProviderCliInstallLog = useCallback(() => {
+    setLogDialogState(null);
+  }, []);
+
+  const startInstall = useCallback<StartProviderCliInstall>(
+    (issue) => {
+      const action = issue.action;
       if (daemonPort === null) {
         appToast.error("Host daemon unavailable", {
           description: "Start bb again and retry the provider CLI setup.",
@@ -379,52 +309,85 @@ export function ProviderCliHealthToasts() {
 
       runningProviderRef.current = issue.provider;
       appToast.dismiss(issue.toastId);
-      setInstallState({
-        provider: issue.provider,
-        displayName: issue.status.displayName,
-        actionLabel: issue.action.label,
-        command: issue.action.command,
-        status: "running",
-        log: `$ ${issue.action.command}\n`,
-        errorMessage: null,
+      const runToastId = getProviderCliRunToastId(issue.provider);
+      let installLogChunks = [`$ ${action.command}\n`];
+      let completedEvent: ProviderCliInstallCompletedEvent | null = null;
+      let errorMessage: string | null = null;
+
+      appToast.loading(getProviderCliTitle({ issue, phase: "progress" }), {
+        id: runToastId,
+        description: action.command,
       });
 
-      let installSucceeded = false;
       void installProviderCli({
         port: daemonPort,
         request: {
           provider: issue.provider,
-          actionKind: issue.action.kind,
+          actionKind: action.kind,
         },
         onEvent: (event) => {
-          if (event.type === "completed") {
-            installSucceeded = event.success;
+          if (event.provider !== issue.provider) {
+            return;
           }
-          setInstallState((current) =>
-            current ? applyInstallEvent(current, event) : current,
-          );
+          switch (event.type) {
+            case "started":
+              installLogChunks = [`$ ${event.command}\n`];
+              appToast.loading(
+                getProviderCliTitle({ issue, phase: "progress" }),
+                {
+                  id: runToastId,
+                  description: event.command,
+                },
+              );
+              break;
+            case "output":
+              if (event.text.length > 0) {
+                installLogChunks.push(event.text);
+              }
+              break;
+            case "completed":
+              completedEvent = event;
+              break;
+            case "error":
+              errorMessage = event.message;
+              installLogChunks.push(`\n${event.message}\n`);
+              break;
+          }
         },
       })
         .then(() => {
-          if (!installSucceeded) {
+          if (completedEvent?.success) {
+            appToast.success(getProviderCliTitle({ issue, phase: "success" }), {
+              id: runToastId,
+            });
+            void refetchProviderCliStatus();
             return;
           }
-          appToast.success(`${issue.status.displayName} is up to date`);
-          void providerCliStatus.refetch();
+
+          const failureMessage =
+            errorMessage ??
+            (completedEvent
+              ? exitDescription(completedEvent)
+              : "Command finished without reporting success.");
+          showProviderCliInstallFailureToast({
+            issue,
+            log: installLogChunks.join(""),
+            message: failureMessage,
+            onViewLog: setLogDialogState,
+            toastId: runToastId,
+          });
         })
         .catch((error) => {
           const message =
             error instanceof Error ? error.message : String(error);
-          setInstallState((current) =>
-            current
-              ? {
-                  ...current,
-                  status: "failed",
-                  errorMessage: message,
-                  log: appendInstallLog(current.log, `\n${message}\n`),
-                }
-              : current,
-          );
+          installLogChunks.push(`\n${message}\n`);
+          showProviderCliInstallFailureToast({
+            issue,
+            log: installLogChunks.join(""),
+            message,
+            onViewLog: setLogDialogState,
+            toastId: runToastId,
+          });
         })
         .finally(() => {
           if (runningProviderRef.current === issue.provider) {
@@ -432,7 +395,7 @@ export function ProviderCliHealthToasts() {
           }
         });
     },
-    [daemonPort, providerCliStatus],
+    [daemonPort, refetchProviderCliStatus],
   );
 
   useEffect(() => {
@@ -476,9 +439,9 @@ export function ProviderCliHealthToasts() {
       }
 
       shownFingerprintsRef.current.add(issue.fingerprint);
-      if (issue.action !== null) {
+      if (hasProviderCliAction(issue)) {
         const dismissAction =
-          issue.action.label === "Update"
+          issue.action.kind === "update"
             ? {
                 label: "Dismiss",
                 onClick: () => dismissIssue(issue),
@@ -509,9 +472,9 @@ export function ProviderCliHealthToasts() {
   }, [clearIssueDismissal, dismissIssue, providerCliStatus.data, startInstall]);
 
   return (
-    <ProviderCliInstallDialog
-      state={installState}
-      onClose={() => setInstallState(null)}
+    <ProviderCliInstallLogDialog
+      state={logDialogState}
+      onClose={handleCloseProviderCliInstallLog}
     />
   );
 }

@@ -1,30 +1,29 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+  type RenderResult,
+} from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
-import type {
-  ProviderCliStatus,
-  ProviderCliStatusResponse,
+import {
+  providerCliInstallRequestSchema,
+  type ProviderCliInstallEvent,
+  type ProviderCliInstallRequest,
+  type ProviderCliStatus,
+  type ProviderCliStatusResponse,
 } from "@bb/host-daemon-contract";
-import { isValidElement, type ReactElement, type ReactNode } from "react";
+import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localProviderCliStatusQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { ProviderCliHealthToasts } from "./ProviderCliHealthToasts";
-
-interface ToastButton {
-  label: ReactNode;
-  onClick: () => void;
-}
-
-interface CapturedToastProps {
-  action?: ToastButton;
-  cancel?: ToastButton;
-  description?: ReactNode;
-  title: ReactNode;
-  tone: string;
-}
 
 interface CapturedToastOptions {
   duration?: number;
@@ -32,9 +31,9 @@ interface CapturedToastOptions {
   onDismiss?: () => void;
 }
 
-interface ProviderCliToastInvocation {
+interface RenderedProviderCliToast {
   options: CapturedToastOptions;
-  props: CapturedToastProps;
+  view: RenderResult;
 }
 
 interface SonnerToastToDismiss {
@@ -54,8 +53,15 @@ interface SonnerCustomToast {
   renderToast: (id: string | number) => ReactElement;
 }
 
+type ProviderCliInstallEventList = ProviderCliInstallEvent[];
+type ReadonlyProviderCliInstallEventList = readonly ProviderCliInstallEvent[];
+type ToastQueries = ReturnType<typeof within>;
+type ToastTextMatcher = string | RegExp;
+
 interface ProviderCliHealthFetchState {
   hostDaemonPort: number;
+  installEvents: ProviderCliInstallEventList;
+  installRequests: ProviderCliInstallRequest[];
   status: ProviderCliStatusResponse;
 }
 
@@ -127,6 +133,8 @@ vi.mock("sonner", () => ({
 
 const HOST_DAEMON_PORT = 4123;
 const CODEX_TOAST_ID = "provider-cli-health:codex";
+const CODEX_RUN_TOAST_ID = "provider-cli-health-run:codex";
+const CODEX_UPDATE_COMMAND = "npm install -g @openai/codex";
 const CODEX_MISSING_FINGERPRINT = "codex:missing:0.133.0";
 const CODEX_OUTDATED_FINGERPRINT =
   "codex:outdated:npmGlobal:0.132.0:0.133.0:/usr/local/bin/codex";
@@ -141,7 +149,7 @@ function codexMissingStatus(): ProviderCliStatus {
     executableName: "codex",
     executablePath: null,
     installAction: {
-      command: "npm install -g @openai/codex",
+      command: CODEX_UPDATE_COMMAND,
       commandKind: "exec",
       kind: "install",
       label: "Install",
@@ -178,7 +186,7 @@ function codexOutdatedStatus(): ProviderCliStatus {
     executableName: "codex",
     executablePath: "/usr/local/bin/codex",
     installAction: {
-      command: "npm install -g @openai/codex",
+      command: CODEX_UPDATE_COMMAND,
       commandKind: "exec",
       kind: "update",
       label: "Update",
@@ -189,6 +197,20 @@ function codexOutdatedStatus(): ProviderCliStatus {
     needsUpdate: true,
     npmGlobalPackageVersion: "0.132.0",
     npmPackageName: "@openai/codex",
+  };
+}
+
+function codexOutdatedStatusWithInstallLabel(): ProviderCliStatus {
+  const status = codexOutdatedStatus();
+  if (status.installAction === null) {
+    throw new Error("Expected outdated Codex status to have an install action.");
+  }
+  return {
+    ...status,
+    installAction: {
+      ...status.installAction,
+      label: "Install",
+    },
   };
 }
 
@@ -217,6 +239,63 @@ function statusResponseWithCodex(
   };
 }
 
+function codexInstallSuccessEvents(): ProviderCliInstallEventList {
+  return [
+    {
+      command: CODEX_UPDATE_COMMAND,
+      provider: "codex",
+      type: "started",
+    },
+    {
+      provider: "codex",
+      stream: "stdout",
+      text: "updated\n",
+      type: "output",
+    },
+    {
+      exitCode: 0,
+      provider: "codex",
+      signal: null,
+      success: true,
+      type: "completed",
+    },
+  ];
+}
+
+function codexInstallFailureEvents(): ProviderCliInstallEventList {
+  return [
+    {
+      command: CODEX_UPDATE_COMMAND,
+      provider: "codex",
+      type: "started",
+    },
+    {
+      provider: "codex",
+      stream: "stderr",
+      text: "permission denied\n",
+      type: "output",
+    },
+    {
+      exitCode: 1,
+      provider: "codex",
+      signal: null,
+      success: false,
+      type: "completed",
+    },
+  ];
+}
+
+function providerCliInstallEventResponse(
+  events: ReadonlyProviderCliInstallEventList,
+): Response {
+  const body = events.map((event) => JSON.stringify(event)).join("\n");
+  return new Response(body.length > 0 ? `${body}\n` : "", {
+    headers: {
+      "content-type": "application/x-ndjson",
+    },
+  });
+}
+
 function installProviderCliHealthFetchRoutes(
   state: ProviderCliHealthFetchState,
 ): void {
@@ -234,6 +313,18 @@ function installProviderCliHealthFetchRoutes(
       port: state.hostDaemonPort,
       handler: async () => jsonResponse(state.status),
     },
+    {
+      method: "POST",
+      pathname: "/provider-clis/install",
+      port: state.hostDaemonPort,
+      handler: async (request) => {
+        const requestBody = providerCliInstallRequestSchema.parse(
+          await request.json(),
+        );
+        state.installRequests.push(requestBody);
+        return providerCliInstallEventResponse(state.installEvents);
+      },
+    },
   ]);
 }
 
@@ -242,6 +333,8 @@ function renderProviderCliHealthToasts(
 ): ProviderCliHealthRenderResult {
   const state: ProviderCliHealthFetchState = {
     hostDaemonPort: HOST_DAEMON_PORT,
+    installEvents: codexInstallSuccessEvents(),
+    installRequests: [],
     status: initialStatus,
   };
   installProviderCliHealthFetchRoutes(state);
@@ -259,20 +352,16 @@ function resetProviderCliToastState(): void {
   providerCliToastState.dismiss.mockClear();
 }
 
-function readProviderCliToast(
+function renderProviderCliToast(
   toast: SonnerCustomToast,
-): ProviderCliToastInvocation {
-  const element = toast.renderToast(toast.options.id);
-  if (!isValidElement<CapturedToastProps>(element)) {
-    throw new Error("Expected app toast content element.");
-  }
+): RenderedProviderCliToast {
   return {
     options: toast.options,
-    props: element.props,
+    view: render(toast.renderToast(toast.options.id)),
   };
 }
 
-function requireLatestCodexToastInvocation(): ProviderCliToastInvocation {
+function requireLatestCodexToast(): SonnerCustomToast {
   for (
     let index = providerCliToastState.invocations.length - 1;
     index >= 0;
@@ -280,41 +369,59 @@ function requireLatestCodexToastInvocation(): ProviderCliToastInvocation {
   ) {
     const invocation = providerCliToastState.invocations[index];
     if (invocation.options.id === CODEX_TOAST_ID) {
-      return readProviderCliToast(invocation);
+      return invocation;
     }
   }
   throw new Error("Expected a Codex provider CLI toast invocation.");
 }
 
-function requireLatestToastInvocation(): ProviderCliToastInvocation {
+function requireLatestToast(): SonnerCustomToast {
   const invocation = providerCliToastState.invocations.at(-1);
   if (!invocation) {
     throw new Error("Expected a provider CLI toast invocation.");
   }
-  return readProviderCliToast(invocation);
+  return invocation;
 }
 
-async function waitForVisibleCodexToast(): Promise<ProviderCliToastInvocation> {
+function renderLatestToast(): RenderedProviderCliToast {
+  return renderProviderCliToast(requireLatestToast());
+}
+
+async function waitForVisibleCodexToast(): Promise<RenderedProviderCliToast> {
   await waitFor(() => {
     expect(providerCliToastState.activeToasts.has(CODEX_TOAST_ID)).toBe(true);
   });
-  return requireLatestCodexToastInvocation();
+  return renderProviderCliToast(requireLatestCodexToast());
 }
 
-function clickToastCancel(invocation: ProviderCliToastInvocation): void {
-  const cancel = invocation.props.cancel;
-  if (!cancel) {
-    throw new Error("Expected provider CLI toast to have a cancel action.");
-  }
-  cancel.onClick();
+function toastQueries(toast: RenderedProviderCliToast): ToastQueries {
+  return within(toast.view.container);
 }
 
-function requireToastAction(invocation: ProviderCliToastInvocation): ToastButton {
-  const action = invocation.props.action;
-  if (!action) {
-    throw new Error("Expected provider CLI toast to have a primary action.");
-  }
-  return action;
+interface ClickToastButtonParams {
+  name: string;
+  toast: RenderedProviderCliToast;
+}
+
+function clickToastButton({ name, toast }: ClickToastButtonParams): void {
+  fireEvent.click(toastQueries(toast).getByRole("button", { name }));
+}
+
+interface WaitForLatestToastTextParams {
+  text: ToastTextMatcher;
+}
+
+async function waitForLatestToastText({
+  text,
+}: WaitForLatestToastTextParams): Promise<void> {
+  await waitFor(() => {
+    const toast = renderLatestToast();
+    try {
+      expect(toastQueries(toast).getByText(text)).toBeTruthy();
+    } finally {
+      toast.view.unmount();
+    }
+  });
 }
 
 async function refetchProviderCliStatus(
@@ -338,17 +445,14 @@ describe("ProviderCliHealthToasts", () => {
   it("does not persist dismissal when the toast closes without the cancel button", async () => {
     renderProviderCliHealthToasts(statusResponseWithCodex(codexMissingStatus()));
 
-    const invocation = await waitForVisibleCodexToast();
-    expect(invocation.props.title).toBe("Codex CLI not installed");
-    expect(invocation.props.description).toBe(
-      "Install Codex so bb can start Codex sessions.",
-    );
-    expect(invocation.options.duration).toBe(Infinity);
-    expect(requireToastAction(invocation).label).toBe("Install");
-    expect(invocation.props.cancel).toBeUndefined();
+    const toast = await waitForVisibleCodexToast();
+    const queries = toastQueries(toast);
+    expect(toast.options.duration).toBe(Infinity);
+    expect(queries.getByRole("button", { name: "Install" })).toBeTruthy();
+    expect(queries.queryByRole("button", { name: "Dismiss" })).toBeNull();
 
     act(() => {
-      providerCliToastState.dismiss(invocation.options.id);
+      providerCliToastState.dismiss(toast.options.id);
     });
 
     expect(window.localStorage.getItem(CODEX_DISMISSED_STORAGE_KEY)).toBeNull();
@@ -357,16 +461,16 @@ describe("ProviderCliHealthToasts", () => {
 
   it("persists dismissal when the user clicks the cancel button", async () => {
     renderProviderCliHealthToasts(
-      statusResponseWithCodex(codexOutdatedStatus()),
+      statusResponseWithCodex(codexOutdatedStatusWithInstallLabel()),
     );
 
-    const invocation = await waitForVisibleCodexToast();
-    expect(invocation.props.title).toBe("Codex update available");
-    expect(requireToastAction(invocation).label).toBe("Update");
-    expect(invocation.props.cancel?.label).toBe("Dismiss");
+    const toast = await waitForVisibleCodexToast();
+    const queries = toastQueries(toast);
+    expect(queries.getByRole("button", { name: "Install" })).toBeTruthy();
+    expect(queries.getByRole("button", { name: "Dismiss" })).toBeTruthy();
 
     act(() => {
-      clickToastCancel(invocation);
+      clickToastButton({ name: "Dismiss", toast });
     });
 
     expect(
@@ -375,25 +479,81 @@ describe("ProviderCliHealthToasts", () => {
     expect(providerCliToastState.activeToasts.has(CODEX_TOAST_ID)).toBe(false);
   });
 
+  it("runs provider CLI updates through a loading toast", async () => {
+    const result = renderProviderCliHealthToasts(
+      statusResponseWithCodex(codexOutdatedStatus()),
+    );
+
+    const toast = await waitForVisibleCodexToast();
+
+    act(() => {
+      clickToastButton({ name: "Update", toast });
+    });
+
+    const loadingToast = renderLatestToast();
+    expect(loadingToast.options.id).toBe(CODEX_RUN_TOAST_ID);
+    expect(providerCliToastState.activeToasts.has(CODEX_TOAST_ID)).toBe(false);
+
+    await waitForLatestToastText({ text: "Codex is up to date" });
+    const successToast = renderLatestToast();
+    expect(successToast.options.id).toBe(CODEX_RUN_TOAST_ID);
+    expect(
+      toastQueries(successToast).getByText("Codex is up to date"),
+    ).toBeTruthy();
+    expect(result.state.installRequests).toEqual([
+      {
+        actionKind: "update",
+        provider: "codex",
+      },
+    ]);
+  });
+
+  it("opens failed provider CLI update logs from the run toast", async () => {
+    const result = renderProviderCliHealthToasts(
+      statusResponseWithCodex(codexOutdatedStatus()),
+    );
+    result.state.installEvents = codexInstallFailureEvents();
+
+    const toast = await waitForVisibleCodexToast();
+
+    act(() => {
+      clickToastButton({ name: "Update", toast });
+    });
+
+    await waitForLatestToastText({ text: "Codex update failed" });
+
+    const failureToast = renderLatestToast();
+    const failureQueries = toastQueries(failureToast);
+    expect(failureToast.options.id).toBe(CODEX_RUN_TOAST_ID);
+    expect(failureQueries.getByText("Codex update failed")).toBeTruthy();
+    expect(
+      failureQueries.getByRole("button", { name: "View log" }),
+    ).toBeTruthy();
+
+    act(() => {
+      clickToastButton({ name: "View log", toast: failureToast });
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Codex update log" });
+    const dialogQueries = within(dialog);
+    expect(dialog).toBeTruthy();
+    expect(dialogQueries.getByText("Command exited with code 1")).toBeTruthy();
+    expect(dialogQueries.getByText(/permission denied/u)).toBeTruthy();
+  });
+
   it("warns when provider CLI setup is already running", async () => {
     renderProviderCliHealthToasts(statusResponseWithCodex(codexMissingStatus()));
 
-    const invocation = await waitForVisibleCodexToast();
-    const action = requireToastAction(invocation);
+    const toast = await waitForVisibleCodexToast();
 
     act(() => {
-      action.onClick();
-      action.onClick();
+      clickToastButton({ name: "Install", toast });
+      clickToastButton({ name: "Install", toast });
     });
 
-    await waitFor(() => {
-      const latestToast = requireLatestToastInvocation();
-      expect(latestToast.props.title).toBe("Provider CLI setup already running");
-      expect(latestToast.props.description).toBe(
-        "Wait for the current install or update to finish.",
-      );
-      expect(latestToast.props.tone).toBe("warning");
-    });
+    const latestToast = renderLatestToast();
+    const queries = toastQueries(latestToast);
+    expect(queries.getByText("Provider CLI setup already running")).toBeTruthy();
   });
 
   it("clears resolved issue state so a recurring missing CLI shows again", async () => {

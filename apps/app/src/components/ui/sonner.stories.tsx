@@ -132,6 +132,22 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     },
   },
   {
+    id: "provider-update-loading",
+    group: "Provider CLI",
+    label: "provider update loading",
+    source: "ProviderCliHealthToasts",
+    usage: [
+      "After clicking Update",
+      "Replaces the update-available toast",
+      "Replaced by success/error",
+    ],
+    current: {
+      tone: "loading",
+      title: "Updating Codex",
+      description: "npm install -g @openai/codex",
+    },
+  },
+  {
     id: "provider-already-running",
     group: "Provider CLI",
     label: "setup already running",
@@ -152,6 +168,22 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     current: {
       tone: "success",
       title: "Codex is up to date",
+    },
+  },
+  {
+    id: "provider-update-failed",
+    group: "Provider CLI",
+    label: "provider update failed",
+    source: "ProviderCliHealthToasts",
+    usage: [
+      "Provider CLI install/update fails",
+      "View log opens the command output dialog",
+    ],
+    current: {
+      tone: "error",
+      title: "Codex update failed",
+      description: "Command exited with code 1",
+      primaryActionLabel: "View log",
     },
   },
   {
