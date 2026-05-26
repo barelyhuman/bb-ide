@@ -349,6 +349,29 @@ describe("ThreadTerminalPanel", () => {
     expect(screen.getAllByText("No terminals")).toHaveLength(1);
   });
 
+  it("explains disconnected terminals and starts a replacement", async () => {
+    serverSessions = [
+      makeTerminalSession({
+        status: "disconnected",
+      }),
+    ];
+    renderPanel();
+
+    fireEvent.click(screen.getByText("Show panel"));
+
+    expect(await screen.findByText("Terminal disconnected")).toBeTruthy();
+    expect(screen.queryByText("This session can't reconnect.")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start new terminal" }),
+    );
+
+    await waitFor(() => {
+      expect(apiMocks.createThreadTerminal).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText("Terminal 2")).toBeTruthy();
+  });
+
   it("renames the active tab from a terminal title escape", async () => {
     serverSessions = [makeTerminalSession()];
     renderPanel();
