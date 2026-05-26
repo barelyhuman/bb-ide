@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import type {
   ProviderCliInstallEvent,
   ProviderCliKey,
@@ -133,8 +133,8 @@ function buildProviderCliIssue(
       provider,
       status,
       action: status.installAction,
-      title: `${status.displayName} is not installed`,
-      description: `Install the latest ${status.displayName} CLI with npm so bb can start ${status.executableName} sessions.`,
+      title: `${status.displayName} CLI not installed`,
+      description: `Install ${status.displayName} so bb can start ${status.displayName} sessions.`,
       fingerprint: `${provider}:missing:${status.latestVersion ?? "latest"}`,
       toastId,
     };
@@ -354,7 +354,7 @@ export function ProviderCliHealthToasts() {
   const dismissIssue = useCallback(
     (issue: ProviderCliToastIssue) => {
       markIssueDismissed(issue);
-      toast.dismiss(issue.toastId);
+      appToast.dismiss(issue.toastId);
     },
     [markIssueDismissed],
   );
@@ -365,20 +365,20 @@ export function ProviderCliHealthToasts() {
         return;
       }
       if (daemonPort === null) {
-        toast.error("Host daemon unavailable", {
+        appToast.error("Host daemon unavailable", {
           description: "Start bb again and retry the provider CLI setup.",
         });
         return;
       }
       if (runningProviderRef.current !== null) {
-        toast.error("Provider CLI setup already running", {
+        appToast.warning("Provider CLI setup already running", {
           description: "Wait for the current install or update to finish.",
         });
         return;
       }
 
       runningProviderRef.current = issue.provider;
-      toast.dismiss(issue.toastId);
+      appToast.dismiss(issue.toastId);
       setInstallState({
         provider: issue.provider,
         displayName: issue.status.displayName,
@@ -409,7 +409,7 @@ export function ProviderCliHealthToasts() {
           if (!installSucceeded) {
             return;
           }
-          toast.success(`${issue.status.displayName} is up to date`);
+          appToast.success(`${issue.status.displayName} is up to date`);
           void providerCliStatus.refetch();
         })
         .catch((error) => {
@@ -455,7 +455,7 @@ export function ProviderCliHealthToasts() {
 
     for (const previousIssue of activeIssuesRef.current.values()) {
       if (!currentIssuesByFingerprint.has(previousIssue.fingerprint)) {
-        toast.dismiss(previousIssue.toastId);
+        appToast.dismiss(previousIssue.toastId);
         shownFingerprintsRef.current.delete(previousIssue.fingerprint);
         clearIssueDismissal(previousIssue);
       }
@@ -477,26 +477,28 @@ export function ProviderCliHealthToasts() {
 
       shownFingerprintsRef.current.add(issue.fingerprint);
       if (issue.action !== null) {
-        toast.warning(issue.title, {
+        const dismissAction =
+          issue.action.label === "Update"
+            ? {
+                label: "Dismiss",
+                onClick: () => dismissIssue(issue),
+              }
+            : undefined;
+        appToast.warning(issue.title, {
           id: issue.toastId,
           description: issue.description,
           duration: Infinity,
-          closeButton: true,
           action: {
             label: issue.action.label,
             onClick: () => startInstall(issue),
           },
-          cancel: {
-            label: "Dismiss",
-            onClick: () => dismissIssue(issue),
-          },
+          ...(dismissAction ? { cancel: dismissAction } : {}),
         });
       } else {
-        toast.warning(issue.title, {
+        appToast.warning(issue.title, {
           id: issue.toastId,
           description: issue.description,
           duration: Infinity,
-          closeButton: true,
           cancel: {
             label: "Dismiss",
             onClick: () => dismissIssue(issue),

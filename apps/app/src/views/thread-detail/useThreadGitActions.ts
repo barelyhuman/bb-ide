@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import type {
   Environment,
   PromptInput,
@@ -210,7 +210,7 @@ function toGitActionFailure({
       detailsMessage ??
       getMutationErrorMessage({
         error,
-        fallbackMessage: "Failed to start git action.",
+        fallbackMessage: "Failed to start git action",
         lifecycleOperation: action,
       }),
     askAgentInput: buildAskAgentInputForGitOperation({
@@ -253,7 +253,7 @@ function showGitActionSuccessToast({
   response,
   toastId,
 }: ShowGitActionSuccessToastParams): void {
-  toast.success(getGitActionSuccessTitle(response.action), {
+  appToast.success(getGitActionSuccessTitle(response.action), {
     id: toastId,
     description: formatGitActionDescription({
       commitSha: response.commitSha,
@@ -275,7 +275,7 @@ function showGitActionErrorToast({
   const title = getGitActionErrorTitle(action);
   const description = failure.message === title ? undefined : failure.message;
 
-  toast.error(title, {
+  appToast.error(title, {
     id: toastId,
     ...(description ? { description } : {}),
     ...(askAgentInput
@@ -357,7 +357,7 @@ export function useThreadGitActions({
         return;
       }
 
-      const toastId = toast.loading("Sending message...");
+      const toastId = appToast.loading("Sending message");
 
       try {
         await sendMessage.mutateAsync({
@@ -365,13 +365,13 @@ export function useThreadGitActions({
           input,
           mode: "auto",
         });
-        toast.success("Message sent to agent", { id: toastId });
+        appToast.success("Message sent", { id: toastId });
       } catch (error) {
-        toast.error("Failed to message agent", {
+        appToast.error("Failed to message agent", {
           id: toastId,
           description: getMutationErrorMessage({
             error,
-            fallbackMessage: "Message was not sent.",
+            fallbackMessage: "Message was not sent",
             lifecycleOperation: "send_message",
           }),
         });
@@ -387,7 +387,7 @@ export function useThreadGitActions({
     }
     const threadId = thread.id;
 
-    const toastId = toast.loading("Creating commit...");
+    const toastId = appToast.loading("Creating commit");
 
     try {
       const response = await requestEnvironmentAction.mutateAsync({
@@ -420,7 +420,7 @@ export function useThreadGitActions({
       }
       const threadId = thread.id;
 
-      const toastId = toast.loading("Squash merging...");
+      const toastId = appToast.loading("Squash merging");
 
       try {
         const response = await requestEnvironmentAction.mutateAsync({

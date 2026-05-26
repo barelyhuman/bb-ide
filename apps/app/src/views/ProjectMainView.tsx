@@ -359,7 +359,7 @@ export function ProjectMainView() {
           setAttachmentError(
             getMutationErrorMessage({
               error: err,
-              fallbackMessage: "Attachment upload failed.",
+              fallbackMessage: "Attachment upload failed",
             }),
           );
           break;

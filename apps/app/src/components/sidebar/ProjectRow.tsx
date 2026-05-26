@@ -72,7 +72,7 @@ import {
   buildNeighborReorderRequest,
   type NeighborReorderRequest,
 } from "@/lib/neighbor-reorder";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import {
   ThreadRow,
   ThreadStatusGlyph,
@@ -270,7 +270,7 @@ function useArchiveEnvironmentThreadGroupAction({
       { id: environmentId },
       {
         onSuccess: (response) => {
-          toast.success(
+          appToast.success(
             formatArchivedWorktreeThreadMessage(
               response.archivedThreadIds.length,
             ),

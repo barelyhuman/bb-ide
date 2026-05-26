@@ -207,7 +207,7 @@ export function GitDiffTabContent({
     (gitDiffError
       ? getMutationErrorMessage({
           error: gitDiffError,
-          fallbackMessage: "Failed to load git diff.",
+          fallbackMessage: "Failed to load git diff",
           lifecycleOperation: "load_diff",
         })
       : null);

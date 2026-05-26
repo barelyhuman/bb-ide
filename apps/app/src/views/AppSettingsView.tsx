@@ -114,7 +114,7 @@ export function AppSettingsView() {
 
   const createHostJoin = useMutation({
     meta: {
-      errorMessage: "Failed to create host join command.",
+      errorMessage: "Failed to create host join command",
       showErrorToast: false,
     },
     mutationFn: () => api.createHostJoin(),
@@ -130,7 +130,7 @@ export function AppSettingsView() {
       }
       showMutationErrorToast({
         error,
-        fallbackMessage: "Failed to create host join command.",
+        fallbackMessage: "Failed to create host join command",
       });
     },
   });

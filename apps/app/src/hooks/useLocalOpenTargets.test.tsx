@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { Suspense, useEffect, type ReactNode } from "react";
+import {
+  isValidElement,
+  Suspense,
+  useEffect,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import {
   act,
   cleanup,
@@ -19,9 +25,50 @@ import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websoc
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { toastError } = vi.hoisted(() => ({
-  toastError: vi.fn(),
-}));
+interface CapturedToastProps {
+  description?: ReactNode;
+  title: ReactNode;
+  tone: string;
+}
+
+interface CapturedToastOptions {
+  id: string;
+}
+
+interface SonnerCustomOptions {
+  id?: string | number;
+}
+
+interface SonnerCustomToast {
+  options: CapturedToastOptions;
+  renderToast: (id: string | number) => ReactElement;
+}
+
+const sonnerToastState = vi.hoisted(() => {
+  const invocations: SonnerCustomToast[] = [];
+  return {
+    custom: vi.fn(
+      (
+        renderToast: (id: string | number) => ReactElement,
+        options?: SonnerCustomOptions,
+      ) => {
+        const fallbackId = `toast-${invocations.length + 1}`;
+        const id =
+          typeof options?.id === "string" || typeof options?.id === "number"
+            ? String(options.id)
+            : fallbackId;
+        const toast = {
+          options: { id },
+          renderToast,
+        };
+        invocations.push(toast);
+        return id;
+      },
+    ),
+    dismiss: vi.fn(),
+    invocations,
+  };
+});
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket: FakeSocket } =
@@ -33,7 +80,8 @@ vi.mock("partysocket/ws", async () => {
 
 vi.mock("sonner", () => ({
   toast: {
-    error: toastError,
+    custom: sonnerToastState.custom,
+    dismiss: sonnerToastState.dismiss,
   },
 }));
 
@@ -97,6 +145,18 @@ function requireLocalOpenTargetsSnapshot(
   return snapshot;
 }
 
+function readLatestToastProps(): CapturedToastProps {
+  const invocation = sonnerToastState.invocations.at(-1);
+  if (!invocation) {
+    throw new Error("Expected local open target toast invocation.");
+  }
+  const element = invocation.renderToast(invocation.options.id);
+  if (!isValidElement<CapturedToastProps>(element)) {
+    throw new Error("Expected app toast content element.");
+  }
+  return element.props;
+}
+
 function installLocalOpenTargetsFetchRoutes(
   state: LocalOpenTargetsFetchState,
   openTargetRequests: Array<ReturnType<typeof openInTargetRequestSchema.parse>>,
@@ -157,7 +217,9 @@ async function importFreshLocalOpenTargetsModules(): Promise<LocalOpenTargetsMod
 afterEach(() => {
   cleanup();
   resetFakeReconnectingWebSockets();
-  toastError.mockReset();
+  sonnerToastState.invocations.splice(0);
+  sonnerToastState.custom.mockClear();
+  sonnerToastState.dismiss.mockClear();
   window.localStorage.clear();
   vi.resetModules();
   vi.restoreAllMocks();
@@ -343,10 +405,12 @@ describe("useLocalOpenTargets", () => {
     });
 
     await waitFor(() => {
-      expect(toastError).toHaveBeenCalledWith("Failed to open file locally", {
-        description: "Localhost is disconnected.",
-      });
+      expect(sonnerToastState.custom).toHaveBeenCalled();
     });
+    const toastProps = readLatestToastProps();
+    expect(toastProps.tone).toBe("error");
+    expect(toastProps.title).toBe("Failed to open file locally");
+    expect(toastProps.description).toBe("Localhost is disconnected.");
     expect(openTargetRequests).toEqual([]);
   });
 
@@ -401,10 +465,12 @@ describe("useLocalOpenTargets", () => {
     });
 
     await waitFor(() => {
-      expect(toastError).toHaveBeenCalledWith("Failed to open file locally", {
-        description: "No local editor is available.",
-      });
+      expect(sonnerToastState.custom).toHaveBeenCalled();
     });
+    const toastProps = readLatestToastProps();
+    expect(toastProps.tone).toBe("error");
+    expect(toastProps.title).toBe("Failed to open file locally");
+    expect(toastProps.description).toBe("No local editor is available.");
     expect(openTargetRequests).toEqual([]);
   });
 });

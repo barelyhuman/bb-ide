@@ -103,7 +103,7 @@ export function ManagerThreadStorageBrowser({
             : null) ??
           getMutationErrorMessage({
             error: filesError,
-            fallbackMessage: "Failed to load manager workspace.",
+            fallbackMessage: "Failed to load manager workspace",
             lifecycleOperation: "load_manager_storage",
           })
         }

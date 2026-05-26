@@ -3,7 +3,7 @@ import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
 } from "@bb/host-daemon-contract";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import {
   resolvePreferredWorkspaceOpenTarget,
   useWorkspaceOpenTargetPreference,
@@ -81,7 +81,7 @@ export function useLocalOpenTargets(
         (candidate) => candidate.id === request.targetId,
       );
       if (!target || !openWorkspace) {
-        toast.error(LOCAL_OPEN_FAILURE_TITLE, {
+        appToast.error(LOCAL_OPEN_FAILURE_TITLE, {
           description: getOpenUnavailableDescription({
             hasDaemon,
           }),
@@ -101,8 +101,9 @@ export function useLocalOpenTargets(
         });
         return true;
       } catch (error) {
-        toast.error(LOCAL_OPEN_FAILURE_TITLE, {
-          description: error instanceof Error ? error.message : undefined,
+        const description = error instanceof Error ? error.message : undefined;
+        appToast.error(LOCAL_OPEN_FAILURE_TITLE, {
+          ...(description ? { description } : {}),
         });
         return false;
       }
@@ -118,7 +119,7 @@ export function useLocalOpenTargets(
   const openPathInPreferredTarget = useCallback(
     async (request: OpenPathInPreferredTargetArgs) => {
       if (!preferredTarget) {
-        toast.error(LOCAL_OPEN_FAILURE_TITLE, {
+        appToast.error(LOCAL_OPEN_FAILURE_TITLE, {
           description: getOpenUnavailableDescription({
             hasDaemon,
           }),

@@ -5,11 +5,12 @@ import {
   type Thread,
   type WorkspaceStatus,
 } from "@bb/domain";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import { getMergeBaseBranchCandidates } from "@/components/pickers/BranchPicker";
 import {
   describeLifecycleError,
   parseLifecycleError,
+  type LifecycleErrorDescription,
 } from "@/lib/lifecycle-errors";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { useUpdateEnvironment } from "../../../hooks/mutations/environment-mutations";
@@ -118,6 +119,17 @@ export function resolvePersistedMergeBaseBranch({
     resolveImplicitMergeBaseBranch({ environment, workspaceStatus })
     ? null
     : normalizedBranch;
+}
+
+function showMergeBaseLifecycleToast(
+  description: LifecycleErrorDescription,
+): void {
+  const options = { description: description.body };
+  if (description.severity === "error") {
+    appToast.error(description.title, options);
+    return;
+  }
+  appToast.warning(description.title, options);
 }
 
 export function useEnvironmentMergeBase({
@@ -229,16 +241,14 @@ export function useEnvironmentMergeBase({
               operation: "update_merge_base",
             });
             if (lifecycleErrorDescription) {
-              toast.error(lifecycleErrorDescription.title, {
-                description: lifecycleErrorDescription.body,
-              });
+              showMergeBaseLifecycleToast(lifecycleErrorDescription);
               return;
             }
 
-            toast.error(
+            appToast.error(
               getMutationErrorMessage({
                 error,
-                fallbackMessage: "Failed to update merge base branch.",
+                fallbackMessage: "Failed to update merge base branch",
                 lifecycleOperation: "update_merge_base",
               }),
             );

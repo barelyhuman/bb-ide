@@ -1,5 +1,5 @@
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import { HttpError } from "./api";
 import {
   describeLifecycleError,
@@ -10,6 +10,8 @@ import {
 const HTTP_STATUS_PREFIX_PATTERN = /^HTTP \d{3}:\s*/u;
 const NETWORK_TRANSPORT_ERROR_MESSAGE =
   "Could not reach the server. Check that it is running and try again.";
+const GENERIC_REQUEST_FAILED_MESSAGE = "Request failed";
+const TRAILING_PERIOD_PATTERN = /\.$/u;
 
 export interface MutationErrorMessageOptions {
   error: unknown;
@@ -31,6 +33,10 @@ function normalizeMessage(message: string): string {
 
 function stripHttpStatusPrefix(message: string): string {
   return message.replace(HTTP_STATUS_PREFIX_PATTERN, "");
+}
+
+function stripTrailingPeriod(message: string): string {
+  return message.replace(TRAILING_PERIOD_PATTERN, "");
 }
 
 function isAbortLikeError(error: unknown): boolean {
@@ -173,11 +179,19 @@ export function showMutationErrorToast({
     return;
   }
 
-  toast.error(
+  const message = stripTrailingPeriod(
     getMutationErrorMessage({
       error,
       fallbackMessage,
       lifecycleOperation,
     }),
   );
+  if (message === GENERIC_REQUEST_FAILED_MESSAGE) {
+    appToast.error("Request failed", {
+      description: "Please try again",
+    });
+    return;
+  }
+
+  appToast.error(message);
 }

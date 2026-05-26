@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 
 interface CopyToClipboardOptions {
   /** Toast message shown on success (set to `null` to suppress). */
@@ -8,7 +8,7 @@ interface CopyToClipboardOptions {
 }
 
 /**
- * Copies text to the clipboard and surfaces success/failure via toast.
+ * Copies text to the clipboard and surfaces success/failure via appToast.
  * Returns `true` on success, `false` on failure.
  */
 export async function copyToClipboardWithToast(
@@ -19,15 +19,15 @@ export async function copyToClipboardWithToast(
   }: CopyToClipboardOptions = {},
 ): Promise<boolean> {
   if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-    if (errorMessage) toast.error(errorMessage);
+    if (errorMessage) appToast.error(errorMessage);
     return false;
   }
   try {
     await navigator.clipboard.writeText(text);
-    if (successMessage) toast.success(successMessage);
+    if (successMessage) appToast.success(successMessage);
     return true;
   } catch {
-    if (errorMessage) toast.error(errorMessage);
+    if (errorMessage) appToast.error(errorMessage);
     return false;
   }
 }

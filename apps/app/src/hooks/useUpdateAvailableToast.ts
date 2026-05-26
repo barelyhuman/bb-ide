@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import type { BbDesktopApi, BbDesktopInfo } from "@bb/server-contract";
 import { getBbDesktopInfo } from "@/lib/bb-desktop";
 import { useSystemVersion } from "./queries/system-queries";
@@ -11,10 +11,6 @@ const DESKTOP_DISMISSED_STORAGE_KEY_PREFIX =
 interface VersionDismissalArgs {
   latestVersion: string;
   storageKeyPrefix: string;
-}
-
-interface AppToastContentArgs {
-  upgradeCommand: string;
 }
 
 interface DesktopToastContentArgs {
@@ -66,20 +62,20 @@ function markDismissedForVersion(args: VersionDismissalArgs): void {
   }
 }
 
-function appToastDescription(args: AppToastContentArgs): string {
-  return `Restart \`${args.upgradeCommand}\` to get the latest version`;
+function appUpdateDescription(latestVersion: string): string {
+  return `${latestVersion} is available. Restart bb-app to update.`;
 }
 
 function desktopToastDescription(args: DesktopToastContentArgs): string {
   if (args.updateDownloaded) {
-    return `bb desktop ${args.latestVersion} is ready to install`;
+    return `bb desktop ${args.latestVersion} is ready to install.`;
   }
-  return `bb desktop ${args.latestVersion} is available`;
+  return `bb desktop ${args.latestVersion} is available.`;
 }
 
 function restartDesktopUpdate(args: DesktopToastActionArgs): void {
   void args.desktopApi.installUpdate().catch(() => undefined);
-  toast.dismiss(`bb-desktop-update-ready:${args.latestVersion}`);
+  appToast.dismiss(`bb-desktop-update-ready:${args.latestVersion}`);
 }
 
 export function useUpdateAvailableToast(): void {
@@ -99,7 +95,7 @@ export function useUpdateAvailableToast(): void {
     if (!data.updateAvailable) {
       return;
     }
-    const { latestVersion, upgradeCommand } = data;
+    const { latestVersion } = data;
     if (latestVersion === null) {
       return;
     }
@@ -116,18 +112,18 @@ export function useUpdateAvailableToast(): void {
       return;
     }
     shownForVersionRef.current = latestVersion;
-    toast(`Update available: bb-app ${latestVersion}`, {
+    appToast.message("bb-app update available", {
       id: `bb-update-available:${latestVersion}`,
-      description: appToastDescription({ upgradeCommand }),
+      description: appUpdateDescription(latestVersion),
       duration: Infinity,
-      action: {
+      cancel: {
         label: "Dismiss",
         onClick: () => {
           markDismissedForVersion({
             latestVersion,
             storageKeyPrefix: DISMISSED_STORAGE_KEY_PREFIX,
           });
-          toast.dismiss(`bb-update-available:${latestVersion}`);
+          appToast.dismiss(`bb-update-available:${latestVersion}`);
         },
       },
       onDismiss: () => {
@@ -206,9 +202,9 @@ export function useDesktopUpdateAvailableToast(): void {
       ? `bb-desktop-update-ready:${latestVersion}`
       : `bb-desktop-update-available:${latestVersion}`;
     if (desktopInfo.updateDownloaded) {
-      toast.dismiss(`bb-desktop-update-available:${latestVersion}`);
+      appToast.dismiss(`bb-desktop-update-available:${latestVersion}`);
     }
-    toast(
+    appToast.message(
       desktopInfo.updateDownloaded
         ? "Desktop update ready"
         : "Desktop update available",
@@ -219,20 +215,29 @@ export function useDesktopUpdateAvailableToast(): void {
           updateDownloaded: desktopInfo.updateDownloaded,
         }),
         duration: Infinity,
-        action: {
-          label: desktopInfo.updateDownloaded ? "Restart" : "Dismiss",
-          onClick: () => {
-            if (desktopInfo.updateDownloaded && desktopApi !== null) {
-              restartDesktopUpdate({ desktopApi, latestVersion });
-              return;
+        ...(desktopInfo.updateDownloaded
+          ? {
+              action: {
+                label: "Restart",
+                onClick: () => {
+                  if (desktopApi !== null) {
+                    restartDesktopUpdate({ desktopApi, latestVersion });
+                  }
+                },
+              },
             }
-            markDismissedForVersion({
-              latestVersion,
-              storageKeyPrefix: DESKTOP_DISMISSED_STORAGE_KEY_PREFIX,
-            });
-            toast.dismiss(toastId);
-          },
-        },
+          : {
+              cancel: {
+                label: "Dismiss",
+                onClick: () => {
+                  markDismissedForVersion({
+                    latestVersion,
+                    storageKeyPrefix: DESKTOP_DISMISSED_STORAGE_KEY_PREFIX,
+                  });
+                  appToast.dismiss(toastId);
+                },
+              },
+            }),
         onDismiss: () => {
           if (desktopInfo.updateDownloaded) {
             return;

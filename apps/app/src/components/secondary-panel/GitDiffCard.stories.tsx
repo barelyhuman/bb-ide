@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { FileContents } from "@pierre/diffs";
-import { toast } from "sonner";
 import {
   GIT_DIFF_VIEW_BASE_OPTIONS,
   GitDiffCard,
@@ -17,6 +16,7 @@ import {
 } from "../git-diff/git-diff-parsing";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { appToast } from "@/components/ui/app-toast";
 
 export default {
   title: "secondary-panel/Diff",
@@ -610,7 +610,7 @@ function InteractiveDiffPanel({
     [displayMode, preferredTheme],
   );
   const onOpenFileInEditor = useCallback((path: string) => {
-    toast.message("Opening in editor", { description: path });
+    appToast.message("Opening in editor", { description: path });
   }, []);
 
   // Single panel-level fetcher that mirrors production: looks up the right

@@ -132,7 +132,7 @@ function ApprovalPendingInteractionBanner({
   const mutationErrorMessage = resolvePendingInteraction.error
     ? getMutationErrorMessage({
         error: resolvePendingInteraction.error,
-        fallbackMessage: "Failed to resolve pending interaction.",
+        fallbackMessage: "Failed to resolve pending interaction",
         lifecycleOperation: "resolve_interaction",
       })
     : null;

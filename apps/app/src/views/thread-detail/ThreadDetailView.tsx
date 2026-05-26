@@ -10,7 +10,7 @@ import {
   type ThreadListEntry,
   type ThreadWithRuntime,
 } from "@bb/domain";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
   useThreadTerminalPanelState,
@@ -729,7 +729,7 @@ export function ThreadDetailView() {
         return false;
       }
       if (resolution.kind === "error") {
-        toast.error("Failed to open file locally", {
+        appToast.error("Failed to open file locally", {
           description: resolution.description,
         });
         return true;
@@ -781,7 +781,7 @@ export function ThreadDetailView() {
           const resolvedThreadStorageRootPath =
             result.data?.storageRootPath ?? null;
           if (resolvedThreadStorageRootPath === null) {
-            toast.error("Failed to open file locally", {
+            appToast.error("Failed to open file locally", {
               description: "Thread storage path is not available yet.",
             });
             return;
@@ -796,7 +796,7 @@ export function ThreadDetailView() {
           handleTimelineLocalFileLinkResolution(resolvedResolution);
         })
         .catch((error: Error) => {
-          toast.error("Failed to open file locally", {
+          appToast.error("Failed to open file locally", {
             description: error.message,
           });
         });

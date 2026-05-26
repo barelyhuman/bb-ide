@@ -32,10 +32,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
   };
 });
 
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
-}));
-
 vi.mock("@/hooks/useHostDaemon", () => ({
   useHostDaemon: () => ({
     localHostId: null,

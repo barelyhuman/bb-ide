@@ -1,10 +1,82 @@
-import { describe, expect, it } from "vitest";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "./api";
 import {
   getMutationErrorMessage,
   getMutationErrorMeta,
   shouldShowMutationErrorToast,
+  showMutationErrorToast,
 } from "./mutation-errors";
+
+interface CapturedToastProps {
+  description?: ReactNode;
+  title: ReactNode;
+  tone: string;
+}
+
+interface CapturedToastOptions {
+  id: string;
+}
+
+interface SonnerCustomOptions {
+  id?: string | number;
+}
+
+interface SonnerCustomToast {
+  options: CapturedToastOptions;
+  renderToast: (id: string | number) => ReactElement;
+}
+
+const mutationToastState = vi.hoisted(() => {
+  const invocations: SonnerCustomToast[] = [];
+  return {
+    custom: vi.fn(
+      (
+        renderToast: (id: string | number) => ReactElement,
+        options?: SonnerCustomOptions,
+      ) => {
+        const fallbackId = `toast-${invocations.length + 1}`;
+        const id =
+          typeof options?.id === "string" || typeof options?.id === "number"
+            ? String(options.id)
+            : fallbackId;
+        const toast = {
+          options: { id },
+          renderToast,
+        };
+        invocations.push(toast);
+        return id;
+      },
+    ),
+    dismiss: vi.fn(),
+    invocations,
+  };
+});
+
+vi.mock("sonner", () => ({
+  toast: {
+    custom: mutationToastState.custom,
+    dismiss: mutationToastState.dismiss,
+  },
+}));
+
+function readLatestToastProps(): CapturedToastProps {
+  const invocation = mutationToastState.invocations.at(-1);
+  if (!invocation) {
+    throw new Error("Expected mutation error toast invocation.");
+  }
+  const element = invocation.renderToast(invocation.options.id);
+  if (!isValidElement<CapturedToastProps>(element)) {
+    throw new Error("Expected app toast content element.");
+  }
+  return element.props;
+}
+
+afterEach(() => {
+  mutationToastState.invocations.splice(0);
+  mutationToastState.custom.mockClear();
+  mutationToastState.dismiss.mockClear();
+});
 
 describe("getMutationErrorMeta", () => {
   it("reads supported fields from mutation meta", () => {
@@ -110,5 +182,30 @@ describe("shouldShowMutationErrorToast", () => {
     ).toBe(false);
     expect(shouldShowMutationErrorToast({ name: "AbortError" })).toBe(false);
   });
+});
 
+describe("showMutationErrorToast", () => {
+  it("splits the generic mutation fallback into title and description", () => {
+    showMutationErrorToast({
+      error: {},
+      fallbackMessage: "Request failed.",
+    });
+
+    const props = readLatestToastProps();
+    expect(props.tone).toBe("error");
+    expect(props.title).toBe("Request failed");
+    expect(props.description).toBe("Please try again");
+  });
+
+  it("strips trailing periods from fallback toast titles", () => {
+    showMutationErrorToast({
+      error: {},
+      fallbackMessage: "Failed to update thread.",
+    });
+
+    const props = readLatestToastProps();
+    expect(props.tone).toBe("error");
+    expect(props.title).toBe("Failed to update thread");
+    expect(props.description).toBeUndefined();
+  });
 });

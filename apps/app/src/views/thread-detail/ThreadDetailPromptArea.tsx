@@ -43,7 +43,7 @@ import {
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { promptDraftToInput } from "@/lib/prompt-draft";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import {
   FollowUpPromptBox,
   type FollowUpSubmitMode,
@@ -404,12 +404,12 @@ export function ThreadDetailPromptArea({
       }
     } catch (nextError) {
       promptDraft.restoreIfEmpty(submittedDraft);
-      toast.error(
+      appToast.error(
         getMutationErrorMessage({
           error: nextError,
           fallbackMessage: isQueuingMessage
-            ? "Failed to queue message."
-            : "Failed to send message.",
+            ? "Failed to queue message"
+            : "Failed to send message",
           lifecycleOperation: isQueuingMessage
             ? "queue_message"
             : "send_message",
@@ -462,10 +462,10 @@ export function ThreadDetailPromptArea({
       }
     } catch (nextError) {
       promptDraft.restoreIfEmpty(submittedDraft);
-      toast.error(
+      appToast.error(
         getMutationErrorMessage({
           error: nextError,
-          fallbackMessage: "Failed to send message.",
+          fallbackMessage: "Failed to send message",
           lifecycleOperation: "send_message",
         }),
       );
@@ -500,10 +500,10 @@ export function ThreadDetailPromptArea({
           setAttachmentError(null);
         })
         .catch((nextError) => {
-          toast.error(
+          appToast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to send queued message.",
+              fallbackMessage: "Failed to send queued message",
               lifecycleOperation: "send_queued_message",
             }),
           );
@@ -536,10 +536,10 @@ export function ThreadDetailPromptArea({
           setAttachmentError(null);
         })
         .catch((nextError) => {
-          toast.error(
+          appToast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to edit queued message.",
+              fallbackMessage: "Failed to edit queued message",
             }),
           );
         })
@@ -561,10 +561,10 @@ export function ThreadDetailPromptArea({
           queuedMessageId: messageId,
         })
         .catch((nextError) => {
-          toast.error(
+          appToast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to delete queued message.",
+              fallbackMessage: "Failed to delete queued message",
             }),
           );
         })
@@ -585,10 +585,10 @@ export function ThreadDetailPromptArea({
           ...request,
         })
         .catch((nextError) => {
-          toast.error(
+          appToast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to reorder queued message.",
+              fallbackMessage: "Failed to reorder queued message",
               lifecycleOperation: "reorder_queued_message",
             }),
           );

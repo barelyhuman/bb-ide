@@ -9,12 +9,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ThreadWithRuntime } from "@bb/domain";
-import type { ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Provider as JotaiProvider } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { toast } from "sonner";
 import type { ThreadAssignedChildSummaryResponse } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { createAppQueryClient } from "@/lib/query-client";
@@ -22,6 +21,63 @@ import {
   ThreadActionsProvider,
   useThreadActions,
 } from "./ThreadActionsProvider";
+
+interface ThreadToastButton {
+  label: ReactNode;
+  onClick: () => void;
+}
+
+interface CapturedToastProps {
+  action?: ThreadToastButton;
+  cancel?: ThreadToastButton;
+  description?: ReactNode;
+  title: ReactNode;
+  tone: string;
+}
+
+interface CapturedToastOptions {
+  id: string;
+}
+
+interface ThreadToastInvocation {
+  options: CapturedToastOptions;
+  props: CapturedToastProps;
+}
+
+interface SonnerCustomOptions {
+  id?: string | number;
+}
+
+interface SonnerCustomToast {
+  options: CapturedToastOptions;
+  renderToast: (id: string | number) => ReactElement;
+}
+
+const threadToastState = vi.hoisted(() => {
+  const invocations: SonnerCustomToast[] = [];
+  return {
+    custom: vi.fn(
+      (
+        renderToast: (id: string | number) => ReactElement,
+        options?: SonnerCustomOptions,
+      ) => {
+        const fallbackId = `toast-${invocations.length + 1}`;
+        const id =
+          typeof options?.id === "string" || typeof options?.id === "number"
+            ? String(options.id)
+            : fallbackId;
+        const toast = {
+          options: { id },
+          renderToast,
+        };
+        invocations.push(toast);
+        return id;
+      },
+    ),
+    dismiss: vi.fn(),
+    invocations,
+  };
+});
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -38,7 +94,10 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: {
+    custom: threadToastState.custom,
+    dismiss: threadToastState.dismiss,
+  },
 }));
 
 function makeThread(
@@ -107,8 +166,28 @@ function HookProbe({
   return null;
 }
 
+function readThreadToast(toast: SonnerCustomToast): ThreadToastInvocation {
+  const element = toast.renderToast(toast.options.id);
+  if (!isValidElement<CapturedToastProps>(element)) {
+    throw new Error("Expected app toast content element.");
+  }
+  return {
+    options: toast.options,
+    props: element.props,
+  };
+}
+
+function requireLatestThreadToastInvocation(): ThreadToastInvocation {
+  const invocation = threadToastState.invocations.at(-1);
+  if (!invocation) {
+    throw new Error("Expected thread action toast invocation.");
+  }
+  return readThreadToast(invocation);
+}
+
 afterEach(() => {
   cleanup();
+  threadToastState.invocations.splice(0);
   vi.clearAllMocks();
 });
 
@@ -141,30 +220,17 @@ describe("ThreadActionsProvider", () => {
       expect(api.archiveThread).toHaveBeenCalledWith(thread.id);
     });
     expect(api.getThreadAssignedChildSummary).not.toHaveBeenCalled();
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(toast.success).toHaveBeenCalledWith(
-      "Archived thread",
-      expect.objectContaining({
-        action: expect.objectContaining({ label: "Undo" }),
-      }),
-    );
-    const successCall = vi.mocked(toast.success).mock.calls[0];
-    const options = successCall?.[1];
-    if (!options || !("action" in options) || !options.action) {
-      throw new Error("Expected archive success toast to include an action");
-    }
-    const action =
-      typeof options.action === "object" && "onClick" in options.action
-        ? options.action
-        : null;
-    if (!action) {
-      throw new Error("Expected archive success toast action object");
+    const successInvocation = requireLatestThreadToastInvocation();
+    expect(successInvocation.props.tone).toBe("success");
+    expect(successInvocation.props.title).toBe("Thread archived");
+    expect(successInvocation.props.cancel?.label).toBe("Undo");
+    const undo = successInvocation.props.cancel;
+    if (!undo) {
+      throw new Error("Expected archive success toast to include Undo.");
     }
 
     act(() => {
-      // Sonner types onClick as `(event: MouseEvent) => void`; pass a stub
-      // since the handler in production doesn't read the event.
-      action.onClick(new MouseEvent("click") as unknown as Parameters<typeof action.onClick>[0]);
+      undo.onClick();
     });
 
     await waitFor(() => {
@@ -268,8 +334,9 @@ describe("ThreadActionsProvider", () => {
     });
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalled();
+      expect(threadToastState.custom).toHaveBeenCalled();
     });
+    expect(requireLatestThreadToastInvocation().props.tone).toBe("error");
     expect(api.deleteThread).not.toHaveBeenCalled();
   });
 

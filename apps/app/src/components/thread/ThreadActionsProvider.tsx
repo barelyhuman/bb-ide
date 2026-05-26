@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { appToast } from "@/components/ui/app-toast";
 import type { Thread } from "@bb/domain";
 import {
   useArchiveThread,
@@ -164,10 +164,10 @@ export function ThreadActionsProvider({
       } catch (error) {
         if (signal.aborted) return null;
         if (shouldShowMutationErrorToast(error)) {
-          toast.error(
+          appToast.error(
             getMutationErrorMessage({
               error,
-              fallbackMessage: "Failed to check thread state.",
+              fallbackMessage: "Failed to check thread state",
             }),
           );
         }
@@ -245,10 +245,10 @@ export function ThreadActionsProvider({
   );
 
   const showArchiveError = useCallback((thread: Thread, error: Error) => {
-    toast.error(
+    appToast.error(
       getMutationErrorMessage({
         error,
-        fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}.`,
+        fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}`,
         lifecycleOperation: "archive_thread",
       }),
     );
@@ -261,8 +261,8 @@ export function ThreadActionsProvider({
         {
           onSuccess: () => {
             navigateAwayIfViewing(thread);
-            toast.success(`Archived ${threadTypeLabel(thread.type)}`, {
-              action: {
+            appToast.success("Thread archived", {
+              cancel: {
                 label: "Undo",
                 onClick: () => {
                   unarchiveMutate({ id: thread.id });
@@ -300,10 +300,10 @@ export function ThreadActionsProvider({
       if (getThreadReadToggleAction(thread) === "mark_unread") {
         markUnreadMutate(thread.id, {
           onError: (error) => {
-            toast.error(
+            appToast.error(
               getMutationErrorMessage({
                 error,
-                fallbackMessage: "Failed to mark thread unread.",
+                fallbackMessage: "Failed to mark thread unread",
               }),
             );
           },
@@ -312,10 +312,10 @@ export function ThreadActionsProvider({
       }
       markReadMutate(thread.id, {
         onError: (error) => {
-          toast.error(
+          appToast.error(
             getMutationErrorMessage({
               error,
-              fallbackMessage: "Failed to mark thread read.",
+              fallbackMessage: "Failed to mark thread read",
             }),
           );
         },
