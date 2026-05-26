@@ -138,6 +138,16 @@ describe("MarkdownPreview", () => {
     });
   });
 
+  it("renders external links as blank-target anchors for desktop handling", () => {
+    render(<MarkdownPreview content="[Docs](https://example.com/docs)" />);
+
+    const link = screen.getByRole("link", { name: "Docs" });
+
+    expect(link.getAttribute("href")).toBe("https://example.com/docs");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
   it("renders inline code and block code with copy affordance", () => {
     const writeText = installClipboardWriteTextMock();
     render(

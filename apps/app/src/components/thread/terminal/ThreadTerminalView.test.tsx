@@ -7,6 +7,7 @@ import { ThreadTerminalView } from "./ThreadTerminalView";
 
 type TerminalDataHandler = (data: string) => void;
 type TerminalTitleHandler = (title: string) => void;
+type TerminalWebLinkHandler = (event: MouseEvent, uri: string) => void;
 type TerminalWriteCallback = () => void;
 
 interface PendingAnimationFrame {
@@ -84,7 +85,17 @@ const xtermMocks = vi.hoisted(() => {
     }
   }
 
-  class MockWebLinksAddon {}
+  class MockWebLinksAddon {
+    static instances: MockWebLinksAddon[] = [];
+
+    constructor(readonly handler: TerminalWebLinkHandler) {
+      MockWebLinksAddon.instances.push(this);
+    }
+
+    open(event: MouseEvent, uri: string): void {
+      this.handler(event, uri);
+    }
+  }
 
   return {
     MockFitAddon,
@@ -239,6 +250,7 @@ function flushAnimationFrames(): void {
 beforeEach(() => {
   xtermMocks.MockTerminal.instances.length = 0;
   xtermMocks.MockFitAddon.instances.length = 0;
+  xtermMocks.MockWebLinksAddon.instances.length = 0;
   FakeResizeObserver.instances.length = 0;
   FakeTerminalWebSocket.instances.length = 0;
   nextAnimationFrameId = 1;
@@ -267,6 +279,37 @@ afterEach(() => {
 });
 
 describe("ThreadTerminalView", () => {
+  it("opens xterm web links with the target URL for desktop interception", async () => {
+    const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(
+      <ThreadTerminalView
+        isPanelOpen={true}
+        session={terminalSession}
+        threadId="thr_test"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(xtermMocks.MockWebLinksAddon.instances).toHaveLength(1);
+    });
+
+    const webLinksAddon = xtermMocks.MockWebLinksAddon.instances[0];
+    if (!webLinksAddon) {
+      throw new Error("Expected web links addon instance");
+    }
+
+    webLinksAddon.open(
+      new MouseEvent("mouseup"),
+      "https://example.com/docs?from=terminal",
+    );
+
+    expect(openWindow).toHaveBeenCalledWith(
+      "https://example.com/docs?from=terminal",
+      "_blank",
+      "noopener,noreferrer",
+    );
+  });
+
   it("sends xterm input to the terminal websocket", async () => {
     const onUserInput = vi.fn();
     render(

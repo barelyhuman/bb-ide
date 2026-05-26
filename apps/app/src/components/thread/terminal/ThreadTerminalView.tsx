@@ -11,6 +11,7 @@ const TERMINAL_FONT_FAMILY =
   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
 
 type TerminalFitScheduler = () => void;
+type TerminalWebLinkHandler = (event: MouseEvent, uri: string) => void;
 
 interface HasVisibleTerminalSizeArgs {
   containerElement: HTMLElement;
@@ -155,6 +156,10 @@ function writeTerminalStatus({ terminal, text }: WriteTerminalStatusArgs): void 
   terminal.write(`\r\n\x1b[2m${text}\x1b[0m\r\n`);
 }
 
+const openTerminalWebLink: TerminalWebLinkHandler = (_event, uri) => {
+  window.open(uri, "_blank", "noopener,noreferrer");
+};
+
 function writeTerminalOutput({
   isReplay,
   replayWriteState,
@@ -276,7 +281,7 @@ export function ThreadTerminalView({
       terminalRef.current = terminal;
       fitAddon = new LoadedFitAddon();
       terminal.loadAddon(fitAddon);
-      terminal.loadAddon(new WebLinksAddon());
+      terminal.loadAddon(new WebLinksAddon(openTerminalWebLink));
       terminal.open(containerElement);
       const fitTerminal = () => {
         if (!fitAddon || !terminal) {

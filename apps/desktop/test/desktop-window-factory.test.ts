@@ -289,4 +289,59 @@ describe("desktop window factory", () => {
     expect(new Set(stateKeys)).toEqual(new Set(["main", "window-concurrent"]));
     expect(new Set(stateKeys).size).toBe(2);
   });
+
+  it("opens renderer blank-target links externally and denies the popup", async () => {
+    const tempDir = await createTempDir();
+    const createdWindows: FakeDesktopWindow[] = [];
+    const openedExternalUrls: string[] = [];
+    const browserWindowCreator: DesktopBrowserWindowCreator = {
+      create(options) {
+        const browserWindow = new FakeDesktopWindow({ options });
+        createdWindows.push(browserWindow);
+        return browserWindow;
+      },
+    };
+    const factory = createDesktopWindowFactory({
+      browserWindowCreator,
+      createWindowStateKey() {
+        return "window-link-test";
+      },
+      displayWorkAreas: [
+        {
+          height: 900,
+          width: 1440,
+          x: 0,
+          y: 0,
+        },
+      ],
+      icon: undefined,
+      isQuitting() {
+        return false;
+      },
+      openExternalUrl({ url }) {
+        openedExternalUrls.push(url);
+      },
+      preloadPath: "/tmp/preload.cjs",
+      userDataPath: tempDir.path,
+    });
+
+    await factory.createWindow({
+      initialUrl: "http://127.0.0.1:38886",
+      stateKey: null,
+    });
+    const browserWindow = createdWindows[0];
+    if (!browserWindow) {
+      throw new Error("Expected desktop window");
+    }
+    const handler = browserWindow.webContents.windowOpenHandler;
+    if (!handler) {
+      throw new Error("Expected window open handler");
+    }
+
+    const result = handler({ url: "https://example.com/from-markdown" });
+
+    expect(createdWindows).toHaveLength(1);
+    expect(openedExternalUrls).toEqual(["https://example.com/from-markdown"]);
+    expect(result).toEqual({ action: "deny" });
+  });
 });
