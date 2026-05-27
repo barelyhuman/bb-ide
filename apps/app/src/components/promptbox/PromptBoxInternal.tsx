@@ -362,6 +362,19 @@ export function PromptBoxInternal({
     if (fromHeight === null || !formElement) return;
     heightAnimationFromRef.current = null;
 
+    // Size the textarea for the new mode before measuring the form's target
+    // height. Otherwise the textarea is still at min-height when we measure,
+    // toHeight undershoots, and the textarea visually overflows the form
+    // bounds once the post-paint resize grows it past the target height.
+    const textarea = textareaRef.current;
+    if (textarea) {
+      if (isZenMode) {
+        textarea.style.height = "100%";
+      } else {
+        resizeTextarea(textarea);
+      }
+    }
+
     const previousTransition = formElement.style.transition;
     const previousWillChange = formElement.style.willChange;
 
@@ -393,7 +406,7 @@ export function PromptBoxInternal({
     formElement.addEventListener("transitionend", handleTransitionEnd);
 
     return cleanup;
-  }, [isZenMode, zenModeLayout]);
+  }, [isZenMode, resizeTextarea, zenModeLayout]);
 
   const syncMentionState = useCallback(
     (textarea: HTMLTextAreaElement) => {
