@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appToast } from "@/components/ui/app-toast";
+import { AppToastCommandDescription } from "@/components/ui/app-toast-descriptions";
 import type {
   ProviderCliInstallEvent,
   ProviderCliInstallAction,
@@ -316,7 +317,7 @@ export function ProviderCliHealthToasts() {
 
       appToast.loading(getProviderCliTitle({ issue, phase: "progress" }), {
         id: runToastId,
-        description: action.command,
+        description: <AppToastCommandDescription command={action.command} />,
       });
 
       void installProviderCli({
@@ -336,7 +337,9 @@ export function ProviderCliHealthToasts() {
                 getProviderCliTitle({ issue, phase: "progress" }),
                 {
                   id: runToastId,
-                  description: event.command,
+                  description: (
+                    <AppToastCommandDescription command={event.command} />
+                  ),
                 },
               );
               break;

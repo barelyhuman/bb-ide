@@ -492,6 +492,12 @@ describe("ProviderCliHealthToasts", () => {
 
     const loadingToast = renderLatestToast();
     expect(loadingToast.options.id).toBe(CODEX_RUN_TOAST_ID);
+    expect(loadingToast.view.container.querySelector(".animate-shine")).toBe(
+      null,
+    );
+    expect(loadingToast.view.container.textContent).toContain(
+      `Running ${CODEX_UPDATE_COMMAND}`,
+    );
     expect(providerCliToastState.activeToasts.has(CODEX_TOAST_ID)).toBe(false);
 
     await waitForLatestToastText({ text: "Codex is up to date" });

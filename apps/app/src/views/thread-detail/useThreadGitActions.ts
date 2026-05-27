@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from "react";
+import { createElement, useCallback, useMemo, type ReactNode } from "react";
 import { appToast } from "@/components/ui/app-toast";
+import { AppToastCommitDescription } from "@/components/ui/app-toast-descriptions";
 import type {
   Environment,
   PromptInput,
@@ -29,11 +30,6 @@ import type {
 interface BuildAskAgentInputForGitOperationParams {
   error: unknown;
   mergeBaseBranch?: string;
-}
-
-interface FormatGitActionDescriptionParams {
-  commitSha: string;
-  commitSubject: string;
 }
 
 interface GitActionFailure {
@@ -92,8 +88,6 @@ interface ThreadHeaderGitAction {
 type GitActionSuccessResponse =
   | CommitActionResponse
   | SquashMergeActionResponse;
-
-const GIT_SHA_DETAIL_LENGTH = 7;
 
 function toEnvironmentActionFailureDetails(
   error: unknown,
@@ -242,11 +236,13 @@ function getGitActionErrorTitle(action: GitActionKind): string {
   }
 }
 
-function formatGitActionDescription({
-  commitSha,
-  commitSubject,
-}: FormatGitActionDescriptionParams): string {
-  return `${commitSha.slice(0, GIT_SHA_DETAIL_LENGTH)} · ${commitSubject}`;
+function renderGitActionDescription(
+  response: GitActionSuccessResponse,
+): ReactNode {
+  return createElement(AppToastCommitDescription, {
+    commitSha: response.commitSha,
+    commitSubject: response.commitSubject,
+  });
 }
 
 function showGitActionSuccessToast({
@@ -255,10 +251,7 @@ function showGitActionSuccessToast({
 }: ShowGitActionSuccessToastParams): void {
   appToast.success(getGitActionSuccessTitle(response.action), {
     id: toastId,
-    description: formatGitActionDescription({
-      commitSha: response.commitSha,
-      commitSubject: response.commitSubject,
-    }),
+    description: renderGitActionDescription(response),
   });
 }
 

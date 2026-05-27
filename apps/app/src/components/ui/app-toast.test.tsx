@@ -6,11 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppToastContent, appToast } from "./app-toast";
 
 interface SonnerCustomOptions {
+  className?: string;
   duration?: number;
   id?: string | number;
 }
 
 interface CapturedToastOptions {
+  className?: string;
   duration?: number;
   id: string;
 }
@@ -36,6 +38,7 @@ const sonnerToastState = vi.hoisted(() => {
         const toast = {
           options: {
             id,
+            ...(options?.className ? { className: options.className } : {}),
             ...(typeof options?.duration === "number"
               ? { duration: options.duration }
               : {}),
@@ -72,6 +75,14 @@ describe("appToast", () => {
     expect(toastId).toBe("toast-1");
     expect(sonnerToastState.custom).toHaveBeenCalledTimes(1);
     expect(sonnerToastState.invocations[0]?.options.duration).toBe(Infinity);
+  });
+
+  it("marks custom toast containers for stack clipping", () => {
+    appToast.success("Commit created", { className: "custom-toast-class" });
+
+    expect(sonnerToastState.invocations[0]?.options.className).toBe(
+      "bb-app-toast custom-toast-class",
+    );
   });
 });
 

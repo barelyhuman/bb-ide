@@ -186,6 +186,7 @@ function showAppToast({
   const {
     action,
     cancel,
+    className,
     description,
     duration,
     ...sonnerOptions
@@ -206,6 +207,7 @@ function showAppToast({
     ),
     {
       ...sonnerOptions,
+      className: cn("bb-app-toast", className),
       duration: nextDuration,
     },
   );

@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, renderHook } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import type { Thread } from "@bb/domain";
-import type { CommitActionResponse } from "@bb/server-contract";
+import type {
+  CommitActionResponse,
+  EnvironmentActionResponse,
+  SquashMergeActionResponse,
+} from "@bb/server-contract";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -29,6 +40,8 @@ interface SonnerCustomToast {
   options: CapturedToastOptions;
   renderToast: (id: string | number) => ReactElement;
 }
+
+type ClipboardWriteText = (text: string) => Promise<void>;
 
 const sonnerToastState = vi.hoisted(() => {
   const invocations: SonnerCustomToast[] = [];
@@ -86,7 +99,7 @@ function makeThread(): Thread {
 }
 
 function makeRequestEnvironmentAction(
-  response: CommitActionResponse,
+  response: EnvironmentActionResponse,
 ): RequestEnvironmentActionMutationLike {
   return {
     isPending: false,
@@ -111,6 +124,18 @@ function readToastProps(index: number): CapturedToastProps {
     throw new Error("Expected app toast content element.");
   }
   return element.props;
+}
+
+function installClipboardWriteTextMock(): ReturnType<
+  typeof vi.fn<ClipboardWriteText>
+> {
+  const writeText = vi.fn<ClipboardWriteText>();
+  writeText.mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
 }
 
 afterEach(() => {
@@ -156,6 +181,7 @@ describe("useThreadGitActions", () => {
   });
 
   it("uses the intended loading and success copy for commit actions", async () => {
+    const writeText = installClipboardWriteTextMock();
     const response: CommitActionResponse = {
       ok: true,
       action: "commit",
@@ -182,10 +208,60 @@ describe("useThreadGitActions", () => {
       title: "Creating commit",
     });
     expect(readToastProps(1)).toMatchObject({
-      description: "abcdef1 · Update toast copy",
       tone: "success",
       title: "Commit created",
     });
     expect(sonnerToastState.invocations[1]?.options.id).toBe("toast-1");
+
+    render(<>{readToastProps(1).description}</>);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy commit SHA abcdef1" }),
+    );
+
+    expect(writeText).toHaveBeenCalledWith("abcdef1234567890");
+  });
+
+  it("uses the intended loading and success copy for squash merge actions", async () => {
+    const writeText = installClipboardWriteTextMock();
+    const response: SquashMergeActionResponse = {
+      ok: true,
+      action: "squash_merge",
+      merged: true,
+      message: "Squash merged",
+      commitSha: "1234567890abcdef",
+      commitSubject: "Squash branch changes",
+    };
+    const requestEnvironmentAction = makeRequestEnvironmentAction(response);
+    const sendMessage = makeSendMessage();
+    const { result } = renderHook(() =>
+      useThreadGitActions({
+        requestEnvironmentAction,
+        sendMessage,
+        thread: makeThread(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleSquashMergeThread({
+        mergeBaseBranch: "main",
+      });
+    });
+
+    expect(readToastProps(0)).toMatchObject({
+      tone: "loading",
+      title: "Squash merging",
+    });
+    expect(readToastProps(1)).toMatchObject({
+      tone: "success",
+      title: "Squash merge completed",
+    });
+    expect(sonnerToastState.invocations[1]?.options.id).toBe("toast-1");
+
+    render(<>{readToastProps(1).description}</>);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy commit SHA 1234567" }),
+    );
+
+    expect(writeText).toHaveBeenCalledWith("1234567890abcdef");
   });
 });
