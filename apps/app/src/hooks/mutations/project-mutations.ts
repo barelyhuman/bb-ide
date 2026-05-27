@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  PromptInput,
   ReasoningLevel,
   ThreadListEntry,
   ThreadWithRuntime,
@@ -54,11 +55,12 @@ export interface HireProjectManagerRequest {
   reasoningLevel?: ReasoningLevel;
   templateName?: string;
   environment: ManagerEnvironmentArgs;
+  /** Optional user-provided first message; when empty the server uses
+   * its welcome-message template instead. */
+  input?: PromptInput[];
 }
 
-export const HIRE_PROJECT_MANAGER_MUTATION_KEY = [
-  "hireProjectManager",
-] as const;
+const HIRE_PROJECT_MANAGER_MUTATION_KEY = ["hireProjectManager"] as const;
 
 interface UpdateProjectMutationRequest extends UpdateProjectRequest {
   id: string;
@@ -206,6 +208,7 @@ export function useHireProjectManager() {
       reasoningLevel,
       templateName,
       environment,
+      input,
     }: HireProjectManagerRequest) =>
       api.hireProjectManager(projectId, {
         name,
@@ -214,6 +217,7 @@ export function useHireProjectManager() {
         ...(reasoningLevel ? { reasoningLevel } : {}),
         ...(templateName ? { templateName } : {}),
         environment,
+        ...(input && input.length > 0 ? { input } : {}),
       }),
     onSuccess: (thread) => {
       queryClient.setQueryData<ThreadWithRuntime>(

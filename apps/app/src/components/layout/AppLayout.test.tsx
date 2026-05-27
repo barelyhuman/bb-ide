@@ -17,7 +17,6 @@ import type {
   SystemConfigResponse,
 } from "@bb/server-contract";
 import { afterEach, describe, expect, it } from "vitest";
-import { NewManagerDialogProvider } from "@/hooks/useNewManagerDialog";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
@@ -100,9 +99,7 @@ async function renderAppLayout(args: RenderAppLayoutArgs): Promise<void> {
       <QueryClientTestWrapper>
         <MemoryRouter initialEntries={[args.initialEntry]}>
           <Suspense fallback={null}>
-            <QuickCreateProjectProvider>
-              <NewManagerDialogProvider>{children}</NewManagerDialogProvider>
-            </QuickCreateProjectProvider>
+            <QuickCreateProjectProvider>{children}</QuickCreateProjectProvider>
           </Suspense>
         </MemoryRouter>
       </QueryClientTestWrapper>

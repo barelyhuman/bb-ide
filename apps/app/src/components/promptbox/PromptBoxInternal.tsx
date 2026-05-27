@@ -63,6 +63,11 @@ export interface PromptBoxSubmissionConfig {
   isRunning?: boolean;
   onStop?: () => void;
   onModifierSubmit?: () => void;
+  /** When true, the submit button is enabled even when the textarea is
+   * empty and no attachments are present. Used by callers (e.g. the
+   * new-manager flow) where empty submission has a meaningful fallback
+   * server-side. */
+  allowEmptyInput?: boolean;
 }
 
 export interface MentionsConfig {
@@ -212,6 +217,7 @@ export function PromptBoxInternal({
     isRunning = false,
     onStop,
     onModifierSubmit,
+    allowEmptyInput = false,
   } = submission;
   const {
     suggestions: mentionSuggestions,
@@ -613,7 +619,10 @@ export function PromptBoxInternal({
     voice?.state === "error" ? voice.errorMessage ?? "Voice input failed." : null;
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
   const canSubmit =
-    hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy;
+    (hasSubmittableInput || allowEmptyInput) &&
+    !isSubmitting &&
+    !submitDisabled &&
+    !isVoiceBusy;
   const canModifierSubmit =
     onModifierSubmit !== undefined &&
     !isSubmitting &&
@@ -887,7 +896,10 @@ export function PromptBoxInternal({
       }}
       className={cn(
         "relative w-full rounded-lg border border-border bg-background pb-2",
-        isZenMode && "flex flex-col pb-3",
+        // Zen toggles only the *height* of the box; the inset padding stays
+        // identical so the placeholder/text doesn't jump when toggling.
+        // `flex flex-col` lets the textarea's `flex-1` fill the dvh height.
+        isZenMode && "flex flex-col",
         isZenMode && ZEN_MODE_HEIGHT_CLASS[zenModeLayout],
         className,
       )}
@@ -905,9 +917,7 @@ export function PromptBoxInternal({
         // shifts from px-4 to px-6 when entering zen). Right padding leaves
         // room for the zen-mode toggle button in the top-right corner. Zen
         // mode also gets more top room since the card fills the viewport.
-        <div className={cn("pr-14", isZenMode ? "pl-6 pt-6" : "pl-4 pt-3")}>
-          {header}
-        </div>
+        <div className="pl-4 pr-14 pt-3">{header}</div>
       ) : null}
       <div
         className={cn(
@@ -926,7 +936,10 @@ export function PromptBoxInternal({
           title={isZenMode ? "Exit zen mode" : "Enter zen mode"}
           aria-label={isZenMode ? "Exit zen mode" : "Enter zen mode"}
           aria-pressed={isZenMode}
-          className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-subtle-foreground hover:text-muted-foreground"
+          // Neutralise the ghost variant's `aria-pressed:bg-state-active`
+          // styling — the icon swap (Maximize2 ↔ Minimize2) is the only
+          // state cue we want for zen mode.
+          className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-subtle-foreground hover:text-muted-foreground aria-pressed:bg-transparent aria-pressed:text-subtle-foreground aria-pressed:hover:bg-transparent aria-pressed:hover:text-muted-foreground"
         >
           {isZenMode ? (
             <Icon name="Minimize2" className="size-3" />
@@ -985,12 +998,11 @@ export function PromptBoxInternal({
         className={cn(
           "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-subtle-foreground",
           COARSE_POINTER_TEXT_BASE_CLASS,
-          isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8",
-          // When a header sits above the textarea, its own padding already
-          // separates it from the top of the card — the zen-mode pt-8 would
-          // stack on top of that and push the placeholder visibly away from
-          // the header. Pull it back to the normal-mode top padding.
-          isZenMode && header ? "pt-3" : null,
+          // Zen mode only adds the flex-fill behavior so the textarea
+          // stretches to the dvh-sized form. Inset padding (px / pt / pb)
+          // is identical between modes — toggling shouldn't shift the
+          // placeholder position.
+          isZenMode && "min-h-0 flex-1",
         )}
         style={{
           minHeight: isZenMode ? "0px" : `${minHeight}px`,

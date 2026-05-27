@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import type { ThreadListEntry } from "@bb/domain";
-import { NewThreadPromptBox } from "@/components/promptbox/NewThreadPromptBox";
+import { findLocalPathProjectSourceForHost, type ThreadListEntry } from "@bb/domain";
 import {
+  NewThreadPromptBox,
+  type ThreadCreationMode,
+} from "@/components/promptbox/NewThreadPromptBox";
+import {
+  encodeHostValue,
   encodeReuseValue,
   parseEnvironmentValue,
 } from "@/components/pickers/environment-picker-value";
-import {
-  ProjectSelector,
-  type ProjectSelectorOption,
-} from "@/components/pickers/ProjectSelector";
+import type { ProjectSelectorOption } from "@/components/pickers/ProjectSelector";
 import type { ReuseThreadOption } from "@/components/pickers/WorktreePicker";
 import { Icon } from "@/components/ui/icon.js";
 import { PageShell } from "@/components/ui/page-shell.js";
-import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
+import {
+  useHireProjectManager,
+  useUploadPromptAttachment,
+} from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
 import {
   useProjectPromptHistory,
@@ -22,12 +26,15 @@ import {
   useSidebarBootstrap,
   stripProjectThreads,
 } from "@/hooks/queries/project-queries";
+import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
+import { useManagerTemplates } from "@/hooks/queries/system-queries";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import { useNewThreadModePreference } from "@/lib/new-thread-mode-preference";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
@@ -51,6 +58,14 @@ function readReuseEnvironmentIdFromLocationState(
     .reuseEnvironmentId;
   if (typeof candidate === "string" && candidate.length > 0) return candidate;
   return null;
+}
+
+function readModeFromLocationState(
+  state: unknown,
+): ThreadCreationMode | null {
+  if (!state || typeof state !== "object") return null;
+  const candidate = (state as { mode?: unknown }).mode;
+  return candidate === "manager" || candidate === "thread" ? candidate : null;
 }
 
 function isWorktreeWithEnv(thread: ThreadListEntry): boolean {
@@ -122,13 +137,35 @@ export function ProjectMainView() {
   );
   const projects = projectsQuery.data ?? sidebarBootstrapProjects;
   const createThread = useCreateThread();
-  const { localHostId } = useHostDaemon();
+  const hireProjectManager = useHireProjectManager();
+  const { isLocalHost, localHostId } = useHostDaemon();
+  const hostsQuery = useEffectiveHosts();
+  const hosts = useMemo(() => hostsQuery.data ?? [], [hostsQuery.data]);
+  const managerTemplatesQuery = useManagerTemplates();
+  const managerTemplates = useMemo(
+    () => managerTemplatesQuery.data?.templates ?? [],
+    [managerTemplatesQuery.data?.templates],
+  );
+  const managerTemplateActiveName =
+    managerTemplatesQuery.data?.activeName ?? null;
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const { data: projectPromptHistory = [] } =
     useProjectPromptHistory(projectId);
   const promptMentions = usePromptMentions(projectId, { environmentId: null });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  // Thread / manager mode for the header switcher above the prompt-box.
+  // Persisted across visits so the user lands on whichever mode they used
+  // last; the sidebar's "New Manager" affordance still seeds "manager" via
+  // router state below, which writes through the same setter.
+  const [mode, setModeRaw] = useNewThreadModePreference();
+  // Manager-mode selections. Held as raw user choices; the effective values
+  // resolved against the loaded hosts / templates are computed below so a
+  // stale selection (host disconnects, template removed) falls back to a
+  // safe default without an effect.
+  const [managerHostSelection, setManagerHostSelection] = useState<string>("");
+  const [managerTemplateSelection, setManagerTemplateSelection] =
+    useState<string>("");
   const prompt = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -173,17 +210,40 @@ export function ProjectMainView() {
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({ scope: "new-thread", projectId });
 
-  // Seed env picker from the sidebar "+" affordance's navigation state.
-  // Reuse intent is purely transient — `setEnvironmentSelectionValue`
-  // routes reuse values to session state inside the hook, never to
-  // localStorage. We then clear location.state so a later refresh starts
-  // from the user's host-mode default.
+  // All mode transitions go through this wrapper. Manager threads have no
+  // environment, so a reuse-env selection is invalid in manager mode —
+  // clear it at the transition rather than letting it survive (hidden) on
+  // the env atom. The discriminated union at the prop boundary stops
+  // invalid combinations from rendering; this clears the state so toggling
+  // back to thread doesn't resurface a stale reuse selection.
+  const setMode = useCallback(
+    (next: ThreadCreationMode) => {
+      setModeRaw(next);
+      if (next === "manager") {
+        clearReuseEnvironment();
+      }
+    },
+    [clearReuseEnvironment, setModeRaw],
+  );
+
+  // Seed transient picker state from the sidebar navigation's router state:
+  // `reuseEnvironmentId` (the "+" affordance on a worktree) seeds the env
+  // picker into reuse mode for that env, and `mode` (the sidebar's
+  // "New Manager" button) seeds the mode picker to "manager". Both are
+  // single-use — clear location.state after applying so a refresh starts
+  // from defaults.
   useEffect(() => {
     const reuseEnvironmentId = readReuseEnvironmentIdFromLocationState(
       location.state,
     );
-    if (reuseEnvironmentId === null) return;
-    setEnvironmentSelectionValue(encodeReuseValue(reuseEnvironmentId));
+    const seededMode = readModeFromLocationState(location.state);
+    if (reuseEnvironmentId === null && seededMode === null) return;
+    if (reuseEnvironmentId !== null) {
+      setEnvironmentSelectionValue(encodeReuseValue(reuseEnvironmentId));
+    }
+    if (seededMode !== null) {
+      setMode(seededMode);
+    }
     navigate(location.pathname + location.search, {
       replace: true,
       state: null,
@@ -194,6 +254,7 @@ export function ProjectMainView() {
     location.state,
     navigate,
     setEnvironmentSelectionValue,
+    setMode,
   ]);
 
   // Worktree picker options come from the project's unarchived threads.
@@ -217,6 +278,57 @@ export function ProjectMainView() {
     [currentProject?.sources],
   );
 
+  // Manager hosting: a host is eligible iff it's connected AND has a
+  // local-path source for the project. The hire flow uses the eligible
+  // selection (or a default) so the user can pick across hosts once we
+  // surface them.
+  const eligibleManagerHosts = useMemo(
+    () =>
+      hosts.filter(
+        (host) =>
+          host.status === "connected" &&
+          findLocalPathProjectSourceForHost(projectSources, host.id) !==
+            undefined,
+      ),
+    [hosts, projectSources],
+  );
+  const defaultManagerHostId = useMemo(() => {
+    const local = eligibleManagerHosts.find((host) => isLocalHost(host.id));
+    return local?.id ?? eligibleManagerHosts[0]?.id ?? "";
+  }, [eligibleManagerHosts, isLocalHost]);
+  const effectiveManagerHostId = useMemo(() => {
+    const isEligible = eligibleManagerHosts.some(
+      (host) => host.id === managerHostSelection,
+    );
+    return managerHostSelection && isEligible
+      ? managerHostSelection
+      : defaultManagerHostId;
+  }, [defaultManagerHostId, eligibleManagerHosts, managerHostSelection]);
+
+  const defaultManagerTemplateName = useMemo(() => {
+    if (
+      managerTemplateActiveName !== null &&
+      managerTemplates.some(
+        (template) => template.name === managerTemplateActiveName,
+      )
+    ) {
+      return managerTemplateActiveName;
+    }
+    return managerTemplates[0]?.name ?? "";
+  }, [managerTemplateActiveName, managerTemplates]);
+  const effectiveManagerTemplateName = useMemo(() => {
+    const isKnown = managerTemplates.some(
+      (template) => template.name === managerTemplateSelection,
+    );
+    return managerTemplateSelection && isKnown
+      ? managerTemplateSelection
+      : defaultManagerTemplateName;
+  }, [
+    defaultManagerTemplateName,
+    managerTemplateSelection,
+    managerTemplates,
+  ]);
+
   // The hook returns reuse values from session-only state and sanitizes any
   // legacy reuse entries out of localStorage, so we can take its value
   // verbatim and fall back to the local-host default only when nothing's
@@ -229,7 +341,7 @@ export function ProjectMainView() {
       return environmentSelectionValue;
     }
     if (localHostId) {
-      return `host:${localHostId}:local`;
+      return encodeHostValue(localHostId, "local");
     }
     return "";
   }, [environmentSelectionValue, localHostId]);
@@ -375,18 +487,45 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    if (
-      submittedInput.length === 0 ||
-      createThread.isPending ||
-      !selectedEnvironment ||
-      !selectedProviderId ||
-      !selectedThreadModel ||
-      !projectId
-    ) {
+    if (!projectId || !selectedProviderId || !selectedThreadModel) {
       return;
     }
 
     setAttachmentError(null);
+
+    if (mode === "manager") {
+      // Managers don't require a prompt — submitting with empty text just
+      // falls back to the server's welcome-message template. Host comes
+      // from the manager-mode host picker; template comes from the
+      // template picker (only sent when non-empty so the server keeps its
+      // own default).
+      if (hireProjectManager.isPending || !effectiveManagerHostId) return;
+      try {
+        await hireProjectManager.mutateAsync({
+          projectId,
+          providerId: selectedProviderId,
+          model: selectedThreadModel,
+          reasoningLevel,
+          environment: { type: "host", hostId: effectiveManagerHostId },
+          ...(effectiveManagerTemplateName
+            ? { templateName: effectiveManagerTemplateName }
+            : {}),
+          ...(submittedInput.length > 0 ? { input: submittedInput } : {}),
+        });
+        promptDraft.clearIfCurrentMatches(submittedDraft);
+      } catch {
+        // Global mutation error handling already surfaced the failure.
+      }
+      return;
+    }
+
+    if (
+      submittedInput.length === 0 ||
+      createThread.isPending ||
+      !selectedEnvironment
+    ) {
+      return;
+    }
 
     try {
       await createThread.mutateAsync({
@@ -405,6 +544,10 @@ export function ProjectMainView() {
     }
   }, [
     createThread,
+    effectiveManagerHostId,
+    effectiveManagerTemplateName,
+    hireProjectManager,
+    mode,
     permissionMode,
     projectId,
     promptDraft,
@@ -416,15 +559,21 @@ export function ProjectMainView() {
     supportsServiceTier,
   ]);
 
+  // Manager-mode submission relaxes the prompt-required and env-resolution
+  // checks (managers don't take a prompt or a worktree-shaped env). Both
+  // modes still require provider + model and a project; manager mode also
+  // needs an eligible host resolved.
   const isSubmitDisabled =
-    createThread.isPending ||
-    promptInput.length === 0 ||
-    !selectedEnvironment ||
     !selectedProviderId ||
     !selectedThreadModel ||
-    (branchEnvironmentMode === "local" &&
-      selectedBranch !== null &&
-      branchUiState.mutationBlocker !== null);
+    (mode === "manager"
+      ? hireProjectManager.isPending || !effectiveManagerHostId
+      : createThread.isPending ||
+        promptInput.length === 0 ||
+        !selectedEnvironment ||
+        (branchEnvironmentMode === "local" &&
+          selectedBranch !== null &&
+          branchUiState.mutationBlocker !== null));
 
   const currentPromptDraft = useMemo(
     () => ({
@@ -606,22 +755,31 @@ export function ProjectMainView() {
   const reuseHeader = useMemo(() => {
     if (parsedEnvironment?.type !== "reuse") return null;
     return (
-      <div className="flex items-center gap-2 text-sm">
-        <Icon name="GitBranch" className="size-4 shrink-0 text-primary" />
-        <span className="flex min-w-0 items-center gap-1">
-          <span className="font-medium text-foreground">
-            Reusing existing worktree
+      <div className="flex">
+        {/* `-ml-1.5` shifts the pill 6px left so its GitBranch icon column
+            lines up with the mode-selector icon above the card (mode
+            selector has `px-1` on its trigger; the pill has `px-2.5`). */}
+        <button
+          type="button"
+          onClick={clearReuseEnvironment}
+          title="Stop reusing and start a regular new thread"
+          aria-label="Stop reusing worktree"
+          className="group -ml-1.5 inline-flex h-7 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+        >
+          <span className="relative inline-flex size-3.5 shrink-0 items-center justify-center">
+            <Icon
+              name="GitBranch"
+              className="size-3.5 transition-opacity group-hover:opacity-0"
+              aria-hidden
+            />
+            <Icon
+              name="X"
+              className="absolute size-3.5 opacity-0 transition-opacity group-hover:opacity-100"
+              aria-hidden
+            />
           </span>
-          <button
-            type="button"
-            onClick={clearReuseEnvironment}
-            title="Stop reusing and start a regular new thread"
-            aria-label="Stop reusing worktree"
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
-          >
-            <Icon name="X" className="size-3.5" />
-          </button>
-        </span>
+          Reusing existing worktree
+        </button>
       </div>
     );
   }, [clearReuseEnvironment, parsedEnvironment]);
@@ -662,40 +820,64 @@ export function ProjectMainView() {
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
-      <div className="space-y-1">
-        <div className="flex items-center px-3.5">
-          {projectId ? (
-            <div className="flex items-center gap-3">
-              <ProjectSelector
-                projects={projectOptions}
-                value={projectId}
-                onChange={(id) => {
-                  if (id !== null) handleProjectChange(id);
-                }}
-                className="h-8 text-sm"
-              />
-            </div>
-          ) : null}
-        </div>
-        <NewThreadPromptBox
-          id="project-main-prompt"
-          value={prompt}
-          onChange={promptDraft.setText}
-          onSubmit={submitPrompt}
-          isSubmitting={createThread.isPending}
-          disabled={isSubmitDisabled}
-          zenModeStorageKey={projectMainZenModeStorageKey}
-          history={historyConfig}
-          mentions={mentionsConfig}
-          attachments={attachmentsConfig}
-          execution={executionConfig}
-          environment={environmentConfig}
-          branch={branchConfig}
-          worktree={worktreeConfig}
-          permission={permissionConfig}
-          header={reuseHeader}
-        />
-      </div>
+      <NewThreadPromptBox
+        id="project-main-prompt"
+        value={prompt}
+        onChange={promptDraft.setText}
+        onSubmit={submitPrompt}
+        isSubmitting={
+          mode === "manager"
+            ? hireProjectManager.isPending
+            : createThread.isPending
+        }
+        disabled={isSubmitDisabled}
+        zenModeStorageKey={projectMainZenModeStorageKey}
+        history={historyConfig}
+        mentions={mentionsConfig}
+        attachments={attachmentsConfig}
+        modeConfig={
+          mode === "manager"
+            ? {
+                mode: "manager",
+                host: {
+                  hosts,
+                  eligibleHosts: eligibleManagerHosts,
+                  value: effectiveManagerHostId,
+                  onChange: setManagerHostSelection,
+                  isLocalHost,
+                },
+                ...(managerTemplates.length > 0
+                  ? {
+                      template: {
+                        templates: managerTemplates,
+                        value: effectiveManagerTemplateName,
+                        onChange: setManagerTemplateSelection,
+                      },
+                    }
+                  : {}),
+              }
+            : {
+                mode: "thread",
+                environment: environmentConfig,
+                branch: branchConfig,
+                worktree: worktreeConfig,
+                permission: permissionConfig,
+                header: reuseHeader,
+              }
+        }
+        onModeChange={setMode}
+        // Project picker is rendered INSIDE the prompt box's strip below
+        // the card. Switching projects routes through the same handler
+        // (navigate to /projects/:id).
+        project={{
+          projects: projectOptions,
+          value: projectId ?? null,
+          onChange: (id) => {
+            if (id !== null) handleProjectChange(id);
+          },
+        }}
+        execution={executionConfig}
+      />
     </PageShell>
   );
 }

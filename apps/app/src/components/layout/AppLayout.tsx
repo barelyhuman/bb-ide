@@ -1,6 +1,5 @@
 import { Fragment, type CSSProperties, type Ref, type ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useIsMutating } from "@tanstack/react-query";
 import { useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { Link, useLocation } from "react-router-dom";
@@ -14,7 +13,6 @@ import {
 } from "@/components/ui/sidebar.js";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
-import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mutations";
 import {
   useProjects,
   useSidebarBootstrap,
@@ -28,7 +26,6 @@ import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
-import { NewManagerDialog } from "@/components/dialogs/NewManagerDialog";
 import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
@@ -42,7 +39,6 @@ import {
   MACOS_WINDOW_NO_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
-import { useNewManagerDialog } from "@/hooks/useNewManagerDialog";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 
@@ -185,7 +181,6 @@ interface AppHeaderProps {
   isSettingsView: boolean;
   projectId?: string;
   project?: ProjectResponse;
-  onHireManager?: (projectId: string) => void;
   meta: {
     title: string;
     subtitle?: string;
@@ -200,7 +195,6 @@ function AppHeader({
   isSettingsView,
   projectId,
   project,
-  onHireManager,
   meta,
 }: AppHeaderProps) {
   const headerBreadcrumbs = meta.breadcrumbs;
@@ -266,22 +260,6 @@ function AppHeader({
   const actions =
     usesProjectChromeStyle && projectId ? (
       <>
-        {onHireManager ? (
-          <button
-            type="button"
-            className={cn(
-              HEADER_ICON_BUTTON_CLASS,
-              "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
-            )}
-            aria-label="Hire manager"
-            title="Hire manager"
-            onClick={() => {
-              onHireManager(projectId);
-            }}
-          >
-            <Icon name="UserRoundPlus" />
-          </button>
-        ) : null}
         <Link
           to={`/projects/${projectId}/settings`}
           className={cn(
@@ -336,7 +314,6 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const quickCreateProject = useQuickCreateProjectController();
-  const newManagerDialog = useNewManagerDialog();
   const location = useLocation();
   const {
     projectId,
@@ -373,9 +350,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   });
   const hasThreadDetailBootstrapSettled =
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
-  const activeHireManagerRequests = useIsMutating({
-    mutationKey: HIRE_PROJECT_MANAGER_MUTATION_KEY,
-  });
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const providerRef = useRef<HTMLDivElement>(null);
@@ -533,7 +507,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (typeof document === "undefined") return;
     document.title = documentTitle;
   }, [documentTitle]);
-  const isManagerActionPending = activeHireManagerRequests > 0;
 
   return (
     <ProjectActionsProvider>
@@ -546,7 +519,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             onResizeMouseDown={handleResizeMouseDown}
             isResizing={isSidebarResizing}
             selectedProjectId={activeProjectId}
-            isManagerActionPending={isManagerActionPending}
             showInlineTrigger={true}
           />
           <SidebarInset>
@@ -565,7 +537,6 @@ export function AppLayout({ children }: AppLayoutProps) {
                   isSettingsView={isSettingsView}
                   projectId={projectId}
                   project={project}
-                  onHireManager={newManagerDialog.open}
                   meta={meta}
                 />
               ) : null}
@@ -583,7 +554,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
           onSubmit={quickCreateProject.submitProjectPath}
         />
-        <NewManagerDialog />
       </ThreadActionsProvider>
     </ProjectActionsProvider>
   );

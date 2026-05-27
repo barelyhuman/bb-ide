@@ -122,7 +122,6 @@ export interface ProjectListActionButtonsProps {
   onNewChat?: () => void;
   onNewManager?: (projectId: string) => void;
   selectedProjectId?: string;
-  isManagerActionPending: boolean;
 }
 
 interface ProjectListSectionLabelProps {
@@ -392,20 +391,16 @@ export function ProjectListActionButtons({
   onNewChat,
   onNewManager,
   selectedProjectId,
-  isManagerActionPending,
 }: ProjectListActionButtonsProps) {
   const isNewChatDisabled = !onNewChat;
-  const isNewManagerDisabled =
-    !onNewManager || !selectedProjectId || isManagerActionPending;
+  const isNewManagerDisabled = !onNewManager || !selectedProjectId;
   const newChatTitle = isNewChatDisabled
     ? "Select a project to start a new thread"
-    : "New Thread";
+    : "New thread";
   const newManagerTitle =
     !onNewManager || !selectedProjectId
       ? "Select a project to hire a new manager"
-      : isManagerActionPending
-        ? "Hiring manager..."
-        : "New Manager";
+      : "New manager";
 
   return (
     <div className="space-y-1">
@@ -419,7 +414,7 @@ export function ProjectListActionButtons({
         title={newChatTitle}
       >
         <Icon name="MessageSquarePlus" />
-        <span className="min-w-0 flex-1 truncate text-left">New Thread</span>
+        <span className="min-w-0 flex-1 truncate text-left">New thread</span>
         <span
           className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
           aria-hidden="true"
@@ -438,7 +433,7 @@ export function ProjectListActionButtons({
         title={newManagerTitle}
       >
         <Icon name="UserRoundPlus" />
-        <span className="min-w-0 flex-1 truncate text-left">New Manager</span>
+        <span className="min-w-0 flex-1 truncate text-left">New manager</span>
         <span
           className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
           aria-hidden="true"

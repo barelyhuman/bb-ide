@@ -1,18 +1,26 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { PermissionMode } from "@bb/domain";
+import type { ManagerTemplateSummary } from "@bb/server-contract";
 import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
+  type NewThreadManagerHostConfig,
+  type NewThreadModeConfig,
+  type NewThreadProjectConfig,
+  type NewThreadTemplateConfig,
   type NewThreadWorktreeConfig,
+  type ThreadCreationMode,
 } from "@/components/promptbox/NewThreadPromptBox";
 import type { HistoryConfig } from "@/components/promptbox/PromptBoxInternal";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
   HOST_IDS,
+  PROJECT_IDS,
   STORY_BRANCH_OPTIONS,
   STORY_HOSTS,
+  STORY_PROJECTS,
   STORY_PROJECT_SOURCES,
   STORY_WORKTREE_OPTIONS,
   makeAttachmentsConfig as makeAttachments,
@@ -58,6 +66,32 @@ const baseWorktree: NewThreadWorktreeConfig = {
   onChange: noop,
 };
 
+const baseProject: NewThreadProjectConfig = {
+  projects: STORY_PROJECTS,
+  value: PROJECT_IDS.bb,
+  onChange: noop,
+};
+
+const baseManagerTemplates: readonly ManagerTemplateSummary[] = [
+  { name: "default", isActive: true },
+  { name: "code-reviewer", isActive: false },
+  { name: "release-captain", isActive: false },
+];
+
+const baseTemplate: NewThreadTemplateConfig = {
+  templates: baseManagerTemplates,
+  value: "default",
+  onChange: noop,
+};
+
+const baseManagerHost: NewThreadManagerHostConfig = {
+  hosts: STORY_HOSTS,
+  eligibleHosts: STORY_HOSTS,
+  value: HOST_IDS.local,
+  onChange: noop,
+  isLocalHost: storyIsLocalHost,
+};
+
 const permissionModeOptions: readonly PickerOption<PermissionMode>[] = [
   { value: "full", label: "Full Access", tone: "warning" },
   { value: "workspace-write", label: "Workspace Write" },
@@ -85,6 +119,29 @@ function useControlledValue(initial: string) {
   return { value, onChange: setValue };
 }
 
+interface ControlledMode {
+  modeConfig: NewThreadModeConfig;
+  onModeChange: (next: ThreadCreationMode) => void;
+}
+
+function useControlledMode(initial: ThreadCreationMode = "thread"): ControlledMode {
+  const [current, setCurrent] = useState<ThreadCreationMode>(initial);
+  const modeConfig = useMemo<NewThreadModeConfig>(
+    () =>
+      current === "manager"
+        ? { mode: "manager", host: baseManagerHost, template: baseTemplate }
+        : {
+            mode: "thread",
+            environment: baseEnvironment,
+            branch: baseBranch,
+            worktree: baseWorktree,
+            permission: basePermission,
+          },
+    [current],
+  );
+  return { modeConfig, onModeChange: setCurrent };
+}
+
 // Match production: ProjectMainView wraps the prompt area in PageShell which
 // caps content at 760px. Without this constraint the env-permission strip's
 // justify-between drifts the permission picker far to the right.
@@ -97,6 +154,7 @@ function PromptStage({ children }: PromptStageProps) {
 }
 
 function DefaultRow() {
+  const { modeConfig, onModeChange } = useControlledMode();
   const { value, onChange } = useControlledValue("");
   return (
     <PromptStage>
@@ -111,17 +169,17 @@ function DefaultRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
+        modeConfig={modeConfig}
+        onModeChange={onModeChange}
+        project={baseProject}
         execution={baseExecution}
-        environment={baseEnvironment}
-        branch={baseBranch}
-        worktree={baseWorktree}
-        permission={basePermission}
       />
     </PromptStage>
   );
 }
 
 function SubmittingRow() {
+  const { modeConfig, onModeChange } = useControlledMode();
   const { value, onChange } = useControlledValue(
     "Investigate the timeline pagination flicker.",
   );
@@ -138,17 +196,17 @@ function SubmittingRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
+        modeConfig={modeConfig}
+        onModeChange={onModeChange}
+        project={baseProject}
         execution={baseExecution}
-        environment={baseEnvironment}
-        branch={baseBranch}
-        worktree={baseWorktree}
-        permission={basePermission}
       />
     </PromptStage>
   );
 }
 
 function ClaudeProviderRow() {
+  const { modeConfig, onModeChange } = useControlledMode();
   const { value, onChange } = useControlledValue("");
   return (
     <PromptStage>
@@ -163,6 +221,9 @@ function ClaudeProviderRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
+        modeConfig={modeConfig}
+        onModeChange={onModeChange}
+        project={baseProject}
         execution={{
           ...baseExecution,
           provider: { ...baseExecution.provider, selectedId: "claude-code" },
@@ -178,17 +239,24 @@ function ClaudeProviderRow() {
           },
           serviceTier: { ...baseExecution.serviceTier!, supported: false },
         }}
-        environment={baseEnvironment}
-        branch={baseBranch}
-        worktree={baseWorktree}
-        permission={basePermission}
       />
     </PromptStage>
   );
 }
 
 function FullAccessRow() {
+  const [current, setCurrent] = useState<ThreadCreationMode>("thread");
   const { value, onChange } = useControlledValue("");
+  const modeConfig: NewThreadModeConfig =
+    current === "manager"
+      ? { mode: "manager", host: baseManagerHost, template: baseTemplate }
+      : {
+          mode: "thread",
+          environment: baseEnvironment,
+          branch: baseBranch,
+          worktree: baseWorktree,
+          permission: { ...basePermission, value: "full" },
+        };
   return (
     <PromptStage>
       <NewThreadPromptBoxUI
@@ -202,11 +270,10 @@ function FullAccessRow() {
         history={baseHistory}
         mentions={makeMentions()}
         attachments={makeAttachments()}
+        modeConfig={modeConfig}
+        onModeChange={setCurrent}
+        project={baseProject}
         execution={baseExecution}
-        environment={baseEnvironment}
-        branch={baseBranch}
-        worktree={baseWorktree}
-        permission={{ ...basePermission, value: "full" }}
       />
     </PromptStage>
   );

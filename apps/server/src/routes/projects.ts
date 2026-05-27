@@ -62,7 +62,7 @@ import {
   requirePublicStandardProject,
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
-import { PROMPT_HISTORY_ENTRY_LIMIT } from "@bb/domain";
+import { PROMPT_HISTORY_ENTRY_LIMIT, type PromptInput } from "@bb/domain";
 import { createThreadFromRequest } from "../services/threads/thread-create.js";
 import {
   toThreadListEntryResponses,
@@ -179,6 +179,26 @@ function assertManagerThreadOrderResult(
         "Manager thread order is invalid",
       );
   }
+}
+
+/**
+ * True when the caller-supplied input has any content the manager should act
+ * on: any non-text part (image, local file), or at least one text part with
+ * non-whitespace content. Used by the manager-hire route to decide between
+ * the quick-start preamble path and the welcome-fallback path — a
+ * whitespace-only text input has the same semantic meaning as no input at
+ * all, so it should fall back to the welcome rather than emit an empty
+ * timeline message preceded by an agent-only preamble.
+ */
+function managerHireInputHasMeaningfulContent(
+  input: readonly PromptInput[],
+): boolean {
+  return input.some((part) => {
+    if (part.type === "text") {
+      return part.text.trim().length > 0;
+    }
+    return true;
+  });
 }
 
 function parseProjectListIncludes(
@@ -754,7 +774,35 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
             : `Manager ${existingManagers.length + 1}`;
       }
 
-      const welcomeMessage = renderTemplate("systemMessageManagerWelcome", {});
+      // When the user provided instructions at hire time, prepend an
+      // agent-only quick-start preamble so the manager knows to skip the
+      // welcome ceremony (no scope / landing-mode / identity questions)
+      // and act on the user's message directly. The preamble is hidden
+      // from the timeline; the user's input renders as the first turn.
+      // Without instructions — or with input that only contains
+      // whitespace-only text — we fall back to the welcome template so
+      // the manager still bootstraps preferences and asks the ceremony
+      // questions on its own, and so the timeline doesn't show an empty
+      // user message preceded by an invisible preamble.
+      const quickStartUserInput =
+        payload.input && managerHireInputHasMeaningfulContent(payload.input)
+          ? payload.input
+          : null;
+      const firstMessage = quickStartUserInput
+        ? [
+            {
+              type: "text" as const,
+              text: renderTemplate("systemMessageManagerQuickStart", {}),
+              visibility: "agent-only" as const,
+            },
+            ...quickStartUserInput,
+          ]
+        : [
+            {
+              type: "text" as const,
+              text: renderTemplate("systemMessageManagerWelcome", {}),
+            },
+          ];
 
       const thread = await createThreadFromRequest(deps, {
         automationId: null,
@@ -764,7 +812,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         providerId: payload.providerId,
         type: "manager",
         title,
-        input: [{ type: "text", text: welcomeMessage }],
+        input: firstMessage,
         ...(payload.model ? { model: payload.model } : {}),
         ...(payload.serviceTier ? { serviceTier: payload.serviceTier } : {}),
         ...(payload.reasoningLevel

@@ -674,6 +674,15 @@ export const createManagerThreadRequestSchema = z.object({
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
   environment: managerEnvironmentArgsSchema,
+  /**
+   * Optional user-provided first message. When present and contains
+   * meaningful content (any non-text part, or text with non-whitespace
+   * content), replaces the default `systemMessageManagerWelcome` template
+   * as the manager's first message. Omit to use the welcome-message
+   * fallback — the schema rejects empty arrays. Whitespace-only text
+   * input is also treated as no-input at the route boundary.
+   */
+  input: z.array(promptInputSchema).min(1).optional(),
 });
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema

@@ -644,7 +644,6 @@ export function Full() {
               onNewChat={noop}
               onNewManager={noop}
               selectedProjectId="proj_full_a"
-              isManagerActionPending={false}
             />
           </div>
           <ProjectListShell onNewProject={noop}>

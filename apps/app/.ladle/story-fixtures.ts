@@ -162,8 +162,8 @@ export const STORY_SERVICE_TIER_SUPPORT: Record<string, boolean> = {
 };
 
 // `AvailableModel`-shaped versions of the same catalog, for stories that go
-// through the real data path (e.g. NewManagerDialog feeds these into
-// `useThreadCreationOptions` rather than into the picker directly).
+// through the real data path (i.e. feed these into `useThreadCreationOptions`
+// rather than into the picker directly).
 const CODEX_EFFORTS: readonly ReasoningLevel[] = [
   "low",
   "medium",

@@ -4,7 +4,6 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { AuthCallbackView } from "./views/AuthCallbackView";
 import { MainView } from "./views/MainView";
 import { ProjectMainView } from "./views/ProjectMainView";
-import { NewManagerDialogProvider } from "./hooks/useNewManagerDialog";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { ProviderCliHealthToasts } from "./components/provider-cli/ProviderCliHealthToasts";
 import {
@@ -93,16 +92,14 @@ export function App() {
 
   return (
     <QuickCreateProjectProvider>
-      <NewManagerDialogProvider>
-        <ProviderCliHealthToasts />
-        <Routes>
-          <Route
-            path={AUTH_CALLBACK_ROUTE_PATH}
-            element={<AuthCallbackView />}
-          />
-          <Route path="*" element={<AppRoutes />} />
-        </Routes>
-      </NewManagerDialogProvider>
+      <ProviderCliHealthToasts />
+      <Routes>
+        <Route
+          path={AUTH_CALLBACK_ROUTE_PATH}
+          element={<AuthCallbackView />}
+        />
+        <Route path="*" element={<AppRoutes />} />
+      </Routes>
     </QuickCreateProjectProvider>
   );
 }

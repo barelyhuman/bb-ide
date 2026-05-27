@@ -13,6 +13,7 @@ import {
   getThread,
   hostDaemonCommands,
   markThreadDeleted,
+  promptHistoryEntries,
   threads,
   upsertThreadDynamicContextFileState,
 } from "@bb/db";
@@ -851,6 +852,217 @@ describe("public thread manager and ownership routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces the welcome template with a quick-start preamble + user input when input is provided", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-quick-start";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            providerId: "codex",
+            model: "gpt-5",
+            environment: { type: "host", hostId: host.id },
+            input: [{ type: "text", text: "Investigate the timeline flicker." }],
+          }),
+        },
+      );
+      await respondToNextManagerPreferencesRead({ harness });
+      const response = await responsePromise;
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      const startCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      if (startCommand.command.type !== "thread.start") {
+        throw new Error(`Expected thread.start, got ${startCommand.command.type}`);
+      }
+      // The preferences-snapshot system message isn't prepended when no
+      // PREFERENCES.md exists, so the quick-start preamble lands at index
+      // 0, the user's input at index 1.
+      expect(startCommand.command.input[0]).toEqual({
+        type: "text",
+        text: renderTemplate("systemMessageManagerQuickStart", {}),
+        visibility: "agent-only",
+      });
+      expect(startCommand.command.input[1]).toEqual({
+        type: "text",
+        text: "Investigate the timeline flicker.",
+      });
+      // The welcome template is NOT sent when the caller supplied input —
+      // the quick-start preamble replaces it.
+      expect(
+        startCommand.command.input.some(
+          (entry) =>
+            entry.type === "text" &&
+            entry.text === renderTemplate("systemMessageManagerWelcome", {}),
+        ),
+      ).toBe(false);
+
+      // Sanity-check prompt-history coverage: manager hire is `initiator:
+      // "system"`, which `resolveAcceptedPromptHistoryScope` rejects, so
+      // nothing about this hire should land in the recall table. In
+      // particular, the agent-only quick-start preamble must never appear
+      // in prompt history.
+      const promptHistoryRows = harness.db
+        .select({
+          input: promptHistoryEntries.input,
+          threadId: promptHistoryEntries.threadId,
+        })
+        .from(promptHistoryEntries)
+        .where(eq(promptHistoryEntries.threadId, thread.id))
+        .all();
+      expect(promptHistoryRows).toEqual([]);
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the welcome template when no input is provided", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-welcome-fallback";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            providerId: "codex",
+            model: "gpt-5",
+            environment: { type: "host", hostId: host.id },
+          }),
+        },
+      );
+      await respondToNextManagerPreferencesRead({ harness });
+      const response = await responsePromise;
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      const startCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      if (startCommand.command.type !== "thread.start") {
+        throw new Error(`Expected thread.start, got ${startCommand.command.type}`);
+      }
+      expect(startCommand.command.input[0]).toEqual({
+        type: "text",
+        text: renderTemplate("systemMessageManagerWelcome", {}),
+      });
+      expect(startCommand.command.input[0]).not.toHaveProperty("visibility");
+      // No user-input message follows the welcome.
+      expect(startCommand.command.input).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the welcome template when input only contains whitespace text", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-whitespace-only";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            providerId: "codex",
+            model: "gpt-5",
+            environment: { type: "host", hostId: host.id },
+            // Two text-only parts, both whitespace — the route should treat
+            // this as no input and route to the welcome fallback so the
+            // timeline doesn't show an empty user message preceded by an
+            // invisible quick-start preamble.
+            input: [
+              { type: "text", text: "   \n\t  " },
+              { type: "text", text: "" },
+            ],
+          }),
+        },
+      );
+      await respondToNextManagerPreferencesRead({ harness });
+      const response = await responsePromise;
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      const startCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      if (startCommand.command.type !== "thread.start") {
+        throw new Error(`Expected thread.start, got ${startCommand.command.type}`);
+      }
+      expect(startCommand.command.input[0]).toEqual({
+        type: "text",
+        text: renderTemplate("systemMessageManagerWelcome", {}),
+      });
+      expect(startCommand.command.input[0]).not.toHaveProperty("visibility");
+      // No quick-start preamble, no user-input echo of the whitespace.
+      expect(startCommand.command.input).toHaveLength(1);
+      expect(
+        startCommand.command.input.some(
+          (entry) =>
+            entry.type === "text" &&
+            entry.text ===
+              renderTemplate("systemMessageManagerQuickStart", {}),
+        ),
+      ).toBe(false);
     } finally {
       await harness.cleanup();
       await rm(dataDir, { recursive: true, force: true });

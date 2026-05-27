@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectList, ProjectListActionButtons } from "./ProjectList";
-import { useNewManagerDialog } from "@/hooks/useNewManagerDialog";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import {
   getBbDesktopInfo,
@@ -27,7 +26,6 @@ interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   isResizing: boolean;
   selectedProjectId?: string;
-  isManagerActionPending?: boolean;
   showInlineTrigger: boolean;
 }
 
@@ -35,11 +33,9 @@ export function AppSidebar({
   onResizeMouseDown,
   isResizing,
   selectedProjectId,
-  isManagerActionPending = false,
   showInlineTrigger,
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
-  const newManagerDialog = useNewManagerDialog();
   const navigate = useNavigate();
   const { isCompactViewport, setOpenMobile } = useSidebar();
   const [desktopInfo] = useState(getBbDesktopInfo);
@@ -57,15 +53,24 @@ export function AppSidebar({
   const handleNewChat = useCallback(() => {
     if (!selectedProjectId) return;
     closeOnMobile();
-    void navigate(`/projects/${selectedProjectId}`);
+    void navigate(`/projects/${selectedProjectId}`, {
+      state: { mode: "thread" },
+    });
   }, [closeOnMobile, navigate, selectedProjectId]);
 
   const handleNewManager = useCallback(
     (managerProjectId: string) => {
       closeOnMobile();
-      newManagerDialog.open(managerProjectId);
+      // Open the project main view with the requested mode preselected via
+      // router state. ProjectMainView reads state.mode on mount and seeds
+      // the mode picker before clearing the state. Both sidebar entry
+      // points seed explicitly so clicking either button overrides whatever
+      // mode was last persisted.
+      void navigate(`/projects/${managerProjectId}`, {
+        state: { mode: "manager" },
+      });
     },
-    [closeOnMobile, newManagerDialog],
+    [closeOnMobile, navigate],
   );
 
   const newChatAction = selectedProjectId ? handleNewChat : undefined;
@@ -104,7 +109,6 @@ export function AppSidebar({
             onNewChat={newChatAction}
             onNewManager={newManagerAction}
             selectedProjectId={selectedProjectId}
-            isManagerActionPending={isManagerActionPending}
           />
         </div>
         <SidebarContent>
