@@ -35,11 +35,11 @@ function renderStaticFooter(
 ) {
   if (!footer) return null;
   return (
-    <div className="relative shrink-0">
+    <div className="relative shrink-0 bg-background">
       <OverflowFade placement="above" tone="background" />
       <div
         className={cn(
-          "mx-auto w-full bg-background px-4 pb-4",
+          "mx-auto w-full px-4 pb-4",
           maxWidthClassName,
           footerClassName,
         )}
