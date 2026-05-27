@@ -9,6 +9,7 @@ import {
 import type {
   PendingInteractionCreate,
   PendingInteractionResolution,
+  StatusDataKey,
   ThreadEvent,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -151,6 +152,13 @@ export interface RuntimeEntry {
   threads: Map<string, RuntimeThreadState>;
 }
 
+export interface ThreadStatusDataChangedNotification {
+  environmentId: string;
+  key: StatusDataKey;
+  threadId: string;
+  threadStoragePath: string;
+}
+
 export interface EnsureEnvironmentArgs {
   environmentId: string;
   personalWorkspaceRoot?: string;
@@ -179,6 +187,9 @@ export interface RuntimeManagerOptions {
     environmentId: string;
     threadId: string;
   }) => void;
+  onThreadStatusDataChanged?: (
+    args: ThreadStatusDataChangedNotification,
+  ) => void;
   onThreadStorageWatchError?: (args: {
     error: ThreadStorageWatchError;
   }) => void;
@@ -898,13 +909,23 @@ export class RuntimeManager {
         resolveThreadTarget: (threadId) =>
           this.findTrackedThreadTarget(threadId),
         onChange: (event) => {
-          if (event.kind !== "thread-storage-changed") {
-            return;
+          if (event.kind === "thread-storage-changed") {
+            this.options.onThreadStorageChanged?.({
+              environmentId: event.environmentId,
+              threadId: event.threadId,
+            });
           }
-          this.options.onThreadStorageChanged?.({
-            environmentId: event.environmentId,
-            threadId: event.threadId,
-          });
+          if (event.kind === "thread-status-data-changed") {
+            this.options.onThreadStatusDataChanged?.({
+              environmentId: event.environmentId,
+              key: event.key,
+              threadId: event.threadId,
+              threadStoragePath: path.join(
+                threadStorageRootPath,
+                event.threadId,
+              ),
+            });
+          }
         },
         onWatchError: (error) => {
           this.options.onThreadStorageWatchError?.({

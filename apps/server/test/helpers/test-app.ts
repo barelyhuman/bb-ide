@@ -20,7 +20,6 @@ import {
 } from "../../src/services/system/app-version.js";
 import { createBbAppManagedConfigReloader } from "../../src/services/system/bb-app-managed-config.js";
 import { TerminalSessionLifecycle } from "../../src/services/terminals/terminal-session-lifecycle.js";
-import { StatusDataFileEventState } from "../../src/services/threads/status-data-files.js";
 import { resolveThreadStorageRootPath } from "../../src/services/threads/thread-storage.js";
 import { createLifecycleDedupers } from "../../src/lifecycle-dedupers.js";
 import type { ServerAppDeps, ServerRuntimeConfig } from "../../src/types.js";
@@ -132,7 +131,6 @@ export async function createTestAppHarness(
     logger: testLogger,
     openTimeoutMs: 50,
   });
-  const statusDataFileEvents = new StatusDataFileEventState();
   pendingInteractions.start();
   const lifecycleDedupers = createLifecycleDedupers();
   const machineAuth = await createMachineAuthService({
@@ -193,7 +191,6 @@ export async function createTestAppHarness(
     logger: testLogger,
     machineAuth: testMachineAuth,
     pendingInteractions,
-    statusDataFileEvents,
     terminalSessions,
   };
   const { app } = createApp(deps);
@@ -206,7 +203,6 @@ export async function createTestAppHarness(
     hub,
     async cleanup(): Promise<void> {
       hostLifecycle.dispose();
-      statusDataFileEvents.dispose();
       await rm(dataDir, { recursive: true, force: true });
     },
   };

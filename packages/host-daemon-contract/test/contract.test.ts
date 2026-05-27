@@ -327,6 +327,54 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
+        type: "host.status_data.list",
+        threadId: "thread-123",
+      }),
+    ).toEqual({
+      type: "host.status_data.list",
+      threadId: "thread-123",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.status_data.get",
+        threadId: "thread-123",
+        key: "tasks",
+      }),
+    ).toEqual({
+      type: "host.status_data.get",
+      threadId: "thread-123",
+      key: "tasks",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.status_data.set",
+        threadId: "thread-123",
+        key: "tasks",
+        value: [{ id: "task-1", title: "Review" }],
+      }),
+    ).toEqual({
+      type: "host.status_data.set",
+      threadId: "thread-123",
+      key: "tasks",
+      value: [{ id: "task-1", title: "Review" }],
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.status_data.delete",
+        threadId: "thread-123",
+        key: "tasks",
+      }),
+    ).toEqual({
+      type: "host.status_data.delete",
+      threadId: "thread-123",
+      key: "tasks",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
@@ -561,6 +609,22 @@ describe("host-daemon command schemas", () => {
         type: "host.read_file_relative",
         rootPath: "/tmp/bb-data/thread-storage/thread-123/STATUS",
         path: "assets/logo.png",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.status_data.get",
+        threadId: "thread-123",
+        key: "../tasks",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.status_data.set",
+        threadId: "thread-123",
+        key: "tasks",
       }),
     ).toThrow();
   });
@@ -1095,6 +1159,136 @@ describe("host-daemon command schemas", () => {
       hash: "abc123",
     });
 
+    expect(
+      hostDaemonCommandResultSchemaByType["host.status_data.list"].parse({
+        values: {
+          tasks: [{ id: "task-1" }],
+          prefs: { compact: true },
+        },
+        versions: {
+          tasks: "tasks-hash",
+          prefs: "prefs-hash",
+        },
+        hash: "aggregate-hash",
+      }),
+    ).toEqual({
+      values: {
+        tasks: [{ id: "task-1" }],
+        prefs: { compact: true },
+      },
+      versions: {
+        tasks: "tasks-hash",
+        prefs: "prefs-hash",
+      },
+      hash: "aggregate-hash",
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.status_data.get"].parse({
+        key: "tasks",
+        value: [{ id: "task-1" }],
+        version: "tasks-hash",
+        sizeBytes: 24,
+        modifiedAtMs: 1234.5,
+      }),
+    ).toEqual({
+      key: "tasks",
+      value: [{ id: "task-1" }],
+      version: "tasks-hash",
+      sizeBytes: 24,
+      modifiedAtMs: 1234.5,
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.status_data.set"].parse({
+        key: "tasks",
+        value: [{ id: "task-2" }],
+        version: "next-hash",
+        sizeBytes: 24,
+        modifiedAtMs: 1234.5,
+        previousValue: [{ id: "task-1" }],
+        previousValuePresent: true,
+        previousVersion: "previous-hash",
+      }),
+    ).toMatchObject({
+      key: "tasks",
+      version: "next-hash",
+      previousValuePresent: true,
+      previousVersion: "previous-hash",
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.status_data.delete"].parse({
+        key: "tasks",
+        deleted: true,
+        previousValue: null,
+        previousValuePresent: true,
+        previousVersion: "previous-null-hash",
+      }),
+    ).toEqual({
+      key: "tasks",
+      deleted: true,
+      previousValue: null,
+      previousValuePresent: true,
+      previousVersion: "previous-null-hash",
+    });
+
+    expect(() =>
+      hostDaemonCommandResultSchemaByType["host.status_data.delete"].parse({
+        key: "tasks",
+        deleted: false,
+        previousValue: ["stale"],
+        previousValuePresent: true,
+        previousVersion: "previous-hash",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandResultSchemaByType["host.status_data.set"].parse({
+        key: "tasks",
+        value: [{ id: "task-2" }],
+        version: "next-hash",
+        sizeBytes: 24,
+        modifiedAtMs: 1234.5,
+        previousValue: null,
+        previousValuePresent: false,
+        previousVersion: "previous-hash",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandResultSchemaByType["host.status_data.set"].parse({
+        key: "tasks",
+        value: [{ id: "task-2" }],
+        version: "next-hash",
+        sizeBytes: 24,
+        modifiedAtMs: 1234.5,
+        previousValue: [{ id: "task-1" }],
+        previousValuePresent: true,
+        previousVersion: null,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandResultSchemaByType["host.status_data.delete"].parse({
+        key: "tasks",
+        deleted: false,
+        previousValue: null,
+        previousValuePresent: false,
+        previousVersion: "previous-hash",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandResultSchemaByType["host.status_data.delete"].parse({
+        key: "tasks",
+        deleted: true,
+        previousValue: [{ id: "task-1" }],
+        previousValuePresent: true,
+        previousVersion: null,
+      }),
+    ).toThrow();
+
     expect(() =>
       hostDaemonCommandResultSchemaByType["workspace.commit"].parse({
         commitSha: "",
@@ -1386,6 +1580,62 @@ describe("host-daemon session schemas", () => {
     });
 
     expect(
+      contract.hostDaemonStatusDataChangeRequestSchema.parse({
+        sessionId: "session_123",
+        threadId: "thr_123",
+        key: "tasks",
+        value: [{ id: "task-2" }],
+        deleted: false,
+        previousValue: [{ id: "task-1" }],
+        previousValuePresent: true,
+        version: "next-hash",
+        previousVersion: "previous-hash",
+      }),
+    ).toEqual({
+      sessionId: "session_123",
+      threadId: "thr_123",
+      key: "tasks",
+      value: [{ id: "task-2" }],
+      deleted: false,
+      previousValue: [{ id: "task-1" }],
+      previousValuePresent: true,
+      version: "next-hash",
+      previousVersion: "previous-hash",
+    });
+
+    expect(
+      contract.hostDaemonStatusDataChangeRequestSchema.parse({
+        sessionId: "session_123",
+        threadId: "thr_123",
+        key: "tasks",
+        value: null,
+        deleted: true,
+        previousValue: null,
+        previousValuePresent: true,
+        version: null,
+        previousVersion: "previous-null-hash",
+      }),
+    ).toMatchObject({
+      deleted: true,
+      previousValuePresent: true,
+      version: null,
+    });
+
+    expect(() =>
+      contract.hostDaemonStatusDataChangeRequestSchema.parse({
+        sessionId: "session_123",
+        threadId: "thr_123",
+        key: "tasks",
+        value: [],
+        deleted: false,
+        previousValue: null,
+        previousValuePresent: false,
+        version: null,
+        previousVersion: null,
+      }),
+    ).toThrow();
+
+    expect(
       hostDaemonInteractiveRequestSchema.parse({
         sessionId: "session_123",
         interaction: {
@@ -1616,6 +1866,9 @@ describe("host-daemon session schemas", () => {
     );
     expect(client.session["environment-change"].$url().pathname).toBe(
       "/internal/session/environment-change",
+    );
+    expect(client.session["status-data-change"].$url().pathname).toBe(
+      "/internal/session/status-data-change",
     );
   });
 });

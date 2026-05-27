@@ -1024,11 +1024,13 @@ describe("RuntimeManager", () => {
       },
     });
     const onThreadStorageChanged = vi.fn();
+    const onThreadStatusDataChanged = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
       provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-storage"),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onThreadStorageChanged,
+      onThreadStatusDataChanged,
       threadStorageRootPath: "/tmp/bb-data/thread-storage",
     });
 
@@ -1049,6 +1051,12 @@ describe("RuntimeManager", () => {
       environmentId: "env-storage",
       threadId: "thread-2",
     });
+    watchThreadStorageRootArgs?.onChange({
+      kind: "thread-status-data-changed",
+      environmentId: "env-storage",
+      threadId: "thread-1",
+      key: "state",
+    });
 
     expect(watchThreadStorageRoot).toHaveBeenCalledTimes(1);
     expect(watchThreadStorageRoot).toHaveBeenCalledWith(
@@ -1065,6 +1073,12 @@ describe("RuntimeManager", () => {
       threadId: "thread-2",
     });
     expect(onThreadStorageChanged).toHaveBeenCalledTimes(2);
+    expect(onThreadStatusDataChanged).toHaveBeenCalledWith({
+      environmentId: "env-storage",
+      threadId: "thread-1",
+      key: "state",
+      threadStoragePath: "/tmp/bb-data/thread-storage/thread-1",
+    });
     expect(stopWatchingPathChanges).not.toHaveBeenCalled();
 
     await manager.destroyEnvironment("env-storage");

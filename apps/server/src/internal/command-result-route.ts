@@ -8,9 +8,8 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
-import { getAuthenticatedDaemon } from "./auth.js";
 import { handleCommandResult } from "./command-results.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 export function registerInternalCommandResultRoutes(
   app: Hono,
@@ -27,9 +26,9 @@ export function registerInternalCommandResultRoutes(
       runWithDaemonCommandWaitForbidden({
         reason: "/session/command-result",
         work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          const session = requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: payload.sessionId,
           });
           const command = getCommand(deps.db, payload.commandId);

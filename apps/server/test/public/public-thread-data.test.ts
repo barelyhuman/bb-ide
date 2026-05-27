@@ -1,7 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import {
   archiveThread,
   claimQueuedThreadMessage,
@@ -2739,31 +2737,37 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const fixture = seedManagerThreadStorage(harness);
-      const statusDataRootPath = path.join(
-        harness.config.threadStorageRootPath,
-        fixture.threadId,
-        "STATUS-data",
-      );
       const tasksJson = '["one"]\n';
       const prefsJson = '{"compact":true}\n';
-      await fs.mkdir(statusDataRootPath, { recursive: true });
-      await fs.writeFile(
-        path.join(statusDataRootPath, "tasks.json"),
-        tasksJson,
-      );
-      await fs.writeFile(
-        path.join(statusDataRootPath, "prefs.json"),
-        prefsJson,
-      );
-      await fs.mkdir(path.join(statusDataRootPath, "nested"));
-      await fs.writeFile(
-        path.join(statusDataRootPath, "nested", "ignored.json"),
-        "true\n",
-      );
 
-      const response = await harness.app.request(
+      const responsePromise = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/status-data`,
       );
+      const listCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.status_data.list" &&
+          command.threadId === fixture.threadId,
+      );
+      expect(listCommand.command).toEqual({
+        type: "host.status_data.list",
+        threadId: fixture.threadId,
+      });
+      await reportQueuedCommandSuccess(harness, listCommand, {
+        values: {
+          tasks: ["one"],
+          prefs: { compact: true },
+        },
+        versions: {
+          tasks: sha256Text(tasksJson),
+          prefs: sha256Text(prefsJson),
+        },
+        hash: sha256Text(
+          `prefs\0${sha256Text(prefsJson)}\n` +
+            `tasks\0${sha256Text(tasksJson)}\n`,
+        ),
+      });
+      const response = await responsePromise;
       expect(response.status).toBe(200);
       const parsed = threadStatusDataListResponseSchema.parse(
         await readJson(response),
@@ -2783,9 +2787,30 @@ describe("public thread data routes", () => {
         ),
       );
 
-      const getResponse = await harness.app.request(
+      const getResponsePromise = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/status-data/tasks`,
       );
+      const getCommand = await waitForQueuedCommandAfter(
+        harness,
+        listCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.status_data.get" &&
+          command.threadId === fixture.threadId &&
+          command.key === "tasks",
+      );
+      expect(getCommand.command).toEqual({
+        type: "host.status_data.get",
+        threadId: fixture.threadId,
+        key: "tasks",
+      });
+      await reportQueuedCommandSuccess(harness, getCommand, {
+        key: "tasks",
+        value: ["one"],
+        version: sha256Text(tasksJson),
+        sizeBytes: Buffer.byteLength(tasksJson),
+        modifiedAtMs: 1234,
+      });
+      const getResponse = await getResponsePromise;
       expect(getResponse.status).toBe(200);
       expect(getResponse.headers.get("etag")).toBe(
         `"${sha256Text(tasksJson)}"`,
@@ -2797,8 +2822,26 @@ describe("public thread data routes", () => {
         value: ["one"],
         version: sha256Text(tasksJson),
         sizeBytes: Buffer.byteLength(tasksJson),
-        modifiedAtMs: expect.any(Number),
+        modifiedAtMs: 1234,
       });
+
+      const missingResponsePromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status-data/missing`,
+      );
+      const missingCommand = await waitForQueuedCommandAfter(
+        harness,
+        getCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.status_data.get" &&
+          command.threadId === fixture.threadId &&
+          command.key === "missing",
+      );
+      await reportQueuedCommandError(harness, missingCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: missing.json",
+      });
+      const missingResponse = await missingResponsePromise;
+      expect(missingResponse.status).toBe(404);
     } finally {
       await harness.cleanup();
     }
@@ -2808,11 +2851,6 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const fixture = seedManagerThreadStorage(harness);
-      const statusDataRootPath = path.join(
-        harness.config.threadStorageRootPath,
-        fixture.threadId,
-        "STATUS-data",
-      );
       const socket = createMockSocket();
       harness.deps.hub.subscribe(
         socket,
@@ -2833,7 +2871,7 @@ describe("public thread data routes", () => {
       );
       expect(oldPutResponse.status).toBe(404);
 
-      const putResponse = await harness.app.request(
+      const putResponsePromise = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/status-state/tasks`,
         {
           method: "PUT",
@@ -2845,7 +2883,31 @@ describe("public thread data routes", () => {
           body: JSON.stringify({ value: nextValue }),
         },
       );
+      const putCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.status_data.set" &&
+          command.threadId === fixture.threadId &&
+          command.key === "tasks",
+      );
+      expect(putCommand.command).toEqual({
+        type: "host.status_data.set",
+        threadId: fixture.threadId,
+        key: "tasks",
+        value: nextValue,
+      });
+      await reportQueuedCommandSuccess(harness, putCommand, {
+        key: "tasks",
+        value: nextValue,
+        version: nextHash,
+        sizeBytes: Buffer.byteLength(nextJson),
+        modifiedAtMs: 2345,
+        previousValue: null,
+        previousValuePresent: false,
+        previousVersion: null,
+      });
 
+      const putResponse = await putResponsePromise;
       expect(putResponse.status).toBe(200);
       expect(putResponse.headers.get("etag")).toBe(`"${nextHash}"`);
       expect(
@@ -2855,11 +2917,8 @@ describe("public thread data routes", () => {
         value: nextValue,
         version: nextHash,
         sizeBytes: Buffer.byteLength(nextJson),
-        modifiedAtMs: expect.any(Number),
+        modifiedAtMs: 2345,
       });
-      await expect(
-        fs.readFile(path.join(statusDataRootPath, "tasks.json"), "utf8"),
-      ).resolves.toBe(nextJson);
       expect(socket.messages.map((message) => JSON.parse(message))).toEqual([
         {
           type: "status-data.changed",
@@ -2881,7 +2940,7 @@ describe("public thread data routes", () => {
       );
       expect(oldDeleteResponse.status).toBe(404);
 
-      const deleteResponse = await harness.app.request(
+      const deleteResponsePromise = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/status-state/tasks`,
         {
           method: "DELETE",
@@ -2891,12 +2950,30 @@ describe("public thread data routes", () => {
           },
         },
       );
+      const deleteCommand = await waitForQueuedCommandAfter(
+        harness,
+        putCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.status_data.delete" &&
+          command.threadId === fixture.threadId &&
+          command.key === "tasks",
+      );
+      expect(deleteCommand.command).toEqual({
+        type: "host.status_data.delete",
+        threadId: fixture.threadId,
+        key: "tasks",
+      });
+      await reportQueuedCommandSuccess(harness, deleteCommand, {
+        key: "tasks",
+        deleted: true,
+        previousValue: nextValue,
+        previousValuePresent: true,
+        previousVersion: nextHash,
+      });
 
+      const deleteResponse = await deleteResponsePromise;
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
-      await expect(
-        fs.stat(path.join(statusDataRootPath, "tasks.json")),
-      ).rejects.toMatchObject({ code: "ENOENT" });
       expect(socket.messages.map((message) => JSON.parse(message))).toEqual([
         {
           type: "status-data.changed",

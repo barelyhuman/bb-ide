@@ -11,8 +11,7 @@ import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
-import { getAuthenticatedDaemon } from "./auth.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 export function registerInternalInteractiveRequestRoutes(
   app: Hono,
@@ -29,9 +28,9 @@ export function registerInternalInteractiveRequestRoutes(
       runWithDaemonCommandWaitForbidden({
         reason: "/session/interactive-request",
         work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          const session = requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: payload.sessionId,
           });
 
@@ -113,9 +112,9 @@ export function registerInternalInteractiveRequestRoutes(
       runWithDaemonCommandWaitForbidden({
         reason: "/session/interactive-request/interrupt",
         work: () => {
-          const daemon = getAuthenticatedDaemon(context);
-          const session = requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: payload.sessionId,
           });
 

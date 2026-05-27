@@ -534,9 +534,6 @@ importers:
       better-sqlite3:
         specifier: 12.10.0
         version: 12.10.0
-      chokidar:
-        specifier: 4.0.3
-        version: 4.0.3
       cron-parser:
         specifier: ^5.5.0
         version: 5.5.0
@@ -1226,6 +1223,9 @@ importers:
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../../packages/host-daemon-contract
+      '@bb/host-watcher':
+        specifier: workspace:*
+        version: link:../../packages/host-watcher
       '@bb/server':
         specifier: workspace:*
         version: link:../../apps/server

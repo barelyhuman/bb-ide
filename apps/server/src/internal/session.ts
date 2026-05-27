@@ -25,7 +25,7 @@ import {
 import { reconcileSessionThreads } from "./reconciliation.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { markHostSessionOpened } from "../services/hosts/host-lifecycle.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 import { readAttachment } from "../services/projects/attachments.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
@@ -128,9 +128,9 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       runWithDaemonCommandWaitForbidden({
         reason: "/session/project-attachment-content",
         work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: query.sessionId,
           });
 
@@ -147,7 +147,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
               "Thread does not belong to project",
             );
           }
-          if (environment.hostId !== daemon.hostId) {
+          if (environment.hostId !== session.hostId) {
             throw new ApiError(
               403,
               "forbidden",

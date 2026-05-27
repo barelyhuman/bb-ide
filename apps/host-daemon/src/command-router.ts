@@ -1,6 +1,7 @@
 import type {
   HostDaemonCommand,
   HostDaemonCommandEnvelope,
+  HostDaemonCommandResult,
   HostDaemonCommandResultReportWithoutSession,
 } from "@bb/host-daemon-contract";
 import { performance } from "node:perf_hooks";
@@ -40,6 +41,34 @@ type FileWriteLaneCommand = Extract<
   HostDaemonCommandEnvelope["command"],
   { type: "host.write_file_relative" | "host.delete_file_relative" }
 >;
+type StatusDataSetCommand = Extract<
+  HostDaemonCommand,
+  { type: "host.status_data.set" }
+>;
+type StatusDataDeleteCommand = Extract<
+  HostDaemonCommand,
+  { type: "host.status_data.delete" }
+>;
+
+export interface StatusDataSetCommandResultNotification {
+  command: StatusDataSetCommand;
+  result: HostDaemonCommandResult<"host.status_data.set">;
+}
+
+export interface StatusDataDeleteCommandResultNotification {
+  command: StatusDataDeleteCommand;
+  result: HostDaemonCommandResult<"host.status_data.delete">;
+}
+
+export type StatusDataCommandResultNotification =
+  | StatusDataSetCommandResultNotification
+  | StatusDataDeleteCommandResultNotification;
+
+export function isStatusDataSetCommandResultNotification(
+  notification: StatusDataCommandResultNotification,
+): notification is StatusDataSetCommandResultNotification {
+  return notification.command.type === "host.status_data.set";
+}
 
 interface EnvironmentLaneWorkMetrics {
   startedAtMs: number | null;
@@ -48,6 +77,17 @@ interface EnvironmentLaneWorkMetrics {
 interface ExecutedCommandResult {
   handlerMs: number;
   result: CommandResultReport;
+}
+
+interface CommandResultBaseReport {
+  commandId: string;
+  type: HostDaemonCommand["type"];
+}
+
+interface CreateSuccessfulCommandResultArgs {
+  baseReport: CommandResultBaseReport;
+  handlerStartedAtMs: number;
+  result: HostDaemonCommandResult;
 }
 
 interface CommandLifecycleTiming {
@@ -86,6 +126,9 @@ export interface CommandRouterOptions {
   threadStorageRootPath: string;
   logger: CommandRouterLogger;
   readFetchedAt?: ReadCommandFetchedAt;
+  onStatusDataCommandResult?: (
+    notification: StatusDataCommandResultNotification,
+  ) => void;
   now?: () => number;
 }
 
@@ -278,43 +321,59 @@ export class CommandRouter {
     envelope: HostDaemonCommandEnvelope,
   ): Promise<ExecutedCommandResult> {
     const handlerStartedAtMs = performance.now();
+    const command = envelope.command;
     const baseReport = {
       commandId: envelope.id,
-      type: envelope.command.type,
+      type: command.type,
+    };
+    const dispatchOptions: CommandDispatchOptions = {
+      fetchProjectAttachment: this.options.fetchProjectAttachment,
+      runtimeManager: this.options.runtimeManager,
+      terminalManager: this.options.terminalManager,
+      dataDir: this.options.dataDir,
+      eventSink: this.options.eventSink,
+      listModels: this.options.listModels,
+      resolveInteractiveRequest: this.options.resolveInteractiveRequest,
+      recordReplayCaptureThreadMetadata:
+        this.options.recordReplayCaptureThreadMetadata,
+      recordReplayCaptureTurnRequest:
+        this.options.recordReplayCaptureTurnRequest,
+      replayTasks: this.options.replayTasks,
+      threadStorageRootPath: this.options.threadStorageRootPath,
     };
 
     try {
-      const result = await dispatchCommand(envelope.command, {
-        fetchProjectAttachment: this.options.fetchProjectAttachment,
-        runtimeManager: this.options.runtimeManager,
-        terminalManager: this.options.terminalManager,
-        dataDir: this.options.dataDir,
-        eventSink: this.options.eventSink,
-        listModels: this.options.listModels,
-        resolveInteractiveRequest: this.options.resolveInteractiveRequest,
-        recordReplayCaptureThreadMetadata:
-          this.options.recordReplayCaptureThreadMetadata,
-        recordReplayCaptureTurnRequest:
-          this.options.recordReplayCaptureTurnRequest,
-        replayTasks: this.options.replayTasks,
-        threadStorageRootPath: this.options.threadStorageRootPath,
-      });
-      return {
-        handlerMs: elapsedMs(handlerStartedAtMs),
-        result: {
-          ...baseReport,
-          completedAt: this.now(),
-          ok: true,
+      if (command.type === "host.status_data.set") {
+        const result = await dispatchCommand(command, dispatchOptions);
+        this.options.onStatusDataCommandResult?.({ command, result });
+        return this.createSuccessfulCommandResult({
+          baseReport,
+          handlerStartedAtMs,
           result,
-        },
-      };
+        });
+      }
+      if (command.type === "host.status_data.delete") {
+        const result = await dispatchCommand(command, dispatchOptions);
+        this.options.onStatusDataCommandResult?.({ command, result });
+        return this.createSuccessfulCommandResult({
+          baseReport,
+          handlerStartedAtMs,
+          result,
+        });
+      }
+      const result = await dispatchCommand(command, dispatchOptions);
+      return this.createSuccessfulCommandResult({
+        baseReport,
+        handlerStartedAtMs,
+        result,
+      });
     } catch (error) {
       const errorCode = getErrorCode(error);
       if (!isExpectedCommandDispatchError(error)) {
         this.logger.warn(
           {
             commandId: envelope.id,
-            type: envelope.command.type,
+            type: command.type,
             err: error,
           },
           "command execution failed",
@@ -331,6 +390,20 @@ export class CommandRouter {
         },
       };
     }
+  }
+
+  private createSuccessfulCommandResult(
+    args: CreateSuccessfulCommandResultArgs,
+  ): ExecutedCommandResult {
+    return {
+      handlerMs: elapsedMs(args.handlerStartedAtMs),
+      result: {
+        ...args.baseReport,
+        completedAt: this.now(),
+        ok: true,
+        result: args.result,
+      },
+    };
   }
 
   private executeCommandWithLaneStart(

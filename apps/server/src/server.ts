@@ -26,6 +26,7 @@ import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalHostRoutes } from "./internal/hosts.js";
 import { registerInternalInteractiveRequestRoutes } from "./internal/interactive-requests.js";
 import { registerInternalSessionRoutes } from "./internal/session.js";
+import { registerInternalStatusDataChangeRoutes } from "./internal/status-data-changes.js";
 import { registerInternalToolCallRoutes } from "./internal/tool-calls.js";
 import {
   setAuthenticatedDaemon,
@@ -263,6 +264,7 @@ export function createApp(
   registerInternalCommandRoutes(internalApi, deps);
   registerInternalCommandResultRoutes(internalApi, deps);
   registerInternalEnvironmentChangeRoutes(internalApi, deps);
+  registerInternalStatusDataChangeRoutes(internalApi, deps);
   registerInternalEventRoutes(internalApi, deps);
   registerInternalToolCallRoutes(internalApi, deps);
   registerInternalInteractiveRequestRoutes(internalApi, deps);

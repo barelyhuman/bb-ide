@@ -32,8 +32,9 @@ import {
   workspaceStatusSchema,
   managerTemplateNameSchema,
   jsonValueSchema,
+  statusDataKeySchema,
 } from "@bb/domain";
-import type { JsonValue } from "@bb/domain";
+import type { JsonValue, StatusDataKey } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 import { timelineRowSchema } from "./thread-timeline.js";
 
@@ -1048,9 +1049,6 @@ export type ThreadStatusVersionResponse = z.infer<
   typeof threadStatusVersionResponseSchema
 >;
 
-export const statusDataKeySchema = z.string().regex(/^[A-Za-z0-9_-]{1,80}$/u);
-export type StatusDataKey = z.infer<typeof statusDataKeySchema>;
-
 export const statusStateChangeEventSourceSchema = z.enum(["local", "remote"]);
 export type StatusStateChangeEventSource = z.infer<
   typeof statusStateChangeEventSourceSchema
@@ -1136,7 +1134,7 @@ export const statusStateBroadcastMessageSchema = z.object({
   deleted: z.boolean(),
   previousValue: jsonValueSchema.nullable(),
   previousValuePresent: z.boolean(),
-  version: z.string().nullable(),
+  version: z.string().min(1).nullable(),
   writerClientId: z.string().nullable(),
   operationId: z.string().nullable(),
 });

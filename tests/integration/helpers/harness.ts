@@ -19,6 +19,7 @@ import {
   type HostDaemonApp,
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
+import { createHostWatcher } from "@bb/host-watcher";
 import { defaultFeatureFlags, type FeatureFlags } from "@bb/domain";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
@@ -29,8 +30,6 @@ import { createMachineAuthService } from "../../../apps/server/src/services/mach
 import { createAppVersionService } from "../../../apps/server/src/services/system/app-version.js";
 import { createBbAppManagedConfigReloader } from "../../../apps/server/src/services/system/bb-app-managed-config.js";
 import { TerminalSessionLifecycle } from "../../../apps/server/src/services/terminals/terminal-session-lifecycle.js";
-import { StatusDataFileEventState } from "../../../apps/server/src/services/threads/status-data-files.js";
-import { startStatusStateFileWatcher } from "../../../apps/server/src/services/threads/status-state-watcher.js";
 import type {
   ServerLogger,
   ServerRuntimeConfig,
@@ -231,7 +230,6 @@ async function startIntegrationServer(
     logger: testLogger,
     openTimeoutMs: 50,
   });
-  const statusDataFileEvents = new StatusDataFileEventState();
   pendingInteractions.start();
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-dev",
@@ -273,14 +271,7 @@ async function startIntegrationServer(
     logger: testLogger,
     machineAuth,
     pendingInteractions,
-    statusDataFileEvents,
     terminalSessions,
-  });
-  const statusStateFileWatcher = await startStatusStateFileWatcher({
-    events: statusDataFileEvents,
-    hub,
-    logger: testLogger,
-    rootPath: threadStorageRootPath,
   });
 
   let addressInfo: ListeningAddress | null = null;
@@ -315,8 +306,6 @@ async function startIntegrationServer(
     hub,
     machineAuth,
     async close(): Promise<void> {
-      await statusStateFileWatcher.close();
-      statusDataFileEvents.dispose();
       hostLifecycle.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -350,6 +339,7 @@ async function startHarnessDaemon(
     // restarts stay attached to the same host.
     await persistHostId({ dataDir, hostId: identity.hostId });
     const adapterFactory = resolveAdapterFactory(options);
+    const hostWatcher = await createHostWatcher({ hostType: "persistent" });
     const daemonApp = await createHostDaemonApp({
       createRuntime: adapterFactory
         ? (runtimeOptions) =>
@@ -363,6 +353,7 @@ async function startHarnessDaemon(
       hostId: identity.hostId,
       hostName: identity.hostName,
       hostType: "persistent",
+      hostWatcher,
       instanceId: randomUUID(),
       localApiConfig: null,
       logger: testLogger,

@@ -8,8 +8,7 @@ import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireEnvironment } from "../services/lib/entity-lookup.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
-import { getAuthenticatedDaemon } from "./auth.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 export function registerInternalEnvironmentChangeRoutes(
   app: Hono,
@@ -26,9 +25,9 @@ export function registerInternalEnvironmentChangeRoutes(
       runWithDaemonCommandWaitForbidden({
         reason: "/session/environment-change",
         work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          const session = requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: payload.sessionId,
           });
           const environment = requireEnvironment(

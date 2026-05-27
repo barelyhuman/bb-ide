@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { JsonValue, StatusDataKey } from "@bb/domain";
 import { statusIframeThreadTellRequestSchema } from "@bb/server-contract";
 import type {
   BbThreadTell,
   BbStatusState,
-  JsonValue,
-  StatusDataKey,
   StatusStateBroadcastMessage,
   StatusStateChangeEvent,
   ThreadStatusDataListResponse,

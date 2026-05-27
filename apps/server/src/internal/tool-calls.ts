@@ -11,8 +11,7 @@ import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wai
 import { parseValue } from "../services/lib/validation.js";
 import { appendThreadEvent } from "../services/threads/thread-events.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
-import { getAuthenticatedDaemon } from "./auth.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
@@ -26,9 +25,9 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
       runWithDaemonCommandWaitForbidden({
         reason: "/session/tool-call",
         work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          const session = requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: payload.sessionId,
           });
           const { environment } = requireThreadEnvironment(

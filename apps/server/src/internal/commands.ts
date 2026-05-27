@@ -9,8 +9,7 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { parseInteger } from "../services/lib/validation.js";
-import { getAuthenticatedDaemon } from "./auth.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
   const { get } = typedRoutes<HostDaemonInternalSchema>(app);
@@ -19,9 +18,9 @@ export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
     runWithDaemonCommandWaitForbidden({
       reason: "/session/commands",
       work: async () => {
-        const daemon = getAuthenticatedDaemon(context);
-        const session = requireAuthorizedActiveSession(deps.db, {
-          hostId: daemon.hostId,
+        const session = requireAuthenticatedDaemonSession({
+          context,
+          db: deps.db,
           sessionId: query.sessionId,
         });
         const waitMs = parseInteger(query.waitMs, "waitMs");

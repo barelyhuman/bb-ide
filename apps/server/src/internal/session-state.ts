@@ -1,9 +1,18 @@
 import { getActiveSessionById } from "@bb/db";
-import type { DbConnection } from "@bb/db";
+import type { DbConnection, HostDaemonSessionRow } from "@bb/db";
 import { ApiError } from "../errors.js";
+import { getAuthenticatedDaemon } from "./auth.js";
+
+type AuthenticatedDaemonContext = Parameters<typeof getAuthenticatedDaemon>[0];
 
 export interface RequireAuthorizedActiveSessionArgs {
   hostId: string;
+  sessionId: string;
+}
+
+export interface RequireAuthenticatedDaemonSessionArgs {
+  context: AuthenticatedDaemonContext;
+  db: DbConnection;
   sessionId: string;
 }
 
@@ -31,4 +40,14 @@ export function requireAuthorizedActiveSession(
   }
 
   return session;
+}
+
+export function requireAuthenticatedDaemonSession(
+  args: RequireAuthenticatedDaemonSessionArgs,
+): HostDaemonSessionRow {
+  const daemon = getAuthenticatedDaemon(args.context);
+  return requireAuthorizedActiveSession(args.db, {
+    hostId: daemon.hostId,
+    sessionId: args.sessionId,
+  });
 }

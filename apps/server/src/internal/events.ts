@@ -61,9 +61,8 @@ import {
 } from "../services/lib/error-log-fields.js";
 import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
-import { getAuthenticatedDaemon } from "./auth.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
-import { requireAuthorizedActiveSession } from "./session-state.js";
+import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 interface ToStoredEventArgs {
   envelope: HostDaemonEventEnvelope;
@@ -770,9 +769,9 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       const result = await runWithDaemonCommandWaitForbidden({
         reason: "/session/events",
         work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          const session = requireAuthorizedActiveSession(deps.db, {
-            hostId: daemon.hostId,
+          const session = requireAuthenticatedDaemonSession({
+            context,
+            db: deps.db,
             sessionId: payload.sessionId,
           });
           const { entries, rejectedEvents } = resolvePostableEventBatchEntries(

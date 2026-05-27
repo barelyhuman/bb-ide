@@ -15,8 +15,6 @@ import { createBbAppManagedConfigReloader } from "./services/system/bb-app-manag
 import { startEventLoopStallMonitor } from "./services/system/event-loop-stall-monitor.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
 import { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
-import { StatusDataFileEventState } from "./services/threads/status-data-files.js";
-import { startStatusStateFileWatcher } from "./services/threads/status-state-watcher.js";
 import { resolveThreadStorageRootPath } from "./services/threads/thread-storage.js";
 import { createLifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { ServerRuntimeConfig } from "./types.js";
@@ -41,7 +39,6 @@ async function main(): Promise<void> {
     hub,
     logger,
   });
-  const statusDataFileEvents = new StatusDataFileEventState();
   pendingInteractions.start();
   const lifecycleDedupers = createLifecycleDedupers();
   const appUrl = toOptionalString(serverConfig.BB_APP_URL);
@@ -103,17 +100,10 @@ async function main(): Promise<void> {
       logger,
       machineAuth,
       pendingInteractions,
-      statusDataFileEvents,
       terminalSessions,
     },
     { staticDir },
   );
-  const statusStateFileWatcher = await startStatusStateFileWatcher({
-    events: statusDataFileEvents,
-    hub,
-    logger,
-    rootPath: threadStorageRootPath,
-  });
   const eventLoopStallMonitor = startEventLoopStallMonitor({ logger });
 
   const server = serve({
@@ -153,8 +143,6 @@ async function main(): Promise<void> {
     shutdownPromise = (async () => {
       eventLoopStallMonitor.stop();
       clearInterval(sweepInterval);
-      await statusStateFileWatcher.close();
-      statusDataFileEvents.dispose();
       hostLifecycle.dispose();
       const closeServer = new Promise<void>((resolve, reject) => {
         server.close((error) => {
