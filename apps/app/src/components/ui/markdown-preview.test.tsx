@@ -138,6 +138,95 @@ describe("MarkdownPreview", () => {
     });
   });
 
+  it("renders absolute local file links with literal spaces in the markdown destination", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    const linkName = "Candidate Changelog \u2014 Since 0.9.1";
+    const markdown = [
+      `[${linkName}](`,
+      "/Users/brsbl/Moss/Notes/Agent Workspaces/bb Workspace/workstreams/",
+      "moss-skills-distribution-discovery/",
+      "Candidate%20Changelog%20%E2%80%94%20Since%200.9.1/",
+      "Candidate%20Changelog%20%E2%80%94%20Since%200.9.1.md)",
+    ].join("");
+
+    render(
+      <MarkdownPreview
+        content={markdown}
+        normalizeLocalFileLinks
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: linkName });
+    expect(link.getAttribute("href")).toBe(
+      [
+        "file:///Users/brsbl/Moss/Notes/Agent%20Workspaces/",
+        "bb%20Workspace/workstreams/moss-skills-distribution-discovery/",
+        "Candidate%20Changelog%20%E2%80%94%20Since%200.9.1/",
+        "Candidate%20Changelog%20%E2%80%94%20Since%200.9.1.md",
+      ].join(""),
+    );
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: [
+        "/Users/brsbl/Moss/Notes/Agent Workspaces/bb Workspace/workstreams/",
+        "moss-skills-distribution-discovery/",
+        "Candidate Changelog \u2014 Since 0.9.1/",
+        "Candidate Changelog \u2014 Since 0.9.1.md",
+      ].join(""),
+    });
+  });
+
+  it("preserves link titles when rendering local file links with literal spaces", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content={'[Notes](/Users/me/My Notes/app.md "My doc")'}
+        normalizeLocalFileLinks
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Notes" });
+    expect(link.getAttribute("href")).toBe(
+      "file:///Users/me/My%20Notes/app.md",
+    );
+    expect(link.getAttribute("title")).toBe("My doc");
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: "/Users/me/My Notes/app.md",
+    });
+  });
+
+  it("renders local file links with section fragments as local file links", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content="[Notes](/Users/me/My Notes/app.md#section)"
+        normalizeLocalFileLinks
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Notes" });
+    expect(link.getAttribute("href")).toBe(
+      "file:///Users/me/My%20Notes/app.md#section",
+    );
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: "/Users/me/My Notes/app.md",
+    });
+  });
+
   it("renders external links as blank-target anchors for desktop handling", () => {
     render(<MarkdownPreview content="[Docs](https://example.com/docs)" />);
 
@@ -146,6 +235,19 @@ describe("MarkdownPreview", () => {
     expect(link.getAttribute("href")).toBe("https://example.com/docs");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("normalizes local file links only when explicitly requested", () => {
+    const content = "[Notes](/Users/me/My Notes/app.md)";
+    const withoutNormalization = render(<MarkdownPreview content={content} />);
+    expect(
+      withoutNormalization.queryByRole("link", { name: "Notes" }),
+    ).toBeNull();
+    withoutNormalization.unmount();
+
+    render(<MarkdownPreview content={content} normalizeLocalFileLinks />);
+
+    expect(screen.getByRole("link", { name: "Notes" })).toBeTruthy();
   });
 
   it("renders inline code and block code with copy affordance", () => {

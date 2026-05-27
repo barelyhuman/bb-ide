@@ -505,6 +505,7 @@ function AssistantConversationMessage({
     <div className="group w-full px-2 text-sm leading-relaxed">
       <MarkdownPreview
         content={text}
+        normalizeLocalFileLinks={onOpenLocalFileLink !== undefined}
         onOpenLocalFileLink={onOpenLocalFileLink}
       />
       <ConversationAttachments

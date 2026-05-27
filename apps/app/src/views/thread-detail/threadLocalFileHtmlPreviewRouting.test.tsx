@@ -109,6 +109,7 @@ function MarkdownHtmlPreviewHarness({
     <>
       <MarkdownPreview
         content={`[file](${markdownPath})`}
+        normalizeLocalFileLinks
         onOpenLocalFileLink={handleOpenLocalFileLink}
       />
       {openedFile?.kind === "host" ? (
@@ -210,6 +211,7 @@ function PanelClosedThreadStorageMarkdownLinkHarness({
     <>
       <MarkdownPreview
         content={`[file](${markdownPath})`}
+        normalizeLocalFileLinks
         onOpenLocalFileLink={handleOpenLocalFileLink}
       />
       {openedFile?.kind === "host" ? (

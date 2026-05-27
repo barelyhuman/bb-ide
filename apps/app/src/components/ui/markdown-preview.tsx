@@ -22,6 +22,7 @@ import remarkGfm from "remark-gfm";
 import { ImageLightbox } from "./image-lightbox.js";
 import { CopyButton } from "./copy-button.js";
 import { Icon } from "./icon.js";
+import { normalizeLocalFileMarkdownLinks } from "./markdown-local-file-link-normalize.js";
 import {
   buildLocalFileAnchorHref,
   parseLocalFileHref,
@@ -36,6 +37,11 @@ export interface MarkdownPreviewProps {
   content: string;
   expandedImageAlt?: string;
   imageLightboxTitle?: string;
+  /**
+   * Repairs malformed local absolute path links before CommonMark parsing.
+   * Use with local-file-capable message surfaces, not general markdown content.
+   */
+  normalizeLocalFileLinks?: boolean;
   onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
   urlTransform?: UrlTransform;
 }
@@ -488,12 +494,20 @@ function MarkdownPreviewComponent({
   content,
   expandedImageAlt = "Expanded image",
   imageLightboxTitle = "Expanded image preview",
+  normalizeLocalFileLinks = false,
   onOpenLocalFileLink,
   urlTransform,
 }: MarkdownPreviewProps) {
   const preferredTheme = usePreferredTheme();
   const contentRef = useMarkdownContentWidthVariable();
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const markdownContent = useMemo(
+    () =>
+      normalizeLocalFileLinks
+        ? normalizeLocalFileMarkdownLinks(content)
+        : content,
+    [content, normalizeLocalFileLinks],
+  );
   const markdownComponents = useMemo(
     () =>
       buildMarkdownComponents({
@@ -521,7 +535,7 @@ function MarkdownPreviewComponent({
             onOpenLocalFileLink ? localFileAwareUrlTransform : urlTransform
           }
         >
-          {content}
+          {markdownContent}
         </ReactMarkdown>
       </div>
 

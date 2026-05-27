@@ -20,6 +20,11 @@ interface LocalFileHrefParts {
   path: string;
 }
 
+interface LocalFilePathValidationArgs {
+  requireLikelyFileBasename: boolean;
+  path: string;
+}
+
 function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -52,8 +57,34 @@ function parseLineSuffix(value: string): LocalFileHrefParts | null {
     };
   }
 
-  if (value.includes("#")) {
-    return null;
+  const hashIndex = value.indexOf("#");
+  if (hashIndex !== -1) {
+    const fragment = value.slice(hashIndex + 1);
+    if (
+      fragment.length === 0 ||
+      fragment.includes("/") ||
+      fragment.includes("#")
+    ) {
+      return null;
+    }
+
+    return {
+      lineNumber: null,
+      path: value.slice(0, hashIndex),
+    };
+  }
+
+  const colonLineColumnMatch = value.match(/:([0-9]+):[0-9]+$/u);
+  if (colonLineColumnMatch) {
+    const lineNumber = parsePositiveInteger(colonLineColumnMatch[1] ?? "");
+    if (lineNumber === null) {
+      return null;
+    }
+
+    return {
+      lineNumber,
+      path: value.slice(0, colonLineColumnMatch.index),
+    };
   }
 
   const colonLineMatch = value.match(/:([0-9]+)$/u);
@@ -81,7 +112,21 @@ function hasLikelyFileBasename(path: string): boolean {
   return basename.startsWith(".") || basename.includes(".");
 }
 
-function isValidAbsoluteLocalFilePath(path: string): boolean {
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && codePoint < 0x20) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isValidAbsoluteLocalFilePath({
+  path,
+  requireLikelyFileBasename,
+}: LocalFilePathValidationArgs): boolean {
   return (
     path.startsWith("/") &&
     !path.startsWith("//") &&
@@ -90,12 +135,15 @@ function isValidAbsoluteLocalFilePath(path: string): boolean {
     !path.includes("\n") &&
     !path.includes("\r") &&
     !path.includes("?") &&
-    !path.includes("#")
+    !path.includes("#") &&
+    !hasControlCharacter(path) &&
+    (!requireLikelyFileBasename || hasLikelyFileBasename(path))
   );
 }
 
 function parseAbsoluteLocalFileHref(
   href: string,
+  requireLikelyFileBasename: boolean,
 ): MarkdownPreviewLocalFileLink | null {
   if (
     href.length === 0 ||
@@ -107,7 +155,13 @@ function parseAbsoluteLocalFileHref(
   }
 
   const parsed = parseLineSuffix(safeDecodeURIComponent(href));
-  if (!parsed || !isValidAbsoluteLocalFilePath(parsed.path)) {
+  if (
+    !parsed ||
+    !isValidAbsoluteLocalFilePath({
+      path: parsed.path,
+      requireLikelyFileBasename,
+    })
+  ) {
     return null;
   }
 
@@ -124,38 +178,77 @@ export function parseLocalFileHref(
   if (href.startsWith("file://")) {
     try {
       const url = new URL(href);
+      if (url.host.length > 0) {
+        return null;
+      }
       if (url.search.length > 0) {
         return null;
       }
-      return parseAbsoluteLocalFileHref(url.pathname + url.hash);
+      return parseAbsoluteLocalFileHref(url.pathname + url.hash, false);
     } catch {
       return null;
     }
   }
 
-  return parseAbsoluteLocalFileHref(href);
+  return parseAbsoluteLocalFileHref(href, true);
 }
 
 function encodeFileUrlPath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-function shouldRenderFileHref(link: MarkdownPreviewLocalFileLink): boolean {
-  return (
-    link.path.startsWith("/") &&
-    (link.lineNumber !== null || hasLikelyFileBasename(link.path))
-  );
+function parseLocalFileHrefFragment(href: string | undefined): string | null {
+  if (!href) {
+    return null;
+  }
+
+  let hash: string;
+  if (href.startsWith("file://")) {
+    try {
+      hash = new URL(href).hash;
+    } catch {
+      return null;
+    }
+  } else {
+    const hashIndex = href.indexOf("#");
+    if (hashIndex === -1) {
+      return null;
+    }
+    hash = href.slice(hashIndex);
+  }
+
+  const decodedHash = safeDecodeURIComponent(hash);
+  if (
+    decodedHash.length <= 1 ||
+    /^#L[0-9]+$/u.test(decodedHash) ||
+    decodedHash.includes("\n") ||
+    decodedHash.includes("\r")
+  ) {
+    return null;
+  }
+
+  return decodedHash.slice(1);
+}
+
+function encodeFileUrlFragment(fragment: string): string {
+  return encodeURIComponent(fragment);
 }
 
 export function buildLocalFileAnchorHref(
   link: MarkdownPreviewLocalFileLink | null,
   originalHref: string | undefined,
 ): string | undefined {
-  if (!link || !shouldRenderFileHref(link)) {
+  if (!link || !link.path.startsWith("/")) {
     return originalHref;
   }
 
+  const fragment =
+    link.lineNumber === null ? parseLocalFileHrefFragment(originalHref) : null;
   return `file://${encodeFileUrlPath(link.path)}${
-    link.lineNumber === null ? "" : `#L${link.lineNumber}`
+    link.lineNumber !== null
+      ? `#L${link.lineNumber}`
+      : fragment === null
+        ? ""
+        : `#${encodeFileUrlFragment(fragment)}`
   }`;
 }

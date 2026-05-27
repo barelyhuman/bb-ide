@@ -18,6 +18,10 @@ describe("parseLocalFileHref", () => {
       path: "/workspace/src/app.ts",
       lineNumber: 12,
     });
+    expect(parseLocalFileHref("/workspace/src/app.ts:12:34")).toEqual({
+      path: "/workspace/src/app.ts",
+      lineNumber: 12,
+    });
     expect(
       parseLocalFileHref("file:///workspace/src/file-url.ts#L4"),
     ).toEqual({
@@ -35,10 +39,22 @@ describe("parseLocalFileHref", () => {
     expect(parseLocalFileHref("README.md")).toBeNull();
     expect(parseLocalFileHref("https://example.test")).toBeNull();
     expect(parseLocalFileHref("file:///workspace/app.ts?foo=1")).toBeNull();
-    expect(parseLocalFileHref("/workspace/app.ts#section")).toBeNull();
+    expect(parseLocalFileHref("file://host/workspace/app.ts")).toBeNull();
     expect(parseLocalFileHref("//workspace/app.ts")).toBeNull();
     expect(parseLocalFileHref("/workspace/app.ts:0")).toBeNull();
     expect(parseLocalFileHref("/workspace/app.ts#L0")).toBeNull();
+    expect(parseLocalFileHref("/work%00space/file.ts")).toBeNull();
+    expect(parseLocalFileHref("/workspace/no-extension")).toBeNull();
+  });
+
+  it("parses local file links with non-line fragments as the file path", () => {
+    expect(parseLocalFileHref("/workspace/app.ts#section")).toEqual({
+      path: "/workspace/app.ts",
+      lineNumber: null,
+    });
+    expect(parseLocalFileHref("/workspace/with#hash/app.ts:12")).toBeNull();
+    expect(parseLocalFileHref("/workspace/app.ts#bad/fragment")).toBeNull();
+    expect(parseLocalFileHref("/workspace/app.ts#one#two")).toBeNull();
   });
 });
 
@@ -50,12 +66,6 @@ describe("buildLocalFileAnchorHref", () => {
         "apps/app/main.tsx:4",
       ),
     ).toBe("apps/app/main.tsx:4");
-    expect(
-      buildLocalFileAnchorHref(
-        { path: "/workspace/somedir", lineNumber: null },
-        "/workspace/somedir",
-      ),
-    ).toBe("/workspace/somedir");
     expect(
       buildLocalFileAnchorHref(
         { path: "/workspace/src/app.ts", lineNumber: 12 },
@@ -70,9 +80,24 @@ describe("buildLocalFileAnchorHref", () => {
     ).toBe("file:///workspace/README.md");
     expect(
       buildLocalFileAnchorHref(
+        { path: "/workspace/README.md", lineNumber: null },
+        "/workspace/README.md#intro",
+      ),
+    ).toBe("file:///workspace/README.md#intro");
+    expect(
+      buildLocalFileAnchorHref(
         { path: "/work space/app.ts", lineNumber: 3 },
         "/work space/app.ts:3",
       ),
     ).toBe("file:///work%20space/app.ts#L3");
+  });
+
+  it("rewrites parsed extensionless file URLs consistently with click handling", () => {
+    expect(
+      buildLocalFileAnchorHref(
+        { path: "/workspace/no-extension", lineNumber: null },
+        "file:///workspace/no-extension",
+      ),
+    ).toBe("file:///workspace/no-extension");
   });
 });
