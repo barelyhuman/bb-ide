@@ -352,7 +352,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
   const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
   const sidebarBootstrapProjects = useMemo(
-    () => sidebarBootstrapQuery.data?.map(stripProjectThreads),
+    () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
     [sidebarBootstrapQuery.data],
   );
   const projects = projectsQuery.data ?? sidebarBootstrapProjects;

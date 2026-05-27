@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 import {
+  PERSONAL_PROJECT_ID,
   buildThreadEventRow,
   turnScope,
   type Environment,
@@ -42,6 +43,7 @@ vi.mock("../daemon.js", () => ({
 }));
 
 import { createClient, unwrap } from "../client.js";
+import { fetchLocalHostId } from "../daemon.js";
 import { registerEnvironmentCommands } from "../commands/environment.js";
 import { registerGuideCommand } from "../commands/guide.js";
 import { registerHostCommands } from "../commands/host.js";
@@ -353,6 +355,7 @@ async function getHelpOutput(
 describe("CLI command output contracts", () => {
   const createClientMock = vi.mocked(createClient);
   const unwrapMock = vi.mocked(unwrap);
+  const fetchLocalHostIdMock = vi.mocked(fetchLocalHostId);
 
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -375,6 +378,8 @@ describe("CLI command output contracts", () => {
     unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
       return responsePromise;
     });
+    fetchLocalHostIdMock.mockClear();
+    fetchLocalHostIdMock.mockResolvedValue("host-test-001");
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
       configurable: true,
@@ -1232,14 +1237,101 @@ describe("CLI command output contracts", () => {
       }),
     );
 
-    await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "spawn", "--project", "proj-1", "--prompt", "hello"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       json: {
         origin: "cli",
         projectId: "proj-1",
+        input: [{ type: "text", text: "hello" }],
+        environment: {
+          type: "host",
+          hostId: "host-test-001",
+          workspace: { type: "unmanaged", path: null },
+        },
+      },
+    });
+  });
+
+  it("bb thread spawn defaults to the personal project without local host lookup", async () => {
+    vi.stubEnv("BB_PROJECT_ID", undefined);
+    const thread: Thread = makeThread({
+      id: "thread-personal",
+      projectId: PERSONAL_PROJECT_ID,
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(fetchLocalHostIdMock).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        origin: "cli",
+        projectId: PERSONAL_PROJECT_ID,
+        input: [{ type: "text", text: "hello" }],
+        environment: {
+          type: "host",
+          workspace: { type: "personal" },
+        },
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
+  });
+
+  it("bb thread spawn honors BB_PROJECT_ID when --project is omitted", async () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-env");
+    const thread: Thread = makeThread({
+      id: "thread-env-project",
+      projectId: "proj-env",
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(fetchLocalHostIdMock).toHaveBeenCalled();
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        origin: "cli",
+        projectId: "proj-env",
         input: [{ type: "text", text: "hello" }],
         environment: {
           type: "host",
@@ -1278,6 +1370,8 @@ describe("CLI command output contracts", () => {
       [
         "thread",
         "spawn",
+        "--project",
+        "proj-1",
         "--prompt",
         "hello",
         "--provider",
@@ -1328,7 +1422,16 @@ describe("CLI command output contracts", () => {
 
     await expect(
       runCommand(
-        ["thread", "spawn", "--prompt", "hello", "--permission-mode", "unsafe"],
+        [
+          "thread",
+          "spawn",
+          "--project",
+          "proj-1",
+          "--prompt",
+          "hello",
+          "--permission-mode",
+          "unsafe",
+        ],
         (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -1406,16 +1509,83 @@ describe("CLI command output contracts", () => {
       }),
     );
 
-    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     await runCommand(["thread", "list"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
+    expect(list).toHaveBeenCalledWith({
+      query: {},
+    });
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
       "ID                 Project  Status         \n-----------------  -------  ---------------\nthread-archived-1  proj-1   idle (archived)",
       "",
     ]);
+  });
+
+  it("bb thread list hides the personal project label", async () => {
+    const list = vi.fn(async () => [
+      makeThread({
+        id: "thread-personal-1",
+        projectId: PERSONAL_PROJECT_ID,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    ]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
+          },
+        },
+      }),
+    );
+
+    vi.stubEnv("BB_PROJECT_ID", undefined);
+    await runCommand(["thread", "list"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(list).toHaveBeenCalledWith({
+      query: {},
+    });
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      "ID                 Project  Status      \n-----------------  -------  ------------\nthread-personal-1  -        idle        ",
+      "",
+    ]);
+  });
+
+  it("bb thread list honors BB_PROJECT_ID when --project is omitted", async () => {
+    const list = vi.fn(async () => []);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
+          },
+        },
+      }),
+    );
+
+    vi.stubEnv("BB_PROJECT_ID", "proj-env");
+    await runCommand(["thread", "list"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(list).toHaveBeenCalledWith({
+      query: {
+        projectId: "proj-env",
+      },
+    });
   });
 
   it("bb provider list renders the shared borderless table", async () => {
@@ -1633,6 +1803,8 @@ describe("CLI command output contracts", () => {
         "thread",
         "spawn",
         "--json",
+        "--project",
+        "proj-1",
         "--prompt",
         "hello",
         "--provider",
@@ -1668,8 +1840,9 @@ describe("CLI command output contracts", () => {
     );
 
     await expect(
-      runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
-        registerThreadCommands(program, () => "http://server"),
+      runCommand(
+        ["thread", "spawn", "--project", "proj-1", "--prompt", "hello"],
+        (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
 
@@ -1707,6 +1880,8 @@ describe("CLI command output contracts", () => {
       [
         "thread",
         "spawn",
+        "--project",
+        "proj-1",
         "--parent-thread",
         "thread-parent",
         "--prompt",
@@ -1765,6 +1940,8 @@ describe("CLI command output contracts", () => {
       [
         "thread",
         "spawn",
+        "--project",
+        "proj-1",
         "--environment",
         "env-worktree-001",
         "--prompt",
@@ -1818,6 +1995,8 @@ describe("CLI command output contracts", () => {
       [
         "thread",
         "spawn",
+        "--project",
+        "proj-1",
         "--new-environment",
         "worktree",
         "--prompt",

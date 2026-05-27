@@ -1,5 +1,7 @@
 export {
   createProject,
+  ensurePersonalProject,
+  getPersonalProject,
   getProject,
   listProjects,
   listPublicProjects,

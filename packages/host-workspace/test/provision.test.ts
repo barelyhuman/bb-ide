@@ -595,6 +595,60 @@ describe("provisionWorkspace", () => {
     });
   });
 
+  describe("personal", () => {
+    it("creates and destroys a non-git managed workspace", async () => {
+      const parentDir = await makeTempDir("bb-personal-parent-");
+      const environmentId = "env_personal";
+      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
+      const targetPath = path.join(personalWorkspaceRoot, environmentId);
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "personal",
+        environmentId,
+        personalWorkspaceRoot,
+        targetPath,
+      });
+
+      expect(ws.path).toBe(targetPath);
+      expect(ws.managed).toBe(true);
+      expect(ws.isGitRepo).toBe(false);
+      expect(ws.isWorktree).toBe(false);
+      expect((await fs.stat(targetPath)).isDirectory()).toBe(true);
+
+      await ws.destroy();
+      await expect(fs.stat(targetPath)).rejects.toThrow();
+    });
+
+    it("rejects personal target paths outside the personal workspace root", async () => {
+      const parentDir = await makeTempDir("bb-personal-parent-");
+      const environmentId = "env_personal";
+      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "personal",
+          environmentId,
+          personalWorkspaceRoot,
+          targetPath: path.join(parentDir, "sibling", environmentId),
+        }),
+      ).rejects.toThrow("Personal workspace target path must match");
+    });
+
+    it("rejects personal target paths that do not match the environment id", async () => {
+      const parentDir = await makeTempDir("bb-personal-parent-");
+      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
+
+      await expect(
+        provisionWorkspace({
+          workspaceProvisionType: "personal",
+          environmentId: "env_personal",
+          personalWorkspaceRoot,
+          targetPath: path.join(personalWorkspaceRoot, "env_other"),
+        }),
+      ).rejects.toThrow("Personal workspace target path must match");
+    });
+  });
+
   describe("reconnect-managed-worktree", () => {
     it("reconnects to an existing worktree with managed=true", async () => {
       const repoPath = await initRepo();

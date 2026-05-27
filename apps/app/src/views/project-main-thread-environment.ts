@@ -1,3 +1,4 @@
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type { BaseBranchSpec, CreateThreadRequest } from "@bb/server-contract";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 
@@ -41,6 +42,14 @@ export function resolveProjectMainThreadEnvironment(
   }
 
   if (parsed.type === "host") {
+    if (args.projectId === PERSONAL_PROJECT_ID) {
+      return {
+        type: "host",
+        hostId: parsed.hostId,
+        workspace: { type: "personal" },
+      };
+    }
+
     if (parsed.mode === "worktree") {
       return {
         type: "host",

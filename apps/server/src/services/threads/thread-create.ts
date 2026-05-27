@@ -7,7 +7,7 @@ import {
   hasNonTerminalThreadInEnvironment,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
-import type { Environment } from "@bb/domain";
+import type { Environment, Project } from "@bb/domain";
 import type { UnmanagedBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -119,12 +119,53 @@ function scheduleThreadProvisioningAdvance(
   });
 }
 
+function shouldAdvanceProvisioningBeforeResponse(
+  environmentIntent: ThreadProvisionEnvironmentIntent,
+): boolean {
+  return environmentIntent.type === "direct-personal";
+}
+
+function requestUsesPersonalWorkspace(
+  request: ThreadCreateServiceRequestInput,
+): boolean {
+  return (
+    request.environment.type === "host" &&
+    request.environment.workspace.type === "personal"
+  );
+}
+
+function assertProjectWorkspaceCompatibility(
+  project: Project,
+  request: ThreadCreateServiceRequestInput,
+): void {
+  const personalWorkspace = requestUsesPersonalWorkspace(request);
+  if (project.kind === "personal") {
+    if (request.environment.type !== "reuse" && !personalWorkspace) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Personal project threads must use a personal workspace",
+      );
+    }
+    return;
+  }
+
+  if (personalWorkspace) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Personal workspaces are only supported for the personal project",
+    );
+  }
+}
+
 function resolveProvisionHostId(
   deps: ThreadCreateDeps,
   environmentIntent: ThreadProvisionEnvironmentIntent,
 ): string {
   switch (environmentIntent.type) {
     case "direct-managed":
+    case "direct-personal":
     case "direct-unmanaged":
     case "checkout-unmanaged":
       return environmentIntent.hostId;
@@ -288,7 +329,13 @@ async function createProvisioningThread(
     execution,
     request: args.request,
   });
-  scheduleThreadProvisioningAdvance(deps, thread.id);
+  if (shouldAdvanceProvisioningBeforeResponse(args.environmentIntent)) {
+    await advanceThreadProvisioning(deps, {
+      threadId: thread.id,
+    });
+  } else {
+    scheduleThreadProvisioningAdvance(deps, thread.id);
+  }
   return getThreadSafe(deps, thread.id);
 }
 
@@ -296,7 +343,11 @@ export async function createThreadFromRequest(
   deps: ThreadCreateDeps,
   requestInput: ThreadCreateServiceRequestInput,
 ) {
-  requirePublicProjectForThreadCreate(deps, requestInput.projectId);
+  const project = requirePublicProjectForThreadCreate(
+    deps,
+    requestInput.projectId,
+  );
+  assertProjectWorkspaceCompatibility(project, requestInput);
   const parentThread = requestInput.parentThreadId
     ? assertValidManagerParentThread(deps, {
         parentThreadId: requestInput.parentThreadId,
@@ -392,6 +443,17 @@ export async function createThreadFromRequest(
         sourcePath: managedSource.path,
         baseBranch: workspace.baseBranch,
         workspaceProvisionType: workspace.type,
+      };
+      break;
+    }
+    case "personal": {
+      if (resolvedEnvironment.hostId === null) {
+        throw new Error("Resolved personal environment is missing hostId");
+      }
+      environmentIntent = {
+        type: "direct-personal",
+        hostId: resolvedEnvironment.hostId,
+        workspaceProvisionType: "personal",
       };
       break;
     }

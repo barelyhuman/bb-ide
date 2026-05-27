@@ -14,6 +14,7 @@ import type {
   ReplayCaptureThreadMetadata,
   ReplayTurnRequestInput,
 } from "@bb/replay-capture/writer";
+import { getPersonalWorkspaceRoot } from "@bb/host-workspace";
 import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 import type { TerminalManager } from "./terminals/terminal-manager.js";
@@ -208,6 +209,7 @@ export async function requireExistingEnvironment(
 
 export async function requireWorkspaceEnvironment(
   args: {
+    dataDir: string;
     environmentId: string;
     workspaceContext: WorkspaceContext;
   },
@@ -220,6 +222,7 @@ export async function requireWorkspaceEnvironment(
 
   return runtimeManager.ensureEnvironment({
     environmentId: args.environmentId,
+    personalWorkspaceRoot: getPersonalWorkspaceRoot(args.dataDir),
     workspacePath: args.workspaceContext.workspacePath,
     workspaceProvisionType: args.workspaceContext.workspaceProvisionType,
   });

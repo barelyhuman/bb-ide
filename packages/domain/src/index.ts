@@ -264,9 +264,12 @@ export type {
 } from "./lifecycle-operations.js";
 
 export {
+  PERSONAL_PROJECT_ID,
   findLocalPathProjectSourceForHost,
   isLocalPathProjectSource,
   localPathProjectSourceSchema,
+  projectKindSchema,
+  projectKindValues,
   projectSchema,
   projectSourceSchema,
   projectSourceTypeSchema,
@@ -275,6 +278,7 @@ export {
 export type {
   LocalPathProjectSource,
   Project,
+  ProjectKind,
   ProjectSource,
   ProjectSourceType,
 } from "./project.js";

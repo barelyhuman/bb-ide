@@ -1,3 +1,5 @@
+import { mkdir, rm } from "node:fs/promises";
+import path from "node:path";
 import type { ProvisioningTranscriptEntry, WorkspaceStatus } from "@bb/domain";
 import type {
   CommitOptions,
@@ -81,10 +83,27 @@ export interface ReconnectManagedWorktreeOpts extends ProvisionBase {
   path: string;
 }
 
+export interface PersonalWorkspaceOpts extends ProvisionBase {
+  workspaceProvisionType: "personal";
+  /** Environment ID that owns the personal scratch workspace. */
+  environmentId: string;
+  /** Root directory containing bb-managed personal scratch workspaces. */
+  personalWorkspaceRoot: string;
+  /** Target directory for the scratch workspace. Created if missing. */
+  targetPath: string;
+}
+
 export type ProvisionWorkspaceArgs =
   | UnmanagedWorkspaceOpts
   | ManagedWorktreeOpts
+  | PersonalWorkspaceOpts
   | ReconnectManagedWorktreeOpts;
+
+export interface ValidatePersonalWorkspaceTargetPathArgs {
+  environmentId: string;
+  personalWorkspaceRoot: string;
+  targetPath: string;
+}
 
 // ---------------------------------------------------------------------------
 // HostWorkspace interface
@@ -251,9 +270,60 @@ export async function provisionWorkspace(
       return provisionUnmanaged(opts);
     case "managed-worktree":
       return provisionWorktree(opts);
+    case "personal":
+      return provisionPersonalWorkspace(opts);
     case "reconnect-managed-worktree":
       return reconnectManagedWorktree(opts);
   }
+}
+
+function isRelativeChildPath(relativePath: string): boolean {
+  return (
+    relativePath.length > 0 &&
+    relativePath !== "." &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    relativePath !== ".." &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
+export function getPersonalWorkspaceRoot(dataDir: string): string {
+  return path.resolve(dataDir, "personal-workspaces");
+}
+
+export function validatePersonalWorkspaceTargetPath(
+  args: ValidatePersonalWorkspaceTargetPathArgs,
+): string {
+  if (
+    path.basename(args.environmentId) !== args.environmentId ||
+    args.environmentId === "." ||
+    args.environmentId === ".."
+  ) {
+    throw new WorkspaceError(
+      "invalid_personal_workspace_path",
+      "Personal workspace environmentId must be a single path segment",
+    );
+  }
+
+  const root = path.resolve(args.personalWorkspaceRoot);
+  const expectedTargetPath = path.resolve(root, args.environmentId);
+  const rootRelativeExpectedPath = path.relative(root, expectedTargetPath);
+  if (!isRelativeChildPath(rootRelativeExpectedPath)) {
+    throw new WorkspaceError(
+      "invalid_personal_workspace_path",
+      "Personal workspace target path must be under the personal workspace root",
+    );
+  }
+
+  const targetPath = path.resolve(args.targetPath);
+  if (targetPath !== expectedTargetPath) {
+    throw new WorkspaceError(
+      "invalid_personal_workspace_path",
+      "Personal workspace target path must match the environment id",
+    );
+  }
+
+  return targetPath;
 }
 
 interface ApplyUnmanagedCheckoutArgs {
@@ -538,6 +608,21 @@ async function provisionWorktree(
     isWorktree: true,
     destroyFn: () =>
       removeWorktree({ path: wsPath, force: true, pruneEmptyParent: true }),
+  });
+}
+
+async function provisionPersonalWorkspace(
+  opts: PersonalWorkspaceOpts,
+): Promise<HostWorkspace> {
+  const targetPath = validatePersonalWorkspaceTargetPath(opts);
+  await mkdir(targetPath, { recursive: true });
+
+  return new ProvisionedHostWorkspace({
+    path: targetPath,
+    managed: true,
+    isGitRepo: false,
+    isWorktree: false,
+    destroyFn: () => rm(targetPath, { recursive: true, force: true }),
   });
 }
 

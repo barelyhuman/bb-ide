@@ -3,7 +3,11 @@ import type {
   EnvironmentProvisionCommand,
   HostDaemonCommandResult,
 } from "@bb/host-daemon-contract";
-import type { ProvisionWorkspaceArgs } from "@bb/host-workspace";
+import {
+  getPersonalWorkspaceRoot,
+  validatePersonalWorkspaceTargetPath,
+  type ProvisionWorkspaceArgs,
+} from "@bb/host-workspace";
 import {
   type CommandDispatchOptions,
   type CommandOf,
@@ -33,7 +37,7 @@ export async function provisionEnvironment(
   try {
     const entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
-      provision: toProvisionWorkspaceOptions(command, onProgress),
+      provision: toProvisionWorkspaceOptions(command, options, onProgress),
     });
 
     const defaultBranch = entry.workspace.isGitRepo
@@ -122,6 +126,7 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
 
 export function toProvisionWorkspaceOptions(
   command: EnvironmentProvisionCommand,
+  options: Pick<CommandDispatchOptions, "dataDir">,
   onProgress?: ProvisionProgressCallback,
 ): ProvisionWorkspaceArgs {
   switch (command.workspaceProvisionType) {
@@ -141,6 +146,21 @@ export function toProvisionWorkspaceOptions(
         branchName: command.branchName,
         baseBranch: command.baseBranch,
         timeoutMs: command.setupTimeoutMs,
+        onProgress,
+      };
+    }
+    case "personal": {
+      const personalWorkspaceRoot = getPersonalWorkspaceRoot(options.dataDir);
+      const targetPath = validatePersonalWorkspaceTargetPath({
+        environmentId: command.environmentId,
+        personalWorkspaceRoot,
+        targetPath: command.targetPath,
+      });
+      return {
+        workspaceProvisionType: command.workspaceProvisionType,
+        environmentId: command.environmentId,
+        personalWorkspaceRoot,
+        targetPath,
         onProgress,
       };
     }

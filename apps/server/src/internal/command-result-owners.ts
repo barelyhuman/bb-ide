@@ -538,7 +538,7 @@ function handleThreadCommandFailure(
   }
   appendSystemErrorEventInTransaction(deps, {
     threadId: thread.id,
-    environmentId: command.environmentId,
+    environmentId: thread.environmentId,
     code: "thread_command_failed",
     message: `Command ${report.type} failed`,
     detail: report.errorMessage,

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hosts } from "@bb/db";
+import { getPersonalProject, getProjectExecutionDefaults, hosts } from "@bb/db";
+import { PERSONAL_PROJECT_ID, threadTypeValues } from "@bb/domain";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
@@ -153,9 +154,37 @@ describe("server skeleton", () => {
     db.$client.close();
   });
 
+  it("ensures the personal project and execution defaults on startup", () => {
+    const db = initDb(":memory:");
+    try {
+      expect(getPersonalProject(db)).toMatchObject({
+        id: PERSONAL_PROJECT_ID,
+        kind: "personal",
+        name: "Personal",
+      });
+
+      for (const threadType of threadTypeValues) {
+        expect(
+          getProjectExecutionDefaults(db, {
+            projectId: PERSONAL_PROJECT_ID,
+            threadType,
+          }),
+        ).toMatchObject({
+          model: expect.any(String),
+          permissionMode: expect.any(String),
+          providerId: expect.any(String),
+          reasoningLevel: expect.any(String),
+          serviceTier: expect.any(String),
+        });
+      }
+    } finally {
+      db.$client.close();
+    }
+  });
+
   it("warns when startup finds future-dated applied migrations", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(1779417575414 + 10_000);
+    vi.setSystemTime(1779821958649 + 10_000);
 
     const dataDir = mkdtempSync(join(tmpdir(), "bb-server-db-startup-"));
     try {

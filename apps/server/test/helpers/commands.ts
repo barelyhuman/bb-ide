@@ -27,6 +27,32 @@ export interface QueuedCommand<
   row: typeof hostDaemonCommands.$inferSelect;
 }
 
+type ManagedWorktreeEnvironmentProvisionCommand = Extract<
+  HostDaemonCommand,
+  { type: "environment.provision"; workspaceProvisionType: "managed-worktree" }
+>;
+
+export type ManagedWorktreeEnvironmentProvisionQueuedCommand =
+  QueuedCommand<ManagedWorktreeEnvironmentProvisionCommand>;
+
+export function isManagedWorktreeEnvironmentProvisionQueuedCommand(
+  queued: QueuedCommand,
+): queued is ManagedWorktreeEnvironmentProvisionQueuedCommand {
+  return (
+    queued.command.type === "environment.provision" &&
+    queued.command.workspaceProvisionType === "managed-worktree"
+  );
+}
+
+export function requireManagedWorktreeEnvironmentProvisionQueuedCommand(
+  queued: QueuedCommand,
+): ManagedWorktreeEnvironmentProvisionQueuedCommand {
+  if (isManagedWorktreeEnvironmentProvisionQueuedCommand(queued)) {
+    return queued;
+  }
+  throw new Error("Expected managed-worktree environment.provision command");
+}
+
 export function listQueuedThreadCommands(
   harness: TestAppHarness,
   type: HostDaemonCommand["type"],

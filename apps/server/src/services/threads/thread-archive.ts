@@ -18,7 +18,10 @@ import {
 import { archiveThreadAndReleaseChildren } from "./thread-ownership.js";
 
 export interface ArchiveThreadWithLifecycleEffectsArgs {
-  environment: Environment;
+  environment: {
+    hostId: string;
+    id: string;
+  };
   thread: Thread;
 }
 

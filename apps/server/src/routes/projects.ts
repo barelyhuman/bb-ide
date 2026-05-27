@@ -2,6 +2,7 @@ import {
   countProjectSources,
   createProject,
   getProjectExecutionDefaults,
+  getPersonalProject,
   createProjectSource,
   deleteProjectSource,
   getDefaultProjectSource,
@@ -43,6 +44,7 @@ import {
   type ProjectWithThreadsResponse,
   type PublicApiSchema,
   type ThreadListResponse,
+  type EnvironmentArgs,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import { renderTemplate } from "@bb/templates";
@@ -57,6 +59,7 @@ import {
   requireNonDestroyedHostWithStatus,
   requireProject,
   requirePublicProject,
+  requirePublicStandardProject,
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
 import { PROMPT_HISTORY_ENTRY_LIMIT } from "@bb/domain";
@@ -82,6 +85,7 @@ function toProjectResponseProjectFields(
 ): ProjectResponseProjectFields {
   return {
     id: project.id,
+    kind: project.kind,
     name: project.name,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -119,7 +123,7 @@ function buildProjectResponses(
   projectId?: string,
 ): ProjectResponse[] {
   const projects = projectId
-    ? [requirePublicProject(deps.db, projectId)]
+    ? [requirePublicStandardProject(deps.db, projectId)]
     : listPublicProjects(deps.db);
   return buildProjectResponsesFromRows(deps, projects);
 }
@@ -193,7 +197,17 @@ function parseProjectListIncludes(
 function buildProjectsWithThreadsResponse(
   deps: AppDeps,
 ): ProjectWithThreadsResponse[] {
-  const projects = buildProjectResponses(deps);
+  return buildProjectsWithThreadsResponseFromRows(
+    deps,
+    listPublicProjects(deps.db),
+  );
+}
+
+function buildProjectsWithThreadsResponseFromRows(
+  deps: AppDeps,
+  projectRows: ProjectResponseRow[],
+): ProjectWithThreadsResponse[] {
+  const projects = buildProjectResponsesFromRows(deps, projectRows);
   const projectIds = projects.map((project) => project.id);
   const threadRows = listThreadsWithPendingInteractionStateForProjects(
     deps.db,
@@ -222,6 +236,32 @@ function buildProjectsWithThreadsResponse(
     ...project,
     threads: threadsByProjectId.get(project.id) ?? [],
   }));
+}
+
+function buildSidebarBootstrapResponse(deps: AppDeps) {
+  const personalProject = getPersonalProject(deps.db);
+  if (!personalProject) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      "Personal project is not initialized",
+    );
+  }
+  const personalProjectResponse = buildProjectsWithThreadsResponseFromRows(
+    deps,
+    [personalProject],
+  )[0];
+  if (!personalProjectResponse) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      "Personal project response was not built",
+    );
+  }
+  return {
+    projects: buildProjectsWithThreadsResponse(deps),
+    personalProject: personalProjectResponse,
+  };
 }
 
 interface RequireProjectSourceArgs {
@@ -306,6 +346,10 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json(buildProjectResponses(deps));
   });
 
+  get("/sidebar-bootstrap", (context) =>
+    context.json(buildSidebarBootstrapResponse(deps)),
+  );
+
   post("/projects", createProjectRequestSchema, async (context, payload) => {
     const { source } = payload;
     if (source.type === "local_path") {
@@ -327,7 +371,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     projectDefaultExecutionOptionsQuerySchema,
     (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
       return context.json(
         getProjectExecutionDefaults(deps.db, {
           projectId,
@@ -342,7 +386,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     promptHistoryQuerySchema,
     (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
       const limit = Math.min(
         parseOptionalInteger(query.limit, "limit") ??
           PROMPT_HISTORY_ENTRY_LIMIT,
@@ -369,7 +413,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     "/projects/:id",
     updateProjectRequestSchema,
     async (context, payload) => {
-      requirePublicProject(deps.db, context.req.param("id"));
+      requirePublicStandardProject(deps.db, context.req.param("id"));
       const project = updateProject(
         deps.db,
         deps.hub,
@@ -388,7 +432,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     reorderProjectRequestSchema,
     async (context, payload) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
       return context.json(
         toProjectOrderResponse(
           deps,
@@ -406,7 +450,14 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   del("/projects/:id", async (context) => {
     const id = context.req.param("id");
-    requireProject(deps.db, id);
+    const project = requireProject(deps.db, id);
+    if (project.kind === "personal") {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "The personal project cannot be deleted",
+      );
+    }
     beginProjectDeletion(deps, { projectId: id });
     requestProjectDeletionAdvance(deps, { projectId: id });
     return context.json({ ok: true });
@@ -416,7 +467,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     "/projects/:id/sources",
     createProjectSourceRequestSchema,
     async (context, payload) => {
-      requirePublicProject(deps.db, context.req.param("id"));
+      requirePublicStandardProject(deps.db, context.req.param("id"));
       if (payload.type === "local_path") {
         requireNonDestroyedHostWithStatus(deps.db, payload.hostId);
       }
@@ -432,7 +483,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     "/projects/:id/sources/:sourceId",
     updateProjectSourceRequestSchema,
     async (context, payload) => {
-      requirePublicProject(deps.db, context.req.param("id"));
+      requirePublicStandardProject(deps.db, context.req.param("id"));
       const existing = requireProjectSource(deps, {
         projectId: context.req.param("id"),
         sourceId: context.req.param("sourceId"),
@@ -462,7 +513,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   del("/projects/:id/sources/:sourceId", (context) => {
     const projectId = context.req.param("id");
-    requirePublicProject(deps.db, projectId);
+    requirePublicStandardProject(deps.db, projectId);
     requireProjectSource(deps, {
       projectId,
       sourceId: context.req.param("sourceId"),
@@ -491,7 +542,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     projectFilesQuerySchema,
     async (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
 
       const limit = Math.min(
         parseOptionalInteger(query.limit, "limit") ?? 1000,
@@ -535,7 +586,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     projectPathsQuerySchema,
     async (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
 
       const limit = Math.min(
         parseOptionalInteger(query.limit, "limit") ?? 1000,
@@ -581,7 +632,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     projectBranchesQuerySchema,
     async (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
 
       const source = resolveProjectSourcePath(deps, {
         projectId,
@@ -600,7 +651,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   );
 
   post("/projects/:id/attachments", async (context) => {
-    requirePublicProject(deps.db, context.req.param("id"));
+    requirePublicStandardProject(deps.db, context.req.param("id"));
     const formData = await context.req.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
@@ -616,7 +667,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     "/projects/:id/attachments/content",
     projectAttachmentContentQuerySchema,
     async (context, query) => {
-      requirePublicProject(deps.db, context.req.param("id"));
+      requirePublicStandardProject(deps.db, context.req.param("id"));
       const attachment = await readAttachment(
         deps.config.dataDir,
         context.req.param("id"),
@@ -636,24 +687,39 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     createManagerThreadRequestSchema,
     async (context, payload) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      const project = requireProject(deps.db, projectId);
 
       const { hostId } = payload.environment;
       requireNonDestroyedHostWithStatus(deps.db, hostId);
-      const source = getProjectSourceByHost(deps.db, projectId, hostId);
-      if (!source) {
-        throw new ApiError(
-          409,
-          "invalid_request",
-          "No project source found for the selected host",
-        );
-      }
-      if (source.type !== "local_path") {
-        throw new ApiError(
-          409,
-          "invalid_request",
-          "Project source for host has no local path",
-        );
+      let environment: EnvironmentArgs;
+      if (project.kind === "personal") {
+        environment = {
+          type: "host",
+          hostId,
+          workspace: { type: "personal" },
+        };
+      } else {
+        requirePublicProject(deps.db, projectId);
+        const source = getProjectSourceByHost(deps.db, projectId, hostId);
+        if (!source) {
+          throw new ApiError(
+            409,
+            "invalid_request",
+            "No project source found for the selected host",
+          );
+        }
+        if (source.type !== "local_path") {
+          throw new ApiError(
+            409,
+            "invalid_request",
+            "Project source for host has no local path",
+          );
+        }
+        environment = {
+          type: "host",
+          hostId,
+          workspace: { type: "unmanaged", path: source.path },
+        };
       }
 
       if (payload.templateName !== undefined) {
@@ -707,11 +773,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         ...(payload.permissionMode
           ? { permissionMode: payload.permissionMode }
           : {}),
-        environment: {
-          type: "host",
-          hostId,
-          workspace: { type: "unmanaged", path: source.path },
-        },
+        environment,
       });
       return context.json(toThreadResponseFromThread(deps, { thread }), 201);
     },
@@ -722,7 +784,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     reorderManagerThreadRequestSchema,
     async (context, payload) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      requirePublicStandardProject(deps.db, projectId);
       assertManagerThreadOrderResult(
         reorderManagerThread({
           db: deps.db,

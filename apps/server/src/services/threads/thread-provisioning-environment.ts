@@ -75,7 +75,10 @@ import {
 } from "./thread-provisioning-context.js";
 import { readThreadProvisioningStateFromRecord } from "./thread-provisioning-state.js";
 import { tryTransition } from "./thread-transitions.js";
-import { resolveManagedTargetPath } from "./worktree-paths.js";
+import {
+  resolveManagedTargetPath,
+  resolvePersonalTargetPath,
+} from "./worktree-paths.js";
 
 export type ThreadProvisioningDeps = LifecycleCoordinationDeps;
 
@@ -85,6 +88,10 @@ type ActiveDirectEnvironmentOperationKind = "provision" | "reprovision";
 type DirectManagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
   { type: "direct-managed" }
+>;
+type DirectPersonalIntent = Extract<
+  ThreadProvisionEnvironmentIntent,
+  { type: "direct-personal" }
 >;
 type DirectUnmanagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
@@ -226,6 +233,13 @@ interface ManagedEnvironmentPlanCommonArgs {
 
 type ManagedEnvironmentPlanArgs = ManagedEnvironmentPlanCommonArgs;
 
+interface PersonalEnvironmentPlanArgs {
+  dataDir: string;
+  hostId: string;
+  thread: Thread;
+  workspaceProvisionType: "personal";
+}
+
 interface EnsureEnvironmentRequestedArgs {
   context: ThreadProvisionContext;
   thread: Thread;
@@ -261,6 +275,15 @@ function initialProvisioningEntries(
           type: "step",
           key: "workspace-started",
           text: "Preparing worktree",
+          status: "started",
+        },
+      ];
+    case "personal":
+      return [
+        {
+          type: "step",
+          key: "workspace-started",
+          text: "Preparing personal workspace",
           status: "started",
         },
       ];
@@ -780,6 +803,37 @@ function buildManagedEnvironmentPlan(
   };
 }
 
+function buildPersonalEnvironmentPlan(
+  args: PersonalEnvironmentPlanArgs,
+): ThreadProvisionEnvironmentPlan {
+  return {
+    environmentInput: {
+      projectId: args.thread.projectId,
+      hostId: args.hostId,
+      managed: true,
+      workspaceProvisionType: args.workspaceProvisionType,
+      status: "provisioning",
+    },
+    buildRequest: ({ context, environment }) =>
+      buildDirectEnvironmentProvisionRequest({
+        command: buildEnvironmentProvisionCommand({
+          environmentId: environment.id,
+          hostId: args.hostId,
+          initiator: {
+            threadId: args.thread.id,
+            provisioningId: context.state.provisioningId,
+          },
+          targetPath: resolvePersonalTargetPath({
+            dataDir: args.dataDir,
+            environmentId: environment.id,
+          }),
+          workspaceProvisionType: args.workspaceProvisionType,
+        }),
+        provisioningId: context.state.provisioningId,
+      }),
+  };
+}
+
 async function resolveEnvironmentCreationPlan(
   deps: ThreadProvisioningDeps,
   args: ResolveEnvironmentCreationPlanArgs,
@@ -800,6 +854,18 @@ async function resolveEnvironmentCreationPlan(
         hostId: intent.hostId,
         sourcePath: intent.sourcePath,
         baseBranch: intent.baseBranch,
+        thread: args.thread,
+        workspaceProvisionType: intent.workspaceProvisionType,
+      });
+    }
+    case "direct-personal": {
+      const intent: DirectPersonalIntent = args.intent;
+      const hostSession = await ensureHostSessionReadyForWork(deps, {
+        hostId: intent.hostId,
+      });
+      return buildPersonalEnvironmentPlan({
+        dataDir: hostSession.dataDir,
+        hostId: intent.hostId,
         thread: args.thread,
         workspaceProvisionType: intent.workspaceProvisionType,
       });

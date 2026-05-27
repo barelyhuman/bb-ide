@@ -62,6 +62,7 @@ import type {
   PromptHistoryResponse,
   ProjectResponse,
   ProjectWithThreadsResponse,
+  SidebarBootstrapResponse,
   ReorderManagerThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
@@ -143,6 +144,9 @@ export type PublicApiSchema = {
       ProjectResponse[] | ProjectWithThreadsResponse[]
     >;
     $post: Endpoint<{ json: CreateProjectRequest }, ProjectResponse, 201>;
+  };
+  "/sidebar-bootstrap": {
+    $get: Endpoint<EmptyInput, SidebarBootstrapResponse>;
   };
   "/projects/:id": {
     $get: Endpoint<PathProjectId, ProjectResponse>;

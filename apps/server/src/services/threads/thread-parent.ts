@@ -5,7 +5,7 @@ import { throwParentThreadInvalid } from "../lib/lifecycle-api-errors.js";
 
 export type ManagerParentThread = Pick<
   Thread,
-  "archivedAt" | "deletedAt" | "id" | "projectId" | "type"
+  "archivedAt" | "deletedAt" | "environmentId" | "id" | "projectId" | "type"
 >;
 
 export interface IsLiveManagerParentThreadArgs {

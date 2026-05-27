@@ -42,6 +42,8 @@ function reprovisionStartedText(
   switch (workspaceProvisionType) {
     case "managed-worktree":
       return "Restoring worktree";
+    case "personal":
+      return "Restoring personal workspace";
     case "unmanaged":
       return "Restoring environment";
   }

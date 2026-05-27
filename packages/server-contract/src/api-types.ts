@@ -205,9 +205,14 @@ export const managedWorktreeWorkspaceSchema = z.object({
   baseBranch: baseBranchSpecSchema,
 });
 
+export const personalWorkspaceSchema = z.object({
+  type: z.literal("personal"),
+});
+
 export const workspaceArgsSchema = z.discriminatedUnion("type", [
   unmanagedWorkspaceSchema,
   managedWorktreeWorkspaceSchema,
+  personalWorkspaceSchema,
 ]);
 export type WorkspaceArgs = z.infer<typeof workspaceArgsSchema>;
 
@@ -216,11 +221,21 @@ export const reuseEnvironmentSchema = z.object({
   environmentId: z.string().min(1),
 });
 
-export const hostEnvironmentSchema = z.object({
-  type: z.literal("host"),
-  hostId: z.string().min(1),
-  workspace: workspaceArgsSchema,
-});
+export const hostEnvironmentSchema = z
+  .object({
+    type: z.literal("host"),
+    hostId: z.string().min(1).optional(),
+    workspace: workspaceArgsSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.workspace.type !== "personal" && value.hostId === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "hostId is required unless workspace.type is personal",
+        path: ["hostId"],
+      });
+    }
+  });
 
 export const environmentArgsSchema = z.discriminatedUnion("type", [
   reuseEnvironmentSchema,
@@ -889,7 +904,7 @@ export type EnvironmentArchiveThreadsResponse = z.infer<
 >;
 
 export const threadListQuerySchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
   type: threadTypeSchema.optional(),
   parentThreadId: z.string().min(1).optional(),
   archived: z.enum(["true", "false"]).optional(),
@@ -1515,6 +1530,14 @@ export const projectWithThreadsResponseSchema = projectResponseSchema.extend({
 });
 export type ProjectWithThreadsResponse = z.infer<
   typeof projectWithThreadsResponseSchema
+>;
+
+export const sidebarBootstrapResponseSchema = z.object({
+  projects: z.array(projectWithThreadsResponseSchema),
+  personalProject: projectWithThreadsResponseSchema,
+});
+export type SidebarBootstrapResponse = z.infer<
+  typeof sidebarBootstrapResponseSchema
 >;
 
 export const systemConfigResponseSchema = z.object({

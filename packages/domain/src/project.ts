@@ -1,7 +1,14 @@
 import { z } from "zod";
 
+export const PERSONAL_PROJECT_ID = "proj_personal";
+
+export const projectKindValues = ["standard", "personal"] as const;
+export const projectKindSchema = z.enum(projectKindValues);
+export type ProjectKind = z.infer<typeof projectKindSchema>;
+
 export const projectSchema = z.object({
   id: z.string(),
+  kind: projectKindSchema,
   name: z.string(),
   createdAt: z.number(),
   updatedAt: z.number(),

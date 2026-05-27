@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { completeThreadStart } from "../../src/services/threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
 import {
+  requireManagedWorktreeEnvironmentProvisionQueuedCommand,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -135,23 +136,21 @@ describe("public thread lifecycle regressions", () => {
       ) {
         throw new Error("Thread creation response shape was invalid");
       }
-      if (
-        firstProvision.command.type !== "environment.provision" ||
-        firstProvision.command.workspaceProvisionType === "unmanaged" ||
-        secondProvision.command.type !== "environment.provision" ||
-        secondProvision.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected managed environment.provision commands");
-      }
+      const firstManagedProvision =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(firstProvision);
+      const secondManagedProvision =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(
+          secondProvision,
+        );
 
-      expect(firstProvision.command.branchName).toBe(
+      expect(firstManagedProvision.command.branchName).toBe(
         `bb/worker-thread-${firstThread.id}`,
       );
-      expect(secondProvision.command.branchName).toBe(
+      expect(secondManagedProvision.command.branchName).toBe(
         `bb/worker-thread-${secondThread.id}`,
       );
-      expect(firstProvision.command.branchName).not.toBe(
-        secondProvision.command.branchName,
+      expect(firstManagedProvision.command.branchName).not.toBe(
+        secondManagedProvision.command.branchName,
       );
     } finally {
       await harness.cleanup();

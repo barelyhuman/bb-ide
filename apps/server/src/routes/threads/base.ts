@@ -33,7 +33,6 @@ import {
   requireEnvironment,
   requirePublicProject,
   requirePublicThread,
-  requirePublicThreadEnvironment,
 } from "../../services/lib/entity-lookup.js";
 import { queueThreadRenameCommand } from "../../services/threads/thread-commands.js";
 import {
@@ -114,15 +113,13 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     }
     const offset = parseOptionalInteger(query.offset, "offset");
     if (offset !== undefined && offset < 0) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "offset must be non-negative",
-      );
+      throw new ApiError(400, "invalid_request", "offset must be non-negative");
     }
-    requirePublicProject(deps.db, query.projectId);
+    if (query.projectId) {
+      requirePublicProject(deps.db, query.projectId);
+    }
     const threads = listThreadsWithPendingInteractionState(deps.db, {
-      projectId: query.projectId,
+      ...(query.projectId ? { projectId: query.projectId } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
       archived:
@@ -138,7 +135,6 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads", createThreadRequestSchema, async (context, payload) => {
-    requirePublicProject(deps.db, payload.projectId);
     const thread = await createThreadFromRequest(deps, {
       ...payload,
       automationId: null,
@@ -226,10 +222,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   del("/threads/:id", deleteThreadRequestSchema, async (context, payload) => {
-    const { environment, thread } = requirePublicThreadEnvironment(
-      deps.db,
-      context.req.param("id"),
-    );
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
     requireManagerChildThreadsConfirmation({
       action: "delete",
       confirmed: payload.managerChildThreadsConfirmed,
@@ -238,6 +231,15 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     });
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
+    if (thread.environmentId === null) {
+      await finalizeStoppedThread(deps, {
+        threadId: thread.id,
+        cancelPendingCommand: false,
+      });
+      return context.json({ ok: true });
+    }
+
+    const environment = requireEnvironment(deps.db, thread.environmentId);
     requestThreadStopIfNeeded(deps, thread, environment);
     await finalizeStoppedThread(deps, {
       threadId: thread.id,

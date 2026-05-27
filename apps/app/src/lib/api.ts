@@ -30,7 +30,7 @@ import type {
   CreateThreadTerminalRequest,
   ProjectBranchesResponse,
   ProjectResponse,
-  ProjectWithThreadsResponse,
+  SidebarBootstrapResponse,
   PromptHistoryResponse,
   ReorderManagerThreadRequest,
   ReorderProjectRequest,
@@ -502,14 +502,9 @@ export async function listProjects(): Promise<ProjectResponse[]> {
 
 export async function listProjectsWithThreads(
   signal?: AbortSignal,
-): Promise<ProjectWithThreadsResponse[]> {
-  return request<ProjectWithThreadsResponse[]>(
-    apiClient.projects.$get(
-      {
-        query: { include: "threads" },
-      },
-      requestOptions(signal),
-    ),
+): Promise<SidebarBootstrapResponse> {
+  return request<SidebarBootstrapResponse>(
+    apiClient["sidebar-bootstrap"].$get(undefined, requestOptions(signal)),
   );
 }
 

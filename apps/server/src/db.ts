@@ -4,6 +4,7 @@ import type {
   MigrationWarningLogger,
   SlowDbQueryLogger,
 } from "@bb/db";
+import { ensurePersonalProjectBootstrap } from "./services/projects/personal-project.js";
 
 export type InitDbLogger = MigrationWarningLogger & SlowDbQueryLogger;
 
@@ -19,5 +20,6 @@ export function initDb(
     slowQueryLogger: options.logger,
   });
   migrate(db, { logger: options.logger });
+  ensurePersonalProjectBootstrap(db);
   return db;
 }

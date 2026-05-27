@@ -20,6 +20,7 @@ export type EnvironmentCleanupMode = z.infer<
 export const WORKSPACE_PROVISION_TYPES = [
   "unmanaged",
   "managed-worktree",
+  "personal",
 ] as const;
 export const workspaceProvisionTypeSchema = z.enum(WORKSPACE_PROVISION_TYPES);
 export type WorkspaceProvisionType = z.infer<
@@ -29,6 +30,7 @@ export type WorkspaceProvisionType = z.infer<
 export const environmentWorkspaceDisplayKindValues = [
   "managed-worktree",
   "unmanaged-worktree",
+  "personal",
   "other",
 ] as const;
 export const environmentWorkspaceDisplayKindSchema = z.enum(
@@ -50,6 +52,10 @@ export function resolveEnvironmentWorkspaceDisplayKind({
 }: ResolveEnvironmentWorkspaceDisplayKindArgs): EnvironmentWorkspaceDisplayKind {
   if (environment.workspaceProvisionType === "managed-worktree") {
     return "managed-worktree";
+  }
+
+  if (environment.workspaceProvisionType === "personal") {
+    return "personal";
   }
 
   if (environment.isWorktree === true) {

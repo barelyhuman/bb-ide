@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WorkspaceError } from "@bb/host-workspace";
+import { getPersonalWorkspaceRoot, WorkspaceError } from "@bb/host-workspace";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import type { BufferedEventInput } from "../../src/event-buffer.js";
 import {
@@ -110,6 +110,86 @@ describe("environment command dispatch", () => {
         onProgress: expect.any(Function),
       },
     ]);
+  });
+
+  it("covers environment.provision in personal mode", async () => {
+    const dataDir = await makeTempDir("bb-dispatch-personal-data-");
+    const environmentId = "env_personal";
+    const personalWorkspaceRoot = getPersonalWorkspaceRoot(dataDir);
+    const targetPath = `${personalWorkspaceRoot}/${environmentId}`;
+    const harness = createHarness({
+      workspacePath: targetPath,
+    });
+    harness.workspace.isGitRepo = false;
+    harness.workspace.getCurrentBranch = async () => null;
+
+    const result = await dispatchCommand(
+      {
+        type: "environment.provision",
+        environmentId,
+        initiator: null,
+        workspaceProvisionType: "personal",
+        targetPath,
+      },
+      harness.dispatchOptions({ dataDir }),
+    );
+
+    expect(result).toMatchObject({
+      path: targetPath,
+      isGitRepo: false,
+      isWorktree: false,
+      branchName: null,
+      defaultBranch: null,
+    });
+    expect(harness.provisions).toEqual([
+      {
+        workspaceProvisionType: "personal",
+        environmentId,
+        personalWorkspaceRoot,
+        targetPath,
+        onProgress: expect.any(Function),
+      },
+    ]);
+  });
+
+  it("rejects personal provision targets outside the data dir personal workspace root", async () => {
+    const dataDir = await makeTempDir("bb-dispatch-personal-data-");
+    const environmentId = "env_personal";
+    const harness = createHarness();
+
+    await expect(() =>
+      dispatchCommand(
+        {
+          type: "environment.provision",
+          environmentId,
+          initiator: null,
+          workspaceProvisionType: "personal",
+          targetPath: `${dataDir}/personal-workspaces-sibling/${environmentId}`,
+        },
+        harness.dispatchOptions({ dataDir }),
+      ),
+    ).rejects.toThrow("Personal workspace target path must match");
+    expect(harness.provisions).toEqual([]);
+  });
+
+  it("rejects personal provision targets that traverse out of the environment directory", async () => {
+    const dataDir = await makeTempDir("bb-dispatch-personal-data-");
+    const environmentId = "env_personal";
+    const harness = createHarness();
+
+    await expect(() =>
+      dispatchCommand(
+        {
+          type: "environment.provision",
+          environmentId,
+          initiator: null,
+          workspaceProvisionType: "personal",
+          targetPath: `${getPersonalWorkspaceRoot(dataDir)}/${environmentId}/../env_other`,
+        },
+        harness.dispatchOptions({ dataDir }),
+      ),
+    ).rejects.toThrow("Personal workspace target path must match");
+    expect(harness.provisions).toEqual([]);
   });
 
   it("streams live events and flushes when initiator is provided", async () => {

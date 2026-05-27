@@ -103,7 +103,11 @@ function resolveSendMode(
 ): "start" | "auto" | "steer" {
   if (requestedMode === "start") {
     if (thread.status === "active") {
-      throwThreadNotWritable(thread, "already_active", "Thread is already active");
+      throwThreadNotWritable(
+        thread,
+        "already_active",
+        "Thread is already active",
+      );
     }
     return "start";
   }
@@ -289,7 +293,7 @@ export async function sendThreadMessage(
 
     const request = appendClientTurnEvent(deps, {
       threadId: thread.id,
-      environmentId: readyEnvironment.id,
+      environmentId: thread.environmentId,
       type: "client/turn/requested",
       input: preparedInput.input,
       execution,

@@ -5,6 +5,7 @@ import {
   listAutomations,
   updateAutomation,
 } from "@bb/db";
+import type { Project } from "@bb/domain";
 import {
   type AutomationAction,
   type AutomationScheduleTrigger,
@@ -41,6 +42,7 @@ import { requirePublicProject } from "../services/lib/entity-lookup.js";
 import { resolveStableThreadRequestEnvironment } from "../services/threads/thread-request-eligibility.js";
 
 interface BuildAutomationConfigUpdateInputArgs {
+  action: AutomationAction | undefined;
   current: NonNullable<ReturnType<typeof getAutomation>>;
   payload: UpdateAutomationConfigRequest;
 }
@@ -60,7 +62,12 @@ interface CreateAutomationValues {
 
 interface ValidateAutomationActionProjectScopeArgs {
   action: AutomationAction;
-  projectId: string;
+  project: Project;
+}
+
+interface ResolveAutomationActionForProjectArgs {
+  action: AutomationAction;
+  project: Project;
 }
 
 function requireProjectAutomation(
@@ -130,13 +137,22 @@ function buildAutomationConfigUpdateInput(
         }
       : {}),
     ...(args.payload.action !== undefined
-      ? { action: serializeAutomationAction(args.payload.action) }
+      ? { action: serializeAutomationAction(requireUpdatedAction(args.action)) }
       : {}),
     ...(args.payload.autoArchive !== undefined
       ? { autoArchive: args.payload.autoArchive }
       : {}),
     nextRunAt,
   };
+}
+
+function requireUpdatedAction(
+  action: AutomationAction | undefined,
+): AutomationAction {
+  if (!action) {
+    throw new Error("Automation action update was not resolved");
+  }
+  return action;
 }
 
 function buildAutomationEnabledUpdateInput(
@@ -176,8 +192,48 @@ function validateAutomationActionProjectScope(
 ): void {
   resolveStableThreadRequestEnvironment(deps, {
     environment: args.action.threadRequest.environment,
-    projectId: args.projectId,
+    projectId: args.project.id,
   });
+}
+
+function resolveAutomationActionForProject(
+  deps: Pick<AppDeps, "db">,
+  args: ResolveAutomationActionForProjectArgs,
+): AutomationAction {
+  validateAutomationActionProjectScope(deps, args);
+
+  switch (args.action.actionType) {
+    case "scheduled-thread": {
+      const environment = args.action.threadRequest.environment;
+      if (
+        environment.type !== "host" ||
+        environment.workspace.type !== "personal"
+      ) {
+        return args.action;
+      }
+      const resolvedEnvironment = resolveStableThreadRequestEnvironment(deps, {
+        environment,
+        projectId: args.project.id,
+      });
+      if (
+        resolvedEnvironment.type !== "personal" ||
+        resolvedEnvironment.hostId === null
+      ) {
+        throw new Error("Validated personal automation is missing hostId");
+      }
+      return {
+        ...args.action,
+        threadRequest: {
+          ...args.action.threadRequest,
+          environment: {
+            ...environment,
+            hostId: resolvedEnvironment.hostId,
+          },
+        },
+      };
+    }
+  }
+  return args.action;
 }
 
 function isAutomationEnabledUpdate(
@@ -210,7 +266,9 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
 
       switch (action.threadRequest.environment.type) {
         case "host":
-          hostIds.add(action.threadRequest.environment.hostId);
+          if (action.threadRequest.environment.hostId !== undefined) {
+            hostIds.add(action.threadRequest.environment.hostId);
+          }
           break;
         case "reuse":
           environmentIds.add(action.threadRequest.environment.environmentId);
@@ -270,13 +328,13 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
     createAutomationRequestSchema,
     (context, payload) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      const project = requirePublicProject(deps.db, projectId);
 
       try {
         const values = resolveCreateAutomationValues(payload);
-        validateAutomationActionProjectScope(deps, {
+        const action = resolveAutomationActionForProject(deps, {
           action: values.action,
-          projectId,
+          project,
         });
         const automation = createAutomation(deps.db, deps.hub, {
           projectId,
@@ -284,7 +342,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
           enabled: values.enabled,
           triggerType: values.trigger.triggerType,
           triggerConfig: serializeAutomationTrigger(values.trigger),
-          action: serializeAutomationAction(values.action),
+          action: serializeAutomationAction(action),
           autoArchive: values.autoArchive,
           nextRunAt: resolveNextRunAtForCreate(values),
         });
@@ -303,7 +361,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
     updateAutomationRequestSchema,
     (context, payload) => {
       const projectId = context.req.param("id");
-      requirePublicProject(deps.db, projectId);
+      const project = requirePublicProject(deps.db, projectId);
       const current = requireProjectAutomation(deps, {
         projectId,
         automationId: context.req.param("automationId"),
@@ -318,11 +376,12 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
           : (() => {
               const nextAction =
                 payload.action ?? parseAutomationAction(current.action);
-              validateAutomationActionProjectScope(deps, {
+              const action = resolveAutomationActionForProject(deps, {
                 action: nextAction,
-                projectId,
+                project,
               });
               return buildAutomationConfigUpdateInput({
+                action: payload.action !== undefined ? action : undefined,
                 current,
                 payload,
               });

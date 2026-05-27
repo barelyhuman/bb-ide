@@ -10,6 +10,7 @@ import type {
   Thread,
   ThreadType,
 } from "@bb/domain";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type { EnvironmentArgs } from "@bb/server-contract";
 import {
   isLiveManagerParentThread,
@@ -74,8 +75,18 @@ export interface ResolveSupportedPermissionModeArgs {
   providerId?: string;
 }
 
-type ImplicitHostDefaultEnvironment = Extract<EnvironmentArgs, { type: "host" }> & {
+type ImplicitHostDefaultEnvironment = Extract<
+  EnvironmentArgs,
+  { type: "host" }
+> & {
   workspace: { path: null; type: "unmanaged" };
+};
+
+type PersonalHostDefaultEnvironment = Extract<
+  EnvironmentArgs,
+  { type: "host" }
+> & {
+  workspace: { type: "personal" };
 };
 
 function isImplicitHostDefaultEnvironment(
@@ -86,6 +97,23 @@ function isImplicitHostDefaultEnvironment(
     environment.workspace.type === "unmanaged" &&
     environment.workspace.path === null
   );
+}
+
+function isPersonalHostDefaultEnvironment(
+  environment: EnvironmentArgs,
+): environment is PersonalHostDefaultEnvironment {
+  return (
+    environment.type === "host" && environment.workspace.type === "personal"
+  );
+}
+
+function requireHostEnvironmentId(
+  environment: Extract<EnvironmentArgs, { type: "host" }>,
+): string {
+  if (environment.hostId !== undefined) {
+    return environment.hostId;
+  }
+  throw new Error("Host environment is missing hostId");
 }
 
 function isManagedChildThread(args: IsManagedChildThreadArgs): boolean {
@@ -106,9 +134,8 @@ function resolveSupportedPermissionMode(
     return args.preferredPermissionMode;
   }
 
-  const supportedPermissionModes =
-    getBuiltInAgentProviderInfo(args.providerId).capabilities
-      .supportedPermissionModes;
+  const supportedPermissionModes = getBuiltInAgentProviderInfo(args.providerId)
+    .capabilities.supportedPermissionModes;
   if (supportedPermissionModes.includes(args.preferredPermissionMode)) {
     return args.preferredPermissionMode;
   }
@@ -168,9 +195,52 @@ export function resolveCreateThreadExecutionDefaults(
   };
 }
 
+export function buildInitialProjectExecutionDefaults(
+  threadType: ThreadType,
+): ProjectExecutionDefaults {
+  if (threadType === "manager") {
+    const managerDefaults = buildManagerThreadExecutionDefaults(
+      MANAGER_DEFAULT_PROVIDER_ID,
+    );
+    if (!managerDefaults) {
+      throw new Error("Manager defaults were not configured");
+    }
+    return managerDefaults;
+  }
+
+  return {
+    providerId: MANAGER_DEFAULT_PROVIDER_ID,
+    model: MANAGER_DEFAULT_MODEL,
+    reasoningLevel: DEFAULT_REASONING_LEVEL,
+    permissionMode: resolveSupportedPermissionMode({
+      providerId: MANAGER_DEFAULT_PROVIDER_ID,
+      preferredPermissionMode: DEFAULT_PERMISSION_MODE,
+    }),
+    serviceTier: DEFAULT_SERVICE_TIER,
+  };
+}
+
 export function resolveCreateThreadEnvironment(
   args: ResolveCreateThreadEnvironmentArgs,
 ): EnvironmentArgs {
+  if (
+    args.projectId === PERSONAL_PROJECT_ID &&
+    args.threadType === "standard" &&
+    isLiveManagerParentThread({
+      parentThread: args.parentThread ?? null,
+      projectId: args.projectId,
+    }) &&
+    isPersonalHostDefaultEnvironment(args.requestedEnvironment)
+  ) {
+    if (!args.parentThread?.environmentId) {
+      throw new Error("Personal manager parent is missing an environment");
+    }
+    return {
+      type: "reuse",
+      environmentId: args.parentThread.environmentId,
+    };
+  }
+
   if (
     args.threadType === "standard" &&
     isLiveManagerParentThread({
@@ -181,7 +251,7 @@ export function resolveCreateThreadEnvironment(
   ) {
     return {
       type: "host",
-      hostId: args.requestedEnvironment.hostId,
+      hostId: requireHostEnvironmentId(args.requestedEnvironment),
       workspace: { type: "managed-worktree", baseBranch: { kind: "default" } },
     };
   }

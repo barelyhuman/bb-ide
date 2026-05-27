@@ -116,21 +116,30 @@ export type EnvironmentProvisionCommandArgs =
       branchName: string;
       baseBranch: BaseBranchSpec;
       setupTimeoutMs: number;
+    }
+  | {
+      workspaceProvisionType: "personal";
+      environmentId: string;
+      hostId: string;
+      initiator: EnvironmentProvisionCommandInitiator;
+      targetPath: string;
     };
 
 export function buildEnvironmentProvisionCommand(
   args: EnvironmentProvisionCommandArgs,
 ): EnvironmentProvisionCommand {
-  return args.workspaceProvisionType === "unmanaged"
-    ? {
+  switch (args.workspaceProvisionType) {
+    case "unmanaged":
+      return {
         type: "environment.provision" as const,
         environmentId: args.environmentId,
         initiator: args.initiator,
         workspaceProvisionType: args.workspaceProvisionType,
         path: args.path,
         ...(args.checkout ? { checkout: args.checkout } : {}),
-      }
-    : {
+      };
+    case "managed-worktree":
+      return {
         type: "environment.provision" as const,
         environmentId: args.environmentId,
         initiator: args.initiator,
@@ -141,6 +150,15 @@ export function buildEnvironmentProvisionCommand(
         baseBranch: baseBranchSpecToStoredName(args.baseBranch),
         setupTimeoutMs: args.setupTimeoutMs,
       };
+    case "personal":
+      return {
+        type: "environment.provision" as const,
+        environmentId: args.environmentId,
+        initiator: args.initiator,
+        workspaceProvisionType: args.workspaceProvisionType,
+        targetPath: args.targetPath,
+      };
+  }
 }
 
 export function createThreadRecord(

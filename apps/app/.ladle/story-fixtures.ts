@@ -243,9 +243,7 @@ export const STORY_CLAUDE_CODE_AVAILABLE_MODELS: readonly AvailableModel[] = [
   makeAvailableModel({
     model: "claude-haiku-4-5",
     displayName: "Claude Haiku 4.5",
-    supportedReasoningEfforts: [
-      { reasoningEffort: "low", description: "" },
-    ],
+    supportedReasoningEfforts: [{ reasoningEffort: "low", description: "" }],
     defaultReasoningEffort: "low",
   }),
 ];
@@ -324,9 +322,8 @@ export const STORY_PROJECTS: readonly ProjectSelectorOption[] = [
 ];
 
 /** Matches the production helper passed into EnvironmentPickerUI. */
-export const storyIsLocalHost = (
-  hostId: string | null | undefined,
-): boolean => hostId === HOST_IDS.local;
+export const storyIsLocalHost = (hostId: string | null | undefined): boolean =>
+  hostId === HOST_IDS.local;
 
 /**
  * Codex / gpt-5.5 / medium reasoning — the default starting point most
@@ -429,6 +426,7 @@ export function makeProject(
 ): ProjectResponse {
   const base: ProjectResponse = {
     id: PROJECT_IDS.bb,
+    kind: "standard",
     name: PROJECT_NAMES.bb,
     sources: [],
     createdAt: 1,

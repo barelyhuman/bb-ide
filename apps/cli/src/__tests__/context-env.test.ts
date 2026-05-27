@@ -38,6 +38,13 @@ describe("context-env", () => {
     expect(resolveThreadId(undefined)).toBe("thread-env");
   });
 
+  it("prefers the explicit project flag over BB_PROJECT_ID", () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-env");
+
+    expect(resolveProjectId(undefined)).toBe("proj-env");
+    expect(resolveProjectId("proj-flag")).toBe("proj-flag");
+  });
+
   it("normalizes empty values as undefined", () => {
     vi.stubEnv("BB_PROJECT_ID", "");
     vi.stubEnv("BB_THREAD_ID", "   ");

@@ -643,6 +643,7 @@ export async function createHostDaemonApp(
   });
   let sendTerminalMessage: TerminalManagerOptions["sendMessage"] = () => false;
   const terminalManager = new TerminalManager({
+    dataDir: options.dataDir,
     logger: options.logger,
     runtimeManager,
     sendMessage: (message) => sendTerminalMessage(message),

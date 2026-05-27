@@ -53,6 +53,10 @@ export interface SafeParsedAutomationDefinitionResult {
   parsedDefinition: ParsedAutomationDefinition | null;
 }
 
+interface RequireAutomationHostAffinityArgs {
+  action: AutomationAction;
+}
+
 const scheduleTimeOfDaySchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):([0-5]\d)$/u, "Expected time in HH:MM format");
@@ -145,6 +149,7 @@ function computeAutomationValidation(
   }
 
   try {
+    requireAutomationHostAffinity({ action: args.action });
     resolveStableThreadRequestEnvironment(deps, {
       environment: args.action.threadRequest.environment,
       projectId: args.projectId,
@@ -207,6 +212,7 @@ function computeAutomationValidationWithProjectData(
   }
 
   try {
+    requireAutomationHostAffinity({ action: args.action });
     resolveStableThreadRequestEnvironmentFromProjectData(
       args.projectData,
       args.action.threadRequest.environment,
@@ -223,6 +229,28 @@ function computeAutomationValidationWithProjectData(
     isValid: validationIssues.length === 0,
     validationIssues,
   };
+}
+
+function requireAutomationHostAffinity(
+  args: RequireAutomationHostAffinityArgs,
+): void {
+  switch (args.action.actionType) {
+    case "scheduled-thread": {
+      const environment = args.action.threadRequest.environment;
+      if (
+        environment.type === "host" &&
+        environment.workspace.type === "personal" &&
+        environment.hostId === undefined
+      ) {
+        throw new ApiError(
+          400,
+          "invalid_request",
+          "Personal automation workspaces must store an explicit hostId",
+        );
+      }
+      return;
+    }
+  }
 }
 
 export function safeParseAutomationDefinition(

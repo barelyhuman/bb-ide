@@ -11,7 +11,7 @@ import {
   listHostThreadIds as listHostThreadIdsFromDb,
   listPublicHosts,
 } from "@bb/db";
-import type { Environment, Host, Project, Thread } from "@bb/domain";
+import type { Environment, Host, Project } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../../errors.js";
 import {
@@ -26,10 +26,12 @@ import {
 } from "./lifecycle-api-errors.js";
 
 type HostRow = NonNullable<ReturnType<typeof getHost>>;
+type ThreadRow = NonNullable<ReturnType<typeof getThread>>;
+type StandardProject = Project & { kind: "standard" };
 
 export interface ThreadEnvironmentLookupResult {
   environment: Environment;
-  thread: Thread;
+  thread: ThreadRow;
 }
 
 function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
@@ -46,10 +48,7 @@ function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
   return "disconnected";
 }
 
-function toHostRecord(
-  row: HostRow,
-  status: Host["status"],
-): Host {
+function toHostRecord(row: HostRow, status: Host["status"]): Host {
   return {
     id: row.id,
     name: row.name,
@@ -63,6 +62,10 @@ function toHostRecord(
 
 function throwHostNotFound(): never {
   throw new ApiError(404, "host_not_found", "Host not found");
+}
+
+function isStandardProject(project: Project): project is StandardProject {
+  return project.kind === "standard";
 }
 
 export function listPublicHostsWithStatus(db: DbConnection): Host[] {
@@ -159,7 +162,18 @@ export function requirePublicProject(
   return project;
 }
 
-function requireThread(db: DbConnection, threadId: string): Thread {
+export function requirePublicStandardProject(
+  db: DbConnection,
+  projectId: string,
+): StandardProject {
+  const project = requirePublicProject(db, projectId);
+  if (!isStandardProject(project)) {
+    throw new ApiError(404, "project_not_found", "Project not found");
+  }
+  return project;
+}
+
+function requireThread(db: DbConnection, threadId: string): ThreadRow {
   const thread = getThread(db, threadId);
   if (!thread) {
     throw new ApiError(404, "thread_not_found", "Thread not found");
@@ -170,7 +184,7 @@ function requireThread(db: DbConnection, threadId: string): Thread {
 export function requirePublicThread(
   db: DbConnection,
   threadId: string,
-): Thread {
+): ThreadRow {
   const thread = requireThread(db, threadId);
   if (
     thread.deletedAt !== null ||
@@ -212,7 +226,7 @@ export function requireReadyEnvironment(
 
 function requireEnvironmentForThread(
   db: DbConnection,
-  thread: Thread,
+  thread: ThreadRow,
 ): Environment {
   if (!thread.environmentId) {
     throwThreadEnvironmentUnavailable(

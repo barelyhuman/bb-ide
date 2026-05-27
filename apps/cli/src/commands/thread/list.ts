@@ -1,13 +1,13 @@
 import { Command } from "commander";
-import type { Thread } from "@bb/domain";
+import { PERSONAL_PROJECT_ID, type Thread } from "@bb/domain";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import {
-  requireProjectIdWithLabel,
+  resolveProjectIdWithLabel,
   resolveThreadId,
 } from "../../context-env.js";
 import { renderBorderlessTable } from "../../table.js";
-import { outputJson, printContextLabel } from "../helpers.js";
+import { outputJson } from "../helpers.js";
 import { statusText } from "./helpers.js";
 
 interface ThreadListCommandOptions {
@@ -26,7 +26,7 @@ export function registerListCommand(
     .description("List threads")
     .option(
       "--project <id>",
-      "Filter by project ID (defaults to BB_PROJECT_ID)",
+      "Filter by project ID (defaults to BB_PROJECT_ID; omit both to list all projects)",
     )
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
     .option("--archived", "Show only archived threads")
@@ -34,12 +34,10 @@ export function registerListCommand(
     .action(
       action(async (opts: ThreadListCommandOptions) => {
         const client = createClient(getUrl());
-        const resolvedProject = requireProjectIdWithLabel(opts.project);
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        const projectId = resolvedProject.id;
+        const resolvedProject = resolveProjectIdWithLabel(opts.project);
         const parentThreadId = resolveThreadId(opts.parentThread);
         const query = {
-          projectId,
+          ...(resolvedProject ? { projectId: resolvedProject.id } : {}),
           ...(parentThreadId ? { parentThreadId } : {}),
           ...(opts.archived ? { archived: "true" as const } : {}),
         };
@@ -59,7 +57,7 @@ export function registerListCommand(
 function printThreadTable(threads: Thread[]): void {
   const rows = threads.map((thread) => [
     thread.id,
-    thread.projectId,
+    thread.projectId === PERSONAL_PROJECT_ID ? "-" : thread.projectId,
     thread.archivedAt !== null
       ? `${statusText(thread.status)} (archived)`
       : statusText(thread.status),

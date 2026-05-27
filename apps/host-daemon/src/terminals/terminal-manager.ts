@@ -5,6 +5,7 @@ import path from "node:path";
 import { spawn as spawnPty } from "node-pty";
 import type { TerminalSessionCloseReason } from "@bb/domain";
 import type { HostDaemonDaemonWsMessage } from "@bb/host-daemon-contract";
+import { getPersonalWorkspaceRoot } from "@bb/host-workspace";
 import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 import type { HostDaemonServerTerminalMessage } from "../server-connection-support.js";
 import type { HostDaemonLogger } from "../logger.js";
@@ -65,6 +66,7 @@ type TerminalAttachMessage = Extract<
 >;
 
 export interface TerminalManagerOptions {
+  dataDir?: string;
   logger: HostDaemonLogger;
   platform?: NodeJS.Platform;
   ptyAdapter?: TerminalPtyAdapter;
@@ -392,6 +394,13 @@ export class TerminalManager {
     try {
       const entry = await this.options.runtimeManager.ensureEnvironment({
         environmentId: message.environmentId,
+        ...(this.options.dataDir
+          ? {
+              personalWorkspaceRoot: getPersonalWorkspaceRoot(
+                this.options.dataDir,
+              ),
+            }
+          : {}),
         workspacePath: message.workspaceContext.workspacePath,
         workspaceProvisionType: message.workspaceContext.workspaceProvisionType,
       });

@@ -34,7 +34,7 @@ export async function reconcileSessionThreads(
   const pendingThreads = deps.db
     .select({
       deletedAt: threads.deletedAt,
-      environmentId: threads.environmentId,
+      environmentId: environments.id,
       id: threads.id,
       status: threads.status,
       archivedAt: threads.archivedAt,
@@ -60,7 +60,7 @@ export async function reconcileSessionThreads(
   for (const thread of pendingThreads) {
     const isActive = activeThreadIds.includes(thread.id);
 
-    if (isActive && thread.environmentId) {
+    if (isActive) {
       requestThreadStop(deps, {
         environmentId: thread.environmentId,
         hostId,
@@ -106,7 +106,7 @@ export async function reconcileSessionThreads(
   }
 
   const activeButMissing = deps.db
-    .select({ environmentId: threads.environmentId, id: threads.id })
+    .select({ environmentId: environments.id, id: threads.id })
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(
@@ -183,5 +183,8 @@ function finalizeStoppedThreadAndRequestCleanupAdvance(
     threadAfterFinalize?.environmentId ??
     threadBeforeFinalize?.environmentId ??
     null;
+  if (environmentId === null) {
+    return;
+  }
   requestEnvironmentCleanupAdvance(deps, { environmentId });
 }

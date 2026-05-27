@@ -8,7 +8,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Project } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,11 +41,12 @@ vi.mock("@/hooks/useHostDaemon", () => ({
 }));
 
 function makeProjectResponse(
-  overrides: Partial<Project> = {},
+  overrides: Partial<ProjectResponse> = {},
 ): ProjectResponse {
   return {
     createdAt: 1,
     id: "project-1",
+    kind: "standard",
     name: "Project One",
     updatedAt: 1,
     sources: [],

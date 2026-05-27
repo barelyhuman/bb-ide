@@ -454,6 +454,13 @@ describe("threads", () => {
       isWorktree: true,
       branchName: "bb/worktree",
     });
+    const personalEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "personal",
+      isGitRepo: false,
+      isWorktree: false,
+    });
     const directThread = createThread(db, noopNotifier, {
       projectId: project.id,
       environmentId: directEnvironment.id,
@@ -462,6 +469,11 @@ describe("threads", () => {
     const worktreeThread = createThread(db, noopNotifier, {
       projectId: project.id,
       environmentId: worktreeEnvironment.id,
+      providerId: "codex",
+    });
+    const personalThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: personalEnvironment.id,
       providerId: "codex",
     });
 
@@ -475,6 +487,7 @@ describe("threads", () => {
     expect(displayKindsByThreadId.get(worktreeThread.id)).toBe(
       "managed-worktree",
     );
+    expect(displayKindsByThreadId.get(personalThread.id)).toBe("personal");
 
     const environmentIdentityByThreadId = new Map(
       listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(
@@ -768,7 +781,7 @@ describe("threads", () => {
       environmentId: environment.id,
       providerId: "codex",
     });
-    createThread(db, noopNotifier, {
+    const otherThread = createThread(db, noopNotifier, {
       projectId: project.id,
       environmentId: otherEnvironment.id,
       providerId: "codex",
@@ -777,7 +790,7 @@ describe("threads", () => {
     expect(
       listThreadEnvironmentAssignmentsOnHost(db, {
         hostId: host.id,
-        threadIds: [matchingThread.id],
+        threadIds: [matchingThread.id, otherThread.id],
       }),
     ).toEqual([
       {

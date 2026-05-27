@@ -67,7 +67,7 @@ import { requireAuthorizedActiveSession } from "./session-state.js";
 
 interface ToStoredEventArgs {
   envelope: HostDaemonEventEnvelope;
-  environmentId: string;
+  environmentId: string | null;
 }
 
 interface ResolvePostableEventBatchEntriesArgs {
@@ -77,7 +77,7 @@ interface ResolvePostableEventBatchEntriesArgs {
 
 interface PostableEventBatchEntry {
   envelope: HostDaemonEventEnvelope;
-  environmentId: string;
+  environmentId: string | null;
 }
 
 interface ResolvePostableEventBatchEntriesResult {
@@ -725,7 +725,7 @@ function resolvePostableEventBatchEntries(
     threadIds,
   });
 
-  const canonicalEnvironmentIdByThreadId = new Map<string, string>();
+  const canonicalEnvironmentIdByThreadId = new Map<string, string | null>();
   for (const ownedThread of ownedThreads) {
     canonicalEnvironmentIdByThreadId.set(
       ownedThread.threadId,
@@ -736,10 +736,7 @@ function resolvePostableEventBatchEntries(
   const entries: PostableEventBatchEntry[] = [];
   const rejectedEvents: HostDaemonRejectedEvent[] = [];
   for (const entry of args.events) {
-    const canonicalEnvironmentId = canonicalEnvironmentIdByThreadId.get(
-      entry.threadId,
-    );
-    if (!canonicalEnvironmentId) {
+    if (!canonicalEnvironmentIdByThreadId.has(entry.threadId)) {
       rejectedEvents.push({
         producerEventId: entry.producerEventId,
         reason: "thread_not_owned_by_host",
@@ -747,6 +744,8 @@ function resolvePostableEventBatchEntries(
       });
       continue;
     }
+    const canonicalEnvironmentId =
+      canonicalEnvironmentIdByThreadId.get(entry.threadId) ?? null;
     entries.push({
       envelope: entry,
       environmentId: canonicalEnvironmentId,

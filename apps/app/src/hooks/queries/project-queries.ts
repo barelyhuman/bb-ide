@@ -4,6 +4,7 @@ import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
+  SidebarBootstrapResponse,
   WorkspaceFileListResponse,
   WorkspacePathListResponse,
 } from "@bb/server-contract";
@@ -64,21 +65,21 @@ export function stripProjectThreads(
 export function useSidebarBootstrap(options?: QueryOptions) {
   const queryClient = useQueryClient();
 
-  return useQuery<ProjectWithThreadsResponse[]>({
+  return useQuery<SidebarBootstrapResponse>({
     queryKey: sidebarBootstrapQueryKey(),
     queryFn: async () => {
-      const projects = await api.listProjectsWithThreads();
+      const response = await api.listProjectsWithThreads();
       queryClient.setQueryData(
         projectsQueryKey(),
-        projects.map(stripProjectThreads),
+        response.projects.map(stripProjectThreads),
       );
-      for (const project of projects) {
+      for (const project of response.projects) {
         queryClient.setQueryData(
           threadListQueryKey({ projectId: project.id, archived: false }),
           project.threads,
         );
       }
-      return projects;
+      return response;
     },
     enabled: options?.enabled ?? true,
     staleTime: Infinity,

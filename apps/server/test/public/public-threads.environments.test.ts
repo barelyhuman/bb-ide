@@ -7,6 +7,7 @@ import {
   archiveThread,
   createPendingInteraction,
   environmentOperations,
+  events,
   getEnvironment,
   getThread,
   getThreadOperation,
@@ -14,7 +15,7 @@ import {
   listThreads,
 } from "@bb/db";
 import { setEnvironmentStatus } from "@bb/db/internal-lifecycle";
-import { threadSchema } from "@bb/domain";
+import { PERSONAL_PROJECT_ID, threadSchema } from "@bb/domain";
 import { threadListResponseSchema } from "@bb/server-contract";
 import {
   reportQueuedCommandSuccess,
@@ -29,11 +30,13 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
+import { resolvePersonalTargetPath } from "../../src/services/threads/worktree-paths.js";
 
 const CHECKOUT_BLOCKING_THREAD_STATUSES = [
   "active",
@@ -57,10 +60,488 @@ const CHECKOUT_PREFLIGHT_FAILURES = [
   },
 ] as const;
 
+interface CreatePersonalThreadRequestArgs {
+  text: string;
+}
+
 describe("public thread environment routes", () => {
   beforeEach(() => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
+  });
+
+  it("creates personal project threads with a personal environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-personal-thread-create",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: PERSONAL_PROJECT_ID,
+          input: [{ type: "text", text: "Start without a project" }],
+          environment: {
+            type: "host",
+            workspace: { type: "personal" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      expect(thread.projectId).toBe(PERSONAL_PROJECT_ID);
+      expect(thread.environmentId).not.toBeNull();
+      const environmentId = thread.environmentId;
+      if (environmentId === null) {
+        throw new Error("Expected a personal environment");
+      }
+      const targetPath = resolvePersonalTargetPath({
+        dataDir: session.dataDir,
+        environmentId,
+      });
+      expect(getEnvironment(harness.db, environmentId)).toMatchObject({
+        hostId: host.id,
+        managed: true,
+        path: null,
+        projectId: PERSONAL_PROJECT_ID,
+        status: "provisioning",
+        workspaceProvisionType: "personal",
+      });
+
+      const queuedProvision = await waitForQueuedCommand(
+        harness,
+        (candidate) =>
+          candidate.command.type === "environment.provision" &&
+          candidate.command.environmentId === environmentId,
+      );
+      expect(queuedProvision.command).toMatchObject({
+        environmentId,
+        targetPath,
+        workspaceProvisionType: "personal",
+      });
+
+      const provisionResult = await reportQueuedCommandSuccess(
+        harness,
+        queuedProvision,
+        {
+          branchName: null,
+          defaultBranch: null,
+          isGitRepo: false,
+          isWorktree: false,
+          path: targetPath,
+          transcript: [],
+        },
+      );
+      expect(provisionResult.status).toBe(200);
+
+      const queuedStart = await waitForQueuedCommandAfter(
+        harness,
+        queuedProvision.row.cursor,
+        (candidate) =>
+          candidate.command.type === "thread.start" &&
+          candidate.command.threadId === thread.id,
+      );
+      if (queuedStart.command.type !== "thread.start") {
+        throw new Error("Expected thread.start command");
+      }
+      expect(queuedStart.command.environmentId).toBe(environmentId);
+      expect(queuedStart.command.workspaceContext).toEqual({
+        workspacePath: targetPath,
+        workspaceProvisionType: "personal",
+      });
+      expect(queuedStart.command.threadStoragePath).toBeUndefined();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("creates a fresh personal environment for each root personal thread", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      seedHostSession(harness.deps, {
+        id: "host-personal-root-fresh-env",
+      });
+
+      const createPersonalThread = async (
+        args: CreatePersonalThreadRequestArgs,
+      ) => {
+        const response = await harness.app.request("/api/v1/threads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: PERSONAL_PROJECT_ID,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: args.text }],
+            environment: {
+              type: "host",
+              workspace: { type: "personal" },
+            },
+          }),
+        });
+        expect(response.status).toBe(201);
+        return threadSchema.parse(await readJson(response));
+      };
+
+      const firstThread = await createPersonalThread({
+        text: "First personal root",
+      });
+      const secondThread = await createPersonalThread({
+        text: "Second personal root",
+      });
+
+      expect(firstThread.parentThreadId).toBeNull();
+      expect(secondThread.parentThreadId).toBeNull();
+      expect(firstThread.environmentId).not.toBeNull();
+      expect(secondThread.environmentId).not.toBeNull();
+      expect(firstThread.environmentId).not.toBe(secondThread.environmentId);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reuses a personal manager environment for personal child threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-manager-child-reuse",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        isGitRepo: false,
+        isWorktree: false,
+        managed: true,
+        path: "/tmp/personal-manager-child-reuse",
+        projectId: PERSONAL_PROJECT_ID,
+        workspaceProvisionType: "personal",
+      });
+      const managerThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: PERSONAL_PROJECT_ID,
+        title: "Personal manager",
+        type: "manager",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: PERSONAL_PROJECT_ID,
+          parentThreadId: managerThread.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Use the manager scratch space" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "personal" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const childThread = threadSchema.parse(await readJson(response));
+      expect(childThread.parentThreadId).toBe(managerThread.id);
+      expect(childThread.environmentId).toBe(environment.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("sends personal project follow-ups in their personal environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-thread-send",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        isGitRepo: false,
+        isWorktree: false,
+        managed: true,
+        path: "/tmp/personal-thread-send",
+        projectId: PERSONAL_PROJECT_ID,
+        workspaceProvisionType: "personal",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: PERSONAL_PROJECT_ID,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        environmentId: environment.id,
+        providerThreadId: "provider-personal-send",
+        threadId: thread.id,
+      });
+
+      const detailResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(detailResponse.status).toBe(200);
+      expect(
+        threadSchema.parse(await readJson(detailResponse)).environmentId,
+      ).toBe(environment.id);
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            mode: "auto",
+            input: [
+              { type: "text", text: "Follow up in a personal workspace" },
+            ],
+          }),
+        },
+      );
+      expect(sendResponse.status).toBe(200);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        (candidate) =>
+          candidate.command.type === "turn.submit" &&
+          candidate.command.threadId === thread.id,
+      );
+      if (queued.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      expect(queued.command.environmentId).toBe(environment.id);
+      expect(queued.command.resumeContext.workspaceContext).toEqual({
+        workspacePath: environment.path,
+        workspaceProvisionType: "personal",
+      });
+
+      const turnRequestEvents = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((event) => event.type === "client/turn/requested");
+      expect(turnRequestEvents.at(-1)?.environmentId).toBe(environment.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("stops and archives personal project threads in their environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-thread-stop-archive",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        isGitRepo: false,
+        isWorktree: false,
+        managed: true,
+        path: "/tmp/personal-thread-stop-archive",
+        projectId: PERSONAL_PROJECT_ID,
+        workspaceProvisionType: "personal",
+      });
+      const stopThread = seedThread(harness.deps, {
+        projectId: PERSONAL_PROJECT_ID,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const archiveTarget = seedThread(harness.deps, {
+        projectId: PERSONAL_PROJECT_ID,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const stopResponse = await harness.app.request(
+        `/api/v1/threads/${stopThread.id}/stop`,
+        { method: "POST" },
+      );
+      expect(stopResponse.status).toBe(200);
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        (candidate) =>
+          candidate.command.type === "thread.stop" &&
+          candidate.command.threadId === stopThread.id,
+      );
+      if (stopCommand.command.type !== "thread.stop") {
+        throw new Error("Expected thread.stop command");
+      }
+      expect(stopCommand.command.environmentId).toBe(environment.id);
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${archiveTarget.id}/archive`,
+        { method: "POST" },
+      );
+      expect(archiveResponse.status).toBe(200);
+      expect(getThread(harness.db, archiveTarget.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      const archiveStopCommand = await waitForQueuedCommand(
+        harness,
+        (candidate) =>
+          candidate.command.type === "thread.stop" &&
+          candidate.command.threadId === archiveTarget.id,
+      );
+      if (archiveStopCommand.command.type !== "thread.stop") {
+        throw new Error("Expected thread.stop command");
+      }
+      expect(archiveStopCommand.command.environmentId).toBe(environment.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects mismatched project and workspace combinations", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-thread-mismatch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+
+      const standardWithPersonalWorkspace = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            input: [{ type: "text", text: "Invalid standard request" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "personal" },
+            },
+          }),
+        },
+      );
+      expect(standardWithPersonalWorkspace.status).toBe(400);
+
+      const personalWithWorkspace = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: PERSONAL_PROJECT_ID,
+            input: [{ type: "text", text: "Invalid personal request" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "unmanaged", path: "/tmp/nope" },
+            },
+          }),
+        },
+      );
+      expect(personalWithWorkspace.status).toBe(400);
+
+      const personalStandardEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/personal-standard-reuse",
+        projectId: PERSONAL_PROJECT_ID,
+        workspaceProvisionType: "unmanaged",
+      });
+      const personalWithStandardReuse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: PERSONAL_PROJECT_ID,
+            input: [{ type: "text", text: "Invalid personal reuse" }],
+            environment: {
+              type: "reuse",
+              environmentId: personalStandardEnvironment.id,
+            },
+          }),
+        },
+      );
+      expect(personalWithStandardReuse.status).toBe(409);
+
+      const standardPersonalEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        isGitRepo: false,
+        isWorktree: false,
+        managed: true,
+        path: "/tmp/standard-personal-reuse",
+        projectId: project.id,
+        workspaceProvisionType: "personal",
+      });
+      const standardWithPersonalReuse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Invalid standard reuse" }],
+            environment: {
+              type: "reuse",
+              environmentId: standardPersonalEnvironment.id,
+            },
+          }),
+        },
+      );
+      expect(standardWithPersonalReuse.status).toBe(409);
+      await expect(readJson(standardWithPersonalReuse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Standard project threads cannot reuse personal workspaces",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("lists threads across projects when projectId is omitted", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-list-all",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const standardThread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+      const personalThread = seedThread(harness.deps, {
+        projectId: PERSONAL_PROJECT_ID,
+      });
+
+      const allResponse = await harness.app.request("/api/v1/threads");
+      expect(allResponse.status).toBe(200);
+      const allThreads = threadListResponseSchema.parse(
+        await readJson(allResponse),
+      );
+      expect(allThreads.map((thread) => thread.id)).toEqual(
+        expect.arrayContaining([standardThread.id, personalThread.id]),
+      );
+
+      const projectResponse = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}`,
+      );
+      expect(projectResponse.status).toBe(200);
+      const projectThreads = threadListResponseSchema.parse(
+        await readJson(projectResponse),
+      );
+      expect(projectThreads.map((thread) => thread.id)).toEqual([
+        standardThread.id,
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("includes hasPendingInteraction in thread list responses", async () => {

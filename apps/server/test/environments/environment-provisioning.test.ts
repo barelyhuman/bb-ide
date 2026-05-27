@@ -14,7 +14,10 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { waitForQueuedCommand } from "../helpers/commands.js";
+import {
+  requireManagedWorktreeEnvironmentProvisionQueuedCommand,
+  waitForQueuedCommand,
+} from "../helpers/commands.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("environment reprovisioning", () => {
@@ -75,13 +78,9 @@ describe("environment reprovisioning", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected managed environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(`bb/${thread.id}`);
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
       expect(
         harness.db
           .select()
@@ -130,13 +129,11 @@ describe("environment reprovisioning", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected managed environment.provision command");
-      }
-      expect(queued.command.branchName).toBe("bb/existing-readable-branch");
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
+        "bb/existing-readable-branch",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -179,13 +176,9 @@ describe("environment reprovisioning", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected managed environment.provision command");
-      }
-      expect(queued.command.baseBranch).toBe("release/2026-05");
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.baseBranch).toBe("release/2026-05");
     } finally {
       await harness.cleanup();
     }
@@ -228,13 +221,9 @@ describe("environment reprovisioning", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected managed environment.provision command");
-      }
-      expect(queued.command.baseBranch).toBeNull();
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.baseBranch).toBeNull();
     } finally {
       await harness.cleanup();
     }

@@ -51,7 +51,7 @@ export function useActiveProjectId(): string | undefined {
   const setLastActive = useSetAtom(lastActiveProjectIdAtom);
   const lastActive = useAtomValue(lastActiveProjectIdAtom);
   const projects: readonly ActiveProjectCandidate[] | undefined =
-    sidebarBootstrapQuery.data ?? projectsFallback;
+    sidebarBootstrapQuery.data?.projects ?? projectsFallback;
 
   useEffect(() => {
     if (urlProjectId) {

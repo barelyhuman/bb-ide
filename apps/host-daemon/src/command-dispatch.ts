@@ -200,6 +200,7 @@ const commandHandlers: CommandHandlerMap = {
   ) => {
     const entry = await requireWorkspaceEnvironment(
       {
+        dataDir: options.dataDir,
         environmentId: command.environmentId,
         workspaceContext: command.workspaceContext,
       },
@@ -328,7 +329,10 @@ const commandHandlers: CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => {
     try {
-      await requireWorkspaceEnvironment(command, options.runtimeManager);
+      await requireWorkspaceEnvironment(
+        { ...command, dataDir: options.dataDir },
+        options.runtimeManager,
+      );
       options.terminalManager?.closeEnvironmentTerminals(
         command.environmentId,
         "environment-destroyed",
@@ -348,7 +352,7 @@ const commandHandlers: CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => {
     const entry = await requireWorkspaceEnvironment(
-      command,
+      { ...command, dataDir: options.dataDir },
       options.runtimeManager,
     );
     return {
@@ -362,7 +366,7 @@ const commandHandlers: CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => {
     const entry = await requireWorkspaceEnvironment(
-      command,
+      { ...command, dataDir: options.dataDir },
       options.runtimeManager,
     );
     return {
@@ -378,7 +382,7 @@ const commandHandlers: CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => {
     const entry = await requireWorkspaceEnvironment(
-      command,
+      { ...command, dataDir: options.dataDir },
       options.runtimeManager,
     );
     return entry.workspace.commit({
@@ -389,7 +393,7 @@ const commandHandlers: CommandHandlerMap = {
   "workspace.squash_merge": async (
     command: Extract<HostDaemonCommand, { type: "workspace.squash_merge" }>,
     options: CommandDispatchOptions,
-  ) => squashMerge(command, options.runtimeManager),
+  ) => squashMerge(command, options),
 };
 
 function dispatchCommandByType<TType extends HostDaemonCommandType>(

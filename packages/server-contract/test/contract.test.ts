@@ -45,6 +45,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Error payloads may omit retryability when the server has no retry guidance.",
   "createAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
     "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
+  "createAutomationRequestSchema.action.threadRequest.environment.hostId":
+    "Personal scheduled threads may omit hostId so the server can use the default connected local host.",
   "createAutomationRequestSchema.action.threadRequest.parentThreadId":
     "Automation creation may omit parentThreadId when the scheduled thread stays a root thread.",
   "createAutomationRequestSchema.action.threadRequest.permissionMode":
@@ -75,6 +77,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Automation PATCH requests omit action when leaving it unchanged.",
   "updateAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
     "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
+  "updateAutomationRequestSchema.action.threadRequest.environment.hostId":
+    "Personal scheduled-thread updates may omit hostId so the server can use the default connected local host.",
   "updateAutomationRequestSchema.action.threadRequest.parentThreadId":
     "Automation action updates may omit parentThreadId when the scheduled thread stays a root thread.",
   "updateAutomationRequestSchema.action.threadRequest.permissionMode":
@@ -107,6 +111,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Manager creation may omit service tier and use the server default.",
   "createThreadRequestSchema.environment.workspace.branch":
     "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
+  "createThreadRequestSchema.environment.hostId":
+    "Personal thread creation may omit hostId so the server can use the default connected local host.",
   "createThreadRequestSchema.model":
     "Thread creation may omit model and inherit the project/provider default.",
   "createThreadRequestSchema.parentThreadId":
@@ -167,6 +173,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Thread listing may omit offset to start from the first row.",
   "threadListQuerySchema.parentThreadId":
     "Thread listing may omit parentThreadId when not filtering by parent.",
+  "threadListQuerySchema.projectId":
+    "Thread listing may omit projectId to list across projects.",
   "threadListQuerySchema.type":
     "Thread listing may omit type when not filtering by thread type.",
   "threadTimelineQuerySchema.managerTimelineView":
@@ -867,6 +875,37 @@ describe("server-contract canonical schemas", () => {
         type: "host",
       },
     });
+
+    expect(
+      createThreadRequestSchema.parse({
+        projectId: "proj_personal",
+        providerId: "codex",
+        origin: "app",
+        input: [{ type: "text", text: "Ship it without a project" }],
+        environment: {
+          type: "host",
+          workspace: { type: "personal" },
+        },
+      }),
+    ).toMatchObject({
+      environment: {
+        type: "host",
+        workspace: { type: "personal" },
+      },
+    });
+
+    expect(() =>
+      createThreadRequestSchema.parse({
+        projectId: "proj_123",
+        providerId: "codex",
+        origin: "app",
+        input: [{ type: "text", text: "Missing host" }],
+        environment: {
+          type: "host",
+          workspace: { type: "unmanaged", path: null },
+        },
+      }),
+    ).toThrow();
 
     expect(
       sendMessageRequestSchema.parse({

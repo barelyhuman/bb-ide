@@ -1,15 +1,18 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
-import type { RuntimeManager } from "../runtime-manager.js";
 import {
   requireWorkspaceEnvironment,
+  type CommandDispatchOptions,
   type CommandOf,
 } from "../command-dispatch-support.js";
 
 export async function squashMerge(
   command: CommandOf<"workspace.squash_merge">,
-  runtimeManager: RuntimeManager,
+  options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"workspace.squash_merge">> {
-  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
+  const entry = await requireWorkspaceEnvironment(
+    { ...command, dataDir: options.dataDir },
+    options.runtimeManager,
+  );
   const result = await entry.workspace.squashMerge({
     targetBranch: command.targetBranch,
     commitMessage: command.commitMessage,

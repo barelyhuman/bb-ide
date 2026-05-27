@@ -1,7 +1,11 @@
-import { getProjectSourceByHost } from "@bb/db";
+import {
+  getMostRecentlyUpdatedConnectedHostId,
+  getProjectSourceByHost,
+} from "@bb/db";
 import {
   type Environment,
   type LocalPathProjectSource,
+  PERSONAL_PROJECT_ID,
   type ProjectSource,
 } from "@bb/domain";
 import type { EnvironmentArgs } from "@bb/server-contract";
@@ -16,6 +20,10 @@ type ThreadRequestEnvironment = EnvironmentArgs;
 type HostThreadRequestEnvironment = Extract<
   ThreadRequestEnvironment,
   { type: "host" }
+>;
+type WorkspaceBackedHostWorkspace = Exclude<
+  HostThreadRequestEnvironment["workspace"],
+  { type: "personal" }
 >;
 type ReuseThreadRequestEnvironment = Extract<
   ThreadRequestEnvironment,
@@ -38,7 +46,7 @@ export interface ResolvedHostThreadRequestEnvironment {
   localSource: LocalPathProjectSource | null;
   type: "host";
   unmanagedPath: string | null;
-  workspace: HostThreadRequestEnvironment["workspace"];
+  workspace: WorkspaceBackedHostWorkspace;
 }
 
 export interface ResolvedReuseThreadRequestEnvironment {
@@ -46,8 +54,14 @@ export interface ResolvedReuseThreadRequestEnvironment {
   type: "reuse";
 }
 
+export interface ResolvedPersonalThreadRequestEnvironment {
+  hostId: string | null;
+  type: "personal";
+}
+
 export type ResolvedStableThreadRequestEnvironment =
   | ResolvedHostThreadRequestEnvironment
+  | ResolvedPersonalThreadRequestEnvironment
   | ResolvedReuseThreadRequestEnvironment;
 
 function requireExistingProjectHost(
@@ -59,18 +73,79 @@ function requireExistingProjectHost(
   }
 }
 
+function requireHostEnvironmentId(
+  environment: HostThreadRequestEnvironment,
+): string {
+  if (environment.hostId !== undefined) {
+    return environment.hostId;
+  }
+  throw new ApiError(
+    400,
+    "invalid_request",
+    "hostId is required for workspace-backed thread creation",
+  );
+}
+
+function assertPersonalWorkspaceProjectCompatibility(projectId: string): void {
+  if (projectId !== PERSONAL_PROJECT_ID) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Personal workspaces are only supported for the personal project",
+    );
+  }
+}
+
+function assertReuseWorkspaceProjectCompatibility(
+  projectId: string,
+  environment: Environment,
+): void {
+  const projectIsPersonal = projectId === PERSONAL_PROJECT_ID;
+  const environmentIsPersonal =
+    environment.workspaceProvisionType === "personal";
+  if (projectIsPersonal && !environmentIsPersonal) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Personal project threads must reuse a personal workspace",
+    );
+  }
+  if (!projectIsPersonal && environmentIsPersonal) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Standard project threads cannot reuse personal workspaces",
+    );
+  }
+}
+
 function resolveStableHostThreadRequestEnvironmentFromProjectData(
   data: StableThreadRequestProjectData,
   environment: HostThreadRequestEnvironment,
-): ResolvedHostThreadRequestEnvironment {
-  requireExistingProjectHost(data, environment.hostId);
+):
+  | ResolvedHostThreadRequestEnvironment
+  | ResolvedPersonalThreadRequestEnvironment {
+  if (environment.workspace.type === "personal") {
+    assertPersonalWorkspaceProjectCompatibility(data.projectId);
+    const hostId = environment.hostId ?? null;
+    if (hostId !== null) {
+      requireExistingProjectHost(data, hostId);
+    }
+    return {
+      hostId,
+      type: "personal",
+    };
+  }
+
+  const hostId = requireHostEnvironmentId(environment);
+  requireExistingProjectHost(data, hostId);
 
   if (
     environment.workspace.type === "unmanaged" &&
     environment.workspace.path !== null
   ) {
     return {
-      hostId: environment.hostId,
+      hostId,
       localSource: null,
       type: "host",
       unmanagedPath: environment.workspace.path,
@@ -81,7 +156,7 @@ function resolveStableHostThreadRequestEnvironmentFromProjectData(
   const localSource =
     data.projectSources.find(
       (source): source is LocalPathProjectSource =>
-        source.type === "local_path" && source.hostId === environment.hostId,
+        source.type === "local_path" && source.hostId === hostId,
     ) ?? null;
   if (!localSource) {
     throw new ApiError(
@@ -92,7 +167,7 @@ function resolveStableHostThreadRequestEnvironmentFromProjectData(
   }
 
   return {
-    hostId: environment.hostId,
+    hostId,
     localSource,
     type: "host",
     unmanagedPath:
@@ -118,6 +193,7 @@ function resolveStableReuseThreadRequestEnvironmentFromProjectData(
       "Environment belongs to a different project",
     );
   }
+  assertReuseWorkspaceProjectCompatibility(data.projectId, reusedEnvironment);
 
   return {
     environment: reusedEnvironment,
@@ -153,15 +229,39 @@ function resolveHostThreadRequestEnvironment(
   deps: Pick<AppDeps, "db">,
   environment: HostThreadRequestEnvironment,
   projectId: string,
-): ResolvedHostThreadRequestEnvironment {
-  requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
+):
+  | ResolvedHostThreadRequestEnvironment
+  | ResolvedPersonalThreadRequestEnvironment {
+  if (environment.workspace.type === "personal") {
+    assertPersonalWorkspaceProjectCompatibility(projectId);
+    const hostId =
+      environment.hostId ??
+      getMostRecentlyUpdatedConnectedHostId(deps.db, {
+        hostType: "persistent",
+      });
+    if (!hostId) {
+      throw new ApiError(
+        502,
+        "host_unavailable",
+        "No connected host is available",
+      );
+    }
+    requireNonDestroyedHostWithStatus(deps.db, hostId);
+    return {
+      hostId,
+      type: "personal",
+    };
+  }
+
+  const hostId = requireHostEnvironmentId(environment);
+  requireNonDestroyedHostWithStatus(deps.db, hostId);
 
   if (
     environment.workspace.type === "unmanaged" &&
     environment.workspace.path !== null
   ) {
     return {
-      hostId: environment.hostId,
+      hostId,
       localSource: null,
       type: "host",
       unmanagedPath: environment.workspace.path,
@@ -169,11 +269,7 @@ function resolveHostThreadRequestEnvironment(
     };
   }
 
-  const localSource = getProjectSourceByHost(
-    deps.db,
-    projectId,
-    environment.hostId,
-  );
+  const localSource = getProjectSourceByHost(deps.db, projectId, hostId);
   if (!localSource || localSource.type !== "local_path") {
     throw new ApiError(
       409,
@@ -183,7 +279,7 @@ function resolveHostThreadRequestEnvironment(
   }
 
   return {
-    hostId: environment.hostId,
+    hostId,
     localSource,
     type: "host",
     unmanagedPath:
@@ -208,6 +304,7 @@ function resolveReuseThreadRequestEnvironment(
       "Environment belongs to a different project",
     );
   }
+  assertReuseWorkspaceProjectCompatibility(projectId, reusedEnvironment);
   return {
     environment: reusedEnvironment,
     type: "reuse",

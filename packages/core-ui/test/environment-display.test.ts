@@ -69,6 +69,21 @@ describe("formatEnvironmentDisplay", () => {
       expect(result.modeLabel).toBe("Working locally");
       expect(result.hostLabel).toBe("My Machine");
     });
+
+    it("labels personal workspaces explicitly", () => {
+      const result = formatEnvironmentDisplay({
+        environment: makeEnvironment({
+          isGitRepo: false,
+          workspaceProvisionType: "personal",
+        }),
+        isLocalHost: true,
+      });
+      expect(result).toMatchObject({
+        modeLabel: "Personal workspace",
+        mode: "direct",
+        workspaceDisplayKind: "personal",
+      });
+    });
   });
 
   describe("remote host", () => {

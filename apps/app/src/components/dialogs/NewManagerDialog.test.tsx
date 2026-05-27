@@ -122,6 +122,7 @@ function makeModel(
 function makeProjectResponse(): ProjectResponse {
   return {
     id: "proj-1",
+    kind: "standard",
     name: "Demo",
     createdAt: 1,
     updatedAt: 1,
@@ -143,6 +144,7 @@ function makeProjectResponse(): ProjectResponse {
 function makeSecondProjectResponse(): ProjectResponse {
   return {
     id: "proj-2",
+    kind: "standard",
     name: "Second Demo",
     createdAt: 2,
     updatedAt: 2,
@@ -225,7 +227,9 @@ async function waitForCreateButtonReady(): Promise<void> {
 
 async function openProviderModelPicker(): Promise<void> {
   fireEvent.click(
-    await screen.findByRole("button", { name: "Provider, model and reasoning" }),
+    await screen.findByRole("button", {
+      name: "Provider, model and reasoning",
+    }),
   );
 }
 
@@ -754,9 +758,9 @@ describe("NewManagerDialog", () => {
     await renderNewManagerDialog({ wrapper });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Template" }).title,
-      ).toContain("sawyer-next");
+      expect(screen.getByRole("button", { name: "Template" }).title).toContain(
+        "sawyer-next",
+      );
     });
 
     await waitForCreateButtonReady();
@@ -800,9 +804,9 @@ describe("NewManagerDialog", () => {
     await renderNewManagerDialog({ wrapper });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Template" }).title,
-      ).toContain("default");
+      expect(screen.getByRole("button", { name: "Template" }).title).toContain(
+        "default",
+      );
     });
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Template" }), {
@@ -814,9 +818,9 @@ describe("NewManagerDialog", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Template" }).title,
-      ).toContain("sawyer-next");
+      expect(screen.getByRole("button", { name: "Template" }).title).toContain(
+        "sawyer-next",
+      );
     });
 
     await waitForCreateButtonReady();

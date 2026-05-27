@@ -442,7 +442,9 @@ export const hostListBranchesCommandSchema = z.object({
 export const managerTemplateSummarySchema = z.object({
   name: managerTemplateNameSchema,
 });
-export type ManagerTemplateSummary = z.infer<typeof managerTemplateSummarySchema>;
+export type ManagerTemplateSummary = z.infer<
+  typeof managerTemplateSummarySchema
+>;
 
 /**
  * List the manager-template directories under the daemon's data directory
@@ -521,6 +523,13 @@ const managedWorktreeEnvironmentProvisionCommandSchema =
     .merge(managedEnvironmentProvisionFieldsSchema)
     .extend({ workspaceProvisionType: z.literal("managed-worktree") });
 
+const personalEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("personal"),
+    /** Target directory under the host data dir for the personal workspace. */
+    targetPath: z.string().min(1),
+  });
+
 /**
  * Provision a workspace for an environment.
  *
@@ -529,6 +538,7 @@ const managedWorktreeEnvironmentProvisionCommandSchema =
  *   isWorktree, branchName). Does NOT create anything.
  * - `managed-worktree`: creates a git worktree at `targetPath` from
  *   `sourcePath`, runs setup script if present.
+ * - `personal`: creates or opens a scratch directory at `targetPath`.
  *
  * Idempotent — if path already exists and is valid, reports success.
  * Rolls back partial state on failure.
@@ -543,6 +553,7 @@ export const environmentProvisionCommandSchema = z.discriminatedUnion(
   [
     unmanagedEnvironmentProvisionCommandSchema,
     managedWorktreeEnvironmentProvisionCommandSchema,
+    personalEnvironmentProvisionCommandSchema,
   ],
 );
 export type EnvironmentProvisionCommand = z.infer<
@@ -741,7 +752,7 @@ export const hostDaemonCommandResultSchemaByType = {
      * Resolved active template name. Falls back to "default" when the `active`
      * file is missing/empty/invalid. Not guaranteed to appear in `templates`
      * — callers should treat that case as "active points at a missing template".
-    */
+     */
     activeName: managerTemplateNameSchema,
   }),
   "host.read_file": fileReadResultSchema,

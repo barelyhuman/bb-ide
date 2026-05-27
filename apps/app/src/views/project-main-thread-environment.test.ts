@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import {
   resolveProjectMainThreadEnvironment,
   type ProjectMainSelectedBranch,
@@ -87,6 +88,20 @@ describe("resolveProjectMainThreadEnvironment", () => {
         type: "managed-worktree",
         baseBranch: { kind: "named", name: "develop" },
       },
+    });
+  });
+
+  it("uses personal workspaces for the personal project", () => {
+    expect(
+      resolveProjectMainThreadEnvironment({
+        environmentValue: hostLocalEnvironmentValue,
+        projectId: PERSONAL_PROJECT_ID,
+        selectedBranch: selectedBranch("develop"),
+      }),
+    ).toEqual({
+      type: "host",
+      hostId: "host_123",
+      workspace: { type: "personal" },
     });
   });
 });

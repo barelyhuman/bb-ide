@@ -39,6 +39,7 @@ export interface NewThreadEnvironmentConfig {
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
   isLocalHost: EnvironmentPickerUIProps["isLocalHost"];
+  personalWorkspace?: boolean;
   /** When true, the picker's "Reuse existing worktree" entry is disabled.
    * Caller signals the project has no worktree envs available. */
   reuseDisabled?: boolean;
@@ -148,7 +149,8 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
     () => parseEnvironmentValue(environment.value),
     [environment.value],
   );
-  const showBranchPicker = parsedEnvironment?.type === "host";
+  const showBranchPicker =
+    parsedEnvironment?.type === "host" && !environment.personalWorkspace;
   const showWorktreePicker = parsedEnvironment?.type === "reuse";
   const branchMenuKind = getBranchPickerMenuKind({ parsedEnvironment });
   return (
@@ -185,6 +187,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
             sources={environment.sources}
             hosts={environment.hosts}
             isLocalHost={environment.isLocalHost}
+            personalWorkspace={environment.personalWorkspace}
             reuseDisabled={environment.reuseDisabled}
             muted
           />

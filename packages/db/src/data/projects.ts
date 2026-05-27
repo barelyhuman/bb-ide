@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type { DbConnection, DbQueryConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { projects, projectOperations, projectSources } from "../schema.js";
@@ -64,11 +65,14 @@ export type ReorderProjectResult =
   | ReorderProjectInvalidNeighborOrder;
 
 function publicProjectFilter() {
-  return sql`NOT EXISTS (
-    SELECT 1 FROM ${projectOperations}
-    WHERE ${projectOperations.projectId} = ${projects.id}
-    AND ${projectOperations.kind} = 'delete'
-  )`;
+  return and(
+    eq(projects.kind, "standard"),
+    sql`NOT EXISTS (
+      SELECT 1 FROM ${projectOperations}
+      WHERE ${projectOperations.projectId} = ${projects.id}
+      AND ${projectOperations.kind} = 'delete'
+    )`,
+  );
 }
 
 function listOrderedPublicProjects(db: DbQueryConnection): ProjectRow[] {
@@ -168,6 +172,38 @@ export function createProject(
 
 export function getProject(db: DbConnection, id: string) {
   return db.select().from(projects).where(eq(projects.id, id)).get() ?? null;
+}
+
+export function getPersonalProject(db: DbConnection) {
+  return (
+    db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, PERSONAL_PROJECT_ID), eq(projects.kind, "personal")))
+      .get() ?? null
+  );
+}
+
+export function ensurePersonalProject(db: DbConnection) {
+  const now = Date.now();
+  db
+    .insert(projects)
+    .values({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      sortKey: "V",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
+    .run();
+
+  const project = getPersonalProject(db);
+  if (!project) {
+    throw new Error("Personal project row was not created");
+  }
+  return project;
 }
 
 export function listProjects(db: DbConnection) {

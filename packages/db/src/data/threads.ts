@@ -106,7 +106,7 @@ export function getThread(db: ThreadWriteConnection, id: string) {
 }
 
 export interface ListThreadsOptions {
-  projectId: string;
+  projectId?: string;
   archived?: boolean;
   parentThreadId?: string;
   type?: ThreadType;
@@ -346,7 +346,7 @@ export interface ThreadEnvironmentAssignmentRow {
 }
 
 export interface StopRequestedThreadRow {
-  environmentId: string | null;
+  environmentId: string;
   hostId: string;
   status: ThreadStatus;
   stopRequestedAt: number | null;
@@ -402,7 +402,7 @@ function statusTransitionNeedsAttention(args: StatusTransition): boolean {
 
 function buildListThreadsFilters(options: ListThreadsOptions) {
   return [
-    eq(threads.projectId, options.projectId),
+    options.projectId ? eq(threads.projectId, options.projectId) : undefined,
     isNull(threads.deletedAt),
     options.type ? eq(threads.type, options.type) : undefined,
     options.parentThreadId
@@ -697,7 +697,7 @@ export function listStopRequestedThreads(
 ): StopRequestedThreadRow[] {
   return db
     .select({
-      environmentId: threads.environmentId,
+      environmentId: environments.id,
       hostId: environments.hostId,
       status: threads.status,
       stopRequestedAt: threads.stopRequestedAt,

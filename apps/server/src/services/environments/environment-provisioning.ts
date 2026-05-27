@@ -52,7 +52,10 @@ import {
   requireSourceForHost,
   storedBaseBranchNameToSpec,
 } from "../threads/thread-create-helpers.js";
-import { resolveManagedTargetPath } from "../threads/worktree-paths.js";
+import {
+  resolveManagedTargetPath,
+  resolvePersonalTargetPath,
+} from "../threads/worktree-paths.js";
 import {
   buildDirectEnvironmentProvisionRequest,
   environmentProvisionRequestSchema,
@@ -673,41 +676,59 @@ export async function queueManagedEnvironmentReprovision(
     return MANAGED_REPROVISION_IN_PROGRESS;
   }
 
-  const source = requireSourceForHost(
-    deps,
-    args.projectId,
-    args.environment.hostId,
-  );
   const hostSession = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
   });
 
-  const targetPath =
-    args.environment.path ??
-    resolveManagedTargetPath({
-      dataDir: hostSession.dataDir,
-      environmentId: args.environment.id,
-      sourcePath: source.path,
-    });
-  const branchName =
-    args.environment.branchName ??
-    buildManagedBranchName({ threadId: args.threadId });
-  const baseBranch = storedBaseBranchNameToSpec(args.environment.baseBranch);
-
-  const command = buildEnvironmentProvisionCommand({
-    branchName,
-    baseBranch,
-    environmentId: args.environment.id,
-    hostId: args.environment.hostId,
-    initiator: {
-      threadId: args.threadId,
-      provisioningId: args.provisioningId,
-    },
-    sourcePath: source.path,
-    targetPath,
-    workspaceProvisionType: provisionType,
-    setupTimeoutMs: SETUP_TIMEOUT_MS,
-  });
+  const initiator = {
+    threadId: args.threadId,
+    provisioningId: args.provisioningId,
+  };
+  const command =
+    provisionType === "personal"
+      ? buildEnvironmentProvisionCommand({
+          environmentId: args.environment.id,
+          hostId: args.environment.hostId,
+          initiator,
+          targetPath:
+            args.environment.path ??
+            resolvePersonalTargetPath({
+              dataDir: hostSession.dataDir,
+              environmentId: args.environment.id,
+            }),
+          workspaceProvisionType: provisionType,
+        })
+      : (() => {
+          const source = requireSourceForHost(
+            deps,
+            args.projectId,
+            args.environment.hostId,
+          );
+          const targetPath =
+            args.environment.path ??
+            resolveManagedTargetPath({
+              dataDir: hostSession.dataDir,
+              environmentId: args.environment.id,
+              sourcePath: source.path,
+            });
+          const branchName =
+            args.environment.branchName ??
+            buildManagedBranchName({ threadId: args.threadId });
+          const baseBranch = storedBaseBranchNameToSpec(
+            args.environment.baseBranch,
+          );
+          return buildEnvironmentProvisionCommand({
+            branchName,
+            baseBranch,
+            environmentId: args.environment.id,
+            hostId: args.environment.hostId,
+            initiator,
+            sourcePath: source.path,
+            targetPath,
+            workspaceProvisionType: provisionType,
+            setupTimeoutMs: SETUP_TIMEOUT_MS,
+          });
+        })();
 
   requestEnvironmentProvision(deps, {
     environmentId: args.environment.id,

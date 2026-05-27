@@ -27,15 +27,7 @@ import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
 } from "../lib/error-log-fields.js";
-import {
-  threadEnvironmentUnavailableDetails,
-  throwThreadEnvironmentUnavailable,
-} from "../lib/lifecycle-api-errors.js";
 import { toThreadQueuedMessage } from "./thread-queued-messages.js";
-import {
-  requireEnvironment,
-  requireThreadEnvironment,
-} from "../lib/entity-lookup.js";
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
@@ -49,6 +41,10 @@ import { requireReadyThreadEnvironment } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { sendThreadMessage } from "./thread-send.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
+import {
+  requireThreadCommandEnvironment,
+  type ThreadCommandEnvironmentSource,
+} from "./thread-command-environment.js";
 import {
   prependManagerPreferencesSystemMessageIfChanged,
   recordManagerDynamicFileDeliveryInTransaction,
@@ -75,8 +71,10 @@ interface SendClaimedQueuedMessageArgs {
 interface SendClaimedQueuedMessageForThreadArgs {
   mode: SendQueuedMessageMode;
   queuedMessage: ClaimedQueuedMessage;
-  thread: Thread;
+  thread: QueuedMessageThread;
 }
+
+interface QueuedMessageThread extends Thread, ThreadCommandEnvironmentSource {}
 
 export interface QueuedMessageAutoSendArgs {
   threadId: string;
@@ -161,7 +159,10 @@ async function sendClaimedQueuedMessage(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageArgs,
 ): Promise<ThreadQueuedMessage> {
-  const { thread } = requireThreadEnvironment(deps.db, args.threadId);
+  const thread = getThread(deps.db, args.threadId);
+  if (!thread) {
+    throw new ApiError(404, "thread_not_found", "Thread not found");
+  }
   return sendClaimedQueuedMessageForThread(deps, {
     mode: args.mode,
     queuedMessage: args.queuedMessage,
@@ -181,19 +182,13 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   if (thread.status !== "idle") {
     return null;
   }
-  if (!thread.environmentId) {
-    throwThreadEnvironmentUnavailable(
-      threadEnvironmentUnavailableDetails("never_attached", null),
-    );
-  }
-
   const providerThreadId = getLastProviderThreadId(deps, thread.id);
   if (!providerThreadId) {
     return null;
   }
 
   const environment = requireReadyThreadEnvironment(
-    requireEnvironment(deps.db, thread.environmentId),
+    await requireThreadCommandEnvironment(deps, { thread }),
   );
   ensureThreadNativeArchiveSettled(deps, { environment, thread });
   const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
@@ -243,7 +238,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
           return false;
         }
         const request = appendClientTurnEventInTransaction(tx, {
-          environmentId: environment.id,
+          environmentId: thread.environmentId,
           execution,
           initiator: "user",
           input: preparedInput.input,
@@ -312,12 +307,9 @@ async function sendClaimedQueuedMessageForThread(
   }
 
   const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
-  if (!args.thread.environmentId) {
-    throwThreadEnvironmentUnavailable(
-      threadEnvironmentUnavailableDetails("never_attached", null),
-    );
-  }
-  const environment = requireEnvironment(deps.db, args.thread.environmentId);
+  const environment = await requireThreadCommandEnvironment(deps, {
+    thread: args.thread,
+  });
   await sendThreadMessage(deps, {
     environment,
     payload: sendQueuedMessagePayload(queuedMessage, args.mode),

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
   createProject,
+  ensurePersonalProject,
   listProjects,
   listPublicProjects,
   reorderProject,
@@ -22,6 +24,19 @@ function setup() {
 }
 
 describe("projects", () => {
+  it("ensures the singleton personal project idempotently", () => {
+    const { db } = setup();
+
+    const first = ensurePersonalProject(db);
+    const second = ensurePersonalProject(db);
+
+    expect(first.id).toBe(PERSONAL_PROJECT_ID);
+    expect(second.id).toBe(PERSONAL_PROJECT_ID);
+    expect(
+      listProjects(db).filter((project) => project.kind === "personal"),
+    ).toEqual([expect.objectContaining({ id: PERSONAL_PROJECT_ID })]);
+  });
+
   it("excludes projects with delete operations from public listings", () => {
     const { db, host } = setup();
     const { project: visibleProject } = createProject(db, noopNotifier, {
@@ -47,10 +62,15 @@ describe("projects", () => {
       payload: JSON.stringify({}),
     });
 
-    expect(listProjects(db).map((project) => project.id)).toEqual([
-      visibleProject.id,
-      deletingProject.id,
-    ]);
+    const allProjectIds = listProjects(db).map((project) => project.id);
+    expect(allProjectIds).toHaveLength(3);
+    expect(allProjectIds).toEqual(
+      expect.arrayContaining([
+        PERSONAL_PROJECT_ID,
+        visibleProject.id,
+        deletingProject.id,
+      ]),
+    );
     expect(listPublicProjects(db).map((project) => project.id)).toEqual([
       visibleProject.id,
     ]);

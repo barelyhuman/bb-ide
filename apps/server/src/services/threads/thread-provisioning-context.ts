@@ -40,6 +40,12 @@ const directManagedIntentSchema = z.object({
   workspaceProvisionType: z.literal("managed-worktree"),
 });
 
+const directPersonalIntentSchema = z.object({
+  type: z.literal("direct-personal"),
+  hostId: z.string().min(1),
+  workspaceProvisionType: z.literal("personal"),
+});
+
 const reuseIntentSchema = z.object({
   type: z.literal("reuse"),
   environmentId: z.string().min(1),
@@ -51,6 +57,7 @@ export const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion(
     directUnmanagedIntentSchema,
     checkoutUnmanagedIntentSchema,
     directManagedIntentSchema,
+    directPersonalIntentSchema,
     reuseIntentSchema,
   ],
 );

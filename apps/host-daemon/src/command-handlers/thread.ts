@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import { getPersonalWorkspaceRoot } from "@bb/host-workspace";
 import { resolveContainedPath } from "@bb/process-utils";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import {
@@ -68,6 +69,7 @@ export async function startThread(
   try {
     const entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
+      personalWorkspaceRoot: getPersonalWorkspaceRoot(options.dataDir),
       workspacePath: command.workspaceContext.workspacePath,
       workspaceProvisionType: command.workspaceContext.workspaceProvisionType,
     });
@@ -106,6 +108,7 @@ export async function ensureThreadRuntime(
   if (!entry) {
     entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
+      personalWorkspaceRoot: getPersonalWorkspaceRoot(options.dataDir),
       workspacePath: resumeContext.workspaceContext.workspacePath,
       workspaceProvisionType:
         resumeContext.workspaceContext.workspaceProvisionType,

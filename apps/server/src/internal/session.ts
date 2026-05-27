@@ -97,19 +97,23 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
           );
 
           const hostThreadIds = listHostThreadIds(deps.db, daemon.hostId);
+          const trackedThreadTargets = listThreadEnvironmentAssignmentsOnHost(
+            deps.db,
+            {
+              hostId: daemon.hostId,
+              threadIds: hostThreadIds,
+            },
+          ).map((target) => ({
+            environmentId: target.environmentId,
+            threadId: target.threadId,
+          }));
 
           return context.json(
             {
               sessionId: session.id,
               heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
               leaseTimeoutMs: LEASE_TIMEOUT_MS,
-              trackedThreadTargets: listThreadEnvironmentAssignmentsOnHost(
-                deps.db,
-                {
-                  hostId: daemon.hostId,
-                  threadIds: hostThreadIds,
-                },
-              ),
+              trackedThreadTargets,
             },
             201,
           );

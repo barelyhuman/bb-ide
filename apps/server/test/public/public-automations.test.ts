@@ -1,4 +1,5 @@
 import { createAutomation, getAutomation } from "@bb/db";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import {
   automationSchema,
   AUTOMATION_NAME_MAX_LENGTH,
@@ -192,6 +193,135 @@ describe("public automation routes", () => {
       );
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("resolves and stores host affinity for personal automations", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-automation",
+      });
+
+      const createResponse = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/automations`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "Personal daily summary",
+            trigger: weekdayMorningTrigger,
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Summarize personal work" }],
+                environment: {
+                  type: "host",
+                  workspace: { type: "personal" },
+                },
+              },
+            },
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(201);
+      const createdAutomation = automationSchema.parse(
+        await readJson(createResponse),
+      );
+      expect(createdAutomation.action.threadRequest.environment).toMatchObject({
+        type: "host",
+        hostId: host.id,
+        workspace: { type: "personal" },
+      });
+      const storedAutomation = getAutomation(harness.db, createdAutomation.id);
+      if (!storedAutomation) {
+        throw new Error("Expected stored personal automation");
+      }
+      expect(JSON.parse(storedAutomation.action)).toMatchObject({
+        threadRequest: {
+          environment: {
+            hostId: host.id,
+            workspace: { type: "personal" },
+          },
+        },
+      });
+
+      const updateResponse = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/automations/${createdAutomation.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Run updated personal work" }],
+                environment: {
+                  type: "host",
+                  workspace: { type: "personal" },
+                },
+              },
+            },
+          }),
+        },
+      );
+      expect(updateResponse.status).toBe(200);
+      expect(
+        automationSchema.parse(await readJson(updateResponse)).action
+          .threadRequest.environment,
+      ).toMatchObject({
+        type: "host",
+        hostId: host.id,
+        workspace: { type: "personal" },
+      });
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects personal automation workspaces on standard projects", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-standard-personal-automation",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "Invalid personal workspace",
+            trigger: weekdayMorningTrigger,
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Should fail" }],
+                environment: {
+                  type: "host",
+                  workspace: { type: "personal" },
+                },
+              },
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(400);
     } finally {
       vi.useRealTimers();
       await harness.cleanup();

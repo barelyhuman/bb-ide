@@ -65,8 +65,10 @@ interface BuildUnexpectedProviderExitEventsArgs {
 }
 
 function lazyProvisionOpts(
+  environmentId: string,
   workspacePath: string,
   workspaceProvisionType: WorkspaceProvisionType,
+  personalWorkspaceRoot?: string,
 ): ProvisionWorkspaceArgs {
   switch (workspaceProvisionType) {
     case "unmanaged":
@@ -75,6 +77,18 @@ function lazyProvisionOpts(
       return {
         workspaceProvisionType: "reconnect-managed-worktree",
         path: workspacePath,
+      };
+    case "personal":
+      if (!personalWorkspaceRoot) {
+        throw new Error(
+          "Personal workspace root is required to reconnect a personal workspace",
+        );
+      }
+      return {
+        workspaceProvisionType: "personal",
+        environmentId,
+        personalWorkspaceRoot,
+        targetPath: workspacePath,
       };
   }
 }
@@ -139,6 +153,7 @@ export interface RuntimeEntry {
 
 export interface EnsureEnvironmentArgs {
   environmentId: string;
+  personalWorkspaceRoot?: string;
   workspacePath?: string;
   workspaceProvisionType?: WorkspaceProvisionType;
   provision?: ProvisionWorkspaceArgs;
@@ -729,8 +744,10 @@ export class RuntimeManager {
       args.provision ??
       (args.workspacePath
         ? lazyProvisionOpts(
+            args.environmentId,
             args.workspacePath,
             args.workspaceProvisionType ?? "unmanaged",
+            args.personalWorkspaceRoot,
           )
         : null);
 
@@ -741,11 +758,10 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const [workspaceWatchState, workspaceWriteRoots] =
-      await Promise.all([
-        this.createWorkspaceWatchState(workspace),
-        workspace.getAdditionalWorkspaceWriteRoots(),
-      ]);
+    const [workspaceWatchState, workspaceWriteRoots] = await Promise.all([
+      this.createWorkspaceWatchState(workspace),
+      workspace.getAdditionalWorkspaceWriteRoots(),
+    ]);
     const additionalWorkspaceWriteRoots = this.runtimeWorkspaceWriteRoots({
       threadStorageRootPath: this.options.threadStorageRootPath,
       workspaceRoots: workspaceWriteRoots,

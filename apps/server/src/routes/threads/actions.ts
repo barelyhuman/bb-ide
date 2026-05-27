@@ -26,15 +26,7 @@ import {
   requestEnvironmentCleanup,
   requestEnvironmentCleanupAdvance,
 } from "../../services/environments/environment-cleanup.js";
-import {
-  requirePublicThread,
-  requirePublicThreadEnvironmentAllowingDestroyed,
-  requirePublicThreadEnvironment,
-} from "../../services/lib/entity-lookup.js";
-import {
-  threadEnvironmentUnavailableDetails,
-  throwThreadEnvironmentUnavailable,
-} from "../../services/lib/lifecycle-api-errors.js";
+import { requirePublicThread } from "../../services/lib/entity-lookup.js";
 import {
   requestQueuedMessageAutoSendForThread,
   sendQueuedMessage,
@@ -55,6 +47,10 @@ import {
   archiveThreadWithLifecycleEffects,
   wouldCleanupAfterThreadArchive,
 } from "../../services/threads/thread-archive.js";
+import {
+  requireThreadCommandEnvironment,
+  requireThreadHostCommandEnvironment,
+} from "../../services/threads/thread-command-environment.js";
 
 function toQueuedMessageOrderResponse(
   result: ReorderQueuedThreadMessageResult,
@@ -95,11 +91,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     "/threads/:id/send",
     sendMessageRequestSchema,
     async (context, payload) => {
-      const { environment, thread } =
-        requirePublicThreadEnvironmentAllowingDestroyed(
-          deps.db,
-          context.req.param("id"),
-        );
+      const thread = requirePublicThread(deps.db, context.req.param("id"));
+      const environment = await requireThreadCommandEnvironment(deps, {
+        thread,
+      });
       await sendThreadMessage(deps, {
         environment,
         payload,
@@ -114,10 +109,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     "/threads/:id/queued-messages",
     createQueuedMessageRequestSchema,
     async (context, payload) => {
-      const { thread } = requirePublicThreadEnvironment(
-        deps.db,
-        context.req.param("id"),
-      );
+      const thread = requirePublicThread(deps.db, context.req.param("id"));
       ensureThreadIsWritable(thread);
       const execution = await buildExecutionOptions(
         deps,
@@ -152,10 +144,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     "/threads/:id/queued-messages/:queuedMessageId/send",
     sendQueuedMessageRequestSchema,
     async (context, payload) => {
-      const { thread } = requirePublicThreadEnvironment(
-        deps.db,
-        context.req.param("id"),
-      );
+      const thread = requirePublicThread(deps.db, context.req.param("id"));
       ensureThreadIsWritable(thread);
       ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
       const queuedMessage = await sendQueuedMessage(deps, {
@@ -208,30 +197,17 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/stop", async (context) => {
-    const { environment, thread } =
-      requirePublicThreadEnvironmentAllowingDestroyed(
-        deps.db,
-        context.req.param("id"),
-      );
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    const environment = requireThreadHostCommandEnvironment({
+      db: deps.db,
+      thread,
+    });
     requestThreadStopIfNeeded(deps, thread, environment);
     return context.json({ ok: true });
   });
 
   post("/threads/:id/archive", async (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
-    if (!thread.environmentId) {
-      throwThreadEnvironmentUnavailable(
-        threadEnvironmentUnavailableDetails("never_attached", null),
-      );
-    }
-    const environment = getEnvironment(deps.db, thread.environmentId);
-    if (!environment) {
-      throw new ApiError(
-        404,
-        "environment_not_found",
-        "Environment not found",
-      );
-    }
     if (thread.archivedAt !== null) {
       deps.terminalSessions.closeArchivedThreadTerminals({
         threadId: thread.id,
@@ -239,6 +215,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       return context.json({ ok: true });
     }
     const shouldRequestCleanup = wouldCleanupAfterThreadArchive(deps, thread);
+    const environment = requireThreadHostCommandEnvironment({
+      db: deps.db,
+      thread,
+    });
     const archiveResult = archiveThreadWithLifecycleEffects(deps, {
       environment,
       thread,
@@ -248,10 +228,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     }
     if (shouldRequestCleanup) {
       requestEnvironmentCleanup(deps, {
-        environmentId: environment.id,
+        environmentId: thread.environmentId,
       });
       requestEnvironmentCleanupAdvance(deps, {
-        environmentId: environment.id,
+        environmentId: thread.environmentId,
       });
     }
     return context.json({ ok: true });

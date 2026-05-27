@@ -2,6 +2,7 @@ import { getThread } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  requireManagedWorktreeEnvironmentProvisionQueuedCommand,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -106,13 +107,9 @@ describe("generated managed branch names", () => {
       expect(getThread(harness.db, thread.id)?.title).toBe(
         "Improve Branch Names",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
         `bb/improve-branch-names-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
@@ -171,13 +168,9 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
         `bb/recovered-managed-metadata-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
@@ -323,13 +316,9 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        provision.command.type !== "environment.provision" ||
-        provision.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(provision.command.branchName).toBe(
+      const managedProvision =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(provision);
+      expect(managedProvision.command.branchName).toBe(
         `bb/user-picked-title-${thread.id}`,
       );
       await reportQueuedCommandSuccess(
@@ -419,13 +408,9 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(`bb/${thread.id}`);
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
@@ -477,17 +462,10 @@ describe("generated managed branch names", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(`bb/${thread.id}`);
-      expect(piAiMocks.getModel).toHaveBeenCalledWith(
-        "openai",
-        "gpt-4o-mini",
-      );
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
+      expect(piAiMocks.getModel).toHaveBeenCalledWith("openai", "gpt-4o-mini");
       expect(piAiMocks.complete).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();
@@ -544,13 +522,9 @@ describe("generated managed branch names", () => {
       expect(getThread(harness.db, thread.id)?.title).toBe(
         "Canonical Generated Title",
       );
-      if (
-        queued.command.type !== "environment.provision" ||
-        queued.command.workspaceProvisionType === "unmanaged"
-      ) {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
         `bb/canonical-generated-title-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);

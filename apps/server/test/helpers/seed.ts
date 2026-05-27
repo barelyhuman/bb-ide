@@ -25,6 +25,7 @@ import type {
   ThreadEventScope,
   ThreadEventItemType,
   ThreadEventType,
+  WorkspaceProvisionType,
 } from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
 
@@ -119,7 +120,9 @@ export function seedEnvironment(
     path?: string;
     status?: EnvironmentStatus;
     managed?: boolean;
-    workspaceProvisionType?: "unmanaged" | "managed-worktree";
+    workspaceProvisionType?: WorkspaceProvisionType;
+    isGitRepo?: boolean;
+    isWorktree?: boolean;
     branchName?: string | null;
     baseBranch?: string | null;
     defaultBranch?: string | null;
@@ -132,8 +135,9 @@ export function seedEnvironment(
     path: args.path ?? "/tmp/test-environment",
     status: args.status ?? "ready",
     managed: args.managed ?? false,
-    isGitRepo: true,
-    isWorktree: args.workspaceProvisionType === "managed-worktree",
+    isGitRepo: args.isGitRepo ?? args.workspaceProvisionType !== "personal",
+    isWorktree:
+      args.isWorktree ?? args.workspaceProvisionType === "managed-worktree",
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
     branchName: args.branchName !== undefined ? args.branchName : "bb/test",
     baseBranch: args.baseBranch !== undefined ? args.baseBranch : null,
@@ -253,7 +257,7 @@ export function seedTurnStarted(
 export function seedThreadRuntimeState(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    environmentId: string;
+    environmentId: string | null;
     inputText?: string;
     model?: string;
     providerThreadId: string;

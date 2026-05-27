@@ -43,6 +43,13 @@
       "when": 1779417575414,
       "tag": "0005_strong_exodus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1779821204585,
+      "tag": "0006_rapid_santa_claus",
+      "breakpoints": true
     }
   ]
 }

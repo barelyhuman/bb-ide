@@ -47,7 +47,7 @@ function resolveAutomationHostId(
 ): string | null {
   switch (threadRequest.environment.type) {
     case "host":
-      return threadRequest.environment.hostId;
+      return threadRequest.environment.hostId ?? null;
     case "reuse": {
       const environment = getEnvironment(
         deps.db,

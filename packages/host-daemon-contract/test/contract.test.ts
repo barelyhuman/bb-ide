@@ -209,6 +209,19 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_personal",
+        initiator: null,
+        workspaceProvisionType: "personal",
+        targetPath: "/tmp/bb/personal-workspaces/env_personal",
+      }),
+    ).toMatchObject({
+      type: "environment.provision",
+      workspaceProvisionType: "personal",
+    });
+
+    expect(
       hostDaemonCommandEnvelopeSchema.parse({
         id: "hcmd_123",
         cursor: 7,

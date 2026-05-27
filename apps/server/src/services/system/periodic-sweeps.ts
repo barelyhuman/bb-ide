@@ -297,7 +297,7 @@ export async function runThreadLifecycleSweep(
 
   for (const thread of stopRequestedThreads) {
     try {
-      if (thread.status === "active" && thread.environmentId !== null) {
+      if (thread.status === "active") {
         requestThreadStop(deps, {
           environmentId: thread.environmentId,
           hostId: thread.hostId,

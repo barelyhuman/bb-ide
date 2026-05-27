@@ -117,7 +117,7 @@ export function ProjectMainView() {
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
   const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
   const sidebarBootstrapProjects = useMemo(
-    () => sidebarBootstrapQuery.data?.map(stripProjectThreads),
+    () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
     [sidebarBootstrapQuery.data],
   );
   const projects = projectsQuery.data ?? sidebarBootstrapProjects;
@@ -527,6 +527,7 @@ export function ProjectMainView() {
       value: effectiveEnvironmentValue,
       onChange: setEnvironmentSelectionValue,
       sources: projectSources,
+      personalWorkspace: false,
       reuseDisabled: reuseThreadOptions.length === 0,
     }),
     [
@@ -649,8 +650,7 @@ export function ProjectMainView() {
     );
   }
   if (!projects?.some((project) => project.id === projectId)) {
-    const errored =
-      sidebarBootstrapQuery.isError || projectsQuery.isError;
+    const errored = sidebarBootstrapQuery.isError || projectsQuery.isError;
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-destructive">

@@ -32,6 +32,7 @@ import type {
   ThreadEventScopeKind,
   ThreadEventType,
   WorkspaceProvisionType,
+  ProjectKind,
 } from "@bb/domain";
 
 export const authUsers = sqliteTable(
@@ -104,6 +105,7 @@ export const projects = sqliteTable(
   "projects",
   {
     id: text("id").primaryKey(),
+    kind: text("kind").$type<ProjectKind>().notNull().default("standard"),
     name: text("name").notNull(),
     sortKey: text("sort_key").notNull().default("V"),
     createdAt: integer("created_at").notNull(),
@@ -112,6 +114,9 @@ export const projects = sqliteTable(
   (table) => [
     index("projects_updated_idx").on(table.updatedAt),
     index("projects_sort_idx").on(table.sortKey, table.id),
+    uniqueIndex("projects_personal_singleton_idx")
+      .on(table.kind)
+      .where(sql`${table.kind} = 'personal'`),
   ],
 );
 

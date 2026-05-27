@@ -255,6 +255,9 @@ export async function resolveThreadRuntimeCommandConfig(
       instructions: STANDARD_AGENT_INSTRUCTIONS,
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
+      ...(args.thread.environmentId === null
+        ? { threadStoragePath: workspacePath }
+        : {}),
       workspacePath,
       workspaceProvisionType,
     };

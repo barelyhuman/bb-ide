@@ -24,10 +24,9 @@ describe("project queries", () => {
       body: [],
     });
     const { wrapper } = createQueryClientTestHarness();
-    const { unmount } = renderHook(
-      () => useProjectPromptHistory("project-1"),
-      { wrapper },
-    );
+    const { unmount } = renderHook(() => useProjectPromptHistory("project-1"), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(route.getSignal()).toBeInstanceOf(AbortSignal);

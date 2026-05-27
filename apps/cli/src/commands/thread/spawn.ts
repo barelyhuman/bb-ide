@@ -1,10 +1,10 @@
 import { Command } from "commander";
-import type { Thread } from "@bb/domain";
+import { PERSONAL_PROJECT_ID, type Thread } from "@bb/domain";
 import type { BaseBranchSpec, EnvironmentArgs } from "@bb/server-contract";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import {
-  requireProjectId,
+  resolveProjectId,
   resolveEnvironmentId,
   resolveThreadId,
 } from "../../context-env.js";
@@ -51,6 +51,7 @@ export function requireHostId(hostId: string | null): string {
 }
 
 export function buildSpawnEnvironment(args: {
+  defaultPersonalWorkspace: boolean;
   environmentValue?: string;
   newEnvironmentKind?: string;
   hostId: string | null;
@@ -79,6 +80,13 @@ export function buildSpawnEnvironment(args: {
     );
   }
   if (!environmentValue) {
+    if (args.defaultPersonalWorkspace) {
+      return {
+        type: "host",
+        ...(args.hostId ? { hostId: args.hostId } : {}),
+        workspace: { type: "personal" },
+      };
+    }
     return {
       type: "host",
       hostId: requireHostId(args.hostId),
@@ -109,7 +117,10 @@ export function registerSpawnCommand(
     )
     .requiredOption("--prompt <prompt>", "Initial prompt for the thread")
     .option("--json", "Print machine-readable JSON output")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .option(
+      "--project <id>",
+      "Project ID (defaults to BB_PROJECT_ID, then the personal project)",
+    )
     .option(
       "--environment <id-or-path>",
       "Existing environment UUID or unmanaged workspace path",
@@ -155,13 +166,22 @@ export function registerSpawnCommand(
           );
         }
 
-        const projectId = requireProjectId(opts.project);
+        const projectId = resolveProjectId(opts.project) ?? PERSONAL_PROJECT_ID;
         const environmentValue = resolveEnvironmentId(opts.environment);
         let hostId: string | null = opts.host ?? null;
-        if (!hostId) {
+        const defaultPersonalWorkspace =
+          projectId === PERSONAL_PROJECT_ID &&
+          !environmentValue &&
+          !opts.newEnvironment;
+        const needsHostId =
+          !defaultPersonalWorkspace &&
+          !hostId &&
+          (!environmentValue || looksLikePath(environmentValue));
+        if (needsHostId) {
           hostId = await fetchLocalHostId();
         }
         const environment = buildSpawnEnvironment({
+          defaultPersonalWorkspace,
           environmentValue,
           newEnvironmentKind: opts.newEnvironment,
           hostId,
@@ -213,7 +233,9 @@ export function registerSpawnCommand(
 function printThread(thread: Thread): void {
   console.log("");
   console.log(`  ID:       ${thread.id}`);
-  console.log(`  Project:  ${thread.projectId}`);
+  console.log(
+    `  Project:  ${thread.projectId === PERSONAL_PROJECT_ID ? "-" : thread.projectId}`,
+  );
   console.log(`  Status:   ${statusText(thread.status)}`);
   if (thread.archivedAt !== null) {
     console.log(`  Archived: ${new Date(thread.archivedAt).toLocaleString()}`);

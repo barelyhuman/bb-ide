@@ -39,6 +39,10 @@ interface MigratedThreadSortKeyRow {
   sortKey: string | null;
 }
 
+interface PersonalProjectMigrationRow {
+  count: number;
+}
+
 interface ReadIndexNamesArgs {
   db: DbConnection;
   tableName: string;
@@ -49,7 +53,7 @@ const baselineWhen = 1778891867195;
 const publishedTerminalSessionUserInputWhen = 1779139400000;
 const closedSessionPruneIndexesWhen = 1779139400001;
 const threadDynamicContextFileStatesWhen = 1779139400002;
-const sidebarOrderingWhen = 1779417575414;
+const threadHostAssignmentMigrationWhen = 1779821958649;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
@@ -107,9 +111,43 @@ function runSidebarOrderingMigration(db: DbConnection): void {
 }
 
 describe("migrate", () => {
+  it("provisions the singleton personal project", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+
+      const personalProject = db.$client
+        .prepare<[], PersonalProjectMigrationRow>(
+          `
+            SELECT COUNT(*) AS count
+            FROM projects
+            WHERE id = 'proj_personal'
+              AND kind = 'personal'
+              AND name = 'Personal'
+          `,
+        )
+        .get();
+      expect(personalProject?.count).toBe(1);
+
+      expect(() =>
+        db.$client
+          .prepare(
+            `
+              INSERT INTO projects (id, kind, name, sort_key, created_at, updated_at)
+              VALUES ('proj_second_personal', 'personal', 'Second personal', 'V', 1, 1)
+            `,
+          )
+          .run(),
+      ).toThrow();
+    } finally {
+      closeConnection(db);
+    }
+  });
+
   it("warns when applied migration timestamps are in the future", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(sidebarOrderingWhen + 10_000);
+    vi.setSystemTime(threadHostAssignmentMigrationWhen + 10_000);
 
     const db = createConnection(":memory:");
     const logger = {
@@ -167,8 +205,11 @@ describe("migrate", () => {
         )
         .run();
       db.$client.prepare("DROP INDEX projects_sort_idx").run();
+      db.$client.prepare("DROP INDEX projects_personal_singleton_idx").run();
       db.$client.prepare("DROP INDEX threads_project_type_sort_idx").run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
+      db.$client.prepare("DELETE FROM projects WHERE kind = 'personal'").run();
+      db.$client.prepare("ALTER TABLE projects DROP COLUMN kind").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN sort_key").run();
       db.$client.prepare("ALTER TABLE threads DROP COLUMN sort_key").run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();

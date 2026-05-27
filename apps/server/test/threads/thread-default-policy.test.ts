@@ -1,4 +1,8 @@
-import type { ProjectExecutionDefaults, Thread } from "@bb/domain";
+import {
+  PERSONAL_PROJECT_ID,
+  type ProjectExecutionDefaults,
+  type Thread,
+} from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   resolveCreateThreadEnvironment,
@@ -13,7 +17,7 @@ type PolicyTestThread = Pick<
 >;
 type PolicyTestParentThread = Pick<
   Thread,
-  "archivedAt" | "deletedAt" | "id" | "projectId" | "type"
+  "archivedAt" | "deletedAt" | "environmentId" | "id" | "projectId" | "type"
 >;
 
 function makeThread(
@@ -47,6 +51,7 @@ function makeManagerParentThread(
   return {
     archivedAt: null,
     deletedAt: null,
+    environmentId: "env-manager-1",
     id: "thr-manager-1",
     projectId: "proj-1",
     type: "manager",
@@ -144,6 +149,26 @@ describe("resolveCreateThreadEnvironment", () => {
     ).toEqual({
       type: "reuse",
       environmentId: "env-1",
+    });
+  });
+
+  it("defaults personal manager children to the manager environment", () => {
+    expect(
+      resolveCreateThreadEnvironment({
+        parentThread: makeManagerParentThread({
+          environmentId: "env-personal-manager",
+          projectId: PERSONAL_PROJECT_ID,
+        }),
+        projectId: PERSONAL_PROJECT_ID,
+        requestedEnvironment: {
+          type: "host",
+          workspace: { type: "personal" },
+        },
+        threadType: "standard",
+      }),
+    ).toEqual({
+      type: "reuse",
+      environmentId: "env-personal-manager",
     });
   });
 

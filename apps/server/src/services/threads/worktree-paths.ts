@@ -52,6 +52,11 @@ export interface ResolveManagedTargetPathArgs {
   sourcePath: string;
 }
 
+export interface ResolvePersonalTargetPathArgs {
+  dataDir: string;
+  environmentId: string;
+}
+
 export function resolveManagedTargetPath(
   args: ResolveManagedTargetPathArgs,
 ): string {
@@ -60,5 +65,15 @@ export function resolveManagedTargetPath(
     "worktrees",
     args.environmentId,
     deriveRepoDirName(args.sourcePath),
+  );
+}
+
+export function resolvePersonalTargetPath(
+  args: ResolvePersonalTargetPathArgs,
+): string {
+  return path.posix.join(
+    args.dataDir,
+    "personal-workspaces",
+    args.environmentId,
   );
 }

@@ -1,6 +1,12 @@
-export { openWorkspace, provisionWorkspace } from "./provision.js";
+export {
+  getPersonalWorkspaceRoot,
+  openWorkspace,
+  provisionWorkspace,
+  validatePersonalWorkspaceTargetPath,
+} from "./provision.js";
 export type {
   HostWorkspace,
+  PersonalWorkspaceOpts,
   ProvisionWorkspaceArgs,
   UnmanagedWorkspaceOpts,
   ManagedWorkspaceBaseOpts,
