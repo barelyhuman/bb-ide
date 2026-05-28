@@ -54,7 +54,7 @@ describe.sequential("fake provider smoke environment integration", () => {
       expect(status.workspace?.workingTree.state).toBe("clean");
       expect(status.workspace?.workingTree.hasUncommittedChanges).toBe(false);
       expect(typeof diff.diff).toBe("string");
-      expect(branches).toContain("main");
+      expect(branches.branches).toContain("main");
     }));
 
   it("commits dirty workspace changes through the environment actions route", () =>

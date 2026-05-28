@@ -24,6 +24,7 @@ import type {
   CreateThreadRequest,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentDiffBranchesResponse,
   EnvironmentStatusResponse,
   ProjectResponse,
   ResolvePendingInteractionRequest,
@@ -38,6 +39,7 @@ import type {
 import {
   createPublicApiClient,
   environmentActionResponseSchema,
+  environmentDiffBranchesResponseSchema,
   environmentStatusResponseSchema,
   projectResponseSchema,
   systemExecutionOptionsResponseSchema,
@@ -275,16 +277,17 @@ export async function getEnvironment(
 export async function getEnvironmentBranches(
   api: PublicApiClient,
   environmentId: string,
-): Promise<string[]> {
+): Promise<EnvironmentDiffBranchesResponse> {
   const response = await api.environments[":id"].diff.branches.$get({
     param: { id: environmentId },
+    query: {},
   });
   await expectStatus(
     response,
     200,
     `get environment branches ${environmentId}`,
   );
-  return response.json();
+  return environmentDiffBranchesResponseSchema.parse(await response.json());
 }
 
 export async function getEnvironmentDiff(
