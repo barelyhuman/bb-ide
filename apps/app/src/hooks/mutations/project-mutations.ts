@@ -118,6 +118,25 @@ function applyProjectOrderToSidebarBootstrap(
   };
 }
 
+function removeProjectFromProjectList(
+  currentProjects: readonly ProjectResponse[],
+  projectId: string,
+): ProjectResponse[] {
+  return currentProjects.filter((project) => project.id !== projectId);
+}
+
+function removeProjectFromSidebarBootstrap(
+  currentBootstrap: SidebarBootstrapResponse,
+  projectId: string,
+): SidebarBootstrapResponse {
+  return {
+    ...currentBootstrap,
+    projects: currentBootstrap.projects.filter(
+      (project) => project.id !== projectId,
+    ),
+  };
+}
+
 function applyThreadListOrderToExistingThreads(
   currentThreads: readonly ThreadListEntry[],
   orderedThreads: readonly ThreadListEntry[],
@@ -460,7 +479,21 @@ export function useDeleteProject() {
       errorMessage: "Failed to remove project.",
     },
     mutationFn: (projectId: string) => api.deleteProject(projectId),
-    onSuccess: () => {
+    onSuccess: (_data, projectId) => {
+      queryClient.setQueryData<ProjectResponse[]>(
+        projectsQueryKey(),
+        (currentProjects) =>
+          currentProjects
+            ? removeProjectFromProjectList(currentProjects, projectId)
+            : currentProjects,
+      );
+      queryClient.setQueryData<SidebarBootstrapResponse>(
+        sidebarBootstrapQueryKey(),
+        (currentBootstrap) =>
+          currentBootstrap
+            ? removeProjectFromSidebarBootstrap(currentBootstrap, projectId)
+            : currentBootstrap,
+      );
       invalidateProjectDeleteQueries({ queryClient });
     },
   });

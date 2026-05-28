@@ -9,6 +9,7 @@ import {
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
   projectsQueryKey,
+  sidebarBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
@@ -56,6 +57,7 @@ export function invalidateProjectDeleteQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
 }
 

@@ -8,15 +8,23 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ProjectResponse } from "@bb/server-contract";
+import type {
+  ProjectResponse,
+  ProjectWithThreadsResponse,
+  SidebarBootstrapResponse,
+} from "@bb/server-contract";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { Provider as JotaiProvider, createStore } from "jotai";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { createAppQueryClient } from "@/lib/query-client";
 import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
+import {
+  projectsQueryKey,
+  sidebarBootstrapQueryKey,
+} from "@/hooks/queries/query-keys";
 import {
   ProjectActionsProvider,
   useProjectActions,
@@ -40,6 +48,15 @@ vi.mock("@/hooks/useHostDaemon", () => ({
   }),
 }));
 
+interface RenderWithProviderOptions {
+  initialEntries?: string[];
+  jotaiStore?: ReturnType<typeof createStore>;
+}
+
+interface RenderWithProviderResult {
+  queryClient: QueryClient;
+}
+
 function makeProjectResponse(
   overrides: Partial<ProjectResponse> = {},
 ): ProjectResponse {
@@ -54,25 +71,38 @@ function makeProjectResponse(
   };
 }
 
+function makeProjectWithThreadsResponse(
+  overrides: Partial<ProjectWithThreadsResponse> = {},
+): ProjectWithThreadsResponse {
+  return {
+    ...makeProjectResponse(overrides),
+    threads: overrides.threads ?? [],
+  };
+}
+
 function renderWithProvider(
   children: ReactNode,
-  { jotaiStore }: { jotaiStore?: ReturnType<typeof createStore> } = {},
-) {
+  {
+    initialEntries = ["/"],
+    jotaiStore,
+  }: RenderWithProviderOptions = {},
+): RenderWithProviderResult {
   const queryClient = createAppQueryClient({
     defaultOptions: {
       mutations: { retry: false },
       queries: { gcTime: Infinity, retry: false },
     },
   });
-  return render(
+  render(
     <JotaiProvider store={jotaiStore}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={initialEntries}>
           <ProjectActionsProvider>{children}</ProjectActionsProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </JotaiProvider>,
   );
+  return { queryClient };
 }
 
 /** Captures the context value so tests can invoke provider APIs directly. */
@@ -84,6 +114,11 @@ function HookProbe({
   const actions = useProjectActions();
   onReady(actions);
   return null;
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}</span>;
 }
 
 afterEach(() => {
@@ -124,5 +159,71 @@ describe("ProjectActionsProvider", () => {
     await waitFor(() => {
       expect(jotaiStore.get(collapsedProjectIdsAtom)).toEqual([other.id]);
     });
+  });
+
+  it("removes the deleted project from route-selection caches before navigating to root", async () => {
+    const deletedProject = makeProjectResponse();
+    const otherProject = makeProjectResponse({
+      id: "project-2",
+      name: "Project Two",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: "personal-project",
+      kind: "personal",
+      name: "Personal",
+    });
+    vi.mocked(api.deleteProject).mockResolvedValue(undefined);
+
+    let actions: ReturnType<typeof useProjectActions> | null = null;
+    const { queryClient } = renderWithProvider(
+      <>
+        <HookProbe
+          onReady={(a) => {
+            actions = a;
+          }}
+        />
+        <LocationProbe />
+      </>,
+      { initialEntries: [`/projects/${deletedProject.id}`] },
+    );
+    queryClient.setQueryData<ProjectResponse[]>(projectsQueryKey(), [
+      deletedProject,
+      otherProject,
+    ]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapQueryKey(),
+      {
+        projects: [
+          makeProjectWithThreadsResponse(deletedProject),
+          makeProjectWithThreadsResponse(otherProject),
+        ],
+        personalProject,
+      },
+    );
+
+    act(() => {
+      actions!.requestDelete(deletedProject);
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove project/i }),
+    );
+
+    await waitFor(() => {
+      expect(api.deleteProject).toHaveBeenCalledWith(deletedProject.id);
+    });
+
+    await waitFor(() => {
+      expect(
+        queryClient
+          .getQueryData<ProjectResponse[]>(projectsQueryKey())
+          ?.map((project) => project.id),
+      ).toEqual([otherProject.id]);
+    });
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapQueryKey())
+        ?.projects.map((project) => project.id),
+    ).toEqual([otherProject.id]);
+    expect(screen.getByTestId("location").textContent).toBe("/");
   });
 });
