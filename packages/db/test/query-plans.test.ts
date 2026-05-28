@@ -11,7 +11,11 @@ import { migrate } from "../src/migrate.js";
 import { noopNotifier } from "../src/notifier.js";
 import {
   fetchCommands,
+  getPendingEnvironmentCommand,
+  hasExistingThreadArchiveCommand,
   hasPendingHostCommandForThread,
+  queueCommand,
+  reportCommandResult,
 } from "../src/data/commands.js";
 import {
   insertEvents,
@@ -32,7 +36,6 @@ import { upsertHost } from "../src/data/hosts.js";
 import { createProject } from "../src/data/projects.js";
 import { createThread } from "../src/data/threads.js";
 import { hostDaemonCommands } from "../src/schema.js";
-import { queueCommand, reportCommandResult } from "../src/data/commands.js";
 
 type SqliteParameter = string | number | bigint | Buffer | null;
 type LoggedSqlPredicate = (fields: SlowDbQueryLogFields) => boolean;
@@ -348,7 +351,7 @@ describe("slow query index plans", () => {
     db.$client.close();
   });
 
-  it("uses the replacement host/state/cursor index for host/state command lookups", () => {
+  it("uses the host/type/state index for host command lookups", () => {
     const { db, host, logger } = setup();
     queueCommand(db, noopNotifier, {
       hostId: host.id,
@@ -375,9 +378,117 @@ describe("slow query index plans", () => {
     assertEmittedQueryPlanUsesIndex({
       db,
       debugLog,
-      indexName: "host_daemon_commands_host_state_cursor_idx",
+      indexName: "host_daemon_commands_host_type_state_idx",
       params: [host.id, "turn.submit", "pending", "fetched", "thr_target"],
     });
+
+    db.$client.close();
+  });
+
+  it("uses the host/type/state index for native archive dedupe lookups", () => {
+    const { db, host, logger } = setup();
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      payload: JSON.stringify({
+        threadId: "thr_target",
+        providerId: "codex",
+        providerThreadId: "provider_target",
+      }),
+      type: "thread.archive",
+    });
+    logger.clear();
+
+    expect(
+      hasExistingThreadArchiveCommand(db, {
+        hostId: host.id,
+        providerId: "codex",
+        providerThreadId: "provider_target",
+        threadId: "thr_target",
+      }),
+    ).toBe(true);
+
+    const debugLog = findOnlyDebugLog({
+      logger,
+      predicate: (fields) =>
+        fields.operation === "get" &&
+        fields.sql.includes('select "id" from "host_daemon_commands"') &&
+        fields.sql.includes('"host_daemon_commands"."type" = ?') &&
+        fields.sql.includes('"host_daemon_commands"."host_id" = ?') &&
+        fields.bindingArgumentCount === 8,
+    });
+    assertEmittedQueryPlanUsesIndex({
+      db,
+      debugLog,
+      indexName: "host_daemon_commands_host_type_state_idx",
+      params: [
+        host.id,
+        "thread.archive",
+        "pending",
+        "fetched",
+        "success",
+        "thr_target",
+        "codex",
+        "provider_target",
+      ],
+    });
+
+    const details = queryPlanDetails({
+      db,
+      params: [
+        host.id,
+        "thread.archive",
+        "pending",
+        "fetched",
+        "success",
+        "thr_target",
+        "codex",
+        "provider_target",
+      ],
+      sql: debugLog.fields.sql,
+    });
+    expect(details).not.toContain("host_daemon_commands_host_state_cursor_idx");
+
+    db.$client.close();
+  });
+
+  it("uses the type/state index for pending environment command lookups", () => {
+    const { db, host, logger } = setup();
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      payload: JSON.stringify({ environmentId: "env_target" }),
+      type: "environment.destroy",
+    });
+    logger.clear();
+
+    expect(
+      getPendingEnvironmentCommand(db, {
+        environmentId: "env_target",
+        type: "environment.destroy",
+      }),
+    ).not.toBeNull();
+
+    const debugLog = findOnlyDebugLog({
+      logger,
+      predicate: (fields) =>
+        fields.operation === "get" &&
+        fields.sql.includes('select "id" from "host_daemon_commands"') &&
+        fields.sql.includes('"host_daemon_commands"."type" = ?') &&
+        !fields.sql.includes('"host_daemon_commands"."host_id" = ?') &&
+        fields.bindingArgumentCount === 4,
+    });
+    assertEmittedQueryPlanUsesIndex({
+      db,
+      debugLog,
+      indexName: "host_daemon_commands_type_state_idx",
+      params: ["environment.destroy", "pending", "fetched", "env_target"],
+    });
+
+    const details = queryPlanDetails({
+      db,
+      params: ["environment.destroy", "pending", "fetched", "env_target"],
+      sql: debugLog.fields.sql,
+    });
+    expect(details).not.toContain("host_daemon_commands_state_fetched_at_idx");
 
     db.$client.close();
   });
@@ -655,6 +766,8 @@ describe("slow query index plans", () => {
     const indexNames = indexRows.map((row) => row.name);
 
     expect(indexNames).toContain("host_daemon_commands_host_state_cursor_idx");
+    expect(indexNames).toContain("host_daemon_commands_host_type_state_idx");
+    expect(indexNames).toContain("host_daemon_commands_type_state_idx");
     expect(indexNames).not.toContain("host_daemon_commands_host_state_idx");
 
     db.$client.close();

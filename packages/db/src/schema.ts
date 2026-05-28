@@ -595,6 +595,15 @@ export const hostDaemonCommands = sqliteTable(
       table.state,
       table.cursor,
     ),
+    index("host_daemon_commands_host_type_state_idx").on(
+      table.hostId,
+      table.type,
+      table.state,
+    ),
+    index("host_daemon_commands_type_state_idx").on(
+      table.type,
+      table.state,
+    ),
     index("host_daemon_commands_state_fetched_at_idx").on(
       table.state,
       table.fetchedAt,

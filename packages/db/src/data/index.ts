@@ -306,6 +306,7 @@ export {
   getCommand,
   getHostCommandCursor,
   getPendingEnvironmentCommand,
+  hasExistingThreadArchiveCommand,
   hasPendingHostCommandForThread,
   queueCommand,
   queueCommandInTransaction,
@@ -315,6 +316,7 @@ export {
 export type {
   DeleteQueuedCommandInTransactionArgs,
   FetchCommandsOptions,
+  HasExistingThreadArchiveCommandArgs,
   HasPendingHostCommandForThreadArgs,
   QueueCommandInput,
   HostDaemonCommandRow,

@@ -2,14 +2,14 @@ import {
   getActiveSession,
   queueCommand,
   queueCommandInTransaction,
+  hasExistingThreadArchiveCommand,
   hasPendingHostCommandForThread,
-  hostDaemonCommands,
   environments,
   events,
   transitionThreadStatus,
   threads,
 } from "@bb/db";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   type AgentProviderId,
   getBuiltInAgentProviderInfo,
@@ -186,17 +186,6 @@ export interface EnsureThreadNativeArchiveSettledArgs {
 
 export interface QueueArchivedThreadProviderArchiveCommandArgs {
   threadId: string;
-}
-
-interface ExistingThreadArchiveCommandLookup {
-  hostId: string;
-  providerId: string;
-  providerThreadId: string;
-  threadId: string;
-}
-
-interface ThreadCommandReadDeps {
-  db: AppDeps["db"];
 }
 
 export interface QueueThreadDeletedCommandArgs {
@@ -511,32 +500,6 @@ function buildThreadWorkspaceContext(
   };
 }
 
-function hasExistingThreadArchiveCommand(
-  deps: ThreadCommandReadDeps,
-  args: ExistingThreadArchiveCommandLookup,
-): boolean {
-  const row = deps.db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.hostId, args.hostId),
-        eq(hostDaemonCommands.type, "thread.archive"),
-        // Completed command payload pruning rewrites old terminal payloads to
-        // "{}" after 24h, so successful-command dedupe is intentionally bounded
-        // by that retention window. Pending/fetched commands remain durable
-        // enough to block active archive sync.
-        inArray(hostDaemonCommands.state, ["pending", "fetched", "success"]),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
-        sql`json_extract(${hostDaemonCommands.payload}, '$.providerId') = ${args.providerId}`,
-        sql`json_extract(${hostDaemonCommands.payload}, '$.providerThreadId') = ${args.providerThreadId}`,
-      ),
-    )
-    .get();
-
-  return row !== undefined;
-}
-
 export function queueThreadRenameCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadRenameCommandArgs,
@@ -602,7 +565,7 @@ export function queueThreadArchiveCommand(
   }
 
   if (
-    hasExistingThreadArchiveCommand(deps, {
+    hasExistingThreadArchiveCommand(deps.db, {
       hostId: args.environment.hostId,
       providerId: args.thread.providerId,
       providerThreadId: args.providerThreadId,

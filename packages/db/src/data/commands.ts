@@ -21,6 +21,13 @@ export interface HasPendingHostCommandForThreadArgs {
   type: "thread.archive" | "thread.stop" | "turn.submit";
 }
 
+export interface HasExistingThreadArchiveCommandArgs {
+  hostId: string;
+  providerId: string;
+  providerThreadId: string;
+  threadId: string;
+}
+
 export interface GetPendingEnvironmentCommandArgs {
   environmentId: string;
   type: "environment.destroy" | "workspace.status";
@@ -144,6 +151,32 @@ export function hasPendingHostCommandForThread(
         eq(hostDaemonCommands.type, args.type),
         inArray(hostDaemonCommands.state, ["pending", "fetched"]),
         sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
+      ),
+    )
+    .get();
+
+  return row !== undefined;
+}
+
+export function hasExistingThreadArchiveCommand(
+  db: CommandReadConnection,
+  args: HasExistingThreadArchiveCommandArgs,
+): boolean {
+  const row = db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.hostId, args.hostId),
+        eq(hostDaemonCommands.type, "thread.archive"),
+        // Completed command payload pruning rewrites old terminal payloads to
+        // "{}" after 24h, so successful-command dedupe is intentionally bounded
+        // by that retention window. Pending/fetched commands remain durable
+        // enough to block active archive sync.
+        inArray(hostDaemonCommands.state, ["pending", "fetched", "success"]),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
+        sql`json_extract(${hostDaemonCommands.payload}, '$.providerId') = ${args.providerId}`,
+        sql`json_extract(${hostDaemonCommands.payload}, '$.providerThreadId') = ${args.providerThreadId}`,
       ),
     )
     .get();
