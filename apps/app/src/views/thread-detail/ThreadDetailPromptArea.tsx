@@ -63,6 +63,8 @@ import {
 
 type ComposerQueryRefetchOnMount = boolean | "always";
 
+const ignorePromptBannerFileClick = () => {};
+
 interface ThreadDetailPromptAreaProps {
   canUseGitUi: boolean;
   composerQueriesEnabled: boolean;
@@ -769,6 +771,75 @@ export function ThreadDetailPromptArea({
       onCreateNewThreadInWorktree,
     ],
   );
+  const promptStack = useMemo(
+    () => (
+      <>
+        <ThreadPromptContextBanner
+          todoSection={
+            thread.type === "manager" || !pendingTodos ? null : { pendingTodos }
+          }
+          archivedSection={
+            thread.archivedAt !== null
+              ? { archivedAt: thread.archivedAt }
+              : null
+          }
+          managedBySection={managedBySection}
+          managerChildrenSection={managerChildrenSection}
+          gitSection={
+            workspaceChangedFilesSection
+              ? {
+                  changedFiles: workspaceChangedFilesSection,
+                  mergeBase: contextBannerMergeBase,
+                  onPromptBannerFileClick: canUseGitUi
+                    ? handlePromptBannerFileClick
+                    : ignorePromptBannerFileClick,
+                }
+              : null
+          }
+          gitSectionPending={workspaceStatusPending}
+          expandedSection={expandedBannerSection}
+          onToggleSection={handleToggleBannerSection}
+        />
+        <QueuedMessagesList
+          queuedMessages={queuedMessages}
+          sendDisabled={
+            !(submitMode.kind === "ready" || submitMode.kind === "queue") ||
+            isFollowUpSubmitting ||
+            isQueueMutationPending
+          }
+          actionDisabled={isQueueMutationPending}
+          processingMessageId={processingQueuedMessageId}
+          onSendImmediately={handleSendQueuedImmediately}
+          onReorder={handleReorderQueuedMessage}
+          onEdit={handleEditQueuedMessage}
+          onDelete={handleDeleteQueuedMessage}
+        />
+      </>
+    ),
+    [
+      canUseGitUi,
+      contextBannerMergeBase,
+      expandedBannerSection,
+      handleDeleteQueuedMessage,
+      handleEditQueuedMessage,
+      handlePromptBannerFileClick,
+      handleReorderQueuedMessage,
+      handleSendQueuedImmediately,
+      handleToggleBannerSection,
+      isFollowUpSubmitting,
+      isQueueMutationPending,
+      managedBySection,
+      managerChildrenSection,
+      pendingTodos,
+      processingQueuedMessageId,
+      queuedMessages,
+      submitMode.kind,
+      thread.archivedAt,
+      thread.type,
+      workspaceChangedFilesSection,
+      workspaceStatusPending,
+    ],
+  );
 
   if (activePendingInteraction) {
     return (
@@ -782,52 +853,7 @@ export function ThreadDetailPromptArea({
   return (
     <FollowUpPromptBox
       attachments={attachmentsConfig}
-      stack={
-        <>
-          <ThreadPromptContextBanner
-            todoSection={
-              thread.type === "manager" || !pendingTodos
-                ? null
-                : { pendingTodos }
-            }
-            archivedSection={
-              thread.archivedAt !== null
-                ? { archivedAt: thread.archivedAt }
-                : null
-            }
-            managedBySection={managedBySection}
-            managerChildrenSection={managerChildrenSection}
-            gitSection={
-              workspaceChangedFilesSection
-                ? {
-                    changedFiles: workspaceChangedFilesSection,
-                    mergeBase: contextBannerMergeBase,
-                    onPromptBannerFileClick: canUseGitUi
-                      ? handlePromptBannerFileClick
-                      : () => {},
-                  }
-                : null
-            }
-            gitSectionPending={workspaceStatusPending}
-            expandedSection={expandedBannerSection}
-            onToggleSection={handleToggleBannerSection}
-          />
-          <QueuedMessagesList
-            queuedMessages={queuedMessages}
-            sendDisabled={
-              !(submitMode.kind === "ready" || submitMode.kind === "queue") ||
-              isFollowUpSubmitting ||
-              isQueueMutationPending
-            }
-            actionDisabled={isQueueMutationPending}
-            processingMessageId={processingQueuedMessageId}
-            onSendImmediately={handleSendQueuedImmediately}
-            onReorder={handleReorderQueuedMessage}
-            onEdit={handleEditQueuedMessage}
-            onDelete={handleDeleteQueuedMessage}
-          />
-        </>
-      }
+      stack={promptStack}
       composer={composerConfig}
       zenModeResetKey={thread.id}
       environmentSummary={environmentSummary}

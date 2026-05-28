@@ -13,6 +13,7 @@ import {
 
 const PROMPT_DRAFT_STORAGE_PREFIX = "bb.promptbox.contents";
 const PROMPT_DRAFT_STORAGE_VERSION = "3";
+const PROMPT_DRAFT_PERSIST_DEBOUNCE_MS = 250;
 
 interface PromptDraftScope {
   projectId?: string | null;
@@ -26,9 +27,15 @@ interface PromptDraftCacheEntry {
 
 type PromptDraftListener = () => void;
 
+interface PromptDraftWriteOptions {
+  persist: "immediate" | "deferred";
+}
+
 const EMPTY_PROMPT_DRAFT = emptyPromptDraftState();
 const promptDraftCache = new Map<string, PromptDraftCacheEntry>();
 const promptDraftSubscribers = new Map<string, Set<PromptDraftListener>>();
+const pendingPromptDraftStorageKeys = new Set<string>();
+const promptDraftPersistTimers = new Map<string, number>();
 let promptDraftStorageObserverInitialized = false;
 
 function normalizeStorageSegment(value: string): string {
@@ -38,6 +45,10 @@ function normalizeStorageSegment(value: string): string {
 function readPromptDraft(storageKey: string | null): PromptDraftState {
   if (!storageKey || typeof window === "undefined") {
     return EMPTY_PROMPT_DRAFT;
+  }
+
+  if (pendingPromptDraftStorageKeys.has(storageKey)) {
+    return promptDraftCache.get(storageKey)?.draft ?? EMPTY_PROMPT_DRAFT;
   }
 
   const rawValue = window.localStorage.getItem(storageKey);
@@ -63,6 +74,46 @@ function emitPromptDraftChange(storageKey: string): void {
   }
 }
 
+function clearPromptDraftPersistTimer(storageKey: string): void {
+  const timerId = promptDraftPersistTimers.get(storageKey);
+  if (timerId === undefined || typeof window === "undefined") return;
+
+  window.clearTimeout(timerId);
+  promptDraftPersistTimers.delete(storageKey);
+}
+
+function persistPromptDraftCache(storageKey: string): void {
+  if (typeof window === "undefined") return;
+
+  clearPromptDraftPersistTimer(storageKey);
+  pendingPromptDraftStorageKeys.delete(storageKey);
+
+  const cachedEntry = promptDraftCache.get(storageKey);
+  if (!cachedEntry || cachedEntry.rawValue === null) {
+    window.localStorage.removeItem(storageKey);
+    return;
+  }
+
+  window.localStorage.setItem(storageKey, cachedEntry.rawValue);
+}
+
+function schedulePromptDraftPersist(storageKey: string): void {
+  if (typeof window === "undefined") return;
+
+  clearPromptDraftPersistTimer(storageKey);
+  pendingPromptDraftStorageKeys.add(storageKey);
+  const timerId = window.setTimeout(() => {
+    persistPromptDraftCache(storageKey);
+  }, PROMPT_DRAFT_PERSIST_DEBOUNCE_MS);
+  promptDraftPersistTimers.set(storageKey, timerId);
+}
+
+function flushPendingPromptDraftPersists(): void {
+  for (const storageKey of Array.from(pendingPromptDraftStorageKeys)) {
+    persistPromptDraftCache(storageKey);
+  }
+}
+
 function ensurePromptDraftStorageObserver(): void {
   if (promptDraftStorageObserverInitialized || typeof window === "undefined") {
     return;
@@ -71,8 +122,16 @@ function ensurePromptDraftStorageObserver(): void {
   promptDraftStorageObserverInitialized = true;
   window.addEventListener("storage", (event) => {
     if (!event.key) return;
+    // While a local deferred write is pending, ignore stale cross-tab storage for this key so it cannot clobber the in-progress draft.
+    if (pendingPromptDraftStorageKeys.has(event.key)) return;
     promptDraftCache.delete(event.key);
     emitPromptDraftChange(event.key);
+  });
+  window.addEventListener("pagehide", flushPendingPromptDraftPersists);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushPendingPromptDraftPersists();
+    }
   });
 }
 
@@ -107,6 +166,7 @@ function subscribePromptDraft(
 function writePromptDraft(
   storageKey: string | null,
   value: PromptDraftState,
+  options: PromptDraftWriteOptions = { persist: "immediate" },
 ): void {
   if (!storageKey || typeof window === "undefined") return;
 
@@ -114,20 +174,28 @@ function writePromptDraft(
   // a previously unmounted thread view.
   const serialized = serializePromptDraftStorage(value);
   if (!serialized) {
-    window.localStorage.removeItem(storageKey);
     promptDraftCache.set(storageKey, {
       rawValue: null,
       draft: EMPTY_PROMPT_DRAFT,
     });
+    if (options.persist === "deferred") {
+      schedulePromptDraftPersist(storageKey);
+    } else {
+      persistPromptDraftCache(storageKey);
+    }
     emitPromptDraftChange(storageKey);
     return;
   }
 
-  window.localStorage.setItem(storageKey, serialized);
   promptDraftCache.set(storageKey, {
     rawValue: serialized,
     draft: value,
   });
+  if (options.persist === "deferred") {
+    schedulePromptDraftPersist(storageKey);
+  } else {
+    persistPromptDraftCache(storageKey);
+  }
   emitPromptDraftChange(storageKey);
 }
 
@@ -195,10 +263,14 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
 
   const setText = useCallback(
     (nextText: string) => {
-      writePromptDraft(storageKey, {
-        ...readPromptDraft(storageKey),
-        text: nextText,
-      });
+      writePromptDraft(
+        storageKey,
+        {
+          ...readPromptDraft(storageKey),
+          text: nextText,
+        },
+        { persist: "deferred" },
+      );
     },
     [storageKey],
   );

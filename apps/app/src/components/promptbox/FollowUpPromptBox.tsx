@@ -2,6 +2,7 @@ import {
   memo,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentProps,
@@ -175,6 +176,10 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
   const onSteerSubmit = composer.canSteerSubmit
     ? composer.onSteerSubmit
     : undefined;
+  const footerStart = useMemo(
+    () => <ExecutionControls {...execution} />,
+    [execution],
+  );
   const stackRef = useRef<HTMLDivElement>(null);
   const [stackHeight, setStackHeight] = useState(0);
   // Measure the stack synchronously after every render. useLayoutEffect runs
@@ -251,7 +256,7 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
             resetKey: zenModeResetKey,
             resetOnSubmit: true,
           }}
-          footerStart={<ExecutionControls {...execution} />}
+          footerStart={footerStart}
         />
         <div className="mt-1 flex min-h-6 items-center justify-between gap-2 pl-[15px] pr-3.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
