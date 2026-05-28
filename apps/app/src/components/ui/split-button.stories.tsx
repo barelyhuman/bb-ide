@@ -12,7 +12,12 @@ export default {
 
 const noop = () => {};
 
-function EditorIcon({ src, alt }: { src: string; alt: string }) {
+interface EditorIconProps {
+  alt: string;
+  src: string;
+}
+
+function EditorIcon({ src, alt }: EditorIconProps) {
   return (
     <img
       alt={alt}
@@ -34,8 +39,7 @@ const gitSecondaries: SplitButtonAction[] = [
   { label: "Squash merge", onSelect: noop },
 ];
 
-// Mirrors ThreadWorkspaceOpenButton: icon-only primary (the preferred editor)
-// + icon+label secondaries listing other workspace open targets.
+// Representative icon-only split button: icon primary + icon+label secondaries.
 const openInVSCodeAction: SplitButtonAction = {
   label: "Open workspace in VS Code",
   onSelect: noop,

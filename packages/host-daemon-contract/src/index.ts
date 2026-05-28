@@ -49,10 +49,9 @@ export {
   providerCliStatusResponseSchema,
   providerCliStatusSchema,
   statusResponseSchema,
+  workspaceOpenTargetCapabilitiesSchema,
   workspaceOpenTargetIdSchema,
   workspaceOpenTargetIdValues,
-  workspaceOpenTargetKindSchema,
-  workspaceOpenTargetKindValues,
   workspaceOpenTargetSchema,
   workspaceOpenTargetsResponseSchema,
 } from "./local.js";
@@ -81,8 +80,8 @@ export type {
   ProviderCliStatusResponse,
   StatusResponse,
   WorkspaceOpenTarget,
+  WorkspaceOpenTargetCapabilities,
   WorkspaceOpenTargetId,
-  WorkspaceOpenTargetKind,
   WorkspaceOpenTargetsResponse,
 } from "./local.js";
 

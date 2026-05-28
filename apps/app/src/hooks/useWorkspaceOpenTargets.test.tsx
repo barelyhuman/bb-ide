@@ -34,6 +34,16 @@ interface WorkspaceOpenTargetFetchState {
   workspaceOpenTargetsStatus: number;
 }
 
+const vscodeTarget: WorkspaceOpenTarget = {
+  capabilities: {
+    openDirectory: true,
+    openFile: true,
+    openFileAtLine: true,
+  },
+  id: "vscode",
+  label: "VS Code",
+};
+
 interface WorkspaceOpenTargetsModules {
   FakeReconnectingWebSocket: typeof import("@/test/fake-reconnecting-websocket").FakeReconnectingWebSocket;
   useWorkspaceOpenTargets: typeof import("./useWorkspaceOpenTargets").useWorkspaceOpenTargets;
@@ -199,13 +209,7 @@ describe("useWorkspaceOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      workspaceOpenTargets: [
-        {
-          id: "vscode",
-          kind: "editor",
-          label: "VS Code",
-        },
-      ],
+      workspaceOpenTargets: [vscodeTarget],
       workspaceOpenTargetsStatus: 200,
     };
     const openTargetRequests: OpenInTargetRequest[] = [];
@@ -348,13 +352,7 @@ describe("useWorkspaceOpenTargets", () => {
     const socket = FakeReconnectingWebSocket.latest();
     socket.open();
     socket.close();
-    state.workspaceOpenTargets = [
-      {
-        id: "vscode",
-        kind: "editor",
-        label: "VS Code",
-      },
-    ];
+    state.workspaceOpenTargets = [vscodeTarget];
     socket.open();
 
     await waitFor(() => {

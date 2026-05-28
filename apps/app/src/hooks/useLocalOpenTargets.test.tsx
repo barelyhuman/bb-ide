@@ -19,7 +19,10 @@ import {
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon";
-import { WORKSPACE_OPEN_TARGET_STORAGE_KEY } from "@/lib/workspace-open-target-preference";
+import {
+  FILE_OPEN_TARGET_STORAGE_KEY,
+  WORKSPACE_OPEN_TARGET_STORAGE_KEY,
+} from "@/lib/workspace-open-target-preference";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
@@ -91,6 +94,36 @@ interface LocalOpenTargetsFetchState {
   workspaceOpenTargets: WorkspaceOpenTarget[];
   workspaceOpenTargetsStatus: number;
 }
+
+const vscodeTarget: WorkspaceOpenTarget = {
+  capabilities: {
+    openDirectory: true,
+    openFile: true,
+    openFileAtLine: true,
+  },
+  id: "vscode",
+  label: "VS Code",
+};
+
+const defaultAppTarget: WorkspaceOpenTarget = {
+  capabilities: {
+    openDirectory: true,
+    openFile: true,
+    openFileAtLine: false,
+  },
+  id: "default-app",
+  label: "Default App",
+};
+
+const finderTarget: WorkspaceOpenTarget = {
+  capabilities: {
+    openDirectory: true,
+    openFile: false,
+    openFileAtLine: false,
+  },
+  id: "finder",
+  label: "Finder",
+};
 
 interface LocalOpenTargetsModules {
   useHostDaemon: typeof import("./useHostDaemon").useHostDaemon;
@@ -227,7 +260,7 @@ afterEach(() => {
 });
 
 describe("useLocalOpenTargets", () => {
-  it("opens in the stored preferred target", async () => {
+  it("opens in the stored preferred directory target", async () => {
     window.localStorage.setItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY, "finder");
     const state: LocalOpenTargetsFetchState = {
       daemonStatus: {
@@ -239,10 +272,7 @@ describe("useLocalOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      workspaceOpenTargets: [
-        { id: "vscode", kind: "editor", label: "VS Code" },
-        { id: "finder", kind: "file-browser", label: "Finder" },
-      ],
+      workspaceOpenTargets: [vscodeTarget, finderTarget],
       workspaceOpenTargetsStatus: 200,
     };
     const openTargetRequests: Array<
@@ -268,14 +298,14 @@ describe("useLocalOpenTargets", () => {
     await waitFor(() => {
       expect(
         requireLocalOpenTargetsSnapshot(latestSnapshot.current).localOpenTargets
-          .preferredTarget?.label,
+          .preferredDirectoryTarget?.label,
       ).toBe("Finder");
     });
 
     await act(async () => {
       await requireLocalOpenTargetsSnapshot(
         latestSnapshot.current,
-      ).localOpenTargets.openPathInPreferredTarget({
+      ).localOpenTargets.openPathInPreferredDirectoryTarget({
         lineNumber: 27,
         path: "/tmp/workspace/file.ts",
       });
@@ -284,7 +314,7 @@ describe("useLocalOpenTargets", () => {
     await waitFor(() => {
       expect(openTargetRequests).toEqual([
         {
-          lineNumber: 27,
+          lineNumber: null,
           path: "/tmp/workspace/file.ts",
           targetId: "finder",
         },
@@ -292,7 +322,9 @@ describe("useLocalOpenTargets", () => {
     });
   });
 
-  it("stores an explicitly selected target for future opens", async () => {
+  it("opens files in the stored file target independently of the workspace target", async () => {
+    window.localStorage.setItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY, "finder");
+    window.localStorage.setItem(FILE_OPEN_TARGET_STORAGE_KEY, "vscode");
     const state: LocalOpenTargetsFetchState = {
       daemonStatus: {
         connected: true,
@@ -303,10 +335,132 @@ describe("useLocalOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      workspaceOpenTargets: [
-        { id: "vscode", kind: "editor", label: "VS Code" },
-        { id: "finder", kind: "file-browser", label: "Finder" },
-      ],
+      workspaceOpenTargets: [finderTarget, defaultAppTarget, vscodeTarget],
+      workspaceOpenTargetsStatus: 200,
+    };
+    const openTargetRequests: Array<
+      ReturnType<typeof openInTargetRequestSchema.parse>
+    > = [];
+    installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
+    const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <LocalOpenTargetsCapture
+          modules={modules}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
+    });
+
+    await waitFor(() => {
+      const localOpenTargets = requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets;
+      expect(localOpenTargets.preferredDirectoryTarget?.label).toBe("Finder");
+      expect(localOpenTargets.preferredFileTarget?.label).toBe("VS Code");
+    });
+
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInPreferredFileTarget({
+        lineNumber: 27,
+        path: "/tmp/workspace/file.md",
+      });
+    });
+
+    await waitFor(() => {
+      expect(openTargetRequests).toEqual([
+        {
+          lineNumber: 27,
+          path: "/tmp/workspace/file.md",
+          targetId: "vscode",
+        },
+      ]);
+    });
+  });
+
+  it("opens file requests in a direct file target when the stored workspace target is Finder", async () => {
+    window.localStorage.setItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY, "finder");
+    const state: LocalOpenTargetsFetchState = {
+      daemonStatus: {
+        connected: true,
+        hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      },
+      hostDaemonPort: 4123,
+      workspaceOpenTargets: [defaultAppTarget, finderTarget],
+      workspaceOpenTargetsStatus: 200,
+    };
+    const openTargetRequests: Array<
+      ReturnType<typeof openInTargetRequestSchema.parse>
+    > = [];
+    installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
+    const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <LocalOpenTargetsCapture
+          modules={modules}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
+    });
+
+    await waitFor(() => {
+      const localOpenTargets = requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets;
+      expect(localOpenTargets.preferredDirectoryTarget?.label).toBe("Finder");
+      expect(localOpenTargets.preferredFileTarget?.label).toBe("Default App");
+    });
+
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInPreferredFileTarget({
+        lineNumber: 27,
+        path: "/tmp/workspace/file.md",
+      });
+    });
+
+    await waitFor(() => {
+      expect(openTargetRequests).toEqual([
+        {
+          lineNumber: null,
+          path: "/tmp/workspace/file.md",
+          targetId: "default-app",
+        },
+      ]);
+    });
+  });
+
+  it("stores an explicitly selected file-capable target for directory and file opens", async () => {
+    const state: LocalOpenTargetsFetchState = {
+      daemonStatus: {
+        connected: true,
+        hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      },
+      hostDaemonPort: 4123,
+      workspaceOpenTargets: [vscodeTarget, finderTarget],
       workspaceOpenTargetsStatus: 200,
     };
     const openTargetRequests: Array<
@@ -332,14 +486,84 @@ describe("useLocalOpenTargets", () => {
     await waitFor(() => {
       expect(
         requireLocalOpenTargetsSnapshot(latestSnapshot.current).localOpenTargets
-          .workspaceOpenTargets,
+          .directoryOpenTargets,
       ).toHaveLength(2);
     });
 
     await act(async () => {
       await requireLocalOpenTargetsSnapshot(
         latestSnapshot.current,
-      ).localOpenTargets.openPathInTarget({
+      ).localOpenTargets.openPathInDirectoryTarget({
+        lineNumber: null,
+        path: "/tmp/workspace/file.ts",
+        rememberTarget: true,
+        targetId: "vscode",
+      });
+    });
+
+    await waitFor(() => {
+      expect(openTargetRequests).toEqual([
+        {
+          lineNumber: null,
+          path: "/tmp/workspace/file.ts",
+          targetId: "vscode",
+        },
+      ]);
+    });
+    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe(
+      "vscode",
+    );
+    expect(window.localStorage.getItem(FILE_OPEN_TARGET_STORAGE_KEY)).toBe(
+      "vscode",
+    );
+  });
+
+  it("keeps the file default when the selected directory target cannot open files", async () => {
+    window.localStorage.setItem(FILE_OPEN_TARGET_STORAGE_KEY, "vscode");
+    const state: LocalOpenTargetsFetchState = {
+      daemonStatus: {
+        connected: true,
+        hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      },
+      hostDaemonPort: 4123,
+      workspaceOpenTargets: [vscodeTarget, finderTarget],
+      workspaceOpenTargetsStatus: 200,
+    };
+    const openTargetRequests: Array<
+      ReturnType<typeof openInTargetRequestSchema.parse>
+    > = [];
+    installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
+    const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <LocalOpenTargetsCapture
+          modules={modules}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        requireLocalOpenTargetsSnapshot(latestSnapshot.current).localOpenTargets
+          .directoryOpenTargets,
+      ).toHaveLength(2);
+    });
+
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInDirectoryTarget({
         lineNumber: null,
         path: "/tmp/workspace/file.ts",
         rememberTarget: true,
@@ -359,9 +583,74 @@ describe("useLocalOpenTargets", () => {
     expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe(
       "finder",
     );
+    expect(window.localStorage.getItem(FILE_OPEN_TARGET_STORAGE_KEY)).toBe(
+      "vscode",
+    );
   });
 
-  it("shows a localhost connectivity error when preferred opens are unavailable", async () => {
+  it("shows a file target error when only Finder is available for file opens", async () => {
+    window.localStorage.setItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY, "finder");
+    const state: LocalOpenTargetsFetchState = {
+      daemonStatus: {
+        connected: true,
+        hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      },
+      hostDaemonPort: 4123,
+      workspaceOpenTargets: [finderTarget],
+      workspaceOpenTargetsStatus: 200,
+    };
+    const openTargetRequests: Array<
+      ReturnType<typeof openInTargetRequestSchema.parse>
+    > = [];
+    installLocalOpenTargetsFetchRoutes(state, openTargetRequests);
+    const modules = await importFreshLocalOpenTargetsModules();
+    const latestSnapshot: { current: LocalOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <LocalOpenTargetsCapture
+          modules={modules}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
+    });
+
+    await waitFor(() => {
+      const localOpenTargets = requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets;
+      expect(localOpenTargets.preferredDirectoryTarget?.label).toBe("Finder");
+      expect(localOpenTargets.preferredFileTarget).toBeNull();
+    });
+
+    await act(async () => {
+      await requireLocalOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).localOpenTargets.openPathInPreferredFileTarget({
+        lineNumber: 27,
+        path: "/tmp/workspace/file.md",
+      });
+    });
+
+    await waitFor(() => {
+      expect(sonnerToastState.custom).toHaveBeenCalled();
+    });
+    const toastProps = readLatestToastProps();
+    expect(toastProps.tone).toBe("error");
+    expect(toastProps.title).toBe("Failed to open file locally");
+    expect(toastProps.description).toBe("No local app can open files.");
+    expect(openTargetRequests).toEqual([]);
+  });
+
+  it("shows a localhost connectivity error when preferred directory opens are unavailable", async () => {
     const state: LocalOpenTargetsFetchState = {
       daemonStatus: {
         connected: false,
@@ -398,7 +687,7 @@ describe("useLocalOpenTargets", () => {
     await act(async () => {
       await requireLocalOpenTargetsSnapshot(
         latestSnapshot.current,
-      ).localOpenTargets.openPathInPreferredTarget({
+      ).localOpenTargets.openPathInPreferredDirectoryTarget({
         lineNumber: 27,
         path: "/tmp/workspace/file.ts",
       });
@@ -458,7 +747,7 @@ describe("useLocalOpenTargets", () => {
     await act(async () => {
       await requireLocalOpenTargetsSnapshot(
         latestSnapshot.current,
-      ).localOpenTargets.openPathInPreferredTarget({
+      ).localOpenTargets.openPathInPreferredDirectoryTarget({
         lineNumber: 27,
         path: "/tmp/workspace/file.ts",
       });
@@ -470,7 +759,7 @@ describe("useLocalOpenTargets", () => {
     const toastProps = readLatestToastProps();
     expect(toastProps.tone).toBe("error");
     expect(toastProps.title).toBe("Failed to open file locally");
-    expect(toastProps.description).toBe("No local editor is available.");
+    expect(toastProps.description).toBe("No local app can open directories.");
     expect(openTargetRequests).toEqual([]);
   });
 });

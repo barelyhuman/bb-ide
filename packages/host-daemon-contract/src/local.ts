@@ -17,6 +17,7 @@ export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE =
 export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT = 9111;
 
 export const workspaceOpenTargetIdValues = [
+  "default-app",
   "vscode",
   "cursor",
   "sublime-text",
@@ -32,22 +33,19 @@ export const workspaceOpenTargetIdValues = [
 export const workspaceOpenTargetIdSchema = z.enum(workspaceOpenTargetIdValues);
 export type WorkspaceOpenTargetId = z.infer<typeof workspaceOpenTargetIdSchema>;
 
-export const workspaceOpenTargetKindValues = [
-  "editor",
-  "file-browser",
-  "terminal",
-] as const;
-export const workspaceOpenTargetKindSchema = z.enum(
-  workspaceOpenTargetKindValues,
-);
-export type WorkspaceOpenTargetKind = z.infer<
-  typeof workspaceOpenTargetKindSchema
+export const workspaceOpenTargetCapabilitiesSchema = z.object({
+  openDirectory: z.boolean(),
+  openFile: z.boolean(),
+  openFileAtLine: z.boolean(),
+});
+export type WorkspaceOpenTargetCapabilities = z.infer<
+  typeof workspaceOpenTargetCapabilitiesSchema
 >;
 
 export const workspaceOpenTargetSchema = z.object({
   id: workspaceOpenTargetIdSchema,
-  kind: workspaceOpenTargetKindSchema,
   label: z.string().min(1),
+  capabilities: workspaceOpenTargetCapabilitiesSchema,
 });
 export type WorkspaceOpenTarget = z.infer<typeof workspaceOpenTargetSchema>;
 

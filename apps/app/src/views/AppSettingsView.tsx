@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@bb/core-ui";
+import type {
+  WorkspaceOpenTarget,
+  WorkspaceOpenTargetId,
+} from "@bb/host-daemon-contract";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
@@ -18,6 +22,7 @@ import {
   SettingsSection,
   SettingsWithControl,
 } from "@/components/ui/settings-section.js";
+import { WorkspaceOpenTargetIcon } from "@/components/workspace-open-target/WorkspaceOpenTargetIcon";
 import {
   HostDeleteDialog,
   type HostDeleteDialogTarget,
@@ -33,7 +38,9 @@ import {
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/useTheme";
+import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
+import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import {
   invalidateHostDeleteDependentQueries,
   invalidateHostAvailabilityQueries,
@@ -43,6 +50,15 @@ import { HttpError } from "@/lib/api";
 import { showMutationErrorToast } from "@/lib/mutation-errors";
 import type { CreateHostJoinResponse } from "@bb/server-contract";
 import { cn } from "@/lib/utils";
+import {
+  resolvePreferredWorkspaceOpenTarget,
+  supportsWorkspaceOpenTargetCapability,
+  useFileOpenTargetPreference,
+  useWorkspaceOpenTargetPreference,
+  type StoredWorkspaceOpenTargetPreference,
+  type WorkspaceOpenTargetCapability,
+} from "@/lib/workspace-open-target-preference";
+import { getWorkspaceOpenTargetFallbackLabel } from "@/components/workspace-open-target/workspace-open-target-display";
 
 interface RenameHostMutationRequest {
   id: string;
@@ -62,6 +78,29 @@ interface ThemePreferenceOption {
   value: ThemePreference;
 }
 
+interface LocalOpenTargetPreferenceDefinition {
+  capability: WorkspaceOpenTargetCapability;
+  emptyDescription: string;
+  label: string;
+}
+
+interface LocalOpenTargetPreferenceControlProps {
+  definition: LocalOpenTargetPreferenceDefinition;
+  hasDaemon: boolean;
+  onTargetChange: (targetId: WorkspaceOpenTargetId) => void;
+  preferredTargetId: StoredWorkspaceOpenTargetPreference;
+  targets: WorkspaceOpenTarget[];
+}
+
+export interface LocalOpenTargetSettingsSectionProps {
+  directoryTargetId: StoredWorkspaceOpenTargetPreference;
+  fileTargetId: StoredWorkspaceOpenTargetPreference;
+  hasDaemon: boolean;
+  onDirectoryTargetChange: (targetId: WorkspaceOpenTargetId) => void;
+  onFileTargetChange: (targetId: WorkspaceOpenTargetId) => void;
+  targets: WorkspaceOpenTarget[];
+}
+
 const THEME_PREFERENCE_OPTIONS: ReadonlyArray<ThemePreferenceOption> = [
   { label: "System", value: "system" },
   { label: "Light", value: "light" },
@@ -74,8 +113,159 @@ const THEME_PREFERENCE_LABELS: Record<ThemePreference, string> = {
   system: "System",
 };
 
+const DIRECTORY_TARGET_PREFERENCE: LocalOpenTargetPreferenceDefinition = {
+  capability: "openDirectory",
+  emptyDescription: "No local app can open directories.",
+  label: "Directory default",
+};
+
+const FILE_TARGET_PREFERENCE: LocalOpenTargetPreferenceDefinition = {
+  capability: "openFile",
+  emptyDescription: "No local app can open files.",
+  label: "File default",
+};
+
+const LOCAL_OPEN_TARGET_DISCONNECTED_MENU_MESSAGE =
+  "This default can be changed when the local host is connected.";
+
+function LocalOpenTargetPreferenceControl({
+  definition,
+  hasDaemon,
+  onTargetChange,
+  preferredTargetId,
+  targets,
+}: LocalOpenTargetPreferenceControlProps) {
+  const compatibleTargets = useMemo(
+    () =>
+      targets.filter((target) =>
+        supportsWorkspaceOpenTargetCapability({
+          capability: definition.capability,
+          target,
+        }),
+      ),
+    [definition.capability, targets],
+  );
+  const resolvedTarget = useMemo(
+    () =>
+      resolvePreferredWorkspaceOpenTarget({
+        capability: definition.capability,
+        preferredTargetId,
+        targets,
+      }),
+    [definition.capability, preferredTargetId, targets],
+  );
+  const unavailableMessage = !hasDaemon
+    ? LOCAL_OPEN_TARGET_DISCONNECTED_MENU_MESSAGE
+    : compatibleTargets.length === 0
+      ? definition.emptyDescription
+      : null;
+  const selectedTargetId = resolvedTarget?.id ?? preferredTargetId;
+  const buttonLabel =
+    resolvedTarget?.label ??
+    (preferredTargetId
+      ? getWorkspaceOpenTargetFallbackLabel(preferredTargetId)
+      : "Unavailable");
+
+  return (
+    <SettingsWithControl label={definition.label}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-between border-border/60 bg-card sm:w-48"
+            aria-label={definition.label}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              {selectedTargetId ? (
+                <WorkspaceOpenTargetIcon
+                  targetId={selectedTargetId}
+                  className="size-5"
+                />
+              ) : null}
+              <span className="min-w-0 truncate">{buttonLabel}</span>
+            </span>
+            <Icon
+              name="ChevronDown"
+              className="size-3.5 text-muted-foreground"
+            />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          {unavailableMessage ? (
+            <div
+              role="note"
+              className="px-2 py-[0.3125rem] text-xs leading-snug text-foreground"
+            >
+              {unavailableMessage}
+            </div>
+          ) : (
+            compatibleTargets.map((target) => (
+              <DropdownMenuItem
+                key={target.id}
+                onSelect={() => onTargetChange(target.id)}
+              >
+                <WorkspaceOpenTargetIcon
+                  targetId={target.id}
+                  className="size-5"
+                />
+                <span className="min-w-0 truncate">{target.label}</span>
+                <Icon
+                  name="Check"
+                  className={cn(
+                    "ml-auto",
+                    resolvedTarget?.id !== target.id && "opacity-0",
+                    COARSE_POINTER_ICON_SIZE_CLASS,
+                  )}
+                />
+              </DropdownMenuItem>
+            ))
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SettingsWithControl>
+  );
+}
+
+export function LocalOpenTargetSettingsSection({
+  directoryTargetId,
+  fileTargetId,
+  hasDaemon,
+  onDirectoryTargetChange,
+  onFileTargetChange,
+  targets,
+}: LocalOpenTargetSettingsSectionProps) {
+  return (
+    <SettingsSection title="Open File Preferences">
+      <div className="space-y-4">
+        <LocalOpenTargetPreferenceControl
+          definition={DIRECTORY_TARGET_PREFERENCE}
+          hasDaemon={hasDaemon}
+          onTargetChange={onDirectoryTargetChange}
+          preferredTargetId={directoryTargetId}
+          targets={targets}
+        />
+        <LocalOpenTargetPreferenceControl
+          definition={FILE_TARGET_PREFERENCE}
+          hasDaemon={hasDaemon}
+          onTargetChange={onFileTargetChange}
+          preferredTargetId={fileTargetId}
+          targets={targets}
+        />
+      </div>
+    </SettingsSection>
+  );
+}
+
 export function AppSettingsView() {
   const themePreference = useThemePreference();
+  const { hasDaemon } = useHostDaemon();
+  const { workspaceOpenTargets } = useWorkspaceOpenTargets({
+    enabled: hasDaemon,
+  });
+  const [directoryTargetId, setDirectoryTargetId] =
+    useWorkspaceOpenTargetPreference();
+  const [fileTargetId, setFileTargetId] = useFileOpenTargetPreference();
   const { data: hosts = [], isLoading: hostsLoading } = useEffectiveHosts();
   const queryClient = useQueryClient();
 
@@ -242,6 +432,15 @@ export function AppSettingsView() {
             </DropdownMenu>
           </SettingsWithControl>
         </SettingsSection>
+
+        <LocalOpenTargetSettingsSection
+          directoryTargetId={directoryTargetId}
+          fileTargetId={fileTargetId}
+          hasDaemon={hasDaemon}
+          onDirectoryTargetChange={setDirectoryTargetId}
+          onFileTargetChange={setFileTargetId}
+          targets={workspaceOpenTargets}
+        />
 
         <div className="space-y-2">
           <SettingsSection title="Hosts">

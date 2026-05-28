@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type {
   WorkspaceOpenTarget,
-  WorkspaceOpenTargetKind,
+  WorkspaceOpenTargetCapabilities,
   WorkspaceOpenTargetId,
 } from "@bb/host-daemon-contract";
 import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
@@ -54,17 +54,26 @@ export interface WorkspaceOpenTargetRuntime {
   platform: NodeJS.Platform;
 }
 
-interface MacWorkspaceOpenTargetDefinition {
+interface MacDefaultOpenTargetDefinition {
+  openMode: "default-app";
+}
+
+interface MacApplicationOpenTargetDefinition {
   appName: string;
   bundleIds: string[];
   builtIn: boolean;
   lineOpenCommand?: MacLineOpenCommandDefinition;
+  openMode: "application";
 }
 
+type MacWorkspaceOpenTargetDefinition =
+  | MacApplicationOpenTargetDefinition
+  | MacDefaultOpenTargetDefinition;
+
 interface WorkspaceOpenTargetDefinition {
+  capabilities: WorkspaceOpenTargetCapabilities;
   fileOpenBehavior: "direct" | "containing-directory";
   id: WorkspaceOpenTargetId;
-  kind: WorkspaceOpenTargetKind;
   label: string;
   macos: MacWorkspaceOpenTargetDefinition;
 }
@@ -99,13 +108,32 @@ function formatPathWithLineNumber(args: BuildMacLineOpenArgs): string {
   return `${args.path}:${args.lineNumber}`;
 }
 
+const FULL_FILE_OPEN_CAPABILITIES: WorkspaceOpenTargetCapabilities = {
+  openDirectory: true,
+  openFile: true,
+  openFileAtLine: true,
+};
+
+const BASIC_FILE_OPEN_CAPABILITIES: WorkspaceOpenTargetCapabilities = {
+  openDirectory: true,
+  openFile: true,
+  openFileAtLine: false,
+};
+
+const DIRECTORY_OPEN_CAPABILITIES: WorkspaceOpenTargetCapabilities = {
+  openDirectory: true,
+  openFile: false,
+  openFileAtLine: false,
+};
+
 const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
+    capabilities: FULL_FILE_OPEN_CAPABILITIES,
     id: "vscode",
-    kind: "editor",
     label: "VS Code",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Visual Studio Code",
       bundleIds: ["com.microsoft.VSCode"],
       builtIn: false,
@@ -116,11 +144,12 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     },
   },
   {
+    capabilities: FULL_FILE_OPEN_CAPABILITIES,
     id: "cursor",
-    kind: "editor",
     label: "Cursor",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Cursor",
       // ToDesktop bundle IDs are generated; keep app-name path fallback below.
       bundleIds: ["com.todesktop.230313mzl4w4u92"],
@@ -132,11 +161,12 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     },
   },
   {
+    capabilities: FULL_FILE_OPEN_CAPABILITIES,
     id: "sublime-text",
-    kind: "editor",
     label: "Sublime Text",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Sublime Text",
       bundleIds: ["com.sublimetext.4", "com.sublimetext.3"],
       builtIn: false,
@@ -147,11 +177,12 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     },
   },
   {
+    capabilities: FULL_FILE_OPEN_CAPABILITIES,
     id: "zed",
-    kind: "editor",
     label: "Zed",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Zed",
       bundleIds: ["dev.zed.Zed"],
       builtIn: false,
@@ -162,11 +193,12 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     },
   },
   {
+    capabilities: FULL_FILE_OPEN_CAPABILITIES,
     id: "windsurf",
-    kind: "editor",
     label: "Windsurf",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Windsurf",
       bundleIds: ["com.exafunction.windsurf"],
       builtIn: false,
@@ -177,66 +209,24 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     },
   },
   {
+    capabilities: BASIC_FILE_OPEN_CAPABILITIES,
     id: "antigravity",
-    kind: "editor",
     label: "Antigravity",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Antigravity",
       bundleIds: ["com.google.antigravity", "com.googlelabs.antigravity"],
       builtIn: false,
     },
   },
   {
-    id: "finder",
-    kind: "file-browser",
-    label: "Finder",
-    fileOpenBehavior: "direct",
-    macos: {
-      appName: "Finder",
-      bundleIds: ["com.apple.finder"],
-      builtIn: true,
-    },
-  },
-  {
-    id: "terminal",
-    kind: "terminal",
-    label: "Terminal",
-    fileOpenBehavior: "containing-directory",
-    macos: {
-      appName: "Terminal",
-      bundleIds: ["com.apple.Terminal"],
-      builtIn: true,
-    },
-  },
-  {
-    id: "iterm2",
-    kind: "terminal",
-    label: "iTerm2",
-    fileOpenBehavior: "containing-directory",
-    macos: {
-      appName: "iTerm",
-      bundleIds: ["com.googlecode.iterm2"],
-      builtIn: false,
-    },
-  },
-  {
-    id: "ghostty",
-    kind: "terminal",
-    label: "Ghostty",
-    fileOpenBehavior: "containing-directory",
-    macos: {
-      appName: "Ghostty",
-      bundleIds: ["com.mitchellh.ghostty"],
-      builtIn: false,
-    },
-  },
-  {
+    capabilities: FULL_FILE_OPEN_CAPABILITIES,
     id: "xcode",
-    kind: "editor",
     label: "Xcode",
     fileOpenBehavior: "direct",
     macos: {
+      openMode: "application",
       appName: "Xcode",
       bundleIds: ["com.apple.dt.Xcode"],
       builtIn: false,
@@ -246,6 +236,63 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
       },
     },
   },
+  {
+    capabilities: DIRECTORY_OPEN_CAPABILITIES,
+    id: "finder",
+    label: "Finder",
+    fileOpenBehavior: "direct",
+    macos: {
+      openMode: "application",
+      appName: "Finder",
+      bundleIds: ["com.apple.finder"],
+      builtIn: true,
+    },
+  },
+  {
+    capabilities: DIRECTORY_OPEN_CAPABILITIES,
+    id: "terminal",
+    label: "Terminal",
+    fileOpenBehavior: "containing-directory",
+    macos: {
+      openMode: "application",
+      appName: "Terminal",
+      bundleIds: ["com.apple.Terminal"],
+      builtIn: true,
+    },
+  },
+  {
+    capabilities: DIRECTORY_OPEN_CAPABILITIES,
+    id: "iterm2",
+    label: "iTerm2",
+    fileOpenBehavior: "containing-directory",
+    macos: {
+      openMode: "application",
+      appName: "iTerm",
+      bundleIds: ["com.googlecode.iterm2"],
+      builtIn: false,
+    },
+  },
+  {
+    capabilities: DIRECTORY_OPEN_CAPABILITIES,
+    id: "ghostty",
+    label: "Ghostty",
+    fileOpenBehavior: "containing-directory",
+    macos: {
+      openMode: "application",
+      appName: "Ghostty",
+      bundleIds: ["com.mitchellh.ghostty"],
+      builtIn: false,
+    },
+  },
+  {
+    capabilities: BASIC_FILE_OPEN_CAPABILITIES,
+    id: "default-app",
+    label: "Default App",
+    fileOpenBehavior: "direct",
+    macos: {
+      openMode: "default-app",
+    },
+  },
 ];
 
 function toWorkspaceOpenTarget(
@@ -253,8 +300,8 @@ function toWorkspaceOpenTarget(
 ): WorkspaceOpenTarget {
   return {
     id: definition.id,
-    kind: definition.kind,
     label: definition.label,
+    capabilities: definition.capabilities,
   };
 }
 
@@ -287,6 +334,10 @@ function getMacApplicationCandidatePaths(
   definition: WorkspaceOpenTargetDefinition,
   runtime: WorkspaceOpenTargetRuntime,
 ): string[] {
+  if (definition.macos.openMode === "default-app") {
+    return [];
+  }
+
   const appBundleName = `${definition.macos.appName}.app`;
   return runtime.applicationDirectories.map((directory) =>
     path.join(directory, appBundleName),
@@ -333,6 +384,10 @@ async function isMacTargetAvailable(
   definition: WorkspaceOpenTargetDefinition,
   runtime: WorkspaceOpenTargetRuntime,
 ): Promise<boolean> {
+  if (definition.macos.openMode === "default-app") {
+    return true;
+  }
+
   if (definition.macos.builtIn) {
     return true;
   }
@@ -449,6 +504,10 @@ async function maybeResolveMacLineOpenInvocation(
     return null;
   }
 
+  if (args.definition.macos.openMode === "default-app") {
+    return null;
+  }
+
   const lineOpenCommand = args.definition.macos.lineOpenCommand;
   if (!lineOpenCommand) {
     return null;
@@ -479,16 +538,24 @@ async function resolveMacOpenInvocation(
     return lineOpenInvocation;
   }
 
+  const openPath = resolveTargetOpenPath({
+    definition: args.definition,
+    existingPath: args.existingPath,
+  });
+  if (args.definition.macos.openMode === "default-app") {
+    return {
+      file: "open",
+      args: ["--", openPath],
+    };
+  }
+
   return {
     file: "open",
     args: [
       "-a",
       args.definition.macos.appName,
       "--",
-      resolveTargetOpenPath({
-        definition: args.definition,
-        existingPath: args.existingPath,
-      }),
+      openPath,
     ],
   };
 }

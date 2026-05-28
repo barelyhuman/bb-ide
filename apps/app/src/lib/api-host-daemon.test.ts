@@ -194,8 +194,12 @@ describe("api-host-daemon", () => {
   it("fetches workspace open targets from the daemon", async () => {
     const targets: WorkspaceOpenTarget[] = [
       {
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtLine: true,
+        },
         id: "vscode",
-        kind: "editor",
         label: "VS Code",
       },
     ];
@@ -247,7 +251,8 @@ describe("api-host-daemon", () => {
       {
         pathname: "/workspace-open-targets",
         port: 3002,
-        handler: async () => jsonResponse({ targets: [{ label: "VS Code" }] }),
+        handler: async () =>
+          jsonResponse({ targets: [{ id: "vscode", label: "VS Code" }] }),
       },
     ]);
 

@@ -61,41 +61,83 @@ describe("host-daemon local schemas", () => {
     expect(
       contract.workspaceOpenTargetSchema.parse({
         id: "vscode",
-        kind: "editor",
         label: "VS Code",
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtLine: true,
+        },
       }),
     ).toEqual({
       id: "vscode",
-      kind: "editor",
       label: "VS Code",
+      capabilities: {
+        openDirectory: true,
+        openFile: true,
+        openFileAtLine: true,
+      },
     });
 
     expect(
       contract.workspaceOpenTargetsResponseSchema.parse({
         targets: [
           {
+            id: "default-app",
+            label: "Default App",
+            capabilities: {
+              openDirectory: true,
+              openFile: true,
+              openFileAtLine: false,
+            },
+          },
+          {
             id: "finder",
-            kind: "file-browser",
             label: "Finder",
+            capabilities: {
+              openDirectory: true,
+              openFile: false,
+              openFileAtLine: false,
+            },
           },
           {
             id: "terminal",
-            kind: "terminal",
             label: "Terminal",
+            capabilities: {
+              openDirectory: true,
+              openFile: false,
+              openFileAtLine: false,
+            },
           },
         ],
       }),
     ).toEqual({
       targets: [
         {
+          id: "default-app",
+          label: "Default App",
+          capabilities: {
+            openDirectory: true,
+            openFile: true,
+            openFileAtLine: false,
+          },
+        },
+        {
           id: "finder",
-          kind: "file-browser",
           label: "Finder",
+          capabilities: {
+            openDirectory: true,
+            openFile: false,
+            openFileAtLine: false,
+          },
         },
         {
           id: "terminal",
-          kind: "terminal",
           label: "Terminal",
+          capabilities: {
+            openDirectory: true,
+            openFile: false,
+            openFileAtLine: false,
+          },
         },
       ],
     });
@@ -117,8 +159,19 @@ describe("host-daemon local schemas", () => {
     expect(() =>
       contract.workspaceOpenTargetSchema.parse({
         id: "unknown-editor",
-        kind: "editor",
         label: "Unknown",
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtLine: true,
+        },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.workspaceOpenTargetSchema.parse({
+        id: "vscode",
+        label: "VS Code",
       }),
     ).toThrow();
 

@@ -231,13 +231,21 @@ describe("local API server", () => {
     const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
     const targets: WorkspaceOpenTarget[] = [
       {
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtLine: true,
+        },
         id: "vscode",
-        kind: "editor",
         label: "VS Code",
       },
       {
+        capabilities: {
+          openDirectory: true,
+          openFile: false,
+          openFileAtLine: false,
+        },
         id: "finder",
-        kind: "file-browser",
         label: "Finder",
       },
     ];

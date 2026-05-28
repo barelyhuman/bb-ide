@@ -593,11 +593,13 @@ export function ThreadDetailView() {
     threadEnvironmentIsLocal,
   });
   const {
-    canOpenPreferredTarget,
-    openPathInPreferredTarget,
-    openPathInTarget,
-    preferredTarget,
-    workspaceOpenTargets,
+    canOpenPreferredDirectoryTarget,
+    canOpenPreferredFileTarget,
+    directoryOpenTargets,
+    openPathInDirectoryTarget,
+    openPathInPreferredDirectoryTarget,
+    openPathInPreferredFileTarget,
+    preferredDirectoryTarget,
   } = useLocalOpenTargets({
     enabled: threadEnvironmentIsLocal,
   });
@@ -919,24 +921,24 @@ export function ThreadDetailView() {
     />
   );
   const workspaceOpenPath = resolveThreadWorkspaceOpenPath({
-    canOpenWorkspace: canOpenPreferredTarget,
+    canOpenWorkspace: canOpenPreferredDirectoryTarget,
     environment,
-    hasWorkspaceOpenTargets: workspaceOpenTargets.length > 0,
+    hasWorkspaceOpenTargets: directoryOpenTargets.length > 0,
     threadEnvironmentIsLocal,
   });
   const workspaceOpenButton =
-    workspaceOpenPath && preferredTarget ? (
+    workspaceOpenPath && preferredDirectoryTarget ? (
       <ThreadWorkspaceOpenButton
-        preferredTarget={preferredTarget}
-        targets={workspaceOpenTargets}
+        preferredTarget={preferredDirectoryTarget}
+        targets={directoryOpenTargets}
         onOpenPreferredTarget={async () => {
-          await openPathInPreferredTarget({
+          await openPathInPreferredDirectoryTarget({
             lineNumber: null,
             path: workspaceOpenPath,
           });
         }}
         onOpenTarget={async (targetId) => {
-          await openPathInTarget({
+          await openPathInDirectoryTarget({
             lineNumber: null,
             path: workspaceOpenPath,
             rememberTarget: true,
@@ -1025,18 +1027,18 @@ export function ThreadDetailView() {
       : undefined;
   const handleOpenFileInEditor = buildOpenInEditorHandler({
     rootPath: localWorkspaceRootPath,
-    canOpenPreferredTarget,
-    openInPreferredTarget: openPathInPreferredTarget,
+    canOpenPreferredTarget: canOpenPreferredFileTarget,
+    openInPreferredTarget: openPathInPreferredFileTarget,
   });
   const handleOpenStorageFileInEditor = buildOpenInEditorHandler({
     rootPath: threadEnvironmentIsLocal ? threadStorageRootPath : null,
-    canOpenPreferredTarget,
-    openInPreferredTarget: openPathInPreferredTarget,
+    canOpenPreferredTarget: canOpenPreferredFileTarget,
+    openInPreferredTarget: openPathInPreferredFileTarget,
   });
   const handleOpenHostFileInEditor =
-    threadEnvironmentIsLocal && canOpenPreferredTarget
+    threadEnvironmentIsLocal && canOpenPreferredFileTarget
       ? (path: string) => {
-          void openPathInPreferredTarget({
+          void openPathInPreferredFileTarget({
             lineNumber: activeHostFileLineNumber,
             path,
           });
