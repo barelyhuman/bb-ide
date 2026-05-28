@@ -16,9 +16,11 @@ import {
   DndContext,
   KeyboardSensor,
   MouseSensor,
+  pointerWithin,
   TouchSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
   type DraggableAttributes,
@@ -502,6 +504,17 @@ function TopLevelSidebarSection({
   );
 }
 
+// The sidebar sections have wildly different heights (the Threads list is far
+// taller than the Projects list). `closestCenter` keys off the dragged
+// element's bounding-rect center, so a tall section's center sits far below the
+// cursor and a swap only registers once you over-drag past the other section's
+// center. Prefer the section the pointer is actually over, falling back to
+// center distance only when the pointer is outside every droppable.
+const sidebarSectionCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCenter(args);
+};
+
 const SortableSidebarSection = memo(function SortableSidebarSection({
   id,
   disabled,
@@ -509,6 +522,7 @@ const SortableSidebarSection = memo(function SortableSidebarSection({
 }: SortableSidebarSectionProps) {
   const {
     attributes,
+    isDragging,
     listeners,
     setActivatorNodeRef,
     setNodeRef,
@@ -521,10 +535,15 @@ const SortableSidebarSection = memo(function SortableSidebarSection({
   });
   const style = useMemo<CSSProperties>(
     () => ({
-      transform: CSS.Transform.toString(transform),
+      transform: CSS.Translate.toString(transform),
       transition,
+      // Each section's sticky header creates its own stacking context
+      // (`isolation: isolate`), so a dragged section paints behind the other
+      // section's rows unless we lift it above them while dragging.
+      position: isDragging ? "relative" : undefined,
+      zIndex: isDragging ? 20 : undefined,
     }),
-    [transform, transition],
+    [isDragging, transform, transition],
   );
   const dragBindings = useMemo<SidebarSectionDragBindings>(
     () => ({
@@ -566,10 +585,12 @@ const SortableProjectRow = memo(function SortableProjectRow({
   });
   const style = useMemo<CSSProperties>(
     () => ({
-      transform: CSS.Transform.toString(transform),
+      transform: CSS.Translate.toString(transform),
       transition,
+      position: isDragging ? "relative" : undefined,
+      zIndex: isDragging ? 20 : undefined,
     }),
-    [transform, transition],
+    [isDragging, transform, transition],
   );
   const projectDragBindings = useMemo<ProjectRowDragBindings>(
     () => ({
@@ -1199,7 +1220,7 @@ function ProjectListComponent({
     <ProjectListShell>
       <DndContext
         sensors={sidebarSectionSensors}
-        collisionDetection={closestCenter}
+        collisionDetection={sidebarSectionCollisionDetection}
         onDragStart={handleSidebarSectionDragStart}
         onDragCancel={handleSidebarSectionDragCancel}
         onDragEnd={handleSidebarSectionDragEnd}
