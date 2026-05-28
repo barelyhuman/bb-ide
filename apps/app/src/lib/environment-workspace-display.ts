@@ -10,8 +10,6 @@ export function getEnvironmentWorkspaceDisplayIconName(
       return "GitBranch";
     case "unmanaged-worktree":
       return "GitBranch";
-    case "personal":
-      return "Folder";
     case "other":
       return null;
   }
@@ -31,8 +29,6 @@ export function getEnvironmentWorkspaceDisplayIconLabel(
       return "Managed worktree environment";
     case "unmanaged-worktree":
       return "Git worktree environment";
-    case "personal":
-      return "Personal workspace";
     case "other":
       return null;
   }

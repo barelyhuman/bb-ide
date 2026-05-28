@@ -8,6 +8,7 @@ import {
   type EnvironmentPickerUIProps,
 } from "@/components/pickers/EnvironmentPicker";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
+import { HostPicker } from "@/components/pickers/HostPicker";
 import { ProjectSelector } from "@/components/pickers/ProjectSelector";
 import { WorktreePicker } from "@/components/pickers/WorktreePicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
@@ -27,6 +28,9 @@ export default {
 };
 
 const noop = () => {};
+const connectedHosts = STORY_HOSTS.filter(
+  (host) => host.status === "connected",
+);
 
 function getStoryBranchMenuKind(
   environmentValue: string,
@@ -40,16 +44,17 @@ function getStoryBranchMenuKind(
 }
 
 // ---------------------------------------------------------------------------
-// EnvironmentOptionsStrip — composes ProjectSelector + EnvironmentPicker +
-// (BranchPicker | WorktreePicker), the same chain that lives below the
-// new-thread prompt box in production. Each row overrides just the slots it
-// cares about; everything else falls back to the shared fixture catalog so
-// adding a new branch / worktree state in `story-fixtures.ts` flows here
-// automatically.
+// EnvironmentOptionsStrip — composes ProjectSelector + either HostPicker for
+// projectless threads or EnvironmentPicker + (BranchPicker | WorktreePicker)
+// for project threads, matching the chain below the production new-thread
+// prompt box. Each row overrides just the slots it cares about; everything
+// else falls back to the shared fixture catalog so adding a new branch /
+// worktree state in `story-fixtures.ts` flows here automatically.
 // ---------------------------------------------------------------------------
 
 interface EnvironmentOptionsStripProps {
   project?: { value: string | null; allowNoProject?: boolean };
+  projectless?: boolean;
   environment?: Partial<EnvironmentPickerUIProps>;
   branch?: Partial<BranchPickerProps>;
   worktreeValue?: string | null;
@@ -57,6 +62,7 @@ interface EnvironmentOptionsStripProps {
 
 function EnvironmentOptionsStrip({
   project,
+  projectless = false,
   environment,
   branch,
   worktreeValue = null,
@@ -78,43 +84,57 @@ function EnvironmentOptionsStrip({
         className="h-7 px-1.5"
         modal={false}
       />
-      <EnvironmentPickerUI
-        value={environmentValue}
-        onChange={noop}
-        sources={STORY_PROJECT_SOURCES}
-        hosts={STORY_HOSTS}
-        isLocalHost={storyIsLocalHost}
-        muted
-        modal={false}
-        {...environment}
-      />
-      {showWorktreePicker ? (
-        <WorktreePicker
-          options={STORY_WORKTREE_OPTIONS}
-          value={worktreeValue}
+      {projectless ? (
+        <HostPicker
+          hosts={[...STORY_HOSTS]}
+          eligibleHosts={connectedHosts}
+          selectedHostId={HOST_IDS.local}
           onChange={noop}
+          isLocalHost={storyIsLocalHost}
           muted
           modal={false}
         />
       ) : (
-        <BranchPicker
-          variant="option"
-          muted
-          value={null}
-          currentBranch="main"
-          options={STORY_BRANCH_OPTIONS}
-          currentOptionLabel="Current: main"
-          currentOptionTitle="Use the current checkout without switching branches"
-          placeholder="Current checkout"
-          triggerLabel="Current (main)"
-          triggerTitle="Current: main"
-          menuKind={getStoryBranchMenuKind(environmentValue)}
-          onChange={noop}
-          onClear={noop}
-          onCreate={noop}
-          modal={false}
-          {...branch}
-        />
+        <>
+          <EnvironmentPickerUI
+            value={environmentValue}
+            onChange={noop}
+            sources={STORY_PROJECT_SOURCES}
+            hosts={STORY_HOSTS}
+            isLocalHost={storyIsLocalHost}
+            muted
+            modal={false}
+            {...environment}
+          />
+          {showWorktreePicker ? (
+            <WorktreePicker
+              options={STORY_WORKTREE_OPTIONS}
+              value={worktreeValue}
+              onChange={noop}
+              muted
+              modal={false}
+            />
+          ) : (
+            <BranchPicker
+              variant="option"
+              muted
+              value={null}
+              currentBranch="main"
+              options={STORY_BRANCH_OPTIONS}
+              currentOptionLabel="Current: main"
+              currentOptionTitle="Use the current checkout without switching branches"
+              placeholder="Current checkout"
+              triggerLabel="Current (main)"
+              triggerTitle="Current: main"
+              menuKind={getStoryBranchMenuKind(environmentValue)}
+              onChange={noop}
+              onClear={noop}
+              onCreate={noop}
+              modal={false}
+              {...branch}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -293,6 +313,7 @@ export function Overview() {
         >
           <EnvironmentOptionsStrip
             project={{ value: null, allowNoProject: true }}
+            projectless
           />
         </StoryRow>
         <StoryRow

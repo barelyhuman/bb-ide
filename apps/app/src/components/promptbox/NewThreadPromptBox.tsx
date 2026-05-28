@@ -28,9 +28,15 @@ import {
 } from "@/components/pickers/environment-picker-value";
 import { HostPicker } from "@/components/pickers/HostPicker";
 import { ManagerTemplatePicker } from "@/components/pickers/ManagerTemplatePicker";
+import {
+  OPTION_BASE_CLASS_NAME,
+  OPTION_CONTENT_CLASS_NAME,
+  OPTION_INTERACTIVE_CLASS_NAME,
+} from "@/components/pickers/OptionPicker";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import {
   ProjectSelector,
+  type ProjectSelectorCreateProjectConfig,
   type ProjectSelectorOption,
 } from "@/components/pickers/ProjectSelector";
 import {
@@ -43,10 +49,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
+import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { cn } from "@/lib/utils";
+
+const NEW_THREAD_PROMPT_BOX_MIN_HEIGHT = 80;
 
 export type ThreadCreationMode = "thread" | "manager";
 
@@ -56,7 +65,6 @@ export interface NewThreadEnvironmentConfig {
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
   isLocalHost: EnvironmentPickerUIProps["isLocalHost"];
-  personalWorkspace?: boolean;
   /** When true, the picker's "Reuse existing worktree" entry is disabled.
    * Caller signals the project has no worktree envs available. */
   reuseDisabled?: boolean;
@@ -110,6 +118,7 @@ export interface NewThreadProjectConfig {
    * emits `null` from onChange. Off by default to match current production
    * (project is required). */
   allowNoProject?: boolean;
+  createProject?: ProjectSelectorCreateProjectConfig;
 }
 
 export interface NewThreadTemplateConfig {
@@ -118,7 +127,7 @@ export interface NewThreadTemplateConfig {
   onChange: (templateName: string) => void;
 }
 
-export interface NewThreadManagerHostConfig {
+export interface NewThreadHostConfig {
   /** All known hosts — used by `HostPicker` to render the selected host's
    * label even when it falls outside the eligible set. */
   hosts: readonly Host[];
@@ -147,15 +156,18 @@ export type NewThreadModeConfig =
       worktree: NewThreadWorktreeConfig;
       permission: ExecutionPermissionConfig;
       /** Slot rendered inside the prompt box card, above the text area.
-       * Used by ProjectMainView to surface the reuse-worktree pill. */
+       * Used by RootComposeView to surface the reuse-worktree pill. */
       header?: ReactNode;
+      /** Projectless threads choose only a host. When set, this replaces the
+       * project environment / branch / worktree pickers below the prompt. */
+      projectlessHost?: NewThreadHostConfig;
     }
   | {
       mode: "manager";
       /** Host picker shown beside the project selector. Managers need a
        * host because the manager thread runs on it; thread mode picks one
        * via the env picker, which manager mode lacks. */
-      host: NewThreadManagerHostConfig;
+      host: NewThreadHostConfig;
       /** Manager-template picker shown beside the host picker. Omit (or
        * pass `templates: []`) to hide. */
       template?: NewThreadTemplateConfig;
@@ -171,7 +183,7 @@ export interface NewThreadPromptBoxUIProps {
   onSubmit: () => void;
   isSubmitting: boolean;
   disabled: boolean;
-  /** zenMode storage key used for the project-main zen-mode atom. */
+  /** zenMode storage key used for the root-compose zen-mode atom. */
   zenModeStorageKey: string;
 
   history: HistoryConfig;
@@ -184,12 +196,17 @@ export interface NewThreadPromptBoxUIProps {
   /** Called when the user switches modes from the picker. */
   onModeChange: (next: ThreadCreationMode) => void;
 
-  project: NewThreadProjectConfig;
+  project?: NewThreadProjectConfig;
   execution: ExecutionControlsProps;
 }
 
 interface GetBranchPickerMenuKindArgs {
   parsedEnvironment: ParsedEnvironmentValue;
+}
+
+interface GetNewThreadPromptPlaceholderArgs {
+  mode: ThreadCreationMode;
+  isProjectless: boolean;
 }
 
 function getBranchPickerMenuKind({
@@ -200,6 +217,21 @@ function getBranchPickerMenuKind({
   }
 
   return parsedEnvironment.mode === "worktree" ? "base" : "checkout";
+}
+
+function getNewThreadPromptPlaceholder({
+  mode,
+  isProjectless,
+}: GetNewThreadPromptPlaceholderArgs): string {
+  if (mode === "manager") {
+    return isProjectless
+      ? "Optional — instructions for the manager: what to work on, or how you like things done."
+      : "Optional — instructions for the manager: what to work on, or how you like things done. @ to mention threads, files, or folders";
+  }
+
+  return isProjectless
+    ? "Ask anything."
+    : "Ask anything. @ to mention files or folders";
 }
 
 /**
@@ -224,21 +256,20 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
 }: NewThreadPromptBoxUIProps) {
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
-  // Manager threads have no environment / branch / permission to configure,
-  // so the textarea is for free-form instructions to the manager. Workers
-  // (the default) take a direct ask.
-  const placeholder =
-    modeConfig.mode === "manager"
-      ? "Optional — instructions for the manager: what to work on, or how you like things done. @ to mention threads, files, or folders"
-      : "Ask anything. @ to mention files or folders";
+  const isProjectlessPrompt =
+    project?.value === null ||
+    (modeConfig.mode === "thread" &&
+      modeConfig.projectlessHost !== undefined);
+  const placeholder = getNewThreadPromptPlaceholder({
+    mode: modeConfig.mode,
+    isProjectless: isProjectlessPrompt,
+  });
   return (
     <>
       {/* Mode selector above the prompt-box: a quiet dropdown trigger that
-          shows the current mode + chevron, opens a menu with both options.
-          `border-transparent px-4` wrapper matches the card's 1px border +
-          textarea px-4 so the icon's left edge aligns with the textarea
-          below. */}
-      <div className="mb-2 flex items-center border border-transparent px-4">
+          shares the prompt-box option sizing used by the footer and project
+          strip controls, keeping their leading icons on the same left edge. */}
+      <div className="mb-2 flex items-center px-3.5">
         <ModeSelector value={modeConfig.mode} onChange={onModeChange} />
       </div>
       <PromptBoxInternal
@@ -262,29 +293,32 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
           allowEmptyInput: modeConfig.mode === "manager",
         }}
         zenMode={{
-          layout: "project-main",
+          layout: "root-compose",
           storageKey: zenModeStorageKey,
         }}
+        minHeight={NEW_THREAD_PROMPT_BOX_MIN_HEIGHT}
         placeholder={placeholder}
         header={modeConfig.mode === "thread" ? modeConfig.header : undefined}
         footerStart={<ExecutionControls {...execution} />}
       />
-      {/* Strip below the prompt-box card: project + env + branch (or
+      {/* Strip below the prompt-box card: optional project + env + branch (or
           worktree) on the left, permission picker pinned to the right.
           In manager mode, the env / branch / worktree / permission pickers
           don't exist on the modeConfig — the discriminated union enforces
-          the invariant. Project stays visible in both modes (managers
-          belong to a project too). `mt-1` reproduces the 4px gap main got
-          from a `space-y-1` wrapper in ProjectMainView (now gone since
-          the standalone project row was removed). */}
+          the invariant. `mt-1` reproduces the 4px gap main got from a
+          `space-y-1` wrapper in RootComposeView (now gone since the
+          standalone project row was removed). */}
       <div className="mt-1 flex items-center justify-between gap-2 px-3.5">
         <div className="flex min-w-0 items-center gap-1">
-          <ProjectSelector
-            projects={project.projects}
-            value={project.value}
-            onChange={project.onChange}
-            allowNoProject={project.allowNoProject ?? false}
-          />
+          {project ? (
+            <ProjectSelector
+              projects={project.projects}
+              value={project.value}
+              onChange={project.onChange}
+              allowNoProject={project.allowNoProject ?? false}
+              createProject={project.createProject}
+            />
+          ) : null}
           {modeConfig.mode === "manager" ? (
             <ManagerSlot
               host={modeConfig.host}
@@ -295,6 +329,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
               environment={modeConfig.environment}
               branch={modeConfig.branch}
               worktree={modeConfig.worktree}
+              projectlessHost={modeConfig.projectlessHost}
             />
           )}
         </div>
@@ -311,31 +346,20 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   );
 });
 
-function ManagerSlot({
-  host,
-  template,
-}: {
-  host: NewThreadManagerHostConfig;
+interface ManagerSlotProps {
+  host: NewThreadHostConfig;
   template: NewThreadTemplateConfig | undefined;
-}) {
+}
+
+function ManagerSlot({ host, template }: ManagerSlotProps) {
   // Hide both pickers when they offer no real choice — a single eligible
   // host or template is the de-facto default, surfacing the picker just
-  // adds visual noise. Submit logic in ProjectMainView still uses the
+  // adds visual noise. Submit logic in RootComposeView still uses the
   // resolved value, so behavior is unchanged.
-  const showHostPicker = host.eligibleHosts.length >= 2;
   const showTemplatePicker = (template?.templates.length ?? 0) >= 2;
   return (
     <>
-      {showHostPicker ? (
-        <HostPicker
-          muted
-          hosts={[...host.hosts]}
-          eligibleHosts={[...host.eligibleHosts]}
-          selectedHostId={host.value}
-          onChange={host.onChange}
-          isLocalHost={host.isLocalHost}
-        />
-      ) : null}
+      <HostSlot host={host} />
       {showTemplatePicker && template ? (
         <ManagerTemplatePicker
           templates={template.templates}
@@ -347,24 +371,46 @@ function ManagerSlot({
   );
 }
 
+interface HostSlotProps {
+  host: NewThreadHostConfig;
+}
+
+function HostSlot({ host }: HostSlotProps) {
+  if (host.eligibleHosts.length < 2) return null;
+  return (
+    <HostPicker
+      muted
+      hosts={[...host.hosts]}
+      eligibleHosts={[...host.eligibleHosts]}
+      selectedHostId={host.value}
+      onChange={host.onChange}
+      isLocalHost={host.isLocalHost}
+    />
+  );
+}
+
+interface ThreadEnvSlotProps {
+  environment: NewThreadEnvironmentConfig;
+  branch: NewThreadBranchConfig;
+  worktree: NewThreadWorktreeConfig;
+  projectlessHost: NewThreadHostConfig | undefined;
+}
+
 function ThreadEnvSlot({
   environment,
   branch,
   worktree,
-}: {
-  environment: NewThreadEnvironmentConfig;
-  branch: NewThreadBranchConfig;
-  worktree: NewThreadWorktreeConfig;
-}) {
+  projectlessHost,
+}: ThreadEnvSlotProps) {
   const parsedEnvironment = useMemo(
     () => parseEnvironmentValue(environment.value),
     [environment.value],
   );
   const branchMenuKind = getBranchPickerMenuKind({ parsedEnvironment });
-  // Personal workspaces have no checked-out branch concept, so the branch
-  // picker is meaningless there even when the env is host-mode.
-  const showBranchPicker =
-    parsedEnvironment?.type === "host" && !environment.personalWorkspace;
+  if (projectlessHost) {
+    return <HostSlot host={projectlessHost} />;
+  }
+  const showBranchPicker = parsedEnvironment?.type === "host";
   const showWorktreePicker = parsedEnvironment?.type === "reuse";
   return (
     <>
@@ -374,7 +420,6 @@ function ThreadEnvSlot({
         sources={environment.sources}
         hosts={environment.hosts}
         isLocalHost={environment.isLocalHost}
-        personalWorkspace={environment.personalWorkspace}
         reuseDisabled={environment.reuseDisabled}
         muted
       />
@@ -440,23 +485,31 @@ function ModeSelector({ value, onChange }: ModeSelectorProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           aria-label="Thread creation mode"
-          className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className={cn(
+            OPTION_BASE_CLASS_NAME,
+            OPTION_INTERACTIVE_CLASS_NAME,
+            "text-sm font-medium text-foreground hover:text-foreground",
+          )}
         >
-          <Icon
-            name={TriggerIcon}
-            className="size-4 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          {triggerLabel}
+          <span className={OPTION_CONTENT_CLASS_NAME}>
+            <Icon
+              name={TriggerIcon}
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            <span className="truncate">{triggerLabel}</span>
+          </span>
           <Icon
             name="ChevronDown"
             className="size-3.5 text-muted-foreground"
             aria-hidden
           />
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="bottom" className="w-44">
         {MODE_OPTIONS.map((option) => (
@@ -534,10 +587,11 @@ export type NewThreadConnectedModeConfig =
       worktree: NewThreadWorktreeConfig;
       permission: ExecutionPermissionConfig;
       header?: ReactNode;
+      projectlessHost?: NewThreadHostConfig;
     }
   | {
       mode: "manager";
-      host: NewThreadManagerHostConfig;
+      host: NewThreadHostConfig;
       template?: NewThreadTemplateConfig;
     };
 
@@ -557,7 +611,7 @@ type NewThreadPromptBoxRest = Omit<NewThreadPromptBoxProps, "modeConfig">;
 
 /**
  * The composed prompt area for creating a new thread in a project — used by
- * ProjectMainView. In "thread" mode it wires host queries through
+ * RootComposeView. In "thread" mode it wires host queries through
  * `ConnectedThreadModeBranch`; in "manager" mode it passes the config
  * straight through with no extra wiring.
  */
@@ -643,6 +697,7 @@ function ConnectedThreadModeBranch({
         worktree: threadConfig.worktree,
         permission: threadConfig.permission,
         header: threadConfig.header,
+        projectlessHost: threadConfig.projectlessHost,
       }}
     />
   );

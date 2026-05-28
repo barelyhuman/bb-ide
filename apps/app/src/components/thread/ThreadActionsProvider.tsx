@@ -35,6 +35,8 @@ import {
   type ThreadDeleteDialogTarget,
 } from "@/components/dialogs/ThreadDeleteDialog";
 import { getThreadReadToggleAction } from "@/components/sidebar/threadReadState";
+import { getRootComposeRoutePath } from "@/lib/app-route-paths";
+import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 
 export interface ThreadActionsContextValue {
   requestRename: (thread: Thread) => void;
@@ -75,6 +77,7 @@ export function ThreadActionsProvider({
   children,
 }: ThreadActionsProviderProps) {
   const navigate = useNavigate();
+  const setRootComposeProjectId = useSetRootComposeProjectId();
   const { threadId: viewedThreadId } = useAppRoute();
   const archiveThread = useArchiveThread();
   const unarchiveThread = useUnarchiveThread();
@@ -110,12 +113,13 @@ export function ThreadActionsProvider({
   const navigateAwayIfViewing = useCallback(
     (thread: Thread) => {
       if (viewedThreadId === thread.id) {
+        setRootComposeProjectId(thread.projectId);
         // Push (not replace) so the back button still returns the user to the
         // archived/deleted thread's URL if they want to re-open it.
-        navigate(`/projects/${thread.projectId}`);
+        navigate(getRootComposeRoutePath());
       }
     },
-    [navigate, viewedThreadId],
+    [navigate, setRootComposeProjectId, viewedThreadId],
   );
 
   const requestRename = useCallback(

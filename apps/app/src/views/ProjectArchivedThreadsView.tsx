@@ -10,6 +10,7 @@ import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useArchivedThreads } from "@/hooks/queries/thread-queries";
 import type { ArchivedThreadsKindFilter } from "@/hooks/queries/query-keys";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { getThreadRoutePath } from "@/lib/app-route-paths";
 
 interface FilterOption {
   value: ArchivedThreadsKindFilter;
@@ -113,7 +114,10 @@ export function ProjectArchivedThreadsView() {
                     className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-state-hover"
                   >
                     <Link
-                      to={`/projects/${projectId}/threads/${thread.id}`}
+                      to={getThreadRoutePath({
+                        projectId: thread.projectId,
+                        threadId: thread.id,
+                      })}
                       className="min-w-0 flex-1"
                     >
                       <span className="flex min-w-0 items-center gap-2">

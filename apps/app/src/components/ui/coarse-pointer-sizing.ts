@@ -46,9 +46,6 @@ export const COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS =
 export const COARSE_POINTER_INPUT_HEIGHT_CLASS =
   "h-9 max-md:pointer-coarse:h-10";
 
-export const COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS =
-  "size-5 max-md:pointer-coarse:size-7";
-
 export const COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS =
   "h-7 max-md:pointer-coarse:h-9";
 

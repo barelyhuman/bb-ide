@@ -21,22 +21,23 @@ import {
   MACOS_WINDOW_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
+import { getRootComposeRoutePath } from "@/lib/app-route-paths";
+import { useSetRootComposeMode } from "@/lib/root-compose-selection";
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   isResizing: boolean;
-  selectedProjectId?: string;
   showInlineTrigger: boolean;
 }
 
 export function AppSidebar({
   onResizeMouseDown,
   isResizing,
-  selectedProjectId,
   showInlineTrigger,
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const navigate = useNavigate();
+  const setRootComposeMode = useSetRootComposeMode();
   const { isCompactViewport, setOpenMobile } = useSidebar();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
@@ -51,30 +52,20 @@ export function AppSidebar({
   }, [setOpenMobile]);
 
   const handleNewChat = useCallback(() => {
-    if (!selectedProjectId) return;
     closeOnMobile();
-    void navigate(`/projects/${selectedProjectId}`, {
-      state: { mode: "thread" },
+    setRootComposeMode("thread");
+    void navigate(getRootComposeRoutePath(), {
+      state: { focusPrompt: true },
     });
-  }, [closeOnMobile, navigate, selectedProjectId]);
+  }, [closeOnMobile, navigate, setRootComposeMode]);
 
-  const handleNewManager = useCallback(
-    (managerProjectId: string) => {
-      closeOnMobile();
-      // Open the project main view with the requested mode preselected via
-      // router state. ProjectMainView reads state.mode on mount and seeds
-      // the mode picker before clearing the state. Both sidebar entry
-      // points seed explicitly so clicking either button overrides whatever
-      // mode was last persisted.
-      void navigate(`/projects/${managerProjectId}`, {
-        state: { mode: "manager" },
-      });
-    },
-    [closeOnMobile, navigate],
-  );
-
-  const newChatAction = selectedProjectId ? handleNewChat : undefined;
-  const newManagerAction = selectedProjectId ? handleNewManager : undefined;
+  const handleNewManager = useCallback(() => {
+    closeOnMobile();
+    setRootComposeMode("manager");
+    void navigate(getRootComposeRoutePath(), {
+      state: { focusPrompt: true },
+    });
+  }, [closeOnMobile, navigate, setRootComposeMode]);
 
   return (
     <>
@@ -106,9 +97,8 @@ export function AppSidebar({
           className="shrink-0 px-2 py-2 group-data-[collapsible=icon]:hidden"
         >
           <ProjectListActionButtons
-            onNewChat={newChatAction}
-            onNewManager={newManagerAction}
-            selectedProjectId={selectedProjectId}
+            onNewChat={handleNewChat}
+            onNewManager={handleNewManager}
           />
         </div>
         <SidebarContent>
@@ -119,7 +109,6 @@ export function AppSidebar({
                 : undefined
             }
             onProjectSelect={closeOnMobile}
-            selectedProjectId={selectedProjectId}
             isCreatingProject={quickCreateProject.isCreating}
           />
         </SidebarContent>

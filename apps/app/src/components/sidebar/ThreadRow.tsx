@@ -20,6 +20,11 @@ import {
   COARSE_POINTER_ROW_HEIGHT_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
 import {
+  SIDEBAR_HOVER_ACTIONS_CLASS,
+  SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
+  SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
+} from "@/components/ui/sidebar-hover-actions.js";
+import {
   getEnvironmentWorkspaceDisplayIconLabel,
   getEnvironmentWorkspaceDisplayIconName,
 } from "@/lib/environment-workspace-display";
@@ -30,33 +35,37 @@ import {
   type CollapsedChildActivity,
 } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { cn } from "@/lib/utils";
 import {
-  SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
-  SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS,
-  SIDEBAR_MANAGER_ROW_PADDING_CLASS,
-  SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   SIDEBAR_UNREAD_DOT_CLASS,
+  getSidebarThreadRowPaddingClass,
+  type SidebarThreadRowIndent,
 } from "./sidebarRowClasses";
 import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
 
 export type ThreadRowOptions =
   | {
       kind: "default";
+      indent: SidebarThreadRowIndent;
     }
   | {
       kind: "managed-child";
+      indent: SidebarThreadRowIndent;
     }
   | {
       kind: "env-grouped-child";
+      indent: SidebarThreadRowIndent;
     }
   | {
       kind: "env-grouped-managed-child";
+      indent: SidebarThreadRowIndent;
     }
   | {
       kind: "manager";
+      indent: SidebarThreadRowIndent;
       isCollapsed: boolean;
       managedChildCount: number;
       managedChildActivity: CollapsedChildActivity;
@@ -330,21 +339,15 @@ function ThreadRowComponent({
     : getEnvironmentWorkspaceDisplayIconLabel(
         thread.environmentWorkspaceDisplayKind,
       );
-  const childPaddingClass = isEnvGroupedManagedChild
-    ? SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS
-    : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
   const rowClassName = cn(
+    SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
     "group/thread-row",
     SIDEBAR_ROW_BASE_CLASS,
     !isManager && "relative",
     isCompactChild
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    isManager
-      ? SIDEBAR_MANAGER_ROW_PADDING_CLASS
-      : isCompactChild
-        ? childPaddingClass
-        : SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
+    getSidebarThreadRowPaddingClass(options.indent),
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
@@ -365,7 +368,7 @@ function ThreadRowComponent({
   const rowContent = (
     <>
       <NavLink
-        to={`/projects/${projectId}/threads/${thread.id}`}
+        to={getThreadRoutePath({ projectId, threadId: thread.id })}
         onClick={() => {
           onProjectSelect?.();
         }}
@@ -400,9 +403,12 @@ function ThreadRowComponent({
           )}
         >
           <span
+            data-sidebar-hover-actions-open={
+              isActionsOpen ? "true" : undefined
+            }
             className={cn(
-              "absolute inset-0 flex items-center justify-center transition-opacity",
-              isActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0",
+              SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
+              "absolute inset-0 flex items-center justify-center",
             )}
           >
             <ThreadTrailingIndicator
@@ -414,11 +420,12 @@ function ThreadRowComponent({
             />
           </span>
           <div
+            data-sidebar-hover-actions-open={
+              isActionsOpen ? "true" : undefined
+            }
             className={cn(
-              "absolute inset-0 z-10 flex items-center justify-end transition-opacity",
-              isActionsOpen
-                ? "pointer-events-auto opacity-100"
-                : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100",
+              SIDEBAR_HOVER_ACTIONS_CLASS,
+              "absolute inset-0 z-10 flex items-center justify-end",
             )}
           >
             <ThreadActionsMenu

@@ -747,6 +747,143 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb manager hire defaults to projectless when no project context is set", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-personal-manager",
+      projectId: PERSONAL_PROJECT_ID,
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["manager", "hire", "--name", "Manager"], (program) =>
+      registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: PERSONAL_PROJECT_ID },
+      json: {
+        environment: { type: "host", hostId: "host-test-001" },
+        name: "Manager",
+        origin: "cli",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "  Project:  -",
+    );
+  });
+
+  it("bb manager hire prints the personal project as projectless when explicitly selected", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-personal-manager",
+      projectId: PERSONAL_PROJECT_ID,
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["manager", "hire", "--project", PERSONAL_PROJECT_ID, "--name", "Manager"],
+      (program) => registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: PERSONAL_PROJECT_ID },
+      json: {
+        environment: { type: "host", hostId: "host-test-001" },
+        name: "Manager",
+        origin: "cli",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "  Project:  -",
+    );
+    expect(collectLogLines(vi.mocked(console.error)).join("\n")).not.toContain(
+      PERSONAL_PROJECT_ID,
+    );
+  });
+
+  it("bb manager hire prints a projectless context label when BB_PROJECT_ID is personal", async () => {
+    vi.stubEnv("BB_PROJECT_ID", PERSONAL_PROJECT_ID);
+    const post = vi.fn(async () => ({
+      id: "thread-personal-manager",
+      projectId: PERSONAL_PROJECT_ID,
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["manager", "hire", "--name", "Manager"], (program) =>
+      registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: PERSONAL_PROJECT_ID },
+      json: {
+        environment: { type: "host", hostId: "host-test-001" },
+        name: "Manager",
+        origin: "cli",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "  Project:  -",
+    );
+    expect(collectLogLines(vi.mocked(console.error))).toEqual([
+      "Project - (from BB_PROJECT_ID)",
+    ]);
+  });
+
   it("bb manager hire omits reasoning level when not provided", async () => {
     const post = vi.fn(async () => ({
       id: "thread-manager-2",
@@ -980,6 +1117,61 @@ describe("CLI command output contracts", () => {
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
       "ID                Status  Title  \n----------------  ------  -------\nthread-manager-1  active  Manager",
+      "",
+    ]);
+  });
+
+  it("bb manager list lists managers across all projects without project context", async () => {
+    const list = vi.fn(async () => [
+      makeThread({
+        id: "thread-personal-manager",
+        projectId: PERSONAL_PROJECT_ID,
+        providerId: "codex",
+        title: "Personal Manager",
+        type: "manager",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+      makeThread({
+        id: "thread-project-manager",
+        projectId: "project-123",
+        providerId: "codex",
+        title: "Project Manager",
+        type: "manager",
+        status: "active",
+        createdAt: 3,
+        updatedAt: 4,
+      }),
+    ]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["manager", "list"], (program) =>
+      registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(list).toHaveBeenCalledWith({
+      query: { type: "manager" },
+    });
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      [
+        "ID                       Project      Status  Title           ",
+        "-----------------------  -----------  ------  ----------------",
+        "thread-personal-manager  -            idle    Personal Manager",
+        "-----------------------  -----------  ------  ----------------",
+        "thread-project-manager   project-123  active  Project Manager ",
+      ].join("\n"),
       "",
     ]);
   });

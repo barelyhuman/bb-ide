@@ -161,6 +161,19 @@ describe("AppLayout desktop chrome", () => {
     );
   });
 
+  it("renders root with project-style header spacing in browser layout", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    const headerRow = await screen.findByTestId("app-page-header-content-row");
+    const header = headerRow.parentElement;
+
+    expect(header?.className).toContain("h-12");
+    expect(header?.className).not.toContain("border-b");
+    expect(
+      screen.getAllByRole("button", { name: "Toggle Sidebar" }),
+    ).toHaveLength(1);
+  });
+
   it("pins the sidebar trigger at the window root while the expanded sidebar row stays a drag spacer in desktop chrome", async () => {
     await renderAppLayout({
       desktopInfo: createBbDesktopApi({

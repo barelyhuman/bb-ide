@@ -13,6 +13,10 @@ import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";
 import { cn } from "@/lib/utils";
 import { getProviderIconInfo } from "@/lib/provider-icon";
+import {
+  getLegacyProjectComposeRoutePath,
+  getThreadRoutePath,
+} from "@/lib/app-route-paths";
 import * as api from "@/lib/api";
 
 const DEFAULT_REPLAY_SPEED: ReplayRunSpeed = 1;
@@ -71,7 +75,10 @@ export function InternalReplayListView() {
       api.startReplayRun(captureId, { speed }),
     onSuccess: (result) => {
       window.open(
-        `/projects/${result.projectId}/threads/${result.replayThreadId}`,
+        getThreadRoutePath({
+          projectId: result.projectId,
+          threadId: result.replayThreadId,
+        }),
         "_blank",
         "noopener",
       );
@@ -240,7 +247,9 @@ export function InternalReplayListView() {
                         </DetailRow>
                         <DetailRow label="Project" valueClassName="min-w-0">
                           <Link
-                            to={`/projects/${capture.projectId}`}
+                            to={getLegacyProjectComposeRoutePath(
+                              capture.projectId,
+                            )}
                             className={DETAIL_LINK_CLASS}
                           >
                             {capture.projectName ?? capture.projectId}
@@ -248,7 +257,10 @@ export function InternalReplayListView() {
                         </DetailRow>
                         <DetailRow label="Thread" valueClassName="min-w-0">
                           <Link
-                            to={`/projects/${capture.projectId}/threads/${capture.threadId}`}
+                            to={getThreadRoutePath({
+                              projectId: capture.projectId,
+                              threadId: capture.threadId,
+                            })}
                             className={cn(
                               DETAIL_LINK_CLASS,
                               !capture.title && "font-mono",

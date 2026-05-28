@@ -1,9 +1,9 @@
 import type { ProjectSourceCheckout } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
-  buildProjectMainBranchUiState,
+  buildRootComposeBranchUiState,
   resolveBranchMutationBlocker,
-} from "./project-main-branch-ui";
+} from "./root-compose-branch-ui";
 
 const cleanMainCheckout: ProjectSourceCheckout = {
   branches: ["main", "release/1.2"],
@@ -48,10 +48,10 @@ const rebaseConflictCheckout: ProjectSourceCheckout = {
   operation: { kind: "rebase", hasConflicts: true },
 };
 
-describe("buildProjectMainBranchUiState", () => {
+describe("buildRootComposeBranchUiState", () => {
   it("labels local use-current without creating branch intent", () => {
     expect(
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: cleanMainCheckout,
         isFetching: false,
         isLoading: false,
@@ -68,7 +68,7 @@ describe("buildProjectMainBranchUiState", () => {
 
   it("labels explicit local branch checkout as a checkout action", () => {
     expect(
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: cleanMainCheckout,
         isFetching: false,
         isLoading: false,
@@ -86,7 +86,7 @@ describe("buildProjectMainBranchUiState", () => {
 
   it("labels local new branch intent with its base branch", () => {
     expect(
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: cleanMainCheckout,
         isFetching: false,
         isLoading: false,
@@ -104,7 +104,7 @@ describe("buildProjectMainBranchUiState", () => {
 
   it("labels detached HEAD without falling back to a default branch", () => {
     expect(
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: detachedCheckout,
         isFetching: false,
         isLoading: false,
@@ -123,7 +123,7 @@ describe("buildProjectMainBranchUiState", () => {
 
   it("labels unborn branches as the current empty checkout", () => {
     expect(
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: unbornCheckout,
         isFetching: false,
         isLoading: false,
@@ -142,7 +142,7 @@ describe("buildProjectMainBranchUiState", () => {
 
   it("labels worktree branch selection as a base branch", () => {
     expect(
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: cleanMainCheckout,
         isFetching: false,
         isLoading: false,

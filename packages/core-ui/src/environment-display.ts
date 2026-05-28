@@ -2,7 +2,7 @@ import type { Environment, EnvironmentWorkspaceDisplayKind } from "@bb/domain";
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
-  /** Human-readable mode: "Working locally", "Working remotely", "Personal workspace", or "Worktree". */
+  /** Human-readable mode: "Working locally", "Working remotely", or "Worktree". */
   modeLabel: string;
   /** Host display name, if available. Null when the host has no name. */
   hostLabel: string | null;
@@ -38,13 +38,11 @@ export function formatEnvironmentDisplay({
   });
 
   const modeLabel =
-    environment.workspaceProvisionType === "personal"
-      ? "Personal workspace"
-      : mode === "worktree"
-        ? "Worktree"
-        : isLocalHost
-          ? "Working locally"
-          : "Working remotely";
+    mode === "worktree"
+      ? "Worktree"
+      : isLocalHost
+        ? "Working locally"
+        : "Working remotely";
 
   const location: EnvironmentDisplayInfo["location"] = isLocalHost
     ? "local"

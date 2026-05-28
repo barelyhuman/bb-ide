@@ -3,7 +3,7 @@ import {
   ManagerSelectorRow,
   HostRow,
   EnvironmentRow,
-  WorktreePathRow,
+  WorkspacePathRow,
   BranchRow,
   MergeBaseRow,
   GitStatusRow,
@@ -249,15 +249,15 @@ export function Environment() {
 }
 
 // ---------------------------------------------------------------------------
-// Worktree path — the "Worktree path" row.
+// Workspace path — the "Worktree path" or "Workspace path" row.
 // ---------------------------------------------------------------------------
 
-export function WorktreePath() {
+export function WorkspacePath() {
   return (
     <StoryCard>
       <StoryRow label="managed worktree">
         <RowStage>
-          <WorktreePathRow
+          <WorkspacePathRow
             thread={makeThread()}
             environment={makeEnvironment({
               path: "/Users/michael/.bb-dev/worktrees/env_demo/bb",
@@ -267,7 +267,7 @@ export function WorktreePath() {
       </StoryRow>
       <StoryRow label="long path">
         <RowStage>
-          <WorktreePathRow
+          <WorkspacePathRow
             thread={makeThread()}
             environment={makeEnvironment({
               path: "/Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/components/secondary-panel",
@@ -277,12 +277,24 @@ export function WorktreePath() {
       </StoryRow>
       <StoryRow label="unmanaged worktree">
         <RowStage>
-          <WorktreePathRow
+          <WorkspacePathRow
             thread={makeThread()}
             environment={makeEnvironment({
               path: "/srv/repos/bb-linked-worktree",
               managed: false,
               workspaceProvisionType: "unmanaged",
+            })}
+          />
+        </RowStage>
+      </StoryRow>
+      <StoryRow label="projectless workspace">
+        <RowStage>
+          <WorkspacePathRow
+            thread={makeThread()}
+            environment={makeEnvironment({
+              path: "/Users/michael/Projects/bb",
+              isWorktree: false,
+              workspaceProvisionType: "personal",
             })}
           />
         </RowStage>

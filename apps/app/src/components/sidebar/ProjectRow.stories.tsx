@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import {
@@ -26,13 +27,15 @@ export default {
 // demos).
 function SidebarStage({ children }: { children: ReactNode }) {
   return (
-    <ProjectActionsProvider>
-      <ThreadActionsProvider>
-        <div className="w-full max-w-[460px] min-w-0 rounded-md bg-sidebar p-2 text-sidebar-foreground">
-          {children}
-        </div>
-      </ThreadActionsProvider>
-    </ProjectActionsProvider>
+    <MemoryRouter>
+      <ProjectActionsProvider>
+        <ThreadActionsProvider>
+          <div className="w-full max-w-[460px] min-w-0 rounded-md bg-sidebar p-2 text-sidebar-foreground">
+            {children}
+          </div>
+        </ThreadActionsProvider>
+      </ProjectActionsProvider>
+    </MemoryRouter>
   );
 }
 
@@ -115,6 +118,8 @@ function InteractiveProjectRow({
       collapsedManagerIds={collapsedManagerIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
       isLocalPathInvalid={isLocalPathInvalid}
+      onCreateProjectThread={noop}
+      onCreateProjectManager={noop}
       onToggleProjectCollapsed={onToggleProjectCollapsed}
       onToggleManagerCollapsed={onToggleManagerCollapsed}
       onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
@@ -122,8 +127,8 @@ function InteractiveProjectRow({
   );
 }
 
-// Isolated ProjectRow demos: no action buttons, no "Projects" label — just the
-// minimum sticky-stack context the row depends on.
+// Isolated ProjectRow demos: no "Projects" label — just the minimum
+// sticky-stack context the row depends on.
 function singleProject(args: InteractiveProjectRowArgs) {
   return (
     <SidebarStage>
@@ -643,10 +648,9 @@ export function Full() {
             <ProjectListActionButtons
               onNewChat={noop}
               onNewManager={noop}
-              selectedProjectId="proj_full_a"
             />
           </div>
-          <ProjectListShell onNewProject={noop}>
+          <ProjectListShell>
             {fullProjects.map(({ key, ...args }) => (
               <InteractiveProjectRow key={key} {...args} />
             ))}

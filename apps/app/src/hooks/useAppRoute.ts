@@ -1,12 +1,11 @@
 import { useLocation, useMatch } from "react-router-dom";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 
 export interface AppRouteState {
   /** ID of the project in view (any project-scoped route), else undefined. */
   projectId: string | undefined;
   /** ID of the thread in view (thread detail only), else undefined. */
   threadId: string | undefined;
-  /** On `/projects/:id` — not a thread, archived, or settings subroute. */
-  isProjectMainView: boolean;
   /** On a thread detail URL. */
   isThreadView: boolean;
   /** On the project's archived threads list. */
@@ -15,6 +14,8 @@ export interface AppRouteState {
   isSettingsView: boolean;
   /** On the app root ("/"). */
   isRootView: boolean;
+  /** On the projectless new-thread surface or canonical projectless thread URL. */
+  isProjectlessView: boolean;
 }
 
 /**
@@ -26,22 +27,40 @@ export function useAppRoute(): AppRouteState {
   const location = useLocation();
   // Wildcard match exists only to extract `projectId` from any
   // project-scoped subroute; specific-view detection uses exact matches so a
-  // new subroute doesn't accidentally count as "project main".
+  // new subroute doesn't accidentally count as the root compose redirect.
   const projectMatch = useMatch("/projects/:projectId/*");
-  const projectMainMatch = useMatch("/projects/:projectId");
   const projectThreadMatch = useMatch(
     "/projects/:projectId/threads/:threadId/*",
   );
+  const projectlessThreadMatch = useMatch("/threads/:threadId/*");
   const projectArchivedMatch = useMatch("/projects/:projectId/archived");
   const projectSettingsMatch = useMatch("/projects/:projectId/settings");
+  const isRootView = location.pathname === "/";
+  const isUnsupportedPersonalProjectThread =
+    projectThreadMatch?.params.projectId === PERSONAL_PROJECT_ID;
+  const projectlessThreadId = projectlessThreadMatch?.params.threadId;
+  const threadId =
+    projectlessThreadId ??
+    (isUnsupportedPersonalProjectThread
+      ? undefined
+      : projectThreadMatch?.params.threadId);
+  const projectRouteProjectId = projectMatch?.params.projectId;
+  const projectId =
+    projectlessThreadId !== undefined
+      ? PERSONAL_PROJECT_ID
+      : isUnsupportedPersonalProjectThread
+        ? undefined
+        : projectRouteProjectId;
 
   return {
-    projectId: projectMatch?.params.projectId,
-    threadId: projectThreadMatch?.params.threadId,
-    isProjectMainView: Boolean(projectMainMatch),
-    isThreadView: Boolean(projectThreadMatch),
+    projectId,
+    threadId,
+    isThreadView:
+      Boolean(projectlessThreadMatch) ||
+      (Boolean(projectThreadMatch) && !isUnsupportedPersonalProjectThread),
     isArchivedView: Boolean(projectArchivedMatch),
     isSettingsView: Boolean(projectSettingsMatch),
-    isRootView: location.pathname === "/",
+    isRootView,
+    isProjectlessView: isRootView || projectlessThreadId !== undefined,
   };
 }

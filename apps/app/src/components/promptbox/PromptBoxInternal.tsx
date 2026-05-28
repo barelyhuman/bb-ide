@@ -43,16 +43,16 @@ const PROMPTBOX_MIN_HEIGHT = 68;
 const PROMPTBOX_MAX_HEIGHT = 158;
 
 type SubmitMode = "enter" | "mod-enter";
-type ZenModeLayout = "thread" | "project-main";
+type ZenModeLayout = "thread" | "root-compose";
 
 const ZEN_MODE_STORAGE_KEY: Record<ZenModeLayout, string> = {
   thread: "bb.promptbox.zen-mode.thread",
-  "project-main": "bb.promptbox.zen-mode.project-main",
+  "root-compose": "bb.promptbox.zen-mode.root-compose",
 };
 
 const ZEN_MODE_HEIGHT_CLASS: Record<ZenModeLayout, string> = {
   thread: "h-[50dvh]",
-  "project-main": "h-[70dvh]",
+  "root-compose": "h-[70dvh]",
 };
 
 export interface PromptBoxSubmissionConfig {

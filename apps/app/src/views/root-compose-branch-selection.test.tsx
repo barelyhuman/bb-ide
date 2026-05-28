@@ -2,7 +2,7 @@
 
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useScopedBranchSelection } from "./project-main-branch-selection";
+import { useScopedBranchSelection } from "./root-compose-branch-selection";
 
 interface HookProps {
   currentBranch: string | null;

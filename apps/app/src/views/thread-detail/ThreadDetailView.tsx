@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtomValue } from "jotai";
-import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
   TimelineTitleActionResolver,
@@ -60,6 +59,7 @@ import {
   type WorkspaceChangedFileSelection,
 } from "@/components/workspace/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { useGitDiffPanel } from "@/components/secondary-panel/git-diff/useGitDiffPanel";
 import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTurnSummaryRows";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
@@ -118,6 +118,7 @@ import {
   useSetThreadSecondaryPanelSelection,
   useToggleThreadSecondaryPanelSelection,
 } from "./threadSecondaryPanelSelection";
+import { useAppRoute } from "@/hooks/useAppRoute";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 const EMPTY_PROJECT_THREAD_SUBSET_FILTERS =
@@ -152,10 +153,7 @@ function buildHostConnectionNotice(
 }
 
 export function ThreadDetailView() {
-  const { projectId, threadId } = useParams<{
-    projectId: string;
-    threadId: string;
-  }>();
+  const { projectId, threadId } = useAppRoute();
   useFixedPanelTabsStorageMaintenance(threadId);
   useThreadTerminalPanelStorageMaintenance(threadId);
   const fixedPanelTabsState = useFixedPanelTabsState(threadId);
@@ -618,7 +616,10 @@ export function ThreadDetailView() {
   });
   const managedBySection: ThreadPromptManagedBySection | null = useMemo(() => {
     if (!thread?.parentThreadId) return null;
-    const href = `/projects/${projectId}/threads/${thread.parentThreadId}`;
+    const href = getThreadRoutePath({
+      projectId: thread.projectId,
+      threadId: thread.parentThreadId,
+    });
     if (parentThread === undefined) {
       // Parent record not yet loaded — show id-based fallback so the user
       // doesn't get a flicker of "no manager" before resolution.
@@ -641,7 +642,7 @@ export function ThreadDetailView() {
       managerName: getThreadDisplayTitle(parentThread),
       href,
     };
-  }, [parentThread, projectId, thread?.parentThreadId, thread?.projectId]);
+  }, [parentThread, thread?.parentThreadId, thread?.projectId]);
   const managerChildrenSection: ThreadPromptManagerChildrenSection | null =
     useMemo(() => {
       if (!isManagerThread) return null;
@@ -653,11 +654,14 @@ export function ThreadDetailView() {
         .map((entry) => ({
           id: entry.id,
           title: getThreadDisplayTitle(entry),
-          href: `/projects/${projectId}/threads/${entry.id}`,
+          href: getThreadRoutePath({
+            projectId: entry.projectId,
+            threadId: entry.id,
+          }),
         }));
       if (activeItems.length === 0) return null;
       return { items: activeItems };
-    }, [isManagerThread, projectId, projectThreadSubsetQuery.data]);
+    }, [isManagerThread, projectThreadSubsetQuery.data]);
   const isThreadTimelinePending = timelineLoading && timelineRows.length === 0;
   const {
     erroredTurnSummaryIds,

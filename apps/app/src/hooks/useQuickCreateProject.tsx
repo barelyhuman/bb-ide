@@ -13,7 +13,11 @@ import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
 } from "@/hooks/useLocalPathPicker";
-import { APP_ROOT_ROUTE_PATH } from "@/lib/app-route-paths";
+import {
+  APP_ROOT_ROUTE_PATH,
+  getRootComposeRoutePath,
+} from "@/lib/app-route-paths";
+import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 import type {
   ProjectPathDialogSubmitHandler,
   ProjectPathDialogTarget,
@@ -41,6 +45,7 @@ export function useQuickCreateProject(): QuickCreateProjectController {
   const { mutate, isPending } = useCreateProject();
   const navigate = useNavigate();
   const location = useLocation();
+  const setRootComposeProjectId = useSetRootComposeProjectId();
   const shouldReplaceRoute = location.pathname === APP_ROOT_ROUTE_PATH;
 
   const submit = useCallback(
@@ -57,14 +62,15 @@ export function useQuickCreateProject(): QuickCreateProjectController {
         {
           onSuccess: (project) => {
             closeDialog();
-            void navigate(`/projects/${project.id}`, {
+            setRootComposeProjectId(project.id);
+            void navigate(getRootComposeRoutePath(), {
               replace: shouldReplaceRoute,
             });
           },
         },
       );
     },
-    [mutate, navigate, shouldReplaceRoute],
+    [mutate, navigate, setRootComposeProjectId, shouldReplaceRoute],
   );
 
   const controller = useLocalPathPicker({

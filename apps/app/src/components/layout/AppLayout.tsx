@@ -22,7 +22,6 @@ import {
   useThread,
   useThreadDetailBootstrap,
 } from "@/hooks/queries/thread-queries";
-import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
@@ -39,8 +38,14 @@ import {
   MACOS_WINDOW_NO_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
+import {
+  getLegacyProjectComposeRoutePath,
+  getProjectArchivedRoutePath,
+  getProjectSettingsRoutePath,
+} from "@/lib/app-route-paths";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
+import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
 const SIDEBAR_OPEN_KEY = "bb.sidebar.open";
@@ -163,17 +168,15 @@ function DesktopSidebarTriggerOverlay() {
 }
 
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
-  "/": { title: "Projects", subtitle: "Select or create a project" },
+  "/": { title: "Threads" },
   "/settings": { title: "Settings" },
   "/development-only/replay": { title: "Replay threads" },
 };
 
 interface AppHeaderProps {
   /**
-   * True for any project-scoped route (main, archived, settings). Drives the
-   * unbordered chrome and the project action icons on the right; also
-   * suppresses meta.title in the center (project name is conveyed by the
-   * page-level project picker, not the chrome).
+   * True for routes that should use quiet chrome. This suppresses the center
+   * title; project-scoped quiet routes also get project actions on the right.
    */
   usesProjectChromeStyle: boolean;
   usesDesktopChrome: boolean;
@@ -261,7 +264,7 @@ function AppHeader({
     usesProjectChromeStyle && projectId ? (
       <>
         <Link
-          to={`/projects/${projectId}/settings`}
+          to={getProjectSettingsRoutePath(projectId)}
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
             "inline-flex items-center justify-center transition-colors",
@@ -276,7 +279,7 @@ function AppHeader({
           <Icon name="Settings" />
         </Link>
         <Link
-          to={`/projects/${projectId}/archived`}
+          to={getProjectArchivedRoutePath(projectId)}
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
             "inline-flex items-center justify-center transition-colors",
@@ -318,7 +321,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const {
     projectId,
     threadId,
-    isProjectMainView,
     isThreadView,
     isArchivedView,
     isSettingsView,
@@ -352,16 +354,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
+  const setRootComposeProjectId = useSetRootComposeProjectId();
   const providerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const liveWidthRef = useRef(sidebarWidth);
   const animationFrameRef = useRef<number | null>(null);
-  const activeProjectId = useActiveProjectId();
-  const showHeader = !isRootView && !isThreadView;
+  const showHeader = !isThreadView;
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  const showFloatingSidebarTrigger = isRootView && !usesDesktopChrome;
+  const showFloatingSidebarTrigger =
+    !showHeader && isRootView && !usesDesktopChrome;
   const sidebarProviderStyle: SidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
   };
@@ -382,6 +385,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     : threadId
       ? `Thread ${threadId.slice(0, 8)}`
       : "Thread";
+  useEffect(() => {
+    if (!thread?.projectId) return;
+    setRootComposeProjectId(thread.projectId);
+  }, [setRootComposeProjectId, thread?.projectId]);
   const meta = isThreadView
     ? {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
@@ -394,7 +401,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           breadcrumbs: [
             {
               label: projectLabel ?? projectId,
-              to: `/projects/${projectId}`,
+              to: getLegacyProjectComposeRoutePath(projectId),
             },
             { label: "Archived" },
           ],
@@ -406,7 +413,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             breadcrumbs: [
               {
                 label: projectLabel ?? projectId,
-                to: `/projects/${projectId}`,
+                to: getLegacyProjectComposeRoutePath(projectId),
               },
               { label: "Settings" },
             ],
@@ -518,7 +525,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           <AppSidebar
             onResizeMouseDown={handleResizeMouseDown}
             isResizing={isSidebarResizing}
-            selectedProjectId={activeProjectId}
             showInlineTrigger={true}
           />
           <SidebarInset>
@@ -531,7 +537,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <AppHeader
                   usesDesktopChrome={usesDesktopChrome}
                   usesProjectChromeStyle={
-                    isProjectMainView || isArchivedView || isSettingsView
+                    isRootView || isArchivedView || isSettingsView
                   }
                   isArchivedView={isArchivedView}
                   isSettingsView={isSettingsView}

@@ -20,6 +20,7 @@ import {
   createProjectScopedStorageAtomFamily,
   rawStringLocalStorage,
 } from "@/lib/browser-storage";
+import { useRootComposeReuseEnvironment } from "@/lib/root-compose-selection";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import { reconcileReasoningLevel } from "@/lib/reasoning-level-reconcile";
 import { useSystemExecutionOptions } from "./queries/system-queries";
@@ -335,11 +336,10 @@ export function useThreadCreationOptions(
     useAtom(environmentSelectionAtomFamily(projectId));
   // Reuse env values are intentionally NEVER persisted to localStorage —
   // they represent a transient "create one thread in this worktree" intent,
-  // not a project default. Held in component state for the duration of this
-  // composer; refresh resets to the user's host-mode default.
-  const [sessionReuseValue, setSessionReuseValue] = useState<string | null>(
-    null,
-  );
+  // not a project default. Held in shared root-compose state so all mode
+  // entry points clear it when switching to manager mode.
+  const [rootComposeReuseValue, setRootComposeReuseValue] =
+    useRootComposeReuseEnvironment();
   const [threadSelections, setThreadSelections] =
     useState<ThreadPromptSelections>(() =>
       getInitialThreadPromptSelections({
@@ -410,7 +410,7 @@ export function useThreadCreationOptions(
       : renderedThreadSelections.permissionMode;
   const rawEnvironmentSelectionValue =
     scope === "new-thread"
-      ? (sessionReuseValue ??
+      ? (rootComposeReuseValue ??
         sanitizeStoredEnvironmentValue(storedEnvironmentSelectionValue))
       : renderedThreadSelections.environmentSelectionValue;
 
@@ -690,13 +690,13 @@ export function useThreadCreationOptions(
       if (scope === "new-thread") {
         const parsed = parseEnvironmentValue(value);
         if (parsed?.type === "reuse") {
-          // Reuse intent is transient. Hold it in session state so the
+          // Reuse intent is transient. Hold it in root-compose state so the
           // picker reflects the user's choice without overwriting their
           // persisted host-mode default.
-          setSessionReuseValue(value);
+          setRootComposeReuseValue(value);
           return;
         }
-        setSessionReuseValue(null);
+        setRootComposeReuseValue(null);
         setStoredEnvironmentSelectionValue(value);
         return;
       }
@@ -709,14 +709,14 @@ export function useThreadCreationOptions(
         }),
       );
     },
-    [scope, setStoredEnvironmentSelectionValue],
+    [scope, setRootComposeReuseValue, setStoredEnvironmentSelectionValue],
   );
   // Dismissing the reuse banner reverts to whatever the user's persisted
   // host-mode default is — no localStorage write needed, just clear the
-  // session override.
+  // transient override.
   const clearReuseEnvironment = useCallback(() => {
-    setSessionReuseValue(null);
-  }, []);
+    setRootComposeReuseValue(null);
+  }, [setRootComposeReuseValue]);
 
   return {
     selectedProviderId: effectiveProviderId,

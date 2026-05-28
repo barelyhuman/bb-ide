@@ -40,6 +40,7 @@ import {
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { useUnarchiveThread } from "../../hooks/mutations/thread-state-mutations";
 import { buildManagerSelectorOptions } from "@/views/thread-detail/threadManagerSelectorOptions";
+import { getThreadRoutePath } from "@/lib/app-route-paths";
 
 // ---------------------------------------------------------------------------
 // Each row of the Info tab is a function component that owns its own raw
@@ -106,7 +107,7 @@ export function ManagerSelectorRow({
       {parentThreadId ? (
         <div className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
           <Link
-            to={`/projects/${projectId}/threads/${parentThreadId}`}
+            to={getThreadRoutePath({ projectId, threadId: parentThreadId })}
             className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
           >
             {selectedManagerOptionLabel ?? "Manager"}
@@ -260,9 +261,16 @@ export function EnvironmentRow({
   );
 }
 
-export interface WorktreePathRowProps {
+export interface WorkspacePathRowProps {
   thread: Thread;
   environment: Environment | null;
+}
+
+interface WorkspacePathRowDisplay {
+  rowLabel: string;
+  copyLabel: string;
+  successMessage: string;
+  errorMessage: string;
 }
 
 function isWorktreeEnvironment(environment: Environment): boolean {
@@ -272,19 +280,47 @@ function isWorktreeEnvironment(environment: Environment): boolean {
   );
 }
 
-export function WorktreePathRow({ thread, environment }: WorktreePathRowProps) {
+function getWorkspacePathRowDisplay(
+  environment: Environment,
+): WorkspacePathRowDisplay | null {
+  if (environment.workspaceProvisionType === "personal") {
+    return {
+      rowLabel: "Workspace path",
+      copyLabel: "Copy workspace path",
+      successMessage: "Workspace path copied",
+      errorMessage: "Failed to copy workspace path",
+    };
+  }
+
+  if (isWorktreeEnvironment(environment)) {
+    return {
+      rowLabel: "Worktree path",
+      copyLabel: "Copy worktree path",
+      successMessage: "Worktree path copied",
+      errorMessage: "Failed to copy worktree path",
+    };
+  }
+
+  return null;
+}
+
+export function WorkspacePathRow({
+  thread,
+  environment,
+}: WorkspacePathRowProps) {
   if (thread.type === "manager") return null;
   if (!environment?.path) return null;
-  if (!isWorktreeEnvironment(environment)) return null;
+  const display = getWorkspacePathRowDisplay(environment);
+  if (!display) return null;
 
   return (
-    <DetailRow label="Worktree path" valueClassName="min-w-0">
+    <DetailRow label={display.rowLabel} valueClassName="min-w-0">
       <CopyableInlineLabel
         text={environment.path}
-        label="Copy worktree path"
+        label={display.copyLabel}
         title={environment.path}
-        successMessage="Worktree path copied"
-        errorMessage="Failed to copy worktree path"
+        successMessage={display.successMessage}
+        errorMessage={display.errorMessage}
       />
     </DetailRow>
   );
@@ -712,7 +748,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         environmentHost={environmentHost}
         environmentIsLocal={environmentIsLocal}
       />
-      <WorktreePathRow thread={thread} environment={environment} />
+      <WorkspacePathRow thread={thread} environment={environment} />
       <BranchRow thread={thread} workspaceStatus={workspaceStatus} />
       <MergeBaseRow
         thread={thread}

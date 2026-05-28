@@ -30,7 +30,6 @@ export type WorkspaceProvisionType = z.infer<
 export const environmentWorkspaceDisplayKindValues = [
   "managed-worktree",
   "unmanaged-worktree",
-  "personal",
   "other",
 ] as const;
 export const environmentWorkspaceDisplayKindSchema = z.enum(
@@ -52,10 +51,6 @@ export function resolveEnvironmentWorkspaceDisplayKind({
 }: ResolveEnvironmentWorkspaceDisplayKindArgs): EnvironmentWorkspaceDisplayKind {
   if (environment.workspaceProvisionType === "managed-worktree") {
     return "managed-worktree";
-  }
-
-  if (environment.workspaceProvisionType === "personal") {
-    return "personal";
   }
 
   if (environment.isWorktree === true) {

@@ -3,16 +3,16 @@ import type {
   ProjectSourceCheckout,
   WorkspaceGitOperation,
 } from "@bb/domain";
-import type { ProjectMainSelectedBranch } from "./project-main-thread-environment";
+import type { RootComposeSelectedBranch } from "./root-compose-thread-environment";
 
-export type ProjectMainBranchEnvironmentMode = "local" | "worktree" | "other";
+export type RootComposeBranchEnvironmentMode = "local" | "worktree" | "other";
 
 export interface BranchMutationBlocker {
   label: string;
   title: string;
 }
 
-export interface ProjectMainBranchUiState {
+export interface RootComposeBranchUiState {
   currentBranch: string | null;
   currentOptionLabel: string | null;
   mutationBlocker: BranchMutationBlocker | null;
@@ -21,17 +21,17 @@ export interface ProjectMainBranchUiState {
   triggerTitle: string;
 }
 
-export interface BuildProjectMainBranchUiStateArgs {
+export interface BuildRootComposeBranchUiStateArgs {
   checkout: ProjectSourceCheckout | undefined;
   isFetching: boolean;
   isLoading: boolean;
-  mode: ProjectMainBranchEnvironmentMode;
-  selectedBranch: ProjectMainSelectedBranch | null;
+  mode: RootComposeBranchEnvironmentMode;
+  selectedBranch: RootComposeSelectedBranch | null;
 }
 
 interface BuildWorktreeBranchUiStateArgs {
   checkout: ProjectSourceCheckout | undefined;
-  selectedBranch: ProjectMainSelectedBranch | null;
+  selectedBranch: RootComposeSelectedBranch | null;
 }
 
 function formatOperationName(operation: WorkspaceGitOperation): string {
@@ -143,7 +143,7 @@ function buildOperationBlocker(
 }
 
 export function resolveBranchMutationBlocker(
-  args: BuildProjectMainBranchUiStateArgs,
+  args: BuildRootComposeBranchUiStateArgs,
 ): BranchMutationBlocker | null {
   if (args.mode !== "local") {
     return null;
@@ -198,7 +198,7 @@ export function resolveBranchMutationBlocker(
 
 function buildWorktreeBranchUiState(
   args: BuildWorktreeBranchUiStateArgs,
-): ProjectMainBranchUiState {
+): RootComposeBranchUiState {
   const defaultBranch = args.checkout?.defaultBranch;
   const defaultOptionLabel = formatBranchFromOptionLabel(defaultBranch);
   const defaultTriggerLabel = formatBranchFromTriggerLabel(defaultBranch);
@@ -224,9 +224,9 @@ function buildWorktreeBranchUiState(
   };
 }
 
-export function buildProjectMainBranchUiState(
-  args: BuildProjectMainBranchUiStateArgs,
-): ProjectMainBranchUiState {
+export function buildRootComposeBranchUiState(
+  args: BuildRootComposeBranchUiStateArgs,
+): RootComposeBranchUiState {
   if (args.mode === "worktree") {
     return buildWorktreeBranchUiState(args);
   }

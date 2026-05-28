@@ -410,7 +410,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     promptHistoryQuerySchema,
     (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicStandardProject(deps.db, projectId);
+      requirePublicProject(deps.db, projectId);
       const limit = Math.min(
         parseOptionalInteger(query.limit, "limit") ??
           PROMPT_HISTORY_ENTRY_LIMIT,
@@ -680,7 +680,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   );
 
   post("/projects/:id/attachments", async (context) => {
-    requirePublicStandardProject(deps.db, context.req.param("id"));
+    requirePublicProject(deps.db, context.req.param("id"));
     const formData = await context.req.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
@@ -696,7 +696,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     "/projects/:id/attachments/content",
     projectAttachmentContentQuerySchema,
     async (context, query) => {
-      requirePublicStandardProject(deps.db, context.req.param("id"));
+      requirePublicProject(deps.db, context.req.param("id"));
       const attachment = await readAttachment(
         deps.config.dataDir,
         context.req.param("id"),

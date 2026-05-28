@@ -1,5 +1,9 @@
 import { createInterface } from "node:readline/promises";
-import { reasoningLevelSchema, type ReasoningLevel } from "@bb/domain";
+import {
+  PERSONAL_PROJECT_ID,
+  reasoningLevelSchema,
+  type ReasoningLevel,
+} from "@bb/domain";
 import type {
   CommitActionResponse,
   SquashMergeActionResponse,
@@ -48,7 +52,11 @@ export function printContextLabel(
 ): void {
   if (opts.json) return;
   if (resolved.source === "env") {
-    console.error(`${kind} ${resolved.id} (from ${envVar})`);
+    const displayId =
+      kind === "Project" && resolved.id === PERSONAL_PROJECT_ID
+        ? "-"
+        : resolved.id;
+    console.error(`${kind} ${displayId} (from ${envVar})`);
   }
 }
 

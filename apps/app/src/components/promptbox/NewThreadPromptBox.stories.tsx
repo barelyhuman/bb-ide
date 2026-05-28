@@ -5,7 +5,7 @@ import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
-  type NewThreadManagerHostConfig,
+  type NewThreadHostConfig,
   type NewThreadModeConfig,
   type NewThreadProjectConfig,
   type NewThreadTemplateConfig,
@@ -34,6 +34,9 @@ export default {
 };
 
 const noop = () => {};
+const connectedStoryHosts = STORY_HOSTS.filter(
+  (host) => host.status === "connected",
+);
 
 const baseExecution = makeExecutionControlsProps();
 
@@ -84,9 +87,9 @@ const baseTemplate: NewThreadTemplateConfig = {
   onChange: noop,
 };
 
-const baseManagerHost: NewThreadManagerHostConfig = {
+const baseHost: NewThreadHostConfig = {
   hosts: STORY_HOSTS,
-  eligibleHosts: STORY_HOSTS,
+  eligibleHosts: connectedStoryHosts,
   value: HOST_IDS.local,
   onChange: noop,
   isLocalHost: storyIsLocalHost,
@@ -129,7 +132,7 @@ function useControlledMode(initial: ThreadCreationMode = "thread"): ControlledMo
   const modeConfig = useMemo<NewThreadModeConfig>(
     () =>
       current === "manager"
-        ? { mode: "manager", host: baseManagerHost, template: baseTemplate }
+        ? { mode: "manager", host: baseHost, template: baseTemplate }
         : {
             mode: "thread",
             environment: baseEnvironment,
@@ -142,7 +145,7 @@ function useControlledMode(initial: ThreadCreationMode = "thread"): ControlledMo
   return { modeConfig, onModeChange: setCurrent };
 }
 
-// Match production: ProjectMainView wraps the prompt area in PageShell which
+// Match production: RootComposeView wraps the prompt area in PageShell which
 // caps content at 760px. Without this constraint the env-permission strip's
 // justify-between drifts the permission picker far to the right.
 interface PromptStageProps {
@@ -249,7 +252,7 @@ function FullAccessRow() {
   const { value, onChange } = useControlledValue("");
   const modeConfig: NewThreadModeConfig =
     current === "manager"
-      ? { mode: "manager", host: baseManagerHost, template: baseTemplate }
+      ? { mode: "manager", host: baseHost, template: baseTemplate }
       : {
           mode: "thread",
           environment: baseEnvironment,
@@ -279,6 +282,41 @@ function FullAccessRow() {
   );
 }
 
+function ProjectlessThreadRow() {
+  const { value, onChange } = useControlledValue("");
+  return (
+    <PromptStage>
+      <NewThreadPromptBoxUI
+        id="story-new-thread-projectless"
+        value={value}
+        onChange={onChange}
+        onSubmit={noop}
+        isSubmitting={false}
+        disabled={false}
+        zenModeStorageKey="bb.story.new-thread.projectless"
+        history={baseHistory}
+        mentions={makeMentions()}
+        attachments={makeAttachments()}
+        modeConfig={{
+          mode: "thread",
+          environment: baseEnvironment,
+          branch: baseBranch,
+          worktree: baseWorktree,
+          permission: basePermission,
+          projectlessHost: baseHost,
+        }}
+        onModeChange={noop}
+        project={{
+          ...baseProject,
+          value: null,
+          allowNoProject: true,
+        }}
+        execution={baseExecution}
+      />
+    </PromptStage>
+  );
+}
+
 export function Overview() {
   return (
     <StoryCard>
@@ -296,6 +334,12 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="full access" hint='permission tone="warning"'>
         <FullAccessRow />
+      </StoryRow>
+      <StoryRow
+        label="projectless"
+        hint="host picker replaces environment picker"
+      >
+        <ProjectlessThreadRow />
       </StoryRow>
     </StoryCard>
   );

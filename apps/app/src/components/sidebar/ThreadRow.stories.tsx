@@ -39,13 +39,20 @@ const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
 
 const noop = () => {};
 
-const defaultOption: ThreadRowOptions = { kind: "default" };
-const managedChildOption: ThreadRowOptions = { kind: "managed-child" };
+const defaultOption: ThreadRowOptions = {
+  kind: "default",
+  indent: "project-child",
+};
+const managedChildOption: ThreadRowOptions = {
+  kind: "managed-child",
+  indent: "nested-child",
+};
 function managerOption(
   overrides: Partial<Extract<ThreadRowOptions, { kind: "manager" }>> = {},
 ): ThreadRowOptions {
   return {
     kind: "manager",
+    indent: "project-child",
     isCollapsed: false,
     managedChildCount: 0,
     managedChildActivity: NO_COLLAPSED_CHILD_ACTIVITY,

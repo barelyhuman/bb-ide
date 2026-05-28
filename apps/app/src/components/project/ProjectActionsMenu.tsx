@@ -1,12 +1,29 @@
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import type { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu.js";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
+import {
+  getProjectArchivedRoutePath,
+  getProjectSettingsRoutePath,
+} from "@/lib/app-route-paths";
 import { cn } from "@/lib/utils";
 import { useProjectActions } from "./ProjectActionsProvider";
 
@@ -38,6 +55,10 @@ interface ProjectActionMenuItemProps {
   surface: ProjectActionsMenuSurface;
 }
 
+interface ProjectActionMenuSeparatorProps {
+  surface: ProjectActionsMenuSurface;
+}
+
 function ProjectActionMenuItem({
   children,
   className,
@@ -59,10 +80,21 @@ function ProjectActionMenuItem({
   );
 }
 
+function ProjectActionMenuSeparator({
+  surface,
+}: ProjectActionMenuSeparatorProps) {
+  return surface === "context" ? (
+    <ContextMenuSeparator />
+  ) : (
+    <DropdownMenuSeparator />
+  );
+}
+
 function ProjectActionsMenuItems({
   project,
   surface,
 }: ProjectActionsMenuItemsProps) {
+  const navigate = useNavigate();
   const { localHostId } = useHostDaemon();
   const { requestRename, requestDelete, requestAddLocalPath } =
     useProjectActions();
@@ -72,6 +104,23 @@ function ProjectActionsMenuItems({
 
   return (
     <>
+      <ProjectActionMenuItem
+        surface={surface}
+        onSelect={() => {
+          navigate(getProjectSettingsRoutePath(project.id));
+        }}
+      >
+        Project settings
+      </ProjectActionMenuItem>
+      <ProjectActionMenuItem
+        surface={surface}
+        onSelect={() => {
+          navigate(getProjectArchivedRoutePath(project.id));
+        }}
+      >
+        Archived threads
+      </ProjectActionMenuItem>
+      <ProjectActionMenuSeparator surface={surface} />
       <ProjectActionMenuItem
         surface={surface}
         onSelect={(event) => {

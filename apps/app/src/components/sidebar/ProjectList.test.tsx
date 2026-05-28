@@ -1,9 +1,22 @@
 // @vitest-environment jsdom
 
-import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  Suspense,
+  useEffect,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
@@ -16,6 +29,8 @@ import {
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { wsManager } from "@/lib/ws";
+import { useRootComposeReuseEnvironment } from "@/lib/root-compose-selection";
+import { encodeReuseValue } from "@/components/pickers/environment-picker-value";
 import {
   projectsQueryKey,
   threadListQueryKey,
@@ -42,6 +57,11 @@ interface ProjectListRenderResult {
   queryClient: QueryClient;
 }
 
+interface ProjectListRenderOptions {
+  extraUi?: ReactNode;
+}
+
+type ProjectListRenderProps = ComponentProps<typeof ProjectList>;
 type ProjectThreadListEntry = ProjectWithThreadsResponse["threads"][number];
 type ProjectThreadListEntryOverrides = Partial<ProjectThreadListEntry>;
 type ProjectWithThreadsOverrides = Partial<ProjectWithThreadsResponse>;
@@ -109,6 +129,11 @@ interface ProjectListHandlerArgs {
   threadsByProjectId?: Map<string, ProjectWithThreadsResponse["threads"]>;
 }
 
+interface RootComposeReuseProbeProps {
+  initialValue: string;
+  onValue: (value: string | null) => void;
+}
+
 function buildProjectListHandler(args: ProjectListHandlerArgs) {
   return (request: Request) => {
     const url = new URL(request.url);
@@ -161,19 +186,36 @@ function createProjectListWrapper() {
   };
 }
 
-interface RenderProjectListArgs {
-  selectedProjectId?: string;
+function RootComposeReuseProbe({
+  initialValue,
+  onValue,
+}: RootComposeReuseProbeProps) {
+  const [value, setValue] = useRootComposeReuseEnvironment();
+
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue, setValue]);
+
+  useEffect(() => {
+    onValue(value);
+  }, [onValue, value]);
+
+  return null;
 }
 
 async function renderProjectList(
-  args: RenderProjectListArgs = {},
+  props: ProjectListRenderProps = {},
+  options: ProjectListRenderOptions = {},
 ): Promise<ProjectListRenderResult> {
   const { queryClient, wrapper } = createProjectListWrapper();
   let container: HTMLElement | null = null;
 
   await act(async () => {
     const result = render(
-      <ProjectList selectedProjectId={args.selectedProjectId} />,
+      <>
+        {options.extraUi}
+        <ProjectList {...props} />
+      </>,
       { wrapper },
     );
     container = result.container;
@@ -212,10 +254,10 @@ describe("ProjectList", () => {
       ]),
     );
     const personalProject = makeProjectWithThreadsResponse({
-      id: "proj_personal",
+      id: PERSONAL_PROJECT_ID,
       kind: "personal",
       name: "Personal",
-      threads: [makeThreadListEntry("proj_personal", 4)],
+      threads: [makeThreadListEntry(PERSONAL_PROJECT_ID, 4)],
     });
     installFetchRoutes([
       {
@@ -273,6 +315,14 @@ describe("ProjectList", () => {
           ),
         ).toEqual(threadsByProjectId.get(project.id));
       }
+      expect(
+        queryClient.getQueryData(
+          threadListQueryKey({
+            projectId: PERSONAL_PROJECT_ID,
+            archived: false,
+          }),
+        ),
+      ).toEqual(personalProject.threads);
     });
     expect(sidebarBootstrapRequestCount).toBe(1);
     expect(leanProjectRequestCount).toBe(0);
@@ -317,6 +367,277 @@ describe("ProjectList", () => {
     expect(screen.queryByText("No projects")).toBeNull();
   });
 
+  it("toggles a project row instead of linking to a project route", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const thread = makeThreadListEntry(project.id, 1, {
+      title: "Project Thread",
+      titleFallback: "Project Thread",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+              threadsByProjectId: new Map([[project.id, [thread]]]),
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    const projectLabel = await screen.findByText("Project One");
+    const projectRow = projectLabel.closest(
+      "[data-sidebar-sticky-tier='project']",
+    );
+    expect(projectRow?.querySelector("a[href='/projects/project-1']")).toBeNull();
+    expect(screen.getByText("Project Thread")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse Project One" }),
+    );
+
+    expect(screen.queryByText("Project Thread")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand Project One" }),
+    );
+
+    expect(screen.getByText("Project Thread")).toBeTruthy();
+  });
+
+  it("orders project hover actions as menu, new manager, then new thread", async () => {
+    window.history.pushState(null, "", "/settings");
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    const reuseValues: (string | null)[] = [];
+    const staleReuseValue = encodeReuseValue("env-stale");
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList(
+      {},
+      {
+        extraUi: (
+          <RootComposeReuseProbe
+            initialValue={staleReuseValue}
+            onValue={(value) => {
+              reuseValues.push(value);
+            }}
+          />
+        ),
+      },
+    );
+
+    const managerButton = await screen.findByRole("button", {
+      name: "New manager in Project One",
+    });
+    const threadButton = screen.getByRole("button", {
+      name: "New thread in Project One",
+    });
+    const menuButton = screen.getByRole("button", {
+      name: "Project One actions",
+    });
+
+    expect(
+      Boolean(
+        menuButton.compareDocumentPosition(managerButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        managerButton.compareDocumentPosition(threadButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+
+    await waitFor(() => {
+      expect(reuseValues.at(-1)).toBe(staleReuseValue);
+    });
+
+    fireEvent.click(managerButton);
+
+    expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
+      "project-1",
+    );
+    expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
+      "manager",
+    );
+    await waitFor(() => {
+      expect(reuseValues.at(-1)).toBeNull();
+    });
+    expect(window.location.pathname).toBe("/");
+
+    fireEvent.click(threadButton);
+
+    expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
+      "project-1",
+    );
+    expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
+      "thread",
+    );
+  });
+
+  it("renders direct section header create actions", async () => {
+    window.history.pushState(null, "", "/settings");
+    const onNewProject = vi.fn();
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList({ onNewProject, isCreatingProject: false });
+
+    const newProjectButton = await screen.findByRole("button", {
+      name: "New project",
+    });
+    const newThreadButton = screen.getByRole("button", {
+      name: "New thread",
+    });
+    const newManagerButton = screen.getByRole("button", {
+      name: "New manager",
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Project options" }),
+    ).toBeNull();
+    expect(
+      newProjectButton.querySelector("[data-icon='FolderPlus']"),
+    ).toBeTruthy();
+
+    fireEvent.click(newProjectButton);
+
+    expect(onNewProject).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(newThreadButton);
+
+    expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
+      PERSONAL_PROJECT_ID,
+    );
+    expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
+      "thread",
+    );
+    expect(window.location.pathname).toBe("/");
+
+    fireEvent.click(newManagerButton);
+
+    expect(window.localStorage.getItem("bb.root-compose.project-id")).toBe(
+      PERSONAL_PROJECT_ID,
+    );
+    expect(window.localStorage.getItem("bb.promptbox.new-thread-mode")).toBe(
+      "manager",
+    );
+  });
+
   it("shows projects unavailable when the project request fails after the websocket connects", async () => {
     installFetchRoutes([
       {
@@ -357,7 +678,7 @@ describe("ProjectList", () => {
       archived: false,
     });
     const personalProject = makeProjectWithThreadsResponse({
-      id: "proj_personal",
+      id: PERSONAL_PROJECT_ID,
       kind: "personal",
       name: "Personal",
     });
@@ -410,6 +731,341 @@ describe("ProjectList", () => {
       expect(queryClient.getQueryState(threadListKey)?.status).toBe("error");
     });
     expect(screen.getByText("Threads unavailable")).toBeTruthy();
-    expect(screen.queryByText("No threads")).toBeNull();
+  });
+
+  it("renders projectless threads in a Threads section below Projects by default", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const projectlessThread = makeThreadListEntry(PERSONAL_PROJECT_ID, 10, {
+      title: "Projectless Thread",
+      titleFallback: "Projectless Thread",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [projectlessThread],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    const projectlessThreadLabel = await screen.findByText(
+      "Projectless Thread",
+    );
+    const projectlessThreadRow = projectlessThreadLabel.closest("div");
+    const projectsLabel = screen.getByText("Projects");
+    const threadsLabel = screen.getByText("Threads");
+    const sectionStack = projectsLabel.closest(
+      "[data-sidebar-sticky-tier='label']",
+    )?.parentElement?.parentElement;
+    expect(
+      Boolean(
+        projectsLabel.compareDocumentPosition(threadsLabel) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(sectionStack?.classList.contains("space-y-4")).toBe(true);
+    expect(projectlessThreadRow?.parentElement?.className).not.toContain(
+      "before:bg-border-hairline",
+    );
+  });
+
+  it("does not indent top-level rows in the projectless Threads section", async () => {
+    const projectlessManager = makeThreadListEntry(PERSONAL_PROJECT_ID, 12, {
+      id: "thread-projectless-manager",
+      title: "Projectless Manager",
+      titleFallback: "Projectless Manager",
+      type: "manager",
+    });
+    const projectlessChild = makeThreadListEntry(PERSONAL_PROJECT_ID, 13, {
+      id: "thread-projectless-child",
+      parentThreadId: projectlessManager.id,
+      title: "Projectless Managed Child",
+      titleFallback: "Projectless Managed Child",
+    });
+    const projectlessThread = makeThreadListEntry(PERSONAL_PROJECT_ID, 14, {
+      title: "Projectless Top Level Thread",
+      titleFallback: "Projectless Top Level Thread",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [projectlessManager, projectlessChild, projectlessThread],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    const standardRow = (
+      await screen.findByText("Projectless Top Level Thread")
+    ).closest("div");
+    const managerRow = screen
+      .getByText("Projectless Manager")
+      .closest("[data-sidebar-sticky-tier='manager']");
+    const childRow = screen
+      .getByText("Projectless Managed Child")
+      .closest("div");
+
+    expect(standardRow?.classList.contains("pl-2")).toBe(true);
+    expect(standardRow?.classList.contains("pl-8")).toBe(false);
+    expect(managerRow?.classList.contains("pl-2")).toBe(true);
+    expect(managerRow?.classList.contains("pl-8")).toBe(false);
+    expect(childRow?.classList.contains("pl-8")).toBe(true);
+  });
+
+  it("renders the projectless Threads section as a non-selectable header", async () => {
+    const projectlessThread = makeThreadListEntry(PERSONAL_PROJECT_ID, 11, {
+      title: "Projectless Header Thread",
+      titleFallback: "Projectless Header Thread",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [projectlessThread],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    expect(await screen.findByText("Projectless Header Thread")).toBeTruthy();
+    const threadsLabel = screen.getByText("Threads");
+    expect(threadsLabel.closest("a")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Collapse Threads" }),
+    ).toBeNull();
+  });
+
+  it("shows a thread icon only for the projectless empty Threads section", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("No threads")).toHaveLength(2);
+    });
+    const noThreadsLabels = screen.getAllByText("No threads");
+    const projectEmptyRow = noThreadsLabels[0]?.closest("div");
+    const projectlessEmptyRow = noThreadsLabels[1]?.closest("div");
+
+    expect(projectEmptyRow?.querySelector("svg")).toBeNull();
+    expect(projectEmptyRow?.className).toContain("py-0.5");
+    expect(projectEmptyRow?.className).not.toContain("h-7");
+    expect(projectEmptyRow?.className).toContain("pl-8");
+    expect(projectEmptyRow?.className).toContain("pr-2");
+    expect(noThreadsLabels[0]?.className).toContain("font-medium");
+    expect(noThreadsLabels[0]?.className).toContain(
+      "text-sidebar-foreground/85",
+    );
+    expect(projectEmptyRow?.parentElement?.className).toContain(
+      "before:bg-border-hairline",
+    );
+    expect(projectlessEmptyRow?.querySelector("svg")).toBeTruthy();
+    expect(projectlessEmptyRow?.className).toContain("py-0.5");
+    expect(projectlessEmptyRow?.className).not.toContain("h-7");
+    expect(projectlessEmptyRow?.className).toContain("px-2");
+    expect(noThreadsLabels[1]?.className).not.toContain("font-medium");
+    expect(noThreadsLabels[1]?.className).toContain("text-muted-foreground");
+    expect(projectlessEmptyRow?.parentElement?.className).not.toContain(
+      "before:bg-border-hairline",
+    );
+  });
+
+  it("honors persisted top-level sidebar section order", async () => {
+    window.localStorage.setItem(
+      "bb.sidebar.sectionOrder",
+      JSON.stringify(["threads", "projects"]),
+    );
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    const projectsLabel = await screen.findByText("Projects");
+    const threadsLabel = screen.getByText("Threads");
+    expect(
+      Boolean(
+        threadsLabel.compareDocumentPosition(projectsLabel) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
   });
 });

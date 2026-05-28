@@ -70,7 +70,7 @@ describe("formatEnvironmentDisplay", () => {
       expect(result.hostLabel).toBe("My Machine");
     });
 
-    it("labels personal workspaces explicitly", () => {
+    it("uses local direct-workspace display for personal environments", () => {
       const result = formatEnvironmentDisplay({
         environment: makeEnvironment({
           isGitRepo: false,
@@ -79,9 +79,9 @@ describe("formatEnvironmentDisplay", () => {
         isLocalHost: true,
       });
       expect(result).toMatchObject({
-        modeLabel: "Personal workspace",
+        modeLabel: "Working locally",
         mode: "direct",
-        workspaceDisplayKind: "personal",
+        workspaceDisplayKind: "other",
       });
     });
   });
@@ -127,6 +127,21 @@ describe("formatEnvironmentDisplay", () => {
       expect(result.modeLabel).toBe("Working remotely");
       expect(result.hostLabel).toBeNull();
       expect(result.location).toBe("remote");
+    });
+
+    it("uses remote direct-workspace display for personal environments", () => {
+      const result = formatEnvironmentDisplay({
+        environment: makeEnvironment({
+          isGitRepo: false,
+          workspaceProvisionType: "personal",
+        }),
+        isLocalHost: false,
+      });
+      expect(result).toMatchObject({
+        modeLabel: "Working remotely",
+        mode: "direct",
+        workspaceDisplayKind: "other",
+      });
     });
   });
 });

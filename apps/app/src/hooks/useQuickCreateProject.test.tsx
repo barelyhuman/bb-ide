@@ -40,10 +40,17 @@ interface SuspenseWrapperArgs {
 type QuickCreateProjectSnapshot = ReturnType<
   typeof import("./useQuickCreateProject").useQuickCreateProject
 >;
+type UseRootComposeProjectIdHook =
+  typeof import("@/lib/root-compose-selection").useRootComposeProjectId;
 
 interface QuickCreateProjectCaptureProps {
   onSnapshot: (snapshot: QuickCreateProjectSnapshot) => void;
   useQuickCreateProject: typeof import("./useQuickCreateProject").useQuickCreateProject;
+}
+
+interface RootComposeProjectCaptureProps {
+  onProjectId: (projectId: string) => void;
+  useRootComposeProjectId: UseRootComposeProjectIdHook;
 }
 
 function makeHost(overrides: HostOverrides = {}): Host {
@@ -117,6 +124,19 @@ function QuickCreateProjectCapture({
   useEffect(() => {
     onSnapshot(snapshot);
   }, [onSnapshot, snapshot]);
+
+  return null;
+}
+
+function RootComposeProjectCapture({
+  onProjectId,
+  useRootComposeProjectId,
+}: RootComposeProjectCaptureProps) {
+  const [projectId] = useRootComposeProjectId();
+
+  useEffect(() => {
+    onProjectId(projectId);
+  }, [onProjectId, projectId]);
 
   return null;
 }
@@ -241,7 +261,7 @@ describe("useQuickCreateProject", () => {
     ).toEqual({ kind: "create" });
   });
 
-  it("creates a project from the submitted absolute path, closes the dialog, and navigates to the project", async () => {
+  it("creates a project from the submitted absolute path, closes the dialog, and stays on root compose", async () => {
     const createdProjectRequests: CreateProjectRequest[] = [];
     const pathnames: string[] = [];
     installQuickCreateFetchRoutes(
@@ -254,9 +274,13 @@ describe("useQuickCreateProject", () => {
     );
 
     const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
+    const { useRootComposeProjectId } = await import(
+      "@/lib/root-compose-selection"
+    );
     const latestSnapshot: { current: QuickCreateProjectSnapshot | null } = {
       current: null,
     };
+    const activeRootComposeProjectIds: string[] = [];
     await act(async () => {
       render(
         <>
@@ -265,6 +289,12 @@ describe("useQuickCreateProject", () => {
               latestSnapshot.current = snapshot;
             }}
             useQuickCreateProject={useQuickCreateProject}
+          />
+          <RootComposeProjectCapture
+            onProjectId={(projectId) => {
+              activeRootComposeProjectIds.push(projectId);
+            }}
+            useRootComposeProjectId={useRootComposeProjectId}
           />
           <BackButton />
         </>,
@@ -315,18 +345,20 @@ describe("useQuickCreateProject", () => {
       ).toBe(false);
     });
     await waitFor(() => {
-      expect(pathnames.at(-1)).toBe("/projects/proj-1");
+      expect(pathnames.at(-1)).toBe("/");
+    });
+    await waitFor(() => {
+      expect(activeRootComposeProjectIds.at(-1)).toBe("proj-1");
     });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     });
 
-    expect(pathnames.at(-1)).toBe("/projects/proj-1");
-    expect(pathnames.at(-1)).not.toBe("/");
+    expect(pathnames.at(-1)).toBe("/");
   });
 
-  it("pushes created-project navigation from non-root routes so back returns to the previous project", async () => {
+  it("pushes root compose navigation from non-root routes so back returns to the previous route", async () => {
     const createdProjectRequests: CreateProjectRequest[] = [];
     const pathnames: string[] = [];
     installQuickCreateFetchRoutes(
@@ -339,9 +371,13 @@ describe("useQuickCreateProject", () => {
     );
 
     const { useQuickCreateProject } = await importFreshUseQuickCreateProject();
+    const { useRootComposeProjectId } = await import(
+      "@/lib/root-compose-selection"
+    );
     const latestSnapshot: { current: QuickCreateProjectSnapshot | null } = {
       current: null,
     };
+    const activeRootComposeProjectIds: string[] = [];
     await act(async () => {
       render(
         <>
@@ -350,6 +386,12 @@ describe("useQuickCreateProject", () => {
               latestSnapshot.current = snapshot;
             }}
             useQuickCreateProject={useQuickCreateProject}
+          />
+          <RootComposeProjectCapture
+            onProjectId={(projectId) => {
+              activeRootComposeProjectIds.push(projectId);
+            }}
+            useRootComposeProjectId={useRootComposeProjectId}
           />
           <BackButton />
         </>,
@@ -380,7 +422,10 @@ describe("useQuickCreateProject", () => {
       expect(createdProjectRequests).toHaveLength(1);
     });
     await waitFor(() => {
-      expect(pathnames.at(-1)).toBe("/projects/proj-1");
+      expect(pathnames.at(-1)).toBe("/");
+    });
+    await waitFor(() => {
+      expect(activeRootComposeProjectIds.at(-1)).toBe("proj-1");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));

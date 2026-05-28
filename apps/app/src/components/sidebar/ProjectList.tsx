@@ -5,9 +5,11 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type MouseEventHandler,
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { useAtom } from "jotai";
 import {
   closestCenter,
@@ -19,6 +21,8 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
 } from "@dnd-kit/core";
 import {
   sortableKeyboardCoordinates,
@@ -34,6 +38,7 @@ import {
 } from "@tanstack/react-query";
 import {
   findLocalPathProjectSourceForHost,
+  PERSONAL_PROJECT_ID,
   type ThreadListEntry,
 } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
@@ -64,20 +69,20 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
+import { getRootComposeRoutePath } from "@/lib/app-route-paths";
 import {
   applyNeighborReorder,
   buildNeighborReorderRequest,
 } from "@/lib/neighbor-reorder";
+import {
+  useSetRootComposeMode,
+  useSetRootComposeProjectId,
+  type RootComposeMode,
+} from "@/lib/root-compose-selection";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
-import { Icon } from "@/components/ui/icon.js";
+import { Icon, type IconName } from "@/components/ui/icon.js";
 import {
   SidebarGroupContent,
   SidebarMenu,
@@ -87,12 +92,11 @@ import {
   SidebarStickyTier,
 } from "@/components/ui/sidebar.js";
 import {
-  COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
-import { ProjectRow } from "./ProjectRow";
+import { ProjectRow, ProjectThreadTree } from "./ProjectRow";
 import type {
   ProjectRowDragBindings,
   ProjectRowProps,
@@ -102,42 +106,56 @@ import {
   collapsedEnvironmentIdsAtom,
   collapsedManagerIdsAtom,
   collapsedProjectIdsAtom,
+  DEFAULT_SIDEBAR_SECTION_ORDER,
+  sidebarSectionOrderAtom,
+  type SidebarSectionId,
 } from "./sidebarCollapsedAtoms";
+import {
+  SIDEBAR_HOVER_ACTIONS_CLASS,
+  SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
+} from "@/components/ui/sidebar-hover-actions.js";
 import {
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
 } from "./sidebarRowClasses";
 import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
-import { useDragClickSuppression } from "./useDragClickSuppression";
+import {
+  useDragClickSuppression,
+  type ConsumeDragClickSuppression,
+} from "./useDragClickSuppression";
 
 interface ProjectListProps {
   onNewProject?: () => void;
   onProjectSelect?: () => void;
-  selectedProjectId?: string;
   isCreatingProject?: boolean;
 }
 
 export interface ProjectListActionButtonsProps {
   onNewChat?: () => void;
-  onNewManager?: (projectId: string) => void;
-  selectedProjectId?: string;
-}
-
-interface ProjectListSectionLabelProps {
-  onNewProject?: () => void;
-  isCreatingProject?: boolean;
-}
-
-interface ProjectListSectionOptionsProps {
-  onNewProject: () => void;
-  isCreatingProject: boolean;
+  onNewManager?: () => void;
 }
 
 interface ProjectListShellProps {
-  onNewProject?: () => void;
-  isCreatingProject?: boolean;
   children: ReactNode;
+}
+
+interface ProjectListSectionIconButtonProps {
+  ariaLabel: string;
+  disabled?: boolean;
+  iconName: IconName;
+  onClick: () => void;
+  title: string;
+}
+
+interface ProjectListProjectsSectionActionsProps {
+  isCreatingProject: boolean;
+  onNewProject: () => void;
+}
+
+interface ProjectListThreadsSectionActionsProps {
+  onNewManager: () => void;
+  onNewThread: () => void;
 }
 
 interface LocalSourcePathTarget {
@@ -168,6 +186,11 @@ interface BuildProjectThreadQueryAggregationArgs {
   connectionGracePeriodElapsed: boolean;
 }
 
+interface OpenRootComposeForProjectArgs {
+  projectId: string;
+  mode: RootComposeMode;
+}
+
 const PROJECT_LIST_ACTION_BUTTON_CLASS = cn(
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
@@ -179,6 +202,11 @@ const PROJECT_LIST_ACTION_BUTTON_CLASS = cn(
 const PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS = cn(
   "inline-flex shrink-0 items-center justify-center",
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+);
+
+const PROJECT_LIST_SECTION_ACTION_BUTTON_CLASS = cn(
+  "inline-flex items-center justify-center rounded-md text-muted-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 disabled:opacity-50",
+  "h-6 w-7",
 );
 
 interface ProjectThreadListStateArgs {
@@ -197,6 +225,29 @@ interface SortableProjectRowProps extends ProjectRowProps {
   reorderDisabled: boolean;
 }
 
+interface SidebarSectionDragBindings {
+  attributes: DraggableAttributes;
+  disabled: boolean;
+  listeners: DraggableSyntheticListeners;
+  setActivatorNodeRef: (element: HTMLDivElement | null) => void;
+}
+
+interface TopLevelSidebarSectionProps {
+  label: string;
+  children: ReactNode;
+  actions?: ReactNode;
+  actionsAlwaysVisible?: boolean;
+  dragBindings?: SidebarSectionDragBindings;
+  sectionRef?: (element: HTMLDivElement | null) => void;
+  sectionStyle?: CSSProperties;
+  consumeClickSuppression?: ConsumeDragClickSuppression;
+}
+
+interface SortableSidebarSectionProps extends TopLevelSidebarSectionProps {
+  id: SidebarSectionId;
+  disabled: boolean;
+}
+
 interface ItemOrderEntry {
   id: string;
 }
@@ -209,6 +260,41 @@ function hasSameItemOrder(
     return false;
   }
   return left.every((item, index) => item.id === right[index]?.id);
+}
+
+function hasSameSidebarSectionOrder(
+  left: readonly SidebarSectionId[],
+  right: readonly SidebarSectionId[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((sectionId, index) => sectionId === right[index]);
+}
+
+function isSidebarSectionId(value: string): value is SidebarSectionId {
+  return value === "projects" || value === "threads";
+}
+
+function normalizeSidebarSectionOrder(
+  order: readonly SidebarSectionId[],
+): SidebarSectionId[] {
+  const seen = new Set<SidebarSectionId>();
+  const normalized: SidebarSectionId[] = [];
+  for (const sectionId of order) {
+    if (!isSidebarSectionId(sectionId) || seen.has(sectionId)) {
+      continue;
+    }
+    seen.add(sectionId);
+    normalized.push(sectionId);
+  }
+  for (const sectionId of DEFAULT_SIDEBAR_SECTION_ORDER) {
+    if (seen.has(sectionId)) {
+      continue;
+    }
+    normalized.push(sectionId);
+  }
+  return normalized;
 }
 
 function buildProjectThreadQueryAggregation({
@@ -283,45 +369,182 @@ function toggleCollapsedIdList({
   return Array.from(next);
 }
 
-function ProjectListSectionOptions({
-  onNewProject,
-  isCreatingProject,
-}: ProjectListSectionOptionsProps) {
+function ProjectListSectionIconButton({
+  ariaLabel,
+  disabled = false,
+  iconName,
+  onClick,
+  title,
+}: ProjectListSectionIconButtonProps) {
+  const handleClick = useCallback<MouseEventHandler<HTMLButtonElement>>(
+    (event) => {
+      event.stopPropagation();
+      onClick();
+    },
+    [onClick],
+  );
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          title="Project options"
-          aria-label="Project options"
-          className={cn(
-            "inline-flex items-center justify-center rounded-md text-muted-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground disabled:opacity-50",
-            COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
-          )}
-        >
-          <Icon
-            name="MoreHorizontal"
-            className={COARSE_POINTER_ICON_SIZE_CLASS}
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="w-40"
-        mobileTitle="Project options"
-      >
-        <DropdownMenuItem
-          disabled={isCreatingProject}
-          onSelect={() => {
-            window.setTimeout(onNewProject, 0);
-          }}
-        >
-          Add project
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <button
+      type="button"
+      title={title}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      className={PROJECT_LIST_SECTION_ACTION_BUTTON_CLASS}
+      onClick={handleClick}
+    >
+      <Icon name={iconName} className={COARSE_POINTER_ICON_SIZE_CLASS} />
+    </button>
   );
 }
+
+function ProjectListProjectsSectionActions({
+  isCreatingProject,
+  onNewProject,
+}: ProjectListProjectsSectionActionsProps) {
+  return (
+    <ProjectListSectionIconButton
+      ariaLabel="New project"
+      title="New project"
+      disabled={isCreatingProject}
+      iconName="FolderPlus"
+      onClick={onNewProject}
+    />
+  );
+}
+
+function ProjectListThreadsSectionActions({
+  onNewManager,
+  onNewThread,
+}: ProjectListThreadsSectionActionsProps) {
+  return (
+    <>
+      <ProjectListSectionIconButton
+        ariaLabel="New manager"
+        title="New manager"
+        iconName="UserRoundPlus"
+        onClick={onNewManager}
+      />
+      <ProjectListSectionIconButton
+        ariaLabel="New thread"
+        title="New thread"
+        iconName="MessageSquarePlus"
+        onClick={onNewThread}
+      />
+    </>
+  );
+}
+
+function TopLevelSidebarSection({
+  label,
+  children,
+  actions,
+  actionsAlwaysVisible = false,
+  dragBindings,
+  sectionRef,
+  sectionStyle,
+  consumeClickSuppression,
+}: TopLevelSidebarSectionProps) {
+  const handleClickCapture = useCallback<MouseEventHandler<HTMLDivElement>>(
+    (event) => {
+      if (!consumeClickSuppression?.()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [consumeClickSuppression],
+  );
+  return (
+    <div
+      ref={sectionRef}
+      style={sectionStyle}
+      className="group/sidebar-section min-w-0"
+      onClickCapture={handleClickCapture}
+    >
+      <SidebarStickyTier
+        ref={dragBindings?.setActivatorNodeRef}
+        tier="label"
+        className={cn(
+          SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
+          "rounded-md pr-1 text-muted-foreground transition-colors",
+          dragBindings &&
+            !dragBindings.disabled &&
+            "select-none cursor-grab active:cursor-grabbing",
+        )}
+        title={label}
+        {...dragBindings?.attributes}
+        {...(dragBindings?.listeners ?? {})}
+      >
+        <span
+          className={cn(
+            "relative z-10 min-w-0 flex-1 truncate text-left",
+            actions && "pr-14",
+          )}
+        >
+          {label}
+        </span>
+        {actions ? (
+          <span className="absolute right-0 top-1/2 z-20 inline-flex -translate-y-1/2 items-center">
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center",
+                !actionsAlwaysVisible && SIDEBAR_HOVER_ACTIONS_CLASS,
+              )}
+            >
+              {actions}
+            </span>
+          </span>
+        ) : null}
+      </SidebarStickyTier>
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+const SortableSidebarSection = memo(function SortableSidebarSection({
+  id,
+  disabled,
+  ...props
+}: SortableSidebarSectionProps) {
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({
+    id,
+    disabled,
+    transition: SIDEBAR_SORTABLE_TRANSITION,
+  });
+  const style = useMemo<CSSProperties>(
+    () => ({
+      transform: CSS.Transform.toString(transform),
+      transition,
+    }),
+    [transform, transition],
+  );
+  const dragBindings = useMemo<SidebarSectionDragBindings>(
+    () => ({
+      attributes,
+      disabled,
+      listeners,
+      setActivatorNodeRef,
+    }),
+    [attributes, disabled, listeners, setActivatorNodeRef],
+  );
+
+  return (
+    <TopLevelSidebarSection
+      {...props}
+      dragBindings={dragBindings}
+      sectionRef={setNodeRef}
+      sectionStyle={style}
+    />
+  );
+});
 
 const SortableProjectRow = memo(function SortableProjectRow({
   project,
@@ -370,37 +593,18 @@ const SortableProjectRow = memo(function SortableProjectRow({
   );
 });
 
-function ProjectListSectionLabel({
-  onNewProject,
-  isCreatingProject = false,
-}: ProjectListSectionLabelProps) {
-  return (
-    <SidebarStickyTier tier="label" className="justify-between pr-1">
-      Projects
-      {onNewProject ? (
-        <ProjectListSectionOptions
-          onNewProject={onNewProject}
-          isCreatingProject={isCreatingProject}
-        />
-      ) : null}
-    </SidebarStickyTier>
-  );
-}
-
 export function ProjectListActionButtons({
   onNewChat,
   onNewManager,
-  selectedProjectId,
 }: ProjectListActionButtonsProps) {
   const isNewChatDisabled = !onNewChat;
-  const isNewManagerDisabled = !onNewManager || !selectedProjectId;
+  const isNewManagerDisabled = !onNewManager;
   const newChatTitle = isNewChatDisabled
-    ? "Select a project to start a new thread"
+    ? "Start a new thread"
     : "New thread";
-  const newManagerTitle =
-    !onNewManager || !selectedProjectId
-      ? "Select a project to hire a new manager"
-      : "New manager";
+  const newManagerTitle = isNewManagerDisabled
+    ? "Hire a new manager"
+    : "New manager";
 
   return (
     <div className="space-y-1">
@@ -425,10 +629,7 @@ export function ProjectListActionButtons({
         size="sm"
         variant="ghost"
         className={PROJECT_LIST_ACTION_BUTTON_CLASS}
-        onClick={() => {
-          if (!selectedProjectId) return;
-          onNewManager?.(selectedProjectId);
-        }}
+        onClick={onNewManager}
         disabled={isNewManagerDisabled}
         title={newManagerTitle}
       >
@@ -444,19 +645,11 @@ export function ProjectListActionButtons({
 }
 
 export function ProjectListShell({
-  onNewProject,
-  isCreatingProject = false,
   children,
 }: ProjectListShellProps) {
   return (
     <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
-      <ProjectListSectionLabel
-        onNewProject={onNewProject}
-        isCreatingProject={isCreatingProject}
-      />
-      <SidebarGroupContent>
-        <SidebarMenu className="gap-1">{children}</SidebarMenu>
-      </SidebarGroupContent>
+      <SidebarGroupContent>{children}</SidebarGroupContent>
     </SidebarStickyStack>
   );
 }
@@ -464,9 +657,11 @@ export function ProjectListShell({
 function ProjectListComponent({
   onNewProject,
   onProjectSelect,
-  selectedProjectId,
   isCreatingProject = false,
 }: ProjectListProps) {
+  const navigate = useNavigate();
+  const setRootComposeProjectId = useSetRootComposeProjectId();
+  const setRootComposeMode = useSetRootComposeMode();
   const sidebarBootstrapQuery = useSidebarBootstrap();
   const hasSidebarBootstrapSettled =
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
@@ -483,38 +678,45 @@ function ProjectListComponent({
     isFetching: sidebarBootstrapQuery.isFetching || projectsFetching,
     isLoadingError: projectsLoadingError,
   });
-  const projectIds = useMemo(
+  const standardProjectIds = useMemo(
     () => (projects ?? []).map((project) => project.id),
     [projects],
   );
+  const threadQueryProjectIds = useMemo(
+    () =>
+      hasSidebarBootstrapSettled
+        ? [...standardProjectIds, PERSONAL_PROJECT_ID]
+        : standardProjectIds,
+    [hasSidebarBootstrapSettled, standardProjectIds],
+  );
   const threadQueries = useMemo(
     () =>
-      projectIds.map((projectId) => ({
+      threadQueryProjectIds.map((projectId) => ({
         enabled: hasSidebarBootstrapSettled,
         queryKey: threadListQueryKey({ projectId, archived: false }),
         queryFn: ({ signal }: ThreadQueryFnContext) =>
           api.listThreads({ projectId, archived: false }, signal),
         staleTime: 10_000,
       })),
-    [hasSidebarBootstrapSettled, projectIds],
+    [hasSidebarBootstrapSettled, threadQueryProjectIds],
   );
   // Keep combine stable so useQueries skips aggregation on unrelated renders.
   const combineProjectThreadQueries = useCallback(
     (results: readonly ProjectThreadQueryResult[]) =>
       buildProjectThreadQueryAggregation({
-        projectIds,
+        projectIds: threadQueryProjectIds,
         queryResults: results,
         serverConnectionState,
         connectionGracePeriodElapsed,
       }),
-    [projectIds, serverConnectionState, connectionGracePeriodElapsed],
+    [threadQueryProjectIds, serverConnectionState, connectionGracePeriodElapsed],
   );
   const { threads, threadStatesByProjectId } = useQueries({
     queries: threadQueries,
     combine: combineProjectThreadQueries,
   });
   const { localHostId } = useHostDaemon();
-  const { threadId: selectedThreadId, isProjectMainView } = useAppRoute();
+  const { threadId: selectedThreadId } = useAppRoute();
 
   const localSourceTargets = useMemo(() => {
     if (!localHostId || !projects) return [];
@@ -567,6 +769,11 @@ function ProjectListComponent({
     beginDragClickSuppression: beginProjectDragClickSuppression,
     clearDragClickSuppressionSoon: clearProjectDragClickSuppressionSoon,
     consumeDragClickSuppression: consumeProjectClickSuppression,
+  } = useDragClickSuppression();
+  const {
+    beginDragClickSuppression: beginSidebarSectionDragClickSuppression,
+    clearDragClickSuppressionSoon: clearSidebarSectionDragClickSuppressionSoon,
+    consumeDragClickSuppression: consumeSidebarSectionClickSuppression,
   } = useDragClickSuppression();
   const projectSensors = useSensors(
     useSensor(MouseSensor, {
@@ -652,6 +859,41 @@ function ProjectListComponent({
     },
     [reorderProjectManagerMutate],
   );
+  const openRootComposeForProject = useCallback(
+    ({ projectId, mode }: OpenRootComposeForProjectArgs) => {
+      setRootComposeProjectId(projectId);
+      setRootComposeMode(mode);
+      onProjectSelect?.();
+      navigate(getRootComposeRoutePath(), {
+        state: { focusPrompt: true },
+      });
+    },
+    [navigate, onProjectSelect, setRootComposeMode, setRootComposeProjectId],
+  );
+  const handleCreateProjectThread = useCallback(
+    (projectId: string) => {
+      openRootComposeForProject({ projectId, mode: "thread" });
+    },
+    [openRootComposeForProject],
+  );
+  const handleCreateProjectManager = useCallback(
+    (projectId: string) => {
+      openRootComposeForProject({ projectId, mode: "manager" });
+    },
+    [openRootComposeForProject],
+  );
+  const handleCreateProjectlessThread = useCallback(() => {
+    openRootComposeForProject({
+      projectId: PERSONAL_PROJECT_ID,
+      mode: "thread",
+    });
+  }, [openRootComposeForProject]);
+  const handleCreateProjectlessManager = useCallback(() => {
+    openRootComposeForProject({
+      projectId: PERSONAL_PROJECT_ID,
+      mode: "manager",
+    });
+  }, [openRootComposeForProject]);
   useEffect(() => {
     if (!optimisticProjectOrder || !projects) {
       return;
@@ -660,7 +902,6 @@ function ProjectListComponent({
       setOptimisticProjectOrder(null);
     }
   }, [optimisticProjectOrder, projects]);
-
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(
     collapsedProjectIdsAtom,
   );
@@ -669,6 +910,9 @@ function ProjectListComponent({
   );
   const [collapsedEnvironmentIdList, setCollapsedEnvironmentIdList] = useAtom(
     collapsedEnvironmentIdsAtom,
+  );
+  const [sidebarSectionOrderList, setSidebarSectionOrderList] = useAtom(
+    sidebarSectionOrderAtom,
   );
   const collapsedProjectIds = useMemo(
     () => new Set(collapsedProjectIdList),
@@ -682,6 +926,22 @@ function ProjectListComponent({
     () => new Set(collapsedEnvironmentIdList),
     [collapsedEnvironmentIdList],
   );
+  const sidebarSectionOrder = useMemo(
+    () => normalizeSidebarSectionOrder(sidebarSectionOrderList),
+    [sidebarSectionOrderList],
+  );
+  useEffect(() => {
+    if (
+      hasSameSidebarSectionOrder(sidebarSectionOrderList, sidebarSectionOrder)
+    ) {
+      return;
+    }
+    setSidebarSectionOrderList(sidebarSectionOrder);
+  }, [
+    setSidebarSectionOrderList,
+    sidebarSectionOrder,
+    sidebarSectionOrderList,
+  ]);
   const threadsByProject = useMemo(() => {
     const grouped = new Map<string, ThreadListEntry[]>();
 
@@ -739,11 +999,67 @@ function ProjectListComponent({
     [setCollapsedEnvironmentIdList],
   );
 
-  return (
-    <ProjectListShell
-      onNewProject={onNewProject}
-      isCreatingProject={isCreatingProject}
-    >
+  const sidebarSectionSensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const handleSidebarSectionDragStart = useCallback((_event: DragStartEvent) => {
+    beginSidebarSectionDragClickSuppression();
+  }, [beginSidebarSectionDragClickSuppression]);
+  const handleSidebarSectionDragCancel = useCallback(() => {
+    clearSidebarSectionDragClickSuppressionSoon();
+  }, [clearSidebarSectionDragClickSuppressionSoon]);
+  const handleSidebarSectionDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      clearSidebarSectionDragClickSuppressionSoon();
+      const { active, over } = event;
+      if (
+        !over ||
+        typeof active.id !== "string" ||
+        typeof over.id !== "string" ||
+        !isSidebarSectionId(active.id) ||
+        !isSidebarSectionId(over.id)
+      ) {
+        return;
+      }
+      const request = buildNeighborReorderRequest({
+        activeId: active.id,
+        overId: over.id,
+        items: sidebarSectionOrder.map((id) => ({ id })),
+      });
+      if (!request) {
+        return;
+      }
+      const nextOrder = applyNeighborReorder({
+        items: sidebarSectionOrder.map((id) => ({ id })),
+        request,
+      });
+      setSidebarSectionOrderList(
+        nextOrder.map((item) => item.id).filter(isSidebarSectionId),
+      );
+    },
+    [
+      clearSidebarSectionDragClickSuppressionSoon,
+      setSidebarSectionOrderList,
+      sidebarSectionOrder,
+    ],
+  );
+
+  const projectlessThreadListState =
+    getProjectThreadListState({
+      status: threadStatesByProjectId.get(PERSONAL_PROJECT_ID)?.status,
+      threads: threadsByProject.get(PERSONAL_PROJECT_ID),
+    });
+
+  const projectsSectionContent = (
+    <SidebarMenu className="gap-1">
       {projectsState.status === "loading" ? (
         <>
           <SidebarMenuSkeleton />
@@ -779,14 +1095,14 @@ function ProjectListComponent({
                   reorderDisabled={projectReorderDisabled}
                   threadListState={threadListState}
                   selectedThreadId={selectedThreadId}
-                  isActive={
-                    selectedProjectId === project.id && isProjectMainView
-                  }
+                  isActive={false}
                   isCollapsed={collapsedProjectIds.has(project.id)}
                   collapsedManagerIds={collapsedManagerIds}
                   collapsedEnvironmentIds={collapsedEnvironmentIds}
                   isLocalPathInvalid={isLocalPathInvalid}
                   onProjectSelect={onProjectSelect}
+                  onCreateProjectThread={handleCreateProjectThread}
+                  onCreateProjectManager={handleCreateProjectManager}
                   onToggleProjectCollapsed={toggleProjectCollapsed}
                   onToggleManagerCollapsed={toggleManagerCollapsed}
                   onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
@@ -816,12 +1132,14 @@ function ProjectListComponent({
               project={project}
               threadListState={threadListState}
               selectedThreadId={selectedThreadId}
-              isActive={selectedProjectId === project.id && isProjectMainView}
+              isActive={false}
               isCollapsed={collapsedProjectIds.has(project.id)}
               collapsedManagerIds={collapsedManagerIds}
               collapsedEnvironmentIds={collapsedEnvironmentIds}
               isLocalPathInvalid={isLocalPathInvalid}
               onProjectSelect={onProjectSelect}
+              onCreateProjectThread={handleCreateProjectThread}
+              onCreateProjectManager={handleCreateProjectManager}
               onToggleProjectCollapsed={toggleProjectCollapsed}
               onToggleManagerCollapsed={toggleManagerCollapsed}
               onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
@@ -845,6 +1163,81 @@ function ProjectListComponent({
           />
         </SidebarMenuItem>
       )}
+    </SidebarMenu>
+  );
+  const threadsSectionContent = (
+    <ProjectThreadTree
+      projectId={PERSONAL_PROJECT_ID}
+      threadListState={projectlessThreadListState}
+      selectedThreadId={selectedThreadId}
+      collapsedManagerIds={collapsedManagerIds}
+      collapsedEnvironmentIds={collapsedEnvironmentIds}
+      variant="section"
+      onProjectSelect={onProjectSelect}
+      onToggleManagerCollapsed={toggleManagerCollapsed}
+      onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
+      isManagerReorderPending={isManagerReorderPending}
+      onReorderManager={handleReorderManager}
+    />
+  );
+  const projectsSectionActions = onNewProject ? (
+    <ProjectListProjectsSectionActions
+      onNewProject={onNewProject}
+      isCreatingProject={isCreatingProject}
+    />
+  ) : undefined;
+  const projectsSectionActionsAlwaysVisible =
+    projectsState.status === "ready" && (renderedProjects?.length ?? 0) === 0;
+  const threadsSectionActions = (
+    <ProjectListThreadsSectionActions
+      onNewThread={handleCreateProjectlessThread}
+      onNewManager={handleCreateProjectlessManager}
+    />
+  );
+
+  return (
+    <ProjectListShell>
+      <DndContext
+        sensors={sidebarSectionSensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleSidebarSectionDragStart}
+        onDragCancel={handleSidebarSectionDragCancel}
+        onDragEnd={handleSidebarSectionDragEnd}
+      >
+        <SortableContext
+          items={sidebarSectionOrder}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-4">
+            {sidebarSectionOrder.map((sectionId) =>
+              sectionId === "projects" ? (
+                <SortableSidebarSection
+                  key={sectionId}
+                  id={sectionId}
+                  label="Projects"
+                  disabled={sidebarSectionOrder.length < 2}
+                  actions={projectsSectionActions}
+                  actionsAlwaysVisible={projectsSectionActionsAlwaysVisible}
+                  consumeClickSuppression={consumeSidebarSectionClickSuppression}
+                >
+                  {projectsSectionContent}
+                </SortableSidebarSection>
+              ) : (
+                <SortableSidebarSection
+                  key={sectionId}
+                  id={sectionId}
+                  label="Threads"
+                  disabled={sidebarSectionOrder.length < 2}
+                  actions={threadsSectionActions}
+                  consumeClickSuppression={consumeSidebarSectionClickSuppression}
+                >
+                  {threadsSectionContent}
+                </SortableSidebarSection>
+              ),
+            )}
+          </div>
+        </SortableContext>
+      </DndContext>
     </ProjectListShell>
   );
 }

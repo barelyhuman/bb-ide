@@ -487,7 +487,7 @@ describe("threads", () => {
     expect(displayKindsByThreadId.get(worktreeThread.id)).toBe(
       "managed-worktree",
     );
-    expect(displayKindsByThreadId.get(personalThread.id)).toBe("personal");
+    expect(displayKindsByThreadId.get(personalThread.id)).toBe("other");
 
     const environmentIdentityByThreadId = new Map(
       listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(

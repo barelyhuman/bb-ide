@@ -179,6 +179,32 @@
     height: var(--bb-sidebar-sticky-tier-shield-bottom-height, 0);
   }
 
+  .bb-sidebar-hover-actions {
+    pointer-events: none;
+    opacity: 0;
+    transition-property: opacity;
+    transition-duration: 150ms;
+  }
+
+  .bb-sidebar-hover-actions-row:is(:hover, :has(:focus-visible))
+    .bb-sidebar-hover-actions,
+  .bb-sidebar-hover-actions[data-sidebar-hover-actions-open="true"] {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  .bb-sidebar-hover-actions-fade {
+    opacity: 1;
+    transition-property: opacity;
+    transition-duration: 150ms;
+  }
+
+  .bb-sidebar-hover-actions-row:is(:hover, :has(:focus-visible))
+    .bb-sidebar-hover-actions-fade,
+  .bb-sidebar-hover-actions-fade[data-sidebar-hover-actions-open="true"] {
+    opacity: 0;
+  }
+
   [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="label"] {
     --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-label-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-label-height);

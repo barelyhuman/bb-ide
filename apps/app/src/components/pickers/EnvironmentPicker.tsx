@@ -93,7 +93,6 @@ export interface EnvironmentPickerUIProps {
   sources: readonly ProjectSource[];
   hosts: readonly Host[];
   isLocalHost: (hostId: string | null | undefined) => boolean;
-  personalWorkspace?: boolean;
   /** When true, the "Reuse existing worktree" entry is disabled — the
    * caller signals that the project has no worktree envs available to
    * reuse. The entry is always rendered so the affordance stays
@@ -113,7 +112,6 @@ export function EnvironmentPickerUI({
   sources,
   hosts,
   isLocalHost,
-  personalWorkspace = false,
   reuseDisabled,
   muted,
   defaultOpen,
@@ -136,19 +134,14 @@ export function EnvironmentPickerUI({
     }
     const host = hosts.find((h) => h.id === parsed.hostId);
     const isLocal = isLocalHost(parsed.hostId);
-    const modeLabel = personalWorkspace
-      ? "Personal workspace"
-      : parsed.mode === "worktree"
+    const modeLabel =
+      parsed.mode === "worktree"
         ? "New worktree"
         : isLocal
           ? "Work locally"
           : "Work remotely";
     const icon = getEnvironmentWorkspaceLabelIconName(
-      personalWorkspace
-        ? "personal"
-        : parsed.mode === "worktree"
-          ? "managed-worktree"
-          : "other",
+      parsed.mode === "worktree" ? "managed-worktree" : "other",
     );
     if (isLocal) {
       return { modeLabel, icon };
@@ -159,7 +152,7 @@ export function EnvironmentPickerUI({
       icon,
       hostConnected: host?.status === "connected",
     };
-  }, [parsed, hosts, isLocalHost, personalWorkspace]);
+  }, [parsed, hosts, isLocalHost]);
 
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
@@ -209,26 +202,22 @@ export function EnvironmentPickerUI({
         mobileTitle="Environment"
       >
         {hostSections.map((section) => {
-          const enabled =
-            section.isConnected && (personalWorkspace || section.hasSource);
+          const enabled = section.isConnected && section.hasSource;
           return (
             <HostSectionGroup
               key={section.host.id}
               section={section}
               enabled={enabled}
-              personalWorkspace={personalWorkspace}
               value={value}
               onChange={onChange}
             />
           );
         })}
-        {personalWorkspace ? null : (
-          <ReuseSection
-            isReuseSelected={parsed?.type === "reuse"}
-            disabled={Boolean(reuseDisabled)}
-            onChange={onChange}
-          />
-        )}
+        <ReuseSection
+          isReuseSelected={parsed?.type === "reuse"}
+          disabled={Boolean(reuseDisabled)}
+          onChange={onChange}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -244,7 +233,6 @@ export interface EnvironmentPickerProps {
   value: string;
   onChange: (value: string) => void;
   sources: readonly ProjectSource[];
-  personalWorkspace?: boolean;
   reuseDisabled?: boolean;
   muted?: boolean;
 }
@@ -253,7 +241,6 @@ export function EnvironmentPicker({
   value,
   onChange,
   sources,
-  personalWorkspace,
   reuseDisabled,
   muted,
 }: EnvironmentPickerProps) {
@@ -267,7 +254,6 @@ export function EnvironmentPicker({
       sources={sources}
       hosts={hosts}
       isLocalHost={isLocalHost}
-      personalWorkspace={personalWorkspace}
       reuseDisabled={reuseDisabled}
       muted={muted}
     />
@@ -338,7 +324,6 @@ function ReuseSection({
 interface HostSectionGroupProps {
   section: HostSection;
   enabled: boolean;
-  personalWorkspace: boolean;
   value: string;
   onChange: (value: string) => void;
 }
@@ -346,7 +331,6 @@ interface HostSectionGroupProps {
 function HostSectionGroup({
   section,
   enabled,
-  personalWorkspace,
   value,
   onChange,
 }: HostSectionGroupProps) {
@@ -361,32 +345,22 @@ function HostSectionGroup({
         {section.isConnected ? <HostStatusDot /> : null}
       </DropdownMenuLabel>
       {enabled ? (
-        personalWorkspace ? (
+        <>
           <EnvironmentMenuItem
-            label="Personal workspace"
-            icon={getEnvironmentWorkspaceLabelIconName("personal")}
+            label={section.isLocal ? "Work locally" : "Work remotely"}
+            icon={getEnvironmentWorkspaceLabelIconName("other")}
             itemValue={localValue}
             selectedValue={value}
             onSelect={onChange}
           />
-        ) : (
-          <>
-            <EnvironmentMenuItem
-              label={section.isLocal ? "Work locally" : "Work remotely"}
-              icon={getEnvironmentWorkspaceLabelIconName("other")}
-              itemValue={localValue}
-              selectedValue={value}
-              onSelect={onChange}
-            />
-            <EnvironmentMenuItem
-              label="New worktree"
-              icon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
-              itemValue={worktreeValue}
-              selectedValue={value}
-              onSelect={onChange}
-            />
-          </>
-        )
+          <EnvironmentMenuItem
+            label="New worktree"
+            icon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
+            itemValue={worktreeValue}
+            selectedValue={value}
+            onSelect={onChange}
+          />
+        </>
       ) : (
         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
           {!section.isConnected

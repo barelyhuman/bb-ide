@@ -60,6 +60,7 @@ import {
   timelineRowRenderSignature,
   timelineRowsSignature,
 } from "./timelineRowSignatures.js";
+import { getThreadRoutePath } from "@/lib/app-route-paths";
 
 export interface ThreadTimelineRowsProps {
   erroredTurnSummaryIds: ReadonlySet<string>;
@@ -1116,7 +1117,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
     return (link) => {
       switch (link.kind) {
         case "thread":
-          return `/projects/${projectId}/threads/${link.threadId}`;
+          return getThreadRoutePath({ projectId, threadId: link.threadId });
         default:
           return assertNever(link.kind);
       }

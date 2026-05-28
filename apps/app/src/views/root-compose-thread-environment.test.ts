@@ -1,19 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
+import {
+  resolveRootComposeThreadEnvironment,
+  type RootComposeSelectedBranch,
+} from "./root-compose-thread-environment";
 
 const projectId = "proj_123";
 const hostWorktreeEnvironmentValue = "host:host_123:worktree";
 const hostLocalEnvironmentValue = "host:host_123:local";
 
-function selectedBranch(name: string) {
+function selectedBranch(name: string): RootComposeSelectedBranch {
   return { name, isNew: false };
 }
 
-describe("resolveProjectMainThreadEnvironment", () => {
+describe("resolveRootComposeThreadEnvironment", () => {
   it("omits unmanaged branch checkout when no branch is selected", () => {
     expect(
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
         selectedBranch: null,
@@ -30,7 +33,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
 
   it("sends explicit existing branch checkout for host local", () => {
     expect(
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
         selectedBranch: selectedBranch("develop"),
@@ -48,7 +51,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
 
   it("sends explicit new branch checkout for host local", () => {
     expect(
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId,
         selectedBranch: { name: "develop", isNew: true },
@@ -63,7 +66,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
 
   it("sends default base branch for managed worktrees without an explicit pick", () => {
     expect(
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: hostWorktreeEnvironmentValue,
         projectId,
         selectedBranch: null,
@@ -78,7 +81,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
 
   it("sends a named base branch when the selected branch matches the env's current", () => {
     expect(
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: hostWorktreeEnvironmentValue,
         projectId,
         selectedBranch: selectedBranch("develop"),
@@ -93,7 +96,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
 
   it("uses personal workspaces for the personal project", () => {
     expect(
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: hostLocalEnvironmentValue,
         projectId: PERSONAL_PROJECT_ID,
         selectedBranch: selectedBranch("develop"),

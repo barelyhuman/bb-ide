@@ -45,6 +45,20 @@ export function Overview() {
       >
         <ProjectSelectorInteractive allowNoProject />
       </StoryRow>
+      <StoryRow
+        label="no projects"
+        hint='empty project list with allowNoProject=true — menu adds a "New project" item'
+      >
+        <ProjectSelector
+          projects={[]}
+          value={null}
+          onChange={noop}
+          allowNoProject
+          createProject={{ onCreate: noop }}
+          defaultOpen
+          modal={false}
+        />
+      </StoryRow>
     </StoryCard>
   );
 }

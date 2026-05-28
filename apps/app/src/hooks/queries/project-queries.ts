@@ -8,6 +8,7 @@ import type {
   WorkspaceFileListResponse,
   WorkspacePathListResponse,
 } from "@bb/server-contract";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import * as api from "@/lib/api";
 import {
   projectFilesQueryKey,
@@ -87,6 +88,13 @@ export function useSidebarBootstrap(options?: QueryOptions) {
           project.threads,
         );
       }
+      queryClient.setQueryData(
+        threadListQueryKey({
+          projectId: PERSONAL_PROJECT_ID,
+          archived: false,
+        }),
+        response.personalProject.threads,
+      );
       return response;
     },
     enabled: options?.enabled ?? true,

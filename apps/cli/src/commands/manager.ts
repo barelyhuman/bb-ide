@@ -1,15 +1,15 @@
 import { Command } from "commander";
-import { type Thread } from "@bb/domain";
+import { PERSONAL_PROJECT_ID, type Thread } from "@bb/domain";
 import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
 import { renderBorderlessTable } from "../table.js";
+import { resolveProjectIdWithLabel } from "../context-env.js";
 import {
   confirmDestructiveAction,
   outputJson,
   parseReasoningLevel,
   printContextLabel,
-  requireProjectIdWithLabel,
 } from "./helpers.js";
 import {
   MANAGED_PERMISSION_MODE_HELP,
@@ -43,18 +43,32 @@ interface ManagerDeleteCommandOptions {
   json?: boolean;
 }
 
+interface ManagerListQueryArgs {
+  projectId?: string;
+}
+
+interface ManagerListQuery {
+  projectId?: string;
+  type: "manager";
+}
+
+interface PrintThreadsTableArgs {
+  includeProject: boolean;
+  threads: Thread[];
+}
+
 export function registerManagerCommands(
   program: Command,
   getUrl: () => string,
 ): void {
   const manager = program
     .command("manager")
-    .description("Manage project managers");
+    .description("Manage managers");
 
   manager
     .command("hire [projectId]")
     .description(
-      "Hire a new manager for a project; omitted provider and execution flags use remembered manager defaults or the server manager policy",
+      "Hire a new manager; defaults to projectless when no project context is set",
     )
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--name <name>", "Manager name")
@@ -84,11 +98,18 @@ export function registerManagerCommands(
           opts: ManagerHireCommandOptions,
         ) => {
           const client = createClient(getUrl());
-          const resolvedProject = requireProjectIdWithLabel(
+          const resolvedProject = resolveProjectIdWithLabel(
             projectIdArg ?? opts.project,
           );
-          const projectId = resolvedProject.id;
-          printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+          const projectId = resolvedProject?.id ?? PERSONAL_PROJECT_ID;
+          if (resolvedProject) {
+            printContextLabel(
+              resolvedProject,
+              "Project",
+              "BB_PROJECT_ID",
+              opts,
+            );
+          }
           const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
           const permissionMode = parsePermissionMode(opts.permissionMode);
           let hostId: string | undefined = opts.host;
@@ -124,8 +145,13 @@ export function registerManagerCommands(
 
   manager
     .command("list [projectId]")
-    .description("List managers for a project")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .description(
+      "List managers; without project context, lists managers across all projects",
+    )
+    .option(
+      "--project <id>",
+      "Project ID (defaults to BB_PROJECT_ID; omit both to list all projects)",
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(
@@ -134,14 +160,23 @@ export function registerManagerCommands(
           opts: ManagerListCommandOptions,
         ) => {
           const client = createClient(getUrl());
-          const resolvedProject = requireProjectIdWithLabel(
+          const resolvedProject = resolveProjectIdWithLabel(
             projectIdArg ?? opts.project,
           );
-          const projectId = resolvedProject.id;
-          printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+          if (resolvedProject) {
+            printContextLabel(
+              resolvedProject,
+              "Project",
+              "BB_PROJECT_ID",
+              opts,
+            );
+          }
+          const query = buildManagerListQuery({
+            projectId: resolvedProject?.id,
+          });
           const managers = await unwrap<Thread[]>(
             client.api.v1.threads.$get({
-              query: { projectId, type: "manager" },
+              query,
             }),
           );
           if (outputJson(opts, managers)) return;
@@ -149,7 +184,10 @@ export function registerManagerCommands(
             console.log("No managers hired");
             return;
           }
-          printThreadsTable(managers);
+          printThreadsTable({
+            includeProject: resolvedProject === undefined,
+            threads: managers,
+          });
         },
       ),
     );
@@ -259,28 +297,54 @@ function printManagerThread(thread: Thread): void {
   console.log(`  Title:    ${thread.title ?? "<untitled>"}`);
   console.log(`  Type:     ${thread.type}`);
   console.log(`  Status:   ${thread.status}`);
-  console.log(`  Project:  ${thread.projectId}`);
+  console.log(`  Project:  ${formatProjectLabel(thread.projectId)}`);
   console.log(`  Created:  ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`  Updated:  ${new Date(thread.updatedAt).toLocaleString()}`);
   console.log("");
 }
 
-function printThreadsTable(threads: Thread[]): void {
-  const rows = threads.map((thread) => [
-    thread.id,
-    thread.status,
-    thread.title ?? "<untitled>",
-  ]);
-  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
-  const statusWidth = Math.max(6, ...rows.map((row) => row[1].length));
-  const titleWidth = Math.max(5, ...rows.map((row) => row[2].length));
-  const table = renderBorderlessTable(
-    {
-      head: ["ID", "Status", "Title"],
-      colWidths: [idWidth, statusWidth, titleWidth],
-    },
-    rows,
+function buildManagerListQuery(args: ManagerListQueryArgs): ManagerListQuery {
+  return {
+    ...(args.projectId ? { projectId: args.projectId } : {}),
+    type: "manager",
+  };
+}
+
+function formatProjectLabel(projectId: string): string {
+  return projectId === PERSONAL_PROJECT_ID ? "-" : projectId;
+}
+
+function printThreadsTable(args: PrintThreadsTableArgs): void {
+  const rows = args.threads.map((thread) =>
+    args.includeProject
+      ? [
+          thread.id,
+          formatProjectLabel(thread.projectId),
+          thread.status,
+          thread.title ?? "<untitled>",
+        ]
+      : [thread.id, thread.status, thread.title ?? "<untitled>"],
   );
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const tableArgs = args.includeProject
+    ? {
+        head: ["ID", "Project", "Status", "Title"],
+        colWidths: [
+          idWidth,
+          Math.max(7, ...rows.map((row) => row[1].length)),
+          Math.max(6, ...rows.map((row) => row[2].length)),
+          Math.max(5, ...rows.map((row) => row[3].length)),
+        ],
+      }
+    : {
+        head: ["ID", "Status", "Title"],
+        colWidths: [
+          idWidth,
+          Math.max(6, ...rows.map((row) => row[1].length)),
+          Math.max(5, ...rows.map((row) => row[2].length)),
+        ],
+      };
+  const table = renderBorderlessTable(tableArgs, rows);
   console.log("");
   console.log(table);
   console.log("");
@@ -292,5 +356,5 @@ function printManagedThreadTable(threads: Thread[]): void {
     console.log("  None");
     return;
   }
-  printThreadsTable(threads);
+  printThreadsTable({ includeProject: false, threads });
 }

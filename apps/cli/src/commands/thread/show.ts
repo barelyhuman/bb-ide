@@ -218,6 +218,7 @@ export function registerShowCommand(
           mergeBaseBranches = await unwrap<string[]>(
             client.api.v1.environments[":id"].diff.branches.$get({
               param: { id: thread.environmentId },
+              query: {},
             }),
           );
         }

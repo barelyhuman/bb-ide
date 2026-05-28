@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   archiveThread,
   createThread,
+  createPromptHistoryEntry,
   getProjectExecutionDefaults,
   getProject,
   getThread,
@@ -16,6 +17,7 @@ import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { projectBranchesResponseSchema } from "@bb/server-contract";
 import {
   PERSONAL_PROJECT_ID,
+  promptHistoryEntrySchema,
   threadListEntrySchema,
   threadSchema,
 } from "@bb/domain";
@@ -77,6 +79,8 @@ const attachmentResponseSchema = z.object({
   path: z.string(),
   type: z.string(),
 });
+
+const promptHistoryResponseSchema = z.array(promptHistoryEntrySchema);
 
 const hostStatusListResponseSchema = z.array(
   z.object({
@@ -241,6 +245,46 @@ describe("public project and host routes", () => {
         `/api/v1/projects/${PERSONAL_PROJECT_ID}/default-execution-options?threadType=standard`,
       );
       expect(defaultsResponse.status).toBe(404);
+
+      const branchesResponse = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/branches?hostId=${host.id}`,
+      );
+      expect(branchesResponse.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns personal project prompt history", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const personalThread = seedThread(harness.deps, {
+        projectId: PERSONAL_PROJECT_ID,
+        title: "Loose Thread",
+      });
+      createPromptHistoryEntry(harness.db, {
+        projectId: PERSONAL_PROJECT_ID,
+        threadId: personalThread.id,
+        scope: "project",
+        requestSequence: 1,
+        createdAt: 123,
+        input: [{ type: "text", text: "Start projectless work" }],
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/prompt-history`,
+      );
+      expect(response.status).toBe(200);
+      const history = promptHistoryResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(history).toEqual([
+        {
+          id: expect.stringMatching(/^phist_/u),
+          createdAt: 123,
+          input: [{ type: "text", text: "Start projectless work" }],
+        },
+      ]);
     } finally {
       await harness.cleanup();
     }
@@ -1756,6 +1800,47 @@ describe("public project and host routes", () => {
       expect(
         Buffer.from(await contentResponse.arrayBuffer()).toString("utf8"),
       ).toBe("attachment body");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("stores personal project attachments and serves their content", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File(["projectless attachment body"], "loose-notes.txt", {
+          type: "text/plain",
+        }),
+        "loose-notes.txt",
+      );
+
+      const uploadResponse = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/attachments`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      expect(uploadResponse.status).toBe(201);
+      const uploaded = attachmentResponseSchema.parse(
+        await readJson(uploadResponse),
+      );
+      expect(uploaded).toMatchObject({
+        type: "localFile",
+        name: "loose-notes.txt",
+        mimeType: "text/plain",
+      });
+
+      const contentResponse = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/attachments/content?path=${encodeURIComponent(uploaded.path)}`,
+      );
+      expect(contentResponse.status).toBe(200);
+      expect(
+        Buffer.from(await contentResponse.arrayBuffer()).toString("utf8"),
+      ).toBe("projectless attachment body");
     } finally {
       await harness.cleanup();
     }

@@ -20,6 +20,23 @@ export const SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS = "pl-14";
 
 export const SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS = "pl-20";
 
+export type SidebarThreadRowIndent =
+  | "root"
+  | "project-child"
+  | "nested-child"
+  | "deep-child";
+
+export function getSidebarThreadRowPaddingClass(
+  indent: SidebarThreadRowIndent,
+): string {
+  if (indent === "root") return SIDEBAR_STANDARD_ROW_PADDING_CLASS;
+  if (indent === "project-child") {
+    return SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS;
+  }
+  if (indent === "nested-child") return SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
+  return SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS;
+}
+
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
   "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
 
@@ -35,6 +52,9 @@ export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
  */
 export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
   "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-[45] before:w-px before:bg-border-hairline before:content-[''] max-md:pointer-coarse:before:left-5";
+
+export const SIDEBAR_SECTION_GROUP_LINE_CLASS =
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-[''] max-md:pointer-coarse:before:left-5";
 
 /**
  * Hairline that runs through a manager's managed-child list, sitting under
@@ -66,3 +86,6 @@ export const SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS =
  */
 export const SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS =
   "pointer-events-none absolute -bottom-0.5 left-10 top-0 z-[1] w-px bg-border-hairline";
+
+export const SIDEBAR_SECTION_LINE_CONTINUATION_CLASS =
+  "pointer-events-none absolute -bottom-0.5 left-4 top-0 z-[1] w-px bg-border-hairline max-md:pointer-coarse:left-5";

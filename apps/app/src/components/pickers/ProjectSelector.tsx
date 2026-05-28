@@ -21,6 +21,12 @@ export interface ProjectSelectorOption {
   name: string;
 }
 
+export interface ProjectSelectorCreateProjectConfig {
+  onCreate: () => void;
+  disabled?: boolean;
+  isCreating?: boolean;
+}
+
 export interface ProjectSelectorProps {
   projects: readonly ProjectSelectorOption[];
   /**
@@ -37,6 +43,8 @@ export interface ProjectSelectorProps {
    * project id (the trigger has no empty state).
    */
   allowNoProject?: boolean;
+  /** When provided and there are no projects, adds a "New project" action. */
+  createProject?: ProjectSelectorCreateProjectConfig;
   className?: string;
   /** Render with the menu open on mount. Story-only escape hatch. */
   defaultOpen?: boolean;
@@ -49,6 +57,7 @@ export function ProjectSelector({
   value,
   onChange,
   allowNoProject = false,
+  createProject,
   className,
   defaultOpen,
   modal,
@@ -60,6 +69,10 @@ export function ProjectSelector({
   const fallback = !allowNoProject && !selected ? projects[0] : null;
   const triggerLabel = selected?.name ?? fallback?.name ?? "Work in a project";
   const triggerIcon = selected || fallback ? "Folder" : "FolderPlus";
+  const createProjectAction = projects.length === 0 ? createProject : undefined;
+  const createProjectLabel = createProjectAction?.isCreating
+    ? "Creating..."
+    : "New project";
 
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
@@ -116,9 +129,24 @@ export function ProjectSelector({
             />
           </DropdownMenuItem>
         ))}
+        {createProjectAction ? (
+          <DropdownMenuItem
+            disabled={createProjectAction.disabled}
+            onSelect={() => createProjectAction.onCreate()}
+          >
+            <Icon
+              name="FolderPlus"
+              className="size-4 text-muted-foreground"
+              aria-hidden
+            />
+            {createProjectLabel}
+          </DropdownMenuItem>
+        ) : null}
+        {allowNoProject && (projects.length > 0 || createProjectAction) ? (
+          <DropdownMenuSeparator />
+        ) : null}
         {allowNoProject ? (
           <>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onChange(null)}>
               <Icon
                 name="FolderMinus"

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ProjectMainSelectedBranch } from "./project-main-thread-environment";
+import type { RootComposeSelectedBranch } from "./root-compose-thread-environment";
 
 interface BranchSelectionScope {
   environmentValue: string;
@@ -12,7 +12,7 @@ interface BranchSelectionScopeArgs {
 }
 
 interface ScopedSelectedBranch {
-  branch: ProjectMainSelectedBranch;
+  branch: RootComposeSelectedBranch;
   scope: BranchSelectionScope;
 }
 
@@ -23,7 +23,7 @@ export interface UseScopedBranchSelectionResult {
   onClearBranch: () => void;
   onCreateBranch: (currentBranch: string | null) => void;
   onCreateBranchFrom: (name: string) => void;
-  selectedBranch: ProjectMainSelectedBranch | null;
+  selectedBranch: RootComposeSelectedBranch | null;
 }
 
 function resolveBranchSelectionScope(

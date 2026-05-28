@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveEnvironmentMergeBaseBranch } from "../src/environment.js";
+import {
+  resolveEnvironmentMergeBaseBranch,
+  resolveEnvironmentWorkspaceDisplayKind,
+} from "../src/environment.js";
 
 describe("resolveEnvironmentMergeBaseBranch", () => {
   it("prefers an explicit merge-base override", () => {
@@ -30,5 +33,18 @@ describe("resolveEnvironmentMergeBaseBranch", () => {
         mergeBaseBranch: null,
       }),
     ).toBe("main");
+  });
+});
+
+describe("resolveEnvironmentWorkspaceDisplayKind", () => {
+  it("treats personal workspaces like direct host workspaces for display", () => {
+    expect(
+      resolveEnvironmentWorkspaceDisplayKind({
+        environment: {
+          isWorktree: false,
+          workspaceProvisionType: "personal",
+        },
+      }),
+    ).toBe("other");
   });
 });

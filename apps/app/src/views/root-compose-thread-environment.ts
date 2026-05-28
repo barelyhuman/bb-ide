@@ -2,19 +2,19 @@ import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type { BaseBranchSpec, CreateThreadRequest } from "@bb/server-contract";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 
-export interface ProjectMainSelectedBranch {
+export interface RootComposeSelectedBranch {
   name: string;
   isNew: boolean;
 }
 
-export interface ResolveProjectMainThreadEnvironmentArgs {
+export interface ResolveRootComposeThreadEnvironmentArgs {
   environmentValue: string;
   projectId: string | undefined;
-  selectedBranch: ProjectMainSelectedBranch | null;
+  selectedBranch: RootComposeSelectedBranch | null;
 }
 
 interface ResolveManagedBaseBranchArgs {
-  selectedBranch: ProjectMainSelectedBranch | null;
+  selectedBranch: RootComposeSelectedBranch | null;
 }
 
 function resolveManagedBaseBranch(
@@ -27,8 +27,8 @@ function resolveManagedBaseBranch(
   return { kind: "named", name: args.selectedBranch.name };
 }
 
-export function resolveProjectMainThreadEnvironment(
-  args: ResolveProjectMainThreadEnvironmentArgs,
+export function resolveRootComposeThreadEnvironment(
+  args: ResolveRootComposeThreadEnvironmentArgs,
 ): CreateThreadRequest["environment"] | null {
   if (!args.projectId) return null;
   const parsed = parseEnvironmentValue(args.environmentValue);

@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   findLocalPathProjectSourceForHost,
+  PERSONAL_PROJECT_ID,
   type ThreadListEntry,
 } from "@bb/domain";
 import {
   NewThreadPromptBox,
+  type NewThreadHostConfig,
+  type NewThreadProjectConfig,
   type ThreadCreationMode,
 } from "@/components/promptbox/NewThreadPromptBox";
 import {
@@ -35,21 +38,38 @@ import { useThreads } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
+import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
-import { useNewThreadModePreference } from "@/lib/new-thread-mode-preference";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import {
-  buildProjectMainBranchUiState,
-  type ProjectMainBranchEnvironmentMode,
-} from "./project-main-branch-ui";
-import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
-import { useScopedBranchSelection } from "./project-main-branch-selection";
+  getRootComposeRoutePath,
+  isProjectlessProjectId,
+} from "@/lib/app-route-paths";
+import {
+  useRootComposeMode,
+  useRootComposeProjectId,
+  useSetRootComposeProjectId,
+} from "@/lib/root-compose-selection";
+import {
+  buildRootComposeBranchUiState,
+  type RootComposeBranchEnvironmentMode,
+} from "./root-compose-branch-ui";
+import { resolveRootComposeThreadEnvironment } from "./root-compose-thread-environment";
+import { useScopedBranchSelection } from "./root-compose-branch-selection";
 
-const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
+const ROOT_COMPOSE_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.root-compose";
+const ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS = "pt-2";
+
+type ProjectSelectionChangeHandler = NewThreadProjectConfig["onChange"];
+type HostSelectionChangeHandler = NewThreadHostConfig["onChange"];
+
+interface LegacyProjectComposeRedirectProps {
+  projectId: string;
+}
 
 // react-router's location.state is freeform unknown — narrow it here at the
 // system boundary before reading.
@@ -124,10 +144,46 @@ function buildReuseThreadOptions(
   return options;
 }
 
-export function ProjectMainView() {
-  const { projectId } = useParams<{ projectId: string }>();
+function LegacyProjectComposeRedirect({
+  projectId,
+}: LegacyProjectComposeRedirectProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const setRootComposeProjectId = useSetRootComposeProjectId();
+
+  useEffect(() => {
+    setRootComposeProjectId(projectId);
+    navigate(getRootComposeRoutePath(), {
+      replace: true,
+      state: location.state,
+    });
+  }, [location.state, navigate, projectId, setRootComposeProjectId]);
+
+  return (
+    <PageShell contentClassName="min-h-full items-center justify-center">
+      <p className="py-12 text-center text-sm text-muted-foreground">
+        Loading…
+      </p>
+    </PageShell>
+  );
+}
+
+export function RootComposeRoute() {
+  const { projectId } = useParams<{ projectId: string }>();
+
+  if (projectId) {
+    return <LegacyProjectComposeRedirect projectId={projectId} />;
+  }
+
+  return <RootComposeView />;
+}
+
+export function RootComposeView() {
+  const [rootComposeProjectId, setRootComposeProjectId] =
+    useRootComposeProjectId();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const quickCreateProject = useQuickCreateProjectController();
   const sidebarBootstrapQuery = useSidebarBootstrap();
   const hasSidebarBootstrapSettled =
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
@@ -137,6 +193,23 @@ export function ProjectMainView() {
     [sidebarBootstrapQuery.data],
   );
   const projects = projectsQuery.data ?? sidebarBootstrapProjects;
+  const projectId = useMemo(() => {
+    if (isProjectlessProjectId(rootComposeProjectId)) {
+      return PERSONAL_PROJECT_ID;
+    }
+    if (!projects) {
+      return rootComposeProjectId;
+    }
+    return projects.some((project) => project.id === rootComposeProjectId)
+      ? rootComposeProjectId
+      : PERSONAL_PROJECT_ID;
+  }, [projects, rootComposeProjectId]);
+  const isProjectless = isProjectlessProjectId(projectId);
+  useEffect(() => {
+    if (!projects) return;
+    if (projectId === rootComposeProjectId) return;
+    setRootComposeProjectId(projectId);
+  }, [projectId, projects, rootComposeProjectId, setRootComposeProjectId]);
   const createThread = useCreateThread();
   const hireProjectManager = useHireProjectManager();
   const { isLocalHost, localHostId } = useHostDaemon();
@@ -153,13 +226,12 @@ export function ProjectMainView() {
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const { data: projectPromptHistory = [] } =
     useProjectPromptHistory(projectId);
-  const promptMentions = usePromptMentions(projectId, { environmentId: null });
+  const promptMentions = usePromptMentions(
+    isProjectless ? undefined : projectId,
+    { environmentId: null },
+  );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  // Thread / manager mode for the header switcher above the prompt-box.
-  // Persisted across visits so the user lands on whichever mode they used
-  // last; the sidebar's "New Manager" affordance still seeds "manager" via
-  // router state below, which writes through the same setter.
-  const [mode, setModeRaw] = useNewThreadModePreference();
+  const [mode, setMode] = useRootComposeMode();
   // Manager-mode selections. Held as raw user choices; the effective values
   // resolved against the loaded hosts / templates are computed below so a
   // stale selection (host disconnects, template removed) falls back to a
@@ -176,9 +248,9 @@ export function ProjectMainView() {
       }),
     [promptDraft.attachments, promptDraft.text],
   );
-  const projectMainZenModeStorageKey = useMemo(
+  const rootComposeZenModeStorageKey = useMemo(
     () =>
-      getProjectScopedStorageKey(PROJECT_MAIN_ZEN_MODE_STORAGE_KEY, projectId),
+      getProjectScopedStorageKey(ROOT_COMPOSE_ZEN_MODE_STORAGE_KEY, projectId),
     [projectId],
   );
   const promptHistoryDrafts = useMemo(
@@ -211,28 +283,11 @@ export function ProjectMainView() {
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({ scope: "new-thread", projectId });
 
-  // All mode transitions go through this wrapper. Manager threads have no
-  // environment, so a reuse-env selection is invalid in manager mode —
-  // clear it at the transition rather than letting it survive (hidden) on
-  // the env atom. The discriminated union at the prop boundary stops
-  // invalid combinations from rendering; this clears the state so toggling
-  // back to thread doesn't resurface a stale reuse selection.
-  const setMode = useCallback(
-    (next: ThreadCreationMode) => {
-      setModeRaw(next);
-      if (next === "manager") {
-        clearReuseEnvironment();
-      }
-    },
-    [clearReuseEnvironment, setModeRaw],
-  );
-
-  // Seed transient picker state from the sidebar navigation's router state:
+  // Seed transient picker state from navigation state:
   // `reuseEnvironmentId` (the "+" affordance on a worktree) seeds the env
-  // picker into reuse mode for that env, and `mode` (the sidebar's
-  // "New Manager" button) seeds the mode picker to "manager". Both are
-  // single-use — clear location.state after applying so a refresh starts
-  // from defaults.
+  // picker into reuse mode for that env, and `mode` seeds the mode picker.
+  // Both are single-use — clear location.state after applying so a refresh
+  // starts from persisted root-compose selection.
   useEffect(() => {
     const reuseEnvironmentId = readReuseEnvironmentIdFromLocationState(
       location.state,
@@ -245,12 +300,11 @@ export function ProjectMainView() {
     if (seededMode !== null) {
       setMode(seededMode);
     }
-    navigate(location.pathname + location.search, {
+    navigate(getRootComposeRoutePath() + location.search, {
       replace: true,
       state: null,
     });
   }, [
-    location.pathname,
     location.search,
     location.state,
     navigate,
@@ -271,27 +325,29 @@ export function ProjectMainView() {
   );
 
   const currentProject = useMemo(
-    () => projects?.find((p) => p.id === projectId),
-    [projects, projectId],
+    () =>
+      isProjectless
+        ? sidebarBootstrapQuery.data?.personalProject
+        : projects?.find((p) => p.id === projectId),
+    [isProjectless, projectId, projects, sidebarBootstrapQuery.data],
   );
   const projectSources = useMemo(
     () => currentProject?.sources ?? [],
     [currentProject?.sources],
   );
 
-  // Manager hosting: a host is eligible iff it's connected AND has a
-  // local-path source for the project. The hire flow uses the eligible
-  // selection (or a default) so the user can pick across hosts once we
-  // surface them.
+  // Standard-project managers need a local-path source on the host. Projectless
+  // managers only need a connected host.
   const eligibleManagerHosts = useMemo(
     () =>
       hosts.filter(
         (host) =>
           host.status === "connected" &&
-          findLocalPathProjectSourceForHost(projectSources, host.id) !==
-            undefined,
+          (isProjectless ||
+            findLocalPathProjectSourceForHost(projectSources, host.id) !==
+              undefined),
       ),
-    [hosts, projectSources],
+    [hosts, isProjectless, projectSources],
   );
   const defaultManagerHostId = useMemo(() => {
     const local = eligibleManagerHosts.find((host) => isLocalHost(host.id));
@@ -305,6 +361,18 @@ export function ProjectMainView() {
       ? managerHostSelection
       : defaultManagerHostId;
   }, [defaultManagerHostId, eligibleManagerHosts, managerHostSelection]);
+  const eligibleProjectlessThreadHosts = useMemo(
+    () => hosts.filter((host) => host.status === "connected"),
+    [hosts],
+  );
+  const defaultProjectlessThreadHostId = useMemo(() => {
+    const local = eligibleProjectlessThreadHosts.find((host) =>
+      isLocalHost(host.id),
+    );
+    return (
+      local?.id ?? eligibleProjectlessThreadHosts[0]?.id ?? localHostId ?? ""
+    );
+  }, [eligibleProjectlessThreadHosts, isLocalHost, localHostId]);
 
   const defaultManagerTemplateName = useMemo(() => {
     if (
@@ -326,22 +394,41 @@ export function ProjectMainView() {
       : defaultManagerTemplateName;
   }, [defaultManagerTemplateName, managerTemplateSelection, managerTemplates]);
 
-  // The hook returns reuse values from session-only state and sanitizes any
-  // legacy reuse entries out of localStorage, so we can take its value
-  // verbatim and fall back to the local-host default only when nothing's
-  // selected.
+  // Projectless threads choose a host directly, not an environment mode. Keep
+  // the underlying persisted value host-shaped for the create-thread contract,
+  // but discard reuse/worktree mode when resolving the effective value.
   const effectiveEnvironmentValue = useMemo(() => {
-    if (
-      environmentSelectionValue &&
-      parseEnvironmentValue(environmentSelectionValue)
-    ) {
+    const parsedSelection = parseEnvironmentValue(environmentSelectionValue);
+    if (isProjectless) {
+      if (parsedSelection?.type === "host") {
+        const selectedHostIsEligible =
+          eligibleProjectlessThreadHosts.length === 0 ||
+          eligibleProjectlessThreadHosts.some(
+            (host) => host.id === parsedSelection.hostId,
+          );
+        if (selectedHostIsEligible) {
+          return encodeHostValue(parsedSelection.hostId, "local");
+        }
+      }
+      if (defaultProjectlessThreadHostId) {
+        return encodeHostValue(defaultProjectlessThreadHostId, "local");
+      }
+      return "";
+    }
+    if (environmentSelectionValue && parsedSelection) {
       return environmentSelectionValue;
     }
     if (localHostId) {
       return encodeHostValue(localHostId, "local");
     }
     return "";
-  }, [environmentSelectionValue, localHostId]);
+  }, [
+    defaultProjectlessThreadHostId,
+    eligibleProjectlessThreadHosts,
+    environmentSelectionValue,
+    isProjectless,
+    localHostId,
+  ]);
   const parsedEnvironment = useMemo(
     () => parseEnvironmentValue(effectiveEnvironmentValue),
     [effectiveEnvironmentValue],
@@ -366,7 +453,7 @@ export function ProjectMainView() {
     projectId,
     isHostMode ? parsedEnvironment.hostId : null,
     {
-      enabled: isHostMode,
+      enabled: isHostMode && !isProjectless,
       query: branchSearchQuery,
       selectedBranch: selectedBranchName,
     },
@@ -383,8 +470,9 @@ export function ProjectMainView() {
     activeBranchesQuery.data?.selectedBranch,
   ]);
   const isHostLocalMode = isHostMode && parsedEnvironment.mode === "local";
-  const branchEnvironmentMode: ProjectMainBranchEnvironmentMode =
-    isHostLocalMode
+  const branchEnvironmentMode: RootComposeBranchEnvironmentMode = isProjectless
+    ? "other"
+    : isHostLocalMode
       ? "local"
       : isHostMode && parsedEnvironment.mode === "worktree"
         ? "worktree"
@@ -425,7 +513,7 @@ export function ProjectMainView() {
   }, [branchSelectionSeed, handleCreateBranch]);
   const branchUiState = useMemo(
     () =>
-      buildProjectMainBranchUiState({
+      buildRootComposeBranchUiState({
         checkout: activeBranchesQuery.data,
         isFetching: activeBranchesQuery.isFetching,
         isLoading: activeBranchesQuery.isLoading,
@@ -452,7 +540,7 @@ export function ProjectMainView() {
 
   const selectedEnvironment = useMemo(
     () =>
-      resolveProjectMainThreadEnvironment({
+      resolveRootComposeThreadEnvironment({
         environmentValue: effectiveEnvironmentValue,
         projectId,
         selectedBranch,
@@ -468,13 +556,21 @@ export function ProjectMainView() {
   );
 
   const selectedThreadModel = activeModel?.model ?? selectedModel;
-  const handleProjectChange = useCallback(
-    (nextProjectId: string) => {
-      if (nextProjectId === projectId) return;
-      navigate(`/projects/${nextProjectId}`);
+  const handleProjectChange = useCallback<ProjectSelectionChangeHandler>(
+    (nextProjectId) => {
+      const nextRootComposeProjectId = nextProjectId ?? PERSONAL_PROJECT_ID;
+      if (nextRootComposeProjectId === projectId) return;
+      setRootComposeProjectId(nextRootComposeProjectId);
     },
-    [navigate, projectId],
+    [projectId, setRootComposeProjectId],
   );
+  const handleProjectlessThreadHostChange =
+    useCallback<HostSelectionChangeHandler>(
+      (hostId) => {
+        setEnvironmentSelectionValue(encodeHostValue(hostId, "local"));
+      },
+      [setEnvironmentSelectionValue],
+    );
 
   const shouldFocusPrompt =
     typeof location.state === "object" &&
@@ -485,7 +581,7 @@ export function ProjectMainView() {
   useEffect(() => {
     if (!shouldFocusPrompt) return;
     const handle = window.requestAnimationFrame(() => {
-      const promptEl = document.getElementById("project-main-prompt");
+      const promptEl = document.getElementById("root-compose-prompt");
       if (!(promptEl instanceof HTMLTextAreaElement)) return;
       promptEl.focus();
       const caretIndex = promptEl.value.length;
@@ -715,7 +811,6 @@ export function ProjectMainView() {
       value: effectiveEnvironmentValue,
       onChange: setEnvironmentSelectionValue,
       sources: projectSources,
-      personalWorkspace: false,
       reuseDisabled: reuseThreadOptions.length === 0,
     }),
     [
@@ -723,6 +818,26 @@ export function ProjectMainView() {
       projectSources,
       reuseThreadOptions.length,
       setEnvironmentSelectionValue,
+    ],
+  );
+  const projectlessThreadHostConfig = useMemo(
+    (): NewThreadHostConfig => ({
+      hosts,
+      eligibleHosts: eligibleProjectlessThreadHosts,
+      value:
+        parsedEnvironment?.type === "host"
+          ? parsedEnvironment.hostId
+          : defaultProjectlessThreadHostId,
+      onChange: handleProjectlessThreadHostChange,
+      isLocalHost,
+    }),
+    [
+      defaultProjectlessThreadHostId,
+      eligibleProjectlessThreadHosts,
+      handleProjectlessThreadHostChange,
+      hosts,
+      isLocalHost,
+      parsedEnvironment,
     ],
   );
   const worktreeConfig = useMemo(() => {
@@ -842,20 +957,6 @@ export function ProjectMainView() {
     );
   }, [clearReuseEnvironment, parsedEnvironment]);
 
-  // Match ThreadDetailView's invalid-id pattern: distinguish missing param,
-  // loading, and not-found/error so the page never renders against a project
-  // the user can't see in the list. The selector inside the page therefore
-  // can rely on projectId existing in projectOptions — no synthetic
-  // placeholder, no surfacing the raw id to the user.
-  if (!projectId) {
-    return (
-      <PageShell contentClassName="min-h-full items-center justify-center">
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Select a project.
-        </p>
-      </PageShell>
-    );
-  }
   if (!hasSidebarBootstrapSettled) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
@@ -865,21 +966,22 @@ export function ProjectMainView() {
       </PageShell>
     );
   }
-  if (!projects?.some((project) => project.id === projectId)) {
-    const errored = sidebarBootstrapQuery.isError || projectsQuery.isError;
+  if (!projects && (sidebarBootstrapQuery.isError || projectsQuery.isError)) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-destructive">
-          {errored ? "Failed to load projects." : "Project not found"}
+          Failed to load projects.
         </p>
       </PageShell>
     );
   }
 
   return (
-    <PageShell contentClassName="pt-4 md:pt-5">
+    <PageShell
+      contentClassName={ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS}
+    >
       <NewThreadPromptBox
-        id="project-main-prompt"
+        id="root-compose-prompt"
         value={prompt}
         onChange={promptDraft.setText}
         onSubmit={submitPrompt}
@@ -889,7 +991,7 @@ export function ProjectMainView() {
             : createThread.isPending
         }
         disabled={isSubmitDisabled}
-        zenModeStorageKey={projectMainZenModeStorageKey}
+        zenModeStorageKey={rootComposeZenModeStorageKey}
         history={historyConfig}
         mentions={mentionsConfig}
         attachments={attachmentsConfig}
@@ -921,17 +1023,22 @@ export function ProjectMainView() {
                 worktree: worktreeConfig,
                 permission: permissionConfig,
                 header: reuseHeader,
+                ...(isProjectless
+                  ? { projectlessHost: projectlessThreadHostConfig }
+                  : {}),
               }
         }
         onModeChange={setMode}
-        // Project picker is rendered INSIDE the prompt box's strip below
-        // the card. Switching projects routes through the same handler
-        // (navigate to /projects/:id).
         project={{
           projects: projectOptions,
-          value: projectId ?? null,
-          onChange: (id) => {
-            if (id !== null) handleProjectChange(id);
+          value: isProjectless ? null : projectId,
+          onChange: handleProjectChange,
+          allowNoProject: true,
+          createProject: {
+            onCreate: quickCreateProject.openCreateDialog,
+            disabled:
+              !quickCreateProject.isAvailable || quickCreateProject.isCreating,
+            isCreating: quickCreateProject.isCreating,
           },
         }}
         execution={executionConfig}

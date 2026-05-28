@@ -2,8 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuthCallbackView } from "./views/AuthCallbackView";
-import { MainView } from "./views/MainView";
-import { ProjectMainView } from "./views/ProjectMainView";
+import { RootComposeRoute } from "./views/RootComposeView";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { ProviderCliHealthToasts } from "./components/provider-cli/ProviderCliHealthToasts";
 import {
@@ -16,8 +15,9 @@ import {
   APP_SETTINGS_ROUTE_PATH,
   AUTH_CALLBACK_ROUTE_PATH,
   DEVELOPMENT_REPLAY_ROUTE_PATH,
+  LEGACY_PROJECT_COMPOSE_ROUTE_PATH,
   PROJECT_ARCHIVED_ROUTE_PATH,
-  PROJECT_MAIN_ROUTE_PATH,
+  PROJECTLESS_THREAD_DETAIL_ROUTE_PATH,
   PROJECT_SETTINGS_ROUTE_PATH,
   THREAD_DETAIL_ROUTE_PATH,
 } from "./lib/app-route-paths";
@@ -51,7 +51,7 @@ function AppRoutes() {
     <AppLayout>
       <Suspense fallback={null}>
         <Routes>
-          <Route path={APP_ROOT_ROUTE_PATH} element={<MainView />} />
+          <Route path={APP_ROOT_ROUTE_PATH} element={<RootComposeRoute />} />
           <Route path={APP_SETTINGS_ROUTE_PATH} element={<AppSettingsView />} />
           {import.meta.env.DEV ? (
             <Route
@@ -59,7 +59,10 @@ function AppRoutes() {
               element={<InternalReplayListView />}
             />
           ) : null}
-          <Route path={PROJECT_MAIN_ROUTE_PATH} element={<ProjectMainView />} />
+          <Route
+            path={LEGACY_PROJECT_COMPOSE_ROUTE_PATH}
+            element={<RootComposeRoute />}
+          />
           <Route
             path={PROJECT_SETTINGS_ROUTE_PATH}
             element={<ProjectSettingsView />}
@@ -70,6 +73,10 @@ function AppRoutes() {
           />
           <Route
             path={THREAD_DETAIL_ROUTE_PATH}
+            element={<ThreadDetailRoute />}
+          />
+          <Route
+            path={PROJECTLESS_THREAD_DETAIL_ROUTE_PATH}
             element={<ThreadDetailRoute />}
           />
           <Route
