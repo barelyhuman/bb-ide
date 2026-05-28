@@ -114,6 +114,14 @@ function workspaceHasRiskyChanges(
   );
 }
 
+function isUninspectableWorkspaceError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.body.code === "path_not_found" ||
+      error.body.code === "not_git_repo")
+  );
+}
+
 async function workspaceCanBeSafelyCleaned(
   deps: LoggedWorkSessionDeps,
   environmentId: string,
@@ -133,6 +141,10 @@ async function workspaceCanBeSafelyCleaned(
     return false;
   }
 
+  if (!environment.isGitRepo) {
+    return true;
+  }
+
   if (
     getPendingEnvironmentCommand(deps.db, {
       environmentId: environment.id,
@@ -143,7 +155,7 @@ async function workspaceCanBeSafelyCleaned(
   }
 
   const mergeBaseBranch = resolveEnvironmentMergeBaseBranch(environment);
-  if (environment.isGitRepo && !mergeBaseBranch) {
+  if (!mergeBaseBranch) {
     return false;
   }
 
@@ -163,10 +175,9 @@ async function workspaceCanBeSafelyCleaned(
       },
     });
   } catch (error) {
-    // Workspace path is gone (e.g. user deleted the worktree out-of-band).
-    // Nothing to inspect and nothing risky to lose — let cleanup proceed so
-    // the environment is marked destroyed via the idempotent destroy command.
-    if (error instanceof ApiError && error.body.code === "path_not_found") {
+    // Workspace path is gone or no longer git-backed out-of-band. Nothing can
+    // be inspected as a git workspace, so let managed cleanup proceed.
+    if (isUninspectableWorkspaceError(error)) {
       return true;
     }
     throw error;

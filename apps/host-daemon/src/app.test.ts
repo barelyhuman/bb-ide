@@ -550,6 +550,88 @@ describe("createCommandFetchLoop", () => {
 });
 
 describe("createHostDaemonApp", () => {
+  it("starts without waiting for the initial command fetch to finish", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-app-startup-");
+    const logger = createLogger();
+    const commandFetchResponse = createDeferred<Response>();
+    const requests: RecordedFetchRequest[] = [];
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = readFetchUrl(input);
+      requests.push({
+        body: readFetchBody(init),
+        method: init?.method ?? "GET",
+        pathname: url.pathname,
+      });
+
+      if (url.pathname === "/internal/session/open") {
+        return Response.json(
+          {
+            sessionId: "session-startup-command-fetch",
+            heartbeatIntervalMs: 30000,
+            leaseTimeoutMs: 90000,
+            trackedThreadTargets: [],
+          },
+          { status: 201 },
+        );
+      }
+      if (url.pathname === "/internal/session/commands") {
+        return commandFetchResponse.promise;
+      }
+      if (url.pathname === "/internal/session/events") {
+        return Response.json({
+          acceptedEvents: [],
+          rejectedEvents: [],
+        });
+      }
+
+      return new Response(`Unhandled test request: ${url.pathname}`, {
+        status: 500,
+      });
+    };
+    const app = await createHostDaemonApp({
+      dataDir,
+      serverUrl: "http://127.0.0.1:3334",
+      hostKey: "host-key-startup-command-fetch",
+      hostType: "persistent",
+      hostId: "host-startup-command-fetch",
+      hostName: "Startup Command Fetch Host",
+      instanceId: "instance-startup-command-fetch",
+      logger,
+      releaseLock: async () => undefined,
+      localApiConfig: null,
+      createRuntime: () => createFakeRuntime(),
+      fetchFn,
+      createWebSocket: createOpeningWebSocket(),
+    });
+
+    try {
+      const startPromise = app.daemon.start();
+      const startupOutcome: Promise<"started"> = startPromise.then(
+        () => "started",
+      );
+      const timeoutOutcome = new Promise<"timeout">((resolve) => {
+        setTimeout(() => resolve("timeout"), 50);
+      });
+
+      await vi.waitFor(() => {
+        expect(
+          requests.some(
+            (request) => request.pathname === "/internal/session/commands",
+          ),
+        ).toBe(true);
+      });
+      await expect(
+        Promise.race([startupOutcome, timeoutOutcome]),
+      ).resolves.toBe("started");
+
+      commandFetchResponse.resolve(new Response(null, { status: 204 }));
+      await startPromise;
+    } finally {
+      commandFetchResponse.resolve(new Response(null, { status: 204 }));
+      await app.daemon.shutdown("test");
+    }
+  });
+
   it("logs raw stderr for unexpected provider process exits", async () => {
     const { app, logger, runtimeOptions } = await createAppFixture();
     try {

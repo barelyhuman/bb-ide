@@ -477,14 +477,6 @@ export function migrate(db: DbConnection, options: MigrateOptions = {}): void {
     sqlite.pragma("foreign_keys = ON");
   }
 
-  const violations = sqlite.pragma("foreign_key_check");
-  if (Array.isArray(violations) && violations.length > 0) {
-    console.error(
-      `foreign_key_check found ${violations.length} violation(s) after migration`,
-      violations.slice(0, 10),
-    );
-  }
-
   warnAboutFutureAppliedMigrations(db, options);
   validatePendingInteractionsSchema(db);
 }

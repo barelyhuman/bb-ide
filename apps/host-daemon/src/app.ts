@@ -794,7 +794,6 @@ export async function createHostDaemonApp(
         "Host daemon connecting",
       );
       await connection.start();
-      await commandFetchLoop.request();
     },
   });
   connection.setSessionCloseHandler((reason) =>

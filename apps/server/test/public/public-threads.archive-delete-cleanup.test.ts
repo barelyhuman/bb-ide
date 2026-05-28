@@ -31,6 +31,7 @@ import { environmentArchiveThreadsResponseSchema } from "@bb/server-contract";
 import {
   listQueuedEnvironmentCommands,
   listQueuedThreadCommands,
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -2219,6 +2220,132 @@ describe("public thread archive delete cleanup routes", () => {
         .where(eq(hostDaemonCommands.type, "environment.destroy"))
         .all();
       expect(destroyCommands).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("cleans up managed non-git workspaces without requiring workspace status", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        projectId: project.id,
+        hostId: host.id,
+        workspaceProvisionType: "personal",
+        path: "/tmp/non-git-managed-cleanup",
+        managed: true,
+        status: "ready",
+        isGitRepo: false,
+        isWorktree: false,
+        branchName: null,
+        defaultBranch: null,
+      });
+      const thread = createThread(harness.db, harness.hub, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+        status: "idle",
+        title: "Managed non-git thread",
+        titleFallback: "Managed non-git thread",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const destroyCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      expect(destroyCommand.command).toMatchObject({
+        type: "environment.destroy",
+        environmentId: environment.id,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: "personal",
+        },
+      });
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "workspace.status",
+          environment.id,
+        ),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("continues managed cleanup when workspace status reports not_git_repo", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/managed-cleanup-not-git",
+        isGitRepo: true,
+        isWorktree: true,
+        defaultBranch: "main",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      const statusErrorResponse = await reportQueuedCommandError(
+        harness,
+        statusCommand,
+        {
+          errorCode: "not_git_repo",
+          errorMessage:
+            "Path is not a git repository: /tmp/managed-cleanup-not-git",
+        },
+      );
+      expect(statusErrorResponse.status).toBe(200);
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      expect(destroyCommand.command).toMatchObject({
+        type: "environment.destroy",
+        environmentId: environment.id,
+      });
     } finally {
       await harness.cleanup();
     }
