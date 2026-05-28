@@ -290,10 +290,10 @@ function Row({
           isFollowUpSubmitting,
           message,
           onChangeMessage: setMessage,
-          onSteerSubmit: noop,
+          onModifierSubmit: noop,
           onSubmit: noop,
           promptPlaceholder: resolvedPlaceholder,
-          canSteerSubmit: submitMode.kind === "queue",
+          canModifierSubmit: submitMode.kind === "queue",
           submitMode,
           threadRuntimeDisplayStatus,
         }}

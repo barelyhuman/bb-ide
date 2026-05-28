@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutoFollowUpRequest,
   buildCreateQueuedFollowUpRequest,
-  buildQueuedSteerRequests,
-  buildSteerFollowUpRequest,
-  canSubmitSteerBatch,
+  buildFollowUpShortcutRequest,
+  canSubmitFollowUpShortcut,
   resolveDefaultExecutionOptionsState,
   shouldQueueFollowUpMessage,
 } from "./threadDetailPromptSubmission";
@@ -13,37 +12,48 @@ import {
 const textInput: PromptInput[] = [{ type: "text", text: "Follow up" }];
 
 describe("threadDetailPromptSubmission", () => {
-  it("builds steer follow-up requests without execution options", () => {
+  it("prioritizes current prompt input over queued messages for the follow-up shortcut", () => {
     expect(
-      buildSteerFollowUpRequest({
+      buildFollowUpShortcutRequest({
         input: textInput,
-        threadId: "thread-1",
-      }),
-    ).toEqual({
-      id: "thread-1",
-      input: textInput,
-      mode: "steer",
-    });
-  });
-
-  it("builds queued-message steer requests in queued order", () => {
-    expect(
-      buildQueuedSteerRequests({
         queuedMessages: [{ id: "queued-1" }, { id: "queued-2" }],
         threadId: "thread-1",
       }),
-    ).toEqual([
-      {
+    ).toEqual({
+      kind: "draft",
+      request: {
         id: "thread-1",
+        input: textInput,
         mode: "steer",
+      },
+    });
+  });
+
+  it("uses only the next queued message for an empty follow-up shortcut", () => {
+    expect(
+      buildFollowUpShortcutRequest({
+        input: [],
+        queuedMessages: [{ id: "queued-1" }, { id: "queued-2" }],
+        threadId: "thread-1",
+      }),
+    ).toEqual({
+      kind: "queued",
+      request: {
+        id: "thread-1",
+        mode: "auto",
         queuedMessageId: "queued-1",
       },
-      {
-        id: "thread-1",
-        mode: "steer",
-        queuedMessageId: "queued-2",
-      },
-    ]);
+    });
+  });
+
+  it("does not build an empty follow-up shortcut without queued messages", () => {
+    expect(
+      buildFollowUpShortcutRequest({
+        input: [],
+        queuedMessages: [],
+        threadId: "thread-1",
+      }),
+    ).toBeNull();
   });
 
   it("builds auto follow-up requests with selected execution options", () => {
@@ -150,9 +160,9 @@ describe("threadDetailPromptSubmission", () => {
     ).toBe("unavailable");
   });
 
-  it("gates queue and steer submission by runtime state and pending work", () => {
+  it("gates the follow-up shortcut by runtime state and pending work", () => {
     expect(
-      canSubmitSteerBatch({
+      canSubmitFollowUpShortcut({
         hasPromptDraftInput: false,
         isFollowUpSubmitting: false,
         isQueueMutationPending: false,
@@ -162,7 +172,7 @@ describe("threadDetailPromptSubmission", () => {
       }),
     ).toBe(true);
     expect(
-      canSubmitSteerBatch({
+      canSubmitFollowUpShortcut({
         hasPromptDraftInput: true,
         isFollowUpSubmitting: false,
         isQueueMutationPending: false,
@@ -172,7 +182,7 @@ describe("threadDetailPromptSubmission", () => {
       }),
     ).toBe(true);
     expect(
-      canSubmitSteerBatch({
+      canSubmitFollowUpShortcut({
         hasPromptDraftInput: true,
         isFollowUpSubmitting: true,
         isQueueMutationPending: false,
@@ -182,7 +192,7 @@ describe("threadDetailPromptSubmission", () => {
       }),
     ).toBe(false);
     expect(
-      canSubmitSteerBatch({
+      canSubmitFollowUpShortcut({
         hasPromptDraftInput: true,
         isFollowUpSubmitting: false,
         isQueueMutationPending: true,
@@ -192,7 +202,7 @@ describe("threadDetailPromptSubmission", () => {
       }),
     ).toBe(false);
     expect(
-      canSubmitSteerBatch({
+      canSubmitFollowUpShortcut({
         hasPromptDraftInput: true,
         isFollowUpSubmitting: false,
         isQueueMutationPending: false,

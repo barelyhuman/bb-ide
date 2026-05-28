@@ -105,10 +105,10 @@ export interface FollowUpComposerProps {
   isFollowUpSubmitting: boolean;
   message: string;
   onChangeMessage: (value: string) => void;
-  onSteerSubmit: () => void;
+  onModifierSubmit: () => void;
   onSubmit: () => void;
   promptPlaceholder: string;
-  canSteerSubmit: boolean;
+  canModifierSubmit: boolean;
   submitMode: FollowUpSubmitMode;
   /** Used by the scroll-to-bottom button to know whether the runtime is actively streaming. */
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
@@ -173,8 +173,8 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
   const canStopRuntime = onStopRuntime !== undefined;
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
-  const onSteerSubmit = composer.canSteerSubmit
-    ? composer.onSteerSubmit
+  const onModifierSubmit = composer.canModifierSubmit
+    ? composer.onModifierSubmit
     : undefined;
   const footerStart = useMemo(
     () => <ExecutionControls {...execution} />,
@@ -239,7 +239,7 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
             onStop: onStopRuntime,
             isSubmitting: composer.isFollowUpSubmitting || isStopping,
             disabled: !canSubmit || composer.isFollowUpSubmitting,
-            onModifierSubmit: onSteerSubmit,
+            onModifierSubmit,
             title: canQueueFollowUp
               ? "Queue follow-up (Enter)"
               : isStopping

@@ -53,9 +53,9 @@ import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 import {
   buildAutoFollowUpRequest,
   buildCreateQueuedFollowUpRequest,
-  buildQueuedSteerRequests,
-  buildSteerFollowUpRequest,
-  canSubmitSteerBatch,
+  buildFollowUpShortcutRequest,
+  buildSendQueuedMessageByIdRequest,
+  canSubmitFollowUpShortcut,
   resolveDefaultExecutionOptionsState,
   shouldQueueFollowUpMessage,
   type FollowUpExecutionSelection,
@@ -108,6 +108,13 @@ interface ThreadDetailPromptAreaProps {
   managerChildrenSection: ThreadPromptManagerChildrenSection | null;
   sendMessage: SendMessageMutationLike;
   thread: ThreadWithRuntime;
+}
+
+type QueuedMessageSendGuard = "exists" | "current-head";
+
+interface SendQueuedMessageByIdArgs {
+  guard: QueuedMessageSendGuard;
+  messageId: string;
 }
 
 export function ThreadDetailPromptArea({
@@ -173,6 +180,8 @@ export function ThreadDetailPromptArea({
     }
     return next;
   }, [queuedMessages]);
+  const queuedMessagesRef = useRef<readonly ThreadQueuedMessage[]>([]);
+  queuedMessagesRef.current = queuedMessages;
   const { data: promptHistoryEntries = [] } = useThreadPromptHistory(
     thread.id,
     {
@@ -203,7 +212,8 @@ export function ThreadDetailPromptArea({
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
     string | null
   >(null);
-  const [isSteerBatchSending, setIsSteerBatchSending] = useState(false);
+  const [isFollowUpShortcutSending, setIsFollowUpShortcutSending] =
+    useState(false);
   const promptHistoryDrafts = useMemo(
     () => promptHistoryEntriesToDrafts(promptHistoryEntries),
     [promptHistoryEntries],
@@ -256,12 +266,12 @@ export function ThreadDetailPromptArea({
     sendQueuedMessage.isPending ||
     deleteQueuedMessage.isPending ||
     reorderQueuedMessage.isPending ||
-    isSteerBatchSending;
+    isFollowUpShortcutSending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
     isEnvironmentActionPending ||
     createQueuedMessage.isPending ||
-    isSteerBatchSending;
+    isFollowUpShortcutSending;
   const handleStopThread = useCallback(() => {
     stopThread.mutate(thread.id);
   }, [stopThread, thread.id]);
@@ -318,7 +328,7 @@ export function ThreadDetailPromptArea({
     [currentPromptDraft],
   );
   const hasPromptDraftInput = currentPromptDraftInput.length > 0;
-  const canSteerSubmit = canSubmitSteerBatch({
+  const canSubmitModifierShortcut = canSubmitFollowUpShortcut({
     hasPromptDraftInput,
     isFollowUpSubmitting,
     isQueueMutationPending,
@@ -430,93 +440,114 @@ export function ThreadDetailPromptArea({
     runtimeDisplayStatus,
   ]);
 
-  const handleSteerSend = useCallback(async () => {
-    if (!canSteerSubmit) {
+  const sendQueuedMessageById = useCallback(
+    async ({ guard, messageId }: SendQueuedMessageByIdArgs) => {
+      if (!queuedMessagesByIdRef.current.has(messageId)) {
+        return;
+      }
+      if (
+        guard === "current-head" &&
+        queuedMessagesRef.current[0]?.id !== messageId
+      ) {
+        return;
+      }
+
+      setProcessingQueuedMessageId(messageId);
+      try {
+        await sendQueuedMessage.mutateAsync(
+          buildSendQueuedMessageByIdRequest({
+            queuedMessageId: messageId,
+            threadId: thread.id,
+          }),
+        );
+        setAttachmentError(null);
+      } catch (nextError) {
+        appToast.error(
+          getMutationErrorMessage({
+            error: nextError,
+            fallbackMessage: "Failed to send queued message",
+            lifecycleOperation: "send_queued_message",
+          }),
+        );
+      } finally {
+        setProcessingQueuedMessageId((currentMessageId) =>
+          currentMessageId === messageId ? null : currentMessageId,
+        );
+      }
+    },
+    [sendQueuedMessage, thread.id],
+  );
+
+  const handleModifierSubmit = useCallback(async () => {
+    if (!canSubmitModifierShortcut) {
       return;
     }
 
     const submittedDraft = currentPromptDraft;
     const submittedInput = currentPromptDraftInput;
-    if (queuedMessages.length === 0 && submittedInput.length === 0) {
+    const shortcutRequest = buildFollowUpShortcutRequest({
+      input: submittedInput,
+      queuedMessages: queuedMessagesRef.current,
+      threadId: thread.id,
+    });
+    if (!shortcutRequest) {
       return;
     }
 
-    setIsSteerBatchSending(true);
-    if (submittedInput.length > 0) {
+    if (shortcutRequest.kind === "draft") {
+      setIsFollowUpShortcutSending(true);
       promptDraft.clearIfCurrentMatches(submittedDraft);
+      setAttachmentError(null);
+
+      try {
+        await sendMessage.mutateAsync(shortcutRequest.request);
+      } catch (nextError) {
+        promptDraft.restoreIfEmpty(submittedDraft);
+        appToast.error(
+          getMutationErrorMessage({
+            error: nextError,
+            fallbackMessage: "Failed to send message",
+            lifecycleOperation: "send_message",
+          }),
+        );
+      } finally {
+        setIsFollowUpShortcutSending(false);
+      }
+      return;
     }
-    setAttachmentError(null);
 
+    const queuedMessageId = shortcutRequest.request.queuedMessageId;
+    if (queuedMessagesRef.current[0]?.id !== queuedMessageId) {
+      return;
+    }
+
+    setIsFollowUpShortcutSending(true);
     try {
-      for (const request of buildQueuedSteerRequests({
-        queuedMessages,
-        threadId: thread.id,
-      })) {
-        await sendQueuedMessage.mutateAsync(request);
-      }
-
-      const request = buildSteerFollowUpRequest({
-        input: submittedInput,
-        threadId: thread.id,
+      await sendQueuedMessageById({
+        guard: "current-head",
+        messageId: queuedMessageId,
       });
-      if (request) {
-        await sendMessage.mutateAsync(request);
-      }
-    } catch (nextError) {
-      promptDraft.restoreIfEmpty(submittedDraft);
-      appToast.error(
-        getMutationErrorMessage({
-          error: nextError,
-          fallbackMessage: "Failed to send message",
-          lifecycleOperation: "send_message",
-        }),
-      );
     } finally {
-      setIsSteerBatchSending(false);
+      setIsFollowUpShortcutSending(false);
     }
   }, [
-    canSteerSubmit,
+    canSubmitModifierShortcut,
     currentPromptDraft,
     currentPromptDraftInput,
     promptDraft,
-    queuedMessages,
     sendMessage,
-    sendQueuedMessage,
+    sendQueuedMessageById,
     thread.id,
   ]);
 
   const handleSendQueuedImmediately = useCallback(
     (messageId: string) => {
-      if (!queuedMessagesByIdRef.current.has(messageId)) {
-        return;
-      }
-
-      setProcessingQueuedMessageId(messageId);
-      void sendQueuedMessage
-        .mutateAsync({
-          id: thread.id,
-          mode: "auto",
-          queuedMessageId: messageId,
-        })
-        .then(() => {
-          setAttachmentError(null);
-        })
-        .catch((nextError) => {
-          appToast.error(
-            getMutationErrorMessage({
-              error: nextError,
-              fallbackMessage: "Failed to send queued message",
-              lifecycleOperation: "send_queued_message",
-            }),
-          );
-        })
-        .finally(() => {
-          setProcessingQueuedMessageId((currentMessageId) =>
-            currentMessageId === messageId ? null : currentMessageId,
-          );
-        });
+      void sendQueuedMessageById({
+        guard: "exists",
+        messageId,
+      });
     },
-    [sendQueuedMessage, thread.id],
+    [sendQueuedMessageById],
   );
 
   const handleEditQueuedMessage = useCallback(
@@ -645,18 +676,18 @@ export function ThreadDetailPromptArea({
       isFollowUpSubmitting,
       message: promptDraft.text,
       onChangeMessage: promptDraft.setText,
-      onSteerSubmit: handleSteerSend,
+      onModifierSubmit: handleModifierSubmit,
       onSubmit: handleSend,
       promptPlaceholder,
-      canSteerSubmit,
+      canModifierSubmit: canSubmitModifierShortcut,
       submitMode,
       threadRuntimeDisplayStatus: runtimeDisplayStatus,
     }),
     [
-      canSteerSubmit,
+      canSubmitModifierShortcut,
       currentPromptDraft,
       handleSend,
-      handleSteerSend,
+      handleModifierSubmit,
       isFollowUpSubmitting,
       promptDraft.setDraft,
       promptDraft.setText,

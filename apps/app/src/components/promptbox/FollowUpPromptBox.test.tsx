@@ -20,10 +20,10 @@ function makeFollowUpPromptBoxProps(): FollowUpPromptBoxProps {
       isFollowUpSubmitting: false,
       message: "Please continue",
       onChangeMessage: vi.fn(),
-      onSteerSubmit: vi.fn(),
+      onModifierSubmit: vi.fn(),
       onSubmit: vi.fn(),
       promptPlaceholder: "Stopping thread...",
-      canSteerSubmit: false,
+      canModifierSubmit: false,
       submitMode: { kind: "blocked", reason: "stopping" },
       threadRuntimeDisplayStatus: "active",
     },
@@ -64,14 +64,14 @@ afterEach(() => {
 });
 
 describe("FollowUpPromptBox", () => {
-  it("sends steers with Cmd+Enter without invoking the normal submit", () => {
+  it("uses modifier submit with Cmd+Enter without invoking the normal submit", () => {
     const props = makeFollowUpPromptBoxProps();
-    const onSteerSubmit = vi.fn();
+    const onModifierSubmit = vi.fn();
     const onSubmit = vi.fn();
     props.composer = {
       ...props.composer,
-      canSteerSubmit: true,
-      onSteerSubmit,
+      canModifierSubmit: true,
+      onModifierSubmit,
       onSubmit,
       promptPlaceholder: "Ask for follow-up changes",
       submitMode: { kind: "queue", onStop: vi.fn() },
@@ -86,18 +86,18 @@ describe("FollowUpPromptBox", () => {
     });
 
     expect(wasNotCanceled).toBe(false);
-    expect(onSteerSubmit).toHaveBeenCalledTimes(1);
+    expect(onModifierSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("uses the normal submit path for Cmd+Enter when steer is unavailable", () => {
+  it("uses the normal submit path for Cmd+Enter when modifier submit is unavailable", () => {
     const props = makeFollowUpPromptBoxProps();
-    const onSteerSubmit = vi.fn();
+    const onModifierSubmit = vi.fn();
     const onSubmit = vi.fn();
     props.composer = {
       ...props.composer,
-      canSteerSubmit: false,
-      onSteerSubmit,
+      canModifierSubmit: false,
+      onModifierSubmit,
       onSubmit,
       promptPlaceholder: "Ask for follow-up changes",
       submitMode: { kind: "ready" },
@@ -113,17 +113,17 @@ describe("FollowUpPromptBox", () => {
 
     expect(wasNotCanceled).toBe(false);
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSteerSubmit).not.toHaveBeenCalled();
+    expect(onModifierSubmit).not.toHaveBeenCalled();
   });
 
   it("preserves ordinary Enter submit behavior", () => {
     const props = makeFollowUpPromptBoxProps();
-    const onSteerSubmit = vi.fn();
+    const onModifierSubmit = vi.fn();
     const onSubmit = vi.fn();
     props.composer = {
       ...props.composer,
-      canSteerSubmit: true,
-      onSteerSubmit,
+      canModifierSubmit: true,
+      onModifierSubmit,
       onSubmit,
       promptPlaceholder: "Ask for follow-up changes",
       submitMode: { kind: "queue", onStop: vi.fn() },
@@ -136,6 +136,6 @@ describe("FollowUpPromptBox", () => {
 
     expect(wasNotCanceled).toBe(false);
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSteerSubmit).not.toHaveBeenCalled();
+    expect(onModifierSubmit).not.toHaveBeenCalled();
   });
 });

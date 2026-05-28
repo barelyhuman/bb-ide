@@ -13,9 +13,9 @@ export interface CreateQueuedFollowUpRequest extends CreateQueuedMessageRequest 
   id: string;
 }
 
-export interface SendQueuedSteerRequest {
+export interface SendQueuedMessageByIdRequest {
   id: string;
-  mode: "steer";
+  mode: "auto";
   queuedMessageId: string;
 }
 
@@ -45,18 +45,21 @@ export interface BuildAutoFollowUpRequestArgs extends BaseFollowUpRequestArgs {
   execution: FollowUpExecutionSelection;
 }
 
-export interface BuildCreateQueuedFollowUpRequestArgs extends BaseFollowUpRequestArgs {
+export interface BuildCreateQueuedFollowUpRequestArgs
+  extends BaseFollowUpRequestArgs {
   execution: FollowUpExecutionSelection;
 }
 
-export interface BuildSteerFollowUpRequestArgs extends BaseFollowUpRequestArgs {}
-
-export interface BuildQueuedSteerRequestsArgs {
-  queuedMessages: readonly QueuedMessageForSteer[];
+export interface BuildSendQueuedMessageByIdRequestArgs {
+  queuedMessageId: string;
   threadId: string;
 }
 
-export interface CanSubmitSteerBatchArgs {
+export interface BuildFollowUpShortcutRequestArgs extends BaseFollowUpRequestArgs {
+  queuedMessages: readonly QueuedMessageForSend[];
+}
+
+export interface CanSubmitFollowUpShortcutArgs {
   hasPromptDraftInput: boolean;
   isFollowUpSubmitting: boolean;
   isQueueMutationPending: boolean;
@@ -71,9 +74,13 @@ export interface ResolveDefaultExecutionOptionsStateArgs {
   isError: boolean;
 }
 
-interface QueuedMessageForSteer {
+export interface QueuedMessageForSend {
   id: string;
 }
+
+export type FollowUpShortcutRequest =
+  | { kind: "draft"; request: SendMessageMutationRequest }
+  | { kind: "queued"; request: SendQueuedMessageByIdRequest };
 
 export type DefaultExecutionOptionsState =
   | "available"
@@ -86,14 +93,14 @@ export function shouldQueueFollowUpMessage(
   return displayStatus === "active" || displayStatus === "host-reconnecting";
 }
 
-export function canSubmitSteerBatch({
+export function canSubmitFollowUpShortcut({
   hasPromptDraftInput,
   isFollowUpSubmitting,
   isQueueMutationPending,
   queuedMessageCount,
   runtimeDisplayStatus,
   submitModeKind,
-}: CanSubmitSteerBatchArgs): boolean {
+}: CanSubmitFollowUpShortcutArgs): boolean {
   return (
     runtimeDisplayStatus === "active" &&
     submitModeKind === "queue" &&
@@ -134,10 +141,10 @@ export function buildAutoFollowUpRequest({
   };
 }
 
-export function buildSteerFollowUpRequest({
+function buildSteerFollowUpRequest({
   input,
   threadId,
-}: BuildSteerFollowUpRequestArgs): SendMessageMutationRequest | null {
+}: BaseFollowUpRequestArgs): SendMessageMutationRequest | null {
   if (input.length === 0) {
     return null;
   }
@@ -165,15 +172,44 @@ export function buildCreateQueuedFollowUpRequest({
   };
 }
 
-export function buildQueuedSteerRequests({
+export function buildSendQueuedMessageByIdRequest({
+  queuedMessageId,
+  threadId,
+}: BuildSendQueuedMessageByIdRequestArgs): SendQueuedMessageByIdRequest {
+  return {
+    id: threadId,
+    mode: "auto",
+    queuedMessageId,
+  };
+}
+
+/**
+ * Cmd+Enter on an active follow-up composer sends current draft input as an
+ * explicit steer. If the composer is empty, it sends only the current queue
+ * head through the same auto path as the queued-card "Send now" action.
+ */
+export function buildFollowUpShortcutRequest({
+  input,
   queuedMessages,
   threadId,
-}: BuildQueuedSteerRequestsArgs): SendQueuedSteerRequest[] {
-  return queuedMessages.map((queuedMessage) => ({
-    id: threadId,
-    mode: "steer",
-    queuedMessageId: queuedMessage.id,
-  }));
+}: BuildFollowUpShortcutRequestArgs): FollowUpShortcutRequest | null {
+  const draftRequest = buildSteerFollowUpRequest({ input, threadId });
+  if (draftRequest) {
+    return { kind: "draft", request: draftRequest };
+  }
+
+  const nextQueuedMessage = queuedMessages[0];
+  if (!nextQueuedMessage) {
+    return null;
+  }
+
+  return {
+    kind: "queued",
+    request: buildSendQueuedMessageByIdRequest({
+      queuedMessageId: nextQueuedMessage.id,
+      threadId,
+    }),
+  };
 }
 
 function buildSharedThreadExecutionRequestFields(
