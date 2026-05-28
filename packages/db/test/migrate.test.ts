@@ -23,6 +23,10 @@ interface MigrationCreatedAtRow {
   createdAt: number;
 }
 
+interface LatestMigrationCreatedAtRow {
+  createdAt: number | null;
+}
+
 interface MigratedQueuedMessageRow {
   id: string;
   sortKey: string;
@@ -53,7 +57,7 @@ const baselineWhen = 1778891867195;
 const publishedTerminalSessionUserInputWhen = 1779139400000;
 const closedSessionPruneIndexesWhen = 1779139400001;
 const threadDynamicContextFileStatesWhen = 1779139400002;
-const threadHostAssignmentMigrationWhen = 1779821958649;
+const commandLookupIndexesWhen = 1779943370189;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
@@ -84,6 +88,22 @@ function readIndexNames(args: ReadIndexNamesArgs): string[] {
     )
     .all(args.tableName)
     .map((row) => row.name);
+}
+
+function readLatestAppliedMigrationCreatedAt(db: DbConnection): number {
+  const row = db.$client
+    .prepare<[], LatestMigrationCreatedAtRow>(
+      `
+        SELECT MAX(created_at) AS createdAt
+        FROM __drizzle_migrations
+      `,
+    )
+    .get();
+  const createdAt = row?.createdAt;
+  if (typeof createdAt !== "number") {
+    throw new Error("Expected at least one applied migration timestamp");
+  }
+  return createdAt;
 }
 
 function runQueuedMessageSortKeyMigration(db: DbConnection): void {
@@ -146,15 +166,17 @@ describe("migrate", () => {
   });
 
   it("warns when applied migration timestamps are in the future", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(threadHostAssignmentMigrationWhen + 10_000);
-
     const db = createConnection(":memory:");
     const logger = {
       warn: vi.fn(),
     } satisfies MigrationWarningLogger;
 
     try {
+      migrate(db);
+      const latestMigrationCreatedAt = readLatestAppliedMigrationCreatedAt(db);
+      vi.useFakeTimers();
+      vi.setSystemTime(latestMigrationCreatedAt + 10_000);
+
       migrate(db, { logger });
       expect(logger.warn).not.toHaveBeenCalled();
 
@@ -207,6 +229,12 @@ describe("migrate", () => {
       db.$client.prepare("DROP INDEX projects_sort_idx").run();
       db.$client.prepare("DROP INDEX projects_personal_singleton_idx").run();
       db.$client.prepare("DROP INDEX threads_project_type_sort_idx").run();
+      db.$client
+        .prepare("DROP INDEX host_daemon_commands_host_type_state_idx")
+        .run();
+      db.$client
+        .prepare("DROP INDEX host_daemon_commands_type_state_idx")
+        .run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
       db.$client.prepare("DELETE FROM projects WHERE kind = 'personal'").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN kind").run();
@@ -258,6 +286,7 @@ describe("migrate", () => {
         .map((row) => row.createdAt);
       expect(migrationCreatedAts).toContain(closedSessionPruneIndexesWhen);
       expect(migrationCreatedAts).toContain(threadDynamicContextFileStatesWhen);
+      expect(migrationCreatedAts).toContain(commandLookupIndexesWhen);
     } finally {
       closeConnection(db);
     }

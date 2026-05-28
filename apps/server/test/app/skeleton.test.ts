@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getPersonalProject, getProjectExecutionDefaults, hosts } from "@bb/db";
+import {
+  getPersonalProject,
+  getProjectExecutionDefaults,
+  hosts,
+  type DbConnection,
+} from "@bb/db";
 import { PERSONAL_PROJECT_ID, threadTypeValues } from "@bb/domain";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { initDb } from "../../src/db.js";
@@ -14,6 +19,28 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+type InsertMigrationParameters = [string, number];
+
+interface LatestMigrationCreatedAtRow {
+  createdAt: number | null;
+}
+
+function readLatestAppliedMigrationCreatedAt(db: DbConnection): number {
+  const row = db.$client
+    .prepare<[], LatestMigrationCreatedAtRow>(
+      `
+        SELECT MAX(created_at) AS createdAt
+        FROM __drizzle_migrations
+      `,
+    )
+    .get();
+  const createdAt = row?.createdAt;
+  if (typeof createdAt !== "number") {
+    throw new Error("Expected at least one applied migration timestamp");
+  }
+  return createdAt;
+}
 
 describe("server skeleton", () => {
   it("serves public routes without auth", async () => {
@@ -183,23 +210,28 @@ describe("server skeleton", () => {
   });
 
   it("warns when startup finds future-dated applied migrations", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1779821958649 + 10_000);
-
     const dataDir = mkdtempSync(join(tmpdir(), "bb-server-db-startup-"));
     try {
       const dbPath = join(dataDir, "bb.db");
-      const futureCreatedAt = Date.now() + 60_000;
       const seedDb = initDb(dbPath);
-      seedDb.$client
-        .prepare<[string, number]>(
-          `
-            INSERT INTO __drizzle_migrations (hash, created_at)
-            VALUES (?, ?)
-          `,
-        )
-        .run("future-migration-hash", futureCreatedAt);
-      seedDb.$client.close();
+      let futureCreatedAt: number;
+      try {
+        const latestMigrationCreatedAt =
+          readLatestAppliedMigrationCreatedAt(seedDb);
+        vi.useFakeTimers();
+        vi.setSystemTime(latestMigrationCreatedAt + 10_000);
+        futureCreatedAt = Date.now() + 60_000;
+        seedDb.$client
+          .prepare<InsertMigrationParameters>(
+            `
+              INSERT INTO __drizzle_migrations (hash, created_at)
+              VALUES (?, ?)
+            `,
+          )
+          .run("future-migration-hash", futureCreatedAt);
+      } finally {
+        seedDb.$client.close();
+      }
 
       const logger = {
         debug: vi.fn(),
