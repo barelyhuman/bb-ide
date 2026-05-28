@@ -1,5 +1,3 @@
-import { CopyButton } from "@/components/ui/copy-button";
-
 interface AppToastCommandDescriptionProps {
   command: string;
 }
@@ -43,14 +41,6 @@ export function AppToastCommitDescription({
       <span className="shrink-0 whitespace-pre font-mono text-foreground">
         {shortSha}
       </span>
-      <CopyButton
-        className="size-4 shrink-0"
-        errorMessage="Failed to copy commit SHA"
-        iconClassName="size-3"
-        label={`Copy commit SHA ${shortSha}`}
-        successMessage="Commit SHA copied"
-        text={commitSha}
-      />
       <span className="shrink-0 whitespace-pre text-muted-foreground">·</span>
       <span className="min-w-0 truncate whitespace-pre text-muted-foreground">
         {commitSubject}

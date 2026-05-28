@@ -3,7 +3,6 @@
 import {
   act,
   cleanup,
-  fireEvent,
   render,
   renderHook,
   screen,
@@ -40,8 +39,6 @@ interface SonnerCustomToast {
   options: CapturedToastOptions;
   renderToast: (id: string | number) => ReactElement;
 }
-
-type ClipboardWriteText = (text: string) => Promise<void>;
 
 const sonnerToastState = vi.hoisted(() => {
   const invocations: SonnerCustomToast[] = [];
@@ -126,18 +123,6 @@ function readToastProps(index: number): CapturedToastProps {
   return element.props;
 }
 
-function installClipboardWriteTextMock(): ReturnType<
-  typeof vi.fn<ClipboardWriteText>
-> {
-  const writeText = vi.fn<ClipboardWriteText>();
-  writeText.mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: { writeText },
-  });
-  return writeText;
-}
-
 afterEach(() => {
   cleanup();
   sonnerToastState.invocations.splice(0);
@@ -181,7 +166,6 @@ describe("useThreadGitActions", () => {
   });
 
   it("uses the intended loading and success copy for commit actions", async () => {
-    const writeText = installClipboardWriteTextMock();
     const response: CommitActionResponse = {
       ok: true,
       action: "commit",
@@ -214,15 +198,14 @@ describe("useThreadGitActions", () => {
     expect(sonnerToastState.invocations[1]?.options.id).toBe("toast-1");
 
     render(<>{readToastProps(1).description}</>);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Copy commit SHA abcdef1" }),
-    );
-
-    expect(writeText).toHaveBeenCalledWith("abcdef1234567890");
+    expect(screen.getByText("abcdef1")).toBeTruthy();
+    expect(screen.getByText("Update toast copy")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Copy commit SHA abcdef1" }),
+    ).toBeNull();
   });
 
   it("uses the intended loading and success copy for squash merge actions", async () => {
-    const writeText = installClipboardWriteTextMock();
     const response: SquashMergeActionResponse = {
       ok: true,
       action: "squash_merge",
@@ -258,10 +241,10 @@ describe("useThreadGitActions", () => {
     expect(sonnerToastState.invocations[1]?.options.id).toBe("toast-1");
 
     render(<>{readToastProps(1).description}</>);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Copy commit SHA 1234567" }),
-    );
-
-    expect(writeText).toHaveBeenCalledWith("1234567890abcdef");
+    expect(screen.getByText("1234567")).toBeTruthy();
+    expect(screen.getByText("Squash branch changes")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Copy commit SHA 1234567" }),
+    ).toBeNull();
   });
 });
