@@ -261,6 +261,69 @@ describe("useWorkspaceOpenTargets", () => {
     });
   });
 
+  it("lists and opens targets when the daemon API is reachable before its server session opens", async () => {
+    const state: WorkspaceOpenTargetFetchState = {
+      daemonStatus: {
+        connected: false,
+        hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      },
+      hostDaemonPort: 4123,
+      workspaceOpenTargets: [vscodeTarget],
+      workspaceOpenTargetsStatus: 200,
+    };
+    const openTargetRequests: OpenInTargetRequest[] = [];
+    installWorkspaceOpenTargetFetchRoutes(state, openTargetRequests);
+
+    const { useWorkspaceOpenTargets } =
+      await importFreshWorkspaceOpenTargetsModules();
+    const latestSnapshot: { current: WorkspaceOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <WorkspaceOpenTargetsCapture
+          enabled={true}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+          useWorkspaceOpenTargets={useWorkspaceOpenTargets}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        requireWorkspaceOpenTargetsSnapshot(latestSnapshot.current)
+          .workspaceOpenTargets,
+      ).toEqual([vscodeTarget]);
+    });
+
+    await act(async () => {
+      await requireWorkspaceOpenTargetsSnapshot(
+        latestSnapshot.current,
+      ).openWorkspace?.({
+        lineNumber: 17,
+        path: "/tmp/workspace/file.ts",
+        targetId: "vscode",
+      });
+    });
+
+    await waitFor(() => {
+      expect(openTargetRequests).toEqual([
+        {
+          lineNumber: 17,
+          path: "/tmp/workspace/file.ts",
+          targetId: "vscode",
+        },
+      ]);
+    });
+  });
+
   it("treats missing workspace open target routes as unsupported", async () => {
     const state: WorkspaceOpenTargetFetchState = {
       daemonStatus: {

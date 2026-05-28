@@ -41,9 +41,13 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 vi.mock("@/hooks/useHostDaemon", () => ({
   useHostDaemon: () => ({
+    hasDaemon: false,
+    localDaemonHostId: null,
     localHostId: null,
     platform: null,
     pickFolder: null,
+    supportsNativeFolderPicker: false,
+    isLocalDaemonHost: () => false,
     isLocalHost: () => false,
   }),
 }));

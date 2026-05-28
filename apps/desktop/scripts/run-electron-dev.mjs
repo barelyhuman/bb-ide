@@ -26,6 +26,7 @@ function createElectronAppEnv(env, config) {
     baseEnv: env,
     config,
   });
+  childEnv.BB_DESKTOP_NODE_EXEC_PATH = process.execPath;
   delete childEnv.ELECTRON_RUN_AS_NODE;
   return childEnv;
 }

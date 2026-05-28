@@ -121,7 +121,7 @@ function getHostDaemonBaseUrl(port: number): string {
 }
 
 /**
- * Fetch the local host ID from the daemon.
+ * Fetch local daemon status.
  * Returns null if the daemon is unreachable.
  */
 export async function fetchHostStatus(
@@ -137,6 +137,7 @@ export async function fetchHostStatus(
   }
 }
 
+/** Fetch the local connected server-session host ID from the daemon. */
 export async function fetchHostId(port: number): Promise<string | null> {
   const status = await fetchHostStatus(port);
   if (!status?.connected) {

@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  createBbAppProcessEnv,
+  resolveBbAppProcessRuntime,
   startBbAppProcess,
   type BbAppProcess,
 } from "../src/bb-process.js";
@@ -67,6 +69,59 @@ afterEach(async () => {
 });
 
 describe("bb app process", () => {
+  it("uses the dev Node executable without Electron node mode", () => {
+    const env = createBbAppProcessEnv({
+      env: {
+        ELECTRON_RUN_AS_NODE: "1",
+      },
+      runtimeMode: "node",
+    });
+
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+  });
+
+  it("uses Electron node mode for packaged runtimes", () => {
+    const runtime = resolveBbAppProcessRuntime({
+      env: {},
+      isPackaged: true,
+      processExecPath: "/Applications/bb.app/Contents/MacOS/bb",
+    });
+
+    expect(runtime).toEqual({
+      executablePath: "/Applications/bb.app/Contents/MacOS/bb",
+      mode: "electron-node",
+    });
+    expect(
+      createBbAppProcessEnv({
+        env: {},
+        runtimeMode: runtime.mode,
+      }).ELECTRON_RUN_AS_NODE,
+    ).toBe("1");
+  });
+
+  it("requires the host Node executable in desktop dev mode", () => {
+    expect(() =>
+      resolveBbAppProcessRuntime({
+        env: {},
+        isPackaged: false,
+        processExecPath: "/path/to/electron",
+      }),
+    ).toThrow("BB_DESKTOP_NODE_EXEC_PATH is required");
+
+    expect(
+      resolveBbAppProcessRuntime({
+        env: {
+          BB_DESKTOP_NODE_EXEC_PATH: "/usr/local/bin/node",
+        },
+        isPackaged: false,
+        processExecPath: "/path/to/electron",
+      }),
+    ).toEqual({
+      executablePath: "/usr/local/bin/node",
+      mode: "node",
+    });
+  });
+
   it("escalates to SIGKILL when the bridge ignores SIGTERM", async () => {
     const script = await createTempScript({
       contents: `
@@ -82,6 +137,10 @@ setInterval(() => undefined, 1000);
       cwd: script.root,
       env: process.env,
       logLineLimit: 20,
+      runtime: {
+        executablePath: process.execPath,
+        mode: "node",
+      },
     });
     processes.push(processEntry);
     await waitForLog({

@@ -6,12 +6,12 @@ import type {
 } from "@bb/host-daemon-contract";
 import {
   hostDaemonPortAtom,
-  localHostIdAtom,
+  localHostDaemonReachableAtom,
   localWorkspaceOpenTargetsAtom,
 } from "@/lib/system-config-atoms";
 import { openInTarget as daemonOpenInTarget } from "@/lib/api-host-daemon";
 
-const disabledLocalHostIdAtom = atom<string | null>(null);
+const disabledLocalHostDaemonReachableAtom = atom(false);
 const disabledHostDaemonPortAtom = atom<number | null>(null);
 const disabledWorkspaceOpenTargetsAtom = atom<WorkspaceOpenTarget[]>([]);
 
@@ -27,8 +27,10 @@ export interface UseWorkspaceOpenTargetsResult {
 export function useWorkspaceOpenTargets(
   args: UseWorkspaceOpenTargetsArgs,
 ): UseWorkspaceOpenTargetsResult {
-  const localHostId = useAtomValue(
-    args.enabled ? localHostIdAtom : disabledLocalHostIdAtom,
+  const localHostDaemonReachable = useAtomValue(
+    args.enabled
+      ? localHostDaemonReachableAtom
+      : disabledLocalHostDaemonReachableAtom,
   );
   const daemonPort = useAtomValue(
     args.enabled ? hostDaemonPortAtom : disabledHostDaemonPortAtom,
@@ -42,7 +44,7 @@ export function useWorkspaceOpenTargets(
   const openWorkspace = useMemo(() => {
     if (
       !args.enabled ||
-      !localHostId ||
+      !localHostDaemonReachable ||
       !daemonPort ||
       workspaceOpenTargets.length === 0
     ) {
@@ -50,7 +52,12 @@ export function useWorkspaceOpenTargets(
     }
     const port = daemonPort;
     return (request: OpenInTargetRequest) => daemonOpenInTarget(port, request);
-  }, [args.enabled, localHostId, daemonPort, workspaceOpenTargets.length]);
+  }, [
+    args.enabled,
+    localHostDaemonReachable,
+    daemonPort,
+    workspaceOpenTargets.length,
+  ]);
 
   return {
     openWorkspace,

@@ -138,22 +138,23 @@ export function ProjectSettingsView() {
     },
     [localSourcePicker, projectId, projectName],
   );
-  const localHostId = localSourcePicker.localHostId;
+  const localDaemonHostId = localSourcePicker.localDaemonHostId;
 
-  const localhostSourcePaths = useMemo(() => {
-    if (!localHostId) return [];
+  const localDaemonSourcePaths = useMemo(() => {
+    if (!localDaemonHostId) return [];
     return sources
       .filter(
         (source): source is LocalPathProjectSource =>
-          isLocalPathProjectSource(source) && source.hostId === localHostId,
+          isLocalPathProjectSource(source) &&
+          source.hostId === localDaemonHostId,
       )
       .map((source) => source.path);
-  }, [localHostId, sources]);
-  const pathExistence = useLocalPathExistence(localhostSourcePaths);
+  }, [localDaemonHostId, sources]);
+  const pathExistence = useLocalPathExistence(localDaemonSourcePaths);
 
   const showAddLocalSourceButton =
-    localHostId != null &&
-    !findLocalPathProjectSourceForHost(sources, localHostId);
+    localDaemonHostId != null &&
+    !findLocalPathProjectSourceForHost(sources, localDaemonHostId);
 
   const addSourceButtons = showAddLocalSourceButton ? (
     <div className="mt-2 flex gap-2">
@@ -185,12 +186,12 @@ export function ProjectSettingsView() {
             <div>
               <SettingsRowList>
                 {sources.map((source) => {
-                  const isLocalhostSource =
+                  const isLocalDaemonSource =
                     isLocalPathProjectSource(source) &&
-                    localHostId != null &&
-                    source.hostId === localHostId;
+                    localDaemonHostId != null &&
+                    source.hostId === localDaemonHostId;
                   const isInvalid =
-                    isLocalhostSource &&
+                    isLocalDaemonSource &&
                     isLocalPathMissing(pathExistence, source.path);
                   const hostName = isLocalPathProjectSource(source)
                     ? (hostNameById.get(source.hostId) ?? source.hostId)
@@ -199,7 +200,7 @@ export function ProjectSettingsView() {
                     <ProjectSourceRow
                       key={source.id}
                       source={source}
-                      isLocalhostSource={isLocalhostSource}
+                      isLocalhostSource={isLocalDaemonSource}
                       isLocalPathInvalid={isInvalid}
                       hostName={hostName}
                       isEditPending={localSourcePickerPending}

@@ -254,17 +254,18 @@ afterEach(() => {
   sonnerToastState.custom.mockClear();
   sonnerToastState.dismiss.mockClear();
   window.localStorage.clear();
+  vi.useRealTimers();
   vi.resetModules();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("useLocalOpenTargets", () => {
-  it("opens in the stored preferred directory target", async () => {
+  it("opens in the stored preferred directory target when the daemon API is reachable", async () => {
     window.localStorage.setItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY, "finder");
     const state: LocalOpenTargetsFetchState = {
       daemonStatus: {
-        connected: true,
+        connected: false,
         hostId: "host-1",
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
@@ -650,16 +651,10 @@ describe("useLocalOpenTargets", () => {
     expect(openTargetRequests).toEqual([]);
   });
 
-  it("shows a localhost connectivity error when preferred directory opens are unavailable", async () => {
+  it("shows a local daemon unavailable error when preferred directory opens are unavailable", async () => {
+    vi.useFakeTimers();
     const state: LocalOpenTargetsFetchState = {
-      daemonStatus: {
-        connected: false,
-        hostId: "host-1",
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        serverUrl: "http://localhost:3334",
-        supportsNativeFolderPicker: false,
-        platform: "darwin",
-      },
+      daemonStatus: null,
       hostDaemonPort: 4123,
       workspaceOpenTargets: [],
       workspaceOpenTargetsStatus: 200,
@@ -683,6 +678,9 @@ describe("useLocalOpenTargets", () => {
         { wrapper: createSuspenseWrapper() },
       );
     });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
 
     await act(async () => {
       await requireLocalOpenTargetsSnapshot(
@@ -693,17 +691,15 @@ describe("useLocalOpenTargets", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(sonnerToastState.custom).toHaveBeenCalled();
-    });
+    expect(sonnerToastState.custom).toHaveBeenCalled();
     const toastProps = readLatestToastProps();
     expect(toastProps.tone).toBe("error");
     expect(toastProps.title).toBe("Failed to open file locally");
-    expect(toastProps.description).toBe("Localhost is disconnected.");
+    expect(toastProps.description).toBe("Local host daemon is unavailable.");
     expect(openTargetRequests).toEqual([]);
   });
 
-  it("shows a no-targets error when localhost is connected but no open targets are available", async () => {
+  it("shows a no-targets error when the daemon is reachable but no open targets are available", async () => {
     const state: LocalOpenTargetsFetchState = {
       daemonStatus: {
         connected: true,

@@ -20,6 +20,16 @@ const unavailableSystemConfig: SystemConfigResponse = {
 };
 
 type SystemConfigLoadStatus = "failed" | "succeeded" | null;
+type Milliseconds = number;
+
+interface FetchHostStatusWithRetryArgs {
+  port: number;
+  retryDelaysMs: readonly Milliseconds[];
+}
+
+const LOCAL_HOST_STATUS_RETRY_DELAYS_MS: readonly Milliseconds[] = [
+  100, 250, 500, 1_000,
+];
 
 let lastSystemConfigLoadStatus: SystemConfigLoadStatus = null;
 
@@ -48,6 +58,32 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
     markSystemConfigLoadFailed();
     return unavailableSystemConfig;
   }
+}
+
+function sleep(milliseconds: Milliseconds): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+async function fetchHostStatusWithRetry({
+  port,
+  retryDelaysMs,
+}: FetchHostStatusWithRetryArgs): Promise<HostDaemonStatusSnapshot | null> {
+  const firstStatus = await fetchHostStatus(port);
+  if (firstStatus) {
+    return firstStatus;
+  }
+
+  for (const delayMs of retryDelaysMs) {
+    await sleep(delayMs);
+    const status = await fetchHostStatus(port);
+    if (status) {
+      return status;
+    }
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,13 +120,13 @@ export const systemConfigAtom = atom(async (get) => {
 });
 
 // ---------------------------------------------------------------------------
-// Local host ID — probed from the host daemon on startup. Re-probes on server
-// connects/reconnects and host status changes while some UI is subscribed to
-// it. No-daemon is a normal state (e.g., mobile browser).
+// Local host daemon status — probed from the host daemon on startup. Re-probes
+// on server connects/reconnects and host status changes while some UI is
+// subscribed to it. No-daemon is a normal state (e.g., mobile browser).
 // ---------------------------------------------------------------------------
 
-const localHostIdRefreshTickAtom = atom(0);
-localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
+const localHostStatusRefreshTickAtom = atom(0);
+localHostStatusRefreshTickAtom.onMount = (setRefreshTick) => {
   const refresh = () => {
     setRefreshTick((count) => count + 1);
   };
@@ -110,17 +146,36 @@ localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
   };
 };
 
-/** The local machine's host ID, or null if no daemon is reachable. */
+/** The local daemon status, or null if no daemon is reachable. */
 export const localHostStatusAtom = atom<
   Promise<HostDaemonStatusSnapshot | null>
 >(async (get) => {
-  get(localHostIdRefreshTickAtom);
+  get(localHostStatusRefreshTickAtom);
   const config = await get(systemConfigAtom);
   if (!config.hostDaemonPort) return null;
-  return fetchHostStatus(config.hostDaemonPort);
+  return fetchHostStatusWithRetry({
+    port: config.hostDaemonPort,
+    retryDelaysMs: LOCAL_HOST_STATUS_RETRY_DELAYS_MS,
+  });
 });
 
-/** The local machine's host ID, or null if no daemon is reachable. */
+/** Whether the local host daemon API is reachable. */
+export const localHostDaemonReachableAtom = atom<Promise<boolean>>(
+  async (get) => {
+    const localHostStatus = await get(localHostStatusAtom);
+    return localHostStatus !== null;
+  },
+);
+
+/** The host ID reported by the local daemon, even before its server session opens. */
+export const localHostDaemonHostIdAtom = atom<Promise<string | null>>(
+  async (get) => {
+    const localHostStatus = await get(localHostStatusAtom);
+    return localHostStatus?.hostId ?? null;
+  },
+);
+
+/** The local machine's connected host ID, or null if no daemon session is open. */
 export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
   const localHostStatus = await get(localHostStatusAtom);
   if (!localHostStatus?.connected) {
@@ -134,7 +189,7 @@ export const localWorkspaceOpenTargetsAtom = atom<
   Promise<WorkspaceOpenTarget[]>
 >(async (get) => {
   const localHostStatus = await get(localHostStatusAtom);
-  if (!localHostStatus?.connected) {
+  if (!localHostStatus) {
     return [];
   }
 

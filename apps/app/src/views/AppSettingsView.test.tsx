@@ -9,7 +9,7 @@ describe("LocalOpenTargetSettingsSection", () => {
     cleanup();
   });
 
-  it("shows readable disconnected copy inside the picker menu while preserving saved values", async () => {
+  it("shows readable daemon-unavailable copy inside the picker menu while preserving saved values", async () => {
     render(
       <LocalOpenTargetSettingsSection
         directoryTargetId="finder"
@@ -28,7 +28,7 @@ describe("LocalOpenTargetSettingsSection", () => {
     expect(directoryPicker.textContent).toContain("Finder");
     expect(
       screen.queryByText(
-        "This default can be changed when the local host is connected.",
+        "This default can be changed when the local host daemon is available.",
       ),
     ).toBeNull();
 
@@ -38,7 +38,7 @@ describe("LocalOpenTargetSettingsSection", () => {
     });
 
     const message = await screen.findByText(
-      "This default can be changed when the local host is connected.",
+      "This default can be changed when the local host daemon is available.",
     );
     expect(message.getAttribute("role")).toBe("note");
     expect(message.className).toContain("text-foreground");

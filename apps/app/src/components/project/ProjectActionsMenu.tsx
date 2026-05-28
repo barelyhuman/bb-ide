@@ -95,12 +95,12 @@ function ProjectActionsMenuItems({
   surface,
 }: ProjectActionsMenuItemsProps) {
   const navigate = useNavigate();
-  const { localHostId } = useHostDaemon();
+  const { localDaemonHostId } = useHostDaemon();
   const { requestRename, requestDelete, requestAddLocalPath } =
     useProjectActions();
   const showAddLocalPath =
-    localHostId != null &&
-    !findLocalPathProjectSourceForHost(project.sources, localHostId);
+    localDaemonHostId != null &&
+    !findLocalPathProjectSourceForHost(project.sources, localDaemonHostId);
 
   return (
     <>

@@ -22,7 +22,7 @@ interface UseLocalPathPickerOptions {
 
 export interface LocalPathPickerController {
   isAvailable: boolean;
-  localHostId: string | null;
+  localDaemonHostId: string | null;
   openPicker: (target: ProjectPathDialogTarget) => void;
   platform: HostPlatform | null;
   projectPathDialog: ReturnType<typeof useDialogState<ProjectPathDialogTarget>>;
@@ -33,21 +33,21 @@ export function useLocalPathPicker({
   isPending,
   submit,
 }: UseLocalPathPickerOptions): LocalPathPickerController {
-  const { localHostId, pickFolder, platform } = useHostDaemon();
+  const { localDaemonHostId, pickFolder, platform } = useHostDaemon();
   const projectPathDialog = useDialogState<ProjectPathDialogTarget>();
   const closeDialog = projectPathDialog.onClose;
 
   const submitPath = useCallback(
     (path: string, target: ProjectPathDialogTarget) => {
-      if (isPending || !localHostId) return;
-      submit({ path, hostId: localHostId, target, closeDialog });
+      if (isPending || !localDaemonHostId) return;
+      submit({ path, hostId: localDaemonHostId, target, closeDialog });
     },
-    [closeDialog, isPending, localHostId, submit],
+    [closeDialog, isPending, localDaemonHostId, submit],
   );
 
   const openPicker = useCallback(
     (target: ProjectPathDialogTarget) => {
-      if (isPending || !localHostId) return;
+      if (isPending || !localDaemonHostId) return;
 
       if (pickFolder) {
         void (async () => {
@@ -60,7 +60,7 @@ export function useLocalPathPicker({
 
       projectPathDialog.onOpen(target);
     },
-    [isPending, localHostId, pickFolder, projectPathDialog, submitPath],
+    [isPending, localDaemonHostId, pickFolder, projectPathDialog, submitPath],
   );
 
   const submitProjectPath = useCallback<ProjectPathDialogSubmitHandler>(
@@ -71,8 +71,8 @@ export function useLocalPathPicker({
   );
 
   return {
-    isAvailable: localHostId != null,
-    localHostId,
+    isAvailable: localDaemonHostId != null,
+    localDaemonHostId,
     openPicker,
     platform,
     projectPathDialog,

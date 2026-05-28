@@ -126,7 +126,7 @@ const FILE_TARGET_PREFERENCE: LocalOpenTargetPreferenceDefinition = {
 };
 
 const LOCAL_OPEN_TARGET_DISCONNECTED_MENU_MESSAGE =
-  "This default can be changed when the local host is connected.";
+  "This default can be changed when the local host daemon is available.";
 
 function LocalOpenTargetPreferenceControl({
   definition,

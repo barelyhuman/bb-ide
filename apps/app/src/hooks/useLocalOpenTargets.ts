@@ -16,10 +16,10 @@ import { useHostDaemon } from "./useHostDaemon";
 import { useWorkspaceOpenTargets } from "./useWorkspaceOpenTargets";
 
 const LOCAL_OPEN_FAILURE_TITLE = "Failed to open file locally";
-const LOCALHOST_DISCONNECTED_OPEN_DESCRIPTION = "Localhost is disconnected.";
-const LOCALHOST_NO_FILE_OPEN_TARGETS_DESCRIPTION =
-  "No local app can open files.";
-const LOCALHOST_NO_DIRECTORY_OPEN_TARGETS_DESCRIPTION =
+const LOCAL_DAEMON_UNAVAILABLE_OPEN_DESCRIPTION =
+  "Local host daemon is unavailable.";
+const LOCAL_NO_FILE_OPEN_TARGETS_DESCRIPTION = "No local app can open files.";
+const LOCAL_NO_DIRECTORY_OPEN_TARGETS_DESCRIPTION =
   "No local app can open directories.";
 
 export interface UseLocalOpenTargetsArgs {
@@ -93,14 +93,14 @@ function getOpenUnavailableDescription(
   args: OpenUnavailableDescriptionArgs,
 ): string {
   if (!args.hasDaemon) {
-    return LOCALHOST_DISCONNECTED_OPEN_DESCRIPTION;
+    return LOCAL_DAEMON_UNAVAILABLE_OPEN_DESCRIPTION;
   }
 
   if (args.targetKind === "file-open-target") {
-    return LOCALHOST_NO_FILE_OPEN_TARGETS_DESCRIPTION;
+    return LOCAL_NO_FILE_OPEN_TARGETS_DESCRIPTION;
   }
 
-  return LOCALHOST_NO_DIRECTORY_OPEN_TARGETS_DESCRIPTION;
+  return LOCAL_NO_DIRECTORY_OPEN_TARGETS_DESCRIPTION;
 }
 
 function dispatchOpenFailureToast(args: DispatchOpenFailureToastArgs): void {

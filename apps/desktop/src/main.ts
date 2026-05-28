@@ -21,6 +21,7 @@ import {
   type DesktopPathContext,
 } from "./app-paths.js";
 import {
+  resolveBbAppProcessRuntime,
   type BbAppProcess,
   type BbAppProcessExit,
   startBbAppProcess,
@@ -665,6 +666,11 @@ async function startOwnedRuntime(
     cwd: homedir(),
     env: process.env,
     logLineLimit: PROCESS_LOG_LINE_LIMIT,
+    runtime: resolveBbAppProcessRuntime({
+      env: process.env,
+      isPackaged: app.isPackaged,
+      processExecPath: process.execPath,
+    }),
   });
   const runtime: DesktopRuntime = {
     bbProcess,

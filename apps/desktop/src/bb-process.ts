@@ -14,6 +14,7 @@ export interface StartBbAppProcessArgs {
   cwd: string;
   env: NodeJS.ProcessEnv;
   logLineLimit: number;
+  runtime: BbAppProcessRuntime;
 }
 
 export interface BbAppProcess {
@@ -38,6 +39,24 @@ export interface StopBbAppProcessArgs {
 
 export interface CreateElectronNodeEnvArgs {
   env: NodeJS.ProcessEnv;
+}
+
+export type BbAppProcessRuntimeMode = "electron-node" | "node";
+
+export interface BbAppProcessRuntime {
+  executablePath: string;
+  mode: BbAppProcessRuntimeMode;
+}
+
+export interface CreateBbAppProcessEnvArgs {
+  env: NodeJS.ProcessEnv;
+  runtimeMode: BbAppProcessRuntimeMode;
+}
+
+export interface ResolveBbAppProcessRuntimeArgs {
+  env: NodeJS.ProcessEnv;
+  isPackaged: boolean;
+  processExecPath: string;
 }
 
 interface WaitForProcessExitWithTimeoutArgs {
@@ -80,6 +99,41 @@ export function createElectronNodeEnv(
   return {
     ...args.env,
     ELECTRON_RUN_AS_NODE: "1",
+  };
+}
+
+export function createBbAppProcessEnv(
+  args: CreateBbAppProcessEnvArgs,
+): NodeJS.ProcessEnv {
+  if (args.runtimeMode === "electron-node") {
+    return createElectronNodeEnv({ env: args.env });
+  }
+
+  const env = { ...args.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  return env;
+}
+
+export function resolveBbAppProcessRuntime(
+  args: ResolveBbAppProcessRuntimeArgs,
+): BbAppProcessRuntime {
+  if (args.isPackaged) {
+    return {
+      executablePath: args.processExecPath,
+      mode: "electron-node",
+    };
+  }
+
+  const rawNodeExecPath = args.env.BB_DESKTOP_NODE_EXEC_PATH?.trim();
+  if (rawNodeExecPath === undefined || rawNodeExecPath.length === 0) {
+    throw new Error(
+      "BB_DESKTOP_NODE_EXEC_PATH is required in desktop dev mode. Launch through apps/desktop/scripts/run-electron-dev.mjs.",
+    );
+  }
+
+  return {
+    executablePath: rawNodeExecPath,
+    mode: "node",
   };
 }
 
@@ -140,9 +194,12 @@ function waitForProcessExitWithTimeout(
 
 export function startBbAppProcess(args: StartBbAppProcessArgs): BbAppProcess {
   const logs = createRuntimeLogBuffer({ maxLines: args.logLineLimit });
-  const childProcess = spawn(process.execPath, [args.bridgePath], {
+  const childProcess = spawn(args.runtime.executablePath, [args.bridgePath], {
     cwd: args.cwd,
-    env: createElectronNodeEnv({ env: args.env }),
+    env: createBbAppProcessEnv({
+      env: args.env,
+      runtimeMode: args.runtime.mode,
+    }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const pid = childProcess.pid;

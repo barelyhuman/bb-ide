@@ -30,7 +30,9 @@ interface HostDaemonFetchState {
 
 interface HostDaemonSnapshot {
   hasDaemon: boolean;
+  isLocalDaemonHost: (hostId: string | null | undefined) => boolean;
   isLocalHost: (hostId: string | null | undefined) => boolean;
+  localDaemonHostId: string | null;
   localHostId: string | null;
   pickFolder: (() => Promise<string | null>) | null;
   supportsNativeFolderPicker: boolean;
@@ -187,7 +189,10 @@ describe("useHostDaemon", () => {
 
     const snapshot = requireHostDaemonSnapshot(latestSnapshot.current);
     expect(snapshot.hasDaemon).toBe(true);
+    expect(snapshot.localDaemonHostId).toBe("host-1");
     expect(snapshot.supportsNativeFolderPicker).toBe(true);
+    expect(snapshot.isLocalDaemonHost("host-1")).toBe(true);
+    expect(snapshot.isLocalDaemonHost("host-2")).toBe(false);
     expect(snapshot.isLocalHost("host-1")).toBe(true);
     expect(snapshot.isLocalHost("host-2")).toBe(false);
 
@@ -200,7 +205,61 @@ describe("useHostDaemon", () => {
     });
   });
 
-  it("returns null actions when the daemon or local host id is unavailable", async () => {
+  it("treats a reachable daemon as available before its server session opens", async () => {
+    const state: HostDaemonFetchState = {
+      daemonStatus: {
+        connected: false,
+        hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: true,
+        platform: "darwin",
+      },
+      hostDaemonPort: 4123,
+      pickedFolderPath: "/picked/path",
+    };
+    const pickFolderRequests: number[] = [];
+    installHostDaemonFetchRoutes(state, pickFolderRequests);
+
+    const { useHostDaemon } = await importFreshHostDaemonModules();
+    const latestSnapshot: { current: HostDaemonSnapshot | null } = {
+      current: null,
+    };
+    await act(async () => {
+      render(
+        <HostDaemonCapture
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+          useHostDaemon={useHostDaemon}
+        />,
+        { wrapper: createSuspenseWrapper() },
+      );
+    });
+
+    await waitFor(() => {
+      expect(requireHostDaemonSnapshot(latestSnapshot.current).hasDaemon).toBe(
+        true,
+      );
+    });
+
+    const snapshot = requireHostDaemonSnapshot(latestSnapshot.current);
+    expect(snapshot.localHostId).toBeNull();
+    expect(snapshot.localDaemonHostId).toBe("host-1");
+    expect(snapshot.supportsNativeFolderPicker).toBe(true);
+    expect(snapshot.isLocalDaemonHost("host-1")).toBe(true);
+    expect(snapshot.isLocalHost("host-1")).toBe(false);
+
+    await act(async () => {
+      await requireHostDaemonSnapshot(latestSnapshot.current).pickFolder?.();
+    });
+
+    await waitFor(() => {
+      expect(pickFolderRequests).toEqual([1]);
+    });
+  });
+
+  it("returns null actions when the daemon is unavailable", async () => {
     const state: HostDaemonFetchState = {
       daemonStatus: null,
       hostDaemonPort: null,
@@ -231,7 +290,9 @@ describe("useHostDaemon", () => {
     });
     const snapshot = requireHostDaemonSnapshot(latestSnapshot.current);
     expect(snapshot.hasDaemon).toBe(false);
+    expect(snapshot.localDaemonHostId).toBeNull();
     expect(snapshot.supportsNativeFolderPicker).toBe(false);
+    expect(snapshot.isLocalDaemonHost("host-1")).toBe(false);
     expect(snapshot.isLocalHost("host-1")).toBe(false);
     expect(snapshot.pickFolder).toBeNull();
   });

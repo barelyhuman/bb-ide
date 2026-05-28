@@ -9,15 +9,15 @@ const NODE_MODULES_DIRECTORY = "node_modules";
 const NODE_PTY_PACKAGE_NAME = "node-pty";
 const BETTER_SQLITE3_PACKAGE_NAME = "better-sqlite3";
 
-// better-sqlite3 must match the runtime that loads it. The packaged app runs the
-// bb server via `process.execPath` with `ELECTRON_RUN_AS_NODE=1` (see
-// apps/desktop/src/bb-process.ts), i.e. Electron's bundled Node, so the binary
-// has to target Electron's ABI. electron-builder's `npmRebuild` would rebuild it
-// for us, but in this pnpm workspace better-sqlite3 resolves to the shared
+// better-sqlite3 must match the runtime that loads it. The packaged app runs
+// the bb server through Electron's bundled Node, so the packaged copy has to
+// target Electron's ABI. electron-builder's `npmRebuild` would rebuild it for
+// us, but in this pnpm workspace better-sqlite3 resolves to the shared
 // content-addressed store, so an in-place rebuild clobbers the node-ABI binary
 // every other workspace package (and the server test suite) relies on. Instead
 // `npmRebuild` is disabled and we fetch the Electron prebuild into the packaged
-// copy here, leaving the shared store untouched.
+// copy here, leaving the shared store untouched. Desktop dev runs bb-app with
+// the host Node executable so it can use the workspace's normal Node-ABI binary.
 const NATIVE_MODULE_PLATFORM = "darwin";
 
 const NODE_PTY_PREBUILD_PLATFORMS = ["darwin-arm64", "darwin-x64"];

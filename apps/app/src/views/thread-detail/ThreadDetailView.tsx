@@ -648,9 +648,9 @@ export function ThreadDetailView() {
     }
     return workspaceChangedFilesSection;
   }, [workspaceChangedFilesSection]);
-  const { isLocalHost } = useHostDaemon();
+  const { isLocalDaemonHost } = useHostDaemon();
   const threadEnvironmentIsLocal = environment
-    ? isLocalHost(environment.hostId)
+    ? isLocalDaemonHost(environment.hostId)
     : false;
   const localWorkspaceRootPath = resolveThreadLocalWorkspaceRootPath({
     environment,

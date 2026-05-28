@@ -110,6 +110,7 @@ async function importFreshAtomModules(): Promise<AtomModules> {
 afterEach(() => {
   cleanup();
   resetFakeReconnectingWebSockets();
+  vi.useRealTimers();
   vi.resetModules();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -266,6 +267,7 @@ describe("atoms", () => {
   });
 
   it("re-probes local host status when the websocket reports a host change", async () => {
+    vi.useFakeTimers();
     installAtomFetchRoutes({
       configs: [
         {
@@ -302,9 +304,9 @@ describe("atoms", () => {
         type: "changed",
       });
 
-      await waitFor(async () => {
-        expect(await store.get(localHostIdAtom)).toBeNull();
-      });
+      const refreshedHostId = store.get(localHostIdAtom);
+      await vi.runAllTimersAsync();
+      expect(await refreshedHostId).toBeNull();
 
       wsManager.disconnect();
     } finally {
@@ -312,7 +314,8 @@ describe("atoms", () => {
     }
   });
 
-  it("re-probes local host status after the websocket first connects", async () => {
+  it("retries local host status after a transient daemon status miss", async () => {
+    vi.useFakeTimers();
     installAtomFetchRoutes({
       configs: [
         {
@@ -332,24 +335,56 @@ describe("atoms", () => {
       ],
     });
 
+    const { localHostIdAtom } = await importFreshAtomModules();
+    const store = createStore();
+
+    const localHostId = store.get(localHostIdAtom);
+    await vi.runAllTimersAsync();
+
+    expect(await localHostId).toBe("host-1");
+  });
+
+  it("re-probes local host status after the websocket first connects", async () => {
+    vi.useFakeTimers();
+    installAtomFetchRoutes({
+      configs: [
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+      ],
+      daemonStatuses: [
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+      ],
+    });
+
     const { FakeReconnectingWebSocket, localHostIdAtom, wsManager } =
       await importFreshAtomModules();
     const store = createStore();
     const unsubscribe = store.sub(localHostIdAtom, () => {});
 
     try {
-      expect(await store.get(localHostIdAtom)).toBeNull();
+      const initialHostId = store.get(localHostIdAtom);
+      await vi.runAllTimersAsync();
+      expect(await initialHostId).toBeNull();
 
       wsManager.connect();
       const socket = FakeReconnectingWebSocket.latest();
       socket.open();
 
-      await waitFor(() => {
-        expect(socket.readyState).toBe(WebSocket.OPEN);
-      });
-      await waitFor(async () => {
-        expect(await store.get(localHostIdAtom)).toBe("host-1");
-      });
+      expect(socket.readyState).toBe(WebSocket.OPEN);
+      expect(await store.get(localHostIdAtom)).toBe("host-1");
 
       wsManager.disconnect();
     } finally {
@@ -358,6 +393,7 @@ describe("atoms", () => {
   });
 
   it("re-probes local host status after the websocket reconnects", async () => {
+    vi.useFakeTimers();
     installAtomFetchRoutes({
       configs: [
         {
@@ -370,6 +406,14 @@ describe("atoms", () => {
         },
       ],
       daemonStatuses: [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         {
@@ -395,22 +439,22 @@ describe("atoms", () => {
     const unsubscribe = store.sub(localHostIdAtom, () => {});
 
     try {
-      expect(await store.get(localHostIdAtom)).toBeNull();
+      const initialHostId = store.get(localHostIdAtom);
+      await vi.runAllTimersAsync();
+      expect(await initialHostId).toBeNull();
 
       wsManager.connect();
       const socket = FakeReconnectingWebSocket.latest();
       socket.open();
 
-      await waitFor(async () => {
-        expect(await store.get(localHostIdAtom)).toBeNull();
-      });
+      const firstConnectedHostId = store.get(localHostIdAtom);
+      await vi.runAllTimersAsync();
+      expect(await firstConnectedHostId).toBeNull();
 
       socket.close();
       socket.open();
 
-      await waitFor(async () => {
-        expect(await store.get(localHostIdAtom)).toBe("host-2");
-      });
+      expect(await store.get(localHostIdAtom)).toBe("host-2");
 
       wsManager.disconnect();
     } finally {

@@ -746,16 +746,16 @@ function ProjectListComponent({
     queries: threadQueries,
     combine: combineProjectThreadQueries,
   });
-  const { localHostId } = useHostDaemon();
+  const { localDaemonHostId } = useHostDaemon();
   const { threadId: selectedThreadId } = useAppRoute();
 
   const localSourceTargets = useMemo(() => {
-    if (!localHostId || !projects) return [];
+    if (!localDaemonHostId || !projects) return [];
     const targets: LocalSourcePathTarget[] = [];
     for (const project of projects) {
       const source = findLocalPathProjectSourceForHost(
         project.sources,
-        localHostId,
+        localDaemonHostId,
       );
       if (source) {
         targets.push({
@@ -765,7 +765,7 @@ function ProjectListComponent({
       }
     }
     return targets;
-  }, [localHostId, projects]);
+  }, [localDaemonHostId, projects]);
 
   const localSourcePathsByProjectId = useMemo(() => {
     const pathsByProjectId = new Map<string, string>();
@@ -776,9 +776,9 @@ function ProjectListComponent({
   }, [localSourceTargets]);
 
   const localPaths = useMemo(() => {
-    if (!localHostId) return [];
+    if (!localDaemonHostId) return [];
     return localSourceTargets.map((target) => target.path);
-  }, [localHostId, localSourceTargets]);
+  }, [localDaemonHostId, localSourceTargets]);
   const pathExistence = useLocalPathExistence(localPaths);
   const { isPending: isProjectReorderPending, mutate: reorderProjectMutate } =
     useReorderProject();
