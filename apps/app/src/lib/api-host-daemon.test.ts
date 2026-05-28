@@ -216,6 +216,65 @@ describe("api-host-daemon", () => {
     await expect(fetchWorkspaceOpenTargets(3002)).resolves.toEqual(targets);
   });
 
+  it("normalizes legacy kind-based workspace open targets", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/workspace-open-targets",
+        port: 3002,
+        handler: async () =>
+          jsonResponse({
+            targets: [
+              { id: "vscode", kind: "editor", label: "VS Code" },
+              { id: "antigravity", kind: "editor", label: "Antigravity" },
+              { id: "finder", kind: "file-browser", label: "Finder" },
+              { id: "terminal", kind: "terminal", label: "Terminal" },
+            ],
+          }),
+      },
+    ]);
+
+    const { fetchWorkspaceOpenTargets } = await importFreshApiHostDaemon();
+
+    await expect(fetchWorkspaceOpenTargets(3002)).resolves.toEqual([
+      {
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtLine: true,
+        },
+        id: "vscode",
+        label: "VS Code",
+      },
+      {
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtLine: false,
+        },
+        id: "antigravity",
+        label: "Antigravity",
+      },
+      {
+        capabilities: {
+          openDirectory: true,
+          openFile: false,
+          openFileAtLine: false,
+        },
+        id: "finder",
+        label: "Finder",
+      },
+      {
+        capabilities: {
+          openDirectory: true,
+          openFile: false,
+          openFileAtLine: false,
+        },
+        id: "terminal",
+        label: "Terminal",
+      },
+    ]);
+  });
+
   it("returns no workspace open targets when the daemon route is unavailable", async () => {
     installFetchRoutes([
       {
