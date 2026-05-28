@@ -39,6 +39,7 @@ const electronBuilderConfigSchema = z
       .passthrough(),
     files: z.array(z.string().min(1)),
     mac: macConfigSchema,
+    npmRebuild: z.literal(false),
     publish: z.tuple([
       z
         .object({
@@ -212,6 +213,21 @@ describe("electron-builder signing config", () => {
     await expect(
       access(resolve(desktopPackageRoot, hookPath)),
     ).resolves.toBeUndefined();
+  });
+
+  it("disables in-place native rebuilds so the shared pnpm store is not mutated", async () => {
+    // electron-builder's npmRebuild rebuilds better-sqlite3 through the
+    // workspace symlink into the shared content-addressed store, flipping the
+    // binary to Electron's ABI and breaking every plain-node consumer (the
+    // server test suite). The afterPack hook fetches the Electron prebuild into
+    // the packaged copy instead, so this must stay false.
+    const configText = await readFile(
+      resolve(desktopPackageRoot, "electron-builder.config.json"),
+      "utf8",
+    );
+    const config = electronBuilderConfigSchema.parse(JSON.parse(configText));
+
+    expect(config.npmRebuild).toBe(false);
   });
 
   it("excludes source maps from packaged app files", async () => {

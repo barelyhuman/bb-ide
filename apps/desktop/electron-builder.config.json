@@ -46,5 +46,5 @@
   "dmg": {
     "sign": false
   },
-  "npmRebuild": true
+  "npmRebuild": false
 }
