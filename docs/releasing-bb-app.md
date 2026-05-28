@@ -5,6 +5,13 @@ It assumes the manual GitHub Actions publish workflow and npm Trusted
 Publishing are configured. Until then, local `npm publish` is an emergency
 fallback only.
 
+A full release has **two** outputs that ship from the same release commit: the
+`bb-app` npm package (`publish-bb-app.yml`) and the desktop app
+(`build-desktop.yml`). They are published by independent workflows — publishing
+npm does not publish the desktop app. Because the versions are locked together,
+a normal release must run both. Do not consider a release complete until the
+desktop app is published at the same version (see "Publish The Desktop App").
+
 ## Release Policy
 
 - Publish only from `main`.
@@ -145,6 +152,51 @@ Report:
 - validation commands and result
 - any follow-up risks
 
+## Publish The Desktop App
+
+The npm publish does not build or publish the desktop app. The desktop release
+is a separate workflow that builds, signs, and notarizes the macOS app, creates
+the immutable `desktop-v<version>` GitHub release, and moves the `desktop-latest`
+release and its `desktop-version.json` auto-update feed. Run it from the same
+pushed `main` commit, at the same version, for every stable release.
+
+```bash
+gh workflow run build-desktop.yml \
+  --ref main \
+  -f publish=true \
+  -f release_channel=stable
+```
+
+- `release_channel=stable` is required to update `desktop-latest`; `qa` builds
+  artifacts without moving the public feed.
+- Only a non-prerelease version is published. The workflow refuses to publish a
+  prerelease (`X.Y.Z-...`) to `desktop-latest`.
+- macOS signing/notarization secrets must be configured, or the workflow
+  publishes `desktop-version.json` only and withholds the unsigned `.dmg`/`.zip`.
+- The `desktop-v<version>` release is immutable: if it already exists the
+  workflow fails. Bump to a new version rather than re-running the same one.
+
+If the `npm-release`-style environment or branch protection gates the run, tell
+the user and let the human approval be the release control point.
+
+## Verify The Desktop Release
+
+After the desktop workflow succeeds, confirm the published version and feed:
+
+```bash
+gh release view desktop-latest --json tagName,assets \
+  -q '{tag:.tagName,assets:[.assets[].name]}'
+curl -fsSL https://github.com/ymichael/bb/releases/download/desktop-latest/desktop-version.json
+```
+
+Confirm `desktop-version.json` reports the released version and that the
+`desktop-v<version>` release exists with the expected `.dmg`/`.zip` assets.
+
+Add to the report from "Verify The Release":
+
+- desktop version published and whether signed binaries were uploaded
+- desktop workflow run URL
+
 ## Failure Handling
 
 - If the version already exists on npm, stop. Bump to the next version in a new
@@ -160,3 +212,9 @@ Report:
 - If a legacy prerelease tag should stop resolving to an old build, remove it
   with `npm dist-tag rm bb-app <tag>` using explicit user approval and normal
   npm authentication.
+- If the desktop workflow fails because `desktop-v<version>` already exists, do
+  not delete the immutable release. Bump to the next version, re-run the npm
+  publish, then re-run the desktop workflow.
+- If the desktop workflow publishes `desktop-version.json` only (binaries
+  withheld), the macOS signing secrets are missing or incomplete. Fix the
+  secrets and re-run; do not hand-upload unsigned binaries to `desktop-latest`.
