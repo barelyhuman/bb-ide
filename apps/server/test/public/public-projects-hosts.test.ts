@@ -241,15 +241,30 @@ describe("public project and host routes", () => {
       );
       expect(sourceResponse.status).toBe(404);
 
-      const defaultsResponse = await harness.app.request(
-        `/api/v1/projects/${PERSONAL_PROJECT_ID}/default-execution-options?threadType=standard`,
-      );
-      expect(defaultsResponse.status).toBe(404);
-
       const branchesResponse = await harness.app.request(
         `/api/v1/projects/${PERSONAL_PROJECT_ID}/branches?hostId=${host.id}`,
       );
       expect(branchesResponse.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns personal project default execution options", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request(
+        `/api/v1/projects/${PERSONAL_PROJECT_ID}/default-execution-options?threadType=manager`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        providerId: "codex",
+        model: "gpt-5.5",
+        reasoningLevel: "xhigh",
+        permissionMode: "full",
+        serviceTier: "default",
+      });
     } finally {
       await harness.cleanup();
     }
@@ -695,6 +710,34 @@ describe("public project and host routes", () => {
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns the server manager defaults when a project has no remembered manager defaults", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-manager-defaults-none",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-manager-defaults-none",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/default-execution-options?threadType=manager`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        providerId: "codex",
+        model: "gpt-5.5",
+        reasoningLevel: "xhigh",
+        permissionMode: "full",
+        serviceTier: "default",
+      });
     } finally {
       await harness.cleanup();
     }

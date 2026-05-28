@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ProjectExecutionDefaults, ThreadType } from "@bb/domain";
 import type {
   ProjectBranchesResponse,
   ProjectResponse,
@@ -12,6 +13,7 @@ import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import * as api from "@/lib/api";
 import {
   projectFilesQueryKey,
+  projectDefaultExecutionOptionsQueryKey,
   projectPathsQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
@@ -29,6 +31,11 @@ interface BranchQueryOptions extends QueryOptions {
   limit?: number;
   query?: string;
   selectedBranch?: string;
+}
+
+interface UseProjectDefaultExecutionOptionsArgs {
+  projectId: string | undefined;
+  threadType: ThreadType;
 }
 
 interface UseProjectPathSuggestionsArgs {
@@ -159,6 +166,29 @@ export function useProjectPromptHistory(
         requireProjectId(projectId, "useProjectPromptHistory"),
         signal,
       ),
+    enabled: (options?.enabled ?? true) && Boolean(projectId),
+    staleTime: 10_000,
+  });
+}
+
+export function useProjectDefaultExecutionOptions(
+  args: UseProjectDefaultExecutionOptionsArgs,
+  options?: QueryOptions,
+) {
+  const { projectId, threadType } = args;
+  return useQuery<ProjectExecutionDefaults | null>({
+    queryKey: projectDefaultExecutionOptionsQueryKey({
+      projectId: projectId ?? "",
+      threadType,
+    }),
+    queryFn: () =>
+      api.getProjectDefaultExecutionOptions({
+        projectId: requireProjectId(
+          projectId,
+          "useProjectDefaultExecutionOptions",
+        ),
+        threadType,
+      }),
     enabled: (options?.enabled ?? true) && Boolean(projectId),
     staleTime: 10_000,
   });

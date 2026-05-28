@@ -238,13 +238,16 @@ export function useHireProjectManager() {
         environment,
         ...(input && input.length > 0 ? { input } : {}),
       }),
-    onSuccess: (thread) => {
+    onSuccess: (thread, variables) => {
       queryClient.setQueryData<ThreadWithRuntime>(
         threadQueryKey(thread.id),
         thread,
       );
       optimisticallyInsertThread(queryClient, thread);
-      invalidateProjectManagerHireQueries({ queryClient });
+      invalidateProjectManagerHireQueries({
+        projectId: variables.projectId,
+        queryClient,
+      });
     },
   });
 }

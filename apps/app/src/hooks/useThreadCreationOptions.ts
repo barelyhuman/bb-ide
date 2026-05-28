@@ -68,10 +68,15 @@ interface PickerOption<T extends string> {
   icon?: ComponentType<{ className?: string }>;
 }
 
+type ThreadCreationOptionsScope =
+  | "new-thread"
+  | "new-manager"
+  | "component-local";
+
 interface UsePromptModelReasoningOptions {
   enabled?: boolean;
   environmentId?: string;
-  scope?: "new-thread" | "component-local";
+  scope?: ThreadCreationOptionsScope;
   projectId?: string | null;
   resetKey?: string | number | null;
   initialProviderId?: string;
@@ -355,6 +360,7 @@ export function useThreadCreationOptions(
   const threadResetKeyRef = useRef<string | number | null | undefined>(
     resetKey,
   );
+  const usesLocalThreadSelections = scope !== "new-thread";
   const nextThreadSelections = useMemo(
     () =>
       getInitialThreadPromptSelections({
@@ -375,7 +381,7 @@ export function useThreadCreationOptions(
     ],
   );
   const renderedThreadSelections = useMemo(() => {
-    if (scope !== "component-local") {
+    if (!usesLocalThreadSelections) {
       return threadSelections;
     }
     if (threadResetKeyRef.current !== resetKey) {
@@ -386,7 +392,12 @@ export function useThreadCreationOptions(
       nextSelections: nextThreadSelections,
       touchedFields: touchedThreadFieldsRef.current,
     });
-  }, [nextThreadSelections, resetKey, scope, threadSelections]);
+  }, [
+    nextThreadSelections,
+    resetKey,
+    threadSelections,
+    usesLocalThreadSelections,
+  ]);
 
   const rawSelectedProviderId =
     scope === "new-thread"
@@ -580,7 +591,7 @@ export function useThreadCreationOptions(
   const environmentSelectionValue = rawEnvironmentSelectionValue;
 
   useLayoutEffect(() => {
-    if (scope !== "component-local") return;
+    if (!usesLocalThreadSelections) return;
     if (threadResetKeyRef.current !== resetKey) {
       threadResetKeyRef.current = resetKey;
       touchedThreadFieldsRef.current = new Set();
@@ -594,7 +605,7 @@ export function useThreadCreationOptions(
         touchedFields: touchedThreadFieldsRef.current,
       }),
     );
-  }, [nextThreadSelections, resetKey, scope]);
+  }, [nextThreadSelections, resetKey, usesLocalThreadSelections]);
 
   const setSelectedProviderId = useCallback(
     (value: string) => {

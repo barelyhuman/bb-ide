@@ -27,6 +27,7 @@ import {
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
 import {
   useProjectPromptHistory,
+  useProjectDefaultExecutionOptions,
   useProjectSourceBranches,
   useProjects,
   useSidebarBootstrap,
@@ -257,6 +258,45 @@ export function RootComposeView() {
     () => promptHistoryEntriesToDrafts(projectPromptHistory),
     [projectPromptHistory],
   );
+  const currentProject = useMemo(
+    () =>
+      isProjectless
+        ? sidebarBootstrapQuery.data?.personalProject
+        : projects?.find((p) => p.id === projectId),
+    [isProjectless, projectId, projects, sidebarBootstrapQuery.data],
+  );
+  const projectSources = useMemo(
+    () => currentProject?.sources ?? [],
+    [currentProject?.sources],
+  );
+  const managerDefaultExecutionOptionsQuery = useProjectDefaultExecutionOptions(
+    {
+      projectId,
+      threadType: "manager",
+    },
+    {
+      enabled: mode === "manager" && currentProject !== undefined,
+    },
+  );
+  const managerDefaultExecutionOptions =
+    managerDefaultExecutionOptionsQuery.data ?? undefined;
+  const standardCreationOptions = useThreadCreationOptions({
+    scope: "new-thread",
+    projectId,
+  });
+  const managerCreationOptions = useThreadCreationOptions({
+    enabled: mode === "manager",
+    initialModel: managerDefaultExecutionOptions?.model,
+    initialPermissionMode: managerDefaultExecutionOptions?.permissionMode,
+    initialProviderId: managerDefaultExecutionOptions?.providerId,
+    initialReasoningLevel: managerDefaultExecutionOptions?.reasoningLevel,
+    initialServiceTier: managerDefaultExecutionOptions?.serviceTier,
+    projectId,
+    resetKey: projectId,
+    scope: "new-manager",
+  });
+  const creationOptions =
+    mode === "manager" ? managerCreationOptions : standardCreationOptions;
   const {
     selectedProviderId,
     setSelectedProviderId,
@@ -281,7 +321,7 @@ export function RootComposeView() {
     supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,
-  } = useThreadCreationOptions({ scope: "new-thread", projectId });
+  } = creationOptions;
 
   // Seed transient picker state from navigation state:
   // `reuseEnvironmentId` (the "+" affordance on a worktree) seeds the env
@@ -322,18 +362,6 @@ export function RootComposeView() {
   const reuseThreadOptions = useMemo(
     () => buildReuseThreadOptions(threadsQuery.data ?? []),
     [threadsQuery.data],
-  );
-
-  const currentProject = useMemo(
-    () =>
-      isProjectless
-        ? sidebarBootstrapQuery.data?.personalProject
-        : projects?.find((p) => p.id === projectId),
-    [isProjectless, projectId, projects, sidebarBootstrapQuery.data],
-  );
-  const projectSources = useMemo(
-    () => currentProject?.sources ?? [],
-    [currentProject?.sources],
   );
 
   // Standard-project managers need a local-path source on the host. Projectless
@@ -634,12 +662,19 @@ export function RootComposeView() {
       // from the manager-mode host picker; template comes from the
       // template picker (only sent when non-empty so the server keeps its
       // own default).
-      if (hireProjectManager.isPending || !effectiveManagerHostId) return;
+      if (
+        hireProjectManager.isPending ||
+        managerDefaultExecutionOptionsQuery.isLoading ||
+        !effectiveManagerHostId
+      ) {
+        return;
+      }
       try {
         await hireProjectManager.mutateAsync({
           projectId,
           providerId: selectedProviderId,
           model: selectedThreadModel,
+          ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           reasoningLevel,
           environment: { type: "host", hostId: effectiveManagerHostId },
           ...(effectiveManagerTemplateName
@@ -682,6 +717,7 @@ export function RootComposeView() {
     effectiveManagerHostId,
     effectiveManagerTemplateName,
     hireProjectManager,
+    managerDefaultExecutionOptionsQuery.isLoading,
     mode,
     permissionMode,
     projectId,
@@ -702,7 +738,9 @@ export function RootComposeView() {
     !selectedProviderId ||
     !selectedThreadModel ||
     (mode === "manager"
-      ? hireProjectManager.isPending || !effectiveManagerHostId
+      ? hireProjectManager.isPending ||
+        managerDefaultExecutionOptionsQuery.isLoading ||
+        !effectiveManagerHostId
       : createThread.isPending ||
         promptInput.length === 0 ||
         !selectedEnvironment ||

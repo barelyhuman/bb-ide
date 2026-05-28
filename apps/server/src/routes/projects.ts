@@ -64,6 +64,7 @@ import {
 } from "../services/lib/entity-lookup.js";
 import { PROMPT_HISTORY_ENTRY_LIMIT, type PromptInput } from "@bb/domain";
 import { createThreadFromRequest } from "../services/threads/thread-create.js";
+import { buildInitialProjectExecutionDefaults } from "../services/threads/thread-default-policy.js";
 import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
@@ -395,12 +396,16 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     projectDefaultExecutionOptionsQuerySchema,
     (context, query) => {
       const projectId = context.req.param("id");
-      requirePublicStandardProject(deps.db, projectId);
+      requirePublicProject(deps.db, projectId);
+      const storedDefaults = getProjectExecutionDefaults(deps.db, {
+        projectId,
+        threadType: query.threadType,
+      });
       return context.json(
-        getProjectExecutionDefaults(deps.db, {
-          projectId,
-          threadType: query.threadType,
-        }),
+        storedDefaults ??
+          (query.threadType === "manager"
+            ? buildInitialProjectExecutionDefaults("manager")
+            : null),
       );
     },
   );

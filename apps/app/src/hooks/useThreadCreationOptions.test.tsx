@@ -124,6 +124,56 @@ describe("useThreadCreationOptions", () => {
     expect(api.getSystemExecutionOptions).not.toHaveBeenCalled();
   });
 
+  it("loads hostless execution options for manager creation defaults", async () => {
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          displayName: "Codex",
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          defaultReasoningEffort: "xhigh",
+          displayName: "gpt-5.5",
+          id: "gpt-5.5",
+          model: "gpt-5.5",
+          supportedReasoningEfforts: [
+            {
+              description: "Medium effort",
+              reasoningEffort: "medium",
+            },
+            {
+              description: "Extra high effort",
+              reasoningEffort: "xhigh",
+            },
+          ],
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          initialModel: "gpt-5.5",
+          initialProviderId: "codex",
+          initialReasoningLevel: "xhigh",
+          projectId: "project-manager-defaults",
+          resetKey: "project-manager-defaults",
+          scope: "new-manager",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedModel).toBe("gpt-5.5");
+    });
+
+    expect(result.current.reasoningLevel).toBe("xhigh");
+    expect(api.getSystemExecutionOptions).toHaveBeenCalled();
+  });
+
   it("falls back to valid provider and model values from query data", async () => {
     const projectId = "project-1";
     localStorage.setItem(

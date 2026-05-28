@@ -6,6 +6,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installAbortableJsonRoute } from "@/test/abort-signal-test-utils";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import {
+  useProjectDefaultExecutionOptions,
   useProjectPromptHistory,
   useProjectSourceBranches,
 } from "./project-queries";
@@ -18,6 +19,41 @@ afterEach(() => {
 });
 
 describe("project queries", () => {
+  it("loads project default execution options by thread type", async () => {
+    const requestUrls: URL[] = [];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects/project-1/default-execution-options",
+        handler: (request) => {
+          requestUrls.push(new URL(request.url));
+          return jsonResponse({
+            providerId: "codex",
+            model: "gpt-5.5",
+            reasoningLevel: "xhigh",
+            permissionMode: "full",
+            serviceTier: "default",
+          });
+        },
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+
+    const { result } = renderHook(
+      () =>
+        useProjectDefaultExecutionOptions({
+          projectId: "project-1",
+          threadType: "manager",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.reasoningLevel).toBe("xhigh");
+    });
+
+    expect(requestUrls[0]?.searchParams.get("threadType")).toBe("manager");
+  });
+
   it("passes AbortSignal through project prompt history requests", async () => {
     const route = installAbortableJsonRoute({
       pathname: "/api/v1/projects/project-1/prompt-history",

@@ -4,6 +4,7 @@ import type {
   Host,
   PendingInteraction,
   Project,
+  ProjectExecutionDefaults,
   ProjectSource,
   ResolvedThreadExecutionOptions,
   ThreadType,
@@ -132,6 +133,11 @@ export type AppCreateManagerThreadRequest = Omit<
   "origin"
 >;
 export type AppCreateThreadRequest = Omit<CreateThreadRequest, "origin">;
+
+export interface GetProjectDefaultExecutionOptionsRequest {
+  projectId: string;
+  threadType: ThreadType;
+}
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -561,6 +567,17 @@ export async function listProjectPromptHistory(
       { param: { id: projectId } },
       requestOptions(signal),
     ),
+  );
+}
+
+export async function getProjectDefaultExecutionOptions(
+  args: GetProjectDefaultExecutionOptionsRequest,
+): Promise<ProjectExecutionDefaults | null> {
+  return request<ProjectExecutionDefaults | null>(
+    apiClient.projects[":id"]["default-execution-options"].$get({
+      param: { id: args.projectId },
+      query: { threadType: args.threadType },
+    }),
   );
 }
 

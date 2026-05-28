@@ -3,6 +3,7 @@ import {
   allProjectPathsQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   localPathExistenceQueryKeyPrefix,
+  projectDefaultExecutionOptionsQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
   projectPathsQueryKeyPrefix,
   projectPromptHistoryQueryKey,
@@ -102,9 +103,13 @@ export function refetchThreadListsAfterComposerThreadCreate({
 }
 
 export function invalidateProjectManagerHireQueries({
+  projectId,
   queryClient,
-}: QueryClientArg): void {
+}: ProjectArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({
+    queryKey: projectDefaultExecutionOptionsQueryKeyPrefix({ projectId }),
+  });
   invalidateBackgroundThreadCreateQueries({ queryClient });
 }
 

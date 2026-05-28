@@ -1,4 +1,5 @@
 import type { QueryKey } from "@tanstack/react-query";
+import type { ThreadType } from "@bb/domain";
 import type { ThreadListFilters } from "@/lib/api";
 import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
 import {
@@ -17,6 +18,8 @@ export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const PROJECT_PATHS_QUERY_KEY = "projectPaths";
 export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
+export const PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
+  "projectDefaultExecutionOptions";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
 export const SIDEBAR_BOOTSTRAP_QUERY_KEY = "sidebarBootstrap";
 export const THREADS_QUERY_KEY = "threads";
@@ -95,6 +98,15 @@ export type AllProjectSourceBranchesQueryKeyPrefix = readonly [
 ];
 export type ProjectSourceBranchesQueryKeyPrefix = readonly [
   typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+  string,
+];
+export type ProjectDefaultExecutionOptionsQueryKey = readonly [
+  typeof PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
+  string,
+  ThreadType,
+];
+export type ProjectDefaultExecutionOptionsQueryKeyPrefix = readonly [
+  typeof PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
 ];
 export type ProjectPromptHistoryQueryKeyPrefix = readonly [
@@ -385,6 +397,15 @@ export type ReplayCapturesQueryKey = readonly [
   typeof REPLAY_CAPTURES_QUERY_KEY,
 ];
 
+export interface ProjectDefaultExecutionOptionsQueryKeyArgs {
+  projectId: string;
+  threadType: ThreadType;
+}
+
+export interface ProjectDefaultExecutionOptionsQueryKeyPrefixArgs {
+  projectId: string;
+}
+
 export function hostsQueryKey(): HostsQueryKey {
   return [HOSTS_QUERY_KEY];
 }
@@ -441,6 +462,19 @@ export function projectPromptHistoryQueryKey(
   projectId: string | null | undefined,
 ): ProjectPromptHistoryQueryKey {
   return [PROJECT_PROMPT_HISTORY_QUERY_KEY, projectId];
+}
+
+export function projectDefaultExecutionOptionsQueryKey({
+  projectId,
+  threadType,
+}: ProjectDefaultExecutionOptionsQueryKeyArgs): ProjectDefaultExecutionOptionsQueryKey {
+  return [PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, projectId, threadType];
+}
+
+export function projectDefaultExecutionOptionsQueryKeyPrefix({
+  projectId,
+}: ProjectDefaultExecutionOptionsQueryKeyPrefixArgs): ProjectDefaultExecutionOptionsQueryKeyPrefix {
+  return [PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, projectId];
 }
 
 export function projectPromptHistoryQueryKeyPrefix(): ProjectPromptHistoryQueryKeyPrefix {
