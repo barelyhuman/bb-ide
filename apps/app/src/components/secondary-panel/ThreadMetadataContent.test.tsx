@@ -21,6 +21,7 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
     status: "idle",
     parentThreadId: null,
     archivedAt: null,
+    pinnedAt: null,
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: null,

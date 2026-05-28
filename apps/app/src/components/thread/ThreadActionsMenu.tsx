@@ -129,10 +129,11 @@ function ThreadActionsMenuItems({
   onViewerToggleCheckedChange,
   surface,
 }: ThreadActionsMenuItemsProps) {
-  const { requestRename, requestDelete, toggleArchive, toggleRead } =
+  const { requestRename, requestDelete, toggleArchive, togglePin, toggleRead } =
     useThreadActions();
   const isRead = isThreadRead(thread);
   const isArchived = thread.archivedAt != null;
+  const isPinned = thread.pinnedAt !== null;
 
   return (
     <>
@@ -146,6 +147,17 @@ function ThreadActionsMenuItems({
         }}
       >
         {isRead ? "Mark as unread" : "Mark as read"}
+      </ThreadActionMenuItem>
+      <ThreadActionMenuItem
+        surface={surface}
+        onSelect={(event) => {
+          if (surface === "dropdown") {
+            event.preventDefault();
+          }
+          togglePin(thread);
+        }}
+      >
+        {isPinned ? "Unpin" : "Pin"}
       </ThreadActionMenuItem>
       <ThreadActionMenuItem
         surface={surface}

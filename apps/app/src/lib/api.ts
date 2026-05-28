@@ -35,6 +35,7 @@ import type {
   SidebarBootstrapResponse,
   PromptHistoryResponse,
   ReorderManagerThreadRequest,
+  ReorderPinnedThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
   SendQueuedMessageRequest,
@@ -774,6 +775,30 @@ export async function listThreads(
 export async function getThread(id: string): Promise<ThreadResponse> {
   return request<ThreadResponse>(
     apiClient.threads[":id"].$get({ param: { id } }),
+  );
+}
+
+export async function pinThread(id: string): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
+    apiClient.threads[":id"].pin.$post({ param: { id } }),
+  );
+}
+
+export async function unpinThread(id: string): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
+    apiClient.threads[":id"].unpin.$post({ param: { id } }),
+  );
+}
+
+export async function reorderPinnedThread(
+  id: string,
+  req: ReorderPinnedThreadRequest,
+): Promise<ThreadListResponse> {
+  return request<ThreadListResponse>(
+    apiClient.threads[":id"]["pin-order"].$patch({
+      param: { id },
+      json: req,
+    }),
   );
 }
 

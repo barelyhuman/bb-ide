@@ -47,6 +47,11 @@ interface PersonalProjectMigrationRow {
   count: number;
 }
 
+interface TableInfoRow {
+  name: string;
+  notnull: number;
+}
+
 interface ReadIndexNamesArgs {
   db: DbConnection;
   tableName: string;
@@ -58,6 +63,7 @@ const publishedTerminalSessionUserInputWhen = 1779139400000;
 const closedSessionPruneIndexesWhen = 1779139400001;
 const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
+const threadPinningMigrationWhen = 1779990051923;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
@@ -69,6 +75,12 @@ const sidebarOrderingMigrationPath = resolve(
   "..",
   "drizzle",
   "0005_strong_exodus.sql",
+);
+const threadPinningMigrationPath = resolve(
+  __dirname,
+  "..",
+  "drizzle",
+  "0008_thread_pinning.sql",
 );
 
 function closeConnection(db: DbConnection): void {
@@ -120,6 +132,18 @@ function runQueuedMessageSortKeyMigration(db: DbConnection): void {
 
 function runSidebarOrderingMigration(db: DbConnection): void {
   const migrationSql = readFileSync(sidebarOrderingMigrationPath, "utf-8");
+  const statements = migrationSql
+    .split("--> statement-breakpoint")
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+
+  for (const statement of statements) {
+    db.$client.exec(statement);
+  }
+}
+
+function runThreadPinningMigration(db: DbConnection): void {
+  const migrationSql = readFileSync(threadPinningMigrationPath, "utf-8");
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
@@ -235,11 +259,14 @@ describe("migrate", () => {
       db.$client
         .prepare("DROP INDEX host_daemon_commands_type_state_idx")
         .run();
+      db.$client.prepare("DROP INDEX threads_pin_sort_idx").run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
       db.$client.prepare("DELETE FROM projects WHERE kind = 'personal'").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN kind").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN sort_key").run();
       db.$client.prepare("ALTER TABLE threads DROP COLUMN sort_key").run();
+      db.$client.prepare("ALTER TABLE threads DROP COLUMN pinned_at").run();
+      db.$client.prepare("ALTER TABLE threads DROP COLUMN pin_sort_key").run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -287,6 +314,7 @@ describe("migrate", () => {
       expect(migrationCreatedAts).toContain(closedSessionPruneIndexesWhen);
       expect(migrationCreatedAts).toContain(threadDynamicContextFileStatesWhen);
       expect(migrationCreatedAts).toContain(commandLookupIndexesWhen);
+      expect(migrationCreatedAts).toContain(threadPinningMigrationWhen);
     } finally {
       closeConnection(db);
     }
@@ -441,6 +469,37 @@ describe("migrate", () => {
         { id: "thr_manager_a", sortKey: "0000000000000001" },
         { id: "thr_manager_b", sortKey: "0000000000000002" },
       ]);
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("adds nullable thread pinning columns and index", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      db.$client.exec(`
+        CREATE TABLE threads (
+          id text PRIMARY KEY NOT NULL,
+          project_id text NOT NULL,
+          archived_at integer,
+          deleted_at integer
+        );
+      `);
+
+      runThreadPinningMigration(db);
+
+      const columns = db.$client
+        .prepare<[], TableInfoRow>("PRAGMA table_info(threads)")
+        .all();
+      const columnsByName = new Map(
+        columns.map((column) => [column.name, column]),
+      );
+      expect(columnsByName.get("pinned_at")?.notnull).toBe(0);
+      expect(columnsByName.get("pin_sort_key")?.notnull).toBe(0);
+      expect(readIndexNames({ db, tableName: "threads" })).toContain(
+        "threads_pin_sort_idx",
+      );
     } finally {
       closeConnection(db);
     }

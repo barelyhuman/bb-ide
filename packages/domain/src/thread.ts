@@ -155,6 +155,7 @@ export const threadSchema = z.object({
   status: threadStatusSchema,
   parentThreadId: z.string().nullable(),
   archivedAt: z.number().nullable(),
+  pinnedAt: z.number().nullable(),
   stopRequestedAt: z.number().nullable(),
   deletedAt: z.number().nullable(),
   lastReadAt: z.number().nullable(),
@@ -170,6 +171,7 @@ export const threadWithRuntimeSchema = threadSchema.extend({
 export type ThreadWithRuntime = z.infer<typeof threadWithRuntimeSchema>;
 
 export const threadListEntrySchema = threadWithRuntimeSchema.extend({
+  pinSortKey: z.string().nullable(),
   hasPendingInteraction: z.boolean(),
   environmentHostId: z.string().nullable(),
   environmentBranchName: z.string().nullable(),

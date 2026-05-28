@@ -132,10 +132,49 @@ export interface ReorderManagerThreadArgs {
   threadId: string;
 }
 
+export interface PinThreadArgs {
+  pinnedAt?: number;
+  threadId: string;
+}
+
+export interface UnpinThreadArgs {
+  threadId: string;
+}
+
+export interface ReorderPinnedThreadArgs {
+  db: DbConnection;
+  nextThreadId: string | null;
+  notifier: DbNotifier;
+  previousThreadId: string | null;
+  threadId: string;
+}
+
 interface ResolveManagerThreadNeighborArgs {
   movedThreadId: string;
   neighborThreadId: string | null;
   projectId: string;
+}
+
+interface ResolvePinnedThreadNeighborArgs {
+  movedThreadId: string;
+  neighborThreadId: string | null;
+  pinnedThreads: readonly ThreadRow[];
+}
+
+interface PinThreadMutationResult {
+  changed: boolean;
+  thread: ThreadRow;
+}
+
+type PinnedThreadRootCandidate = Pick<
+  ThreadRow,
+  "id" | "parentThreadId" | "type"
+>;
+
+interface FilterVisiblePinnedThreadRootsArgs<
+  TThread extends PinnedThreadRootCandidate,
+> {
+  pinnedThreads: readonly TThread[];
 }
 
 export interface ReorderManagerThreadSuccess {
@@ -166,6 +205,40 @@ export type ReorderManagerThreadResult =
   | ReorderManagerThreadNotFound
   | ReorderManagerThreadStaleNeighbor
   | ReorderManagerThreadInvalidNeighborOrder;
+
+export interface ReorderPinnedThreadSuccess {
+  kind: "reordered";
+  threads: ThreadRow[];
+}
+
+export interface ReorderPinnedThreadUnchanged {
+  kind: "unchanged";
+  threads: ThreadRow[];
+}
+
+export interface ReorderPinnedThreadNotFound {
+  kind: "not_found";
+}
+
+export interface ReorderPinnedThreadNotPinned {
+  kind: "not_pinned";
+}
+
+export interface ReorderPinnedThreadStaleNeighbor {
+  kind: "stale_neighbor";
+}
+
+export interface ReorderPinnedThreadInvalidNeighborOrder {
+  kind: "invalid_neighbor_order";
+}
+
+export type ReorderPinnedThreadResult =
+  | ReorderPinnedThreadSuccess
+  | ReorderPinnedThreadUnchanged
+  | ReorderPinnedThreadNotFound
+  | ReorderPinnedThreadNotPinned
+  | ReorderPinnedThreadStaleNeighbor
+  | ReorderPinnedThreadInvalidNeighborOrder;
 
 function listActiveManagerThreads(
   db: DbQueryConnection,
@@ -258,6 +331,102 @@ function resolveManagerThreadNeighbor(
       args.projectId,
       args.neighborThreadId,
     ) ?? false
+  );
+}
+
+function pinnedThreadWhere() {
+  return and(
+    isNull(threads.deletedAt),
+    isNotNull(threads.pinnedAt),
+    isNotNull(threads.pinSortKey),
+  );
+}
+
+function getFirstPinnedThread(db: DbQueryConnection): ThreadRow | null {
+  return (
+    db
+      .select()
+      .from(threads)
+      .where(pinnedThreadWhere())
+      .orderBy(asc(threads.pinSortKey), asc(threads.id))
+      .limit(1)
+      .get() ?? null
+  );
+}
+
+function filterVisiblePinnedThreadRoots<
+  TThread extends PinnedThreadRootCandidate,
+>({
+  pinnedThreads,
+}: FilterVisiblePinnedThreadRootsArgs<TThread>): TThread[] {
+  const pinnedManagerThreadIds = new Set(
+    pinnedThreads
+      .filter((thread) => thread.type === "manager")
+      .map((thread) => thread.id),
+  );
+  return pinnedThreads.filter(
+    (thread) =>
+      thread.parentThreadId === null ||
+      !pinnedManagerThreadIds.has(thread.parentThreadId),
+  );
+}
+
+export function listActiveVisiblePinnedThreadRoots(
+  db: DbQueryConnection,
+): ThreadRow[] {
+  const pinnedThreads = db
+    .select()
+    .from(threads)
+    .where(and(pinnedThreadWhere(), isNull(threads.archivedAt)))
+    .orderBy(asc(threads.pinSortKey), asc(threads.id))
+    .all();
+
+  return filterVisiblePinnedThreadRoots({ pinnedThreads });
+}
+
+export function listActiveVisiblePinnedThreadRootsWithPendingInteractionState(
+  db: DbConnection,
+): ThreadWithPendingInteractionState[] {
+  const pinnedThreads = db
+    .select({
+      ...getTableColumns(threads),
+      environmentBranchName: environments.branchName,
+      environmentHostId: environments.hostId,
+      environmentIsWorktree: environments.isWorktree,
+      environmentWorkspaceProvisionType: environments.workspaceProvisionType,
+      pendingInteractionCount: count(pendingInteractions.id),
+    })
+    .from(threads)
+    .leftJoin(environments, eq(threads.environmentId, environments.id))
+    .leftJoin(
+      pendingInteractions,
+      and(
+        eq(pendingInteractions.threadId, threads.id),
+        eq(pendingInteractions.status, "pending"),
+      ),
+    )
+    .where(and(pinnedThreadWhere(), isNull(threads.archivedAt)))
+    .groupBy(threads.id)
+    .orderBy(asc(threads.pinSortKey), asc(threads.id))
+    .all()
+    .map(toThreadWithPendingInteractionState);
+
+  return filterVisiblePinnedThreadRoots({ pinnedThreads });
+}
+
+function resolvePinnedThreadNeighbor(
+  args: ResolvePinnedThreadNeighborArgs,
+): ThreadRow | null | false {
+  if (args.neighborThreadId === null) {
+    return null;
+  }
+  if (args.neighborThreadId === args.movedThreadId) {
+    return false;
+  }
+
+  return (
+    args.pinnedThreads.find((thread) => thread.id === args.neighborThreadId) ??
+    false
   );
 }
 
@@ -441,10 +610,44 @@ function buildActiveProjectThreadOrderBy() {
   return [
     asc(threads.projectId),
     asc(sql`CASE WHEN ${threads.type} = 'manager' THEN 0 ELSE 1 END`),
-    asc(sql`CASE WHEN ${threads.type} = 'manager' THEN ${threads.sortKey} END`),
-    asc(sql`CASE WHEN ${threads.type} = 'manager' THEN ${threads.id} END`),
-    desc(sql`CASE WHEN ${threads.type} <> 'manager' THEN ${threads.createdAt} END`),
-    desc(sql`CASE WHEN ${threads.type} <> 'manager' THEN ${threads.id} END`),
+    asc(
+      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN 0 WHEN ${threads.type} = 'manager' THEN 1 END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.id} END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.sortKey} END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} = 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.id} END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN 0 WHEN ${threads.type} <> 'manager' THEN 1 END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`,
+    ),
+    asc(
+      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NOT NULL THEN ${threads.id} END`,
+    ),
+    desc(
+      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.createdAt} END`,
+    ),
+    desc(
+      sql`CASE WHEN ${threads.type} <> 'manager' AND ${threads.pinnedAt} IS NULL THEN ${threads.id} END`,
+    ),
+  ];
+}
+
+function buildPinnedThreadOrderBy() {
+  return [
+    asc(sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN 0 ELSE 1 END`),
+    asc(sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`),
+    asc(sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN ${threads.id} END`),
   ];
 }
 
@@ -453,12 +656,16 @@ function buildListThreadsOrderBy(options: ListThreadsOptions) {
     return [desc(threads.archivedAt), desc(threads.id)];
   }
   if (options.type === "manager") {
-    return [asc(threads.sortKey), asc(threads.id)];
+    return [
+      ...buildPinnedThreadOrderBy(),
+      asc(threads.sortKey),
+      asc(threads.id),
+    ];
   }
   if (options.type === undefined) {
     return buildActiveProjectThreadOrderBy();
   }
-  return [desc(threads.createdAt)];
+  return [...buildPinnedThreadOrderBy(), desc(threads.createdAt), desc(threads.id)];
 }
 
 function buildListThreadsForProjectsOrderBy(
@@ -844,6 +1051,192 @@ export function reorderManagerThread({
 
   if (result.kind === "reordered") {
     notifier.notifyThread(threadId, ["order-changed"], { projectId });
+  }
+  return result;
+}
+
+export function pinThread(
+  db: ThreadWriteConnection,
+  notifier: DbNotifier,
+  args: PinThreadArgs,
+) {
+  const result = db.transaction(
+    (tx): PinThreadMutationResult | null => {
+      const existing =
+        tx.select().from(threads).where(eq(threads.id, args.threadId)).get() ??
+        null;
+      if (!existing || existing.deletedAt !== null) {
+        return null;
+      }
+      if (existing.pinnedAt !== null && existing.pinSortKey !== null) {
+        return { changed: false, thread: existing };
+      }
+
+      const firstPinnedThread = getFirstPinnedThread(tx);
+      const pinSortKey = createOrderKeyBetween({
+        previousKey: null,
+        nextKey: firstPinnedThread?.pinSortKey ?? null,
+      });
+      const now = Date.now();
+      const updated = tx
+        .update(threads)
+        .set({
+          pinnedAt: args.pinnedAt ?? now,
+          pinSortKey,
+          updatedAt: now,
+        })
+        .where(and(eq(threads.id, args.threadId), isNull(threads.deletedAt)))
+        .returning()
+        .get();
+      return updated ? { changed: true, thread: updated } : null;
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result?.changed) {
+    notifier.notifyThread(args.threadId, ["pin-state-changed"], {
+      projectId: result.thread.projectId,
+    });
+  }
+  return result?.thread ?? null;
+}
+
+export function unpinThread(
+  db: ThreadWriteConnection,
+  notifier: DbNotifier,
+  args: UnpinThreadArgs,
+) {
+  const result = db.transaction(
+    (tx): PinThreadMutationResult | null => {
+      const existing =
+        tx.select().from(threads).where(eq(threads.id, args.threadId)).get() ??
+        null;
+      if (!existing || existing.deletedAt !== null) {
+        return null;
+      }
+      if (existing.pinnedAt === null && existing.pinSortKey === null) {
+        return { changed: false, thread: existing };
+      }
+
+      const updated = tx
+        .update(threads)
+        .set({
+          pinnedAt: null,
+          pinSortKey: null,
+          updatedAt: Date.now(),
+        })
+        .where(and(eq(threads.id, args.threadId), isNull(threads.deletedAt)))
+        .returning()
+        .get();
+      return updated ? { changed: true, thread: updated } : null;
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result?.changed) {
+    notifier.notifyThread(args.threadId, ["pin-state-changed"], {
+      projectId: result.thread.projectId,
+    });
+  }
+  return result?.thread ?? null;
+}
+
+export function reorderPinnedThread({
+  db,
+  nextThreadId,
+  notifier,
+  previousThreadId,
+  threadId,
+}: ReorderPinnedThreadArgs): ReorderPinnedThreadResult {
+  const result = db.transaction(
+    (tx): ReorderPinnedThreadResult => {
+      const movedThread =
+        tx.select().from(threads).where(eq(threads.id, threadId)).get() ?? null;
+      if (!movedThread || movedThread.deletedAt !== null) {
+        return { kind: "not_found" };
+      }
+      if (movedThread.pinnedAt === null || movedThread.pinSortKey === null) {
+        return { kind: "not_pinned" };
+      }
+
+      const currentThreads = listActiveVisiblePinnedThreadRoots(tx);
+      const currentIndex = currentThreads.findIndex(
+        (thread) => thread.id === threadId,
+      );
+      if (currentIndex === -1) {
+        return { kind: "stale_neighbor" };
+      }
+      const previousThread = resolvePinnedThreadNeighbor({
+        movedThreadId: threadId,
+        neighborThreadId: previousThreadId,
+        pinnedThreads: currentThreads,
+      });
+      const nextThread = resolvePinnedThreadNeighbor({
+        movedThreadId: threadId,
+        neighborThreadId: nextThreadId,
+        pinnedThreads: currentThreads,
+      });
+      if (previousThread === false || nextThread === false) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
+        previousThread?.pinSortKey === null ||
+        nextThread?.pinSortKey === null
+      ) {
+        return { kind: "stale_neighbor" };
+      }
+      if (
+        previousThread !== null &&
+        nextThread !== null &&
+        previousThread.pinSortKey >= nextThread.pinSortKey
+      ) {
+        return { kind: "invalid_neighbor_order" };
+      }
+
+      const currentPreviousThreadId =
+        currentThreads[currentIndex - 1]?.id ?? null;
+      const currentNextThreadId = currentThreads[currentIndex + 1]?.id ?? null;
+      if (
+        currentPreviousThreadId === previousThreadId &&
+        currentNextThreadId === nextThreadId
+      ) {
+        return {
+          kind: "unchanged",
+          threads: currentThreads,
+        };
+      }
+
+      const pinSortKey = createOrderKeyBetween({
+        previousKey: previousThread?.pinSortKey ?? null,
+        nextKey: nextThread?.pinSortKey ?? null,
+      });
+      const updated = tx
+        .update(threads)
+        .set({ pinSortKey, updatedAt: Date.now() })
+        .where(and(eq(threads.id, threadId), pinnedThreadWhere()))
+        .returning({ id: threads.id })
+        .get();
+      if (!updated) {
+        return { kind: "stale_neighbor" };
+      }
+
+      return {
+        kind: "reordered",
+        threads: listActiveVisiblePinnedThreadRoots(tx),
+      };
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result.kind === "reordered") {
+    const reorderedThread = result.threads.find(
+      (thread) => thread.id === threadId,
+    );
+    if (reorderedThread) {
+      notifier.notifyThread(threadId, ["pin-state-changed"], {
+        projectId: reorderedThread.projectId,
+      });
+    }
   }
   return result;
 }

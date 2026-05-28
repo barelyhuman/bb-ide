@@ -58,9 +58,7 @@ function printThreadTable(threads: Thread[]): void {
   const rows = threads.map((thread) => [
     thread.id,
     thread.projectId === PERSONAL_PROJECT_ID ? "-" : thread.projectId,
-    thread.archivedAt !== null
-      ? `${statusText(thread.status)} (archived)`
-      : statusText(thread.status),
+    formatThreadListStatus(thread),
   ]);
   const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
   const projectWidth = Math.max(7, ...rows.map((row) => row[1].length));
@@ -76,4 +74,18 @@ function printThreadTable(threads: Thread[]): void {
   console.log("");
   console.log(table);
   console.log("");
+}
+
+function formatThreadListStatus(thread: Thread): string {
+  const flags: string[] = [];
+  if (thread.archivedAt !== null) {
+    flags.push("archived");
+  }
+  if (thread.pinnedAt !== null) {
+    flags.push("pinned");
+  }
+  if (flags.length === 0) {
+    return statusText(thread.status);
+  }
+  return `${statusText(thread.status)} (${flags.join(", ")})`;
 }

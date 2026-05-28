@@ -22,6 +22,8 @@ function createThread(
     status: "idle",
     parentThreadId: null,
     archivedAt: null,
+    pinnedAt: null,
+    pinSortKey: null,
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: 0,
@@ -119,14 +121,16 @@ describe("buildProjectThreadGroups", () => {
       managedChildActivity: { pending: false, working: true, unread: false },
       managedChildCount: 2,
     });
-    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
-      .toEqual(["child-idle", "child-busy"]);
+    expect(
+      looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual(["child-idle", "child-busy"]);
     expect(groups.managerThreadGroups[1]?.stats).toEqual({
       managedChildActivity: { pending: false, working: false, unread: false },
       managedChildCount: 0,
     });
-    expect(looseThreadIds(groups.managerThreadGroups[1]?.managedItems ?? []))
-      .toEqual([]);
+    expect(
+      looseThreadIds(groups.managerThreadGroups[1]?.managedItems ?? []),
+    ).toEqual([]);
     expect(looseThreadIds(groups.unmanagedItems)).toEqual([
       "orphan-child",
       "root-old",
@@ -305,8 +309,9 @@ describe("buildProjectThreadGroups", () => {
       }),
     ]);
 
-    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
-      .toEqual([
+    expect(
+      looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual([
       "active-newer-created-child",
       "active-older-created-child",
       "idle-newer-attention-child",

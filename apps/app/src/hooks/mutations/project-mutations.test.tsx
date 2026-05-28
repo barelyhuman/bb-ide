@@ -24,6 +24,7 @@ function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
     lastReadAt: null,
     latestAttentionAt: 1,
     parentThreadId: null,
+    pinnedAt: null,
     projectId: "project-1",
     providerId: "codex",
     runtime: {

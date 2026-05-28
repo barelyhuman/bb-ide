@@ -46,6 +46,7 @@ interface CreateThreadWithEnvironmentArgs {
 }
 
 interface ThreadWithSortKey extends Thread {
+  pinSortKey: string | null;
   sortKey: string | null;
 }
 

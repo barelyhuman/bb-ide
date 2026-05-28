@@ -24,6 +24,7 @@ import {
   environmentActionRequestSchema,
   baseBranchSpecSchema,
   gitBranchNameSchema,
+  reorderPinnedThreadRequestSchema,
   reorderQueuedMessageRequestSchema,
   resolvePendingInteractionRequestSchema,
   sendQueuedMessageRequestSchema,
@@ -816,6 +817,20 @@ describe("server-contract canonical schemas", () => {
         nextQueuedMessageId: "qmsg_next",
       }),
     ).toThrow();
+    expect(
+      reorderPinnedThreadRequestSchema.parse({
+        previousThreadId: null,
+        nextThreadId: "thr_next",
+      }),
+    ).toEqual({
+      previousThreadId: null,
+      nextThreadId: "thr_next",
+    });
+    expect(() =>
+      reorderPinnedThreadRequestSchema.parse({
+        nextThreadId: "thr_next",
+      }),
+    ).toThrow();
 
     expect(
       threadListResponseSchema.parse([
@@ -831,6 +846,8 @@ describe("server-contract canonical schemas", () => {
           status: "idle",
           parentThreadId: null,
           archivedAt: null,
+          pinnedAt: null,
+          pinSortKey: null,
           stopRequestedAt: null,
           deletedAt: null,
           lastReadAt: null,
@@ -1137,6 +1154,21 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/queued-messages/qmsg_123/order");
     expect(
+      publicClient.threads[":id"].pin.$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/pin");
+    expect(
+      publicClient.threads[":id"].unpin.$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/unpin");
+    expect(
+      publicClient.threads[":id"]["pin-order"].$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/pin-order");
+    expect(
       publicClient.threads[":id"]["composer-bootstrap"].$url({
         param: { id: "thr_123" },
       }).pathname,
@@ -1338,6 +1370,8 @@ describe("server-contract clients", () => {
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
       reorderManagerThreadRequestSchema:
         contract.reorderManagerThreadRequestSchema,
+      reorderPinnedThreadRequestSchema:
+        contract.reorderPinnedThreadRequestSchema,
       reorderProjectRequestSchema: contract.reorderProjectRequestSchema,
       reorderQueuedMessageRequestSchema:
         contract.reorderQueuedMessageRequestSchema,

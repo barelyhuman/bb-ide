@@ -71,6 +71,7 @@ import type {
   ProjectWithThreadsResponse,
   SidebarBootstrapResponse,
   ReorderManagerThreadRequest,
+  ReorderPinnedThreadRequest,
   ReorderProjectRequest,
   ReorderQueuedMessageRequest,
   SendQueuedMessageRequest,
@@ -474,6 +475,21 @@ export type PublicApiSchema = {
   };
   "/threads/:id/stop": {
     $post: Endpoint<PathId, { ok: true }>;
+  };
+  "/threads/:id/pin": {
+    /** Pin a thread into the global sidebar Pinned section. */
+    $post: Endpoint<PathId, ThreadResponse>;
+  };
+  "/threads/:id/unpin": {
+    /** Clear a thread's pinned state and pinned order key. */
+    $post: Endpoint<PathId, ThreadResponse>;
+  };
+  "/threads/:id/pin-order": {
+    /** Reposition a visible pinned root between global pinned root neighbors. */
+    $patch: Endpoint<
+      PathId & { json: ReorderPinnedThreadRequest },
+      ThreadListResponse
+    >;
   };
   "/threads/:id/interactions": {
     /** List pending interactions owned by a thread. */

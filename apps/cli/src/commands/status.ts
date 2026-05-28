@@ -25,6 +25,7 @@ interface StatusPayload {
     type: string;
     status: string;
     title: string | null;
+    pinnedAt: number | null;
     parentThreadId: string | null;
     environment: ThreadEnvironmentInfo | null;
   } | null;
@@ -156,6 +157,7 @@ export function registerStatusCommand(
               type: threadResult.type,
               status: threadResult.status,
               title: threadResult.title ?? null,
+              pinnedAt: threadResult.pinnedAt,
               parentThreadId: threadResult.parentThreadId ?? null,
               environment: environmentInfo,
             };
@@ -201,6 +203,11 @@ export function registerStatusCommand(
           console.log(`  Status: ${payload.thread.status}`);
           if (payload.thread.title) {
             console.log(`  Title: ${payload.thread.title}`);
+          }
+          if (payload.thread.pinnedAt !== null) {
+            console.log(
+              `  Pinned: ${new Date(payload.thread.pinnedAt).toLocaleString()}`,
+            );
           }
           if (payload.thread.parentThreadId) {
             console.log(`  Parent: ${payload.thread.parentThreadId}`);

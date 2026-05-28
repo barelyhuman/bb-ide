@@ -99,6 +99,7 @@ function toPublicThread(thread: Thread): Thread {
     status: thread.status,
     parentThreadId: thread.parentThreadId,
     archivedAt: thread.archivedAt,
+    pinnedAt: thread.pinnedAt,
     stopRequestedAt: thread.stopRequestedAt,
     deletedAt: thread.deletedAt,
     lastReadAt: thread.lastReadAt,
@@ -248,6 +249,7 @@ function toThreadListEntryResponseFromLatestSession(
   const thread = toPublicThread(args.thread);
   return {
     ...thread,
+    pinSortKey: args.thread.pinSortKey,
     environmentBranchName: args.thread.environmentBranchName,
     environmentHostId: args.thread.environmentHostId,
     environmentWorkspaceDisplayKind:

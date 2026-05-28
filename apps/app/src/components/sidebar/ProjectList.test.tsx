@@ -108,6 +108,8 @@ function makeThreadListEntry(
     lastReadAt: null,
     latestAttentionAt: index,
     parentThreadId: null,
+    pinnedAt: null,
+    pinSortKey: null,
     projectId,
     providerId: "codex",
     runtime: {
@@ -802,6 +804,188 @@ describe("ProjectList", () => {
     expect(projectlessThreadRow?.parentElement?.className).not.toContain(
       "before:bg-border-hairline",
     );
+  });
+
+  it("hides the Pinned section when no active threads are pinned", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    expect(await screen.findByText("Projects")).toBeTruthy();
+    expect(screen.queryByText("Pinned")).toBeNull();
+  });
+
+  it("moves pinned threads into the Pinned section and removes them from canonical sections", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const pinnedThread = makeThreadListEntry(project.id, 10, {
+      title: "Pinned Project Thread",
+      titleFallback: "Pinned Project Thread",
+      pinnedAt: 1_000,
+      pinSortKey: "a",
+    });
+    const unpinnedThread = makeThreadListEntry(project.id, 11, {
+      title: "Project Thread",
+      titleFallback: "Project Thread",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+              threadsByProjectId: new Map([
+                [project.id, [pinnedThread, unpinnedThread]],
+              ]),
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    expect(await screen.findByText("Pinned")).toBeTruthy();
+    expect(screen.getAllByText("Pinned Project Thread")).toHaveLength(1);
+    expect(screen.getByText("Project Thread")).toBeTruthy();
+  });
+
+  it("moves pinned manager children with the manager", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const pinnedManager = makeThreadListEntry(project.id, 20, {
+      id: "thread-pinned-manager",
+      title: "Pinned Manager",
+      titleFallback: "Pinned Manager",
+      type: "manager",
+      pinnedAt: 1_000,
+      pinSortKey: "a",
+    });
+    const managedChild = makeThreadListEntry(project.id, 21, {
+      id: "thread-managed-child",
+      parentThreadId: pinnedManager.id,
+      title: "Managed Child",
+      titleFallback: "Managed Child",
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarBootstrapResponse({
+              personalProject,
+              projects: [project],
+              threadsByProjectId: new Map([
+                [project.id, [pinnedManager, managedChild]],
+              ]),
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    expect(await screen.findByText("Pinned")).toBeTruthy();
+    expect(screen.getAllByText("Pinned Manager")).toHaveLength(1);
+    expect(screen.getAllByText("Managed Child")).toHaveLength(1);
   });
 
   it("does not indent top-level rows in the projectless Threads section", async () => {

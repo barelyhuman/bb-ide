@@ -29,10 +29,7 @@ import {
   printEnvironmentInfo,
 } from "../environment-helpers.js";
 import { statusText } from "./helpers.js";
-import {
-  fetchThreadPendingTodos,
-  printPendingTodos,
-} from "./pending-todos.js";
+import { fetchThreadPendingTodos, printPendingTodos } from "./pending-todos.js";
 
 interface ThreadShowCommandOptions {
   self?: boolean;
@@ -419,6 +416,9 @@ function printThreadStatus(
   }
   if (thread.archivedAt !== null) {
     console.log(`  Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
+  }
+  if (thread.pinnedAt !== null) {
+    console.log(`  Pinned: ${new Date(thread.pinnedAt).toLocaleString()}`);
   }
   if (environmentInfo) {
     printEnvironmentInfo(environmentInfo);

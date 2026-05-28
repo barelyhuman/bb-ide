@@ -103,6 +103,7 @@ function makeThreadWithRuntime(
     titleFallback: null,
     parentThreadId: null,
     archivedAt: null,
+    pinnedAt: null,
     stopRequestedAt: null,
     deletedAt: null,
     runtime: {

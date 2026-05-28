@@ -554,6 +554,14 @@ export type ReorderManagerThreadRequest = z.infer<
   typeof reorderManagerThreadRequestSchema
 >;
 
+export const reorderPinnedThreadRequestSchema = z.object({
+  previousThreadId: z.string().min(1).nullable(),
+  nextThreadId: z.string().min(1).nullable(),
+});
+export type ReorderPinnedThreadRequest = z.infer<
+  typeof reorderPinnedThreadRequestSchema
+>;
+
 const persistentHostJoinRequestSchema = z
   .object({
     hostId: z.string().min(1).optional(),

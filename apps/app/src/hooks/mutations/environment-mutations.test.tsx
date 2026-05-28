@@ -34,6 +34,7 @@ function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
     lastReadAt: null,
     latestAttentionAt: 1,
     parentThreadId: null,
+    pinnedAt: null,
     projectId: "project-1",
     providerId: "codex",
     runtime: {
@@ -60,6 +61,7 @@ function makeThreadListEntry(
     environmentHostId: null,
     environmentWorkspaceDisplayKind: "managed-worktree",
     hasPendingInteraction: false,
+    pinSortKey: null,
     ...overrides,
   };
 }

@@ -20,6 +20,7 @@ export const THREAD_CHANGE_KINDS = [
   "title-changed",
   "queue-changed",
   "archived-changed",
+  "pin-state-changed",
   "parent-changed",
   "read-state-changed",
   "manager-assignment-changed",

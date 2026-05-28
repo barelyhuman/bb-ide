@@ -29,6 +29,7 @@ function makeThread(
     lastReadAt: null,
     latestAttentionAt: 10,
     parentThreadId: null,
+    pinnedAt: null,
     projectId: "project-1",
     providerId: "codex",
     runtime: {
@@ -55,6 +56,7 @@ function makeThreadListEntry(
     environmentHostId: null,
     environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: false,
+    pinSortKey: null,
     ...overrides,
   };
 }

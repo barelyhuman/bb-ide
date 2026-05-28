@@ -34,6 +34,11 @@ interface ThreadUnarchiveCommandOptions {
   json?: boolean;
 }
 
+interface ThreadPinCommandOptions {
+  self?: boolean;
+  json?: boolean;
+}
+
 interface ThreadDeleteCommandOptions {
   confirmAssignedChildThreads?: boolean;
   yes?: boolean;
@@ -176,6 +181,44 @@ export function registerActionsCommands(
           console.log(`Thread ${threadId} unarchived`);
         },
       ),
+    );
+
+  parent
+    .command("pin [id]")
+    .description("Pin a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (id: string | undefined, opts: ThreadPinCommandOptions) => {
+        const client = createClient(getUrl());
+        const threadId = requireThreadIdOrSelf(id, opts);
+        const thread = await unwrap<Thread>(
+          client.api.v1.threads[":id"].pin.$post({
+            param: { id: threadId },
+          }),
+        );
+        if (outputJson(opts, thread)) return;
+        console.log(`Thread ${thread.id} pinned`);
+      }),
+    );
+
+  parent
+    .command("unpin [id]")
+    .description("Unpin a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (id: string | undefined, opts: ThreadPinCommandOptions) => {
+        const client = createClient(getUrl());
+        const threadId = requireThreadIdOrSelf(id, opts);
+        const thread = await unwrap<Thread>(
+          client.api.v1.threads[":id"].unpin.$post({
+            param: { id: threadId },
+          }),
+        );
+        if (outputJson(opts, thread)) return;
+        console.log(`Thread ${thread.id} unpinned`);
+      }),
     );
 
   parent

@@ -133,6 +133,7 @@ function makeThread(
     environmentId: null,
     parentThreadId: null,
     archivedAt: null,
+    pinnedAt: null,
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: null,
@@ -1533,6 +1534,49 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb status prints pinned state for pinned thread context", async () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    vi.stubEnv("BB_THREAD_ID", "thread-pinned-1");
+
+    const getProject = vi.fn(async () => ({
+      id: "proj-1",
+      name: "Alpha",
+    }));
+    const getThread = vi.fn(async () =>
+      makeThread({
+        id: "thread-pinned-1",
+        projectId: "proj-1",
+        providerId: "codex",
+        pinnedAt: 1_700_000_000_000,
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                $get: getProject,
+              },
+            },
+            threads: {
+              ":id": {
+                $get: getThread,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["status"], (program) =>
+      registerStatusCommand(program, () => "http://server"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines.some((line) => line.includes("Pinned:"))).toBe(true);
+  });
+
   it("bb thread spawn omits provider and model when the user relies on project defaults", async () => {
     vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
@@ -1841,6 +1885,40 @@ describe("CLI command output contracts", () => {
       "ID                 Project  Status         \n-----------------  -------  ---------------\nthread-archived-1  proj-1   idle (archived)",
       "",
     ]);
+  });
+
+  it("bb thread list renders pinned status in the shared borderless table", async () => {
+    const list = vi.fn(async () => [
+      makeThread({
+        id: "thread-pinned-1",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        pinnedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    ]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "list"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log)).join("\n")).toContain(
+      "idle (pinned)",
+    );
   });
 
   it("bb thread list hides the personal project label", async () => {
@@ -2471,6 +2549,79 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb thread pin sends the thread id from args", async () => {
+    const pinnedThread = makeThread({
+      id: "thread-pin-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      pinnedAt: 1,
+    });
+    const pinPost = vi.fn(async () => pinnedThread);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                pin: {
+                  $post: pinPost,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "pin", "thread-pin-1"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(pinPost).toHaveBeenCalledWith({
+      param: { id: "thread-pin-1" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-pin-1 pinned",
+    );
+  });
+
+  it("bb thread unpin --self resolves from BB_THREAD_ID", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-unpin-1");
+    const unpinnedThread = makeThread({
+      id: "thread-unpin-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      pinnedAt: null,
+    });
+    const unpinPost = vi.fn(async () => unpinnedThread);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                unpin: {
+                  $post: unpinPost,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "unpin", "--self"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(unpinPost).toHaveBeenCalledWith({
+      param: { id: "thread-unpin-1" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-unpin-1 unpinned",
+    );
+  });
+
   it("bb thread delete prompts before deleting", async () => {
     const thread: Thread = makeThread({
       id: "thread-delete-1",
@@ -2829,6 +2980,42 @@ describe("CLI command output contracts", () => {
     });
     const lines = collectLogLines(vi.mocked(console.log));
     expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
+  });
+
+  it("bb thread show prints pinned timestamp for pinned threads", async () => {
+    const thread: Thread = makeThread({
+      id: "thread-pinned-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      pinnedAt: 1_700_000_000_000,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const get = vi.fn(async () => thread);
+    const timelineGet = makeEmptyTimelineGetMock();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                timeline: { $get: timelineGet },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "show", "thread-pinned-1"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines.some((line) => line.includes("Pinned:"))).toBe(true);
   });
 
   it("bb thread show --self resolves from BB_THREAD_ID", async () => {

@@ -34,6 +34,7 @@ function makeThread(options: ThreadFixtureOptions): Thread {
     status: "idle",
     parentThreadId: null,
     archivedAt: null,
+    pinnedAt: null,
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: null,

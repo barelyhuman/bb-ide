@@ -59,6 +59,7 @@ import {
   useReorderProject,
   useReorderProjectManager,
 } from "@/hooks/mutations/project-mutations";
+import { useReorderPinnedThread } from "@/hooks/mutations/thread-state-mutations";
 import {
   isLocalPathMissing,
   useLocalPathExistence,
@@ -104,6 +105,11 @@ import type {
   ProjectRowProps,
   ProjectThreadListState,
 } from "./ProjectRow";
+import {
+  PinnedThreadTree,
+  type PinnedThreadTreeProps,
+} from "./PinnedThreadTree";
+import { buildPinnedSidebarState } from "./pinnedSidebarThreads";
 import {
   collapsedEnvironmentIdsAtom,
   collapsedManagerIdsAtom,
@@ -275,7 +281,7 @@ function hasSameSidebarSectionOrder(
 }
 
 function isSidebarSectionId(value: string): value is SidebarSectionId {
-  return value === "projects" || value === "threads";
+  return value === "pinned" || value === "projects" || value === "threads";
 }
 
 function normalizeSidebarSectionOrder(
@@ -289,6 +295,10 @@ function normalizeSidebarSectionOrder(
     }
     seen.add(sectionId);
     normalized.push(sectionId);
+  }
+  if (!seen.has("pinned")) {
+    seen.add("pinned");
+    normalized.unshift("pinned");
   }
   for (const sectionId of DEFAULT_SIDEBAR_SECTION_ORDER) {
     if (seen.has(sectionId)) {
@@ -776,6 +786,10 @@ function ProjectListComponent({
     isPending: isManagerReorderPending,
     mutate: reorderProjectManagerMutate,
   } = useReorderProjectManager();
+  const {
+    isPending: isPinnedReorderPending,
+    mutate: reorderPinnedThreadMutate,
+  } = useReorderPinnedThread();
   const [optimisticProjectOrder, setOptimisticProjectOrder] = useState<
     ProjectResponse[] | null
   >(null);
@@ -880,6 +894,23 @@ function ProjectListComponent({
     },
     [reorderProjectManagerMutate],
   );
+  const handleReorderPinnedRoot = useCallback<
+    NonNullable<PinnedThreadTreeProps["onReorderPinnedRoot"]>
+  >(
+    (request, callbacks) => {
+      reorderPinnedThreadMutate(
+        {
+          id: request.itemId,
+          previousThreadId: request.previousItemId,
+          nextThreadId: request.nextItemId,
+        },
+        {
+          onSettled: callbacks.onSettled,
+        },
+      );
+    },
+    [reorderPinnedThreadMutate],
+  );
   const openRootComposeForProject = useCallback(
     ({ projectId, mode }: OpenRootComposeForProjectArgs) => {
       setRootComposeProjectId(projectId);
@@ -963,10 +994,25 @@ function ProjectListComponent({
     sidebarSectionOrder,
     sidebarSectionOrderList,
   ]);
+  const pinnedSidebarState = useMemo(
+    () => buildPinnedSidebarState({ threads }),
+    [threads],
+  );
+  const hasPinnedSection = pinnedSidebarState.rootItems.length > 0;
+  const visibleSidebarSectionOrder = useMemo(
+    () =>
+      sidebarSectionOrder.filter(
+        (sectionId) => sectionId !== "pinned" || hasPinnedSection,
+      ),
+    [hasPinnedSection, sidebarSectionOrder],
+  );
   const threadsByProject = useMemo(() => {
     const grouped = new Map<string, ThreadListEntry[]>();
 
     for (const thread of threads) {
+      if (pinnedSidebarState.effectivePinnedThreadIds.has(thread.id)) {
+        continue;
+      }
       const existing = grouped.get(thread.projectId);
       if (existing) {
         existing.push(thread);
@@ -976,7 +1022,7 @@ function ProjectListComponent({
     }
 
     return grouped;
-  }, [threads]);
+  }, [pinnedSidebarState.effectivePinnedThreadIds, threads]);
 
   // Pre-build per-project list state once per inputs so each ProjectRow can
   // bail out of memo when none of its data changed.
@@ -1053,13 +1099,13 @@ function ProjectListComponent({
       const request = buildNeighborReorderRequest({
         activeId: active.id,
         overId: over.id,
-        items: sidebarSectionOrder.map((id) => ({ id })),
+        items: visibleSidebarSectionOrder.map((id) => ({ id })),
       });
       if (!request) {
         return;
       }
       const nextOrder = applyNeighborReorder({
-        items: sidebarSectionOrder.map((id) => ({ id })),
+        items: visibleSidebarSectionOrder.map((id) => ({ id })),
         request,
       });
       setSidebarSectionOrderList(
@@ -1069,7 +1115,7 @@ function ProjectListComponent({
     [
       clearSidebarSectionDragClickSuppressionSoon,
       setSidebarSectionOrderList,
-      sidebarSectionOrder,
+      visibleSidebarSectionOrder,
     ],
   );
 
@@ -1079,6 +1125,19 @@ function ProjectListComponent({
       threads: threadsByProject.get(PERSONAL_PROJECT_ID),
     });
 
+  const pinnedSectionContent = (
+    <PinnedThreadTree
+      rootItems={pinnedSidebarState.rootItems}
+      selectedThreadId={selectedThreadId}
+      collapsedManagerIds={collapsedManagerIds}
+      collapsedEnvironmentIds={collapsedEnvironmentIds}
+      onProjectSelect={onProjectSelect}
+      onToggleManagerCollapsed={toggleManagerCollapsed}
+      onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
+      isPinnedReorderPending={isPinnedReorderPending}
+      onReorderPinnedRoot={handleReorderPinnedRoot}
+    />
+  );
   const projectsSectionContent = (
     <SidebarMenu className="gap-1">
       {projectsState.status === "loading" ? (
@@ -1226,17 +1285,27 @@ function ProjectListComponent({
         onDragEnd={handleSidebarSectionDragEnd}
       >
         <SortableContext
-          items={sidebarSectionOrder}
+          items={visibleSidebarSectionOrder}
           strategy={verticalListSortingStrategy}
         >
           <div className="space-y-4">
-            {sidebarSectionOrder.map((sectionId) =>
-              sectionId === "projects" ? (
+            {visibleSidebarSectionOrder.map((sectionId) =>
+              sectionId === "pinned" ? (
+                <SortableSidebarSection
+                  key={sectionId}
+                  id={sectionId}
+                  label="Pinned"
+                  disabled={visibleSidebarSectionOrder.length < 2}
+                  consumeClickSuppression={consumeSidebarSectionClickSuppression}
+                >
+                  {pinnedSectionContent}
+                </SortableSidebarSection>
+              ) : sectionId === "projects" ? (
                 <SortableSidebarSection
                   key={sectionId}
                   id={sectionId}
                   label="Projects"
-                  disabled={sidebarSectionOrder.length < 2}
+                  disabled={visibleSidebarSectionOrder.length < 2}
                   actions={projectsSectionActions}
                   actionsAlwaysVisible={projectsSectionActionsAlwaysVisible}
                   consumeClickSuppression={consumeSidebarSectionClickSuppression}
@@ -1248,7 +1317,7 @@ function ProjectListComponent({
                   key={sectionId}
                   id={sectionId}
                   label="Threads"
-                  disabled={sidebarSectionOrder.length < 2}
+                  disabled={visibleSidebarSectionOrder.length < 2}
                   actions={threadsSectionActions}
                   consumeClickSuppression={consumeSidebarSectionClickSuppression}
                 >

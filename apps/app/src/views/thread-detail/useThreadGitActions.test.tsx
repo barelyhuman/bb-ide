@@ -84,6 +84,7 @@ function makeThread(): Thread {
     lastReadAt: null,
     latestAttentionAt: 10,
     parentThreadId: null,
+    pinnedAt: null,
     projectId: "project-1",
     providerId: "provider-1",
     status: "idle",

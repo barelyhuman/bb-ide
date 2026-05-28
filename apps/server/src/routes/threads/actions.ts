@@ -3,17 +3,24 @@ import {
   deleteQueuedThreadMessage,
   getEnvironment,
   getQueuedThreadMessage,
+  listActiveVisiblePinnedThreadRootsWithPendingInteractionState,
+  pinThread,
+  reorderPinnedThread,
   reorderQueuedThreadMessage,
   unarchiveThread,
+  unpinThread,
   updateThread,
+  type ReorderPinnedThreadResult,
   type ReorderQueuedThreadMessageResult,
 } from "@bb/db";
 import {
   createQueuedMessageRequestSchema,
+  reorderPinnedThreadRequestSchema,
   reorderQueuedMessageRequestSchema,
   sendQueuedMessageRequestSchema,
   sendMessageRequestSchema,
   typedRoutes,
+  type ThreadListResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
@@ -42,7 +49,10 @@ import {
 } from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
 import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
-import { toThreadResponseFromThread } from "../../services/threads/thread-runtime-display.js";
+import {
+  toThreadListEntryResponses,
+  toThreadResponseFromThread,
+} from "../../services/threads/thread-runtime-display.js";
 import {
   archiveThreadWithLifecycleEffects,
   wouldCleanupAfterThreadArchive,
@@ -78,6 +88,38 @@ function toQueuedMessageOrderResponse(
         409,
         "invalid_request",
         "Queued message order is invalid",
+      );
+  }
+}
+
+function buildActivePinnedThreadRootListResponse(
+  deps: AppDeps,
+): ThreadListResponse {
+  return toThreadListEntryResponses(deps, {
+    threads: listActiveVisiblePinnedThreadRootsWithPendingInteractionState(
+      deps.db,
+    ),
+  });
+}
+
+function assertPinnedThreadOrderResult(
+  result: ReorderPinnedThreadResult,
+): void {
+  switch (result.kind) {
+    case "reordered":
+    case "unchanged":
+      return;
+    case "not_found":
+      throw new ApiError(404, "thread_not_found", "Thread not found");
+    case "not_pinned":
+      throw new ApiError(409, "invalid_request", "Thread is not pinned");
+    case "stale_neighbor":
+      throw new ApiError(409, "invalid_request", "Pinned thread order changed");
+    case "invalid_neighbor_order":
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Pinned thread order is invalid",
       );
   }
 }
@@ -205,6 +247,46 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     requestThreadStopIfNeeded(deps, thread, environment);
     return context.json({ ok: true });
   });
+
+  post("/threads/:id/pin", (context) => {
+    const publicThread = requirePublicThread(deps.db, context.req.param("id"));
+    const thread = pinThread(deps.db, deps.hub, {
+      threadId: publicThread.id,
+    });
+    if (!thread) {
+      throw new ApiError(404, "thread_not_found", "Thread not found");
+    }
+    return context.json(toThreadResponseFromThread(deps, { thread }));
+  });
+
+  post("/threads/:id/unpin", (context) => {
+    const publicThread = requirePublicThread(deps.db, context.req.param("id"));
+    const thread = unpinThread(deps.db, deps.hub, {
+      threadId: publicThread.id,
+    });
+    if (!thread) {
+      throw new ApiError(404, "thread_not_found", "Thread not found");
+    }
+    return context.json(toThreadResponseFromThread(deps, { thread }));
+  });
+
+  patch(
+    "/threads/:id/pin-order",
+    reorderPinnedThreadRequestSchema,
+    (context, payload) => {
+      const thread = requirePublicThread(deps.db, context.req.param("id"));
+      assertPinnedThreadOrderResult(
+        reorderPinnedThread({
+          db: deps.db,
+          notifier: deps.hub,
+          threadId: thread.id,
+          previousThreadId: payload.previousThreadId,
+          nextThreadId: payload.nextThreadId,
+        }),
+      );
+      return context.json(buildActivePinnedThreadRootListResponse(deps));
+    },
+  );
 
   post("/threads/:id/archive", async (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));

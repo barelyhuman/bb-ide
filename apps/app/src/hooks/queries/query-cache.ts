@@ -370,6 +370,7 @@ export function optimisticallyInsertThread(
         environmentHostId: null,
         runtime: thread.runtime,
         hasPendingInteraction: false,
+        pinSortKey: null,
         environmentWorkspaceDisplayKind: "other",
       },
       ...data,

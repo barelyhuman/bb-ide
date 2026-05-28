@@ -88,7 +88,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
     getThreadAssignedChildSummary: vi.fn(),
     markThreadRead: vi.fn(),
     markThreadUnread: vi.fn(),
+    pinThread: vi.fn(),
     unarchiveThread: vi.fn(),
+    unpinThread: vi.fn(),
     updateThread: vi.fn(),
   };
 });
@@ -113,6 +115,7 @@ function makeThread(
     lastReadAt: null,
     latestAttentionAt: 10,
     parentThreadId: null,
+    pinnedAt: null,
     projectId: "project-1",
     providerId: "provider-1",
     stopRequestedAt: null,
@@ -198,6 +201,40 @@ beforeEach(() => {
 });
 
 describe("ThreadActionsProvider", () => {
+  it("toggles thread pin state", async () => {
+    const thread = makeThread();
+    const pinnedThread = makeThread({
+      pinnedAt: 1_000,
+    });
+    vi.mocked(api.pinThread).mockResolvedValue(pinnedThread);
+    vi.mocked(api.unpinThread).mockResolvedValue(thread);
+
+    let actions: ReturnType<typeof useThreadActions> | null = null;
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
+
+    act(() => {
+      actions!.togglePin(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.pinThread).toHaveBeenCalledWith(thread.id);
+    });
+
+    act(() => {
+      actions!.togglePin(pinnedThread);
+    });
+
+    await waitFor(() => {
+      expect(api.unpinThread).toHaveBeenCalledWith(thread.id);
+    });
+  });
+
   it("archives and supports undo from the toast action", async () => {
     const thread = makeThread();
     vi.mocked(api.archiveThread).mockResolvedValue(undefined);
@@ -261,9 +298,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      await screen.findByText(
-        /assigned threads will be unassigned/i,
-      ),
+      await screen.findByText(/assigned threads will be unassigned/i),
     ).not.toBeNull();
     expect(api.deleteThread).not.toHaveBeenCalled();
 
@@ -298,16 +333,12 @@ describe("ThreadActionsProvider", () => {
       actions!.requestDelete(thread);
     });
 
-    await screen.findByText(
-      /assigned threads will be unassigned/i,
-    );
+    await screen.findByText(/assigned threads will be unassigned/i);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
-        screen.queryByText(
-          /assigned threads will be unassigned/i,
-        ),
+        screen.queryByText(/assigned threads will be unassigned/i),
       ).toBeNull();
     });
     expect(api.deleteThread).not.toHaveBeenCalled();
@@ -365,9 +396,7 @@ describe("ThreadActionsProvider", () => {
     });
 
     expect(
-      screen.queryByText(
-        /assigned threads will be unassigned/i,
-      ),
+      screen.queryByText(/assigned threads will be unassigned/i),
     ).toBeNull();
     fireEvent.click(confirmButton);
 

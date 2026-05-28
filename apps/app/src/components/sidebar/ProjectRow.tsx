@@ -385,7 +385,7 @@ function ProjectThreadTreeGroup({
   );
 }
 
-interface ManagerThreadGroupRowProps {
+export interface ManagerThreadGroupRowProps {
   projectId: string;
   managerThreadGroup: ManagerThreadGroup;
   selectedThreadId?: string;
@@ -834,7 +834,7 @@ function ManagedEnvironmentThreadSubGroup({
   );
 }
 
-const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
+export const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   projectId,
   managerThreadGroup,
   selectedThreadId,

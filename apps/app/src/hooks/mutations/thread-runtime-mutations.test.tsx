@@ -79,6 +79,7 @@ const createdThread = {
   titleFallback: null,
   parentThreadId: null,
   archivedAt: null,
+  pinnedAt: null,
   stopRequestedAt: null,
   deletedAt: null,
   runtime: {
@@ -106,6 +107,7 @@ function makeThreadWithRuntime(
     titleFallback: null,
     parentThreadId: null,
     archivedAt: null,
+    pinnedAt: null,
     stopRequestedAt: null,
     deletedAt: null,
     runtime: {
@@ -125,6 +127,7 @@ function makeThreadListEntry(
     environmentHostId: "host-1",
     environmentBranchName: null,
     environmentWorkspaceDisplayKind: "managed-worktree",
+    pinSortKey: null,
   };
 }
 

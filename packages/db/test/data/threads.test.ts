@@ -10,6 +10,7 @@ import {
   getThread,
   hasPendingThreadShutdownInEnvironment,
   listHostThreadIds,
+  listActiveVisiblePinnedThreadRoots,
   listThreadEnvironmentAssignmentsOnHost,
   listThreads,
   listThreadsWithPendingInteractionState,
@@ -20,7 +21,10 @@ import {
   markThreadDeleted,
   markThreadAttentionRequested,
   markThreadStopRequested,
+  pinThread,
+  reorderPinnedThread,
   reorderManagerThread,
+  unpinThread,
   unarchiveThread,
   transitionThreadStatus,
   InvalidThreadStatusTransitionError,
@@ -97,6 +101,201 @@ describe("threads", () => {
         (thread) => thread.id,
       ),
     ).toEqual([firstManager.id, secondManager.id]);
+  });
+
+  it("pins and unpins threads with durable pin order keys", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const spy: DbNotifier = {
+        notifyThread: vi.fn(),
+        notifyEnvironment: vi.fn(),
+        notifyHost: vi.fn(),
+        notifyCommand: vi.fn(),
+        notifyProject: vi.fn(),
+        notifySystem: vi.fn(),
+      };
+      const thread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+
+      const pinned = pinThread(db, spy, {
+        pinnedAt: 2_000,
+        threadId: thread.id,
+      });
+
+      expect(pinned?.pinnedAt).toBe(2_000);
+      expect(pinned?.pinSortKey).not.toBeNull();
+      expect(spy.notifyThread).toHaveBeenCalledWith(
+        thread.id,
+        ["pin-state-changed"],
+        { projectId: project.id },
+      );
+
+      const pinnedAgain = pinThread(db, spy, { threadId: thread.id });
+      expect(pinnedAgain?.pinSortKey).toBe(pinned?.pinSortKey);
+      expect(spy.notifyThread).toHaveBeenCalledTimes(1);
+
+      const unpinned = unpinThread(db, spy, { threadId: thread.id });
+      expect(unpinned?.pinnedAt).toBeNull();
+      expect(unpinned?.pinSortKey).toBeNull();
+      expect(spy.notifyThread).toHaveBeenCalledTimes(2);
+
+      unpinThread(db, spy, { threadId: thread.id });
+      expect(spy.notifyThread).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("orders pinned threads before unpinned siblings", () => {
+    const { db, project } = setup();
+    const firstManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const secondManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const firstStandard = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const secondStandard = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    pinThread(db, noopNotifier, { threadId: firstManager.id });
+    pinThread(db, noopNotifier, { threadId: firstStandard.id });
+
+    expect(
+      listThreads(db, { projectId: project.id, type: "manager" }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual([firstManager.id, secondManager.id]);
+    expect(
+      listThreads(db, { projectId: project.id, type: "standard" }).map(
+        (thread) => thread.id,
+      ),
+    ).toEqual([firstStandard.id, secondStandard.id]);
+    expect(listThreads(db, { projectId: project.id }).map((thread) => thread.id))
+      .toEqual([
+        firstManager.id,
+        secondManager.id,
+        firstStandard.id,
+        secondStandard.id,
+      ]);
+  });
+
+  it("reorders active visible pinned roots globally", () => {
+    const { db, host, project } = setup();
+    const { project: otherProject } = createProject(db, noopNotifier, {
+      name: "other-project",
+      source: { type: "local_path", hostId: host.id, path: "/tmp/other" },
+    });
+    const first = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const second = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const third = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const otherProjectThread = createThread(db, noopNotifier, {
+      projectId: otherProject.id,
+      providerId: "codex",
+    });
+    pinThread(db, noopNotifier, { threadId: first.id });
+    pinThread(db, noopNotifier, { threadId: second.id });
+    pinThread(db, noopNotifier, { threadId: third.id });
+    pinThread(db, noopNotifier, { threadId: otherProjectThread.id });
+
+    expect(listActiveVisiblePinnedThreadRoots(db).map((thread) => thread.id))
+      .toEqual([otherProjectThread.id, third.id, second.id, first.id]);
+
+    const result = reorderPinnedThread({
+      db,
+      notifier: noopNotifier,
+      threadId: first.id,
+      previousThreadId: null,
+      nextThreadId: otherProjectThread.id,
+    });
+
+    expect(result.kind).toBe("reordered");
+    expect(listActiveVisiblePinnedThreadRoots(db).map((thread) => thread.id))
+      .toEqual([first.id, otherProjectThread.id, third.id, second.id]);
+  });
+
+  it("rejects pinned reorder for unpinned threads, stale neighbors, and hidden child pins", () => {
+    const { db, project } = setup();
+    const pinned = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const unpinned = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const otherManager = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const pinnedChild = createThread(db, noopNotifier, {
+      parentThreadId: otherManager.id,
+      projectId: project.id,
+      providerId: "codex",
+    });
+    pinThread(db, noopNotifier, { threadId: pinned.id });
+    pinThread(db, noopNotifier, { threadId: otherManager.id });
+    pinThread(db, noopNotifier, { threadId: pinnedChild.id });
+
+    expect(
+      reorderPinnedThread({
+        db,
+        notifier: noopNotifier,
+        threadId: unpinned.id,
+        previousThreadId: null,
+        nextThreadId: pinned.id,
+      }).kind,
+    ).toBe("not_pinned");
+    expect(
+      reorderPinnedThread({
+        db,
+        notifier: noopNotifier,
+        threadId: pinned.id,
+        previousThreadId: unpinned.id,
+        nextThreadId: null,
+      }).kind,
+    ).toBe("stale_neighbor");
+    expect(
+      reorderPinnedThread({
+        db,
+        notifier: noopNotifier,
+        threadId: pinned.id,
+        previousThreadId: pinnedChild.id,
+        nextThreadId: null,
+      }).kind,
+    ).toBe("stale_neighbor");
+    expect(
+      reorderPinnedThread({
+        db,
+        notifier: noopNotifier,
+        threadId: pinnedChild.id,
+        previousThreadId: null,
+        nextThreadId: pinned.id,
+      }).kind,
+    ).toBe("stale_neighbor");
   });
 
   it("returns unchanged when manager thread order already matches neighboring threads", () => {

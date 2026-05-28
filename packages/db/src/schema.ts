@@ -277,6 +277,8 @@ export const threads = sqliteTable(
       { onDelete: "set null" },
     ),
     archivedAt: integer("archived_at"),
+    pinnedAt: integer("pinned_at"),
+    pinSortKey: text("pin_sort_key"),
     stopRequestedAt: integer("stop_requested_at"),
     deletedAt: integer("deleted_at"),
     lastReadAt: integer("last_read_at"),
@@ -298,6 +300,14 @@ export const threads = sqliteTable(
       table.sortKey,
       table.id,
     ),
+    index("threads_pin_sort_idx")
+      .on(
+        table.archivedAt,
+        table.deletedAt,
+        table.pinSortKey,
+        table.id,
+      )
+      .where(sql`${table.pinnedAt} IS NOT NULL`),
     index("threads_environment_idx").on(table.environmentId),
     index("threads_automation_runtime_idx").on(
       table.automationId,
@@ -600,10 +610,7 @@ export const hostDaemonCommands = sqliteTable(
       table.type,
       table.state,
     ),
-    index("host_daemon_commands_type_state_idx").on(
-      table.type,
-      table.state,
-    ),
+    index("host_daemon_commands_type_state_idx").on(table.type, table.state),
     index("host_daemon_commands_state_fetched_at_idx").on(
       table.state,
       table.fetchedAt,

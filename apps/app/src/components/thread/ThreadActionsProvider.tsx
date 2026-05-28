@@ -15,7 +15,9 @@ import {
   useDeleteThread,
   useMarkThreadRead,
   useMarkThreadUnread,
+  usePinThread,
   useUnarchiveThread,
+  useUnpinThread,
   useUpdateThread,
 } from "@/hooks/mutations/thread-state-mutations";
 import { getThreadAssignedChildSummary } from "@/lib/api";
@@ -42,6 +44,7 @@ export interface ThreadActionsContextValue {
   requestRename: (thread: Thread) => void;
   requestDelete: (thread: Thread) => void;
   toggleArchive: (thread: Thread) => void;
+  togglePin: (thread: Thread) => void;
   toggleRead: (thread: Thread) => void;
 }
 
@@ -83,6 +86,8 @@ export function ThreadActionsProvider({
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
+  const pinThread = usePinThread();
+  const unpinThread = useUnpinThread();
   const deleteThread = useDeleteThread();
   const updateThread = useUpdateThread();
   const threadActionContextAbortRef = useRef<AbortController | null>(null);
@@ -94,6 +99,8 @@ export function ThreadActionsProvider({
   const { mutate: unarchiveMutate } = unarchiveThread;
   const { mutate: markReadMutate } = markThreadRead;
   const { mutate: markUnreadMutate } = markThreadUnread;
+  const { mutate: pinMutate } = pinThread;
+  const { mutate: unpinMutate } = unpinThread;
   const { mutate: deleteMutate } = deleteThread;
   const { mutate: updateMutate } = updateThread;
 
@@ -328,14 +335,26 @@ export function ThreadActionsProvider({
     [markReadMutate, markUnreadMutate],
   );
 
+  const togglePin = useCallback(
+    (thread: Thread) => {
+      if (thread.pinnedAt !== null) {
+        unpinMutate({ id: thread.id });
+        return;
+      }
+      pinMutate({ id: thread.id });
+    },
+    [pinMutate, unpinMutate],
+  );
+
   const value = useMemo<ThreadActionsContextValue>(
     () => ({
       requestRename,
       requestDelete,
       toggleArchive,
+      togglePin,
       toggleRead,
     }),
-    [requestRename, requestDelete, toggleArchive, toggleRead],
+    [requestRename, requestDelete, toggleArchive, togglePin, toggleRead],
   );
 
   return (

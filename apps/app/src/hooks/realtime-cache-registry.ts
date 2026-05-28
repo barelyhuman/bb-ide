@@ -115,6 +115,13 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
       dirtyProjectPromptHistoryQueries, // Archived prompts may leave project history.
     ],
   },
+  "pin-state-changed": {
+    flush: "debounced",
+    dirty: [
+      dirtyThreadListQueries, // Pinned state and pin order change sidebar/list ordering.
+      dirtyThreadDetailQueries, // Detail consumers render the thread metadata contract.
+    ],
+  },
   "parent-changed": {
     flush: "debounced",
     dirty: [
