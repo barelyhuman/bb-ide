@@ -224,6 +224,8 @@ describe("ProjectActionsProvider", () => {
         .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapQueryKey())
         ?.projects.map((project) => project.id),
     ).toEqual([otherProject.id]);
-    expect(screen.getByTestId("location").textContent).toBe("/");
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe("/");
+    });
   });
 });
