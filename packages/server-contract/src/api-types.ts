@@ -6,6 +6,8 @@ import {
   activeThinkingSchema,
   featureFlagsSchema,
   environmentSchema,
+  gitBranchNameSchema,
+  gitBranchRefClassificationSchema,
   hostSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -34,7 +36,7 @@ import {
   jsonValueSchema,
   statusDataKeySchema,
 } from "@bb/domain";
-import type { JsonValue, StatusDataKey } from "@bb/domain";
+import type { GitBranchName, JsonValue, StatusDataKey } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 import { timelineRowSchema } from "./thread-timeline.js";
 
@@ -42,6 +44,7 @@ export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
 
 export const AUTOMATION_NAME_MAX_LENGTH = 200;
+export const BRANCH_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const SCHEDULE_CRON_MAX_LENGTH = 100;
 export const SCHEDULE_NAME_MAX_LENGTH = 200;
@@ -120,60 +123,25 @@ export interface BbDesktopApi extends BbDesktopInfo {
 
 // --- Thread creation: environment + workspace discriminated unions ---
 
-const gitBranchForbiddenCharacterPattern = /[\u0000-\u001f\u007f\\:~^?*\[]/u;
-const gitBranchWhitespacePattern = /[ \t]/u;
-const gitBranchReservedNames = new Set([
-  "AUTO_MERGE",
-  "BISECT_HEAD",
-  "CHERRY_PICK_HEAD",
-  "FETCH_HEAD",
-  "HEAD",
-  "MERGE_HEAD",
-  "ORIG_HEAD",
-  "REVERT_HEAD",
-]);
-type GitBranchNameCandidate = string;
-
-// Pure contract-boundary mirror of git's branch/refname restrictions. Keep
-// this close to `git check-ref-format --branch` without shelling out.
-function isValidGitBranchName(name: GitBranchNameCandidate) {
-  const components = name.split("/");
-  return (
-    name.length > 0 &&
-    name.trim().length > 0 &&
-    !name.startsWith("-") &&
-    !name.startsWith("/") &&
-    name !== "@" &&
-    !gitBranchReservedNames.has(name) &&
-    !gitBranchForbiddenCharacterPattern.test(name) &&
-    !gitBranchWhitespacePattern.test(name) &&
-    !name.includes("..") &&
-    !name.includes("@{") &&
-    !name.includes("//") &&
-    !name.endsWith("/") &&
-    !name.endsWith(".") &&
-    components.every(
-      (component) =>
-        component.length > 0 &&
-        !component.startsWith(".") &&
-        !component.endsWith(".lock"),
-    )
-  );
-}
-
-export const gitBranchNameSchema = z
-  .string()
-  .refine(isValidGitBranchName, { message: "Invalid git branch name" });
-export type GitBranchName = z.infer<typeof gitBranchNameSchema>;
+export { gitBranchNameSchema };
+export type { GitBranchName };
 
 /**
  * Pre-thread checkout intent for an unmanaged workspace. Omitting this from
  * the workspace request means "don't touch HEAD"; including it asks the
- * daemon to switch to (or create) the named branch before the thread starts.
+ * daemon to switch to the named branch or create a server-named branch from
+ * `baseBranch` before the thread starts.
  */
 export const unmanagedBranchSpecSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("existing"), name: gitBranchNameSchema }),
-  z.object({ kind: z.literal("new") }),
+  z
+    .object({
+      kind: z.literal("existing"),
+      name: gitBranchNameSchema,
+    })
+    .strict(),
+  z
+    .object({ kind: z.literal("new"), baseBranch: gitBranchNameSchema })
+    .strict(),
 ]);
 export type UnmanagedBranchSpec = z.infer<typeof unmanagedBranchSpecSchema>;
 
@@ -183,7 +151,8 @@ export const unmanagedWorkspaceSchema = z.object({
   /**
    * If set, the daemon checks out this branch in the unmanaged workspace
    * before the thread starts. `existing` switches to a named branch; `new`
-   * asks the server to mint a thread-scoped branch name and create it.
+   * asks the server to mint a thread-scoped branch name and create it from
+   * the requested base branch.
    */
   branch: unmanagedBranchSpecSchema.optional(),
 });
@@ -553,7 +522,7 @@ export const updateThreadRequestSchema = z
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
 export const updateEnvironmentRequestSchema = z.object({
-  mergeBaseBranch: z.string().min(1).nullable(),
+  mergeBaseBranch: gitBranchNameSchema.nullable(),
 });
 export type UpdateEnvironmentRequest = z.infer<
   typeof updateEnvironmentRequestSchema
@@ -736,14 +705,41 @@ export const projectPathsQuerySchema = projectFilesQuerySchema.extend({
 });
 export type ProjectPathsQuery = z.infer<typeof projectPathsQuerySchema>;
 
-export const projectBranchesQuerySchema = z.object({
+export const branchListQuerySchema = z.object({
+  query: z.string().min(1).max(BRANCH_LIST_QUERY_MAX_LENGTH).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+});
+export type BranchListQuery = z.infer<typeof branchListQuerySchema>;
+
+export const environmentDiffBranchesQuerySchema = branchListQuerySchema.extend({
+  selectedBranch: gitBranchNameSchema.optional(),
+});
+export type EnvironmentDiffBranchesQuery = z.infer<
+  typeof environmentDiffBranchesQuerySchema
+>;
+
+export const projectBranchesQuerySchema = branchListQuerySchema.extend({
   hostId: z.string().min(1),
+  selectedBranch: gitBranchNameSchema.optional(),
 });
 export type ProjectBranchesQuery = z.infer<typeof projectBranchesQuerySchema>;
 
 export const projectBranchesResponseSchema = projectSourceCheckoutSchema;
 export type ProjectBranchesResponse = z.infer<
   typeof projectBranchesResponseSchema
+>;
+
+export const environmentDiffBranchesResponseSchema = z.object({
+  /** Local branches under refs/heads, safe for checkout and write targets. */
+  branches: z.array(z.string()),
+  branchesTruncated: z.boolean(),
+  /** Remote-tracking branches under refs/remotes, for base/diff selection. */
+  remoteBranches: z.array(z.string()),
+  remoteBranchesTruncated: z.boolean(),
+  selectedBranch: gitBranchRefClassificationSchema.nullable(),
+});
+export type EnvironmentDiffBranchesResponse = z.infer<
+  typeof environmentDiffBranchesResponseSchema
 >;
 
 export const projectAttachmentContentQuerySchema = z.object({
@@ -821,7 +817,7 @@ export type ThreadComposerBootstrapResponse = z.infer<
 
 const mergeBaseBranchQuerySchema = z
   .string("A merge base branch is required")
-  .min(1, "A merge base branch is required");
+  .pipe(gitBranchNameSchema);
 
 export const environmentStatusQuerySchema = z.object({
   mergeBaseBranch: mergeBaseBranchQuerySchema.optional(),
@@ -1209,7 +1205,7 @@ export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const squashMergeOptionsSchema = z
   .object({
-    mergeBaseBranch: z.string().min(1),
+    mergeBaseBranch: gitBranchNameSchema,
   })
   .strict();
 export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;

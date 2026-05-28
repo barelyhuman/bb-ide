@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import {
-  resolveProjectMainThreadEnvironment,
-  type ProjectMainSelectedBranch,
-} from "./project-main-thread-environment";
+import { resolveProjectMainThreadEnvironment } from "./project-main-thread-environment";
 
 const projectId = "proj_123";
 const hostWorktreeEnvironmentValue = "host:host_123:worktree";
 const hostLocalEnvironmentValue = "host:host_123:local";
 
-function selectedBranch(name: string): ProjectMainSelectedBranch {
+function selectedBranch(name: string) {
   return { name, isNew: false };
 }
 
@@ -41,7 +38,10 @@ describe("resolveProjectMainThreadEnvironment", () => {
     ).toMatchObject({
       workspace: {
         type: "unmanaged",
-        branch: { kind: "existing", name: "develop" },
+        branch: {
+          kind: "existing",
+          name: "develop",
+        },
       },
     });
   });
@@ -56,7 +56,7 @@ describe("resolveProjectMainThreadEnvironment", () => {
     ).toMatchObject({
       workspace: {
         type: "unmanaged",
-        branch: { kind: "new" },
+        branch: { kind: "new", baseBranch: "develop" },
       },
     });
   });

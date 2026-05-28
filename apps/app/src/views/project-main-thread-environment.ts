@@ -68,7 +68,10 @@ export function resolveProjectMainThreadEnvironment(
         workspace: {
           type: "unmanaged",
           path: null,
-          branch: { kind: "new" },
+          branch: {
+            kind: "new",
+            baseBranch: args.selectedBranch.name,
+          },
         },
       };
     }
@@ -80,7 +83,12 @@ export function resolveProjectMainThreadEnvironment(
         type: "unmanaged",
         path: null,
         ...(args.selectedBranch
-          ? { branch: { kind: "existing", name: args.selectedBranch.name } }
+          ? {
+              branch: {
+                kind: "existing",
+                name: args.selectedBranch.name,
+              },
+            }
           : {}),
       },
     };

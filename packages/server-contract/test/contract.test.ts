@@ -109,6 +109,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Manager creation may omit reasoning level and use the server default.",
   "createManagerThreadRequestSchema.serviceTier":
     "Manager creation may omit service tier and use the server default.",
+  "createManagerThreadRequestSchema.input":
+    "Manager creation may omit initial input and use the server welcome-message template.",
   "createThreadRequestSchema.environment.workspace.branch":
     "Unmanaged workspaces may omit branch when the daemon should not check out before starting the thread.",
   "createThreadRequestSchema.environment.hostId":
@@ -284,7 +286,90 @@ describe("git branch name contract", () => {
     expect(
       unmanagedBranchSpecSchema.safeParse({
         kind: "existing",
+        name: "release/1.2",
+        mergeBaseBranch: "origin/main",
+      }).success,
+    ).toBe(false);
+    expect(
+      unmanagedBranchSpecSchema.safeParse({
+        kind: "new",
+        baseBranch: "release/1.2",
+      }).success,
+    ).toBe(true);
+    expect(
+      unmanagedBranchSpecSchema.safeParse({
+        kind: "existing",
         name: "release 1.2",
+      }).success,
+    ).toBe(false);
+    expect(
+      unmanagedBranchSpecSchema.safeParse({
+        kind: "new",
+        baseBranch: "release 1.2",
+      }).success,
+    ).toBe(false);
+    expect(
+      contract.environmentDiffBranchesQuerySchema.safeParse({
+        selectedBranch: "origin/main",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentDiffBranchesQuerySchema.safeParse({
+        selectedBranch: "origin/main lock",
+      }).success,
+    ).toBe(false);
+    expect(
+      contract.projectBranchesQuerySchema.safeParse({
+        hostId: "host_123",
+        selectedBranch: "upstream/main",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.projectBranchesQuerySchema.safeParse({
+        hostId: "host_123",
+        selectedBranch: "upstream/main lock",
+      }).success,
+    ).toBe(false);
+    expect(
+      contract.squashMergeOptionsSchema.safeParse({
+        mergeBaseBranch: "origin/main",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.squashMergeOptionsSchema.safeParse({
+        mergeBaseBranch: "origin/main lock",
+      }).success,
+    ).toBe(false);
+    expect(
+      updateEnvironmentRequestSchema.safeParse({
+        mergeBaseBranch: "origin/main",
+      }).success,
+    ).toBe(true);
+    expect(
+      updateEnvironmentRequestSchema.safeParse({
+        mergeBaseBranch: "origin/main lock",
+      }).success,
+    ).toBe(false);
+    expect(
+      contract.environmentStatusQuerySchema.safeParse({
+        mergeBaseBranch: "origin/main",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentStatusQuerySchema.safeParse({
+        mergeBaseBranch: "origin/main lock",
+      }).success,
+    ).toBe(false);
+    expect(
+      contract.environmentDiffQuerySchema.safeParse({
+        target: "all",
+        mergeBaseBranch: "origin/main",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentDiffQuerySchema.safeParse({
+        target: "all",
+        mergeBaseBranch: "origin/main lock",
       }).success,
     ).toBe(false);
   });

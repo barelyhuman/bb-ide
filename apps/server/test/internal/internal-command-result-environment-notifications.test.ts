@@ -1,4 +1,4 @@
-import { queueCommand } from "@bb/db";
+import { getEnvironment, queueCommand } from "@bb/db";
 import type { HostDaemonCommandResultByType } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
@@ -21,10 +21,7 @@ interface WorkspaceMutationCase {
   commandType: WorkspaceMutationCommandType;
   name: string;
   result: WorkspaceMutationResult;
-  toPayload: (args: {
-    environmentId: string;
-    workspacePath: string;
-  }) => string;
+  toPayload: (args: { environmentId: string; workspacePath: string }) => string;
 }
 
 const WORKSPACE_MUTATION_CASES: WorkspaceMutationCase[] = [
@@ -187,6 +184,218 @@ describe("internal command result environment notifications", () => {
         environment.id,
         ["work-status-changed"],
       ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("records unmanaged new-branch bases from provision commands", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-provision-base",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/provision-base",
+        status: "provisioning",
+        mergeBaseBranch: "stale-base",
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: null,
+          path: "/tmp/provision-base",
+          workspaceProvisionType: "unmanaged",
+          checkout: {
+            kind: "new",
+            name: "bb/thread",
+            baseBranch: "release/1.2",
+          },
+        },
+      });
+      const result: HostDaemonCommandResultByType["environment.provision"] = {
+        branchName: "bb/thread",
+        defaultBranch: "main",
+        isGitRepo: true,
+        isWorktree: false,
+        path: "/tmp/provision-base",
+        transcript: [],
+      };
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          body: JSON.stringify({
+            commandId: command.id,
+            completedAt: Date.now(),
+            cursor: command.cursor,
+            ok: true,
+            result,
+            sessionId: session.id,
+            type: "environment.provision",
+          }),
+          headers: internalAuthHeaders(harness),
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        baseBranch: null,
+        branchName: "bb/thread",
+        mergeBaseBranch: "release/1.2",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves branch metadata for personal provision results", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-personal-provision-metadata",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        baseBranch: "stored-base",
+        hostId: host.id,
+        managed: true,
+        mergeBaseBranch: "stored-merge-base",
+        path: "/tmp/personal-provision-metadata",
+        projectId: project.id,
+        status: "provisioning",
+        workspaceProvisionType: "personal",
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: null,
+          targetPath: "/tmp/personal-provision-metadata",
+          workspaceProvisionType: "personal",
+        },
+      });
+      const result: HostDaemonCommandResultByType["environment.provision"] = {
+        branchName: null,
+        defaultBranch: null,
+        isGitRepo: false,
+        isWorktree: false,
+        path: "/tmp/personal-provision-metadata",
+        transcript: [],
+      };
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          body: JSON.stringify({
+            commandId: command.id,
+            completedAt: Date.now(),
+            cursor: command.cursor,
+            ok: true,
+            result,
+            sessionId: session.id,
+            type: "environment.provision",
+          }),
+          headers: internalAuthHeaders(harness),
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        baseBranch: "stored-base",
+        branchName: null,
+        mergeBaseBranch: "stored-merge-base",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves branch metadata for managed-worktree reprovision results", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-managed-reprovision-metadata",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        baseBranch: "stored-base",
+        branchName: "bb/stored",
+        hostId: host.id,
+        managed: true,
+        mergeBaseBranch: "stored-merge-base",
+        path: "/tmp/managed-reprovision-metadata",
+        projectId: project.id,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        kind: "reprovision",
+        command: {
+          type: "environment.provision",
+          baseBranch: "command-base",
+          branchName: "bb/command",
+          environmentId: environment.id,
+          initiator: null,
+          setupTimeoutMs: 1000,
+          sourcePath: "/tmp/managed-source",
+          targetPath: "/tmp/managed-reprovision-metadata",
+          workspaceProvisionType: "managed-worktree",
+        },
+      });
+      const result: HostDaemonCommandResultByType["environment.provision"] = {
+        branchName: "bb/command",
+        defaultBranch: "command-default",
+        isGitRepo: true,
+        isWorktree: true,
+        path: "/tmp/managed-reprovision-metadata",
+        transcript: [],
+      };
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          body: JSON.stringify({
+            commandId: command.id,
+            completedAt: Date.now(),
+            cursor: command.cursor,
+            ok: true,
+            result,
+            sessionId: session.id,
+            type: "environment.provision",
+          }),
+          headers: internalAuthHeaders(harness),
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        baseBranch: "stored-base",
+        branchName: "bb/command",
+        mergeBaseBranch: "stored-merge-base",
+      });
     } finally {
       await harness.cleanup();
     }

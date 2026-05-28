@@ -92,6 +92,66 @@ describe("public thread creation routes", () => {
     }
   });
 
+  it("queues unmanaged new branches with the requested base branch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/unmanaged-new-branch-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Start from release" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+              branch: {
+                kind: "new",
+                baseBranch: "release/1.2",
+              },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      const environment = await waitForThreadEnvironment(
+        harness,
+        createdThread.id,
+      );
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+
+      expect(queued.command).toMatchObject({
+        environmentId: environment?.id,
+        path: source.path,
+        workspaceProvisionType: "unmanaged",
+        checkout: {
+          kind: "new",
+          baseBranch: "release/1.2",
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("creates host threads while the host is offline and leaves provisioning requested", async () => {
     const harness = await createTestAppHarness();
     try {

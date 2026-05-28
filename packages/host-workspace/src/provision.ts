@@ -40,14 +40,23 @@ interface ProvisionBase {
   onProgress?: ProvisionProgressCallback;
 }
 
-export interface UnmanagedCheckoutOpts {
-  /**
-   * `existing` runs `git switch <name>` (no-op if HEAD is already there).
-   * `new` runs `git switch -C <name>` so the branch is created or reset.
-   */
-  kind: "existing" | "new";
-  name: string;
-}
+export type UnmanagedCheckoutOpts =
+  | {
+      /**
+       * Runs `git switch <name>` (no-op if HEAD is already there).
+       */
+      kind: "existing";
+      name: string;
+    }
+  | {
+      /**
+       * Runs `git switch -C <name> <baseBranch>` so the branch is created or
+       * reset from the requested base.
+       */
+      kind: "new";
+      name: string;
+      baseBranch: string;
+    };
 
 export interface UnmanagedWorkspaceOpts extends ProvisionBase {
   workspaceProvisionType: "unmanaged";
@@ -446,10 +455,10 @@ async function applyUnmanagedCheckout(
   args: ApplyUnmanagedCheckoutArgs,
 ): Promise<void> {
   const { cwd, checkout, onProgress } = args;
-  // `switch -C` for new (create-or-reset) and `switch` for existing.
+  // `switch -C` for new (create-or-reset from base) and `switch` for existing.
   const switchArgs =
     checkout.kind === "new"
-      ? ["switch", "-C", checkout.name]
+      ? ["switch", "-C", checkout.name, checkout.baseBranch]
       : ["switch", checkout.name];
   const waitingStartedAt = Date.now();
   onProgress?.({

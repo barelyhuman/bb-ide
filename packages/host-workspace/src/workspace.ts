@@ -98,16 +98,11 @@ type WorktreeEntry = {
   branchRef: string | null;
 };
 
-type SquashMergeTarget =
-  | {
-      kind: "local";
-      baseRef: string;
-      expectedSha: string;
-    }
-  | {
-      kind: "remote";
-      baseRef: string;
-    };
+type SquashMergeTarget = {
+  kind: "local";
+  baseRef: string;
+  expectedSha: string;
+};
 
 type PublishSquashMergeCommitArgs = {
   targetBranch: string;
@@ -755,12 +750,20 @@ export class Workspace {
       };
     }
 
+    const directRemoteRef = `refs/remotes/${targetBranch}`;
+    if (await hasRef(this.path, directRemoteRef)) {
+      throw new WorkspaceError(
+        "non_local_target_branch",
+        `Cannot squash merge into remote branch ${targetBranch}; select a local branch`,
+      );
+    }
+
     const remoteRef = `refs/remotes/origin/${targetBranch}`;
     if (await hasRef(this.path, remoteRef)) {
-      return {
-        kind: "remote",
-        baseRef: remoteRef,
-      };
+      throw new WorkspaceError(
+        "non_local_target_branch",
+        `Cannot squash merge into remote-only branch ${targetBranch}; select a local branch`,
+      );
     }
 
     throw new WorkspaceError(
@@ -791,28 +794,15 @@ export class Workspace {
       return;
     }
 
-    switch (args.target.kind) {
-      case "local":
-        await runGit(
-          [
-            "update-ref",
-            `refs/heads/${args.targetBranch}`,
-            args.commitSha,
-            args.target.expectedSha,
-          ],
-          { cwd: this.path },
-        );
-        return;
-      case "remote":
-        await runGit(["branch", args.targetBranch, args.commitSha], {
-          cwd: this.path,
-        });
-        return;
-      default: {
-        const _exhaustive: never = args.target;
-        return _exhaustive;
-      }
-    }
+    await runGit(
+      [
+        "update-ref",
+        `refs/heads/${args.targetBranch}`,
+        args.commitSha,
+        args.target.expectedSha,
+      ],
+      { cwd: this.path },
+    );
   }
 
   private async findWorktreePathForBranch(

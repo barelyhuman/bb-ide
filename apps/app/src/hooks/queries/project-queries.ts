@@ -18,9 +18,16 @@ import {
   sidebarBootstrapQueryKey,
   threadListQueryKey,
 } from "./query-keys";
+import { resolveProjectSourceBranchesPlaceholder } from "./query-placeholders";
 
 interface QueryOptions {
   enabled?: boolean;
+}
+
+interface BranchQueryOptions extends QueryOptions {
+  limit?: number;
+  query?: string;
+  selectedBranch?: string;
 }
 
 interface UseProjectPathSuggestionsArgs {
@@ -33,6 +40,7 @@ interface UseProjectPathSuggestionsArgs {
 }
 
 const PROJECT_SOURCE_BRANCHES_STALE_TIME_MS = 5_000;
+const PROJECT_SOURCE_BRANCHES_LIMIT = 50;
 
 function requireProjectId(
   projectId: string | undefined,
@@ -89,21 +97,46 @@ export function useSidebarBootstrap(options?: QueryOptions) {
 export function useProjectSourceBranches(
   projectId: string | undefined,
   hostId: string | null,
-  options?: QueryOptions,
+  options?: BranchQueryOptions,
 ) {
   const enabled =
     (options?.enabled ?? true) && Boolean(projectId) && Boolean(hostId);
+  const query = options?.query?.trim() ?? "";
+  const limit = options?.limit ?? PROJECT_SOURCE_BRANCHES_LIMIT;
+  const selectedBranch = options?.selectedBranch?.trim() ?? "";
   return useQuery<ProjectBranchesResponse>({
-    queryKey: projectSourceBranchesQueryKey(projectId ?? "", hostId ?? ""),
+    queryKey: projectSourceBranchesQueryKey(
+      projectId ?? "",
+      hostId ?? "",
+      query,
+      limit,
+      selectedBranch,
+    ),
     queryFn: () =>
       api.getProjectSourceBranches(
         requireProjectId(projectId, "useProjectSourceBranches"),
         hostId ?? "",
+        {
+          ...(query ? { query } : {}),
+          ...(selectedBranch ? { selectedBranch } : {}),
+          limit,
+        },
       ),
     enabled,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
     staleTime: PROJECT_SOURCE_BRANCHES_STALE_TIME_MS,
+    placeholderData: (previousData, previousQuery) =>
+      projectId && hostId
+        ? resolveProjectSourceBranchesPlaceholder({
+            previousData,
+            previousQueryKey: previousQuery?.queryKey,
+            projectId,
+            hostId,
+            limit,
+            selectedBranch,
+          })
+        : undefined,
   });
 }
 

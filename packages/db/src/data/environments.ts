@@ -112,6 +112,7 @@ export function listEnvironmentsByIds(
 }
 
 interface EnvironmentMetadataUpdateColumns {
+  baseBranch?: string | null;
   branchName?: string | null;
   defaultBranch?: string | null;
   isGitRepo?: boolean;
@@ -127,6 +128,8 @@ interface EnvironmentLifecycleUpdateColumns {
 }
 
 export interface ApplyProvisionedEnvironmentInput extends DiscoveredWorkspaceProperties {
+  baseBranch?: string | null;
+  mergeBaseBranch?: string | null;
   status: EnvironmentStatus;
 }
 
@@ -151,6 +154,7 @@ function buildEnvironmentMetadataUpdateSet(
   input: EnvironmentMetadataUpdateColumns,
 ): EnvironmentMetadataUpdateColumns {
   const set: EnvironmentMetadataUpdateColumns = {};
+  if ("baseBranch" in input) set.baseBranch = input.baseBranch;
   if ("path" in input) set.path = input.path;
   if ("isGitRepo" in input) set.isGitRepo = input.isGitRepo;
   if ("isWorktree" in input) set.isWorktree = input.isWorktree;
@@ -188,6 +192,8 @@ function buildEnvironmentChangeKinds(args: {
   }
 
   const metadataChanged =
+    ("baseBranch" in args.metadata &&
+      args.updated.baseBranch !== args.existing.baseBranch) ||
     ("path" in args.metadata && args.updated.path !== args.existing.path) ||
     ("isGitRepo" in args.metadata &&
       args.updated.isGitRepo !== args.existing.isGitRepo) ||
@@ -287,7 +293,13 @@ export function applyProvisionedEnvironmentRecord(
       isGitRepo: input.isGitRepo,
       isWorktree: input.isWorktree,
       branchName: input.branchName,
+      ...(input.baseBranch !== undefined
+        ? { baseBranch: input.baseBranch }
+        : {}),
       defaultBranch: input.defaultBranch,
+      ...(input.mergeBaseBranch !== undefined
+        ? { mergeBaseBranch: input.mergeBaseBranch }
+        : {}),
     },
   });
 }

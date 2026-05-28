@@ -42,13 +42,16 @@ describe("project queries", () => {
   it("does not poll project source branches in the background", async () => {
     vi.useFakeTimers();
     let branchRequestCount = 0;
+    const branchRequestUrls: URL[] = [];
     installFetchRoutes([
       {
         pathname: "/api/v1/projects/project-1/branches",
-        handler: () => {
+        handler: (request) => {
           branchRequestCount += 1;
+          branchRequestUrls.push(new URL(request.url));
           return jsonResponse({
             branches: ["main"],
+            branchesTruncated: false,
             checkout: {
               kind: "branch",
               branchName: "main",
@@ -57,6 +60,9 @@ describe("project queries", () => {
             defaultBranch: "main",
             hasUncommittedChanges: false,
             operation: { kind: "none" },
+            remoteBranches: [],
+            remoteBranchesTruncated: false,
+            selectedBranch: null,
           });
         },
       },
@@ -72,11 +78,55 @@ describe("project queries", () => {
       await Promise.resolve();
     });
     expect(branchRequestCount).toBe(1);
+    expect(branchRequestUrls[0]?.searchParams.get("selectedBranch")).toBeNull();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15_000);
     });
 
     expect(branchRequestCount).toBe(1);
+  });
+
+  it("passes selected branch through project source branch requests", async () => {
+    const branchRequestUrls: URL[] = [];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects/project-1/branches",
+        handler: (request) => {
+          branchRequestUrls.push(new URL(request.url));
+          return jsonResponse({
+            branches: [],
+            branchesTruncated: false,
+            checkout: { kind: "unknown", reason: "not checked" },
+            defaultBranch: "main",
+            hasUncommittedChanges: false,
+            operation: { kind: "none" },
+            remoteBranches: ["upstream/main"],
+            remoteBranchesTruncated: false,
+            selectedBranch: { name: "upstream/main", kind: "remote" },
+          });
+        },
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+
+    const { result } = renderHook(
+      () =>
+        useProjectSourceBranches("project-1", "host-1", {
+          selectedBranch: "upstream/main",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.selectedBranch).toEqual({
+        name: "upstream/main",
+        kind: "remote",
+      });
+    });
+    const branchRequestUrl = branchRequestUrls[0];
+    expect(branchRequestUrl?.searchParams.get("selectedBranch")).toBe(
+      "upstream/main",
+    );
   });
 });

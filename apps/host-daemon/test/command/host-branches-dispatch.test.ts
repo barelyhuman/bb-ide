@@ -32,7 +32,7 @@ describe("host.list_branches dispatch", () => {
     const harness = createHarness();
 
     const result = await dispatchCommand(
-      { type: "host.list_branches", path: repoPath },
+      { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
 
@@ -43,11 +43,106 @@ describe("host.list_branches dispatch", () => {
     expect(result.defaultBranch).toBe("main");
     expect(result.hasUncommittedChanges).toBe(false);
     expect(result.operation).toEqual({ kind: "none" });
+    expect(result.remoteBranches).toEqual([]);
+    expect(result.selectedBranch).toBeNull();
+    expect(result.branchesTruncated).toBe(false);
+    expect(result.remoteBranchesTruncated).toBe(false);
     expect(result.branches[0]).toBe("main");
     expect(result.branches).toHaveLength(3);
     expect(result.branches).toEqual(
       expect.arrayContaining(["main", "develop", "release/1.2"]),
     );
+  });
+
+  it("lists remote branches separately from local checkout branches", async () => {
+    const repoPath = await initBranchRepo();
+    const remotePath = await makeTempDir("bb-host-branches-remote-");
+    await runGitCommand(["init", "--bare"], { cwd: remotePath });
+    await runGitCommand(["remote", "add", "upstream", remotePath], {
+      cwd: repoPath,
+    });
+    await runGitCommand(["push", "upstream", "develop", "main"], {
+      cwd: repoPath,
+    });
+    await runGitCommand(["fetch", "upstream"], { cwd: repoPath });
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      { type: "host.list_branches", path: repoPath, limit: 50 },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.branches).toEqual(["main", "develop", "release/1.2"]);
+    expect(result.remoteBranches).toEqual([
+      "upstream/develop",
+      "upstream/main",
+    ]);
+  });
+
+  it("classifies a selected branch before filtering and pagination", async () => {
+    const repoPath = await initBranchRepo();
+    const remotePath = await makeTempDir("bb-host-branches-remote-");
+    await runGitCommand(["init", "--bare"], { cwd: remotePath });
+    await runGitCommand(["remote", "add", "upstream", remotePath], {
+      cwd: repoPath,
+    });
+    await runGitCommand(["push", "upstream", "develop", "main"], {
+      cwd: repoPath,
+    });
+    await runGitCommand(["fetch", "upstream"], { cwd: repoPath });
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      {
+        type: "host.list_branches",
+        path: repoPath,
+        query: "release",
+        selectedBranch: "upstream/main",
+        limit: 1,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.branches).toEqual(["release/1.2"]);
+    expect(result.remoteBranches).toEqual([]);
+    expect(result.selectedBranch).toEqual({
+      name: "upstream/main",
+      kind: "remote",
+    });
+
+    const missingResult = await dispatchCommand(
+      {
+        type: "host.list_branches",
+        path: repoPath,
+        query: "release",
+        selectedBranch: "origin/main",
+        limit: 1,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(missingResult.selectedBranch).toEqual({
+      name: "origin/main",
+      kind: "missing",
+    });
+  });
+
+  it("filters and limits branch lists", async () => {
+    const repoPath = await initBranchRepo();
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      {
+        type: "host.list_branches",
+        path: repoPath,
+        query: "e",
+        limit: 1,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.branches).toEqual(["develop"]);
+    expect(result.branchesTruncated).toBe(true);
   });
 
   it("reports detached HEAD in checkout state", async () => {
@@ -56,7 +151,7 @@ describe("host.list_branches dispatch", () => {
     const harness = createHarness();
 
     const result = await dispatchCommand(
-      { type: "host.list_branches", path: repoPath },
+      { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
 
@@ -72,7 +167,7 @@ describe("host.list_branches dispatch", () => {
     const harness = createHarness();
 
     const result = await dispatchCommand(
-      { type: "host.list_branches", path: repoPath },
+      { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
 
@@ -85,16 +180,20 @@ describe("host.list_branches dispatch", () => {
     const harness = createHarness();
 
     const result = await dispatchCommand(
-      { type: "host.list_branches", path: dirPath },
+      { type: "host.list_branches", path: dirPath, limit: 50 },
       harness.dispatchOptions(),
     );
 
     expect(result).toEqual({
       branches: [],
+      branchesTruncated: false,
       checkout: { kind: "unknown", reason: "Path is not a git repository" },
       defaultBranch: null,
       hasUncommittedChanges: false,
       operation: { kind: "none" },
+      remoteBranches: [],
+      remoteBranchesTruncated: false,
+      selectedBranch: null,
     });
   });
 
@@ -103,16 +202,24 @@ describe("host.list_branches dispatch", () => {
     const harness = createHarness();
 
     const result = await dispatchCommand(
-      { type: "host.list_branches", path: path.join(parentPath, "missing") },
+      {
+        type: "host.list_branches",
+        path: path.join(parentPath, "missing"),
+        limit: 50,
+      },
       harness.dispatchOptions(),
     );
 
     expect(result).toEqual({
       branches: [],
+      branchesTruncated: false,
       checkout: { kind: "unknown", reason: "Path is not a git repository" },
       defaultBranch: null,
       hasUncommittedChanges: false,
       operation: { kind: "none" },
+      remoteBranches: [],
+      remoteBranchesTruncated: false,
+      selectedBranch: null,
     });
   });
 });

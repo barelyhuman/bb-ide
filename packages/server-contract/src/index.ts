@@ -144,6 +144,7 @@ export type {
 
 export {
   AUTOMATION_NAME_MAX_LENGTH,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
   FILE_LIST_QUERY_MAX_LENGTH,
   automationActionSchema,
   automationNameSchema,
@@ -172,6 +173,9 @@ export {
   environmentActionRequestSchema,
   environmentActionResponseSchema,
   environmentArchiveThreadsResponseSchema,
+  branchListQuerySchema,
+  environmentDiffBranchesQuerySchema,
+  environmentDiffBranchesResponseSchema,
   environmentDiffQuerySchema,
   environmentDiffFileQuerySchema,
   environmentDiffFileResponseSchema,
@@ -327,6 +331,9 @@ export type {
   ThreadCreateOrigin,
   EnvironmentArgs,
   EnvironmentActionApiError,
+  BranchListQuery,
+  EnvironmentDiffBranchesQuery,
+  EnvironmentDiffBranchesResponse,
   EnvironmentDiffQuery,
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,

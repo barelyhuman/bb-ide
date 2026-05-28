@@ -132,6 +132,9 @@ export type ProjectSourceBranchesQueryKey = readonly [
   typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
   string,
   string,
+  string,
+  number,
+  string,
 ];
 export type SidebarBootstrapQueryKey = readonly [
   typeof SIDEBAR_BOOTSTRAP_QUERY_KEY,
@@ -283,6 +286,9 @@ export type EnvironmentMergeBaseBranchesQueryKeyRootPrefix = readonly [
 ];
 export type EnvironmentMergeBaseBranchesQueryKey = readonly [
   typeof ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY,
+  string,
+  string,
+  number,
   string,
 ];
 export type EnvironmentMergeBaseBranchesQueryKeyPrefix = readonly [
@@ -456,8 +462,18 @@ export function projectPathsQueryKeyPrefix(
 export function projectSourceBranchesQueryKey(
   projectId: string,
   hostId: string,
+  query = "",
+  limit = 50,
+  selectedBranch = "",
 ): ProjectSourceBranchesQueryKey {
-  return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId, hostId];
+  return [
+    PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+    projectId,
+    hostId,
+    query,
+    limit,
+    selectedBranch,
+  ];
 }
 
 export function allProjectSourceBranchesQueryKeyPrefix(): AllProjectSourceBranchesQueryKeyPrefix {
@@ -699,8 +715,17 @@ export function environmentWorkStatusQueryKeyPrefix(
 
 export function environmentMergeBaseBranchesQueryKey(
   environmentId: string,
+  query = "",
+  limit = 50,
+  selectedBranch = "",
 ): EnvironmentMergeBaseBranchesQueryKey {
-  return [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environmentId];
+  return [
+    ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY,
+    environmentId,
+    query,
+    limit,
+    selectedBranch,
+  ];
 }
 
 export function allEnvironmentMergeBaseBranchesQueryKeyPrefix(): EnvironmentMergeBaseBranchesQueryKeyRootPrefix {

@@ -15,6 +15,7 @@ import {
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
   clientTurnRequestIdSchema,
+  gitBranchNameSchema,
   jsonObjectSchema,
   jsonValueSchema,
   statusDataKeySchema,
@@ -30,6 +31,8 @@ export const HOST_DAEMON_PROTOCOL_VERSION = 24 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
+export const BRANCH_LIST_QUERY_MAX_LENGTH = 256;
+export const BRANCH_LIST_LIMIT_MAX = 1_000;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -468,13 +471,16 @@ export const hostListPathsCommandSchema = z
   });
 
 /**
- * List git branches at an absolute host path. Path-only sibling of
- * `host.list_files`. Does not require an environment row, does not
+ * List a bounded page of git branches at an absolute host path. Path-only
+ * sibling of `host.list_files`. Does not require an environment row, does not
  * provision anything, and does not create daemon-side workspace state.
  */
 export const hostListBranchesCommandSchema = z.object({
   type: z.literal("host.list_branches"),
   path: z.string().min(1),
+  query: z.string().max(BRANCH_LIST_QUERY_MAX_LENGTH).optional(),
+  selectedBranch: gitBranchNameSchema.optional(),
+  limit: z.number().int().positive().max(BRANCH_LIST_LIMIT_MAX),
 });
 
 export const managerTemplateSummarySchema = z.object({
@@ -523,12 +529,23 @@ const environmentProvisionCommandBaseSchema =
 
 /**
  * Pre-provision checkout for unmanaged workspaces. The server resolves the
- * branch name (including server-minted names for the `new` case) before
- * sending — daemon just runs the corresponding git checkout.
+ * branch name (including server-minted names for the `new` case) and base
+ * branch before sending — daemon just runs the corresponding git checkout.
  */
 const unmanagedCheckoutSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("existing"), name: z.string().min(1) }),
-  z.object({ kind: z.literal("new"), name: z.string().min(1) }),
+  z
+    .object({
+      kind: z.literal("existing"),
+      name: gitBranchNameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("new"),
+      name: gitBranchNameSchema,
+      baseBranch: gitBranchNameSchema,
+    })
+    .strict(),
 ]);
 
 const unmanagedEnvironmentProvisionCommandSchema =
@@ -546,12 +563,12 @@ const managedEnvironmentProvisionFieldsSchema = z.object({
   /** Target path for worktree/clone creation */
   targetPath: z.string().min(1),
   /** Name of the new branch the daemon should create for this environment. */
-  branchName: z.string().min(1),
+  branchName: gitBranchNameSchema,
   /**
    * Branch on the source repo that the new branch should be based on. Pass
    * `null` to use the source's default branch (resolved by the daemon).
    */
-  baseBranch: z.string().min(1).nullable(),
+  baseBranch: gitBranchNameSchema.nullable(),
   /** Maximum time in ms to wait for the setup script */
   setupTimeoutMs: z.number().int().positive(),
 });
@@ -606,7 +623,7 @@ export const environmentDestroyCommandSchema =
 export const workspaceStatusCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("workspace.status"),
-    mergeBaseBranch: z.string().min(1).optional(),
+    mergeBaseBranch: gitBranchNameSchema.optional(),
   });
 
 export const workspaceDiffCommandSchema =
@@ -626,7 +643,7 @@ export const workspaceCommitCommandSchema =
 export const workspaceSquashMergeCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("workspace.squash_merge"),
-    targetBranch: z.string().min(1),
+    targetBranch: gitBranchNameSchema,
     commitMessage: z.string().min(1),
   });
 

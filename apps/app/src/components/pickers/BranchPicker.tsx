@@ -6,6 +6,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { useDebounceValue } from "usehooks-ts";
 import { Button } from "@/components/ui/button.js";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import {
@@ -26,28 +27,78 @@ import {
   OPTION_MUTED_CLASS_NAME,
 } from "./OptionPicker";
 import { cn } from "@/lib/utils";
+import type { GitBranchRefClassification } from "@bb/domain";
+
+export type BranchPickerSelectedOptionKind = "local" | "remote";
 
 interface GetMergeBaseBranchCandidatesArgs {
   mergeBaseBranch?: string;
+  mergeBaseBranchRef?: GitBranchRefClassification | null;
   mergeBaseBranchOptions?: readonly string[];
+  remoteMergeBaseBranchOptions?: readonly string[];
 }
 
-export function getMergeBaseBranchCandidates({
+export interface MergeBaseBranchCandidateGroups {
+  options: readonly string[];
+  remoteOptions: readonly string[];
+  selectedOptionKind?: BranchPickerSelectedOptionKind;
+}
+
+export function getMergeBaseBranchCandidateGroups({
   mergeBaseBranch,
+  mergeBaseBranchRef,
   mergeBaseBranchOptions,
-}: GetMergeBaseBranchCandidatesArgs) {
+  remoteMergeBaseBranchOptions,
+}: GetMergeBaseBranchCandidatesArgs): MergeBaseBranchCandidateGroups {
   const fromProps = mergeBaseBranchOptions ?? [];
-  if (!mergeBaseBranch || fromProps.includes(mergeBaseBranch)) {
-    return fromProps;
+  const fromRemoteProps = remoteMergeBaseBranchOptions ?? [];
+  const selectedRef =
+    mergeBaseBranchRef?.name === mergeBaseBranch ? mergeBaseBranchRef : null;
+  const selectedOptionKind =
+    selectedRef && selectedRef.kind !== "missing"
+      ? selectedRef.kind
+      : undefined;
+  if (
+    !mergeBaseBranch ||
+    fromProps.includes(mergeBaseBranch) ||
+    fromRemoteProps.includes(mergeBaseBranch)
+  ) {
+    return {
+      options: fromProps,
+      remoteOptions: fromRemoteProps,
+      ...(selectedOptionKind ? { selectedOptionKind } : {}),
+    };
   }
-  return [mergeBaseBranch, ...fromProps];
+  if (selectedOptionKind === "remote") {
+    return {
+      options: fromProps,
+      remoteOptions: [mergeBaseBranch, ...fromRemoteProps],
+      selectedOptionKind,
+    };
+  }
+  if (selectedOptionKind === "local" || selectedRef?.kind !== "missing") {
+    return {
+      options: [mergeBaseBranch, ...fromProps],
+      remoteOptions: fromRemoteProps,
+      ...(selectedOptionKind ? { selectedOptionKind } : {}),
+    };
+  }
+  return { options: fromProps, remoteOptions: fromRemoteProps };
+}
+
+export function getMergeBaseBranchCandidates(
+  args: GetMergeBaseBranchCandidatesArgs,
+) {
+  return getMergeBaseBranchCandidateGroups(args).options;
 }
 
 const CREATE_NEW_BRANCH_LABEL = "New branch";
+const EMPTY_BRANCH_OPTIONS: readonly string[] = [];
 const BRANCH_LABEL_PREFIXES = [
   "Start from:",
   "Current:",
   "Checkout:",
+  "New branch from:",
   "Branch from:",
 ] as const;
 const CURRENT_PARENTHESES_LABEL_PREFIX = "Current (";
@@ -57,12 +108,11 @@ const DETACHED_LABEL_PREFIX = "Detached";
 // (text-xs, px-2 py-[0.3125rem]).
 const BRANCH_PICKER_ROW_CLASS_NAME =
   "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-left text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:bg-state-hover focus-visible:text-foreground";
-// `sticky top-0` keeps the section label pinned to the top of the scrolling
-// branch list (stacking — each header pushes the previous one off). `bg-background`
-// makes the label opaque so rows scrolling underneath don't bleed through.
-// Matches ModelReasoningPicker's sticky pattern.
 const BRANCH_PICKER_HEADER_BASE_CLASS_NAME =
-  "sticky top-0 z-10 bg-background px-2 text-xs font-medium text-muted-foreground";
+  "text-xs font-medium text-muted-foreground";
+const BRANCH_PICKER_HEADER_STICKY_CLASS_NAME =
+  "sticky top-0 z-20 -mx-1 bg-background px-3";
+const BRANCH_SEARCH_DEBOUNCE_MS = 120;
 
 interface BranchPlainLabelParts {
   kind: "plain";
@@ -96,6 +146,7 @@ interface BranchPickerSectionHeaderProps {
   label: string;
   subtitle?: string;
   subtitleTitle?: string;
+  sticky?: boolean;
   className?: string;
 }
 
@@ -141,6 +192,7 @@ interface BranchPickerRowButtonProps {
   label: string;
   title?: string;
   selected: boolean;
+  disabled?: boolean;
   emphasizeLabel?: boolean;
   onSelect: () => void;
 }
@@ -151,6 +203,40 @@ interface BranchPickerSearchProps {
   enterSelection: string | undefined;
   onEnterSelection: (branch: string) => void;
   onQueryChange: (query: string) => void;
+}
+
+interface BranchPickerOptionGroups {
+  local: string[];
+  remote: string[];
+}
+
+interface BranchPickerBranchOptionsProps {
+  localOptions: readonly string[];
+  remoteOptions: readonly string[];
+  selectedValue: string | null;
+  onSelect: (branch: string) => void;
+}
+
+interface BuildBranchPickerOptionGroupsArgs {
+  options: readonly string[];
+  remoteOptions: readonly string[];
+}
+
+interface FilterBranchOptionsArgs {
+  normalizedQuery: string;
+  options: readonly string[];
+}
+
+interface PinSelectedBranchArgs {
+  options: readonly string[];
+  value: string | null;
+}
+
+type BranchPickerCheckoutIntent = "current" | "new" | "checkout";
+
+interface ResolveCheckoutIntentArgs {
+  isCreatingNew: boolean;
+  value: string | null;
 }
 
 interface FormatUnavailableDescriptionArgs {
@@ -165,6 +251,18 @@ function formatUnavailableDescription({
   fallback,
 }: FormatUnavailableDescriptionArgs): string {
   return title ?? reason ?? fallback;
+}
+
+function formatCreateBranchTriggerLabel(branch: string | null): string {
+  return branch === null
+    ? CREATE_NEW_BRANCH_LABEL
+    : `New branch from: ${branch}`;
+}
+
+function formatCreateBranchTriggerTitle(branch: string | null): string {
+  return branch === null
+    ? CREATE_NEW_BRANCH_LABEL
+    : `Create a new branch from ${branch}`;
 }
 
 function splitBranchLabel(label: string): BranchLabelParts {
@@ -251,18 +349,20 @@ function BranchPickerSectionHeader({
   label,
   subtitle,
   subtitleTitle,
+  sticky = true,
   className,
 }: BranchPickerSectionHeaderProps) {
-  // Label-only case: `flex h-7 items-center` pins the sticky label to an
-  // integer height so it doesn't subpixel-shift during scroll. The subtitle
-  // case is rare (only shows when a section is unavailable, and the disabled
-  // state means there's no scrolling underneath to jitter against), so the
-  // variable-height fallback is acceptable there.
+  // Sticky headers cover the scroll gutter while keeping label text aligned
+  // with option rows.
+  const positionClassName = sticky
+    ? BRANCH_PICKER_HEADER_STICKY_CLASS_NAME
+    : "px-2";
   if (!subtitle) {
     return (
       <div
         className={cn(
           BRANCH_PICKER_HEADER_BASE_CLASS_NAME,
+          positionClassName,
           "flex h-7 items-center",
           className,
         )}
@@ -275,6 +375,7 @@ function BranchPickerSectionHeader({
     <div
       className={cn(
         BRANCH_PICKER_HEADER_BASE_CLASS_NAME,
+        positionClassName,
         "py-[0.3125rem] pb-1.5",
         className,
       )}
@@ -320,13 +421,19 @@ function BranchPickerRowButton({
   label,
   title,
   selected,
+  disabled = false,
   emphasizeLabel = false,
   onSelect,
 }: BranchPickerRowButtonProps) {
   return (
     <button
       type="button"
-      className={BRANCH_PICKER_ROW_CLASS_NAME}
+      className={cn(
+        BRANCH_PICKER_ROW_CLASS_NAME,
+        disabled &&
+          "cursor-not-allowed text-muted-foreground opacity-60 hover:bg-transparent hover:text-muted-foreground",
+      )}
+      disabled={disabled}
       title={title ?? label}
       onClick={onSelect}
     >
@@ -394,6 +501,46 @@ function BranchPickerSearch({
   );
 }
 
+function BranchPickerBranchOptions({
+  localOptions,
+  remoteOptions,
+  selectedValue,
+  onSelect,
+}: BranchPickerBranchOptionsProps) {
+  return (
+    <>
+      {localOptions.map((branch) => (
+        <BranchPickerRowButton
+          key={branch}
+          icon="GitMerge"
+          label={branch}
+          title={branch}
+          selected={branch === selectedValue}
+          onSelect={() => onSelect(branch)}
+        />
+      ))}
+      {remoteOptions.length > 0 ? (
+        <>
+          <BranchPickerSectionHeader
+            label="Remote branches"
+            className={localOptions.length > 0 ? "mt-1" : undefined}
+          />
+          {remoteOptions.map((branch) => (
+            <BranchPickerRowButton
+              key={branch}
+              icon="GitMerge"
+              label={branch}
+              title={branch}
+              selected={branch === selectedValue}
+              onSelect={() => onSelect(branch)}
+            />
+          ))}
+        </>
+      ) : null}
+    </>
+  );
+}
+
 function getBranchPickerMenuCopy(
   menuKind: BranchPickerMenuKind | undefined,
 ): BranchPickerMenuCopy {
@@ -407,9 +554,68 @@ function getBranchPickerMenuCopy(
   }
 }
 
+function buildBranchPickerOptionGroups({
+  options,
+  remoteOptions,
+}: BuildBranchPickerOptionGroupsArgs): BranchPickerOptionGroups {
+  const local = [...options];
+  const localBranchNames = new Set(local);
+  const remote = remoteOptions.filter(
+    (branch) => !localBranchNames.has(branch),
+  );
+  return { local, remote };
+}
+
+function filterBranchOptions({
+  normalizedQuery,
+  options,
+}: FilterBranchOptionsArgs): string[] {
+  if (normalizedQuery.length === 0) {
+    return [...options];
+  }
+
+  return options.filter((branch) =>
+    branch.toLowerCase().includes(normalizedQuery),
+  );
+}
+
+function pinSelectedBranch({
+  options,
+  value,
+}: PinSelectedBranchArgs): string[] {
+  if (!value) {
+    return [...options];
+  }
+
+  const selectedIndex = options.indexOf(value);
+  if (selectedIndex <= 0) {
+    return [...options];
+  }
+
+  return [
+    options[selectedIndex],
+    ...options.slice(0, selectedIndex),
+    ...options.slice(selectedIndex + 1),
+  ];
+}
+
+function resolveCheckoutIntent({
+  isCreatingNew,
+  value,
+}: ResolveCheckoutIntentArgs): BranchPickerCheckoutIntent {
+  if (isCreatingNew) {
+    return "new";
+  }
+  if (value !== null) {
+    return "checkout";
+  }
+  return "current";
+}
+
 export interface BranchPickerProps {
   value: string | null;
   options: readonly string[];
+  remoteOptions?: readonly string[];
   currentBranch?: string | null;
   loading?: boolean;
   disabled?: boolean;
@@ -421,6 +627,9 @@ export interface BranchPickerProps {
   currentOptionTitle?: string;
   onChange: (branch: string) => void;
   onClear?: () => void;
+  onCreateBaseChange?: (branch: string) => void;
+  onSearchQueryChange?: (query: string) => void;
+  optionsTruncated?: boolean;
   /** When provided, branch-changing choices are disabled with this reason. */
   optionDisabledReason?: string | null;
   optionDisabledTitle?: string;
@@ -441,6 +650,8 @@ export interface BranchPickerProps {
   onOpenChange?: (open: boolean) => void;
   className?: string;
   variant?: "default" | "minimal" | "option";
+  /** Exact selected option kind. When omitted, the picker infers from the current option arrays. */
+  selectedOptionKind?: BranchPickerSelectedOptionKind;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. Only meaningful with variant="minimal" or "option". */
   muted?: boolean;
   /** Render with the popover open on mount. Story-only escape hatch. */
@@ -454,6 +665,7 @@ export interface BranchPickerProps {
 export function BranchPicker({
   value,
   options,
+  remoteOptions = EMPTY_BRANCH_OPTIONS,
   currentBranch,
   loading = false,
   disabled,
@@ -465,6 +677,9 @@ export function BranchPicker({
   currentOptionTitle,
   onChange,
   onClear,
+  onCreateBaseChange,
+  onSearchQueryChange,
+  optionsTruncated = false,
   optionDisabledReason,
   optionDisabledTitle,
   createDisabledReason,
@@ -474,6 +689,7 @@ export function BranchPicker({
   onOpenChange,
   className,
   variant = "default",
+  selectedOptionKind,
   muted,
   defaultOpen = false,
   modal = true,
@@ -481,55 +697,124 @@ export function BranchPicker({
 }: BranchPickerProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
+  const selectedCheckoutIntent = resolveCheckoutIntent({
+    isCreatingNew,
+    value,
+  });
+  const [checkoutIntent, setCheckoutIntent] =
+    useState<BranchPickerCheckoutIntent>(selectedCheckoutIntent);
   const deferredQuery = useDeferredValue(query);
   const inputRef = useRef<HTMLInputElement>(null);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const [debouncedNormalizedQuery] = useDebounceValue(
+    normalizedQuery,
+    BRANCH_SEARCH_DEBOUNCE_MS,
+  );
   const menuCopy = getBranchPickerMenuCopy(menuKind);
+  const isCheckoutMenu = menuKind === "checkout";
+  const activeCheckoutIntent = isCheckoutMenu
+    ? checkoutIntent
+    : selectedCheckoutIntent;
+  const showBranchChooser =
+    !isCheckoutMenu || activeCheckoutIntent !== "current";
+  const checkoutBranchSectionLabel =
+    activeCheckoutIntent === "new" ? "Branch from:" : "Checkout:";
   const branchOptionsDisabled = Boolean(optionDisabledReason);
   const createDisabled = Boolean(createDisabledReason);
-  const checkoutSectionDisabled =
-    menuKind === "checkout" && (branchOptionsDisabled || createDisabled);
-  const branchOptions = useMemo(
+  const branchChooserDisabled =
+    isCheckoutMenu && activeCheckoutIntent === "new"
+      ? createDisabled
+      : branchOptionsDisabled;
+  const branchOptionGroups = useMemo(
     () =>
-      currentBranch
-        ? options.filter((branch) => branch !== currentBranch)
-        : options,
-    [currentBranch, options],
+      buildBranchPickerOptionGroups({
+        options,
+        remoteOptions,
+      }),
+    [options, remoteOptions],
   );
-  const filteredOptions = useMemo(() => {
-    const matches =
-      normalizedQuery.length === 0
-        ? branchOptions
-        : branchOptions.filter((branch) =>
-            branch.toLowerCase().includes(normalizedQuery),
-          );
-    // Pin the currently-selected branch to the top of the list so it's
-    // always visible without scrolling. Only when not creating a new branch
-    // (then no list option is "selected").
-    if (isCreatingNew) return matches;
-    if (!value) return matches;
-    const selectedIndex = matches.indexOf(value);
-    if (selectedIndex <= 0) return matches;
-    return [
-      matches[selectedIndex],
-      ...matches.slice(0, selectedIndex),
-      ...matches.slice(selectedIndex + 1),
-    ];
-  }, [branchOptions, normalizedQuery, value, isCreatingNew]);
-  const enterSelection =
-    branchOptionsDisabled || checkoutSectionDisabled
-      ? undefined
-      : value
-        ? (filteredOptions.find((branch) => branch === value) ??
-          filteredOptions[0])
-        : filteredOptions[0];
+  const filteredLocalBranchOptions = useMemo(
+    () =>
+      filterBranchOptions({
+        normalizedQuery,
+        options: branchOptionGroups.local,
+      }),
+    [branchOptionGroups.local, normalizedQuery],
+  );
+  const filteredRemoteBranchOptions = useMemo(
+    () =>
+      filterBranchOptions({
+        normalizedQuery,
+        options: branchOptionGroups.remote,
+      }),
+    [branchOptionGroups.remote, normalizedQuery],
+  );
+  const filteredCheckoutTargetOptions = useMemo(
+    () =>
+      pinSelectedBranch({
+        options: filteredLocalBranchOptions,
+        value,
+      }),
+    [filteredLocalBranchOptions, value],
+  );
+  const selectedBranchOptionGroup = useMemo(() => {
+    if (!value) {
+      return "local";
+    }
+    if (selectedOptionKind) {
+      return selectedOptionKind;
+    }
+    if (
+      branchOptionGroups.remote.includes(value) &&
+      !branchOptionGroups.local.includes(value)
+    ) {
+      return "remote";
+    }
+    return "local";
+  }, [
+    branchOptionGroups.local,
+    branchOptionGroups.remote,
+    selectedOptionKind,
+    value,
+  ]);
+  const filteredLocalBaseOptions = useMemo(
+    () =>
+      pinSelectedBranch({
+        options: filteredLocalBranchOptions,
+        value: selectedBranchOptionGroup === "local" ? value : null,
+      }),
+    [filteredLocalBranchOptions, selectedBranchOptionGroup, value],
+  );
+  const filteredRemoteBaseOptions = useMemo(
+    () =>
+      pinSelectedBranch({
+        options: filteredRemoteBranchOptions,
+        value: selectedBranchOptionGroup === "remote" ? value : null,
+      }),
+    [filteredRemoteBranchOptions, selectedBranchOptionGroup, value],
+  );
+  const filteredBranchOptions = useMemo(
+    () => [...filteredLocalBaseOptions, ...filteredRemoteBaseOptions],
+    [filteredLocalBaseOptions, filteredRemoteBaseOptions],
+  );
+  const activeEnterOptions =
+    isCheckoutMenu && activeCheckoutIntent === "checkout"
+      ? filteredCheckoutTargetOptions
+      : filteredBranchOptions;
+  const firstFilteredOption = activeEnterOptions[0];
+  const enterSelection = branchChooserDisabled
+    ? undefined
+    : value
+      ? (activeEnterOptions.find((branch) => branch === value) ??
+        firstFilteredOption)
+      : firstFilteredOption;
   const unresolvedTriggerLabel = loading
     ? "Loading branches..."
     : (placeholder ?? "Select branch");
   const triggerLabel =
     triggerLabelOverride ??
     (isCreatingNew
-      ? CREATE_NEW_BRANCH_LABEL
+      ? formatCreateBranchTriggerLabel(value)
       : (value ?? unresolvedTriggerLabel));
   // The trigger emphasises a plain branch value (or the "New branch" state) so
   // the committed selection stands out from muted prefix copy like
@@ -547,40 +832,81 @@ export function BranchPicker({
     reason: optionDisabledReason ?? createDisabledReason,
     fallback: menuCopy.optionsUnavailableFallback,
   });
+  const branchChooserDisabledDescription =
+    isCheckoutMenu && activeCheckoutIntent === "new"
+      ? createDisabledDescription
+      : branchOptionsDisabledDescription;
+  const branchChooserDisabledTitle =
+    isCheckoutMenu && activeCheckoutIntent === "new"
+      ? createDisabledTitle
+      : (optionDisabledTitle ?? createDisabledTitle);
   const currentOptionItemLabel =
     currentOptionLabel !== undefined && currentOptionLabel !== null && onClear
       ? currentOptionLabel
       : null;
   const hasCurrentItem = currentOptionItemLabel !== null;
+  const hasBranchOptions =
+    branchOptionGroups.local.length > 0 || branchOptionGroups.remote.length > 0;
   const hasOptionsSection =
     loading ||
     showCreateItem ||
-    branchOptions.length > 0 ||
-    ((branchOptionsDisabled || createDisabled) && options.length > 0);
+    hasBranchOptions ||
+    ((branchOptionsDisabled || createDisabled) &&
+      options.length + remoteOptions.length > 0);
   const showOptionsSearch =
-    branchOptions.length > 0 &&
-    !branchOptionsDisabled &&
-    !checkoutSectionDisabled;
-  const optionsSectionDisabled =
-    checkoutSectionDisabled || branchOptionsDisabled;
-  const optionsSectionDisabledTitle =
-    optionDisabledTitle ?? createDisabledTitle;
+    showBranchChooser && hasBranchOptions && !branchChooserDisabled;
+  const optionsSectionDisabled = branchChooserDisabled;
   const titleSubtitle =
     menuCopy.optionsSectionLabel === null && optionsSectionDisabled
-      ? branchOptionsDisabledDescription
+      ? branchChooserDisabledDescription
       : undefined;
   const titleSubtitleTitle =
     menuCopy.optionsSectionLabel === null
-      ? optionsSectionDisabledTitle
+      ? branchChooserDisabledTitle
       : undefined;
   const selectBranchAndClose = (branch: string) => {
+    if (isCheckoutMenu && activeCheckoutIntent === "new") {
+      (onCreateBaseChange ?? onChange)(branch);
+    } else {
+      onChange(branch);
+    }
+    setOpen(false);
+  };
+  const selectCheckoutTarget = (branch: string) => {
     onChange(branch);
     setOpen(false);
   };
+  const selectEnterBranch = (branch: string) => {
+    if (isCheckoutMenu && activeCheckoutIntent === "checkout") {
+      selectCheckoutTarget(branch);
+      return;
+    }
+
+    selectBranchAndClose(branch);
+  };
+
+  useEffect(() => {
+    if (open && isCheckoutMenu) {
+      setCheckoutIntent(selectedCheckoutIntent);
+    }
+  }, [isCheckoutMenu, open, selectedCheckoutIntent]);
 
   useEffect(() => {
     if (!open) {
       setQuery("");
+      onSearchQueryChange?.("");
+      return;
+    }
+
+    if (debouncedNormalizedQuery !== normalizedQuery) {
+      return;
+    }
+
+    onSearchQueryChange?.(debouncedNormalizedQuery);
+  }, [debouncedNormalizedQuery, normalizedQuery, onSearchQueryChange, open]);
+
+  useEffect(() => {
+    if (!open || !showOptionsSearch) {
       return;
     }
 
@@ -591,7 +917,7 @@ export function BranchPicker({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [open]);
+  }, [open, showOptionsSearch]);
 
   return (
     <Popover
@@ -612,7 +938,7 @@ export function BranchPicker({
           title={
             triggerTitle ??
             (isCreatingNew
-              ? CREATE_NEW_BRANCH_LABEL
+              ? formatCreateBranchTriggerTitle(value)
               : value
                 ? `Branch: ${value}`
                 : unresolvedTriggerLabel)
@@ -668,19 +994,19 @@ export function BranchPicker({
         sideOffset={6}
         collisionPadding={16}
         mobileTitle={menuCopy.title ?? "Branch"}
-        className="flex flex-col overflow-hidden p-0 md:max-h-[calc(100vh-6rem)] md:w-[18rem] md:min-w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))] md:max-w-[calc(100vw-2rem)]"
+        className="flex flex-col overflow-hidden p-0 md:max-h-[calc(100vh-6rem)] md:w-[18rem] md:min-w-[min(var(--radix-popover-trigger-width),18rem)] md:max-w-[min(18rem,calc(100vw-2rem))]"
       >
         {showOptionsSearch ? (
           <BranchPickerSearch
             inputRef={inputRef}
             query={query}
             enterSelection={enterSelection}
-            onEnterSelection={selectBranchAndClose}
+            onEnterSelection={selectEnterBranch}
             onQueryChange={setQuery}
           />
         ) : null}
         <div
-          className="min-h-0 max-h-[60vh] overflow-y-auto overscroll-contain p-1 md:max-h-80"
+          className="min-h-0 max-h-[60vh] overflow-y-auto overscroll-contain px-1 pb-1 pt-0 md:max-h-80"
           onWheel={(event) => {
             event.stopPropagation();
           }}
@@ -690,94 +1016,202 @@ export function BranchPicker({
               label={menuCopy.title}
               subtitle={titleSubtitle}
               subtitleTitle={titleSubtitleTitle}
+              sticky={!isCheckoutMenu}
             />
           ) : null}
-          {hasCurrentItem ? (
+          {isCheckoutMenu ? (
             <>
-              {currentOptionItemLabel !== null &&
-              menuCopy.currentSectionLabel ? (
-                <BranchPickerSectionHeader
-                  label={menuCopy.currentSectionLabel}
-                />
-              ) : null}
               {currentOptionItemLabel !== null && onClear ? (
                 <BranchPickerRowButton
                   icon="GitMerge"
                   label={currentOptionItemLabel}
                   title={currentOptionTitle ?? currentOptionItemLabel}
-                  selected={!isCreatingNew && value === null}
+                  selected={activeCheckoutIntent === "current"}
                   onSelect={() => {
+                    setCheckoutIntent("current");
                     onClear();
                     setOpen(false);
                   }}
                 />
               ) : null}
-            </>
-          ) : null}
-          {hasOptionsSection ? (
-            <>
-              {menuCopy.optionsSectionLabel ? (
-                <BranchPickerSectionHeader
-                  label={menuCopy.optionsSectionLabel}
-                  subtitle={
-                    optionsSectionDisabled
-                      ? branchOptionsDisabledDescription
-                      : undefined
-                  }
-                  subtitleTitle={optionsSectionDisabledTitle}
-                  className={
-                    hasCurrentItem
-                      ? "mt-1 border-t border-border/60"
-                      : undefined
-                  }
+              {showCreateItem && onCreate ? (
+                <BranchPickerRowButton
+                  icon="Plus"
+                  label={CREATE_NEW_BRANCH_LABEL}
+                  title={createDisabledTitle ?? CREATE_NEW_BRANCH_LABEL}
+                  selected={activeCheckoutIntent === "new"}
+                  disabled={createDisabled}
+                  onSelect={() => {
+                    setCheckoutIntent("new");
+                    onCreate();
+                  }}
                 />
               ) : null}
-              {optionsSectionDisabled ? null : (
+              <BranchPickerRowButton
+                icon="GitMerge"
+                label="Checkout"
+                title={optionDisabledTitle ?? "Checkout an existing branch"}
+                selected={activeCheckoutIntent === "checkout"}
+                disabled={branchOptionsDisabled}
+                onSelect={() => {
+                  setCheckoutIntent("checkout");
+                }}
+              />
+              {showBranchChooser ? (
                 <>
-                  {showCreateItem && onCreate ? (
-                    createDisabled ? (
-                      <BranchPickerUnavailableRow
-                        icon="Plus"
-                        label={CREATE_NEW_BRANCH_LABEL}
-                        description={createDisabledDescription}
-                        title={createDisabledTitle}
-                      />
-                    ) : (
-                      <BranchPickerRowButton
-                        icon="Plus"
-                        label={CREATE_NEW_BRANCH_LABEL}
-                        title={createDisabledTitle}
-                        selected={isCreatingNew}
-                        onSelect={() => {
-                          onCreate();
-                          setOpen(false);
-                        }}
-                      />
-                    )
-                  ) : null}
-                  {filteredOptions.length > 0 ? (
-                    filteredOptions.map((branch) => (
-                      <BranchPickerRowButton
-                        key={branch}
-                        icon="GitMerge"
-                        label={branch}
-                        title={branch}
-                        selected={!isCreatingNew && branch === value}
-                        onSelect={() => selectBranchAndClose(branch)}
-                      />
-                    ))
-                  ) : showCreateItem ? null : (
-                    <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-                      {loading ? "Loading branches..." : "No branches found."}
-                    </p>
+                  <div className="my-1 h-px bg-border/60" />
+                  <BranchPickerSectionHeader
+                    label={checkoutBranchSectionLabel}
+                    subtitle={
+                      optionsSectionDisabled
+                        ? branchChooserDisabledDescription
+                        : undefined
+                    }
+                    subtitleTitle={branchChooserDisabledTitle}
+                  />
+                  {optionsSectionDisabled ? null : (
+                    <>
+                      {activeCheckoutIntent === "checkout" ? (
+                        <>
+                          {filteredCheckoutTargetOptions.length > 0
+                            ? filteredCheckoutTargetOptions.map((branch) => (
+                                <BranchPickerRowButton
+                                  key={branch}
+                                  icon="GitMerge"
+                                  label={branch}
+                                  title={branch}
+                                  selected={branch === value}
+                                  onSelect={() => selectCheckoutTarget(branch)}
+                                />
+                              ))
+                            : null}
+                          {filteredCheckoutTargetOptions.length === 0 ? (
+                            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                              {loading
+                                ? "Loading branches..."
+                                : "No local branches found."}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <BranchPickerBranchOptions
+                            localOptions={filteredLocalBaseOptions}
+                            remoteOptions={filteredRemoteBaseOptions}
+                            selectedValue={value}
+                            onSelect={selectBranchAndClose}
+                          />
+                          {filteredBranchOptions.length === 0 ? (
+                            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                              {loading
+                                ? "Loading branches..."
+                                : "No branches found."}
+                            </p>
+                          ) : null}
+                        </>
+                      )}
+                      {optionsTruncated ? (
+                        <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Search to narrow branch results.
+                        </p>
+                      ) : null}
+                    </>
                   )}
                 </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {hasCurrentItem ? (
+                <>
+                  {currentOptionItemLabel !== null &&
+                  menuCopy.currentSectionLabel ? (
+                    <BranchPickerSectionHeader
+                      label={menuCopy.currentSectionLabel}
+                    />
+                  ) : null}
+                  {currentOptionItemLabel !== null && onClear ? (
+                    <BranchPickerRowButton
+                      icon="GitMerge"
+                      label={currentOptionItemLabel}
+                      title={currentOptionTitle ?? currentOptionItemLabel}
+                      selected={!isCreatingNew && value === null}
+                      onSelect={() => {
+                        onClear();
+                        setOpen(false);
+                      }}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              {hasOptionsSection ? (
+                <>
+                  {menuCopy.optionsSectionLabel ? (
+                    <>
+                      {hasCurrentItem ? (
+                        <div className="my-1 h-px bg-border/60" />
+                      ) : null}
+                      <BranchPickerSectionHeader
+                        label={menuCopy.optionsSectionLabel}
+                        subtitle={
+                          optionsSectionDisabled
+                            ? branchChooserDisabledDescription
+                            : undefined
+                        }
+                        subtitleTitle={branchChooserDisabledTitle}
+                      />
+                    </>
+                  ) : null}
+                  {optionsSectionDisabled ? null : (
+                    <>
+                      {showCreateItem && onCreate ? (
+                        createDisabled ? (
+                          <BranchPickerUnavailableRow
+                            icon="Plus"
+                            label={CREATE_NEW_BRANCH_LABEL}
+                            description={createDisabledDescription}
+                            title={createDisabledTitle}
+                          />
+                        ) : (
+                          <BranchPickerRowButton
+                            icon="Plus"
+                            label={CREATE_NEW_BRANCH_LABEL}
+                            title={createDisabledTitle}
+                            selected={isCreatingNew}
+                            onSelect={() => {
+                              onCreate();
+                              setOpen(false);
+                            }}
+                          />
+                        )
+                      ) : null}
+                      <BranchPickerBranchOptions
+                        localOptions={filteredLocalBaseOptions}
+                        remoteOptions={filteredRemoteBaseOptions}
+                        selectedValue={value}
+                        onSelect={selectBranchAndClose}
+                      />
+                      {filteredBranchOptions.length === 0 && !showCreateItem ? (
+                        <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                          {loading
+                            ? "Loading branches..."
+                            : "No branches found."}
+                        </p>
+                      ) : null}
+                      {optionsTruncated ? (
+                        <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Search to narrow branch results.
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                </>
+              ) : hasCurrentItem ? null : (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                  {loading ? "Loading branches..." : "No branches found."}
+                </p>
               )}
             </>
-          ) : hasCurrentItem ? null : (
-            <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-              {loading ? "Loading branches..." : "No branches found."}
-            </p>
           )}
         </div>
       </PopoverContent>

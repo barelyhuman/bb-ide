@@ -8,6 +8,7 @@ export type {
   HostWorkspace,
   PersonalWorkspaceOpts,
   ProvisionWorkspaceArgs,
+  UnmanagedCheckoutOpts,
   UnmanagedWorkspaceOpts,
   ManagedWorkspaceBaseOpts,
   ManagedWorktreeOpts,
@@ -34,6 +35,7 @@ export {
   gitBlobSize,
   hasUncommittedChanges,
   listBranches,
+  listRemoteBranches,
   readDefaultBranch,
   readGitBlob,
 } from "./git.js";

@@ -312,6 +312,35 @@ function hasActiveThreadProvisionOperation(
   return Boolean(operation && isActiveLifecycleOperationState(operation.state));
 }
 
+interface ProvisionedEnvironmentBranchMetadata {
+  baseBranch?: string | null;
+  mergeBaseBranch?: string | null;
+}
+
+function resolveProvisionedEnvironmentBranchMetadata(
+  command: ParsedCommandForType<"environment.provision">,
+): ProvisionedEnvironmentBranchMetadata {
+  if (command.workspaceProvisionType !== "unmanaged") {
+    return {};
+  }
+
+  if (!command.checkout) {
+    return {};
+  }
+
+  if (command.checkout.kind === "new") {
+    return {
+      baseBranch: null,
+      mergeBaseBranch: command.checkout.baseBranch,
+    };
+  }
+
+  return {
+    baseBranch: null,
+    mergeBaseBranch: null,
+  };
+}
+
 function handleProvisionCommandResult(
   args: ApplyCommandResultSideEffectsArgs<"environment.provision">,
 ): CommandResultSideEffectsResult {
@@ -352,6 +381,7 @@ function handleProvisionCommandResult(
         isWorktree: args.report.result.isWorktree,
         branchName: args.report.result.branchName,
         defaultBranch: args.report.result.defaultBranch,
+        ...resolveProvisionedEnvironmentBranchMetadata(args.command),
       },
     );
     args.deps.hub.notifyEnvironment(args.command.environmentId, [

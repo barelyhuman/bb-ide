@@ -48,6 +48,8 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
     "host.read_file may omit ref to read from disk; setting ref switches to git history at that ref.",
   "hostDaemonCommandSchema.rootPath":
     "host.read_file and host.file_metadata may omit rootPath only for explicit absolute disk reads; ref-based reads still require it.",
+  "hostDaemonCommandSchema.selectedBranch":
+    "host.list_branches may omit exact selected-branch classification when the caller only needs a branch option page.",
   "hostDaemonCommandSchema.threadStoragePath":
     "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
   "hostDaemonCommandSchema.disallowedTools":
@@ -275,6 +277,49 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/project",
+        checkout: {
+          kind: "existing",
+          name: "feature/test",
+        },
+      }),
+    ).toMatchObject({
+      type: "environment.provision",
+      workspaceProvisionType: "unmanaged",
+      checkout: {
+        kind: "existing",
+        name: "feature/test",
+      },
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/project",
+        checkout: {
+          kind: "new",
+          name: "bb/env-123",
+          baseBranch: "release",
+        },
+      }),
+    ).toMatchObject({
+      type: "environment.provision",
+      workspaceProvisionType: "unmanaged",
+      checkout: {
+        kind: "new",
+        baseBranch: "release",
+      },
+    });
+
+    expect(
       hostDaemonCommandEnvelopeSchema.parse({
         id: "hcmd_123",
         cursor: 7,
@@ -327,10 +372,16 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "host.list_branches",
         path: "/tmp/workspace",
+        query: "release",
+        selectedBranch: "origin/main",
+        limit: 50,
       }),
     ).toMatchObject({
       type: "host.list_branches",
       path: "/tmp/workspace",
+      query: "release",
+      selectedBranch: "origin/main",
+      limit: 50,
     });
 
     expect(
@@ -646,6 +697,28 @@ describe("host-daemon command schemas", () => {
         environmentId: "env_123",
         initiator: null,
         workspaceProvisionType: "unmanaged",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/project",
+        checkout: { kind: "new", name: "bb/env-123" },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/project",
+        checkout: { kind: "existing" },
       }),
     ).toThrow();
 
@@ -1007,6 +1080,98 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
   });
 
+  it("rejects invalid branch names at command boundaries", () => {
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "host.list_branches",
+        path: "/tmp/workspace",
+        selectedBranch: "origin/main lock",
+        limit: 50,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/project",
+        checkout: { kind: "existing", name: "feature/test lock" },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/project",
+        checkout: {
+          kind: "new",
+          name: "bb/env-123",
+          baseBranch: "release lock",
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/project",
+        targetPath: "/tmp/project/.bb/env",
+        branchName: "bb/env lock",
+        baseBranch: null,
+        setupTimeoutMs: 900000,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: null,
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/project",
+        targetPath: "/tmp/project/.bb/env",
+        branchName: "bb/env-123",
+        baseBranch: "release lock",
+        setupTimeoutMs: 900000,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "workspace.status",
+        environmentId: "env_123",
+        environmentStatus: "ready",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        mergeBaseBranch: "origin/main lock",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      hostDaemonCommandSchema.safeParse({
+        type: "workspace.squash_merge",
+        environmentId: "env_123",
+        environmentStatus: "ready",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        targetBranch: "main lock",
+        commitMessage: "Merge branch",
+      }).success,
+    ).toBe(false);
+  });
+
   it("requires replay.run request correlation", () => {
     expect(
       hostDaemonCommandSchema.parse({
@@ -1144,6 +1309,7 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonCommandResultSchemaByType["host.list_branches"].parse({
         branches: ["main", "feature/test"],
+        branchesTruncated: false,
         checkout: {
           kind: "branch",
           branchName: "feature/test",
@@ -1152,6 +1318,9 @@ describe("host-daemon command schemas", () => {
         defaultBranch: "main",
         hasUncommittedChanges: true,
         operation: { kind: "merge", hasConflicts: true },
+        remoteBranches: ["origin/main"],
+        remoteBranchesTruncated: false,
+        selectedBranch: { name: "origin/main", kind: "remote" },
       }),
     ).toMatchObject({
       checkout: {

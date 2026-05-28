@@ -1,15 +1,72 @@
 import path from "node:path";
+import type { GitBranchRefClassification } from "@bb/domain";
 import {
   detectGitRepo,
   getCheckoutRef,
   getWorkspaceGitOperation,
   hasUncommittedChanges,
   listBranches,
+  listRemoteBranches,
   readDefaultBranch,
 } from "@bb/host-workspace";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
+
+interface LimitBranchListArgs {
+  branches: readonly string[];
+  limit: number;
+  query?: string;
+}
+
+interface LimitedBranchList {
+  branches: string[];
+  truncated: boolean;
+}
+
+interface ClassifySelectedBranchArgs {
+  branches: readonly string[];
+  remoteBranches: readonly string[];
+  selectedBranch?: string;
+}
+
+function limitBranchList({
+  branches,
+  limit,
+  query,
+}: LimitBranchListArgs): LimitedBranchList {
+  const normalizedQuery = query?.trim().toLowerCase();
+  const filteredBranches =
+    normalizedQuery && normalizedQuery.length > 0
+      ? branches.filter((branch) =>
+          branch.toLowerCase().includes(normalizedQuery),
+        )
+      : [...branches];
+  return {
+    branches: filteredBranches.slice(0, limit),
+    truncated: filteredBranches.length > limit,
+  };
+}
+
+function classifySelectedBranch({
+  branches,
+  remoteBranches,
+  selectedBranch,
+}: ClassifySelectedBranchArgs): GitBranchRefClassification | null {
+  if (!selectedBranch) {
+    return null;
+  }
+
+  if (branches.includes(selectedBranch)) {
+    return { name: selectedBranch, kind: "local" };
+  }
+
+  if (remoteBranches.includes(selectedBranch)) {
+    return { name: selectedBranch, kind: "remote" };
+  }
+
+  return { name: selectedBranch, kind: "missing" };
+}
 
 export async function listHostBranches(
   command: CommandOf<"host.list_branches">,
@@ -21,16 +78,25 @@ export async function listHostBranches(
   if (!(await detectGitRepo(command.path))) {
     return {
       branches: [],
+      branchesTruncated: false,
       checkout: { kind: "unknown", reason: "Path is not a git repository" },
       defaultBranch: null,
       hasUncommittedChanges: false,
       operation: { kind: "none" },
+      remoteBranches: [],
+      remoteBranchesTruncated: false,
+      selectedBranch: classifySelectedBranch({
+        branches: [],
+        remoteBranches: [],
+        selectedBranch: command.selectedBranch,
+      }),
     };
   }
 
-  const [branches, checkout, defaultBranch, dirty, operation] =
+  const [branches, remoteBranches, checkout, defaultBranch, dirty, operation] =
     await Promise.all([
       listBranches(command.path),
+      listRemoteBranches(command.path),
       getCheckoutRef(command.path),
       readDefaultBranch(command.path),
       hasUncommittedChanges(command.path),
@@ -42,11 +108,30 @@ export async function listHostBranches(
     defaultBranch && branches.includes(defaultBranch)
       ? [defaultBranch, ...branches.filter((b) => b !== defaultBranch)]
       : branches;
-  return {
+  const limitedBranches = limitBranchList({
     branches: sorted,
+    limit: command.limit,
+    query: command.query,
+  });
+  const limitedRemoteBranches = limitBranchList({
+    branches: remoteBranches,
+    limit: command.limit,
+    query: command.query,
+  });
+  const selectedBranch = classifySelectedBranch({
+    branches,
+    remoteBranches,
+    selectedBranch: command.selectedBranch,
+  });
+  return {
+    branches: limitedBranches.branches,
+    branchesTruncated: limitedBranches.truncated,
     checkout,
     defaultBranch: defaultBranch ?? null,
     hasUncommittedChanges: dirty,
     operation,
+    remoteBranches: limitedRemoteBranches.branches,
+    remoteBranchesTruncated: limitedRemoteBranches.truncated,
+    selectedBranch,
   };
 }

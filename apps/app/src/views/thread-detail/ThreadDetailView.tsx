@@ -120,7 +120,8 @@ import {
 } from "./threadSecondaryPanelSelection";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
-const EMPTY_PROJECT_THREAD_SUBSET_FILTERS = {} satisfies ProjectThreadSubsetFilters;
+const EMPTY_PROJECT_THREAD_SUBSET_FILTERS =
+  {} satisfies ProjectThreadSubsetFilters;
 const MANAGER_THREAD_SUBSET_FILTERS = {
   type: "manager",
 } satisfies ProjectThreadSubsetFilters;
@@ -411,10 +412,14 @@ export function ThreadDetailView() {
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
     isLoadingMergeBaseBranchOptions,
     mergeBaseBranchOptions,
+    mergeBaseBranchOptionsTruncated,
+    mergeBaseRemoteBranchOptions,
     openDiffFile: openPersistedDiffFile,
     openThreadDiffPanel: openPersistedDiffPanel,
     openThreadSecondaryPanel: openPersistedSecondaryPanel,
     selectedMergeBaseBranch,
+    selectedMergeBaseBranchRef,
+    setMergeBaseBranchSearchQuery,
     setSelectedMergeBaseBranch,
   } = useGitDiffPanel({
     activeSecondaryPanel,
@@ -676,7 +681,9 @@ export function ThreadDetailView() {
     mergeBaseBranch,
   } = useEnvironmentMergeBase({
     environment,
+    mergeBaseBranchRef: selectedMergeBaseBranchRef,
     mergeBaseBranchOptions,
+    mergeBaseRemoteBranchOptions,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
     thread,
@@ -690,6 +697,11 @@ export function ThreadDetailView() {
     thread,
     workspaceStatus,
   });
+  useEffect(() => {
+    if (gitActions.threadGitActionDialog.target !== null) {
+      setHasRequestedMergeBaseOptions(true);
+    }
+  }, [gitActions.threadGitActionDialog.target]);
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
@@ -1002,10 +1014,14 @@ export function ThreadDetailView() {
         canUseGitUi && showMergeBase && promptBannerMergeBaseBranch
           ? {
               branch: promptBannerMergeBaseBranch,
+              branchRef: selectedMergeBaseBranchRef,
               options: mergeBaseBranchOptions,
+              remoteOptions: mergeBaseRemoteBranchOptions,
+              optionsTruncated: mergeBaseBranchOptionsTruncated,
               optionsLoading: isLoadingMergeBaseBranchOptions,
               onChange: handleMergeBaseBranchChange,
               onPickerOpenChange: handleMergeBasePickerOpenChange,
+              onSearchQueryChange: setMergeBaseBranchSearchQuery,
             }
           : null
       }
@@ -1115,13 +1131,17 @@ export function ThreadDetailView() {
           workspaceStatus,
           workspaceStatusError: workspaceStatusError ?? null,
           selectedMergeBaseBranch,
+          mergeBaseBranchRef: selectedMergeBaseBranchRef,
           mergeBaseBranchOptions,
+          mergeBaseBranchOptionsTruncated,
+          mergeBaseRemoteBranchOptions,
           isLoadingMergeBaseBranchOptions,
           updateThreadPending:
             updateThread.isPending || updateEnvironment.isPending,
           storage: metadataStorage,
           onAssignManager: handleAssignManager,
           onMergeBaseBranchChange: handleMergeBaseBranchChange,
+          onMergeBaseBranchSearchQueryChange: setMergeBaseBranchSearchQuery,
           onChangedFileClick: canUseGitUi ? handleChangedFileClick : undefined,
         }}
         secondaryPanel={{
@@ -1209,7 +1229,11 @@ export function ThreadDetailView() {
           showMergeBaseDetails={showBranchComparisonUi}
           mergeBaseBranch={effectiveMergeBaseBranch}
           mergeBaseBranchOptions={mergeBaseBranchOptions}
+          mergeBaseBranchOptionsTruncated={mergeBaseBranchOptionsTruncated}
+          mergeBaseBranchRef={selectedMergeBaseBranchRef}
+          mergeBaseRemoteBranchOptions={mergeBaseRemoteBranchOptions}
           mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
+          onMergeBaseBranchSearchQueryChange={setMergeBaseBranchSearchQuery}
           onMergeBaseBranchChange={
             showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
           }

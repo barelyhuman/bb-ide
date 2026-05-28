@@ -95,7 +95,7 @@ export function requireSourceForHost(
  */
 export type UnmanagedCheckoutCommand =
   | { kind: "existing"; name: string }
-  | { kind: "new"; name: string };
+  | { kind: "new"; name: string; baseBranch: string };
 
 export type EnvironmentProvisionCommandArgs =
   | {

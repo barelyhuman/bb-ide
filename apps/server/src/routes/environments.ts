@@ -1,11 +1,13 @@
 import path from "node:path";
 import { updateEnvironmentMetadata } from "@bb/db";
 import {
+  type GitBranchRefClassification,
   resolveEnvironmentWorkspaceDisplayKind,
   type Environment,
 } from "@bb/domain";
 import {
   environmentActionRequestSchema,
+  environmentDiffBranchesQuerySchema,
   environmentDiffFileQuerySchema,
   environmentDiffQuerySchema,
   environmentStatusQuerySchema,
@@ -30,6 +32,10 @@ import {
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
 import { archiveEnvironmentThreads } from "../services/threads/thread-archive.js";
+import {
+  normalizeBranchQuery,
+  parseBranchListLimit,
+} from "./branch-list-query.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
@@ -38,6 +44,34 @@ const PRE_MERGE_COMMIT_MESSAGE = "bb: pre-merge commit";
 /** Caps for diffs sent to the inference model for commit message generation. */
 const AI_MAX_DIFF_BYTES = 32_000;
 const AI_MAX_FILE_LIST_BYTES = 4_000;
+
+interface AssertSquashMergeTargetIsLocalArgs {
+  selectedBranch: GitBranchRefClassification | null;
+  targetBranch: string;
+}
+
+function assertSquashMergeTargetIsLocal({
+  selectedBranch,
+  targetBranch,
+}: AssertSquashMergeTargetIsLocalArgs): void {
+  if (selectedBranch?.kind === "local") {
+    return;
+  }
+
+  if (selectedBranch?.kind === "remote") {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      `Cannot squash merge into remote branch ${targetBranch}; select a local branch`,
+    );
+  }
+
+  throw new ApiError(
+    409,
+    "invalid_request",
+    `Target branch does not exist: ${targetBranch}`,
+  );
+}
 
 function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
   switch (query.target) {
@@ -245,21 +279,36 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     },
   );
 
-  get("/environments/:id/diff/branches", async (context) => {
-    const environment = requireReadyEnvironment(
-      deps.db,
-      context.req.param("id"),
-    );
-    const result = await queueCommandAndWait(deps, {
-      hostId: environment.hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "host.list_branches",
-        path: environment.path,
-      },
-    });
-    return context.json(result.branches);
-  });
+  get(
+    "/environments/:id/diff/branches",
+    environmentDiffBranchesQuerySchema,
+    async (context, query) => {
+      const environment = requireReadyEnvironment(
+        deps.db,
+        context.req.param("id"),
+      );
+      const branchQuery = normalizeBranchQuery(query.query);
+      const selectedBranch = normalizeBranchQuery(query.selectedBranch);
+      const result = await queueCommandAndWait(deps, {
+        hostId: environment.hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: {
+          type: "host.list_branches",
+          path: environment.path,
+          ...(branchQuery ? { query: branchQuery } : {}),
+          ...(selectedBranch ? { selectedBranch } : {}),
+          limit: parseBranchListLimit(query.limit),
+        },
+      });
+      return context.json({
+        branches: result.branches,
+        branchesTruncated: result.branchesTruncated,
+        remoteBranches: result.remoteBranches,
+        remoteBranchesTruncated: result.remoteBranchesTruncated,
+        selectedBranch: result.selectedBranch,
+      });
+    },
+  );
 
   post(
     "/environments/:id/actions",
@@ -360,6 +409,21 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               "Cannot squash merge from a detached workspace",
             );
           }
+
+          const targetBranchResult = await queueCommandAndWait(deps, {
+            hostId: environment.hostId,
+            timeoutMs: COMMAND_TIMEOUT_MS,
+            command: {
+              type: "host.list_branches",
+              path: environment.path,
+              selectedBranch: targetBranch,
+              limit: 1,
+            },
+          });
+          assertSquashMergeTargetIsLocal({
+            selectedBranch: targetBranchResult.selectedBranch,
+            targetBranch,
+          });
 
           if (statusResult.workspaceStatus.workingTree.hasUncommittedChanges) {
             await queueCommandAndWait(deps, {

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { findLocalPathProjectSourceForHost, type ThreadListEntry } from "@bb/domain";
+import {
+  findLocalPathProjectSourceForHost,
+  type ThreadListEntry,
+} from "@bb/domain";
 import {
   NewThreadPromptBox,
   type ThreadCreationMode,
@@ -60,9 +63,7 @@ function readReuseEnvironmentIdFromLocationState(
   return null;
 }
 
-function readModeFromLocationState(
-  state: unknown,
-): ThreadCreationMode | null {
+function readModeFromLocationState(state: unknown): ThreadCreationMode | null {
   if (!state || typeof state !== "object") return null;
   const candidate = (state as { mode?: unknown }).mode;
   return candidate === "manager" || candidate === "thread" ? candidate : null;
@@ -323,11 +324,7 @@ export function ProjectMainView() {
     return managerTemplateSelection && isKnown
       ? managerTemplateSelection
       : defaultManagerTemplateName;
-  }, [
-    defaultManagerTemplateName,
-    managerTemplateSelection,
-    managerTemplates,
-  ]);
+  }, [defaultManagerTemplateName, managerTemplateSelection, managerTemplates]);
 
   // The hook returns reuse values from session-only state and sanitizes any
   // legacy reuse entries out of localStorage, so we can take its value
@@ -349,17 +346,42 @@ export function ProjectMainView() {
     () => parseEnvironmentValue(effectiveEnvironmentValue),
     [effectiveEnvironmentValue],
   );
+  const [branchSearchQuery, setBranchSearchQuery] = useState("");
+  useEffect(() => {
+    setBranchSearchQuery("");
+  }, [effectiveEnvironmentValue, projectId]);
   const isHostMode = parsedEnvironment?.type === "host";
+  const {
+    selectedBranch,
+    onBranchChange: handleBranchChange,
+    onClearBranch: handleClearBranch,
+    onCreateBranch: handleCreateBranch,
+    onCreateBranchFrom: handleCreateBranchFrom,
+  } = useScopedBranchSelection({
+    environmentValue: effectiveEnvironmentValue,
+    projectId,
+  });
+  const selectedBranchName = selectedBranch?.name ?? "";
   const hostBranchesQuery = useProjectSourceBranches(
     projectId,
     isHostMode ? parsedEnvironment.hostId : null,
-    { enabled: isHostMode },
+    {
+      enabled: isHostMode,
+      query: branchSearchQuery,
+      selectedBranch: selectedBranchName,
+    },
   );
   const activeBranchesQuery = hostBranchesQuery;
-  const branchOptions = useMemo(
-    () => activeBranchesQuery.data?.branches ?? [],
-    [activeBranchesQuery.data?.branches],
-  );
+  const branchOptions = useMemo(() => {
+    const branches = activeBranchesQuery.data?.branches ?? [];
+    const selectedRef = activeBranchesQuery.data?.selectedBranch;
+    return selectedRef?.kind === "local" && !branches.includes(selectedRef.name)
+      ? [selectedRef.name, ...branches]
+      : branches;
+  }, [
+    activeBranchesQuery.data?.branches,
+    activeBranchesQuery.data?.selectedBranch,
+  ]);
   const isHostLocalMode = isHostMode && parsedEnvironment.mode === "local";
   const branchEnvironmentMode: ProjectMainBranchEnvironmentMode =
     isHostLocalMode
@@ -367,6 +389,30 @@ export function ProjectMainView() {
       : isHostMode && parsedEnvironment.mode === "worktree"
         ? "worktree"
         : "other";
+  const remoteBranchOptions = useMemo(() => {
+    if (
+      branchEnvironmentMode !== "local" &&
+      branchEnvironmentMode !== "worktree"
+    ) {
+      return [];
+    }
+    const branches = activeBranchesQuery.data?.remoteBranches ?? [];
+    const selectedRef = activeBranchesQuery.data?.selectedBranch;
+    return selectedRef?.kind === "remote" &&
+      !branches.includes(selectedRef.name)
+      ? [selectedRef.name, ...branches]
+      : branches;
+  }, [
+    activeBranchesQuery.data?.remoteBranches,
+    activeBranchesQuery.data?.selectedBranch,
+    branchEnvironmentMode,
+  ]);
+  const branchOptionsTruncated = Boolean(
+    activeBranchesQuery.data?.branchesTruncated ||
+    ((branchEnvironmentMode === "local" ||
+      branchEnvironmentMode === "worktree") &&
+      activeBranchesQuery.data?.remoteBranchesTruncated),
+  );
   const branchSelectionSeed =
     branchEnvironmentMode === "local" &&
     activeBranchesQuery.data?.checkout.kind === "branch"
@@ -374,16 +420,9 @@ export function ProjectMainView() {
       : branchEnvironmentMode === "worktree"
         ? (activeBranchesQuery.data?.defaultBranch ?? null)
         : null;
-  const {
-    selectedBranch,
-    onBranchChange: handleBranchChange,
-    onClearBranch: handleClearBranch,
-    onCreateBranch: handleCreateBranch,
-  } = useScopedBranchSelection({
-    currentBranch: branchSelectionSeed,
-    environmentValue: effectiveEnvironmentValue,
-    projectId,
-  });
+  const handleCreateBranchFromSeed = useCallback(() => {
+    handleCreateBranch(branchSelectionSeed);
+  }, [branchSelectionSeed, handleCreateBranch]);
   const branchUiState = useMemo(
     () =>
       buildProjectMainBranchUiState({
@@ -701,28 +740,45 @@ export function ProjectMainView() {
   }, [parsedEnvironment, reuseThreadOptions, setEnvironmentSelectionValue]);
   const branchConfig = useMemo(
     () => ({
-      value: selectedBranch?.name ?? null,
+      value:
+        selectedBranch?.name ??
+        (branchEnvironmentMode === "worktree"
+          ? branchUiState.currentBranch
+          : null),
       currentBranch: branchUiState.currentBranch,
       isNew: selectedBranch?.isNew ?? false,
       options: branchOptions,
-      loading: activeBranchesQuery.isLoading,
+      remoteOptions: remoteBranchOptions,
+      optionsTruncated: branchOptionsTruncated,
+      loading: activeBranchesQuery.isFetching,
       placeholder: branchUiState.placeholder,
       triggerLabel: branchUiState.triggerLabel,
       triggerTitle: branchUiState.triggerTitle,
-      currentOptionLabel: branchUiState.currentOptionLabel,
-      currentOptionTitle: branchUiState.currentOptionLabel ?? undefined,
+      currentOptionLabel:
+        branchEnvironmentMode === "local"
+          ? branchUiState.currentOptionLabel
+          : null,
+      currentOptionTitle:
+        branchEnvironmentMode === "local"
+          ? (branchUiState.currentOptionLabel ?? undefined)
+          : undefined,
       optionDisabledReason: branchUiState.mutationBlocker?.label,
       optionDisabledTitle: branchUiState.mutationBlocker?.title,
       createDisabledReason: branchUiState.mutationBlocker?.label,
       createDisabledTitle: branchUiState.mutationBlocker?.title,
       onChange: handleBranchChange,
       onClear: handleClearBranch,
-      onCreate: handleCreateBranch,
+      onCreate: handleCreateBranchFromSeed,
+      onCreateBaseChange: handleCreateBranchFrom,
       onOpenChange: handleBranchOpenChange,
+      onSearchQueryChange: setBranchSearchQuery,
     }),
     [
-      activeBranchesQuery.isLoading,
+      activeBranchesQuery.isFetching,
+      branchOptionsTruncated,
       branchOptions,
+      branchEnvironmentMode,
+      remoteBranchOptions,
       branchUiState.currentBranch,
       branchUiState.currentOptionLabel,
       branchUiState.mutationBlocker,
@@ -732,7 +788,9 @@ export function ProjectMainView() {
       handleBranchChange,
       handleBranchOpenChange,
       handleClearBranch,
-      handleCreateBranch,
+      handleCreateBranchFromSeed,
+      handleCreateBranchFrom,
+      setBranchSearchQuery,
       selectedBranch?.isNew,
       selectedBranch?.name,
     ],

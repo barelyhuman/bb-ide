@@ -5,6 +5,7 @@ import type {
   WorkspaceDiffTarget,
   WorkspaceStatus,
 } from "@bb/domain";
+import type { EnvironmentDiffBranchesResponse } from "@bb/server-contract";
 import type { FilePreview } from "@/lib/api";
 import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
 import * as api from "@/lib/api";
@@ -16,6 +17,7 @@ import {
   environmentWorkStatusQueryKey,
 } from "./query-keys";
 import {
+  resolveEnvironmentMergeBaseBranchesPlaceholder,
   resolveEnvironmentGitDiffPlaceholder,
   resolveEnvironmentWorkStatusPlaceholder,
 } from "./query-placeholders";
@@ -28,12 +30,19 @@ interface EnvironmentQueryOptions extends QueryOptions {
   staleTime?: number;
 }
 
+interface BranchQueryOptions extends QueryOptions {
+  limit?: number;
+  query?: string;
+  selectedBranch?: string;
+}
+
 interface UseEnvironmentGitDiffOptions extends QueryOptions {
   target?: WorkspaceDiffTarget;
 }
 
 const ENVIRONMENT_WORK_STATUS_STALE_MS = 10_000;
 const MERGE_BASE_BRANCHES_STALE_MS = 30_000;
+const MERGE_BASE_BRANCHES_LIMIT = 50;
 
 function requireEnvironmentId(
   environmentId: string | null | undefined,
@@ -126,14 +135,37 @@ export function useEnvironmentWorkStatus(
 
 export function useEnvironmentMergeBaseBranches(
   environmentId: string,
-  options?: QueryOptions,
+  options?: BranchQueryOptions,
 ) {
-  return useQuery<string[]>({
-    queryKey: environmentMergeBaseBranchesQueryKey(environmentId),
-    queryFn: () => api.getEnvironmentDiffBranches(environmentId),
+  const query = options?.query?.trim() ?? "";
+  const selectedBranch = options?.selectedBranch?.trim();
+  const limit = options?.limit ?? MERGE_BASE_BRANCHES_LIMIT;
+  return useQuery<EnvironmentDiffBranchesResponse>({
+    queryKey: environmentMergeBaseBranchesQueryKey(
+      environmentId,
+      query,
+      limit,
+      selectedBranch ?? "",
+    ),
+    queryFn: () =>
+      api.getEnvironmentDiffBranches(environmentId, {
+        ...(query ? { query } : {}),
+        ...(selectedBranch ? { selectedBranch } : {}),
+        limit,
+      }),
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
     refetchOnWindowFocus: false,
     staleTime: MERGE_BASE_BRANCHES_STALE_MS,
+    placeholderData: (previousData, previousQuery) =>
+      environmentId
+        ? resolveEnvironmentMergeBaseBranchesPlaceholder({
+            previousData,
+            previousQueryKey: previousQuery?.queryKey,
+            environmentId,
+            limit,
+            selectedBranch: selectedBranch ?? "",
+          })
+        : undefined,
   });
 }
 

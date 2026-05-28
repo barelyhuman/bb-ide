@@ -1,15 +1,22 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
-import type { ThreadType } from "@bb/domain";
+import type { GitBranchRefClassification, ThreadType } from "@bb/domain";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
 import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { FormError } from "@/components/ui/form-error.js";
 import { Button } from "@/components/ui/button.js";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import {
-  getMergeBaseBranchCandidates,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import {
+  getMergeBaseBranchCandidateGroups,
   BranchPicker,
 } from "@/components/pickers/BranchPicker";
 
@@ -27,9 +34,13 @@ interface ThreadGitActionDialogProps {
   threadType?: ThreadType;
   showMergeBaseDetails?: boolean;
   mergeBaseBranch?: string;
+  mergeBaseBranchRef?: GitBranchRefClassification | null;
   mergeBaseBranchOptions?: string[];
+  mergeBaseBranchOptionsTruncated?: boolean;
+  mergeBaseRemoteBranchOptions?: readonly string[];
   mergeBaseBranchOptionsLoading?: boolean;
   onMergeBaseBranchChange?: (branch: string) => void;
+  onMergeBaseBranchSearchQueryChange?: (query: string) => void;
   onOpenChange: (open: boolean) => void;
   onCommit: () => Promise<void>;
   onSquashMerge: (args: { mergeBaseBranch: string }) => Promise<void>;
@@ -76,9 +87,13 @@ export function ThreadGitActionDialog({
   threadType,
   showMergeBaseDetails = false,
   mergeBaseBranch,
+  mergeBaseBranchRef,
   mergeBaseBranchOptions,
+  mergeBaseBranchOptionsTruncated,
+  mergeBaseRemoteBranchOptions,
   mergeBaseBranchOptionsLoading = false,
   onMergeBaseBranchChange,
+  onMergeBaseBranchSearchQueryChange,
   onOpenChange,
   onCommit,
   onSquashMerge,
@@ -102,9 +117,15 @@ export function ThreadGitActionDialog({
             threadType={threadType}
             showMergeBaseDetails={showMergeBaseDetails}
             mergeBaseBranch={mergeBaseBranch}
+            mergeBaseBranchRef={mergeBaseBranchRef}
             mergeBaseBranchOptions={mergeBaseBranchOptions}
+            mergeBaseBranchOptionsTruncated={mergeBaseBranchOptionsTruncated}
+            mergeBaseRemoteBranchOptions={mergeBaseRemoteBranchOptions}
             mergeBaseBranchOptionsLoading={mergeBaseBranchOptionsLoading}
             onMergeBaseBranchChange={onMergeBaseBranchChange}
+            onMergeBaseBranchSearchQueryChange={
+              onMergeBaseBranchSearchQueryChange
+            }
             onOpenChange={onOpenChange}
             onCommit={onCommit}
             onSquashMerge={onSquashMerge}
@@ -131,25 +152,59 @@ export function ThreadGitActionDialogContent({
   threadType,
   showMergeBaseDetails,
   mergeBaseBranch,
+  mergeBaseBranchRef,
   mergeBaseBranchOptions,
+  mergeBaseBranchOptionsTruncated,
+  mergeBaseRemoteBranchOptions,
   mergeBaseBranchOptionsLoading,
   onMergeBaseBranchChange,
+  onMergeBaseBranchSearchQueryChange,
   onOpenChange,
   onCommit,
   onSquashMerge,
 }: ThreadGitActionDialogContentProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const dialogCopy = getDialogCopy(target);
-  const mergeBaseCandidates = getMergeBaseBranchCandidates({
+  const mergeBaseCandidateGroups = getMergeBaseBranchCandidateGroups({
     mergeBaseBranch,
+    mergeBaseBranchRef,
     mergeBaseBranchOptions,
+    remoteMergeBaseBranchOptions: mergeBaseRemoteBranchOptions,
   });
+  const mergeBaseCandidates = mergeBaseCandidateGroups.options;
+  const remoteMergeBaseCandidates = mergeBaseCandidateGroups.remoteOptions;
   const selectedMergeBaseBranch = mergeBaseBranch ?? mergeBaseCandidates[0];
+  const selectedMergeBaseBranchRef =
+    mergeBaseBranchRef?.name === selectedMergeBaseBranch
+      ? mergeBaseBranchRef
+      : null;
+  const selectedMergeBaseBranchClassificationPending =
+    dialogCopy.showMergeBase &&
+    Boolean(selectedMergeBaseBranch) &&
+    mergeBaseBranchRef === undefined;
+  const remoteMergeBaseBranches = useMemo(
+    () => new Set(remoteMergeBaseCandidates),
+    [remoteMergeBaseCandidates],
+  );
+  const selectedMergeBaseBranchIsRemote = selectedMergeBaseBranch
+    ? selectedMergeBaseBranchRef?.kind === "remote" ||
+      (selectedMergeBaseBranchRef === null &&
+        remoteMergeBaseBranches.has(selectedMergeBaseBranch))
+    : false;
+  const selectedMergeBaseBranchMissing =
+    selectedMergeBaseBranchRef?.kind === "missing";
+  const blocksRemoteMergeBase =
+    dialogCopy.showMergeBase && selectedMergeBaseBranchIsRemote;
+  const remoteMergeBaseErrorMessage =
+    "Squash merge requires a local target branch. Create or check out a local branch from the remote first.";
+  const missingMergeBaseErrorMessage =
+    "Squash merge requires an existing local target branch.";
+  const checkingMergeBaseErrorMessage = "Checking merge base branch.";
   const canSelectMergeBase =
     dialogCopy.showMergeBase &&
     showMergeBaseDetails === true &&
     Boolean(onMergeBaseBranchChange) &&
-    mergeBaseCandidates.length > 0;
+    (mergeBaseCandidates.length > 0 || remoteMergeBaseCandidates.length > 0);
   const canShowMergeBase =
     dialogCopy.showMergeBase &&
     showMergeBaseDetails === true &&
@@ -157,6 +212,31 @@ export function ThreadGitActionDialogContent({
   const shouldShowChangedFilesRow = Boolean(
     changedFilesSection && changedFilesSection.files.length > 0,
   );
+  const mergeBaseSubmitError = !selectedMergeBaseBranch
+    ? "A merge base branch is required"
+    : selectedMergeBaseBranchClassificationPending
+      ? checkingMergeBaseErrorMessage
+      : blocksRemoteMergeBase
+        ? remoteMergeBaseErrorMessage
+        : selectedMergeBaseBranchMissing
+          ? missingMergeBaseErrorMessage
+          : null;
+  const visibleMergeBaseErrorMessage =
+    errorMessage ??
+    (selectedMergeBaseBranchClassificationPending
+      ? checkingMergeBaseErrorMessage
+      : blocksRemoteMergeBase
+        ? remoteMergeBaseErrorMessage
+        : selectedMergeBaseBranchMissing
+          ? missingMergeBaseErrorMessage
+          : null);
+  const submitTitle = selectedMergeBaseBranchClassificationPending
+    ? checkingMergeBaseErrorMessage
+    : blocksRemoteMergeBase
+      ? remoteMergeBaseErrorMessage
+      : selectedMergeBaseBranchMissing
+        ? missingMergeBaseErrorMessage
+        : undefined;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -168,8 +248,10 @@ export function ThreadGitActionDialogContent({
         void onCommit();
         break;
       case "commit_and_squash_merge":
-        if (!selectedMergeBaseBranch) {
-          setErrorMessage("A merge base branch is required");
+        if (mergeBaseSubmitError || !selectedMergeBaseBranch) {
+          setErrorMessage(
+            mergeBaseSubmitError ?? "A merge base branch is required",
+          );
           return;
         }
         onOpenChange(false);
@@ -178,8 +260,10 @@ export function ThreadGitActionDialogContent({
         });
         break;
       case "squash_merge":
-        if (!selectedMergeBaseBranch) {
-          setErrorMessage("A merge base branch is required");
+        if (mergeBaseSubmitError || !selectedMergeBaseBranch) {
+          setErrorMessage(
+            mergeBaseSubmitError ?? "A merge base branch is required",
+          );
           return;
         }
         onOpenChange(false);
@@ -232,8 +316,14 @@ export function ThreadGitActionDialogContent({
                   <BranchPicker
                     value={selectedMergeBaseBranch}
                     options={mergeBaseCandidates}
+                    remoteOptions={remoteMergeBaseCandidates}
+                    selectedOptionKind={
+                      mergeBaseCandidateGroups.selectedOptionKind
+                    }
+                    optionsTruncated={mergeBaseBranchOptionsTruncated}
                     loading={mergeBaseBranchOptionsLoading}
                     onChange={(branch) => onMergeBaseBranchChange?.(branch)}
+                    onSearchQueryChange={onMergeBaseBranchSearchQueryChange}
                     className="max-w-full"
                   />
                 ) : (
@@ -255,11 +345,12 @@ export function ThreadGitActionDialogContent({
             ) : null}
           </DetailCard>
         ) : null}
-        <FormError message={errorMessage} />
+        <FormError message={visibleMergeBaseErrorMessage} />
         <DialogFooter>
           <Button
             type="submit"
-            disabled={dialogCopy.showMergeBase && !selectedMergeBaseBranch}
+            disabled={dialogCopy.showMergeBase && mergeBaseSubmitError !== null}
+            title={submitTitle}
           >
             {dialogCopy.submitLabel}
           </Button>

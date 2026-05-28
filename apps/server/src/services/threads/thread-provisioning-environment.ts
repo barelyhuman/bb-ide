@@ -679,7 +679,10 @@ function buildUnmanagedCheckout(
   args: BuildUnmanagedCheckoutArgs,
 ): UnmanagedCheckoutCommand {
   if (args.branch.kind === "existing") {
-    return { kind: "existing", name: args.branch.name };
+    return {
+      kind: "existing",
+      name: args.branch.name,
+    };
   }
 
   return {
@@ -688,6 +691,7 @@ function buildUnmanagedCheckout(
       branchSlug: args.context.request.branchSlug,
       threadId: args.thread.id,
     }),
+    baseBranch: args.branch.baseBranch,
   };
 }
 

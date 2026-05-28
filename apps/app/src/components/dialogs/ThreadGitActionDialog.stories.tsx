@@ -72,7 +72,8 @@ const aheadGitStatus: ThreadGitStatusDisplay = {
   summaryContent: "3 ahead of origin/main",
 };
 
-const mergeBaseOptions = ["origin/main", "origin/develop", "origin/staging"];
+const mergeBaseOptions = ["main", "develop", "staging"];
+const mergeBaseRemoteOptions = ["origin/main", "origin/develop"];
 
 export function Overview() {
   return (
@@ -104,8 +105,10 @@ export function Overview() {
             gitStatusDisplay={dirtyGitStatus}
             changedFilesSection={changedFilesSection}
             showMergeBaseDetails
-            mergeBaseBranch="origin/main"
+            mergeBaseBranch="main"
+            mergeBaseBranchRef={{ name: "main", kind: "local" }}
             mergeBaseBranchOptions={mergeBaseOptions}
+            mergeBaseRemoteBranchOptions={mergeBaseRemoteOptions}
             onMergeBaseBranchChange={noop}
             onOpenChange={noop}
             onCommit={asyncNoop}
@@ -123,8 +126,10 @@ export function Overview() {
             branchName={BRANCH_NAMES.feature}
             gitStatusDisplay={aheadGitStatus}
             showMergeBaseDetails
-            mergeBaseBranch="origin/main"
+            mergeBaseBranch="main"
+            mergeBaseBranchRef={{ name: "main", kind: "local" }}
             mergeBaseBranchOptions={mergeBaseOptions}
+            mergeBaseRemoteBranchOptions={mergeBaseRemoteOptions}
             onMergeBaseBranchChange={noop}
             onOpenChange={noop}
             onCommit={asyncNoop}
@@ -142,7 +147,8 @@ export function Overview() {
             branchName={BRANCH_NAMES.feature}
             gitStatusDisplay={aheadGitStatus}
             showMergeBaseDetails
-            mergeBaseBranch="origin/main"
+            mergeBaseBranch="main"
+            mergeBaseBranchRef={{ name: "main", kind: "local" }}
             onOpenChange={noop}
             onCommit={asyncNoop}
             onSquashMerge={asyncNoop}
@@ -160,7 +166,7 @@ export function Overview() {
             gitStatusDisplay={dirtyGitStatus}
             changedFilesSection={changedFilesSection}
             showMergeBaseDetails
-            mergeBaseBranch="origin/main"
+            mergeBaseBranch="main"
             mergeBaseBranchOptions={[]}
             mergeBaseBranchOptionsLoading
             onMergeBaseBranchChange={noop}

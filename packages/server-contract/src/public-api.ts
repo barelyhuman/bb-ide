@@ -35,9 +35,11 @@ import type {
   CreateThreadRequest,
   CloseThreadTerminalRequest,
   DeleteThreadRequest,
+  EnvironmentDiffBranchesQuery,
   EnvironmentDiffQuery,
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
+  EnvironmentDiffBranchesResponse,
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
@@ -231,10 +233,11 @@ export type PublicApiSchema = {
   };
   "/projects/:id/branches": {
     /**
-     * List branches available on the project's local-path source for the
-     * given host. Used to populate the new-thread branch picker before any
-     * environment exists. Dispatches `host.list_branches` against the
-     * source's path — no provisioning, no env created.
+     * List a bounded page of local and remote-tracking branches available on
+     * the project's local-path source for the given host. Used to populate the
+     * new-thread branch picker before any environment exists. Dispatches
+     * `host.list_branches` against the source's path — no provisioning, no env
+     * created.
      */
     $get: Endpoint<
       PathProjectId & { query: ProjectBranchesQuery },
@@ -347,8 +350,11 @@ export type PublicApiSchema = {
     >;
   };
   "/environments/:id/diff/branches": {
-    /** List git branches. Proxies to `host.list_branches` against the environment's path. */
-    $get: Endpoint<PathId, string[]>;
+    /** List a bounded page of local and remote-tracking branches for merge-base selection. */
+    $get: Endpoint<
+      PathId & { query: EnvironmentDiffBranchesQuery },
+      EnvironmentDiffBranchesResponse
+    >;
   };
   "/environments/:id/actions": {
     /**

@@ -76,6 +76,10 @@ import {
 } from "../services/projects/project-deletion.js";
 import { listProjectPromptHistory } from "../services/prompt-history.js";
 import { parsePathKindInclusion } from "./path-list-inclusion.js";
+import {
+  normalizeBranchQuery,
+  parseBranchListLimit,
+} from "./branch-list-query.js";
 
 type ProjectResponseProjectFields = Omit<ProjectResponse, "sources">;
 type ProjectResponseRow = ProjectResponseProjectFields;
@@ -658,12 +662,17 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         projectId,
         hostId: query.hostId,
       });
+      const branchQuery = normalizeBranchQuery(query.query);
+      const selectedBranch = normalizeBranchQuery(query.selectedBranch);
       const result = await queueCommandAndWait(deps, {
         hostId: source.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "host.list_branches",
           path: source.path,
+          ...(branchQuery ? { query: branchQuery } : {}),
+          ...(selectedBranch ? { selectedBranch } : {}),
+          limit: parseBranchListLimit(query.limit),
         },
       });
       return context.json(result);

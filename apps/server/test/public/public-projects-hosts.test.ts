@@ -1522,7 +1522,7 @@ describe("public project and host routes", () => {
       });
 
       const responsePromise = harness.app.request(
-        `/api/v1/projects/${project.id}/branches?hostId=${host.id}`,
+        `/api/v1/projects/${project.id}/branches?hostId=${host.id}&selectedBranch=upstream%2Fmain`,
       );
       const queued = await waitForQueuedCommand(
         harness,
@@ -1532,9 +1532,14 @@ describe("public project and host routes", () => {
       );
       expect(queued.command).toMatchObject({
         path: "/tmp/project-branches",
+        limit: 50,
+        selectedBranch: "upstream/main",
       });
       await reportQueuedCommandSuccess(harness, queued, {
         branches: ["main", "feature/test"],
+        branchesTruncated: false,
+        remoteBranches: ["origin/main", "upstream/main"],
+        remoteBranchesTruncated: false,
         checkout: {
           kind: "branch",
           branchName: "feature/test",
@@ -1543,6 +1548,7 @@ describe("public project and host routes", () => {
         defaultBranch: "main",
         hasUncommittedChanges: false,
         operation: { kind: "none" },
+        selectedBranch: { name: "upstream/main", kind: "remote" },
       });
 
       const response = await responsePromise;
@@ -1551,6 +1557,9 @@ describe("public project and host routes", () => {
         projectBranchesResponseSchema.parse(await readJson(response)),
       ).toEqual({
         branches: ["main", "feature/test"],
+        branchesTruncated: false,
+        remoteBranches: ["origin/main", "upstream/main"],
+        remoteBranchesTruncated: false,
         checkout: {
           kind: "branch",
           branchName: "feature/test",
@@ -1559,6 +1568,7 @@ describe("public project and host routes", () => {
         defaultBranch: "main",
         hasUncommittedChanges: false,
         operation: { kind: "none" },
+        selectedBranch: { name: "upstream/main", kind: "remote" },
       });
     } finally {
       await harness.cleanup();

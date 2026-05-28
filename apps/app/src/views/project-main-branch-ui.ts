@@ -109,6 +109,18 @@ function formatBranchFromTriggerLabel(
   return `Branch from: ${defaultBranch ?? "default"}`;
 }
 
+function formatNewBranchTriggerLabel(branchName: string): string {
+  return `New branch from: ${branchName}`;
+}
+
+function formatCheckoutBranchTriggerLabel(branchName: string): string {
+  return `Checkout: ${branchName}`;
+}
+
+function formatCheckoutBranchTriggerTitle(branchName: string): string {
+  return `Checkout branch: ${branchName}`;
+}
+
 function buildOperationBlocker(
   operation: WorkspaceGitOperation,
 ): BranchMutationBlocker | null {
@@ -241,8 +253,10 @@ export function buildProjectMainBranchUiState(
       currentOptionLabel,
       mutationBlocker,
       placeholder: "Current checkout",
-      triggerLabel: "Checkout: new branch",
-      triggerTitle: mutationBlocker?.title ?? "Checkout new branch",
+      triggerLabel: formatNewBranchTriggerLabel(args.selectedBranch.name),
+      triggerTitle:
+        mutationBlocker?.title ??
+        `Create a new branch from ${args.selectedBranch.name}`,
     };
   }
 
@@ -252,10 +266,10 @@ export function buildProjectMainBranchUiState(
       currentOptionLabel,
       mutationBlocker,
       placeholder: "Current checkout",
-      triggerLabel: `Checkout: ${args.selectedBranch.name}`,
+      triggerLabel: formatCheckoutBranchTriggerLabel(args.selectedBranch.name),
       triggerTitle:
         mutationBlocker?.title ??
-        `Checkout branch: ${args.selectedBranch.name}`,
+        formatCheckoutBranchTriggerTitle(args.selectedBranch.name),
     };
   }
 

@@ -7,6 +7,7 @@ import {
 
 const cleanMainCheckout: ProjectSourceCheckout = {
   branches: ["main", "release/1.2"],
+  branchesTruncated: false,
   checkout: {
     kind: "branch",
     branchName: "main",
@@ -15,6 +16,9 @@ const cleanMainCheckout: ProjectSourceCheckout = {
   defaultBranch: "main",
   hasUncommittedChanges: false,
   operation: { kind: "none" },
+  remoteBranches: [],
+  remoteBranchesTruncated: false,
+  selectedBranch: null,
 };
 
 const detachedCheckout: ProjectSourceCheckout = {
@@ -69,11 +73,32 @@ describe("buildProjectMainBranchUiState", () => {
         isFetching: false,
         isLoading: false,
         mode: "local",
-        selectedBranch: { name: "release/1.2", isNew: false },
+        selectedBranch: {
+          name: "release/1.2",
+          isNew: false,
+        },
       }),
     ).toMatchObject({
       triggerLabel: "Checkout: release/1.2",
       triggerTitle: "Checkout branch: release/1.2",
+    });
+  });
+
+  it("labels local new branch intent with its base branch", () => {
+    expect(
+      buildProjectMainBranchUiState({
+        checkout: cleanMainCheckout,
+        isFetching: false,
+        isLoading: false,
+        mode: "local",
+        selectedBranch: {
+          name: "release/1.2",
+          isNew: true,
+        },
+      }),
+    ).toMatchObject({
+      triggerLabel: "New branch from: release/1.2",
+      triggerTitle: "Create a new branch from release/1.2",
     });
   });
 
@@ -122,7 +147,10 @@ describe("buildProjectMainBranchUiState", () => {
         isFetching: false,
         isLoading: false,
         mode: "worktree",
-        selectedBranch: { name: "release/1.2", isNew: false },
+        selectedBranch: {
+          name: "release/1.2",
+          isNew: false,
+        },
       }),
     ).toMatchObject({
       currentBranch: "main",

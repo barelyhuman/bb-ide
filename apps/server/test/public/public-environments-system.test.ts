@@ -43,6 +43,8 @@ interface ProviderModelLookupFailureCase {
   name: string;
 }
 
+type TestAppHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
+
 const DEFAULT_PROVIDER_CAPABILITIES: ProviderCapabilities = {
   supportsArchive: false,
   supportsRename: false,
@@ -110,6 +112,37 @@ function makeSystemProvider(args: MakeSystemProviderArgs): ProviderInfo {
     },
     available: true,
   };
+}
+
+async function reportLocalSquashMergeTarget(
+  harness: TestAppHarness,
+  targetBranch: string,
+): Promise<void> {
+  const targetCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "host.list_branches" &&
+      command.selectedBranch === targetBranch,
+  );
+  expect(targetCommand.command).toMatchObject({
+    selectedBranch: targetBranch,
+    limit: 1,
+  });
+  await reportQueuedCommandSuccess(harness, targetCommand, {
+    branches: [targetBranch],
+    branchesTruncated: false,
+    checkout: {
+      kind: "branch",
+      branchName: "bb/feature",
+      headSha: "abc123",
+    },
+    defaultBranch: "main",
+    hasUncommittedChanges: false,
+    operation: { kind: "none" },
+    remoteBranches: [],
+    remoteBranchesTruncated: false,
+    selectedBranch: { name: targetBranch, kind: "local" },
+  });
 }
 
 describe("public environment and system routes", () => {
@@ -334,7 +367,7 @@ describe("public environment and system routes", () => {
       });
 
       const branchesPromise = harness.app.request(
-        `/api/v1/environments/${environment.id}/diff/branches`,
+        `/api/v1/environments/${environment.id}/diff/branches?selectedBranch=origin%2Fmain`,
       );
       const branchesCommand = await waitForQueuedCommand(
         harness,
@@ -344,9 +377,14 @@ describe("public environment and system routes", () => {
       );
       expect(branchesCommand.command).toMatchObject({
         path: "/tmp/environment-details/worktree",
+        selectedBranch: "origin/main",
+        limit: 50,
       });
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],
+        branchesTruncated: false,
+        remoteBranches: ["origin/main"],
+        remoteBranchesTruncated: false,
         checkout: {
           kind: "branch",
           branchName: "bb/details",
@@ -355,13 +393,17 @@ describe("public environment and system routes", () => {
         defaultBranch: "main",
         hasUncommittedChanges: false,
         operation: { kind: "none" },
+        selectedBranch: { name: "origin/main", kind: "remote" },
       });
       const branchesResponse = await branchesPromise;
       expect(branchesResponse.status).toBe(200);
-      await expect(readJson(branchesResponse)).resolves.toEqual([
-        "main",
-        "bb/details",
-      ]);
+      await expect(readJson(branchesResponse)).resolves.toEqual({
+        branches: ["main", "bb/details"],
+        branchesTruncated: false,
+        remoteBranches: ["origin/main"],
+        remoteBranchesTruncated: false,
+        selectedBranch: { name: "origin/main", kind: "remote" },
+      });
     } finally {
       await harness.cleanup();
     }
@@ -556,6 +598,7 @@ describe("public environment and system routes", () => {
           mergeBase: null,
         },
       });
+      await reportLocalSquashMergeTarget(harness, "main");
 
       // Step 2: Server queries branch_committed diff
       const diffCommand = await waitForQueuedCommand(
@@ -666,6 +709,7 @@ describe("public environment and system routes", () => {
           mergeBase: null,
         },
       });
+      await reportLocalSquashMergeTarget(harness, "main");
 
       const diffCommand = await waitForQueuedCommand(
         harness,
@@ -769,6 +813,87 @@ describe("public environment and system routes", () => {
           },
           mergeBase: null,
         },
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects squash merge into a remote-only target before commit or diff", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "squash_merge",
+            options: { mergeBaseBranch: "origin/main" },
+          }),
+        },
+      );
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: true,
+            state: "dirty_uncommitted",
+            insertions: 1,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/feature",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      const targetCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.list_branches" &&
+          command.selectedBranch === "origin/main",
+      );
+      await reportQueuedCommandSuccess(harness, targetCommand, {
+        branches: ["main"],
+        branchesTruncated: false,
+        checkout: {
+          kind: "branch",
+          branchName: "bb/feature",
+          headSha: "abc123",
+        },
+        defaultBranch: "main",
+        hasUncommittedChanges: true,
+        operation: { kind: "none" },
+        remoteBranches: ["origin/main"],
+        remoteBranchesTruncated: false,
+        selectedBranch: { name: "origin/main", kind: "remote" },
       });
 
       const response = await responsePromise;
@@ -904,6 +1029,7 @@ describe("public environment and system routes", () => {
           mergeBase: null,
         },
       });
+      await reportLocalSquashMergeTarget(harness, "main");
 
       // Step 2: Server issues pre-merge commit
       const preCommitCommand = await waitForQueuedCommand(

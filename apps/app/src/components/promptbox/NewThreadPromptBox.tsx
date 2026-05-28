@@ -67,6 +67,8 @@ export interface NewThreadBranchConfig {
   currentBranch?: string | null;
   isNew: boolean;
   options: readonly string[];
+  remoteOptions?: readonly string[];
+  optionsTruncated?: boolean;
   loading?: boolean;
   placeholder?: string;
   triggerLabel?: string;
@@ -80,6 +82,8 @@ export interface NewThreadBranchConfig {
   onChange: (value: string) => void;
   onClear?: () => void;
   onOpenChange?: (open: boolean) => void;
+  onSearchQueryChange?: (query: string) => void;
+  onCreateBaseChange?: (value: string) => void;
   /**
    * When provided, the picker exposes a "Create new branch" item. Only set
    * for `host:local` (work locally / remotely). Managed-worktree mode uses
@@ -282,7 +286,10 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
             allowNoProject={project.allowNoProject ?? false}
           />
           {modeConfig.mode === "manager" ? (
-            <ManagerSlot host={modeConfig.host} template={modeConfig.template} />
+            <ManagerSlot
+              host={modeConfig.host}
+              template={modeConfig.template}
+            />
           ) : (
             <ThreadEnvSlot
               environment={modeConfig.environment}
@@ -379,6 +386,8 @@ function ThreadEnvSlot({
           currentBranch={branch.currentBranch}
           isCreatingNew={branch.isNew}
           options={branch.options}
+          remoteOptions={branch.remoteOptions}
+          optionsTruncated={branch.optionsTruncated}
           loading={branch.loading}
           placeholder={branch.placeholder}
           triggerLabel={branch.triggerLabel}
@@ -393,6 +402,8 @@ function ThreadEnvSlot({
           onChange={branch.onChange}
           onClear={branch.onClear}
           onOpenChange={branch.onOpenChange}
+          onSearchQueryChange={branch.onSearchQueryChange}
+          onCreateBaseChange={branch.onCreateBaseChange}
           onCreate={branch.onCreate}
         />
       ) : null}
@@ -488,6 +499,8 @@ export interface NewThreadConnectedBranchConfig {
   currentBranch?: string | null;
   isNew: boolean;
   options: readonly string[];
+  remoteOptions?: readonly string[];
+  optionsTruncated?: boolean;
   loading?: boolean;
   placeholder?: string;
   triggerLabel?: string;
@@ -501,6 +514,8 @@ export interface NewThreadConnectedBranchConfig {
   onChange: (value: string) => void;
   onClear?: () => void;
   onOpenChange?: (open: boolean) => void;
+  onSearchQueryChange?: (query: string) => void;
+  onCreateBaseChange?: (value: string) => void;
   onCreate: () => void;
 }
 
@@ -526,8 +541,10 @@ export type NewThreadConnectedModeConfig =
       template?: NewThreadTemplateConfig;
     };
 
-export interface NewThreadPromptBoxProps
-  extends Omit<NewThreadPromptBoxUIProps, "modeConfig"> {
+export interface NewThreadPromptBoxProps extends Omit<
+  NewThreadPromptBoxUIProps,
+  "modeConfig"
+> {
   modeConfig: NewThreadConnectedModeConfig;
 }
 
@@ -574,7 +591,9 @@ function ConnectedThreadModeBranch({
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useEffectiveHosts();
 
-  const parsedEnvironment = parseEnvironmentValue(threadConfig.environment.value);
+  const parsedEnvironment = parseEnvironmentValue(
+    threadConfig.environment.value,
+  );
   const isHostMode = parsedEnvironment?.type === "host";
   // Create-new-branch is only meaningful for host:local (work locally /
   // remotely) — the server checks out a fresh branch in the primary checkout
@@ -593,6 +612,8 @@ function ConnectedThreadModeBranch({
       currentBranch: branch.currentBranch,
       isNew: allowCreate && branch.isNew,
       options: branch.options,
+      remoteOptions: branch.remoteOptions,
+      optionsTruncated: branch.optionsTruncated,
       loading: branch.loading,
       placeholder: branch.placeholder,
       triggerLabel: branch.triggerLabel,
@@ -606,6 +627,8 @@ function ConnectedThreadModeBranch({
       onChange: branch.onChange,
       onClear: branch.onClear,
       onOpenChange: branch.onOpenChange,
+      onSearchQueryChange: branch.onSearchQueryChange,
+      onCreateBaseChange: branch.onCreateBaseChange,
       ...(allowCreate ? { onCreate: branch.onCreate } : {}),
     };
   }, [allowCreate, threadConfig.branch]);

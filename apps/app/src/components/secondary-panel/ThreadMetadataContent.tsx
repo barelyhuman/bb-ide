@@ -4,6 +4,7 @@ import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser
 import { Link } from "react-router-dom";
 import type {
   Environment,
+  GitBranchRefClassification,
   Host,
   Thread,
   ThreadListEntry,
@@ -28,7 +29,7 @@ import { Icon } from "@/components/ui/icon.js";
 import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import {
   BranchPicker,
-  getMergeBaseBranchCandidates,
+  getMergeBaseBranchCandidateGroups,
 } from "@/components/pickers/BranchPicker";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { ChangedFilesDetailRow } from "@/components/workspace/ChangedFilesDetailRow";
@@ -314,9 +315,13 @@ export interface MergeBaseRowProps {
   thread: Thread;
   workspaceStatus: WorkspaceStatus | undefined;
   selectedMergeBaseBranch: string | undefined;
+  mergeBaseBranchRef?: GitBranchRefClassification | null;
   mergeBaseBranchOptions: readonly string[] | undefined;
+  mergeBaseBranchOptionsTruncated?: boolean;
+  mergeBaseRemoteBranchOptions?: readonly string[];
   isLoadingMergeBaseBranchOptions: boolean;
   onMergeBaseBranchChange: (branch: string) => void;
+  onMergeBaseBranchSearchQueryChange?: (query: string) => void;
   /** Force the BranchPicker popover open on first render. Used by stories. */
   defaultOpen?: boolean;
 }
@@ -325,9 +330,13 @@ export function MergeBaseRow({
   thread,
   workspaceStatus,
   selectedMergeBaseBranch,
+  mergeBaseBranchRef,
   mergeBaseBranchOptions,
+  mergeBaseBranchOptionsTruncated,
+  mergeBaseRemoteBranchOptions,
   isLoadingMergeBaseBranchOptions,
   onMergeBaseBranchChange,
+  onMergeBaseBranchSearchQueryChange,
   defaultOpen,
 }: MergeBaseRowProps) {
   const effectiveMergeBaseBranch =
@@ -335,14 +344,23 @@ export function MergeBaseRow({
     workspaceStatus?.mergeBase?.mergeBaseBranch ??
     workspaceStatus?.branch.defaultBranch;
   const mergeBaseBranch = effectiveMergeBaseBranch;
-  const mergeBaseCandidates = useMemo(
+  const mergeBaseCandidateGroups = useMemo(
     () =>
-      getMergeBaseBranchCandidates({
+      getMergeBaseBranchCandidateGroups({
         mergeBaseBranch,
+        mergeBaseBranchRef,
         mergeBaseBranchOptions,
+        remoteMergeBaseBranchOptions: mergeBaseRemoteBranchOptions,
       }),
-    [mergeBaseBranch, mergeBaseBranchOptions],
+    [
+      mergeBaseBranch,
+      mergeBaseBranchOptions,
+      mergeBaseBranchRef,
+      mergeBaseRemoteBranchOptions,
+    ],
   );
+  const mergeBaseCandidates = mergeBaseCandidateGroups.options;
+  const remoteMergeBaseCandidates = mergeBaseCandidateGroups.remoteOptions;
   const showBranchComparisonUi = Boolean(
     effectiveMergeBaseBranch || workspaceStatus?.branch.defaultBranch,
   );
@@ -355,7 +373,8 @@ export function MergeBaseRow({
   if (thread.type === "manager") return null;
   if (!showMergeBase) return null;
   const canSelectMergeBase = Boolean(
-    mergeBaseBranch && mergeBaseCandidates.length > 0,
+    mergeBaseBranch &&
+    (mergeBaseCandidates.length > 0 || remoteMergeBaseCandidates.length > 0),
   );
 
   return (
@@ -364,9 +383,13 @@ export function MergeBaseRow({
         <BranchPicker
           value={mergeBaseBranch}
           options={mergeBaseCandidates}
+          remoteOptions={remoteMergeBaseCandidates}
+          selectedOptionKind={mergeBaseCandidateGroups.selectedOptionKind}
+          optionsTruncated={mergeBaseBranchOptionsTruncated}
           variant="minimal"
           loading={isLoadingMergeBaseBranchOptions}
           onChange={onMergeBaseBranchChange}
+          onSearchQueryChange={onMergeBaseBranchSearchQueryChange}
           className="max-w-full"
           defaultOpen={defaultOpen}
         />
@@ -546,12 +569,16 @@ export interface ThreadMetadataContentProps {
   workspaceStatus: WorkspaceStatus | undefined;
   workspaceStatusError: Error | null;
   selectedMergeBaseBranch: string | undefined;
+  mergeBaseBranchRef?: GitBranchRefClassification | null;
   mergeBaseBranchOptions: readonly string[] | undefined;
+  mergeBaseBranchOptionsTruncated?: boolean;
+  mergeBaseRemoteBranchOptions?: readonly string[];
   isLoadingMergeBaseBranchOptions: boolean;
   updateThreadPending: boolean;
   storage?: ManagerWorkspaceRowProps;
   onAssignManager: (parentThreadId: string | null) => void;
   onMergeBaseBranchChange: (branch: string) => void;
+  onMergeBaseBranchSearchQueryChange?: (query: string) => void;
   onChangedFileClick?: (selection: WorkspaceChangedFileSelection) => void;
 }
 
@@ -643,12 +670,16 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     workspaceStatus,
     workspaceStatusError,
     selectedMergeBaseBranch,
+    mergeBaseBranchRef,
     mergeBaseBranchOptions,
+    mergeBaseBranchOptionsTruncated,
+    mergeBaseRemoteBranchOptions,
     isLoadingMergeBaseBranchOptions,
     updateThreadPending,
     storage,
     onAssignManager,
     onMergeBaseBranchChange,
+    onMergeBaseBranchSearchQueryChange,
     onChangedFileClick,
   } = props;
 
@@ -687,9 +718,13 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         thread={thread}
         workspaceStatus={workspaceStatus}
         selectedMergeBaseBranch={selectedMergeBaseBranch}
+        mergeBaseBranchRef={mergeBaseBranchRef}
         mergeBaseBranchOptions={mergeBaseBranchOptions}
+        mergeBaseBranchOptionsTruncated={mergeBaseBranchOptionsTruncated}
+        mergeBaseRemoteBranchOptions={mergeBaseRemoteBranchOptions}
         isLoadingMergeBaseBranchOptions={isLoadingMergeBaseBranchOptions}
         onMergeBaseBranchChange={onMergeBaseBranchChange}
+        onMergeBaseBranchSearchQueryChange={onMergeBaseBranchSearchQueryChange}
       />
       <GitStatusRow
         thread={thread}
@@ -704,9 +739,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         workspaceStatus={workspaceStatus}
         onChangedFileClick={onChangedFileClick}
       />
-      {storage ? (
-        <ManagerWorkspaceRow {...storage} />
-      ) : null}
+      {storage ? <ManagerWorkspaceRow {...storage} /> : null}
     </ThreadMetadataCard>
   );
 }

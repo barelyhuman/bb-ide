@@ -927,6 +927,22 @@ export async function listBranches(cwd: string): Promise<string[]> {
     .filter(Boolean);
 }
 
+export async function listRemoteBranches(cwd: string): Promise<string[]> {
+  await ensureGitRepo(cwd);
+  const result = await runGit(
+    ["for-each-ref", "--format=%(refname:short)%09%(symref)", "refs/remotes"],
+    { cwd },
+  );
+  return result.stdout
+    .split("\n")
+    .map((line) => {
+      const [branch = "", symref = ""] = line.split("\t");
+      return { branch: branch.trim(), symref: symref.trim() };
+    })
+    .filter((ref) => ref.branch.length > 0 && ref.symref.length === 0)
+    .map((ref) => ref.branch);
+}
+
 export async function hasUncommittedChanges(cwd: string): Promise<boolean> {
   await ensureGitRepo(cwd);
   const status = await runGit(

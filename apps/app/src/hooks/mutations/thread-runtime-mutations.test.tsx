@@ -197,10 +197,14 @@ describe("thread runtime mutations", () => {
     );
     queryClient.setQueryData(projectSourceBranchesKey, {
       branches: ["main", "release/1.2"],
+      branchesTruncated: false,
       checkout: { kind: "branch", branchName: "main", headSha: "abc123" },
       defaultBranch: "main",
       hasUncommittedChanges: false,
       operation: { kind: "none" },
+      remoteBranches: [],
+      remoteBranchesTruncated: false,
+      selectedBranch: null,
     });
     const { result } = renderHook(() => useCreateThread(), { wrapper });
 

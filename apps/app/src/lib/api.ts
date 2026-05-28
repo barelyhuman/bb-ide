@@ -23,6 +23,7 @@ import type {
   EnvironmentArchiveThreadsResponse,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentDiffBranchesResponse,
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
   EnvironmentStatusResponse,
@@ -54,6 +55,9 @@ import type {
   ThreadStatusVersionResponse,
   ThreadWithIncludesResponse,
   PathListIncludeQueryValue,
+  BranchListQuery,
+  EnvironmentDiffBranchesQuery,
+  ProjectBranchesQuery,
   ThreadStorageFilesQuery,
   ThreadStoragePathsQuery,
   TerminalSession,
@@ -112,6 +116,17 @@ interface GetEnvironmentFilePreviewArgs {
   signal?: AbortSignal;
 }
 
+export interface BranchListRequest {
+  query?: string;
+  limit?: number;
+}
+
+export interface EnvironmentBranchListRequest extends BranchListRequest {
+  selectedBranch?: string;
+}
+
+export type ProjectBranchListRequest = EnvironmentBranchListRequest;
+
 export type AppCreateManagerThreadRequest = Omit<
   CreateManagerThreadRequest,
   "origin"
@@ -131,6 +146,35 @@ function normalizeErrorText(raw: string): string {
 
 function requestOptions(signal?: AbortSignal) {
   return signal ? { init: { signal } } : undefined;
+}
+
+function buildBranchListQuery(
+  args: BranchListRequest | undefined,
+): BranchListQuery {
+  return {
+    ...(args?.query ? { query: args.query } : {}),
+    ...(args?.limit !== undefined ? { limit: String(args.limit) } : {}),
+  };
+}
+
+function buildProjectBranchesQuery(
+  hostId: string,
+  args: ProjectBranchListRequest | undefined,
+): ProjectBranchesQuery {
+  return {
+    hostId,
+    ...buildBranchListQuery(args),
+    ...(args?.selectedBranch ? { selectedBranch: args.selectedBranch } : {}),
+  };
+}
+
+function buildEnvironmentDiffBranchesQuery(
+  args: EnvironmentBranchListRequest | undefined,
+): EnvironmentDiffBranchesQuery {
+  return {
+    ...buildBranchListQuery(args),
+    ...(args?.selectedBranch ? { selectedBranch: args.selectedBranch } : {}),
+  };
 }
 
 export class HttpError extends Error {
@@ -615,11 +659,12 @@ export async function searchProjectPaths(
 export async function getProjectSourceBranches(
   projectId: string,
   hostId: string,
+  args?: ProjectBranchListRequest,
 ): Promise<ProjectBranchesResponse> {
   return request<ProjectBranchesResponse>(
     apiClient.projects[":id"].branches.$get({
       param: { id: projectId },
-      query: { hostId },
+      query: buildProjectBranchesQuery(hostId, args),
     }),
   );
 }
@@ -1108,9 +1153,13 @@ export async function getEnvironmentWorkStatus(
 
 export async function getEnvironmentDiffBranches(
   id: string,
-): Promise<string[]> {
-  return request<string[]>(
-    apiClient.environments[":id"].diff.branches.$get({ param: { id } }),
+  args?: EnvironmentBranchListRequest,
+): Promise<EnvironmentDiffBranchesResponse> {
+  return request<EnvironmentDiffBranchesResponse>(
+    apiClient.environments[":id"].diff.branches.$get({
+      param: { id },
+      query: buildEnvironmentDiffBranchesQuery(args),
+    }),
   );
 }
 

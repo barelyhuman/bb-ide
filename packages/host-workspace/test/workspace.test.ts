@@ -657,8 +657,9 @@ describe("Workspace", () => {
 
     expect(await workspace.currentBranch).toBe("feature");
     expect((await workspace.getStatus()).workingTree.state).toBe("clean");
-    await expect(fs.readFile(path.join(repoPath, firstFileName), "utf8"))
-      .resolves.toBe("feature 0\n");
+    await expect(
+      fs.readFile(path.join(repoPath, firstFileName), "utf8"),
+    ).resolves.toBe("feature 0\n");
 
     const fsck = await runGit(["fsck", "--no-progress"], {
       cwd: repoPath,
@@ -807,7 +808,6 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "squash\n", "utf8");
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature work"], { cwd: repoPath });
-    await runGit(["branch", "-D", "main"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
     const result = await workspace.squashMergeInto({
@@ -820,6 +820,31 @@ describe("Workspace", () => {
     ).stdout.trim();
     expect(result.merged).toBe(true);
     expect(targetBranchSubject).toBe("feat: squash merge feature into main");
+  });
+
+  it("rejects squash merges into remote-only target branches", async () => {
+    const repoPath = await initRepo();
+    await initBareRemoteFrom(repoPath);
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "squash\n", "utf8");
+    await runGit(["add", "README.md"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Feature work"], { cwd: repoPath });
+    await runGit(["branch", "-D", "main"], { cwd: repoPath });
+
+    const workspace = new Workspace(repoPath);
+
+    await expect(
+      workspace.squashMergeInto({
+        targetBranch: "main",
+        commitMessage: "feat: squash merge feature into main",
+      }),
+    ).rejects.toMatchObject({ code: "non_local_target_branch" });
+    await expect(
+      workspace.squashMergeInto({
+        targetBranch: "origin/main",
+        commitMessage: "feat: squash merge feature into origin/main",
+      }),
+    ).rejects.toMatchObject({ code: "non_local_target_branch" });
   });
 
   it("squash merges when the target branch is checked out in another worktree", async () => {

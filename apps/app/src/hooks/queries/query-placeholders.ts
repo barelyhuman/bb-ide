@@ -5,12 +5,16 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type {
+  EnvironmentDiffBranchesResponse,
   ManagerTimelineView,
+  ProjectBranchesResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import {
+  ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY,
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
+  PROJECT_SOURCE_BRANCHES_QUERY_KEY,
   THREAD_QUERY_KEY,
   THREAD_TIMELINE_QUERY_KEY,
   managerTimelineViewFromThreadTimelineQueryKey,
@@ -21,6 +25,23 @@ type ThreadScopedQueryKeyPrefix =
   | typeof ENVIRONMENT_WORK_STATUS_QUERY_KEY
   | typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY
   | typeof THREAD_TIMELINE_QUERY_KEY;
+
+interface ResolveProjectSourceBranchesPlaceholderArgs {
+  previousData: ProjectBranchesResponse | undefined;
+  previousQueryKey: QueryKey | undefined;
+  projectId: string;
+  hostId: string;
+  limit: number;
+  selectedBranch: string;
+}
+
+interface ResolveEnvironmentMergeBaseBranchesPlaceholderArgs {
+  previousData: EnvironmentDiffBranchesResponse | undefined;
+  previousQueryKey: QueryKey | undefined;
+  environmentId: string;
+  limit: number;
+  selectedBranch: string;
+}
 
 function extractThreadIdFromThreadScopedQueryKey(
   queryKey: QueryKey | undefined,
@@ -76,6 +97,65 @@ export function resolveEnvironmentGitDiffPlaceholder(
     nextEnvironmentId,
     ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   );
+}
+
+export function resolveProjectSourceBranchesPlaceholder({
+  previousData,
+  previousQueryKey,
+  projectId,
+  hostId,
+  limit,
+  selectedBranch,
+}: ResolveProjectSourceBranchesPlaceholderArgs):
+  | ProjectBranchesResponse
+  | undefined {
+  if (
+    previousData === undefined ||
+    !previousQueryKey ||
+    previousQueryKey[0] !== PROJECT_SOURCE_BRANCHES_QUERY_KEY
+  ) {
+    return undefined;
+  }
+
+  const previousProjectId = previousQueryKey[1];
+  const previousHostId = previousQueryKey[2];
+  const previousLimit = previousQueryKey[4];
+  const previousSelectedBranch = previousQueryKey[5];
+
+  return previousProjectId === projectId &&
+    previousHostId === hostId &&
+    previousLimit === limit &&
+    previousSelectedBranch === selectedBranch
+    ? previousData
+    : undefined;
+}
+
+export function resolveEnvironmentMergeBaseBranchesPlaceholder({
+  previousData,
+  previousQueryKey,
+  environmentId,
+  limit,
+  selectedBranch,
+}: ResolveEnvironmentMergeBaseBranchesPlaceholderArgs):
+  | EnvironmentDiffBranchesResponse
+  | undefined {
+  if (
+    previousData === undefined ||
+    !previousQueryKey ||
+    previousQueryKey[0] !== ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY
+  ) {
+    return undefined;
+  }
+
+  const previousEnvironmentId = previousQueryKey[1];
+  const previousLimit = previousQueryKey[3];
+  const previousSelectedBranch = previousQueryKey[4];
+
+  return previousEnvironmentId === environmentId &&
+    previousLimit === limit &&
+    previousSelectedBranch === selectedBranch
+    ? previousData
+    : undefined;
 }
 
 export function resolveThreadPlaceholder(

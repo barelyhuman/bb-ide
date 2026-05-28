@@ -16,18 +16,13 @@ interface ScopedSelectedBranch {
   scope: BranchSelectionScope;
 }
 
-export interface UseScopedBranchSelectionArgs extends BranchSelectionScopeArgs {
-  /**
-   * The branch the env will use if the user doesn't pick one. Used as the
-   * seed when starting the "create new branch" flow.
-   */
-  currentBranch: string | null;
-}
+export type UseScopedBranchSelectionArgs = BranchSelectionScopeArgs;
 
 export interface UseScopedBranchSelectionResult {
   onBranchChange: (name: string) => void;
   onClearBranch: () => void;
-  onCreateBranch: () => void;
+  onCreateBranch: (currentBranch: string | null) => void;
+  onCreateBranchFrom: (name: string) => void;
   selectedBranch: ProjectMainSelectedBranch | null;
 }
 
@@ -83,37 +78,60 @@ export function useScopedBranchSelection(
 
       setSelectedBranchState({
         scope,
-        branch: { name, isNew: false },
+        branch: {
+          name,
+          isNew: false,
+        },
       });
     },
     [scope],
   );
 
-  const onCreateBranch = useCallback(() => {
-    if (!scope) {
-      return;
-    }
-
-    setSelectedBranchState((previous) => {
-      const scopedPrevious = matchesBranchSelectionScope(previous?.scope, scope)
-        ? previous?.branch
-        : null;
-      const branchName = scopedPrevious?.name ?? args.currentBranch;
-      if (!branchName) {
-        return matchesBranchSelectionScope(previous?.scope, scope)
-          ? null
-          : previous;
+  const onCreateBranch = useCallback(
+    (currentBranch: string | null) => {
+      if (!scope) {
+        return;
       }
 
-      return {
+      setSelectedBranchState((previous) => {
+        const scopedPrevious = matchesBranchSelectionScope(
+          previous?.scope,
+          scope,
+        )
+          ? previous?.branch
+          : null;
+        const branchName = scopedPrevious?.name ?? currentBranch;
+        if (!branchName) {
+          return matchesBranchSelectionScope(previous?.scope, scope)
+            ? null
+            : previous;
+        }
+
+        return {
+          scope,
+          branch: {
+            name: branchName,
+            isNew: true,
+          },
+        };
+      });
+    },
+    [scope],
+  );
+
+  const onCreateBranchFrom = useCallback(
+    (name: string) => {
+      if (!scope) {
+        return;
+      }
+
+      setSelectedBranchState({
         scope,
-        branch: {
-          name: branchName,
-          isNew: true,
-        },
-      };
-    });
-  }, [args.currentBranch, scope]);
+        branch: { name, isNew: true },
+      });
+    },
+    [scope],
+  );
 
   const onClearBranch = useCallback(() => {
     if (!scope) {
@@ -129,6 +147,7 @@ export function useScopedBranchSelection(
     onBranchChange,
     onClearBranch,
     onCreateBranch,
+    onCreateBranchFrom,
     selectedBranch,
   };
 }

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   resolveEnvironmentMergeBaseBranch,
   type Environment,
+  type GitBranchRefClassification,
   type Thread,
   type WorkspaceStatus,
 } from "@bb/domain";
 import { appToast } from "@/components/ui/app-toast";
-import { getMergeBaseBranchCandidates } from "@/components/pickers/BranchPicker";
+import { getMergeBaseBranchCandidateGroups } from "@/components/pickers/BranchPicker";
 import {
   describeLifecycleError,
   parseLifecycleError,
@@ -17,7 +18,9 @@ import { useUpdateEnvironment } from "../../../hooks/mutations/environment-mutat
 
 interface UseEnvironmentMergeBaseParams {
   environment?: Environment;
+  mergeBaseBranchRef?: GitBranchRefClassification | null;
   mergeBaseBranchOptions?: readonly string[];
+  mergeBaseRemoteBranchOptions?: readonly string[];
   selectedMergeBaseBranch?: string;
   setSelectedMergeBaseBranch: (branch: string | undefined) => void;
   thread?: Thread;
@@ -46,8 +49,7 @@ interface ResolveImplicitMergeBaseBranchParams {
   workspaceStatus?: WorkspaceStatus;
 }
 
-interface ResolvePersistedMergeBaseBranchParams
-  extends ResolveImplicitMergeBaseBranchParams {
+interface ResolvePersistedMergeBaseBranchParams extends ResolveImplicitMergeBaseBranchParams {
   branch: string;
 }
 
@@ -134,7 +136,9 @@ function showMergeBaseLifecycleToast(
 
 export function useEnvironmentMergeBase({
   environment,
+  mergeBaseBranchRef,
   mergeBaseBranchOptions,
+  mergeBaseRemoteBranchOptions,
   selectedMergeBaseBranch,
   setSelectedMergeBaseBranch,
   thread,
@@ -181,14 +185,23 @@ export function useEnvironmentMergeBase({
     effectiveMergeBaseBranch || workspaceStatus?.branch.defaultBranch,
   );
   const mergeBaseBranch = effectiveMergeBaseBranch;
-  const mergeBaseCandidates = useMemo(
+  const mergeBaseCandidateGroups = useMemo(
     () =>
-      getMergeBaseBranchCandidates({
+      getMergeBaseBranchCandidateGroups({
         mergeBaseBranch,
+        mergeBaseBranchRef,
         mergeBaseBranchOptions,
+        remoteMergeBaseBranchOptions: mergeBaseRemoteBranchOptions,
       }),
-    [mergeBaseBranch, mergeBaseBranchOptions],
+    [
+      mergeBaseBranch,
+      mergeBaseBranchOptions,
+      mergeBaseBranchRef,
+      mergeBaseRemoteBranchOptions,
+    ],
   );
+  const mergeBaseCandidates = mergeBaseCandidateGroups.options;
+  const remoteMergeBaseCandidates = mergeBaseCandidateGroups.remoteOptions;
   const isOnDefaultBranch =
     workspaceStatus?.branch.currentBranch != null &&
     workspaceStatus.branch.currentBranch ===
@@ -196,7 +209,9 @@ export function useEnvironmentMergeBase({
   const showMergeBase =
     showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
   const canSelectMergeBase = Boolean(
-    showMergeBase && mergeBaseBranch && mergeBaseCandidates.length > 0,
+    showMergeBase &&
+    mergeBaseBranch &&
+    (mergeBaseCandidates.length > 0 || remoteMergeBaseCandidates.length > 0),
   );
 
   const handleMergeBaseBranchChange: MergeBaseBranchChangeHandler = useCallback(
@@ -273,5 +288,6 @@ export function useEnvironmentMergeBase({
     showMergeBase,
     mergeBaseBranch,
     mergeBaseCandidates,
+    mergeBaseRemoteBranchOptions: remoteMergeBaseCandidates,
   };
 }

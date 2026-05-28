@@ -148,9 +148,10 @@ export function Overview() {
         >
           <EnvironmentOptionsStrip
             branch={{
+              value: "main",
               isCreatingNew: true,
-              triggerLabel: "Checkout: new branch",
-              triggerTitle: "Create a new branch before starting",
+              triggerLabel: "New branch from: main",
+              triggerTitle: "Create a new branch from main",
             }}
           />
         </StoryRow>
@@ -298,9 +299,7 @@ export function Overview() {
           label="other project · pierre"
           hint="swapping project changes the env strip context"
         >
-          <EnvironmentOptionsStrip
-            project={{ value: PROJECT_IDS.pierre }}
-          />
+          <EnvironmentOptionsStrip project={{ value: PROJECT_IDS.pierre }} />
         </StoryRow>
       </StoryCard>
     </div>

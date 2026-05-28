@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { BranchPicker, type BranchPickerProps } from "./BranchPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
@@ -14,6 +15,14 @@ const branches = [
   "bb/implement-server-daemon-protocol-simplification-thr_qfk8ksbxkk",
 ] as const;
 
+const remoteBranches = [
+  "origin/main",
+  "origin/develop",
+  "origin/release/1.3",
+  "origin/bb/feat/review-flow",
+  "upstream/main",
+] as const;
+
 const noop = () => {};
 
 type BranchPickerStoryConfig = Omit<
@@ -24,8 +33,33 @@ type BranchPickerStoryConfig = Omit<
 interface BranchPickerStoryRowProps {
   label: string;
   hint: string;
+  includeRemoteOptions?: boolean;
   picker: BranchPickerStoryConfig;
   variant?: BranchPickerProps["variant"];
+}
+
+interface BranchPickerStoryState {
+  isCreatingNew: boolean;
+  value: string | null;
+}
+
+interface GetInitialBranchPickerStoryStateArgs {
+  picker: BranchPickerStoryConfig;
+}
+
+interface GetCreateBranchBaseArgs {
+  currentBranch?: string | null;
+  value: string | null;
+}
+
+interface GetStoryTriggerLabelArgs {
+  picker: BranchPickerStoryConfig;
+  state: BranchPickerStoryState;
+}
+
+interface GetStoryTriggerTitleArgs {
+  picker: BranchPickerStoryConfig;
+  state: BranchPickerStoryState;
 }
 
 const currentCheckoutPicker: BranchPickerStoryConfig = {
@@ -42,35 +76,163 @@ const currentCheckoutPicker: BranchPickerStoryConfig = {
 };
 
 const branchFromPicker: BranchPickerStoryConfig = {
-  value: null,
+  value: "main",
   currentBranch: "main",
-  currentOptionLabel: "main",
-  currentOptionTitle: "Branch from: main",
   triggerLabel: "Branch from: main",
   triggerTitle: "Branch from: main",
   menuKind: "base",
-  onClear: noop,
   modal: false,
 };
 
 const mergeBasePicker: BranchPickerStoryConfig = {
-  value: "main",
+  value: "origin/main",
   modal: false,
 };
+
+const checkoutBranchPicker: BranchPickerStoryConfig = {
+  ...currentCheckoutPicker,
+  value: "develop",
+  triggerLabel: "Checkout: develop",
+  triggerTitle: "Checkout: develop",
+};
+
+const newBranchPicker: BranchPickerStoryConfig = {
+  ...currentCheckoutPicker,
+  value: "origin/main",
+  isCreatingNew: true,
+  triggerLabel: "New branch from: origin/main",
+  triggerTitle: "Create a new branch from origin/main",
+};
+
+function getInitialBranchPickerStoryState({
+  picker,
+}: GetInitialBranchPickerStoryStateArgs): BranchPickerStoryState {
+  return {
+    isCreatingNew: picker.isCreatingNew ?? false,
+    value: picker.value,
+  };
+}
+
+function getCreateBranchBase({
+  currentBranch,
+  value,
+}: GetCreateBranchBaseArgs): string | null {
+  return value ?? currentBranch ?? branches[0] ?? null;
+}
+
+function getStoryTriggerLabel({
+  picker,
+  state,
+}: GetStoryTriggerLabelArgs): string | undefined {
+  if (picker.menuKind === "checkout") {
+    if (state.isCreatingNew) {
+      return state.value === null
+        ? "New branch"
+        : `New branch from: ${state.value}`;
+    }
+    if (state.value !== null) {
+      return `Checkout: ${state.value}`;
+    }
+    return picker.currentBranch
+      ? `Current (${picker.currentBranch})`
+      : picker.triggerLabel;
+  }
+
+  if (picker.menuKind === "base" && state.value !== null) {
+    return `Branch from: ${state.value}`;
+  }
+
+  return picker.triggerLabel;
+}
+
+function getStoryTriggerTitle({
+  picker,
+  state,
+}: GetStoryTriggerTitleArgs): string | undefined {
+  if (picker.menuKind === "checkout") {
+    if (state.isCreatingNew) {
+      return state.value === null
+        ? "Create a new branch"
+        : `Create a new branch from ${state.value}`;
+    }
+    if (state.value !== null) {
+      return `Checkout: ${state.value}`;
+    }
+    return picker.currentBranch
+      ? `Current: ${picker.currentBranch}`
+      : undefined;
+  }
+
+  if (picker.menuKind === "base" && state.value !== null) {
+    return `Branch from: ${state.value}`;
+  }
+
+  return picker.triggerTitle;
+}
 
 function BranchPickerStoryRow({
   label,
   hint,
+  includeRemoteOptions = true,
   picker,
   variant,
 }: BranchPickerStoryRowProps) {
+  const [state, setState] = useState(() =>
+    getInitialBranchPickerStoryState({ picker }),
+  );
+  const triggerLabel = getStoryTriggerLabel({ picker, state });
+  const triggerTitle = getStoryTriggerTitle({ picker, state });
+  const handleCreate = picker.onCreate
+    ? () => {
+        const branchName = getCreateBranchBase({
+          currentBranch: picker.currentBranch,
+          value: state.value,
+        });
+
+        if (branchName === null) {
+          return;
+        }
+
+        setState({
+          isCreatingNew: true,
+          value: branchName,
+        });
+      }
+    : undefined;
+  const handleClear = picker.onClear
+    ? () => {
+        setState({
+          isCreatingNew: false,
+          value: null,
+        });
+      }
+    : undefined;
+
   return (
     <StoryRow label={label} hint={hint}>
       <BranchPicker
         {...picker}
+        value={state.value}
+        isCreatingNew={state.isCreatingNew}
         options={branches}
+        remoteOptions={includeRemoteOptions ? remoteBranches : undefined}
+        triggerLabel={triggerLabel}
+        triggerTitle={triggerTitle}
         variant={variant}
-        onChange={noop}
+        onChange={(branch) => {
+          setState({
+            isCreatingNew: false,
+            value: branch,
+          });
+        }}
+        onCreateBaseChange={(branch) => {
+          setState({
+            isCreatingNew: true,
+            value: branch,
+          });
+        }}
+        onClear={handleClear}
+        onCreate={handleCreate}
       />
     </StoryRow>
   );
@@ -80,24 +242,27 @@ export function Overview() {
   return (
     <StoryCard labelWidth="190px">
       <BranchPickerStoryRow
-        label="choosing current/checkout"
-        hint="work locally in the current checkout or switch branches"
-        picker={currentCheckoutPicker}
-      />
-      <BranchPickerStoryRow
-        label="choosing branch from"
-        hint="pick the base branch for a new worktree"
-        picker={branchFromPicker}
-      />
-      <BranchPickerStoryRow
-        label="choosing a merge base"
+        label="choose merge base"
         hint="pick a comparison branch for an existing worktree"
         picker={mergeBasePicker}
       />
       <BranchPickerStoryRow
-        label="minimal current/checkout"
-        hint="minimal trigger for local checkout choice"
+        label="minimal current"
+        hint="current checkout selected"
+        includeRemoteOptions={false}
         picker={currentCheckoutPicker}
+        variant="minimal"
+      />
+      <BranchPickerStoryRow
+        label="minimal new branch"
+        hint="new branch selected with a base"
+        picker={newBranchPicker}
+        variant="minimal"
+      />
+      <BranchPickerStoryRow
+        label="minimal checkout"
+        hint="checkout selected with an existing branch"
+        picker={checkoutBranchPicker}
         variant="minimal"
       />
       <BranchPickerStoryRow
@@ -107,15 +272,10 @@ export function Overview() {
         variant="minimal"
       />
       <BranchPickerStoryRow
-        label="minimal merge base"
-        hint="minimal trigger for comparison branch"
-        picker={mergeBasePicker}
-        variant="minimal"
-      />
-      <BranchPickerStoryRow
-        label="open menu"
-        hint="defaultOpen + modal=false — shows the branch list with the current-checkout row pinned at top"
+        label="open current"
+        hint="defaultOpen + modal=false - top section chooses current, new branch, or checkout"
         picker={{ ...currentCheckoutPicker, defaultOpen: true }}
+        variant="minimal"
       />
     </StoryCard>
   );

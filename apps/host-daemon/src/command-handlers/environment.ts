@@ -19,7 +19,6 @@ type BuildOnProgressArgs = {
   options: CommandDispatchOptions;
   transcript: ProvisioningTranscriptEntry[];
 };
-
 export async function provisionEnvironment(
   command: CommandOf<"environment.provision">,
   options: CommandDispatchOptions,

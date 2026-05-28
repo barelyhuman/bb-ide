@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type {
+  GitBranchRefClassification,
   ThreadRuntimeDisplayStatus,
   ThreadTimelinePendingTodoItem,
   ThreadTimelinePendingTodoItemStatus,
@@ -8,7 +9,7 @@ import type {
 } from "@bb/domain";
 import {
   BranchPicker,
-  getMergeBaseBranchCandidates,
+  getMergeBaseBranchCandidateGroups,
 } from "@/components/pickers/BranchPicker";
 import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
@@ -23,10 +24,14 @@ import { Icon } from "@/components/ui/icon.js";
 
 export interface ContextBannerMergeBaseConfig {
   branch: string;
+  branchRef?: GitBranchRefClassification | null;
   options?: readonly string[];
+  remoteOptions?: readonly string[];
+  optionsTruncated?: boolean;
   optionsLoading?: boolean;
   onChange: (branch: string) => void;
   onPickerOpenChange?: (open: boolean) => void;
+  onSearchQueryChange?: (query: string) => void;
 }
 
 export interface ThreadPromptTodoSection {
@@ -489,11 +494,13 @@ export function ThreadPromptContextBanner({
 
   const mergeBaseCandidates =
     showGit && gitSection.mergeBase
-      ? getMergeBaseBranchCandidates({
+      ? getMergeBaseBranchCandidateGroups({
           mergeBaseBranch: gitSection.mergeBase.branch,
+          mergeBaseBranchRef: gitSection.mergeBase.branchRef,
           mergeBaseBranchOptions: gitSection.mergeBase.options,
+          remoteMergeBaseBranchOptions: gitSection.mergeBase.remoteOptions,
         })
-      : [];
+      : { options: [], remoteOptions: [] };
 
   // When the managed-by segment is the only item in the banner, render it
   // inline as "Managed by <name>" with the name as a link. There's no other
@@ -599,11 +606,15 @@ export function ThreadPromptContextBanner({
             <span className="shrink-0">Merge base:</span>
             <BranchPicker
               value={gitSection.mergeBase.branch}
-              options={mergeBaseCandidates}
+              options={mergeBaseCandidates.options}
+              remoteOptions={mergeBaseCandidates.remoteOptions}
+              selectedOptionKind={mergeBaseCandidates.selectedOptionKind}
+              optionsTruncated={gitSection.mergeBase.optionsTruncated}
               variant="minimal"
               loading={gitSection.mergeBase.optionsLoading}
               onChange={gitSection.mergeBase.onChange}
               onOpenChange={gitSection.mergeBase.onPickerOpenChange}
+              onSearchQueryChange={gitSection.mergeBase.onSearchQueryChange}
               className="max-w-[10rem]"
               muted
               popoverAlign="end"

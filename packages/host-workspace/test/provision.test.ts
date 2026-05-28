@@ -111,12 +111,40 @@ describe("provisionWorkspace", () => {
       const ws = await provisionWorkspace({
         workspaceProvisionType: "unmanaged",
         path: repoPath,
-        checkout: { kind: "new", name: "feature-new" },
+        checkout: { kind: "new", name: "feature-new", baseBranch: "main" },
       });
 
       expect(ws.isGitRepo).toBe(true);
       expect(await ws.getCurrentBranch()).toBe("feature-new");
       expect(await ws.listBranches()).toContain("feature-new");
+    });
+
+    it("creates unmanaged checkout branches from the requested base branch", async () => {
+      const repoPath = await initRepo();
+      await runGit(["switch", "-c", "release"], { cwd: repoPath });
+      await fs.writeFile(path.join(repoPath, "release.txt"), "release\n");
+      await runGit(["add", "release.txt"], { cwd: repoPath });
+      await runGit(["commit", "-m", "Release base"], { cwd: repoPath });
+      await runGit(["switch", "main"], { cwd: repoPath });
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+        checkout: {
+          kind: "new",
+          name: "feature-from-release",
+          baseBranch: "release",
+        },
+      });
+
+      expect(ws.isGitRepo).toBe(true);
+      expect(await ws.getCurrentBranch()).toBe("feature-from-release");
+      expect(
+        (await runGit(["merge-base", "release", "HEAD"], { cwd: repoPath }))
+          .stdout,
+      ).toBe(
+        (await runGit(["rev-parse", "release"], { cwd: repoPath })).stdout,
+      );
     });
 
     it("no-ops unmanaged checkout when already on the target branch even if dirty", async () => {
@@ -161,7 +189,11 @@ describe("provisionWorkspace", () => {
         provisionWorkspace({
           workspaceProvisionType: "unmanaged",
           path: repoPath,
-          checkout: { kind: "new", name: "feature-new-dirty" },
+          checkout: {
+            kind: "new",
+            name: "feature-new-dirty",
+            baseBranch: "main",
+          },
         }),
       ).rejects.toHaveProperty("code", "checkout_dirty");
       expect(

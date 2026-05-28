@@ -10,7 +10,11 @@ import {
   makeWorkspaceStatus,
   makeWorkspaceWorkingTree,
 } from "@bb/test-helpers";
-import type { ThreadTimelineResponse } from "@bb/server-contract";
+import type {
+  EnvironmentDiffBranchesResponse,
+  ProjectBranchesResponse,
+  ThreadTimelineResponse,
+} from "@bb/server-contract";
 import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
@@ -24,7 +28,9 @@ import {
 } from "./query-keys";
 import {
   resolveEnvironmentGitDiffPlaceholder,
+  resolveEnvironmentMergeBaseBranchesPlaceholder,
   resolveEnvironmentWorkStatusPlaceholder,
+  resolveProjectSourceBranchesPlaceholder,
   resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
 } from "./query-placeholders";
@@ -47,6 +53,34 @@ function makeGitDiffResponse(): ThreadGitDiffResponse {
     shortstat: " 1 file changed, 1 insertion(+)\n",
     files: "M\tfile\n",
     mergeBaseRef: null,
+  };
+}
+
+function makeProjectBranchesResponse(): ProjectBranchesResponse {
+  return {
+    branches: ["main"],
+    branchesTruncated: false,
+    checkout: {
+      kind: "branch",
+      branchName: "main",
+      headSha: "abc123",
+    },
+    defaultBranch: "main",
+    hasUncommittedChanges: false,
+    operation: { kind: "none" },
+    remoteBranches: ["origin/main"],
+    remoteBranchesTruncated: false,
+    selectedBranch: null,
+  };
+}
+
+function makeEnvironmentDiffBranchesResponse(): EnvironmentDiffBranchesResponse {
+  return {
+    branches: ["main"],
+    branchesTruncated: false,
+    remoteBranches: ["origin/main"],
+    remoteBranchesTruncated: false,
+    selectedBranch: null,
   };
 }
 
@@ -222,6 +256,156 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
         ["environmentGitDiff", "env-1", "all", "main"],
         "env-2",
       ),
+    ).toBeUndefined();
+  });
+});
+
+describe("resolveProjectSourceBranchesPlaceholder", () => {
+  it("reuses previous branch data only when the project, host, and limit match", () => {
+    const previousBranches = makeProjectBranchesResponse();
+
+    expect(
+      resolveProjectSourceBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "projectSourceBranches",
+          "project-1",
+          "host-1",
+          "",
+          50,
+          "",
+        ],
+        projectId: "project-1",
+        hostId: "host-1",
+        limit: 50,
+        selectedBranch: "",
+      }),
+    ).toBe(previousBranches);
+
+    expect(
+      resolveProjectSourceBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "projectSourceBranches",
+          "project-1",
+          "host-1",
+          "",
+          50,
+          "origin/main",
+        ],
+        projectId: "project-1",
+        hostId: "host-1",
+        limit: 50,
+        selectedBranch: "origin/main",
+      }),
+    ).toBe(previousBranches);
+
+    expect(
+      resolveProjectSourceBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "projectSourceBranches",
+          "project-1",
+          "host-2",
+          "",
+          50,
+          "",
+        ],
+        projectId: "project-1",
+        hostId: "host-1",
+        limit: 50,
+        selectedBranch: "",
+      }),
+    ).toBeUndefined();
+
+    expect(
+      resolveProjectSourceBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "projectSourceBranches",
+          "project-1",
+          "host-1",
+          "",
+          25,
+          "",
+        ],
+        projectId: "project-1",
+        hostId: "host-1",
+        limit: 50,
+        selectedBranch: "",
+      }),
+    ).toBeUndefined();
+
+    expect(
+      resolveProjectSourceBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "projectSourceBranches",
+          "project-1",
+          "host-1",
+          "",
+          50,
+          "origin/main",
+        ],
+        projectId: "project-1",
+        hostId: "host-1",
+        limit: 50,
+        selectedBranch: "upstream/main",
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("resolveEnvironmentMergeBaseBranchesPlaceholder", () => {
+  it("reuses previous branch data only when the environment, limit, and selected branch match", () => {
+    const previousBranches = makeEnvironmentDiffBranchesResponse();
+
+    expect(
+      resolveEnvironmentMergeBaseBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "environmentMergeBaseBranches",
+          "env-1",
+          "",
+          50,
+          "origin/main",
+        ],
+        environmentId: "env-1",
+        limit: 50,
+        selectedBranch: "origin/main",
+      }),
+    ).toBe(previousBranches);
+
+    expect(
+      resolveEnvironmentMergeBaseBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "environmentMergeBaseBranches",
+          "env-1",
+          "",
+          50,
+          "origin/main",
+        ],
+        environmentId: "env-2",
+        limit: 50,
+        selectedBranch: "origin/main",
+      }),
+    ).toBeUndefined();
+
+    expect(
+      resolveEnvironmentMergeBaseBranchesPlaceholder({
+        previousData: previousBranches,
+        previousQueryKey: [
+          "environmentMergeBaseBranches",
+          "env-1",
+          "",
+          50,
+          "origin/main",
+        ],
+        environmentId: "env-1",
+        limit: 50,
+        selectedBranch: "main",
+      }),
     ).toBeUndefined();
   });
 });

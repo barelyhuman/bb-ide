@@ -38,11 +38,15 @@ export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
 export type { FeatureFlags } from "./feature-flags.js";
 
 export {
+  gitBranchNameSchema,
+  gitBranchRefClassificationSchema,
   gitCheckoutRefSchema,
   projectSourceCheckoutSchema,
   workspaceGitOperationSchema,
 } from "./git-checkout.js";
 export type {
+  GitBranchName,
+  GitBranchRefClassification,
   GitCheckoutRef,
   ProjectSourceCheckout,
   WorkspaceGitOperation,

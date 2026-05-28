@@ -27,7 +27,7 @@ describe("useScopedBranchSelection", () => {
     });
 
     act(() => {
-      result.current.onCreateBranch();
+      result.current.onCreateBranch(null);
     });
 
     expect(result.current.selectedBranch).toBeNull();
@@ -41,7 +41,7 @@ describe("useScopedBranchSelection", () => {
     });
 
     act(() => {
-      result.current.onCreateBranch();
+      result.current.onCreateBranch("main");
     });
 
     expect(result.current.selectedBranch).toEqual({
@@ -61,7 +61,27 @@ describe("useScopedBranchSelection", () => {
       result.current.onBranchChange("release/1.2");
     });
     act(() => {
-      result.current.onCreateBranch();
+      result.current.onCreateBranch("main");
+    });
+
+    expect(result.current.selectedBranch).toEqual({
+      isNew: true,
+      name: "release/1.2",
+    });
+  });
+
+  it("keeps new branch intent when changing the new branch base", () => {
+    const { result } = renderBranchSelection({
+      currentBranch: "main",
+      environmentValue: "host:hst_test:local",
+      projectId: "proj_test",
+    });
+
+    act(() => {
+      result.current.onCreateBranch("main");
+    });
+    act(() => {
+      result.current.onCreateBranchFrom("release/1.2");
     });
 
     expect(result.current.selectedBranch).toEqual({
@@ -113,7 +133,7 @@ describe("useScopedBranchSelection", () => {
     expect(result.current.selectedBranch).toBeNull();
 
     act(() => {
-      result.current.onCreateBranch();
+      result.current.onCreateBranch("develop");
     });
 
     expect(result.current.selectedBranch).toEqual({
@@ -124,5 +144,22 @@ describe("useScopedBranchSelection", () => {
     rerender(firstScopeProps);
 
     expect(result.current.selectedBranch).toBeNull();
+  });
+
+  it("stores existing branch checkout without an implicit merge base", () => {
+    const { result } = renderBranchSelection({
+      currentBranch: "main",
+      environmentValue: "host:hst_test:local",
+      projectId: "proj_test",
+    });
+
+    act(() => {
+      result.current.onBranchChange("release/1.2");
+    });
+
+    expect(result.current.selectedBranch).toEqual({
+      isNew: false,
+      name: "release/1.2",
+    });
   });
 });
