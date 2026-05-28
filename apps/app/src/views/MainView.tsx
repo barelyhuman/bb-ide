@@ -12,6 +12,8 @@ import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { Button } from "@/components/ui/button.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 
+const NO_PROJECTS_HEADING_ID = "main-view-no-projects-heading";
+
 export interface MainViewBodyProps {
   status: ConnectionAwareQueryStatus;
   isCreating: boolean;
@@ -67,14 +69,20 @@ export function MainViewBody({
 
   return (
     <PageShell contentClassName="min-h-full items-center justify-center">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <p className="text-sm text-muted-foreground">
+      <section
+        aria-labelledby={NO_PROJECTS_HEADING_ID}
+        className="flex flex-col items-center gap-4 text-center"
+      >
+        <h1 id={NO_PROJECTS_HEADING_ID} className="sr-only">
+          No projects
+        </h1>
+        <p className="text-sm font-medium text-foreground">
           Create a new project to get started
         </p>
         <Button onClick={onCreate} disabled={isCreating}>
           {isCreating ? "Creating..." : "New project"}
         </Button>
-      </div>
+      </section>
     </PageShell>
   );
 }

@@ -1151,7 +1151,7 @@ function ProjectRowComponent({
                 : "No threads"
             }
             className="py-0.5 pl-8 pr-2 group-data-[collapsible=icon]:hidden"
-            messageClassName="text-xs leading-4 text-muted-foreground"
+            messageClassName="text-xs font-medium leading-4 text-sidebar-foreground/85"
           />
         )
       ) : null}

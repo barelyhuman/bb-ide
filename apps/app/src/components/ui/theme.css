@@ -250,10 +250,10 @@
   --secondary-foreground: oklch(0.3211 0 0);
   --muted: oklch(0.8853 0 0);
   /* Secondary text tiers, darkened for contrast on the 0.9551 background.
-   * Was 0.5103/0.62 (~5.0:1 and a failing ~3.2:1); now ~5.7:1 and ~4.3:1
+   * Was 0.5103/0.62 (~5.0:1 and a failing ~3.2:1); now ~6.8:1 and ~5.3:1
    * while keeping muted darker than subtle so the hierarchy survives. */
-  --muted-foreground: oklch(0.48 0 0);
-  --subtle-foreground: oklch(0.55 0 0);
+  --muted-foreground: oklch(0.44 0 0);
+  --subtle-foreground: oklch(0.5 0 0);
   --accent: oklch(0.9 0 0);
   --accent-foreground: oklch(0.3211 0 0);
   /* Interactive-state fills. Kept a clear step apart from background (0.9551)
@@ -373,8 +373,8 @@
   --secondary: oklch(0.28 0 0);
   --secondary-foreground: oklch(0.8853 0 0);
   --muted: oklch(0.285 0 0);
-  --muted-foreground: oklch(0.72 0 0);
-  --subtle-foreground: oklch(0.6 0 0);
+  --muted-foreground: oklch(0.78 0 0);
+  --subtle-foreground: oklch(0.68 0 0);
   --accent: oklch(0.285 0 0);
   --accent-foreground: oklch(0.8853 0 0);
   /* See light-mode note. Background is 0.195, card 0.2435; lift hover/active

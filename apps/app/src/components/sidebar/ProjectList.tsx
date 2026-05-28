@@ -173,7 +173,7 @@ const PROJECT_LIST_ACTION_BUTTON_CLASS = cn(
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
-  "min-w-0 justify-start overflow-hidden font-normal ring-sidebar-ring focus-visible:ring-2 max-md:pointer-coarse:[&_svg]:size-5",
+  "min-w-0 justify-start overflow-hidden font-normal ring-sidebar-ring focus-visible:ring-2 disabled:opacity-70 max-md:pointer-coarse:[&_svg]:size-5",
 );
 
 const PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS = cn(
@@ -840,8 +840,8 @@ function ProjectListComponent({
             }
             icon="Folder"
             className="px-2 py-1.5"
-            iconClassName="size-3.5"
-            messageClassName="text-xs"
+            iconClassName="size-3.5 text-sidebar-foreground/75"
+            messageClassName="text-xs font-medium text-sidebar-foreground/85"
           />
         </SidebarMenuItem>
       )}

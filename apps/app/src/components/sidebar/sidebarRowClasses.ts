@@ -21,7 +21,7 @@ export const SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS = "pl-14";
 export const SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS = "pl-20";
 
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
-  "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+  "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
 
 /**
  * Hairline that runs through an expanded project's thread list, sitting
