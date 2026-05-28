@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   PromptInput,
   ReasoningLevel,
+  ServiceTier,
   ThreadListEntry,
   ThreadWithRuntime,
 } from "@bb/domain";
@@ -52,6 +53,7 @@ export interface HireProjectManagerRequest {
   name?: string;
   providerId?: string;
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   templateName?: string;
   environment: ManagerEnvironmentArgs;
@@ -224,6 +226,7 @@ export function useHireProjectManager() {
       name,
       providerId,
       model,
+      serviceTier,
       reasoningLevel,
       templateName,
       environment,
@@ -233,6 +236,7 @@ export function useHireProjectManager() {
         name,
         ...(providerId ? { providerId } : {}),
         ...(model ? { model } : {}),
+        ...(serviceTier ? { serviceTier } : {}),
         ...(reasoningLevel ? { reasoningLevel } : {}),
         ...(templateName ? { templateName } : {}),
         environment,

@@ -191,6 +191,7 @@ export function useProjectDefaultExecutionOptions(
       }),
     enabled: (options?.enabled ?? true) && Boolean(projectId),
     staleTime: 10_000,
+    placeholderData: (previousData) => (projectId ? previousData : undefined),
   });
 }
 

@@ -11,6 +11,10 @@ import {
   useProjectSourceBranches,
 } from "./project-queries";
 
+interface DefaultExecutionOptionsHookProps {
+  projectId: string;
+}
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -52,6 +56,78 @@ describe("project queries", () => {
     });
 
     expect(requestUrls[0]?.searchParams.get("threadType")).toBe("manager");
+  });
+
+  it("keeps previous project defaults while new project defaults load", async () => {
+    let projectTwoRequestCount = 0;
+    let resolveProjectTwoResponse: () => void = () => {
+      throw new Error("Project 2 request did not start");
+    };
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects/project-1/default-execution-options",
+        handler: () =>
+          jsonResponse({
+            providerId: "codex",
+            model: "gpt-5.5",
+            reasoningLevel: "xhigh",
+            permissionMode: "full",
+            serviceTier: "fast",
+          }),
+      },
+      {
+        pathname: "/api/v1/projects/project-2/default-execution-options",
+        handler: () => {
+          projectTwoRequestCount += 1;
+          return new Promise<Response>((resolve) => {
+            resolveProjectTwoResponse = () =>
+              resolve(
+                jsonResponse({
+                  providerId: "codex",
+                  model: "gpt-5.6",
+                  reasoningLevel: "high",
+                  permissionMode: "workspace-write",
+                  serviceTier: "default",
+                }),
+              );
+          });
+        },
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+
+    const { result, rerender } = renderHook(
+      ({ projectId }: DefaultExecutionOptionsHookProps) =>
+        useProjectDefaultExecutionOptions({
+          projectId,
+          threadType: "manager",
+        }),
+      {
+        initialProps: { projectId: "project-1" },
+        wrapper,
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.serviceTier).toBe("fast");
+    });
+
+    rerender({ projectId: "project-2" });
+
+    await waitFor(() => {
+      expect(projectTwoRequestCount).toBe(1);
+    });
+    expect(result.current.data?.serviceTier).toBe("fast");
+    expect(result.current.isPlaceholderData).toBe(true);
+
+    await act(async () => {
+      resolveProjectTwoResponse();
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.serviceTier).toBe("default");
+    });
+    expect(result.current.isPlaceholderData).toBe(false);
   });
 
   it("passes AbortSignal through project prompt history requests", async () => {
