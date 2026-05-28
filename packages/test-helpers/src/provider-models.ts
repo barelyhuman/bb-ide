@@ -9,6 +9,7 @@ const PREFERRED_TEST_MODELS_BY_PROVIDER: Record<string, readonly string[]> = {
     "openai-codex/gpt-5.4-mini",
     "openai-codex/gpt-5.3-codex",
     "anthropic/claude-haiku-4-5",
+    "anthropic/claude-opus-4-8",
     "anthropic/claude-opus-4-7",
   ],
 };

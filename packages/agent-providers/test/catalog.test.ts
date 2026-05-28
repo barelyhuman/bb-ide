@@ -57,6 +57,12 @@ describe("agent provider catalog", () => {
 
   it("exposes pi default model declarations", () => {
     expect(PI_DEFAULT_MODEL_PER_PROVIDER["openai-codex"]).toBe("gpt-5.5");
-    expect(resolvePiDefaultModelId("anthropic")).toBe("claude-opus-4-7");
+    expect(resolvePiDefaultModelId("anthropic")).toBe("claude-opus-4-8");
+    expect(resolvePiDefaultModelId("amazon-bedrock")).toBe(
+      "us.anthropic.claude-opus-4-8",
+    );
+    expect(resolvePiDefaultModelId("vercel-ai-gateway")).toBe(
+      "anthropic/claude-opus-4.8",
+    );
   });
 });

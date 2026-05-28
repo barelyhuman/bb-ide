@@ -45,7 +45,7 @@ describe("provider model selection", () => {
   it("falls back to Pi Anthropic models when OpenAI Codex is unavailable", () => {
     const models = [
       availableModel("anthropic/claude-haiku-4-5", false),
-      availableModel("anthropic/claude-opus-4-7", true),
+      availableModel("anthropic/claude-opus-4-8", true),
     ];
 
     expect(resolvePreferredTestModel({ providerId: "pi", models })).toBe(

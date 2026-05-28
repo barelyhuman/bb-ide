@@ -447,7 +447,7 @@ Run a smaller provider regression with Pi as the manager:
 ```bash
 PI_MANAGER_ID=$(bb manager hire "$BB_PROJECT_ID" \
   --provider pi \
-  --model anthropic/claude-opus-4-7 \
+  --model anthropic/claude-opus-4-8 \
   --reasoning-level medium \
   --json | jq -r '.id')
 

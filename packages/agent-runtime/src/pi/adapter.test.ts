@@ -1932,8 +1932,8 @@ describe("pi provider adapter", () => {
       providers: ["anthropic"],
       getModels: () => [
         {
-          id: "claude-opus-4-7",
-          name: "Claude Opus 4.7",
+          id: "claude-opus-4-8",
+          name: "Claude Opus 4.8",
           provider: "anthropic",
           reasoning: true,
           input: ["text"],
@@ -1952,7 +1952,7 @@ describe("pi provider adapter", () => {
     });
 
     expect(models.map((model) => model.id)).toEqual([
-      "anthropic/claude-opus-4-7",
+      "anthropic/claude-opus-4-8",
     ]);
     expect(selectedOnlyModels.map((model) => model.id)).toEqual([
       "anthropic/claude-opus-4-6-20240620",

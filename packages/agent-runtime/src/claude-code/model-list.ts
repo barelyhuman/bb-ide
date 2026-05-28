@@ -16,13 +16,16 @@ type ClaudeCodeCatalogEntry = {
   defaultReasoningEffort: AvailableModel["defaultReasoningEffort"];
 };
 
-const OPUS_4_7_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
+const OPUS_4_8_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   HIGH_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
   MAX_REASONING_EFFORT,
 ];
+
+const OPUS_4_7_REASONING_EFFORTS: readonly ModelReasoningEffort[] =
+  OPUS_4_8_REASONING_EFFORTS;
 
 const OPUS_4_6_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
@@ -42,6 +45,7 @@ const HAIKU_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
 ];
 
+const CLAUDE_OPUS_4_8_MODEL = "claude-opus-4-8";
 const CLAUDE_OPUS_4_7_MODEL = "claude-opus-4-7";
 const CLAUDE_OPUS_4_6_MODEL = "claude-opus-4-6";
 const CLAUDE_SONNET_4_6_MODEL = "claude-sonnet-4-6";
@@ -55,6 +59,22 @@ function withOneMillionContext(model: string): string {
 // strings live in the selected-only catalog so existing stored selections can
 // render with their proper label without being offered as fresh choices.
 const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
+  {
+    id: withOneMillionContext(CLAUDE_OPUS_4_8_MODEL),
+    model: withOneMillionContext(CLAUDE_OPUS_4_8_MODEL),
+    displayName: "Opus 4.8 (1M)",
+    description: "Opus 4.8 with 1M context for complex long coding sessions",
+    supportedReasoningEfforts: OPUS_4_8_REASONING_EFFORTS,
+    defaultReasoningEffort: "high",
+  },
+  {
+    id: CLAUDE_OPUS_4_8_MODEL,
+    model: CLAUDE_OPUS_4_8_MODEL,
+    displayName: "Opus 4.8",
+    description: "Opus 4.8 for complex coding tasks",
+    supportedReasoningEfforts: OPUS_4_8_REASONING_EFFORTS,
+    defaultReasoningEffort: "high",
+  },
   {
     id: withOneMillionContext(CLAUDE_OPUS_4_7_MODEL),
     model: withOneMillionContext(CLAUDE_OPUS_4_7_MODEL),

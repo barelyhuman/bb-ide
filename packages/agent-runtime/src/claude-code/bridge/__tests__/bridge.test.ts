@@ -351,7 +351,9 @@ function createLegacyStaleResumeResultMessage(
   return legacyMessage;
 }
 
-function createSuccessResultMessage(args: SuccessResultMessageArgs): SDKMessage {
+function createSuccessResultMessage(
+  args: SuccessResultMessageArgs,
+): SDKMessage {
   return {
     type: "result",
     subtype: "success",
@@ -457,7 +459,7 @@ describe("bridge", () => {
             value: "default",
             displayName: "Default (recommended)",
             description:
-              "Opus 4.7 with 1M context [NEW] · Most capable for complex work",
+              "Opus 4.8 with 1M context [NEW] · Most capable for complex work",
             supportsEffort: true,
             supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
           },
@@ -1329,10 +1331,22 @@ describe("bridge", () => {
     const { models, selectedOnlyModels } = await listClaudeCodeBridgeModels();
     expect(models).toEqual([
       expect.objectContaining({
+        id: "claude-opus-4-8[1m]",
+        model: "claude-opus-4-8[1m]",
+        displayName: "Opus 4.8 (1M)",
+        isDefault: true,
+      }),
+      expect.objectContaining({
+        id: "claude-opus-4-8",
+        model: "claude-opus-4-8",
+        displayName: "Opus 4.8",
+        isDefault: false,
+      }),
+      expect.objectContaining({
         id: "claude-opus-4-7[1m]",
         model: "claude-opus-4-7[1m]",
         displayName: "Opus 4.7 (1M)",
-        isDefault: true,
+        isDefault: false,
       }),
       expect.objectContaining({
         id: "claude-opus-4-7",
@@ -1409,11 +1423,7 @@ describe("bridge", () => {
       };
       expect(queryOptions.env?.HOME).toBe("/Users/test-bb");
       expect(queryOptions.env?.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("bb/1.0.0");
-      expect(queryOptions.settingSources).toEqual([
-        "user",
-        "project",
-        "local",
-      ]);
+      expect(queryOptions.settingSources).toEqual(["user", "project", "local"]);
 
       bridge.sendRequest(2, "thread/stop", {
         threadId: "thread-home-config",

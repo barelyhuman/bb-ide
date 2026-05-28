@@ -5,6 +5,8 @@ describe("listClaudeCodeModels", () => {
   it("returns the full static Claude Code catalog with version-pinned models", () => {
     const { models } = listClaudeCodeModels();
     expect(models.map((model) => model.model)).toEqual([
+      "claude-opus-4-8[1m]",
+      "claude-opus-4-8",
       "claude-opus-4-7[1m]",
       "claude-opus-4-7",
       "claude-opus-4-6[1m]",
@@ -19,9 +21,9 @@ describe("listClaudeCodeModels", () => {
     const { models } = listClaudeCodeModels();
     expect(models[0]).toEqual(
       expect.objectContaining({
-        id: "claude-opus-4-7[1m]",
-        model: "claude-opus-4-7[1m]",
-        defaultReasoningEffort: "medium",
+        id: "claude-opus-4-8[1m]",
+        model: "claude-opus-4-8[1m]",
+        defaultReasoningEffort: "high",
         isDefault: true,
       }),
     );
@@ -48,6 +50,13 @@ describe("listClaudeCodeModels", () => {
       ]),
     );
 
+    expect(effortLevelsByModel.get("claude-opus-4-8")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
     expect(effortLevelsByModel.get("claude-opus-4-7")).toEqual([
       "low",
       "medium",

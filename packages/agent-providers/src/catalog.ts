@@ -78,15 +78,15 @@ const builtInAgentProviderById = new Map(
  * https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/model-resolver.ts
  */
 export const PI_DEFAULT_MODEL_PER_PROVIDER: PiDefaultModelPerProvider = {
-  anthropic: "claude-opus-4-7",
+  anthropic: "claude-opus-4-8",
   openai: "gpt-5.4",
   "openai-codex": "gpt-5.5",
-  "amazon-bedrock": "us.anthropic.claude-opus-4-7",
+  "amazon-bedrock": "us.anthropic.claude-opus-4-8",
   google: "gemini-2.5-pro",
   "google-gemini-cli": "gemini-2.5-pro",
   "google-vertex": "gemini-3-pro-preview",
   openrouter: "openai/gpt-5.1-codex",
-  "vercel-ai-gateway": "anthropic/claude-opus-4.7",
+  "vercel-ai-gateway": "anthropic/claude-opus-4.8",
   xai: "grok-4-fast-non-reasoning",
   mistral: "devstral-medium-latest",
 };
