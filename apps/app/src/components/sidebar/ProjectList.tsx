@@ -33,26 +33,19 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  useQueries,
-  type QueryFunctionContext,
-  type UseQueryResult,
-} from "@tanstack/react-query";
+import type { ProjectResponse } from "@bb/server-contract";
 import {
   findLocalPathProjectSourceForHost,
   PERSONAL_PROJECT_ID,
   type ThreadListEntry,
 } from "@bb/domain";
-import type { ProjectResponse } from "@bb/server-contract";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import {
-  getConnectionAwareQueryState,
   useConnectionAwareQueryState,
-  useServerConnectionGracePeriodElapsed,
   type ConnectionAwareQueryStatus,
 } from "@/hooks/queries/connection-aware-query-state";
 import {
-  useProjects,
+  stripProjectThreads,
   useSidebarBootstrap,
 } from "@/hooks/queries/project-queries";
 import {
@@ -64,14 +57,7 @@ import {
   isLocalPathMissing,
   useLocalPathExistence,
 } from "@/hooks/queries/host-path-queries";
-import {
-  threadListQueryKey,
-  type ThreadListQueryKey,
-} from "@/hooks/queries/query-keys";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useServerConnectionState } from "@/hooks/useServerConnectionState";
-import type { WebSocketConnectionState } from "@/lib/ws";
-import * as api from "@/lib/api";
 import { getRootComposeRoutePath } from "@/lib/app-route-paths";
 import {
   applyNeighborReorder,
@@ -169,29 +155,6 @@ interface ProjectListThreadsSectionActionsProps {
 interface LocalSourcePathTarget {
   path: string;
   projectId: string;
-}
-
-interface ProjectThreadQueryState {
-  status: ConnectionAwareQueryStatus;
-}
-
-type ProjectThreadQueryResult = Pick<
-  UseQueryResult<ThreadListEntry[]>,
-  "data" | "isFetching" | "isLoadingError"
->;
-
-type ThreadQueryFnContext = QueryFunctionContext<ThreadListQueryKey>;
-
-interface ProjectThreadQueryAggregation {
-  threads: ThreadListEntry[];
-  threadStatesByProjectId: Map<string, ProjectThreadQueryState>;
-}
-
-interface BuildProjectThreadQueryAggregationArgs {
-  projectIds: readonly string[];
-  queryResults: readonly ProjectThreadQueryResult[];
-  serverConnectionState: WebSocketConnectionState;
-  connectionGracePeriodElapsed: boolean;
 }
 
 interface OpenRootComposeForProjectArgs {
@@ -307,42 +270,6 @@ function normalizeSidebarSectionOrder(
     normalized.push(sectionId);
   }
   return normalized;
-}
-
-function buildProjectThreadQueryAggregation({
-  projectIds,
-  queryResults,
-  serverConnectionState,
-  connectionGracePeriodElapsed,
-}: BuildProjectThreadQueryAggregationArgs): ProjectThreadQueryAggregation {
-  const threads: ThreadListEntry[] = [];
-  const threadStatesByProjectId = new Map<string, ProjectThreadQueryState>();
-
-  for (let index = 0; index < queryResults.length; index += 1) {
-    const projectId = projectIds[index];
-    const result = queryResults[index];
-    if (!projectId || !result) {
-      continue;
-    }
-
-    if (result.data !== undefined) {
-      threads.push(...result.data);
-    }
-    threadStatesByProjectId.set(projectId, {
-      status: getConnectionAwareQueryState({
-        hasResolvedData: result.data !== undefined,
-        isFetching: result.isFetching,
-        isLoadingError: result.isLoadingError,
-        serverConnectionState,
-        connectionGracePeriodElapsed,
-      }).status,
-    });
-  }
-
-  return {
-    threads,
-    threadStatesByProjectId,
-  };
 }
 
 const EMPTY_PROJECT_THREAD_LIST_STATE: ProjectThreadListState = {
@@ -694,57 +621,26 @@ function ProjectListComponent({
   const setRootComposeProjectId = useSetRootComposeProjectId();
   const setRootComposeMode = useSetRootComposeMode();
   const sidebarBootstrapQuery = useSidebarBootstrap();
-  const hasSidebarBootstrapSettled =
-    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
-  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
-  const {
-    data: projects,
-    isFetching: projectsFetching,
-    isLoadingError: projectsLoadingError,
-  } = projectsQuery;
-  const serverConnectionState = useServerConnectionState();
-  const connectionGracePeriodElapsed = useServerConnectionGracePeriodElapsed();
+  const sidebarBootstrap = sidebarBootstrapQuery.data;
+  const projects = useMemo(
+    () => sidebarBootstrap?.projects.map(stripProjectThreads),
+    [sidebarBootstrap],
+  );
+  const threads = useMemo(() => {
+    if (!sidebarBootstrap) {
+      return [];
+    }
+    const sidebarThreads: ThreadListEntry[] = [];
+    for (const project of sidebarBootstrap.projects) {
+      sidebarThreads.push(...project.threads);
+    }
+    sidebarThreads.push(...sidebarBootstrap.personalProject.threads);
+    return sidebarThreads;
+  }, [sidebarBootstrap]);
   const projectsState = useConnectionAwareQueryState({
     hasResolvedData: projects !== undefined,
-    isFetching: sidebarBootstrapQuery.isFetching || projectsFetching,
-    isLoadingError: projectsLoadingError,
-  });
-  const standardProjectIds = useMemo(
-    () => (projects ?? []).map((project) => project.id),
-    [projects],
-  );
-  const threadQueryProjectIds = useMemo(
-    () =>
-      hasSidebarBootstrapSettled
-        ? [...standardProjectIds, PERSONAL_PROJECT_ID]
-        : standardProjectIds,
-    [hasSidebarBootstrapSettled, standardProjectIds],
-  );
-  const threadQueries = useMemo(
-    () =>
-      threadQueryProjectIds.map((projectId) => ({
-        enabled: hasSidebarBootstrapSettled,
-        queryKey: threadListQueryKey({ projectId, archived: false }),
-        queryFn: ({ signal }: ThreadQueryFnContext) =>
-          api.listThreads({ projectId, archived: false }, signal),
-        staleTime: 10_000,
-      })),
-    [hasSidebarBootstrapSettled, threadQueryProjectIds],
-  );
-  // Keep combine stable so useQueries skips aggregation on unrelated renders.
-  const combineProjectThreadQueries = useCallback(
-    (results: readonly ProjectThreadQueryResult[]) =>
-      buildProjectThreadQueryAggregation({
-        projectIds: threadQueryProjectIds,
-        queryResults: results,
-        serverConnectionState,
-        connectionGracePeriodElapsed,
-      }),
-    [threadQueryProjectIds, serverConnectionState, connectionGracePeriodElapsed],
-  );
-  const { threads, threadStatesByProjectId } = useQueries({
-    queries: threadQueries,
-    combine: combineProjectThreadQueries,
+    isFetching: sidebarBootstrapQuery.isFetching,
+    isLoadingError: sidebarBootstrapQuery.isLoadingError,
   });
   const { localDaemonHostId } = useHostDaemon();
   const { threadId: selectedThreadId } = useAppRoute();
@@ -1029,15 +925,17 @@ function ProjectListComponent({
   const threadListStatesByProjectId = useMemo(() => {
     const map = new Map<string, ProjectThreadListState>();
     for (const project of renderedProjects ?? []) {
-      const status = threadStatesByProjectId.get(project.id)?.status;
       const projectThreads = threadsByProject.get(project.id);
       map.set(
         project.id,
-        getProjectThreadListState({ status, threads: projectThreads }),
+        getProjectThreadListState({
+          status: projectsState.status,
+          threads: projectThreads,
+        }),
       );
     }
     return map;
-  }, [renderedProjects, threadStatesByProjectId, threadsByProject]);
+  }, [projectsState.status, renderedProjects, threadsByProject]);
 
   const toggleProjectCollapsed = useCallback<ToggleCollapsedId>(
     (projectId) => {
@@ -1121,7 +1019,7 @@ function ProjectListComponent({
 
   const projectlessThreadListState =
     getProjectThreadListState({
-      status: threadStatesByProjectId.get(PERSONAL_PROJECT_ID)?.status,
+      status: projectsState.status,
       threads: threadsByProject.get(PERSONAL_PROJECT_ID),
     });
 

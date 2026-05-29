@@ -36,6 +36,7 @@ import {
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
   projectsQueryKey,
+  sidebarBootstrapQueryKey,
   systemProvidersQueryKey,
   threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
@@ -205,12 +206,12 @@ export const REALTIME_ENVIRONMENT_CHANGE_REGISTRY = {
 export const REALTIME_PROJECT_CHANGE_REGISTRY = {
   "project-created": {
     dirty: [
-      dirtyProjectListQueries, // Navigation and settings are backed by the project list.
+      dirtyProjectListQueries, // Navigation and settings are backed by sidebar bootstrap/project caches.
     ],
   },
   "project-updated": {
     dirty: [
-      dirtyProjectListQueries, // Name/settings fields are embedded in the project list.
+      dirtyProjectListQueries, // Name/settings fields are embedded in sidebar bootstrap/project caches.
     ],
   },
   "project-deleted": {
@@ -371,18 +372,20 @@ function dirtyThreadListQueries({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  return projectId
+  const threadListQueryKeys = projectId
     ? getCachedProjectThreadListInvalidationQueryKeys({
         projectId,
         queryClient,
       })
     : [threadsQueryKey()];
+  return [...threadListQueryKeys, sidebarBootstrapQueryKey()];
 }
 
 function dirtyManagerOrderThreadListQueries({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): void {
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
   if (!projectId) {
     queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
     return;
@@ -485,6 +488,10 @@ function markThreadListQueriesStale({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): void {
+  queryClient.invalidateQueries({
+    queryKey: sidebarBootstrapQueryKey(),
+    refetchType: "none",
+  });
   if (!projectId) {
     queryClient.invalidateQueries({
       queryKey: threadsQueryKey(),
@@ -574,7 +581,7 @@ function dirtyThreadStorageQueriesForEnvironment({
 }
 
 function dirtyProjectListQueries(): QueryKey[] {
-  return [projectsQueryKey()];
+  return [projectsQueryKey(), sidebarBootstrapQueryKey()];
 }
 
 function dirtyProjectSourceDependentQueries({
@@ -582,6 +589,7 @@ function dirtyProjectSourceDependentQueries({
 }: ProjectRealtimeDirtyContext): QueryKey[] {
   const sharedKeys: QueryKey[] = [
     projectsQueryKey(),
+    sidebarBootstrapQueryKey(),
     localPathExistenceQueryKeyPrefix(),
   ];
   if (!projectId) {

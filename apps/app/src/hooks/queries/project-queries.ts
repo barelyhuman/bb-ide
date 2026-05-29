@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { ProjectExecutionDefaults, ThreadType } from "@bb/domain";
 import type {
   ProjectBranchesResponse,
@@ -8,16 +8,13 @@ import type {
   SidebarBootstrapResponse,
   WorkspacePathListResponse,
 } from "@bb/server-contract";
-import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import * as api from "@/lib/api";
 import {
   projectDefaultExecutionOptionsQueryKey,
   projectPathsQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
-  projectsQueryKey,
   sidebarBootstrapQueryKey,
-  threadListQueryKey,
 } from "./query-keys";
 import { resolveProjectSourceBranchesPlaceholder } from "./query-placeholders";
 
@@ -59,16 +56,6 @@ function requireProjectId(
   return projectId;
 }
 
-export function useProjects(options?: QueryOptions) {
-  return useQuery<ProjectResponse[]>({
-    queryKey: projectsQueryKey(),
-    queryFn: () => api.listProjects(),
-    enabled: options?.enabled ?? true,
-    refetchOnMount: false,
-    staleTime: 30_000,
-  });
-}
-
 export function stripProjectThreads(
   project: ProjectWithThreadsResponse,
 ): ProjectResponse {
@@ -77,31 +64,9 @@ export function stripProjectThreads(
 }
 
 export function useSidebarBootstrap(options?: QueryOptions) {
-  const queryClient = useQueryClient();
-
   return useQuery<SidebarBootstrapResponse>({
     queryKey: sidebarBootstrapQueryKey(),
-    queryFn: async () => {
-      const response = await api.listProjectsWithThreads();
-      queryClient.setQueryData(
-        projectsQueryKey(),
-        response.projects.map(stripProjectThreads),
-      );
-      for (const project of response.projects) {
-        queryClient.setQueryData(
-          threadListQueryKey({ projectId: project.id, archived: false }),
-          project.threads,
-        );
-      }
-      queryClient.setQueryData(
-        threadListQueryKey({
-          projectId: PERSONAL_PROJECT_ID,
-          archived: false,
-        }),
-        response.personalProject.threads,
-      );
-      return response;
-    },
+    queryFn: ({ signal }) => api.listProjectsWithThreads(signal),
     enabled: options?.enabled ?? true,
     staleTime: Infinity,
   });

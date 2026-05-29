@@ -16,6 +16,7 @@ import {
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
+  sidebarBootstrapQueryKey,
   threadQueuedMessagesQueryKey,
   threadListQueryKey,
   threadPromptHistoryQueryKey,
@@ -47,6 +48,15 @@ const NON_PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
 interface CachedThreadListEntryFixture {
   hasPendingInteraction: boolean;
   id: string;
+}
+
+interface CachedSidebarBootstrapProjectFixture {
+  threads: CachedThreadListEntryFixture[];
+}
+
+interface CachedSidebarBootstrapFixture {
+  personalProject: CachedSidebarBootstrapProjectFixture;
+  projects: CachedSidebarBootstrapProjectFixture[];
 }
 
 function createRealtimeEffectsTestContext() {
@@ -224,6 +234,34 @@ describe("createRealtimeCacheEffects", () => {
     effects.dispose();
   });
 
+  it("invalidates sidebar bootstrap for thread list changes", () => {
+    vi.useFakeTimers();
+    const { effects, queryClient } = createRealtimeEffectsTestContext();
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    queryClient.setQueryData<CachedSidebarBootstrapFixture>(
+      sidebarBootstrapKey,
+      {
+        projects: [{ threads: [] }],
+        personalProject: { threads: [] },
+      },
+    );
+
+    effects.handleChanged({
+      type: "changed",
+      entity: "thread",
+      id: "thr_1",
+      metadata: { projectId: "project-1" },
+      changes: ["title-changed"],
+    });
+    vi.advanceTimersByTime(50);
+
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
+
+    effects.dispose();
+  });
+
   it("refetches active manager order lists without refetching managed child lists for order changes", async () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
@@ -372,10 +410,22 @@ describe("createRealtimeCacheEffects", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(threadKey, { id: "thr_1" });
     queryClient.setQueryData(threadListKey, []);
+    queryClient.setQueryData<CachedSidebarBootstrapFixture>(
+      sidebarBootstrapKey,
+      {
+        projects: [{ threads: [] }],
+        personalProject: { threads: [] },
+      },
+    );
     const threadQueryFn = vi.fn(async () => null);
     const threadListQueryFn = vi.fn(async () => []);
+    const sidebarBootstrapQueryFn = vi.fn(async () => ({
+      projects: [],
+      personalProject: { threads: [] },
+    }));
     const threadObserver = new QueryObserver(queryClient, {
       queryKey: threadKey,
       queryFn: threadQueryFn,
@@ -386,10 +436,19 @@ describe("createRealtimeCacheEffects", () => {
       queryFn: threadListQueryFn,
       staleTime: Infinity,
     });
+    const sidebarBootstrapObserver = new QueryObserver(queryClient, {
+      queryKey: sidebarBootstrapKey,
+      queryFn: sidebarBootstrapQueryFn,
+      staleTime: Infinity,
+    });
     const unsubscribeThread = threadObserver.subscribe(() => {});
     const unsubscribeThreadList = threadListObserver.subscribe(() => {});
+    const unsubscribeSidebarBootstrap = sidebarBootstrapObserver.subscribe(
+      () => {},
+    );
     threadQueryFn.mockClear();
     threadListQueryFn.mockClear();
+    sidebarBootstrapQueryFn.mockClear();
 
     effects.handleChanged({
       type: "changed",
@@ -401,11 +460,16 @@ describe("createRealtimeCacheEffects", () => {
 
     expect(threadQueryFn).not.toHaveBeenCalled();
     expect(threadListQueryFn).not.toHaveBeenCalled();
+    expect(sidebarBootstrapQueryFn).not.toHaveBeenCalled();
     expect(queryClient.getQueryState(threadKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(threadListKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
 
     unsubscribeThread();
     unsubscribeThreadList();
+    unsubscribeSidebarBootstrap();
     effects.dispose();
   });
 
@@ -705,6 +769,7 @@ describe("createRealtimeCacheEffects", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(threadKey, { id: "thr_1" });
     queryClient.setQueryData(timelineKey, {
       rows: [],
@@ -719,6 +784,15 @@ describe("createRealtimeCacheEffects", () => {
     queryClient.setQueryData<CachedThreadListEntryFixture[]>(threadListKey, [
       { hasPendingInteraction: false, id: "thr_1" },
     ]);
+    queryClient.setQueryData<CachedSidebarBootstrapFixture>(
+      sidebarBootstrapKey,
+      {
+        projects: [
+          { threads: [{ hasPendingInteraction: false, id: "thr_1" }] },
+        ],
+        personalProject: { threads: [] },
+      },
+    );
 
     effects.handleChanged({
       type: "changed",
@@ -733,6 +807,12 @@ describe("createRealtimeCacheEffects", () => {
       queryClient
         .getQueryData<CachedThreadListEntryFixture[]>(threadListKey)
         ?.at(0)?.hasPendingInteraction,
+    ).toBe(true);
+    expect(
+      queryClient
+        .getQueryData<CachedSidebarBootstrapFixture>(sidebarBootstrapKey)
+        ?.projects.at(0)
+        ?.threads.at(0)?.hasPendingInteraction,
     ).toBe(true);
     expect(queryClient.getQueryState(threadKey)?.isInvalidated).not.toBe(true);
     expect(queryClient.getQueryState(timelineKey)?.isInvalidated).not.toBe(

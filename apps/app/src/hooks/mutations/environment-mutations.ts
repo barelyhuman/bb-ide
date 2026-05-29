@@ -13,9 +13,15 @@ import {
 } from "../cache-effects";
 import {
   environmentQueryKey,
+  sidebarBootstrapQueryKey,
   threadQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
+import {
+  restoreCachedSidebarBootstrap,
+  snapshotCachedSidebarBootstrap,
+  type CachedSidebarBootstrapSnapshot,
+} from "../queries/query-cache";
 import {
   restoreCachedThreadLists,
   snapshotCachedThreadLists,
@@ -38,6 +44,7 @@ interface ArchiveEnvironmentThreadsMutationRequest {
 
 interface ArchiveEnvironmentThreadsMutationContext {
   archivedThreadIds: string[];
+  previousSidebarBootstrap: CachedSidebarBootstrapSnapshot;
   previousThreadLists: CachedThreadListSnapshot;
   previousThreads: CachedThreadSnapshot[];
 }
@@ -90,6 +97,8 @@ export function useArchiveEnvironmentThreads() {
       const previousThreadLists = snapshotCachedThreadLists(queryClient, {
         queryKey: threadsQueryKey(),
       });
+      const previousSidebarBootstrap =
+        snapshotCachedSidebarBootstrap(queryClient);
       const previousThreads = getCachedThreadSnapshots({
         queryClient,
         threadIds: archivedThreadIds,
@@ -106,6 +115,7 @@ export function useArchiveEnvironmentThreads() {
 
       return {
         archivedThreadIds,
+        previousSidebarBootstrap,
         previousThreadLists,
         previousThreads,
       };
@@ -120,6 +130,10 @@ export function useArchiveEnvironmentThreads() {
       }
 
       restoreCachedThreadLists(queryClient, context.previousThreadLists);
+      restoreCachedSidebarBootstrap(
+        queryClient,
+        context.previousSidebarBootstrap,
+      );
       for (const snapshot of context.previousThreads) {
         queryClient.setQueryData(threadQueryKey(snapshot.id), snapshot.thread);
       }
@@ -130,6 +144,7 @@ export function useArchiveEnvironmentThreads() {
         queryClient,
       });
       queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
       for (const threadId of data?.archivedThreadIds ??
         context?.archivedThreadIds ??
         []) {

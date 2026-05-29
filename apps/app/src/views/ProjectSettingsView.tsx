@@ -32,7 +32,7 @@ import {
   type LocalPathSubmitParams,
 } from "@/hooks/useLocalPathPicker";
 import {
-  useProjects,
+  stripProjectThreads,
   useSidebarBootstrap,
 } from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
@@ -53,11 +53,11 @@ function sourceLabel(
 export function ProjectSettingsView() {
   const { projectId } = useParams<{ projectId: string }>();
   const sidebarBootstrapQuery = useSidebarBootstrap();
-  const hasSidebarBootstrapSettled =
-    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
-  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
-  const projects = projectsQuery.data;
-  const isLoading = sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
+  const projects = useMemo(
+    () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
+    [sidebarBootstrapQuery.data],
+  );
+  const isLoading = sidebarBootstrapQuery.isFetching && projects === undefined;
   const { data: hosts = [] } = useEffectiveHosts();
   const queryClient = useQueryClient();
 

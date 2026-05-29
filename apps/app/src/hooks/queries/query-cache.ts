@@ -6,6 +6,7 @@ import {
   iterateThreadListCacheEntries,
 } from "./thread-list-cache-data";
 import type {
+  SidebarBootstrapResponse,
   ThreadTimelineResponse,
   TimelineRow,
   TimelineUserConversationRow,
@@ -22,6 +23,7 @@ import {
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
   isStandardManagerThreadTimelineQueryKey,
+  sidebarBootstrapQueryKey,
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
@@ -53,6 +55,20 @@ export interface ProjectThreadListInvalidationParams {
   projectId: string;
   queryClient: QueryClient;
 }
+
+type SidebarBootstrapProject = SidebarBootstrapResponse["projects"][number];
+type SidebarBootstrapThreadMapper = (
+  threads: ThreadListEntry[],
+) => ThreadListEntry[];
+
+interface ApplyToCachedSidebarBootstrapThreadsArgs {
+  mapper: SidebarBootstrapThreadMapper;
+  queryClient: QueryClient;
+}
+
+export type CachedSidebarBootstrapSnapshot =
+  | SidebarBootstrapResponse
+  | undefined;
 
 function getThreadListFiltersFromQueryKey(
   queryKey: QueryKey,
@@ -170,6 +186,69 @@ export function getCachedProjectThreadListInvalidationQueryKeys({
     }
   }
   return queryKeys;
+}
+
+function mapSidebarBootstrapProjectThreads(
+  project: SidebarBootstrapProject,
+  mapper: SidebarBootstrapThreadMapper,
+): SidebarBootstrapProject {
+  return {
+    ...project,
+    threads: mapper(project.threads),
+  };
+}
+
+export function applyToCachedSidebarBootstrapThreads({
+  mapper,
+  queryClient,
+}: ApplyToCachedSidebarBootstrapThreadsArgs): void {
+  queryClient.setQueryData<SidebarBootstrapResponse>(
+    sidebarBootstrapQueryKey(),
+    (currentBootstrap) => {
+      if (!currentBootstrap) {
+        return currentBootstrap;
+      }
+      return {
+        projects: currentBootstrap.projects.map((project) =>
+          mapSidebarBootstrapProjectThreads(project, mapper),
+        ),
+        personalProject: mapSidebarBootstrapProjectThreads(
+          currentBootstrap.personalProject,
+          mapper,
+        ),
+      };
+    },
+  );
+}
+
+export function getCachedSidebarBootstrapThreads(
+  queryClient: QueryClient,
+): ThreadListEntry[] {
+  const bootstrap = queryClient.getQueryData<SidebarBootstrapResponse>(
+    sidebarBootstrapQueryKey(),
+  );
+  if (!bootstrap) {
+    return [];
+  }
+  return [
+    ...bootstrap.projects.flatMap((project) => project.threads),
+    ...bootstrap.personalProject.threads,
+  ];
+}
+
+export function snapshotCachedSidebarBootstrap(
+  queryClient: QueryClient,
+): CachedSidebarBootstrapSnapshot {
+  return queryClient.getQueryData<SidebarBootstrapResponse>(
+    sidebarBootstrapQueryKey(),
+  );
+}
+
+export function restoreCachedSidebarBootstrap(
+  queryClient: QueryClient,
+  snapshot: CachedSidebarBootstrapSnapshot,
+): void {
+  queryClient.setQueryData(sidebarBootstrapQueryKey(), snapshot);
 }
 
 export function getEnvironmentRecordInvalidationQueryKeys({
@@ -475,6 +554,17 @@ export function updateCachedThreadListPendingInteractionState(
 ): void {
   applyToCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
+    mapper: (list) => {
+      if (!list.some((thread) => thread.id === threadId)) {
+        return list;
+      }
+      return list.map((thread) =>
+        thread.id === threadId ? { ...thread, hasPendingInteraction } : thread,
+      );
+    },
+  });
+  applyToCachedSidebarBootstrapThreads({
+    queryClient,
     mapper: (list) => {
       if (!list.some((thread) => thread.id === threadId)) {
         return list;

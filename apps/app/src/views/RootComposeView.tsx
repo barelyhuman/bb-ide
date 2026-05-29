@@ -29,7 +29,6 @@ import {
   useProjectPromptHistory,
   useProjectDefaultExecutionOptions,
   useProjectSourceBranches,
-  useProjects,
   useSidebarBootstrap,
   stripProjectThreads,
 } from "@/hooks/queries/project-queries";
@@ -189,12 +188,10 @@ export function RootComposeView() {
   const sidebarBootstrapQuery = useSidebarBootstrap();
   const hasSidebarBootstrapSettled =
     sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
-  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
-  const sidebarBootstrapProjects = useMemo(
+  const projects = useMemo(
     () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
     [sidebarBootstrapQuery.data],
   );
-  const projects = projectsQuery.data ?? sidebarBootstrapProjects;
   const projectId = useMemo(() => {
     if (isProjectlessProjectId(rootComposeProjectId)) {
       return PERSONAL_PROJECT_ID;
@@ -1018,7 +1015,7 @@ export function RootComposeView() {
       </PageShell>
     );
   }
-  if (!projects && (sidebarBootstrapQuery.isError || projectsQuery.isError)) {
+  if (!projects && sidebarBootstrapQuery.isError) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-destructive">

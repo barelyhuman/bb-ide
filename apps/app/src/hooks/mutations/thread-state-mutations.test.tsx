@@ -3,9 +3,14 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
-import { threadListQueryKey, threadQueryKey } from "../queries/query-keys";
+import {
+  sidebarBootstrapQueryKey,
+  threadListQueryKey,
+  threadQueryKey,
+} from "../queries/query-keys";
 import {
   useArchiveManagerThreads,
   useMarkThreadRead,
@@ -63,6 +68,33 @@ function makeThreadListEntry(
   };
 }
 
+function makeSidebarBootstrapResponse(
+  threads: ThreadListEntry[],
+): SidebarBootstrapResponse {
+  return {
+    projects: [
+      {
+        createdAt: 1,
+        id: "project-1",
+        kind: "standard",
+        name: "Project One",
+        sources: [],
+        threads,
+        updatedAt: 1,
+      },
+    ],
+    personalProject: {
+      createdAt: 1,
+      id: "personal-project",
+      kind: "personal",
+      name: "Personal",
+      sources: [],
+      threads: [],
+      updatedAt: 1,
+    },
+  };
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -90,9 +122,10 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(threadQueryKey(managerThread.id), managerThread);
     queryClient.setQueryData(threadQueryKey(childThread.id), childThread);
-    queryClient.setQueryData<ThreadListEntry[]>(listKey, [
+    const cachedThreads = [
       makeThreadListEntry({
         id: managerThread.id,
         type: managerThread.type,
@@ -104,7 +137,12 @@ describe("thread state mutations", () => {
       makeThreadListEntry({
         id: otherThread.id,
       }),
-    ]);
+    ];
+    queryClient.setQueryData<ThreadListEntry[]>(listKey, cachedThreads);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapKey,
+      makeSidebarBootstrapResponse(cachedThreads),
+    );
 
     const { result } = renderHook(() => useArchiveManagerThreads(), {
       wrapper,
@@ -119,6 +157,12 @@ describe("thread state mutations", () => {
       expect.objectContaining({ id: otherThread.id }),
     ]);
     expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        ?.projects.at(0)
+        ?.threads.map((thread) => thread.id),
+    ).toEqual([otherThread.id]);
+    expect(
       queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(managerThread.id),
       )?.archivedAt,
@@ -129,6 +173,9 @@ describe("thread state mutations", () => {
       )?.archivedAt,
     ).toBeTypeOf("number");
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it("restores cached manager groups when archive all fails", async () => {
@@ -157,12 +204,17 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(threadQueryKey(managerThread.id), managerThread);
     queryClient.setQueryData(threadQueryKey(childThread.id), childThread);
     queryClient.setQueryData<ThreadListEntry[]>(listKey, [
       managerListEntry,
       childListEntry,
     ]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapKey,
+      makeSidebarBootstrapResponse([managerListEntry, childListEntry]),
+    );
 
     const { result } = renderHook(() => useArchiveManagerThreads(), {
       wrapper,
@@ -188,6 +240,11 @@ describe("thread state mutations", () => {
       managerListEntry,
       childListEntry,
     ]);
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        ?.projects.at(0)?.threads,
+    ).toEqual([managerListEntry, childListEntry]);
   });
 
   it("marks a thread read without invalidating active thread lists", async () => {
@@ -203,10 +260,17 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const unreadListEntry = makeThreadListEntry({
+      lastReadAt: null,
+      latestAttentionAt: 10,
+    });
     queryClient.setQueryData(threadQueryKey(unreadThread.id), unreadThread);
-    queryClient.setQueryData<ThreadListEntry[]>(listKey, [
-      makeThreadListEntry({ lastReadAt: null, latestAttentionAt: 10 }),
-    ]);
+    queryClient.setQueryData<ThreadListEntry[]>(listKey, [unreadListEntry]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapKey,
+      makeSidebarBootstrapResponse([unreadListEntry]),
+    );
 
     const { result } = renderHook(() => useMarkThreadRead(), { wrapper });
 
@@ -224,7 +288,20 @@ describe("thread state mutations", () => {
       lastReadAt: 10,
       latestAttentionAt: 10,
     });
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        ?.projects.at(0)
+        ?.threads.at(0),
+    ).toMatchObject({
+      id: unreadThread.id,
+      lastReadAt: 10,
+      latestAttentionAt: 10,
+    });
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+      false,
+    );
   });
 
   it("marks a thread unread without invalidating active thread lists", async () => {
@@ -237,10 +314,17 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const readListEntry = makeThreadListEntry({
+      lastReadAt: 10,
+      latestAttentionAt: 10,
+    });
     queryClient.setQueryData(threadQueryKey(readThread.id), readThread);
-    queryClient.setQueryData<ThreadListEntry[]>(listKey, [
-      makeThreadListEntry({ lastReadAt: 10, latestAttentionAt: 10 }),
-    ]);
+    queryClient.setQueryData<ThreadListEntry[]>(listKey, [readListEntry]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapKey,
+      makeSidebarBootstrapResponse([readListEntry]),
+    );
 
     const { result } = renderHook(() => useMarkThreadUnread(), { wrapper });
 
@@ -258,6 +342,19 @@ describe("thread state mutations", () => {
       lastReadAt: 0,
       latestAttentionAt: 10,
     });
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        ?.projects.at(0)
+        ?.threads.at(0),
+    ).toMatchObject({
+      id: readThread.id,
+      lastReadAt: 0,
+      latestAttentionAt: 10,
+    });
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+      false,
+    );
   });
 });

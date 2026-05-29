@@ -3,10 +3,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   archivedThreadsListQueryKey,
+  sidebarBootstrapQueryKey,
   threadListQueryKey,
   threadQueryKey,
 } from "../queries/query-keys";
@@ -66,6 +68,33 @@ function makeThreadListEntry(
   };
 }
 
+function makeSidebarBootstrapResponse(
+  threads: ThreadListEntry[],
+): SidebarBootstrapResponse {
+  return {
+    projects: [
+      {
+        createdAt: 1,
+        id: "project-1",
+        kind: "standard",
+        name: "Project One",
+        sources: [],
+        threads,
+        updatedAt: 1,
+      },
+    ],
+    personalProject: {
+      createdAt: 1,
+      id: "personal-project",
+      kind: "personal",
+      name: "Personal",
+      sources: [],
+      threads: [],
+      updatedAt: 1,
+    },
+  };
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -96,19 +125,25 @@ describe("environment mutations", () => {
       kind: "all",
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(threadQueryKey(firstThread.id), firstThread);
     queryClient.setQueryData(threadQueryKey(secondThread.id), secondThread);
-    queryClient.setQueryData<ThreadListEntry[]>(activeListKey, [
+    const cachedThreads = [
       makeThreadListEntry({ id: firstThread.id }),
       makeThreadListEntry({ id: secondThread.id }),
       makeThreadListEntry({
         environmentId: otherEnvironmentThread.environmentId,
         id: otherEnvironmentThread.id,
       }),
-    ]);
+    ];
+    queryClient.setQueryData<ThreadListEntry[]>(activeListKey, cachedThreads);
     queryClient.setQueryData<ThreadListEntry[]>(archivedListKey, [
       alreadyArchivedThread,
     ]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapKey,
+      makeSidebarBootstrapResponse(cachedThreads),
+    );
 
     const { result } = renderHook(() => useArchiveEnvironmentThreads(), {
       wrapper,
@@ -123,6 +158,12 @@ describe("environment mutations", () => {
       expect.objectContaining({ id: otherEnvironmentThread.id }),
     ]);
     expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        ?.projects.at(0)
+        ?.threads.map((thread) => thread.id),
+    ).toEqual([otherEnvironmentThread.id]);
+    expect(
       queryClient.getQueryData<ThreadListEntry[]>(archivedListKey),
     ).toEqual([alreadyArchivedThread]);
     expect(
@@ -132,6 +173,9 @@ describe("environment mutations", () => {
     ).toBeTypeOf("number");
     expect(queryClient.getQueryState(activeListKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(archivedListKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
       true,
     );
   });
@@ -148,8 +192,13 @@ describe("environment mutations", () => {
       archived: false,
       projectId: "project-1",
     });
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(threadQueryKey(thread.id), thread);
     queryClient.setQueryData<ThreadListEntry[]>(activeListKey, [listEntry]);
+    queryClient.setQueryData<SidebarBootstrapResponse>(
+      sidebarBootstrapKey,
+      makeSidebarBootstrapResponse([listEntry]),
+    );
 
     const { result } = renderHook(() => useArchiveEnvironmentThreads(), {
       wrapper,
@@ -167,5 +216,10 @@ describe("environment mutations", () => {
     expect(queryClient.getQueryData<ThreadListEntry[]>(activeListKey)).toEqual([
       listEntry,
     ]);
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        ?.projects.at(0)?.threads,
+    ).toEqual([listEntry]);
   });
 });

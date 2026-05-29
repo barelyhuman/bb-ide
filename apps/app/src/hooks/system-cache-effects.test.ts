@@ -3,6 +3,7 @@ import { createAppQueryClient } from "@/lib/query-client";
 import {
   allSystemExecutionOptionsQueryKeyPrefix,
   allThreadComposerBootstrapQueryKeyPrefix,
+  sidebarBootstrapQueryKey,
   systemExecutionOptionsQueryKey,
   threadComposerBootstrapQueryKey,
 } from "./queries/query-keys";
@@ -53,6 +54,7 @@ describe("system cache effects", () => {
       "thread-1",
       "env-1",
     );
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
     queryClient.setQueryData(composerBootstrapKey, {
       defaultExecutionOptions: null,
@@ -61,6 +63,10 @@ describe("system cache effects", () => {
       pendingInteractions: [],
       promptHistory: [],
     });
+    queryClient.setQueryData(sidebarBootstrapKey, {
+      projects: [],
+      personalProject: { threads: [] },
+    });
 
     invalidateRealtimeQueriesAfterServerReconnect({ queryClient });
 
@@ -68,6 +74,9 @@ describe("system cache effects", () => {
       true,
     );
     expect(queryClient.getQueryState(composerBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
       true,
     );
   });
@@ -81,6 +90,7 @@ describe("system cache effects", () => {
       "thread-1",
       "env-1",
     );
+    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
     queryClient.setQueryData(composerBootstrapKey, {
       defaultExecutionOptions: null,
@@ -88,6 +98,10 @@ describe("system cache effects", () => {
       executionOptions: EMPTY_EXECUTION_OPTIONS,
       pendingInteractions: [],
       promptHistory: [],
+    });
+    queryClient.setQueryData(sidebarBootstrapKey, {
+      projects: [],
+      personalProject: { threads: [] },
     });
 
     invalidateHostChangeDependentQueries({ queryClient });
@@ -104,6 +118,9 @@ describe("system cache effects", () => {
         ?.isInvalidated,
     ).toBeUndefined();
     expect(queryClient.getQueryState(composerBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
       true,
     );
   });

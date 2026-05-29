@@ -37,6 +37,7 @@ import { useRootComposeReuseEnvironment } from "@/lib/root-compose-selection";
 import { encodeReuseValue } from "@/components/pickers/environment-picker-value";
 import {
   projectsQueryKey,
+  sidebarBootstrapQueryKey,
   threadListQueryKey,
 } from "@/hooks/queries/query-keys";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
@@ -306,7 +307,7 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
-  it("primes project and thread-list caches from the sidebar bootstrap", async () => {
+  it("uses the sidebar bootstrap without fetching canonical project or thread lists", async () => {
     let sidebarBootstrapRequestCount = 0;
     let leanProjectRequestCount = 0;
     let threadRequestCount = 0;
@@ -327,18 +328,17 @@ describe("ProjectList", () => {
       name: "Personal",
       threads: [makeThreadListEntry(PERSONAL_PROJECT_ID, 4)],
     });
+    const sidebarBootstrap = buildSidebarBootstrapResponse({
+      personalProject,
+      projects,
+      threadsByProjectId,
+    });
     installFetchRoutes([
       {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () => {
           sidebarBootstrapRequestCount += 1;
-          return jsonResponse(
-            buildSidebarBootstrapResponse({
-              personalProject,
-              projects,
-              threadsByProjectId,
-            }),
-          );
+          return jsonResponse(sidebarBootstrap);
         },
       },
       {
@@ -375,23 +375,29 @@ describe("ProjectList", () => {
     const { queryClient } = await renderProjectList();
 
     await waitFor(() => {
-      expect(queryClient.getQueryData(projectsQueryKey())).toEqual(projects);
-      for (const project of projects) {
-        expect(
-          queryClient.getQueryData(
-            threadListQueryKey({ projectId: project.id, archived: false }),
-          ),
-        ).toEqual(threadsByProjectId.get(project.id));
-      }
+      expect(screen.getByText("Project One")).toBeTruthy();
+      expect(screen.getByText("Thread 1")).toBeTruthy();
+      expect(screen.getByText("Thread 4")).toBeTruthy();
+    });
+    expect(queryClient.getQueryData(sidebarBootstrapQueryKey())).toEqual(
+      sidebarBootstrap,
+    );
+    expect(queryClient.getQueryData(projectsQueryKey())).toBeUndefined();
+    for (const project of projects) {
       expect(
         queryClient.getQueryData(
-          threadListQueryKey({
-            projectId: PERSONAL_PROJECT_ID,
-            archived: false,
-          }),
+          threadListQueryKey({ projectId: project.id, archived: false }),
         ),
-      ).toEqual(personalProject.threads);
-    });
+      ).toBeUndefined();
+    }
+    expect(
+      queryClient.getQueryData(
+        threadListQueryKey({
+          projectId: PERSONAL_PROJECT_ID,
+          archived: false,
+        }),
+      ),
+    ).toBeUndefined();
     expect(sidebarBootstrapRequestCount).toBe(1);
     expect(leanProjectRequestCount).toBe(0);
     expect(threadRequestCount).toBe(0);
@@ -427,7 +433,9 @@ describe("ProjectList", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalled();
-      expect(queryClient.getQueryState(projectsQueryKey())?.status).toBe(
+      expect(
+        queryClient.getQueryState(sidebarBootstrapQueryKey())?.status,
+      ).toBe(
         "error",
       );
     });
@@ -982,27 +990,12 @@ describe("ProjectList", () => {
     expect(screen.queryByText("No projects")).toBeNull();
   });
 
-  it("shows threads unavailable when a project thread list fetch fails after the websocket connects", async () => {
+  it("shows threads unavailable when the sidebar bootstrap fails after the websocket connects", async () => {
     const project = makeProjectResponse();
-    const threadListKey = threadListQueryKey({
-      projectId: project.id,
-      archived: false,
-    });
-    const personalProject = makeProjectWithThreadsResponse({
-      id: PERSONAL_PROJECT_ID,
-      kind: "personal",
-      name: "Personal",
-    });
     installFetchRoutes([
       {
         pathname: "/api/v1/sidebar-bootstrap",
-        handler: () =>
-          jsonResponse(
-            buildSidebarBootstrapResponse({
-              personalProject,
-              projects: [project],
-            }),
-          ),
+        handler: () => new Response("starting", { status: 503 }),
       },
       {
         pathname: "/api/v1/projects",
@@ -1010,7 +1003,7 @@ describe("ProjectList", () => {
       },
       {
         pathname: "/api/v1/threads",
-        handler: () => new Response("starting", { status: 503 }),
+        handler: () => jsonResponse([]),
       },
       {
         pathname: "/api/v1/system/config",
@@ -1029,19 +1022,9 @@ describe("ProjectList", () => {
     wsManager.connect();
     FakeReconnectingWebSocket.latest().open();
 
-    const { queryClient } = await renderProjectList();
+    await renderProjectList();
 
-    await waitFor(() => {
-      expect(queryClient.getQueryData(threadListKey)).toEqual([]);
-    });
-    await act(async () => {
-      await queryClient.resetQueries({ queryKey: threadListKey, exact: true });
-    });
-
-    await waitFor(() => {
-      expect(queryClient.getQueryState(threadListKey)?.status).toBe("error");
-    });
-    expect(screen.getByText("Threads unavailable")).toBeTruthy();
+    expect(await screen.findByText("Threads unavailable")).toBeTruthy();
   });
 
   it("renders projectless threads in a Threads section below Projects by default", async () => {

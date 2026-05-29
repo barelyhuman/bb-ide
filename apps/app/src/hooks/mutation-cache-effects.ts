@@ -35,6 +35,7 @@ export function invalidateProjectListQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function invalidateProjectUpdateQueries({
@@ -42,6 +43,7 @@ export function invalidateProjectUpdateQueries({
   queryClient,
 }: ProjectArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
   queryClient.invalidateQueries({
     queryKey: projectPathsQueryKeyPrefix(projectId),
   });
@@ -61,6 +63,7 @@ export function invalidateProjectSourceQueries({
   queryClient,
 }: ProjectSourceInvalidationArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
   queryClient.invalidateQueries({
     queryKey: localPathExistenceQueryKeyPrefix(),
   });
@@ -88,6 +91,10 @@ export function refetchThreadListsAfterComposerThreadCreate({
     queryKey: threadsQueryKey(),
     type: "active",
   });
+  void queryClient.refetchQueries({
+    queryKey: sidebarBootstrapQueryKey(),
+    type: "active",
+  });
 }
 
 export function invalidateProjectManagerHireQueries({
@@ -95,6 +102,7 @@ export function invalidateProjectManagerHireQueries({
   queryClient,
 }: ProjectArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
   queryClient.invalidateQueries({
     queryKey: projectDefaultExecutionOptionsQueryKeyPrefix({ projectId }),
   });
@@ -105,6 +113,7 @@ export function invalidateThreadListQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function invalidateThreadListMembershipQueries({
@@ -113,6 +122,7 @@ export function invalidateThreadListMembershipQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function invalidateProjectPromptHistoryQueries({
@@ -136,6 +146,7 @@ export function invalidateThreadDeleteQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
   invalidateAllProjectsPromptHistoryQueries({ queryClient });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
 }
@@ -162,6 +173,7 @@ export function invalidateThreadQueuedMessageSendQueries({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
   });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function invalidateThreadAcceptedMessageQueries({
@@ -186,6 +198,7 @@ export function invalidateThreadAcceptedMessageQueriesWithoutRealtime({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
   });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function invalidateThreadStopQueries({
@@ -194,6 +207,7 @@ export function invalidateThreadStopQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function invalidateThreadPendingInteractionResolutionQueries({
@@ -208,6 +222,7 @@ export function invalidateThreadPendingInteractionResolutionQueries({
   });
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
 }
 
 export function removeThreadScopedQueries({

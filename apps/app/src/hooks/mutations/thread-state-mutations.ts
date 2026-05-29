@@ -19,9 +19,16 @@ import {
 } from "../cache-effects";
 import {
   projectsQueryKey,
+  sidebarBootstrapQueryKey,
   threadQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
+import {
+  applyToCachedSidebarBootstrapThreads,
+  restoreCachedSidebarBootstrap,
+  snapshotCachedSidebarBootstrap,
+  type CachedSidebarBootstrapSnapshot,
+} from "../queries/query-cache";
 import {
   applyToCachedThreadLists,
   restoreCachedThreadLists,
@@ -80,6 +87,7 @@ interface PinnedThreadOrderMutationContext {
 
 interface ArchiveManagerThreadsMutationContext {
   archivedThreadIds: string[];
+  previousSidebarBootstrap: CachedSidebarBootstrapSnapshot;
   previousThreadLists: CachedThreadListSnapshot;
   previousThreads: CachedThreadSnapshot[];
 }
@@ -114,12 +122,17 @@ function updateThreadInLists({
   queryClient,
   thread,
 }: UpdateThreadInListsArgs): void {
+  const updateThread = (list: ThreadListEntry[]) =>
+    list.map((candidate) =>
+      candidate.id === thread.id ? { ...candidate, ...thread } : candidate,
+    );
   applyToCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
-    mapper: (list) =>
-      list.map((candidate) =>
-        candidate.id === thread.id ? { ...candidate, ...thread } : candidate,
-      ),
+    mapper: updateThread,
+  });
+  applyToCachedSidebarBootstrapThreads({
+    queryClient,
+    mapper: updateThread,
   });
 }
 
@@ -486,6 +499,8 @@ export function useArchiveManagerThreads() {
       const previousThreadLists = snapshotCachedThreadLists(queryClient, {
         queryKey: threadsQueryKey(),
       });
+      const previousSidebarBootstrap =
+        snapshotCachedSidebarBootstrap(queryClient);
       const previousThreads = getCachedThreadSnapshots({
         queryClient,
         threadIds: archivedThreadIds,
@@ -503,6 +518,7 @@ export function useArchiveManagerThreads() {
 
       return {
         archivedThreadIds,
+        previousSidebarBootstrap,
         previousThreadLists,
         previousThreads,
       };
@@ -517,12 +533,17 @@ export function useArchiveManagerThreads() {
       }
 
       restoreCachedThreadLists(queryClient, context.previousThreadLists);
+      restoreCachedSidebarBootstrap(
+        queryClient,
+        context.previousSidebarBootstrap,
+      );
       for (const snapshot of context.previousThreads) {
         queryClient.setQueryData(threadQueryKey(snapshot.id), snapshot.thread);
       }
     },
     onSettled: (data, _error, _variables, context) => {
       queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
       for (const threadId of data?.archivedThreadIds ??
         context?.archivedThreadIds ??
         []) {

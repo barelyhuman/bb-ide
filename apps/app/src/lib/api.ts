@@ -549,10 +549,6 @@ export async function reorderProject(
   );
 }
 
-export async function listProjects(): Promise<ProjectResponse[]> {
-  return request<ProjectResponse[]>(apiClient.projects.$get());
-}
-
 export async function listProjectsWithThreads(
   signal?: AbortSignal,
 ): Promise<SidebarBootstrapResponse> {
