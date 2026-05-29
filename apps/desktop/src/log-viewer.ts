@@ -83,6 +83,11 @@ interface StopTailProcessArgs {
   state: ComponentTailState;
 }
 
+interface HandleDirectoryWatchErrorArgs {
+  error: Error;
+  watcher: FSWatcher;
+}
+
 interface HandleTailChunkArgs {
   chunk: string;
   state: ComponentTailState;
@@ -539,6 +544,22 @@ export function createLogTailer(args: CreateLogTailerArgs): LogTailer {
     tailProcess.childProcess.kill("SIGTERM");
   }
 
+  function handleDirectoryWatchError(
+    watchArgs: HandleDirectoryWatchErrorArgs,
+  ): void {
+    if (directoryWatcher !== watchArgs.watcher) {
+      return;
+    }
+    directoryWatcher = null;
+    watchArgs.watcher.close();
+    if (stopped) {
+      return;
+    }
+    emitSystemLine({
+      text: `log directory watch failed: ${watchArgs.error.message}`,
+    });
+  }
+
   function restartTailProcess(restartArgs: RestartTailProcessArgs): void {
     stopTailProcess({ state: restartArgs.state });
     restartArgs.state.currentFilePath = restartArgs.filePath;
@@ -659,9 +680,19 @@ export function createLogTailer(args: CreateLogTailerArgs): LogTailer {
     async start() {
       stopped = false;
       await mkdir(args.logDir, { recursive: true });
-      directoryWatcher = watch(args.logDir, () => {
-        scheduleRefresh();
-      });
+      try {
+        const watcher = watch(args.logDir, () => {
+          scheduleRefresh();
+        });
+        directoryWatcher = watcher;
+        watcher.on("error", (error) => {
+          handleDirectoryWatchError({ error, watcher });
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        emitSystemLine({ text: `log directory watch failed: ${message}` });
+      }
       pollTimer = setInterval(
         scheduleRefresh,
         LOG_VIEWER_ROTATION_POLL_INTERVAL_MS,
