@@ -14,7 +14,6 @@ import {
   getEnvironment,
   getThread,
   isDatabaseMaintenanceIdle,
-  listHostThreadIds,
   listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
@@ -46,6 +45,7 @@ import {
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
 import { handleExpiredCommands } from "../hosts/expired-commands.js";
+import { handleExpiredHostSessionLeases } from "../../internal/session-owner-side-effects.js";
 import { sweepDueNudges } from "../scheduling/nudge-sweep.js";
 import {
   advanceProjectDeletion,
@@ -368,21 +368,7 @@ export async function runPeriodicSweeps(
       limit: DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
     });
     const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
-    if (expiredLeases.expiredSessionIds.length > 0) {
-      for (const sessionId of expiredLeases.expiredSessionIds) {
-        deps.hub.closeDaemonSession(sessionId, "expired");
-      }
-      deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
-        sessionIds: expiredLeases.expiredSessionIds,
-        reason:
-          "Host daemon connection expired while awaiting user interaction; retry the thread to continue",
-      });
-      for (const hostId of expiredLeases.expiredHostIds) {
-        for (const threadId of listHostThreadIds(deps.db, { hostId })) {
-          deps.hub.notifyThread(threadId, ["status-changed"]);
-        }
-      }
-    }
+    handleExpiredHostSessionLeases(deps, { expiredLeases });
     sweepDestroyingEnvironments(deps.db, deps.hub);
     await sweepDueAutomations(deps);
     await sweepDueNudges(deps);

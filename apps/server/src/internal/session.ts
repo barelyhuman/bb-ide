@@ -20,11 +20,10 @@ import {
   assertAuthenticatedHostMatches,
   getAuthenticatedDaemon,
 } from "./auth.js";
-import { reconcileSessionThreads } from "./reconciliation.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
-import { markHostSessionOpened } from "../services/hosts/host-lifecycle.js";
 import { requireAuthenticatedDaemonSession } from "./session-state.js";
 import { readAttachment } from "../services/projects/attachments.js";
+import { handleHostSessionOpened } from "./session-owner-side-effects.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   const { get, post } = typedRoutes<HostDaemonInternalSchema>(app, {
@@ -76,39 +75,13 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
             heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
             leaseTimeoutMs: LEASE_TIMEOUT_MS,
           });
-          await markHostSessionOpened(deps, {
+
+          await handleHostSessionOpened(deps, {
+            activeThreads: payload.activeThreads,
             hostId: daemon.hostId,
+            openedSession: session,
+            previousSession: existingSession,
           });
-          deps.logger.info(
-            {
-              sessionId: session.id,
-              hostId: daemon.hostId,
-              replacedSessionId: existingSession?.id ?? null,
-            },
-            "Session opened",
-          );
-
-          if (existingSession && existingSession.id !== session.id) {
-            deps.hub.closeDaemonSession(existingSession.id, "replaced");
-
-            // Pending interactions are bound to the daemon session that registered
-            // them. A new session id is a new in-memory provider-request registry,
-            // even if the daemon instance id is unchanged and reports active threads.
-            const pendingInteractionInterruptReason =
-              existingSession.instanceId !== payload.instanceId
-                ? "Host daemon restarted while awaiting user interaction; retry the thread to continue"
-                : "Host daemon session was replaced while awaiting user interaction; retry the thread to continue";
-            deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
-              sessionIds: [existingSession.id],
-              reason: pendingInteractionInterruptReason,
-            });
-          }
-
-          await reconcileSessionThreads(
-            deps,
-            daemon.hostId,
-            payload.activeThreads,
-          );
 
           const trackedThreadTargets = listTrackedThreadStorageTargetsOnHost(
             deps.db,

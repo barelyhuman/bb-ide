@@ -17,6 +17,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/errors.js";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../../src/constants.js";
+import { runPeriodicSweeps } from "../../src/services/system/periodic-sweeps.js";
 import {
   onDaemonSocketClose,
   onDaemonSocketMessage,
@@ -701,6 +702,107 @@ describe("internal session correctness", () => {
       });
     } finally {
       vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("closes expired lease sockets and interrupts their pending interactions during sweeps", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-expired-lease-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-expired-lease-pending-interaction",
+        providerThreadId: "provider-thread-expired-lease-pending-interaction",
+      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-expired-lease-pending-interaction",
+            providerId: "codex",
+            providerThreadId:
+              "provider-thread-expired-lease-pending-interaction",
+            providerRequestId: "request-expired-lease-pending-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-expired-lease-pending-interaction",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
+      if (registered.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
+      }
+
+      const socket = {
+        close: vi.fn(),
+        send: vi.fn(),
+      };
+      harness.hub.registerDaemon(session.id, host.id, socket);
+      harness.db
+        .update(hostDaemonSessions)
+        .set({ leaseExpiresAt: Date.now() - 1_000 })
+        .where(eq(hostDaemonSessions.id, session.id))
+        .run();
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(socket.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: "session-close", reason: "expired" }),
+      );
+      expect(socket.close).toHaveBeenCalledWith(1000, "expired");
+      const expiredSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(expiredSession?.status).toBe("closed");
+      expect(expiredSession?.closeReason).toBe("expired");
+
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction(
+        {
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        },
+      );
+      expect(interrupted).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon connection expired while awaiting user interaction; retry the thread to continue",
+      });
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+
+      const threadResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(threadResponse.status).toBe(200);
+      expect(
+        threadResponseSchema.parse(await readJson(threadResponse)).runtime,
+      ).toMatchObject({
+        displayStatus: "waiting-for-host",
+        hostReconnectGraceExpiresAt: null,
+      });
+    } finally {
       await harness.cleanup();
     }
   });
