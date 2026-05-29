@@ -18,22 +18,22 @@ import type {
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import {
+  findTimelineSegmentAnchorSequenceAfter,
+  getTimelineSegmentAnchorAtSequence,
   listContextWindowUsageRows,
   listFilteredStoredTimelineWindowEventRows,
-  listManagerConversationTimelineSegmentAnchorRows,
   listRecentStoredEventRows,
-  listStandardTimelineSegmentAnchorRows,
   listStoredClientTurnRequestIdsInRange,
   listStoredEventRowsInRange,
   listStoredTimelineWindowEventRows,
   listStoredTurnInputAcceptedRowsByClientRequestIds,
   listStoredTurnStartedRowsByTurnIdsUpToSequence,
+  listTimelineSegmentAnchorsDescending,
 } from "@bb/db";
 import type {
   DbConnection,
-  ManagerConversationTimelineSegmentAnchorRow,
-  StandardTimelineSegmentAnchorRow,
   StoredEventRow,
+  TimelineSegmentAnchorAudience,
 } from "@bb/db";
 import { ApiError } from "../../errors.js";
 import { parseStoredEvent } from "./thread-data.js";
@@ -734,31 +734,90 @@ function ensureTimelineWindowTurnStartedRows(
   );
 }
 
-function isStandardTimelineAnchorCursorMatch(
-  anchor: StandardTimelineSegmentAnchorRow,
-  cursor: TimelinePaginationCursor,
-): boolean {
-  return (
-    anchor.sequence === cursor.anchorSeq && anchor.rowId === cursor.anchorId
-  );
+interface ResolveTimelineSegmentWindowArgs {
+  audience: TimelineSegmentAnchorAudience;
+  page: ThreadTimelinePageRequest;
+  threadId: string;
 }
 
-function requireStandardTimelineAnchorCursorIndex(
-  anchors: readonly StandardTimelineSegmentAnchorRow[],
-  cursor: TimelinePaginationCursor,
-): number {
-  const index = anchors.findIndex((anchor) =>
-    isStandardTimelineAnchorCursorMatch(anchor, cursor),
-  );
-  if (index !== -1) {
-    return index;
+interface ResolvedTimelineSegmentWindow {
+  beforeSequence: number | undefined;
+  hasAnchors: boolean;
+  sequenceStart: number;
+}
+
+/**
+ * Resolves the event-sequence window for a timeline page from segment anchors,
+ * touching only the ~`segmentLimit` anchors around the page rather than every
+ * anchor in the thread. `hasAnchors` is false only when the thread has no
+ * qualifying anchors at all; a stale cursor (anchors exist but the cursor's
+ * anchor is gone) throws, matching the previous behavior.
+ */
+function resolveTimelineSegmentWindow(
+  db: DbConnection,
+  args: ResolveTimelineSegmentWindowArgs,
+): ResolvedTimelineSegmentWindow {
+  const { audience, page, threadId } = args;
+  const noAnchors: ResolvedTimelineSegmentWindow = {
+    beforeSequence: undefined,
+    hasAnchors: false,
+    sequenceStart: 0,
+  };
+
+  if (page.kind === "older") {
+    const cursor = page.beforeCursor;
+    const cursorAnchor = getTimelineSegmentAnchorAtSequence(db, {
+      audience,
+      sequence: cursor.anchorSeq,
+      threadId,
+    });
+    if (!cursorAnchor || cursorAnchor.rowId !== cursor.anchorId) {
+      const anyAnchor = listTimelineSegmentAnchorsDescending(db, {
+        audience,
+        limit: 1,
+        threadId,
+      });
+      if (anyAnchor.length === 0) {
+        return noAnchors;
+      }
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Timeline pagination cursor is no longer available",
+      );
+    }
+    const precedingAnchors = listTimelineSegmentAnchorsDescending(db, {
+      audience,
+      beforeSequence: cursor.anchorSeq,
+      limit: page.segmentLimit + 1,
+      threadId,
+    });
+    return {
+      beforeSequence: findTimelineSegmentAnchorSequenceAfter(db, {
+        audience,
+        sequence: cursor.anchorSeq,
+        threadId,
+      }),
+      hasAnchors: true,
+      // The (segmentLimit + 1)-th anchor before the cursor is the window's
+      // lower bound; fewer than that means the window reaches the thread start.
+      sequenceStart: precedingAnchors[page.segmentLimit]?.sequence ?? 0,
+    };
   }
 
-  throw new ApiError(
-    400,
-    "invalid_request",
-    "Timeline pagination cursor is no longer available",
-  );
+  const newestAnchors = listTimelineSegmentAnchorsDescending(db, {
+    audience,
+    limit: page.segmentLimit + 1,
+    threadId,
+  });
+  if (newestAnchors.length === 0) {
+    return noAnchors;
+  }
+  return {
+    beforeSequence: undefined,
+    hasAnchors: true,
+    sequenceStart: newestAnchors[page.segmentLimit]?.sequence ?? 0,
+  };
 }
 
 function selectStandardTimelineEventRows(
@@ -767,37 +826,18 @@ function selectStandardTimelineEventRows(
   page: ThreadTimelinePageRequest,
   systemClientRequestVisibility: SystemClientRequestVisibility,
 ): TimelineEventRowSelection {
-  const anchors = listStandardTimelineSegmentAnchorRows(db, {
-    includeSystemClientRequests: systemClientRequestVisibility === "visible",
+  const window = resolveTimelineSegmentWindow(db, {
+    audience:
+      systemClientRequestVisibility === "visible" ? "all" : "non-system",
+    page,
     threadId: thread.id,
   });
-  if (anchors.length === 0) {
+  if (!window.hasAnchors) {
     return selectFullTimelineEventRows(db, thread, page);
   }
 
-  let beforeSequence: number | undefined;
-  let candidateAnchorEndExclusive: number;
-  if (page.kind === "older") {
-    const cursorAnchorIndex = requireStandardTimelineAnchorCursorIndex(
-      anchors,
-      page.beforeCursor,
-    );
-    candidateAnchorEndExclusive = cursorAnchorIndex;
-    beforeSequence = anchors[cursorAnchorIndex + 1]?.sequence;
-  } else {
-    candidateAnchorEndExclusive = anchors.length;
-    beforeSequence = undefined;
-  }
-  const selectedAnchorStartIndex = Math.max(
-    0,
-    candidateAnchorEndExclusive - page.segmentLimit,
-  );
-  const windowAnchorIndex =
-    selectedAnchorStartIndex > 0 ? selectedAnchorStartIndex - 1 : null;
-  const sequenceStart =
-    windowAnchorIndex === null
-      ? 0
-      : (anchors[windowAnchorIndex]?.sequence ?? 0);
+  const beforeSequence = window.beforeSequence;
+  const sequenceStart = window.sequenceStart;
 
   const selectedRows = ensureTimelineWindowTurnStartedRows(db, {
     threadId: thread.id,
@@ -837,65 +877,26 @@ function selectStandardTimelineEventRows(
   };
 }
 
-function isManagerConversationTimelineAnchorCursorMatch(
-  anchor: ManagerConversationTimelineSegmentAnchorRow,
-  cursor: TimelinePaginationCursor,
-): boolean {
-  return (
-    anchor.sequence === cursor.anchorSeq && anchor.rowId === cursor.anchorId
-  );
-}
-
-function requireManagerConversationTimelineAnchorCursorIndex(
-  anchors: readonly ManagerConversationTimelineSegmentAnchorRow[],
-  cursor: TimelinePaginationCursor,
-): number {
-  const index = anchors.findIndex((anchor) =>
-    isManagerConversationTimelineAnchorCursorMatch(anchor, cursor),
-  );
-  if (index !== -1) {
-    return index;
-  }
-
-  throw new ApiError(
-    400,
-    "invalid_request",
-    "Timeline pagination cursor is no longer available",
-  );
-}
-
 function selectManagerConversationTimelineEventRows(
   db: DbConnection,
   thread: Thread,
   page: ThreadTimelinePageRequest,
 ): TimelineEventRowSelection {
-  const anchors = listManagerConversationTimelineSegmentAnchorRows(db, {
+  const window = resolveTimelineSegmentWindow(db, {
+    audience: "user",
+    page,
     threadId: thread.id,
   });
-  let beforeSequence: number | undefined;
-  let candidateAnchorEndExclusive: number;
-  if (page.kind === "older") {
-    const cursorAnchorIndex =
-      requireManagerConversationTimelineAnchorCursorIndex(
-        anchors,
-        page.beforeCursor,
-      );
-    candidateAnchorEndExclusive = cursorAnchorIndex;
-    beforeSequence = anchors[cursorAnchorIndex + 1]?.sequence;
-  } else {
-    candidateAnchorEndExclusive = anchors.length;
-    beforeSequence = undefined;
+  // The manager conversation has no full-timeline fallback: an older page must
+  // resolve against a live cursor, while a latest page with no anchors selects
+  // from the thread start (sequenceStart 0).
+  if (!window.hasAnchors && page.kind === "older") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Timeline pagination cursor is no longer available",
+    );
   }
-  const selectedAnchorStartIndex = Math.max(
-    0,
-    candidateAnchorEndExclusive - page.segmentLimit,
-  );
-  const windowAnchorIndex =
-    selectedAnchorStartIndex > 0 ? selectedAnchorStartIndex - 1 : null;
-  const sequenceStart =
-    windowAnchorIndex === null
-      ? 0
-      : (anchors[windowAnchorIndex]?.sequence ?? 0);
 
   return {
     acceptedClientRequestContextRows: [],
@@ -910,9 +911,9 @@ function selectManagerConversationTimelineEventRows(
     rows: ensureTimelineWindowTurnStartedRows(db, {
       threadId: thread.id,
       rows: listFilteredStoredTimelineWindowEventRows(db, {
-        beforeSequence,
+        beforeSequence: window.beforeSequence,
         filter: MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
-        sequenceStart,
+        sequenceStart: window.sequenceStart,
         threadId: thread.id,
       }),
     }),

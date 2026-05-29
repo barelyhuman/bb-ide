@@ -24,6 +24,9 @@ import {
   listFilteredStoredEventRows,
   listRecentStoredEventRows,
   listStandardTimelineSegmentAnchorRows,
+  listTimelineSegmentAnchorsDescending,
+  findTimelineSegmentAnchorSequenceAfter,
+  getTimelineSegmentAnchorAtSequence,
   listStoredClientTurnRequestIdsInRange,
   listStoredEventRows,
   listStoredEventRowsInRange,
@@ -1233,6 +1236,65 @@ describe("events", () => {
         threadId: thread.id,
       }).map((row) => row.sequence),
     ).toEqual([1, 2, 4, 7, 8, 9, 10]);
+
+    // The bounded queries used by timeline pagination must select the same
+    // anchors as the full scan, windowed by limit/sequence so a page load
+    // never enumerates the whole thread.
+    expect(
+      listTimelineSegmentAnchorsDescending(db, {
+        audience: "non-system",
+        limit: 3,
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([10, 9, 8]);
+    expect(
+      listTimelineSegmentAnchorsDescending(db, {
+        audience: "non-system",
+        beforeSequence: 8,
+        limit: 2,
+        threadId: thread.id,
+      }),
+    ).toEqual([
+      { rowId: `${thread.id}:user-seed:7`, sequence: 7 },
+      { rowId: `${thread.id}:user-seed:4`, sequence: 4 },
+    ]);
+    expect(
+      getTimelineSegmentAnchorAtSequence(db, {
+        audience: "non-system",
+        sequence: 7,
+        threadId: thread.id,
+      }),
+    ).toEqual({ rowId: `${thread.id}:user-seed:7`, sequence: 7 });
+    // Sequence 2 is a system-initiated turn: an anchor for "all" but not
+    // "non-system" — the audience filter must be honored.
+    expect(
+      getTimelineSegmentAnchorAtSequence(db, {
+        audience: "non-system",
+        sequence: 2,
+        threadId: thread.id,
+      }),
+    ).toBeUndefined();
+    expect(
+      getTimelineSegmentAnchorAtSequence(db, {
+        audience: "all",
+        sequence: 2,
+        threadId: thread.id,
+      }),
+    ).toEqual({ rowId: `${thread.id}:user-seed:2`, sequence: 2 });
+    expect(
+      findTimelineSegmentAnchorSequenceAfter(db, {
+        audience: "non-system",
+        sequence: 7,
+        threadId: thread.id,
+      }),
+    ).toBe(8);
+    expect(
+      findTimelineSegmentAnchorSequenceAfter(db, {
+        audience: "non-system",
+        sequence: 10,
+        threadId: thread.id,
+      }),
+    ).toBeUndefined();
   });
 
   it("loads timeline event windows with sequence bounds and exclusions", () => {

@@ -1118,43 +1118,154 @@ export interface ManagerConversationTimelineSegmentAnchorRow {
   sequence: number;
 }
 
+/**
+ * Which `client/turn/requested` turns count as timeline segment anchors:
+ * - `all`: every turn (standard timeline with system client requests visible)
+ * - `non-system`: turns not initiated by the system (standard timeline default)
+ * - `user`: user-initiated turns only (manager-conversation timeline)
+ */
+export type TimelineSegmentAnchorAudience = "all" | "non-system" | "user";
+
+function timelineSegmentAnchorSelection() {
+  return {
+    rowId: sql<string>`${events.threadId} || ':user-seed:' || ${events.sequence}`,
+    sequence: events.sequence,
+  };
+}
+
+function timelineSegmentAnchorInitiatorCondition(
+  audience: TimelineSegmentAnchorAudience,
+): SQL {
+  switch (audience) {
+    case "all":
+      return sql`1 = 1`;
+    case "non-system":
+      return sql`COALESCE(json_extract(${events.data}, '$.initiator'), 'user') <> 'system'`;
+    case "user":
+      return sql`COALESCE(json_extract(${events.data}, '$.initiator'), 'user') = 'user'`;
+  }
+}
+
+function timelineSegmentAnchorConditions(
+  threadId: string,
+  audience: TimelineSegmentAnchorAudience,
+): SQL | undefined {
+  // Shared anchor predicate so the unbounded and bounded queries select the
+  // exact same set of turns.
+  return and(
+    eq(events.threadId, threadId),
+    eq(events.type, "client/turn/requested"),
+    timelineSegmentAnchorInitiatorCondition(audience),
+    sql`(
+      COALESCE(json_extract(${events.data}, '$.target.kind'), 'new-turn')
+        IN ('thread-start', 'new-turn')
+      OR (
+        json_extract(${events.data}, '$.target.kind') = 'auto'
+        AND json_extract(${events.data}, '$.target.expectedTurnId') IS NULL
+      )
+    )`,
+    sql`EXISTS (
+      SELECT 1
+      FROM json_each(${events.data}, '$.input') AS input_part
+      WHERE (
+        json_extract(input_part.value, '$.type') = 'text'
+        AND COALESCE(json_extract(input_part.value, '$.text'), '') <> ''
+      )
+      OR json_extract(input_part.value, '$.type')
+        IN ('image', 'localImage', 'localFile')
+    )`,
+  );
+}
+
+export interface ListTimelineSegmentAnchorsDescendingArgs {
+  threadId: string;
+  audience: TimelineSegmentAnchorAudience;
+  /** Restrict to anchors strictly before this sequence (exclusive). */
+  beforeSequence?: number;
+  limit: number;
+}
+
+/**
+ * Newest-first segment anchors, bounded by `limit` (and optionally by
+ * `beforeSequence`). Lets the timeline resolve a page's window without
+ * enumerating every anchor in the thread.
+ */
+export function listTimelineSegmentAnchorsDescending(
+  db: DbConnection,
+  args: ListTimelineSegmentAnchorsDescendingArgs,
+): StandardTimelineSegmentAnchorRow[] {
+  const conditions = timelineSegmentAnchorConditions(
+    args.threadId,
+    args.audience,
+  );
+  const where =
+    args.beforeSequence === undefined
+      ? conditions
+      : and(conditions, lt(events.sequence, args.beforeSequence));
+  return db
+    .select(timelineSegmentAnchorSelection())
+    .from(events)
+    .where(where)
+    .orderBy(desc(events.sequence))
+    .limit(args.limit)
+    .all();
+}
+
+export interface TimelineSegmentAnchorLookupArgs {
+  threadId: string;
+  audience: TimelineSegmentAnchorAudience;
+  sequence: number;
+}
+
+/** The first segment anchor strictly after `sequence`, if any. */
+export function findTimelineSegmentAnchorSequenceAfter(
+  db: DbConnection,
+  args: TimelineSegmentAnchorLookupArgs,
+): number | undefined {
+  const row = db
+    .select({ sequence: events.sequence })
+    .from(events)
+    .where(
+      and(
+        timelineSegmentAnchorConditions(args.threadId, args.audience),
+        gt(events.sequence, args.sequence),
+      ),
+    )
+    .orderBy(events.sequence)
+    .limit(1)
+    .get();
+  return row?.sequence;
+}
+
+/** The segment anchor at exactly `sequence`, if that turn qualifies as one. */
+export function getTimelineSegmentAnchorAtSequence(
+  db: DbConnection,
+  args: TimelineSegmentAnchorLookupArgs,
+): StandardTimelineSegmentAnchorRow | undefined {
+  return db
+    .select(timelineSegmentAnchorSelection())
+    .from(events)
+    .where(
+      and(
+        timelineSegmentAnchorConditions(args.threadId, args.audience),
+        eq(events.sequence, args.sequence),
+      ),
+    )
+    .limit(1)
+    .get();
+}
+
 export function listStandardTimelineSegmentAnchorRows(
   db: DbConnection,
   args: ListStandardTimelineSegmentAnchorRowsArgs,
 ): StandardTimelineSegmentAnchorRow[] {
-  const initiatorCondition = args.includeSystemClientRequests
-    ? sql`1 = 1`
-    : sql`COALESCE(json_extract(${events.data}, '$.initiator'), 'user') <> 'system'`;
-
   return db
-    .select({
-      rowId: sql<string>`${events.threadId} || ':user-seed:' || ${events.sequence}`,
-      sequence: events.sequence,
-    })
+    .select(timelineSegmentAnchorSelection())
     .from(events)
     .where(
-      and(
-        eq(events.threadId, args.threadId),
-        eq(events.type, "client/turn/requested"),
-        initiatorCondition,
-        sql`(
-          COALESCE(json_extract(${events.data}, '$.target.kind'), 'new-turn')
-            IN ('thread-start', 'new-turn')
-          OR (
-            json_extract(${events.data}, '$.target.kind') = 'auto'
-            AND json_extract(${events.data}, '$.target.expectedTurnId') IS NULL
-          )
-        )`,
-        sql`EXISTS (
-          SELECT 1
-          FROM json_each(${events.data}, '$.input') AS input_part
-          WHERE (
-            json_extract(input_part.value, '$.type') = 'text'
-            AND COALESCE(json_extract(input_part.value, '$.text'), '') <> ''
-          )
-          OR json_extract(input_part.value, '$.type')
-            IN ('image', 'localImage', 'localFile')
-        )`,
+      timelineSegmentAnchorConditions(
+        args.threadId,
+        args.includeSystemClientRequests ? "all" : "non-system",
       ),
     )
     .orderBy(events.sequence)
@@ -1166,36 +1277,9 @@ export function listManagerConversationTimelineSegmentAnchorRows(
   args: ListManagerConversationTimelineSegmentAnchorRowsArgs,
 ): ManagerConversationTimelineSegmentAnchorRow[] {
   return db
-    .select({
-      rowId: sql<string>`${events.threadId} || ':user-seed:' || ${events.sequence}`,
-      sequence: events.sequence,
-    })
+    .select(timelineSegmentAnchorSelection())
     .from(events)
-    .where(
-      and(
-        eq(events.threadId, args.threadId),
-        eq(events.type, "client/turn/requested"),
-        sql`COALESCE(json_extract(${events.data}, '$.initiator'), 'user') = 'user'`,
-        sql`(
-          COALESCE(json_extract(${events.data}, '$.target.kind'), 'new-turn')
-            IN ('thread-start', 'new-turn')
-          OR (
-            json_extract(${events.data}, '$.target.kind') = 'auto'
-            AND json_extract(${events.data}, '$.target.expectedTurnId') IS NULL
-          )
-        )`,
-        sql`EXISTS (
-          SELECT 1
-          FROM json_each(${events.data}, '$.input') AS input_part
-          WHERE (
-            json_extract(input_part.value, '$.type') = 'text'
-            AND COALESCE(json_extract(input_part.value, '$.text'), '') <> ''
-          )
-          OR json_extract(input_part.value, '$.type')
-            IN ('image', 'localImage', 'localFile')
-        )`,
-      ),
-    )
+    .where(timelineSegmentAnchorConditions(args.threadId, "user"))
     .orderBy(events.sequence)
     .all();
 }
