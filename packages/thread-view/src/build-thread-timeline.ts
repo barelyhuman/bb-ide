@@ -13,12 +13,13 @@ import type {
   TimelineTurnRow,
   TimelineUserConversationRow,
 } from "@bb/server-contract";
-import type {
-  ActiveThinking,
-  Thread,
-  ThreadEventItemType,
-  ThreadEventType,
-  ThreadTimelinePendingTodos,
+import {
+  readTerminalOutputLines,
+  type ActiveThinking,
+  type Thread,
+  type ThreadEventItemType,
+  type ThreadEventType,
+  type ThreadTimelinePendingTodos,
 } from "@bb/domain";
 import type {
   EventProjectionErrorMessage,
@@ -395,7 +396,7 @@ function toTimelineFileChange(
   };
 }
 
-function formatProvisioningTranscriptEntry(
+function formatProvisioningTranscriptEntryText(
   entry: EventProjectionProvisioningTranscriptEntry,
 ): string {
   const durationMs =
@@ -409,6 +410,12 @@ function formatProvisioningTranscriptEntry(
     return `${entry.text} (${durationToCompactString(durationMs)})`;
   }
   return entry.text;
+}
+
+function formatProvisioningTranscriptEntryLines(
+  entry: EventProjectionProvisioningTranscriptEntry,
+): string[] {
+  return readTerminalOutputLines(formatProvisioningTranscriptEntryText(entry));
 }
 
 function provisioningTerminalDetailLine(
@@ -446,8 +453,9 @@ function buildTimelineOperationDetail(
   }
 
   const transcriptLines =
-    message.provisioning?.transcript?.map(formatProvisioningTranscriptEntry) ??
-    [];
+    message.provisioning?.transcript?.flatMap(
+      formatProvisioningTranscriptEntryLines,
+    ) ?? [];
   const terminalLine = provisioningTerminalDetailLine(message);
   const detailLines = (message.detail ?? "")
     .split(/\n|•/u)

@@ -219,6 +219,29 @@ describe("workspace provisioning", () => {
     ).rejects.toThrow(/timed out/u);
   });
 
+  it("compacts carriage-return setup script progress in transcript output", async () => {
+    const workspacePath = await makeTempDir("bb-setup-progress-");
+    await fs.writeFile(
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      "printf 'progress 1\\rprogress 2\\rprogress done\\n'\n",
+      "utf8",
+    );
+
+    const outputEntries: string[] = [];
+    const result = await runSetupScript({
+      workspacePath,
+      timeoutMs: 900000,
+      onProgress: (entry) => {
+        if (entry.type === "output" && entry.key.startsWith("setup-output-")) {
+          outputEntries.push(entry.text);
+        }
+      },
+    });
+
+    expect(result.output).toBe("progress 1\rprogress 2\rprogress done\n");
+    expect(outputEntries).toEqual(["progress done"]);
+  });
+
   it("closes setup script stdin so hooks do not block on input", async () => {
     const workspacePath = await makeTempDir("bb-setup-stdin-closed-");
     await fs.writeFile(

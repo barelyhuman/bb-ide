@@ -582,6 +582,43 @@ function fileChangeRowIdByPath(
 }
 
 describe("buildThreadTimelineFromEvents", () => {
+  it("normalizes carriage-return provisioning output in operation detail", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const rows = buildTimelineRows(
+      fromRows([
+        event.threadProvisioning({
+          status: "active",
+          entries: [
+            {
+              type: "output",
+              key: "git-worktree-output-1",
+              text: [
+                "Preparing worktree (new branch 'bb/example')\n",
+                "Updating files:  44% (1017/2287)\r",
+                "Updating files:  45% (1030/2287)\r",
+                "Updating files: 100% (2287/2287), done.",
+              ].join(""),
+            },
+          ],
+        }),
+      ]),
+    );
+
+    const [row] = rows;
+    if (!row || row.kind !== "system") {
+      throw new Error("Expected a system row");
+    }
+
+    expect(row.detail).toBe(
+      [
+        "Preparing worktree (new branch 'bb/example')",
+        "Updating files: 100% (2287/2287), done.",
+      ].join("\n"),
+    );
+    expect(row.detail).not.toContain("44%");
+    expect(row.detail).not.toContain("\r");
+  });
+
   it("uses accepted context to suppress pending steers without rendering future accepted rows", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const turnStarted = event.turnStarted({ turnId: "turn-1" });

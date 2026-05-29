@@ -66,7 +66,9 @@ export {
   TERMINAL_DATA_MAX_BASE64_LENGTH,
   TERMINAL_DATA_MAX_BYTES,
   TERMINAL_ROWS_MAX,
+  createTerminalOutputLineReader,
   getTerminalBase64DecodedByteLength,
+  readTerminalOutputLines,
   terminalColsSchema,
   terminalDataBase64Schema,
   terminalSessionCloseReasonSchema,
@@ -76,6 +78,7 @@ export {
   terminalSessionStatusValues,
 } from "./terminal.js";
 export type {
+  TerminalOutputLineReader,
   TerminalSessionCloseReason,
   TerminalSessionStatus,
 } from "./terminal.js";

@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   DEFAULT_ENV_SETUP_SCRIPT_NAME,
+  createTerminalOutputLineReader,
+  readTerminalOutputLines,
   type ProvisioningTranscriptEntry,
 } from "@bb/domain";
 import {
@@ -128,12 +130,12 @@ function emitGitOutput(
   key: string,
   result: GitCommandResult,
 ): void {
-  const combined = (result.stdout + result.stderr).trim();
-  if (!combined) {
+  const lines = readTerminalOutputLines(result.stdout + result.stderr);
+  if (lines.length === 0) {
     return;
   }
   let index = 0;
-  for (const line of combined.split(/\r?\n/u).filter(Boolean)) {
+  for (const line of lines) {
     index += 1;
     emitOutput(onProgress, `${key}-output-${index}`, line);
   }
@@ -327,16 +329,21 @@ export async function runSetupScript(
   });
 
   const outputChunks: string[] = [];
+  const outputLineReader = createTerminalOutputLineReader();
   let outputIndex = 0;
   let timedOut = false;
+
+  const emitSetupOutputLines = (lines: string[]): void => {
+    for (const line of lines) {
+      outputIndex += 1;
+      emitOutput(args.onProgress, `setup-output-${outputIndex}`, line);
+    }
+  };
 
   const handleChunk = (chunk: Buffer) => {
     const text = chunk.toString("utf8");
     outputChunks.push(text);
-    for (const line of text.split(/\r?\n/u).filter(Boolean)) {
-      outputIndex += 1;
-      emitOutput(args.onProgress, `setup-output-${outputIndex}`, line);
-    }
+    emitSetupOutputLines(outputLineReader.push(text));
   };
 
   child.stdout.on("data", handleChunk);
@@ -360,6 +367,7 @@ export async function runSetupScript(
     });
 
     const output = outputChunks.join("");
+    emitSetupOutputLines(outputLineReader.flush());
     const durationMs = Date.now() - startedAt;
     if (timedOut) {
       emitStep({
