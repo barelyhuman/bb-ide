@@ -13,8 +13,10 @@ import {
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import {
   hostDaemonCommandSchema,
+  isHostDaemonCommandType,
   type HostDaemonCommandResult,
   type HostDaemonCommandResultReportWithoutSession,
+  type HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
 import {
   isActiveLifecycleOperationState,
@@ -307,6 +309,12 @@ function getCommandResultOwner<TType extends ParsedCommandType>(
   command: ParsedCommandForType<TType>,
 ): CommandResultOwner<TType> | null {
   return commandResultOwners[command.type];
+}
+
+function hasCommandResultOwnerSideEffects(
+  type: HostDaemonCommandType,
+): boolean {
+  return commandResultOwners[type]?.applySideEffects !== undefined;
 }
 
 function isWorkspaceProvisioningTranscriptEntry(
@@ -853,6 +861,14 @@ export function handleCommandResultSideEffects(
   report: CommandResultSideEffectReport,
   commandRow: HostDaemonCommandRow,
 ): CommandResultSideEffectsResult {
+  if (
+    report.type !== commandRow.type ||
+    !isHostDaemonCommandType(report.type) ||
+    !hasCommandResultOwnerSideEffects(report.type)
+  ) {
+    return emptyCommandResultSideEffects();
+  }
+
   const command = parseCommand(commandRow);
   if (!reportMatchesCommandType(command, report)) {
     return emptyCommandResultSideEffects();

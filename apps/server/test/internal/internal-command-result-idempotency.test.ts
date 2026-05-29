@@ -24,6 +24,7 @@ import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
 } from "../../src/services/environments/environment-cleanup.js";
+import { handleExpiredCommands } from "../../src/services/hosts/expired-commands.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   advanceEnvironmentProvisioning,
@@ -981,7 +982,10 @@ describe("internal command result idempotency", () => {
         .run();
 
       const expired = sweepExpiredCommands(harness.db, harness.hub, now);
-      expect(expired.erroredCommandIds).toEqual([queuedStop.row.id]);
+      expect(expired.expiredCommandIds).toEqual([queuedStop.row.id]);
+      await handleExpiredCommands(harness.deps, {
+        commandIds: expired.expiredCommandIds,
+      });
       expect(getCommand(harness.db, queuedStop.row.id)).toMatchObject({
         state: "error",
         resultPayload: JSON.stringify({

@@ -475,6 +475,7 @@ export type {
   PruneCompletedCommandsResult,
   PruneCompletedCommandPayloadsArgs,
   PruneCompletedCommandPayloadsResult,
+  SweepExpiredCommandsResult,
   SweepExpiredLeasesResult,
   TruncateCompletedEventItemOutputsArgs,
   TruncateCompletedEventItemOutputsResult,

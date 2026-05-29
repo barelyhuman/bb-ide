@@ -117,7 +117,7 @@ describe("sweepExpiredCommands", () => {
 
     const result = sweepExpiredCommands(db, noopNotifier);
     expect(result.requeued).toBe(1);
-    expect(result.errored).toBe(0);
+    expect(result.expiredCommandIds).toEqual([]);
 
     // Verify command is back to pending with retryCount=1
     const updated = db
@@ -130,7 +130,7 @@ describe("sweepExpiredCommands", () => {
     expect(updated?.fetchedAt).toBeNull();
   });
 
-  it("errors commands with retryCount >= 1", () => {
+  it("returns retried expired command ids without terminalizing them", () => {
     const { db, host, project } = setup();
     const thread = createThread(db, noopNotifier, {
       projectId: project.id,
@@ -151,46 +151,26 @@ describe("sweepExpiredCommands", () => {
       .where(eq(hostDaemonCommands.id, cmd.id))
       .run();
 
-    const spy: DbNotifier = {
-      notifyThread: vi.fn(),
-      notifyEnvironment: vi.fn(),
-      notifyHost: vi.fn(),
-      notifyCommand: vi.fn(),
-      notifyProject: vi.fn(),
-      notifySystem: vi.fn(),
-    };
-
-    const result = sweepExpiredCommands(db, spy);
+    const result = sweepExpiredCommands(db, noopNotifier);
     expect(result.requeued).toBe(0);
-    expect(result.errored).toBe(1);
+    expect(result.expiredCommandIds).toEqual([cmd.id]);
 
-    // Command should be errored
     const updated = db
       .select()
       .from(hostDaemonCommands)
       .where(eq(hostDaemonCommands.id, cmd.id))
       .get();
-    expect(updated?.state).toBe("error");
-    expect(JSON.parse(updated?.resultPayload ?? "")).toEqual({
-      errorCode: "command_expired",
-      errorMessage: "Command expired after retry",
+    expect(updated).toMatchObject({
+      state: "fetched",
+      resultPayload: null,
     });
 
-    // Thread should be errored
     const updatedThread = db
       .select()
       .from(threads)
       .where(eq(threads.id, thread.id))
       .get();
-    expect(updatedThread?.status).toBe("error");
-
-    expect(spy.notifyThread).toHaveBeenCalledWith(
-      thread.id,
-      ["status-changed"],
-      {
-        projectId: project.id,
-      },
-    );
+    expect(updatedThread?.status).toBe("idle");
   });
 
   it("uses 20-minute TTL for environment.provision commands", () => {
@@ -212,6 +192,7 @@ describe("sweepExpiredCommands", () => {
 
     const result1 = sweepExpiredCommands(db, noopNotifier);
     expect(result1.requeued).toBe(0); // Not expired yet
+    expect(result1.expiredCommandIds).toEqual([]);
 
     // 21 minutes ago (past provision TTL)
     db.update(hostDaemonCommands)
@@ -223,7 +204,7 @@ describe("sweepExpiredCommands", () => {
     expect(result2.requeued).toBe(1); // Now expired and re-queued
   });
 
-  it("does not transition deleted or stop-pending threads to error when commands expire", () => {
+  it("returns retried deleted or stop-pending thread command ids without thread side effects", () => {
     const { db, host, project } = setup();
     const deletedThread = createThread(db, noopNotifier, {
       projectId: project.id,
@@ -263,7 +244,10 @@ describe("sweepExpiredCommands", () => {
       .run();
 
     const result = sweepExpiredCommands(db, noopNotifier);
-    expect(result.errored).toBe(2);
+    expect(result.expiredCommandIds).toHaveLength(2);
+    expect(result.expiredCommandIds).toEqual(
+      expect.arrayContaining([deletedCommand.id, stopPendingCommand.id]),
+    );
 
     expect(
       db.select().from(threads).where(eq(threads.id, deletedThread.id)).get()

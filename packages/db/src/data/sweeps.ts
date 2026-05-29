@@ -17,16 +17,12 @@ import {
   environments,
   maintenanceScanCursors,
 } from "../schema.js";
-import { transitionThreadsToError } from "./threads.js";
 
 /** Standard command TTL: 60 seconds */
 const STANDARD_COMMAND_TTL_MS = 60_000;
 
 /** Provision command TTL: 20 minutes */
 const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
-
-const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
-const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
 
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
@@ -172,6 +168,11 @@ export interface SweepExpiredLeasesResult {
   expiredHostIds: string[];
   expiredSessionIds: string[];
   sessionsClosed: number;
+}
+
+export interface SweepExpiredCommandsResult {
+  expiredCommandIds: string[];
+  requeued: number;
 }
 
 type SqlPredicate = ReturnType<typeof and>;
@@ -516,15 +517,16 @@ export function truncateCompletedEventItemOutputs(
  * Sweep expired commands (fetched but not completed past TTL).
  *
  * - retryCount 0: re-queue (set state="pending", fetchedAt=null, retryCount=1)
- * - retryCount >= 1: error the command and transition the associated thread to error
+ * - retryCount >= 1: return command ids for command-result settlement
  *
- * Returns { requeued: number; errored: number }
+ * Retried expirations are terminalized by the server's normal command-result
+ * settlement path so owner side effects and command completion remain atomic.
  */
 export function sweepExpiredCommands(
   db: DbConnection,
-  notifier: DbNotifier,
+  _notifier: DbNotifier,
   now?: number,
-) {
+): SweepExpiredCommandsResult {
   const currentTime = now ?? Date.now();
   const requeuedResult = db
     .update(hostDaemonCommands)
@@ -536,47 +538,16 @@ export function sweepExpiredCommands(
     .where(isFirstExpiredCommandAttemptPredicate(currentTime))
     .run();
 
-  const erroredCommands = db
-    .update(hostDaemonCommands)
-    .set({
-      state: "error",
-      completedAt: currentTime,
-      resultPayload: JSON.stringify({
-        errorCode: EXPIRED_COMMAND_ERROR_CODE,
-        errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-      }),
-    })
+  const expiredCommandIds = db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
     .where(isRetriedExpiredCommandPredicate(currentTime))
-    .returning({
-      id: hostDaemonCommands.id,
-      payload: hostDaemonCommands.payload,
-    })
-    .all();
-  const erroredCommandIds = erroredCommands.map((row) => row.id);
-
-  if (erroredCommandIds.length > 0) {
-    const threadsToError = new Set<string>();
-    for (const command of erroredCommands) {
-      try {
-        const payload = JSON.parse(command.payload);
-        if (typeof payload.threadId === "string") {
-          threadsToError.add(payload.threadId);
-        }
-      } catch {
-        // payload may not contain threadId, that's fine
-      }
-    }
-
-    transitionThreadsToError(db, notifier, {
-      now: currentTime,
-      threadIds: [...threadsToError],
-    });
-  }
+    .all()
+    .map((row) => row.id);
 
   return {
     requeued: requeuedResult.changes,
-    errored: erroredCommandIds.length,
-    erroredCommandIds,
+    expiredCommandIds,
   };
 }
 
