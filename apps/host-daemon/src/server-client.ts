@@ -453,10 +453,7 @@ export function createServerClient(
       });
 
       if (response.status !== 201) {
-        const detail = await response.text();
-        throw new Error(
-          `Failed to open session: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
-        );
+        throw await createResponseError("open session", response);
       }
 
       return hostDaemonSessionOpenResponseSchema.parse(await response.json());

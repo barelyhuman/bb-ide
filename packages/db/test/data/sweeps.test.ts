@@ -11,7 +11,8 @@ import {
   COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
   pruneClosedSessions,
-  pruneCompletedCommands,
+  pruneCompletedDurableCommandRows,
+  pruneCompletedReadOnlyCommandRows,
   pruneCompletedCommandPayloads,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
@@ -425,7 +426,7 @@ describe("pruneCompletedCommandPayloads", () => {
   });
 });
 
-describe("pruneCompletedCommands", () => {
+describe("pruneCompletedCommandRows", () => {
   it("deletes only old terminal command rows", () => {
     const { db, host } = setup();
     const now = Date.now();
@@ -475,11 +476,17 @@ describe("pruneCompletedCommands", () => {
     fetchCommands(db, noopNotifier, { hostId: host.id });
 
     expect(
-      pruneCompletedCommands(db, {
+      pruneCompletedReadOnlyCommandRows(db, {
         completedBefore,
         limit: 100,
       }),
     ).toEqual({ deleted: 2 });
+    expect(
+      pruneCompletedDurableCommandRows(db, {
+        completedBefore,
+        limit: 100,
+      }),
+    ).toEqual({ deleted: 0 });
 
     expect(
       db
@@ -488,6 +495,46 @@ describe("pruneCompletedCommands", () => {
         .all()
         .map((command) => command.id),
     ).toEqual([freshSuccess.id, fetchedCommand.id]);
+  });
+
+  it("prunes read-only rows without touching durable rows", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const completedAt = now - 10_000;
+    const completedBefore = now - 5_000;
+
+    const readOnly = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: "{}",
+    });
+    const durable = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.commit",
+      payload: "{}",
+    });
+    for (const command of [readOnly, durable]) {
+      reportCommandResult(db, noopNotifier, {
+        commandId: command.id,
+        state: "success",
+        completedAt,
+        resultPayload: null,
+      });
+    }
+
+    expect(
+      pruneCompletedReadOnlyCommandRows(db, {
+        completedBefore,
+        limit: 100,
+      }),
+    ).toEqual({ deleted: 1 });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .all()
+        .map((command) => command.id),
+    ).toEqual([durable.id]);
   });
 
   it("honors the delete batch limit", () => {
@@ -515,12 +562,49 @@ describe("pruneCompletedCommands", () => {
     }
 
     expect(
-      pruneCompletedCommands(db, {
+      pruneCompletedReadOnlyCommandRows(db, {
         completedBefore,
         limit: 2,
       }),
     ).toEqual({ deleted: 2 });
     expect(db.select().from(hostDaemonCommands).all()).toHaveLength(1);
+  });
+
+  it("drains a read-only backlog larger than one batch across repeated sweeps", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const completedAt = now - 10_000;
+    const completedBefore = now - 5_000;
+    const backlog = 25;
+    const batchLimit = 10;
+
+    for (let index = 0; index < backlog; index += 1) {
+      const command = queueCommand(db, noopNotifier, {
+        hostId: host.id,
+        type: "workspace.status",
+        payload: "{}",
+      });
+      reportCommandResult(db, noopNotifier, {
+        commandId: command.id,
+        state: "success",
+        completedAt,
+        resultPayload: null,
+      });
+    }
+
+    let sweeps = 0;
+    while (
+      pruneCompletedReadOnlyCommandRows(db, {
+        completedBefore,
+        limit: batchLimit,
+      }).deleted > 0
+    ) {
+      sweeps += 1;
+      expect(sweeps).toBeLessThanOrEqual(backlog);
+    }
+
+    expect(db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+    expect(sweeps).toBe(Math.ceil(backlog / batchLimit));
   });
 });
 

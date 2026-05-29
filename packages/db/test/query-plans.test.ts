@@ -24,7 +24,8 @@ import {
 } from "../src/data/events.js";
 import {
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
-  pruneCompletedCommands,
+  READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+  pruneCompletedReadOnlyCommandRows,
   pruneCompletedCommandPayloads,
   pruneClosedSessions,
   sweepExpiredCommands,
@@ -226,7 +227,7 @@ describe("slow query index plans", () => {
     });
     logger.clear();
 
-    pruneCompletedCommands(db, { completedBefore, limit: 100 });
+    pruneCompletedReadOnlyCommandRows(db, { completedBefore, limit: 100 });
 
     const debugLog = findOnlyDebugLog({
       logger,
@@ -238,7 +239,13 @@ describe("slow query index plans", () => {
       db,
       debugLog,
       indexName: "host_daemon_commands_completed_prune_idx",
-      params: ["success", "error", completedBefore, 100],
+      params: [
+        "success",
+        "error",
+        ...READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+        completedBefore,
+        100,
+      ],
     });
 
     db.$client.close();

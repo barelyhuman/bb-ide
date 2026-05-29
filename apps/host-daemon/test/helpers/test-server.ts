@@ -94,6 +94,8 @@ export interface CreateTestServerOptions {
   leaseTimeoutMs?: number;
   requireTurnStartedForInteractiveRequests?: boolean;
   requireTurnStartedForToolCalls?: boolean;
+  /** When set, `/session/open` responds with this status and an api-error body. */
+  sessionOpenErrorStatus?: number;
   trackedThreadTargets?: HostDaemonTrackedThreadTarget[];
 }
 
@@ -250,6 +252,18 @@ export async function createTestServer(
       await context.req.json(),
     );
     sessionOpenCalls.push(payload);
+    if (options.sessionOpenErrorStatus !== undefined) {
+      return new Response(
+        JSON.stringify({
+          code: "invalid_request",
+          message: "Invalid input: expected current protocol version",
+        }),
+        {
+          status: options.sessionOpenErrorStatus,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
     return context.json(
       {
         sessionId: `session-${nextSessionId++}`,

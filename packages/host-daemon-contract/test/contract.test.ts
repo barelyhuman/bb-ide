@@ -1365,7 +1365,7 @@ describe("host-daemon session schemas", () => {
       }),
     ).toThrow();
 
-    expect(() =>
+    expect(
       hostDaemonSessionOpenRequestSchema.parse({
         hostId: "host_123",
         instanceId: "instance_1",
@@ -1373,6 +1373,20 @@ describe("host-daemon session schemas", () => {
         hostType: "persistent",
         dataDir: "/tmp/bb-data",
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION - 1,
+        activeThreads: [],
+      }),
+    ).toMatchObject({
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION - 1,
+    });
+
+    expect(() =>
+      hostDaemonSessionOpenRequestSchema.parse({
+        hostId: "host_123",
+        instanceId: "instance_1",
+        hostName: "Michael's MacBook",
+        hostType: "persistent",
+        dataDir: "/tmp/bb-data",
+        protocolVersion: 0,
         activeThreads: [],
       }),
     ).toThrow();

@@ -238,6 +238,32 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("rejects a session open whose protocol version does not match the server", async () => {
+    const server = await startTestServer();
+    try {
+      const hostKey = createTestDaemonHostKey({ hostId: "host-protocol" });
+      const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
+      const response = await daemonClient.session.open.$post({
+        json: {
+          hostId: "host-protocol",
+          instanceId: "instance-1",
+          hostName: "Protocol Host",
+          hostType: "persistent",
+          dataDir: "/tmp/host-protocol-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION - 1,
+          activeThreads: [],
+        },
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: "protocol_version_mismatch",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("closes the daemon websocket with 1008 on malformed messages", async () => {
     const server = await startTestServer();
     try {

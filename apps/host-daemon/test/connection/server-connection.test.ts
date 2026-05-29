@@ -638,6 +638,34 @@ describe("ServerConnection", () => {
     expect(String(error)).toMatch(/timed out/u);
   });
 
+  it("fails start() fast with an actionable error on a non-retryable session-open rejection", async () => {
+    testServer = await createTestServer({ sessionOpenErrorStatus: 400 });
+    const { connection, logger } = createConnection(testServer, {
+      connectionOverrides: {
+        startupTimeoutMs: 60_000,
+        createWebSocket: (urlProvider) => {
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          queueMicrotask(() => {
+            void socket.open().catch(() => socket.onerror?.({}));
+          });
+          return socket;
+        },
+      },
+    });
+
+    const error = await connection.start().catch((err: Error) => err);
+
+    expect(error).toMatchObject({ status: 400, code: "invalid_request" });
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 400, code: "invalid_request" }),
+      expect.stringContaining("incompatible protocol version"),
+    );
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "Waiting for server...",
+    );
+  });
+
   it("logs and retries when the websocket closes before opening", async () => {
     testServer = await createTestServer();
     let attempt = 0;

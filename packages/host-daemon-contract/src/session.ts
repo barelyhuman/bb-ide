@@ -20,7 +20,6 @@ import { z } from "zod";
 import type { Endpoint } from "./common.js";
 import type { HostDaemonCommandResultReport } from "./commands.js";
 import {
-  HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandEnvelopeSchema,
   workspaceContextSchema,
 } from "./commands.js";
@@ -49,7 +48,9 @@ export const hostDaemonSessionOpenRequestSchema = z.object({
   hostName: z.string().min(1),
   hostType: hostTypeSchema,
   dataDir: z.string().min(1),
-  protocolVersion: z.literal(HOST_DAEMON_PROTOCOL_VERSION),
+  // Accept any version at the schema boundary so the server can return an
+  // actionable protocol mismatch instead of an opaque validation failure.
+  protocolVersion: z.number().int().positive(),
   activeThreads: z.array(hostDaemonActiveThreadSchema),
 });
 export type HostDaemonSessionOpenRequest = z.infer<

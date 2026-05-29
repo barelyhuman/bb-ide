@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDaemon } from "./daemon.js";
-import { acquireDaemonLock } from "./lock.js";
+import { acquireDaemonLock, DAEMON_LOCK_FILE_NAME } from "./lock.js";
 
 const tempDirs: string[] = [];
 type SignalListener = () => void;
@@ -56,8 +56,24 @@ describe("daemon lifecycle", () => {
     const dataDir = await makeTempDir("bb-host-daemon-lock-");
     const releaseLock = await acquireDaemonLock(dataDir);
 
-    await expect(acquireDaemonLock(dataDir)).rejects.toThrow();
+    await expect(acquireDaemonLock(dataDir, { retries: 0 })).rejects.toThrow();
 
+    await releaseLock();
+  });
+
+  it("reclaims a stale lock left behind by a crashed instance", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-stale-lock-");
+    await fs.mkdir(dataDir, { recursive: true });
+
+    const lockDirPath = path.join(dataDir, `${DAEMON_LOCK_FILE_NAME}.lock`);
+    await fs.mkdir(lockDirPath, { recursive: true });
+    const stalePast = new Date(Date.now() - 60_000);
+    await fs.utimes(lockDirPath, stalePast, stalePast);
+
+    const releaseLock = await acquireDaemonLock(dataDir, {
+      staleMs: 5_000,
+      retries: 0,
+    });
     await releaseLock();
   });
 

@@ -19,7 +19,8 @@ import {
   listEnvironmentOperations,
   listThreadOperations,
   pruneClosedSessions,
-  pruneCompletedCommands,
+  pruneCompletedDurableCommandRows,
+  pruneCompletedReadOnlyCommandRows,
   pruneCompletedCommandPayloads,
   shouldCompactDatabase,
   sweepDestroyingEnvironments,
@@ -354,7 +355,11 @@ export async function runPeriodicSweeps(
       limit: DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
       truncatedAt: now,
     });
-    pruneCompletedCommands(deps.db, {
+    pruneCompletedReadOnlyCommandRows(deps.db, {
+      completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
+      limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
+    });
+    pruneCompletedDurableCommandRows(deps.db, {
       completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
       limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
     });

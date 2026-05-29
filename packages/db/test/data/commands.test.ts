@@ -10,7 +10,10 @@ import {
   queueCommand,
   reportCommandResult,
 } from "../../src/data/commands.js";
-import { pruneCompletedCommands } from "../../src/data/sweeps.js";
+import {
+  pruneCompletedDurableCommandRows,
+  pruneCompletedReadOnlyCommandRows,
+} from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
 
 function setup() {
@@ -103,11 +106,11 @@ describe("commands", () => {
     }
 
     expect(
-      pruneCompletedCommands(db, {
-        completedBefore,
-        limit: 100,
-      }),
-    ).toEqual({ deleted: 3 });
+      pruneCompletedReadOnlyCommandRows(db, { completedBefore, limit: 100 })
+        .deleted +
+        pruneCompletedDurableCommandRows(db, { completedBefore, limit: 100 })
+          .deleted,
+    ).toBe(3);
 
     const next = queueCommand(db, noopNotifier, {
       hostId: host.id,

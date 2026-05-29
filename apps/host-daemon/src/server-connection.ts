@@ -26,6 +26,7 @@ import {
   type TimeoutHandle,
 } from "./server-connection-support.js";
 import { normalizeCaughtError, runtimeErrorLogFields } from "./error-utils.js";
+import { ServerResponseError } from "./server-client.js";
 
 export type {
   CreateReconnectingWebSocket,
@@ -79,6 +80,7 @@ export class ServerConnection {
   private heartbeatInterval: IntervalHandle | null = null;
   private stopped = false;
   private sessionCloseHandler: ServerConnectionOptions["onSessionClose"];
+  private fatalConnectError: ServerResponseError | null = null;
 
   constructor(private readonly options: ServerConnectionOptions) {
     this.sessionCloseHandler = options.onSessionClose;
@@ -145,6 +147,7 @@ export class ServerConnection {
   }
 
   private async openSession(): Promise<HostDaemonSessionOpenResponse> {
+    this.fatalConnectError = null;
     try {
       const session = await this.options.serverClient.openSession({
         hostId: this.options.hostId,
@@ -159,15 +162,33 @@ export class ServerConnection {
       this.session = session;
       return session;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("401") || message.includes("403")) {
-        this.options.logger.error(
-          { hostId: this.options.hostId, serverUrl: this.options.serverUrl },
-          "Server rejected host credentials — this host is not registered with the server.",
-        );
+      if (error instanceof ServerResponseError && !error.retryable) {
+        this.fatalConnectError = error;
+        this.logFatalConnectError(error);
       }
       throw error;
     }
+  }
+
+  private logFatalConnectError(error: ServerResponseError): void {
+    const base = {
+      hostId: this.options.hostId,
+      serverUrl: this.options.serverUrl,
+      status: error.status,
+      code: error.code,
+      detail: error.bodyMessage,
+    };
+    if (error.status === 401 || error.status === 403) {
+      this.options.logger.error(
+        base,
+        "Server rejected host credentials — this host is not registered with the server.",
+      );
+      return;
+    }
+    this.options.logger.error(
+      { ...base, daemonProtocolVersion: HOST_DAEMON_PROTOCOL_VERSION },
+      "Server rejected the daemon session. This usually means the server is running an incompatible protocol version — restart it (e.g. `pnpm dev:restart`).",
+    );
   }
 
   private async connectWebSocket(
@@ -284,12 +305,16 @@ export class ServerConnection {
       websocket.onerror = (error) => {
         if (hasOpened) {
           this.options.logger.warn({ err: error }, "WebSocket error");
-        } else {
-          this.options.logger.info(
-            { serverUrl: this.options.serverUrl },
-            "Waiting for server...",
-          );
+          return;
         }
+        if (this.fatalConnectError) {
+          fail(this.fatalConnectError);
+          return;
+        }
+        this.options.logger.info(
+          { serverUrl: this.options.serverUrl },
+          "Waiting for server...",
+        );
       };
     });
   }

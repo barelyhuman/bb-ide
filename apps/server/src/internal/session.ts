@@ -1,10 +1,11 @@
 import {
   getActiveSession,
-  listThreadEnvironmentAssignmentsOnHost,
+  listTrackedThreadStorageTargetsOnHost,
   openSession,
   upsertHost,
 } from "@bb/db";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonProjectAttachmentContentQuerySchema,
   hostDaemonSessionOpenRequestSchema,
   typedRoutes,
@@ -14,10 +15,7 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { HEARTBEAT_INTERVAL_MS, LEASE_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import {
-  listHostThreadIds,
-  requirePublicThreadEnvironment,
-} from "../services/lib/entity-lookup.js";
+import { requirePublicThreadEnvironment } from "../services/lib/entity-lookup.js";
 import {
   assertAuthenticatedHostMatches,
   getAuthenticatedDaemon,
@@ -45,6 +43,22 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
             hostId: payload.hostId,
             hostType: payload.hostType,
           });
+
+          if (payload.protocolVersion !== HOST_DAEMON_PROTOCOL_VERSION) {
+            deps.logger.error(
+              {
+                hostId: daemon.hostId,
+                daemonProtocolVersion: payload.protocolVersion,
+                serverProtocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+              },
+              "Rejecting daemon session: protocol version mismatch. The server is likely running stale code — restart it (e.g. `pnpm dev:restart`).",
+            );
+            throw new ApiError(
+              400,
+              "protocol_version_mismatch",
+              `Daemon protocol version ${payload.protocolVersion} does not match server protocol version ${HOST_DAEMON_PROTOCOL_VERSION}`,
+            );
+          }
 
           const existingSession = getActiveSession(deps.db, daemon.hostId);
           upsertHost(deps.db, deps.hub, {
@@ -96,13 +110,9 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
             payload.activeThreads,
           );
 
-          const hostThreadIds = listHostThreadIds(deps.db, daemon.hostId);
-          const trackedThreadTargets = listThreadEnvironmentAssignmentsOnHost(
+          const trackedThreadTargets = listTrackedThreadStorageTargetsOnHost(
             deps.db,
-            {
-              hostId: daemon.hostId,
-              threadIds: hostThreadIds,
-            },
+            { hostId: daemon.hostId },
           ).map((target) => ({
             environmentId: target.environmentId,
             threadId: target.threadId,

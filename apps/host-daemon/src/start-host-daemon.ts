@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import {
   loadHostDaemonStartConfig,
   type HostDaemonConnectionConfig,
@@ -7,6 +8,7 @@ import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
 import { createLogger } from "@bb/logger";
 import { type CreateHostDaemonAppOptions, createHostDaemonApp } from "./app.js";
+import { enableCrashDiagnostics } from "./crash-diagnostics.js";
 import {
   readHostAuthState,
   resolveServerUrl,
@@ -76,6 +78,7 @@ export async function startHostDaemon(
   if (dataDir === undefined) {
     throw new Error("Host daemon data directory is required");
   }
+  enableCrashDiagnostics({ logsDir: join(dataDir, "logs") });
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
   let app: Awaited<ReturnType<typeof createHostDaemonApp>> | undefined;

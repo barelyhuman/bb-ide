@@ -509,6 +509,10 @@ export interface ListHostThreadIdsArgs {
   hostId: string;
 }
 
+export interface ListTrackedThreadStorageTargetsOnHostArgs {
+  hostId: string;
+}
+
 export interface ThreadEnvironmentAssignmentRow {
   environmentId: string;
   threadId: string;
@@ -897,6 +901,32 @@ export function listHostThreadIds(
     .where(eq(environments.hostId, args.hostId))
     .all()
     .map((row) => row.id);
+}
+
+/**
+ * Threads whose app-data storage the daemon should track for a host. Archived
+ * and deleted thread storage can be reaped, so those rows must not trigger
+ * reprime work.
+ */
+export function listTrackedThreadStorageTargetsOnHost(
+  db: DbConnection,
+  args: ListTrackedThreadStorageTargetsOnHostArgs,
+): ThreadEnvironmentAssignmentRow[] {
+  return db
+    .select({
+      threadId: threads.id,
+      environmentId: environments.id,
+    })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(
+      and(
+        eq(environments.hostId, args.hostId),
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .all();
 }
 
 export function listStopRequestedThreads(

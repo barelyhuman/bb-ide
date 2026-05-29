@@ -57,9 +57,27 @@ const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_POLICY =
   "completed_event_output_truncation";
 
 type CompletedCommandState = "success" | "error";
-type CompletedCommandDeleteParameters = [
+export const READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
+  "host.file_metadata",
+  "host.list_branches",
+  "host.list_files",
+  "host.list_manager_templates",
+  "host.list_paths",
+  "host.read_file",
+  "host.read_file_relative",
+  "provider.list",
+  "provider.list_models",
+  "replay.capture_get",
+  "replay.capture_list",
+  "workspace.diff",
+  "workspace.status",
+] as const;
+type ReadOnlyHostDaemonCommandType =
+  (typeof READ_ONLY_HOST_DAEMON_COMMAND_TYPES)[number];
+type CompletedCommandRowDeleteParameters = [
   CompletedCommandState,
   CompletedCommandState,
+  ...ReadOnlyHostDaemonCommandType[],
   number,
   number,
 ];
@@ -119,7 +137,7 @@ export interface PruneCompletedCommandPayloadsResult {
   pruned: number;
 }
 
-export interface PruneCompletedCommandsArgs {
+export interface PruneCompletedCommandRowsArgs {
   completedBefore: number;
   limit: number;
 }
@@ -182,12 +200,18 @@ export function pruneCompletedCommandPayloads(
   return { pruned: result.changes };
 }
 
-export function pruneCompletedCommands(
+function deleteCompletedCommandRowsByCohort(
   db: DbConnection,
-  args: PruneCompletedCommandsArgs,
+  args: PruneCompletedCommandRowsArgs & { includeReadOnlyTypes: boolean },
 ): PruneCompletedCommandsResult {
+  const readOnlyCommandPlaceholders = READ_ONLY_HOST_DAEMON_COMMAND_TYPES.map(
+    () => "?",
+  ).join(", ");
+  const typePredicate = args.includeReadOnlyTypes
+    ? `type IN (${readOnlyCommandPlaceholders})`
+    : `type NOT IN (${readOnlyCommandPlaceholders})`;
   const result = db.$client
-    .prepare<CompletedCommandDeleteParameters>(
+    .prepare<CompletedCommandRowDeleteParameters>(
       `
         DELETE FROM host_daemon_commands
         WHERE id IN (
@@ -195,15 +219,42 @@ export function pruneCompletedCommands(
           FROM host_daemon_commands INDEXED BY host_daemon_commands_completed_prune_idx
           WHERE state IN (?, ?)
             AND completed_at IS NOT NULL
+            AND ${typePredicate}
             AND completed_at < ?
           ORDER BY completed_at
           LIMIT ?
         )
       `,
     )
-    .run("success", "error", args.completedBefore, args.limit);
+    .run(
+      "success",
+      "error",
+      ...READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+      args.completedBefore,
+      args.limit,
+    );
 
   return { deleted: result.changes };
+}
+
+export function pruneCompletedReadOnlyCommandRows(
+  db: DbConnection,
+  args: PruneCompletedCommandRowsArgs,
+): PruneCompletedCommandsResult {
+  return deleteCompletedCommandRowsByCohort(db, {
+    ...args,
+    includeReadOnlyTypes: true,
+  });
+}
+
+export function pruneCompletedDurableCommandRows(
+  db: DbConnection,
+  args: PruneCompletedCommandRowsArgs,
+): PruneCompletedCommandsResult {
+  return deleteCompletedCommandRowsByCohort(db, {
+    ...args,
+    includeReadOnlyTypes: false,
+  });
 }
 
 export function pruneClosedSessions(

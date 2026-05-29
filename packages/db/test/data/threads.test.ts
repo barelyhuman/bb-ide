@@ -12,6 +12,7 @@ import {
   listHostThreadIds,
   listActiveVisiblePinnedThreadRoots,
   listThreadEnvironmentAssignmentsOnHost,
+  listTrackedThreadStorageTargetsOnHost,
   listThreads,
   listThreadsWithPendingInteractionState,
   updateThread,
@@ -1053,6 +1054,43 @@ describe("threads", () => {
         environmentId: otherEnvironment.id,
       }),
     ).toBe(false);
+  });
+
+  it("tracks storage targets only for non-archived, non-deleted threads", () => {
+    const { db, project, host } = setup();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/thread-storage-targets",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const activeThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+    });
+    const archivedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+    });
+    const deletedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+    });
+    archiveThread(db, noopNotifier, archivedThread.id);
+    markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
+
+    expect(
+      listTrackedThreadStorageTargetsOnHost(db, { hostId: host.id }),
+    ).toEqual([{ threadId: activeThread.id, environmentId: environment.id }]);
+    expect(
+      [...listHostThreadIds(db, { hostId: host.id })].sort(),
+    ).toEqual(
+      [activeThread.id, archivedThread.id, deletedThread.id].sort(),
+    );
   });
 });
 

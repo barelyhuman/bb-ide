@@ -210,10 +210,20 @@ export async function listThreadAppDataFromRoot(
   if (!path.isAbsolute(args.rootPath)) {
     throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
   }
-  const threadStoragePath = await resolveNonSymlinkDirectoryPath({
-    description: "Thread storage root",
-    path: args.rootPath,
-  });
+  let threadStoragePath: string;
+  try {
+    threadStoragePath = await resolveNonSymlinkDirectoryPath({
+      description: "Thread storage root",
+      path: args.rootPath,
+    });
+  } catch (error) {
+    if (isFsErrorWithCode(error, "ENOENT")) {
+      // Archived/deleted thread storage can be cleaned up while the daemon is
+      // still reconciling tracked targets. A missing root is an empty snapshot.
+      return { appIds: [], entries: [] };
+    }
+    throw error;
+  }
   const appsRoot = path.join(threadStoragePath, "apps");
   let appDirectories;
   try {
