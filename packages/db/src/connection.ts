@@ -160,6 +160,11 @@ export function createConnection(
 ) {
   const sqlite = new Database(dbPath);
 
+  // Reclaim freed pages incrementally (via PRAGMA incremental_vacuum in the
+  // periodic maintenance sweep) instead of relying on a full-file VACUUM. This
+  // only takes effect for a brand-new database (set before any tables exist);
+  // existing databases convert on their next full VACUUM (see compactDatabase).
+  sqlite.pragma("auto_vacuum = INCREMENTAL");
   // Enable WAL mode for better concurrent read performance
   sqlite.pragma("journal_mode = WAL");
   // Enable foreign keys

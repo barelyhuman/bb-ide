@@ -3,8 +3,12 @@ import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
+  DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
+  getDatabaseAutoVacuumMode,
+  getDatabaseCompactionStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
+  runIncrementalVacuum,
   shouldCompactDatabase,
 } from "../../src/data/maintenance.js";
 import { queueCommand, reportCommandResult } from "../../src/data/commands.js";
@@ -60,6 +64,49 @@ describe("database maintenance", () => {
     expect(isDatabaseMaintenanceIdle(getDatabaseMaintenanceActivity(db))).toBe(
       true,
     );
+  });
+
+  it("creates databases in incremental auto-vacuum mode", () => {
+    const { db } = setup();
+    expect(getDatabaseAutoVacuumMode(db)).toBe("incremental");
+  });
+
+  it("reclaims freed pages incrementally without a full VACUUM", () => {
+    const { db } = setup();
+    expect(getDatabaseAutoVacuumMode(db)).toBe("incremental");
+
+    // Build a freelist: insert several pages of data, then delete it. Under
+    // incremental auto-vacuum the freed pages stay in the file until an
+    // explicit incremental_vacuum, so the freelist is non-empty afterward.
+    db.$client.exec(
+      "CREATE TABLE scratch_blobs (id INTEGER PRIMARY KEY, blob TEXT)",
+    );
+    const insert = db.$client.prepare(
+      "INSERT INTO scratch_blobs (blob) VALUES (?)",
+    );
+    const blob = "x".repeat(8 * 1024);
+    const insertMany = db.$client.transaction((count: number) => {
+      for (let index = 0; index < count; index += 1) {
+        insert.run(blob);
+      }
+    });
+    insertMany(3_000);
+    db.$client.exec("DELETE FROM scratch_blobs");
+
+    const before = getDatabaseCompactionStats(db);
+    expect(before.freelistCount).toBeGreaterThan(0);
+
+    const result = runIncrementalVacuum(db, {
+      maxPages: DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
+    });
+
+    expect(result.before.freelistCount).toBe(before.freelistCount);
+    expect(result.after.freelistCount).toBeLessThan(before.freelistCount);
+    expect(getDatabaseCompactionStats(db).freelistCount).toBeLessThan(
+      before.freelistCount,
+    );
+    // Reclaiming pages must not change the auto-vacuum mode.
+    expect(getDatabaseAutoVacuumMode(db)).toBe("incremental");
   });
 
   it("requires both reclaimable bytes and ratio before compacting", () => {

@@ -13,6 +13,15 @@ import {
 export const DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES = 128 * 1024 * 1024;
 export const DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO = 0.15;
 
+/** Below this many freelist pages, incremental reclamation isn't worth a pass. */
+export const DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES = 1_024;
+/**
+ * Upper bound on pages reclaimed per incremental pass. Incremental vacuum moves
+ * pages individually, so capping the batch keeps each pass short enough to run
+ * without stalling a busy server (unlike a full VACUUM).
+ */
+export const DATABASE_INCREMENTAL_VACUUM_MAX_PAGES = 20_000;
+
 const ACTIVE_COMMAND_STATES = ["pending", "fetched"] as const;
 const ACTIVE_THREAD_STATUSES = ["active", "provisioning"] as const;
 const ACTIVE_PENDING_INTERACTION_STATUSES = ["pending", "resolving"] as const;
@@ -229,11 +238,61 @@ export function shouldCompactDatabase(
   );
 }
 
+export type DatabaseAutoVacuumMode = "none" | "full" | "incremental";
+
+interface AutoVacuumModeRow {
+  auto_vacuum: number;
+}
+
+export function getDatabaseAutoVacuumMode(
+  db: DbConnection,
+): DatabaseAutoVacuumMode {
+  const mode =
+    db.$client
+      .prepare<[], AutoVacuumModeRow>("PRAGMA auto_vacuum")
+      .get()?.auto_vacuum ?? 0;
+  switch (mode) {
+    case 1:
+      return "full";
+    case 2:
+      return "incremental";
+    default:
+      return "none";
+  }
+}
+
 export function compactDatabase(db: DbConnection): CompactDatabaseResult {
   const before = getDatabaseCompactionStats(db);
 
+  // Convert to incremental auto-vacuum (no-op if already incremental) so that
+  // after this one full rewrite, future reclamation can run via
+  // incremental_vacuum without requiring a fully-idle instance. The mode change
+  // only takes effect because of the VACUUM that immediately follows.
+  db.$client.exec("PRAGMA auto_vacuum = INCREMENTAL");
   db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   db.$client.exec("VACUUM");
+  db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+
+  return {
+    after: getDatabaseCompactionStats(db),
+    before,
+  };
+}
+
+/**
+ * Reclaims up to `maxPages` freelist pages on an incremental-auto-vacuum
+ * database. Unlike {@link compactDatabase} this does not rewrite the whole file
+ * or require an exclusive long-held lock, so it is safe to run while the
+ * instance is busy.
+ */
+export function runIncrementalVacuum(
+  db: DbConnection,
+  args: { maxPages: number },
+): CompactDatabaseResult {
+  const before = getDatabaseCompactionStats(db);
+
+  db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.$client.exec(`PRAGMA incremental_vacuum(${args.maxPages})`);
   db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
   return {

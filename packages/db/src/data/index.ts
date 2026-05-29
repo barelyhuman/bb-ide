@@ -482,8 +482,12 @@ export type {
 
 export {
   compactDatabase,
+  runIncrementalVacuum,
+  getDatabaseAutoVacuumMode,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
+  DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
+  DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
   getDatabaseCompactionStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
@@ -491,6 +495,7 @@ export {
 } from "./maintenance.js";
 export type {
   CompactDatabaseResult,
+  DatabaseAutoVacuumMode,
   DatabaseCompactionDecisionArgs,
   DatabaseCompactionStats,
   DatabaseMaintenanceActivity,

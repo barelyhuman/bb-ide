@@ -1,14 +1,17 @@
 import {
   CLOSED_SESSION_ROW_RETENTION_MS,
   compactDatabase,
-  COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+  COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_EVENT_OUTPUT_RETENTION_MS,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
+  DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
+  DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
   DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+  getDatabaseAutoVacuumMode,
   getDatabaseCompactionStats,
   getDatabaseMaintenanceActivity,
   getEnvironment,
@@ -21,6 +24,7 @@ import {
   pruneCompletedDurableCommandRows,
   pruneCompletedReadOnlyCommandRows,
   pruneCompletedCommandPayloads,
+  runIncrementalVacuum,
   shouldCompactDatabase,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
@@ -86,6 +90,34 @@ export function runDatabaseMaintenanceSweep(
 
   lastDatabaseMaintenanceCheckAt = now;
 
+  const stats = getDatabaseCompactionStats(deps.db);
+
+  // Incremental auto-vacuum reclaims freed pages in a bounded batch without
+  // rewriting the whole file, so it does not need a fully-idle instance — which
+  // a busy server effectively never reaches. This is the steady-state path.
+  if (getDatabaseAutoVacuumMode(deps.db) === "incremental") {
+    if (stats.freelistCount < DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES) {
+      return;
+    }
+    databaseMaintenanceRunning = true;
+    try {
+      const result = runIncrementalVacuum(deps.db, {
+        maxPages: DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
+      });
+      deps.logger.info({ result }, "Incremental database vacuum completed");
+    } catch (error) {
+      deps.logger.warn({ err: error }, "Incremental database vacuum failed");
+    } finally {
+      databaseMaintenanceRunning = false;
+    }
+    return;
+  }
+
+  // Legacy databases (auto_vacuum=NONE) need a one-time full VACUUM to reclaim
+  // space and convert to incremental mode. A full VACUUM holds an exclusive
+  // lock and rewrites the entire file, so only run it when the instance is idle
+  // to avoid stalling active work. After it converts the database, subsequent
+  // sweeps take the incremental path above.
   const activity = getDatabaseMaintenanceActivity(deps.db);
   if (!isDatabaseMaintenanceIdle(activity)) {
     deps.logger.debug(
@@ -95,7 +127,6 @@ export function runDatabaseMaintenanceSweep(
     return;
   }
 
-  const stats = getDatabaseCompactionStats(deps.db);
   if (
     !shouldCompactDatabase({
       minReclaimableBytes: DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
