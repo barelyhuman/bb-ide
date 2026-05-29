@@ -357,6 +357,7 @@ export interface MergeBaseRowProps {
   mergeBaseRemoteBranchOptions?: readonly string[];
   isLoadingMergeBaseBranchOptions: boolean;
   onMergeBaseBranchChange: (branch: string) => void;
+  onMergeBasePickerOpenChange?: (open: boolean) => void;
   onMergeBaseBranchSearchQueryChange?: (query: string) => void;
   /** Force the BranchPicker popover open on first render. Used by stories. */
   defaultOpen?: boolean;
@@ -372,6 +373,7 @@ export function MergeBaseRow({
   mergeBaseRemoteBranchOptions,
   isLoadingMergeBaseBranchOptions,
   onMergeBaseBranchChange,
+  onMergeBasePickerOpenChange,
   onMergeBaseBranchSearchQueryChange,
   defaultOpen,
 }: MergeBaseRowProps) {
@@ -408,9 +410,15 @@ export function MergeBaseRow({
     showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
   if (thread.type === "manager") return null;
   if (!showMergeBase) return null;
+  const canRequestMergeBaseOptions =
+    mergeBaseBranchOptions === undefined &&
+    onMergeBasePickerOpenChange !== undefined;
   const canSelectMergeBase = Boolean(
     mergeBaseBranch &&
-    (mergeBaseCandidates.length > 0 || remoteMergeBaseCandidates.length > 0),
+    (canRequestMergeBaseOptions ||
+      isLoadingMergeBaseBranchOptions ||
+      mergeBaseCandidates.length > 0 ||
+      remoteMergeBaseCandidates.length > 0),
   );
 
   return (
@@ -423,8 +431,11 @@ export function MergeBaseRow({
           selectedOptionKind={mergeBaseCandidateGroups.selectedOptionKind}
           optionsTruncated={mergeBaseBranchOptionsTruncated}
           variant="minimal"
-          loading={isLoadingMergeBaseBranchOptions}
+          loading={
+            isLoadingMergeBaseBranchOptions || canRequestMergeBaseOptions
+          }
           onChange={onMergeBaseBranchChange}
+          onOpenChange={onMergeBasePickerOpenChange}
           onSearchQueryChange={onMergeBaseBranchSearchQueryChange}
           className="max-w-full"
           defaultOpen={defaultOpen}
@@ -614,6 +625,7 @@ export interface ThreadMetadataContentProps {
   storage?: ManagerWorkspaceRowProps;
   onAssignManager: (parentThreadId: string | null) => void;
   onMergeBaseBranchChange: (branch: string) => void;
+  onMergeBasePickerOpenChange?: (open: boolean) => void;
   onMergeBaseBranchSearchQueryChange?: (query: string) => void;
   onChangedFileClick?: (selection: WorkspaceChangedFileSelection) => void;
 }
@@ -715,6 +727,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     storage,
     onAssignManager,
     onMergeBaseBranchChange,
+    onMergeBasePickerOpenChange,
     onMergeBaseBranchSearchQueryChange,
     onChangedFileClick,
   } = props;
@@ -760,6 +773,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         mergeBaseRemoteBranchOptions={mergeBaseRemoteBranchOptions}
         isLoadingMergeBaseBranchOptions={isLoadingMergeBaseBranchOptions}
         onMergeBaseBranchChange={onMergeBaseBranchChange}
+        onMergeBasePickerOpenChange={onMergeBasePickerOpenChange}
         onMergeBaseBranchSearchQueryChange={onMergeBaseBranchSearchQueryChange}
       />
       <GitStatusRow

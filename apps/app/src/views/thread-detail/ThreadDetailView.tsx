@@ -1207,6 +1207,7 @@ export function ThreadDetailView() {
           storage: metadataStorage,
           onAssignManager: handleAssignManager,
           onMergeBaseBranchChange: handleMergeBaseBranchChange,
+          onMergeBasePickerOpenChange: handleMergeBasePickerOpenChange,
           onMergeBaseBranchSearchQueryChange: setMergeBaseBranchSearchQuery,
           onChangedFileClick: canUseGitUi ? handleChangedFileClick : undefined,
         }}

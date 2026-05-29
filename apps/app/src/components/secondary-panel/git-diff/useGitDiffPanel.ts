@@ -49,20 +49,28 @@ export function useGitDiffPanel({
     selectedBranch: requestedMergeBaseBranch,
   });
   const selectedMergeBaseBranchRef = mergeBaseBranches?.selectedBranch;
+  const mergeBaseBranchList = mergeBaseBranches?.branches;
+  const mergeBaseRemoteBranchList = mergeBaseBranches?.remoteBranches;
   const mergeBaseBranchOptions = useMemo(() => {
-    const branches = mergeBaseBranches?.branches ?? [];
+    if (!mergeBaseBranchList) {
+      return undefined;
+    }
+
     return selectedMergeBaseBranchRef?.kind === "local" &&
-      !branches.includes(selectedMergeBaseBranchRef.name)
-      ? [selectedMergeBaseBranchRef.name, ...branches]
-      : branches;
-  }, [mergeBaseBranches?.branches, selectedMergeBaseBranchRef]);
+      !mergeBaseBranchList.includes(selectedMergeBaseBranchRef.name)
+      ? [selectedMergeBaseBranchRef.name, ...mergeBaseBranchList]
+      : mergeBaseBranchList;
+  }, [mergeBaseBranchList, selectedMergeBaseBranchRef]);
   const mergeBaseRemoteBranchOptions = useMemo(() => {
-    const branches = mergeBaseBranches?.remoteBranches ?? [];
+    if (!mergeBaseRemoteBranchList) {
+      return undefined;
+    }
+
     return selectedMergeBaseBranchRef?.kind === "remote" &&
-      !branches.includes(selectedMergeBaseBranchRef.name)
-      ? [selectedMergeBaseBranchRef.name, ...branches]
-      : branches;
-  }, [mergeBaseBranches?.remoteBranches, selectedMergeBaseBranchRef]);
+      !mergeBaseRemoteBranchList.includes(selectedMergeBaseBranchRef.name)
+      ? [selectedMergeBaseBranchRef.name, ...mergeBaseRemoteBranchList]
+      : mergeBaseRemoteBranchList;
+  }, [mergeBaseRemoteBranchList, selectedMergeBaseBranchRef]);
   const mergeBaseBranchOptionsTruncated = Boolean(
     mergeBaseBranches?.branchesTruncated ||
     mergeBaseBranches?.remoteBranchesTruncated,

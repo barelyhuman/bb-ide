@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Environment, Thread } from "@bb/domain";
-import { afterEach, describe, expect, it } from "vitest";
-import { WorkspacePathRow } from "./ThreadMetadataContent";
+import { makeWorkspaceStatus } from "@bb/test-helpers";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MergeBaseRow, WorkspacePathRow } from "./ThreadMetadataContent";
 
 type ThreadOverrides = Partial<Thread>;
 type EnvironmentOverrides = Partial<Environment>;
@@ -107,5 +108,33 @@ describe("WorkspacePathRow", () => {
     );
 
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("MergeBaseRow", () => {
+  it("requests branch options when the Info tab merge-base picker opens", () => {
+    const handleOpenChange = vi.fn();
+
+    render(
+      <MergeBaseRow
+        thread={makeThread()}
+        workspaceStatus={makeWorkspaceStatus({
+          branch: {
+            currentBranch: "feature/projectless-threads",
+            defaultBranch: "main",
+          },
+        })}
+        selectedMergeBaseBranch={undefined}
+        mergeBaseBranchOptions={undefined}
+        isLoadingMergeBaseBranchOptions={false}
+        onMergeBaseBranchChange={vi.fn()}
+        onMergeBasePickerOpenChange={handleOpenChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Branch" }));
+
+    expect(handleOpenChange).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Branches")).not.toBeNull();
   });
 });
