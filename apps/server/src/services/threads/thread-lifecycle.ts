@@ -205,6 +205,14 @@ interface HasQueuedThreadOperationCommandArgs {
   db: DbQueryConnection;
 }
 
+interface ApplyActiveTurnInterruptionArgs {
+  activeTurnId: string;
+  environmentId: string | null;
+  providerThreadId: string | null;
+  reason: SystemThreadInterruptedReason;
+  threadId: string;
+}
+
 function hasQueuedThreadOperationCommandForDb(
   args: HasQueuedThreadOperationCommandArgs,
 ): boolean {
@@ -280,6 +288,31 @@ function getThreadOperationCommandState(
   }
 
   return "settled";
+}
+
+function applyActiveTurnInterruptionInTransaction(
+  db: DbTransaction,
+  args: ApplyActiveTurnInterruptionArgs,
+): void {
+  appendThreadEventInTransaction(db, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    providerThreadId: args.providerThreadId,
+    type: "turn/completed",
+    scope: turnScope(args.activeTurnId),
+    data: {
+      providerThreadId: args.providerThreadId,
+      status: "interrupted",
+    },
+  });
+  appendThreadInterruptedEventInTransaction(db, {
+    threadId: args.threadId,
+    reason: args.reason,
+  });
+  transitionThreadStatusInTransaction(db, {
+    id: args.threadId,
+    newStatus: nextStatusForInterruptedThread(args.reason),
+  });
 }
 
 export function hasActiveThreadStartOperation(
@@ -721,28 +754,15 @@ export function interruptActiveTurnForThread(
   }
 
   const providerThreadId = getLastProviderThreadId(deps, args.threadId);
-  const nextStatus = nextStatusForInterruptedThread(args.reason);
 
   deps.db.transaction(
     (tx) => {
-      appendThreadEventInTransaction(tx, {
-        threadId: args.threadId,
+      applyActiveTurnInterruptionInTransaction(tx, {
+        activeTurnId,
         environmentId: args.environmentId,
         providerThreadId,
-        type: "turn/completed",
-        scope: turnScope(activeTurnId),
-        data: {
-          providerThreadId,
-          status: "interrupted",
-        },
-      });
-      appendThreadInterruptedEventInTransaction(tx, {
-        threadId: args.threadId,
         reason: args.reason,
-      });
-      transitionThreadStatusInTransaction(tx, {
-        id: args.threadId,
-        newStatus: nextStatus,
+        threadId: args.threadId,
       });
     },
     { behavior: "immediate" },
@@ -764,26 +784,13 @@ function interruptActiveTurnForThreadInTransaction(
   }
 
   const providerThreadId = getLastProviderThreadId(deps, args.threadId);
-  const nextStatus = nextStatusForInterruptedThread(args.reason);
 
-  appendThreadEventInTransaction(deps.db, {
-    threadId: args.threadId,
+  applyActiveTurnInterruptionInTransaction(deps.db, {
+    activeTurnId,
     environmentId: args.environmentId,
     providerThreadId,
-    type: "turn/completed",
-    scope: turnScope(activeTurnId),
-    data: {
-      providerThreadId,
-      status: "interrupted",
-    },
-  });
-  appendThreadInterruptedEventInTransaction(deps.db, {
-    threadId: args.threadId,
     reason: args.reason,
-  });
-  transitionThreadStatusInTransaction(deps.db, {
-    id: args.threadId,
-    newStatus: nextStatus,
+    threadId: args.threadId,
   });
   deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"], {
     eventTypes: ["turn/completed", "system/thread/interrupted"],
