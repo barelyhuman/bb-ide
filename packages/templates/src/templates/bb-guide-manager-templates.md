@@ -59,8 +59,8 @@ allowlist: `PREFERENCES.md`, `ASYNC.md`, `apps/status/manifest.json`, and
 Symlinks and other non-regular files are ignored. Existing destination files
 are left as-is; seeding does not overwrite, delete, or refresh files.
 
-If `default/` is missing, bb uses a bundled fallback template containing only
-the `status` app:
+After any selected template copy, bb overlays a bundled `status` app so every
+new manager has a working status surface:
 
 ```text
 apps/status/manifest.json
@@ -68,8 +68,9 @@ apps/status/assets/index.html
 apps/status/data/state.json
 ```
 
-If `default/` exists but is empty, no bundled files are mixed in. If a selected
-non-default template is missing, bb logs a warning and skips storage seeding.
+User-authored files at those same paths win; the overlay only fills missing
+files. If a selected non-default template is missing, bb logs a warning and
+still writes the bundled `status` app.
 
 When it runs:
 
@@ -138,10 +139,10 @@ Limitations and gotchas:
 - Template file contents are not schema-validated before copying.
 - Symlinks and other non-regular files are ignored.
 - Existing thread storage files are never overwritten by seeding.
-- A user-authored `default/` directory fully replaces the bundled fallback,
-  even if it is empty.
-- Missing selected non-default templates skip seeding instead of falling back
-  to `default`.
+- A user-authored `default/` directory does not suppress the bundled `status`
+  app overlay, but files already present at the bundled paths are preserved.
+- Missing selected non-default templates do not fall back to `default`; bb logs
+  a warning and writes only the bundled `status` app overlay.
 
 Related guides:
 

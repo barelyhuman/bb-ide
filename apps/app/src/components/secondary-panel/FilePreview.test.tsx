@@ -1,15 +1,73 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilePreview } from "./FilePreview";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("FilePreview", () => {
+  it("delays the iframe loading indicator so fast app switches do not flash it", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <FilePreview
+        path="Status"
+        headerMode="none"
+        state={{
+          kind: "iframe",
+          sandbox: null,
+          title: "Status",
+          url: "/api/v1/threads/thr_1/apps/status/",
+        }}
+      />,
+    );
+
+    expect(container.querySelector("[aria-busy]")).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(159);
+    });
+    expect(container.querySelector("[aria-busy]")).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(container.querySelector("[aria-busy]")).not.toBeNull();
+  });
+
+  it("cancels the iframe loading indicator when the iframe loads before the delay", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <FilePreview
+        path="Status"
+        headerMode="none"
+        state={{
+          kind: "iframe",
+          sandbox: null,
+          title: "Status",
+          url: "/api/v1/threads/thr_1/apps/status/",
+        }}
+      />,
+    );
+
+    fireEvent.load(screen.getByTitle("Status"));
+    act(() => {
+      vi.advanceTimersByTime(160);
+    });
+
+    expect(container.querySelector("[aria-busy]")).toBeNull();
+  });
+
   it("renders sanitized HTML in markdown file previews", () => {
     const { container } = render(
       <FilePreview

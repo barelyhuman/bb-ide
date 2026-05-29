@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import type { AppDetail } from "@bb/server-contract";
+import type { AppDetail, AppSummary } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { threadAppsQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { AppTabContent } from "./AppTabContent";
 
@@ -39,6 +40,26 @@ afterEach(() => {
 });
 
 describe("AppTabContent", () => {
+  it("renders app-list metadata while the detail refetch is still pending", () => {
+    vi.mocked(api.getThreadApp).mockReturnValue(new Promise(() => {}));
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<AppSummary[]>(threadAppsQueryKey("thr_1"), [
+      HTML_APP,
+    ]);
+
+    render(<AppTabContent threadId="thr_1" appId="status" />, { wrapper });
+
+    const frame = screen.getByTitle("Status");
+    expect(frame.getAttribute("src")).toBe(
+      "/api/v1/threads/thr_1/apps/status/",
+    );
+    expect(api.getThreadApp).toHaveBeenCalledWith(
+      "thr_1",
+      "status",
+      expect.any(AbortSignal),
+    );
+  });
+
   it("renders HTML apps in the injected app iframe route", async () => {
     vi.mocked(api.getThreadApp).mockResolvedValue(HTML_APP);
     const { wrapper } = createQueryClientTestHarness();

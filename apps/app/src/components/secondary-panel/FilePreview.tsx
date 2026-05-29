@@ -130,6 +130,7 @@ const HTML_FILE_PREVIEW_IFRAME_STYLE = {
   height: "100%",
   border: 0,
 } as CSSProperties;
+const IFRAME_LOADING_INDICATOR_DELAY_MS = 160;
 
 function isMarkdownFile(name: string): boolean {
   const extension = name.split(".").pop()?.toLowerCase();
@@ -378,10 +379,27 @@ function FilePreviewImage({ url, alt }: FilePreviewImageProps) {
 
 function IframeFilePreview({ sandbox, title, url }: IframeFilePreviewTarget) {
   const [loadState, setLoadState] = useState<IframeLoadState>("loading");
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
 
   useEffect(() => {
     setLoadState("loading");
   }, [url]);
+
+  useEffect(() => {
+    if (loadState !== "loading") {
+      setShowLoadingIndicator(false);
+      return;
+    }
+
+    setShowLoadingIndicator(false);
+    const timeoutId = window.setTimeout(() => {
+      setShowLoadingIndicator(true);
+    }, IFRAME_LOADING_INDICATOR_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [loadState, url]);
 
   if (loadState === "error") {
     return (
@@ -396,7 +414,7 @@ function IframeFilePreview({ sandbox, title, url }: IframeFilePreviewTarget) {
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
-      {loadState === "loading" ? (
+      {loadState === "loading" && showLoadingIndicator ? (
         <div className="absolute inset-x-0 top-0 z-10">
           <FilePreviewLoading />
         </div>

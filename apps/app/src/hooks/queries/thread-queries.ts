@@ -656,6 +656,8 @@ export function useThreadApp(
   appId: string | null | undefined,
   options?: QueryOptions,
 ) {
+  const queryClient = useQueryClient();
+
   return useQuery<AppDetail>({
     queryKey: threadAppQueryKey(id, appId ?? ""),
     queryFn: ({ signal }) =>
@@ -667,6 +669,10 @@ export function useThreadApp(
     enabled: (options?.enabled ?? true) && Boolean(id) && Boolean(appId),
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
+    placeholderData: () =>
+      queryClient
+        .getQueryData<AppSummary[]>(threadAppsQueryKey(id))
+        ?.find((app) => app.id === appId),
     staleTime: options?.staleTime,
   });
 }
