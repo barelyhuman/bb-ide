@@ -226,7 +226,9 @@ export function ensureNodePtySpawnHelpersExecutableInPackage(
   }
 }
 
-function ensureNodePtySpawnHelperExecutable(logger: HostDaemonLogger): void {
+export function ensureNodePtySpawnHelperExecutable(
+  logger: HostDaemonLogger,
+): void {
   if (nodePtySpawnHelperChecked || process.platform !== "darwin") {
     return;
   }

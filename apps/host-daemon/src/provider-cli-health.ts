@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
-import type { Readable } from "node:stream";
+import { PassThrough, type Readable } from "node:stream";
 import { spawnPortableOutputProcess } from "@bb/process-utils";
+import { spawn as spawnPty } from "node-pty";
 import semver from "semver";
 import { z } from "zod";
 import {
@@ -13,10 +14,19 @@ import {
   type ProviderCliStatus,
   type ProviderCliStatusResponse,
 } from "@bb/host-daemon-contract";
+import type { HostDaemonLogger } from "./logger.js";
+import { ensureNodePtySpawnHelperExecutable } from "./terminals/terminal-manager.js";
 
 const COMMAND_CHECK_TIMEOUT_MS = 5_000;
 const NPM_VIEW_TIMEOUT_MS = 15_000;
 const NPM_INSTALL_STATE_TIMEOUT_MS = 5_000;
+const CLAUDE_CODE_INSTALL_SCRIPT_URL = "https://claude.ai/install.sh";
+const providerCliNodePtyLogger: HostDaemonLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+};
 
 const npmGlobalListDependencySchema = z
   .object({
@@ -102,6 +112,11 @@ export interface StreamProviderCliInstallArgs {
   installProcessSpawner?: ProviderCliInstallProcessSpawner;
 }
 
+interface ProviderCliPtyShellCommand {
+  command: string;
+  args: string[];
+}
+
 interface NeedsProviderCliUpdateArgs {
   installed: boolean;
   currentVersion: string | null;
@@ -146,6 +161,10 @@ type ProviderCliInstallCommandDefinition =
   | Readonly<{
       kind: "shell";
       command: string;
+    }>
+  | Readonly<{
+      kind: "downloadedShellScript";
+      scriptUrl: string;
     }>;
 
 interface ResolveProviderCliActionCommandArgs {
@@ -216,8 +235,8 @@ function getProviderCliDefinition(
         executableName: "claude",
         npmPackageName: "@anthropic-ai/claude-code",
         installCommand: {
-          kind: "shell",
-          command: "curl -fsSL https://claude.ai/install.sh | bash",
+          kind: "downloadedShellScript",
+          scriptUrl: CLAUDE_CODE_INSTALL_SCRIPT_URL,
         },
         updateCommand: {
           commandKind: "exec",
@@ -324,6 +343,18 @@ function shellInstallActionCommand(command: string): ProviderCliActionCommand {
   };
 }
 
+function downloadedShellScriptInstallActionCommand(
+  scriptUrl: string,
+): ProviderCliActionCommand {
+  const command = [
+    'tmp=$(mktemp "${TMPDIR:-/tmp}/provider-cli-install.XXXXXX")',
+    "trap 'rm -f \"$tmp\"' EXIT",
+    `curl -fsSL ${formatCommand(scriptUrl, [])} -o "$tmp"`,
+    'bash "$tmp"',
+  ].join(" && ");
+  return shellInstallActionCommand(command);
+}
+
 function installActionCommand(
   definition: ProviderCliDefinition,
   nodePlatform: NodeJS.Platform,
@@ -333,6 +364,10 @@ function installActionCommand(
       return npmInstallActionCommand(definition, nodePlatform);
     case "shell":
       return shellInstallActionCommand(definition.installCommand.command);
+    case "downloadedShellScript":
+      return downloadedShellScriptInstallActionCommand(
+        definition.installCommand.scriptUrl,
+      );
   }
 }
 
@@ -630,25 +665,57 @@ export async function getProviderCliStatus(
   };
 }
 
-export function createPortableProviderCliInstallProcessSpawner(): ProviderCliInstallProcessSpawner {
+function providerCliPtyShellCommand(
+  args: SpawnProviderCliInstallProcessArgs,
+): ProviderCliPtyShellCommand {
+  const commandLine = formatCommand(args.command, args.args);
+  if (process.platform === "win32") {
+    return {
+      command: process.env.ComSpec ?? "cmd.exe",
+      args: ["/d", "/s", "/c", commandLine],
+    };
+  }
+  return {
+    command: "/bin/sh",
+    args: ["-c", commandLine],
+  };
+}
+
+export function createPtyProviderCliInstallProcessSpawner(): ProviderCliInstallProcessSpawner {
   return {
     spawn(args) {
-      const child = spawnPortableOutputProcess({
-        command: args.command,
-        args: args.args,
+      const ptyCommand = providerCliPtyShellCommand(args);
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      ensureNodePtySpawnHelperExecutable(providerCliNodePtyLogger);
+      const pty = spawnPty(ptyCommand.command, ptyCommand.args, {
+        cols: 120,
+        cwd: process.cwd(),
         env: process.env,
+        name: "xterm-256color",
+        rows: 30,
+      });
+      pty.onData((data) => {
+        stdout.write(data);
+      });
+      pty.onExit(() => {
+        stdout.end();
+        stderr.end();
       });
       return {
-        stdout: child.stdout,
-        stderr: child.stderr,
+        stdout,
+        stderr,
         kill(signal) {
-          return child.kill(signal);
+          pty.kill(signal);
+          return true;
         },
         onError(listener) {
-          child.on("error", listener);
+          void listener;
         },
         onClose(listener) {
-          child.on("close", listener);
+          pty.onExit((event) => {
+            listener(event.exitCode, null);
+          });
         },
       };
     },
@@ -716,7 +783,7 @@ export function streamProviderCliInstall({
   provider,
   actionKind,
   nodePlatform = process.platform,
-  installProcessSpawner = createPortableProviderCliInstallProcessSpawner(),
+  installProcessSpawner = createPtyProviderCliInstallProcessSpawner(),
 }: StreamProviderCliInstallArgs): ReadableStream<Uint8Array> {
   const definition = getProviderCliDefinition(provider);
   const actionCommand = resolveProviderCliActionCommand({

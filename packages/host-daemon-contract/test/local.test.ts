@@ -164,7 +164,8 @@ describe("provider CLI schemas", () => {
             kind: "install",
             label: "Install",
             commandKind: "shell",
-            command: "curl -fsSL https://claude.ai/install.sh | bash",
+            command:
+              'tmp=$(mktemp "${TMPDIR:-/tmp}/provider-cli-install.XXXXXX") && trap \'rm -f "$tmp"\' EXIT && curl -fsSL https://claude.ai/install.sh -o "$tmp" && bash "$tmp"',
           },
           needsUpdate: false,
         },

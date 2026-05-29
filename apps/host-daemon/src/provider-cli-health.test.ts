@@ -20,6 +20,14 @@ import {
   type ProviderCliInstallEvent,
 } from "@bb/host-daemon-contract";
 
+const CLAUDE_INSTALL_SCRIPT_URL = "https://claude.ai/install.sh";
+const CLAUDE_INSTALL_COMMAND = [
+  'tmp=$(mktemp "${TMPDIR:-/tmp}/provider-cli-install.XXXXXX")',
+  "trap 'rm -f \"$tmp\"' EXIT",
+  `curl -fsSL ${CLAUDE_INSTALL_SCRIPT_URL} -o "$tmp"`,
+  'bash "$tmp"',
+].join(" && ");
+
 interface FakeCommandBehavior {
   stdout: string;
   stderr: string;
@@ -182,8 +190,8 @@ const CLAUDE_CODE_DEFINITION: ProviderCliDefinition = {
   executableName: "claude",
   npmPackageName: "@anthropic-ai/claude-code",
   installCommand: {
-    kind: "shell",
-    command: "curl -fsSL https://claude.ai/install.sh | bash",
+    kind: "downloadedShellScript",
+    scriptUrl: CLAUDE_INSTALL_SCRIPT_URL,
   },
   updateCommand: {
     commandKind: "exec",
@@ -341,7 +349,7 @@ describe("provider CLI health", () => {
     });
   });
 
-  it("reports a missing Claude Code CLI with the shell installer action", async () => {
+  it("reports a missing Claude Code CLI with the downloaded shell installer action", async () => {
     const runner = new FakeProviderCliCommandRunner();
     installMissingClaudeCommands(runner);
 
@@ -357,7 +365,7 @@ describe("provider CLI health", () => {
       kind: "install",
       label: "Install",
       commandKind: "shell",
-      command: "curl -fsSL https://claude.ai/install.sh | bash",
+      command: CLAUDE_INSTALL_COMMAND,
     });
   });
 
@@ -482,7 +490,7 @@ describe("provider CLI health", () => {
     ]);
   });
 
-  it("streams Claude Code shell installs with the visible install command", async () => {
+  it("streams Claude Code installs from a downloaded script file", async () => {
     const spawner = new FakeProviderCliInstallProcessSpawner();
     const stream = streamProviderCliInstall({
       provider: "claudeCode",
@@ -499,7 +507,7 @@ describe("provider CLI health", () => {
       {
         type: "started",
         provider: "claudeCode",
-        command: "curl -fsSL https://claude.ai/install.sh | bash",
+        command: CLAUDE_INSTALL_COMMAND,
       },
       {
         type: "output",
@@ -518,9 +526,11 @@ describe("provider CLI health", () => {
     expect(spawner.spawnRequests).toEqual([
       {
         command: "sh",
-        args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
+        args: ["-c", CLAUDE_INSTALL_COMMAND],
       },
     ]);
+    expect(CLAUDE_INSTALL_COMMAND).not.toContain("| bash");
+    expect(CLAUDE_INSTALL_COMMAND).toContain('bash "$tmp"');
   });
 
   it("streams provider self-updates with the visible update command", async () => {
