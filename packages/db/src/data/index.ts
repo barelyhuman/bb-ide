@@ -488,15 +488,21 @@ export {
   DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
   DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
   DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
+  DATABASE_MAINTENANCE_BUSY_TIMEOUT_MS,
   getDatabaseCompactionStats,
+  getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
   isDatabaseMaintenanceIdle,
   shouldCompactDatabase,
+  shouldRunIncrementalVacuum,
 } from "./maintenance.js";
 export type {
   CompactDatabaseResult,
   DatabaseAutoVacuumMode,
   DatabaseCompactionDecisionArgs,
   DatabaseCompactionStats,
+  DatabaseFreelistStats,
+  DatabaseIncrementalVacuumDecisionArgs,
   DatabaseMaintenanceActivity,
+  RunIncrementalVacuumArgs,
 } from "./maintenance.js";

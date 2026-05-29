@@ -6,13 +6,14 @@ import {
   COMPLETED_EVENT_OUTPUT_RETENTION_MS,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
-  DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
   DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
+  DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
   DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
   getDatabaseAutoVacuumMode,
   getDatabaseCompactionStats,
+  getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
   getEnvironment,
   getThread,
@@ -26,6 +27,7 @@ import {
   pruneCompletedCommandPayloads,
   runIncrementalVacuum,
   shouldCompactDatabase,
+  shouldRunIncrementalVacuum,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
@@ -90,15 +92,27 @@ export function runDatabaseMaintenanceSweep(
 
   lastDatabaseMaintenanceCheckAt = now;
 
-  const stats = getDatabaseCompactionStats(deps.db);
+  const autoVacuumMode = getDatabaseAutoVacuumMode(deps.db);
 
-  // Incremental auto-vacuum reclaims freed pages in a bounded batch without
-  // rewriting the whole file, so it does not need a fully-idle instance — which
-  // a busy server effectively never reaches. This is the steady-state path.
-  if (getDatabaseAutoVacuumMode(deps.db) === "incremental") {
-    if (stats.freelistCount < DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES) {
+  if (autoVacuumMode === "incremental") {
+    const freelistStats = getDatabaseFreelistStats(deps.db);
+    if (
+      !shouldRunIncrementalVacuum({
+        minFreelistPages: DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
+        stats: freelistStats,
+      })
+    ) {
+      // Incremental vacuum only reclaims freelist pages. It does not defragment
+      // internal page slack reported by dbstat.unused, and checking dbstat here
+      // would add an expensive scan to busy servers that cannot act on it.
+      deps.logger.debug(
+        { freelistStats },
+        "Incremental database vacuum skipped below freelist threshold",
+      );
       return;
     }
+    // This steady-state path may write and checkpoint, but each attempt is
+    // capped by page count and DB busy timeout so active app work can proceed.
     databaseMaintenanceRunning = true;
     try {
       const result = runIncrementalVacuum(deps.db, {
@@ -113,11 +127,10 @@ export function runDatabaseMaintenanceSweep(
     return;
   }
 
-  // Legacy databases (auto_vacuum=NONE) need a one-time full VACUUM to reclaim
-  // space and convert to incremental mode. A full VACUUM holds an exclusive
-  // lock and rewrites the entire file, so only run it when the instance is idle
-  // to avoid stalling active work. After it converts the database, subsequent
-  // sweeps take the incremental path above.
+  // Non-incremental databases need a full VACUUM to reclaim dbstat-reported
+  // internal slack and convert legacy auto_vacuum=NONE databases to
+  // incremental mode. A full VACUUM rewrites the file, so only compute the
+  // expensive dbstat-based compaction stats after the instance is idle.
   const activity = getDatabaseMaintenanceActivity(deps.db);
   if (!isDatabaseMaintenanceIdle(activity)) {
     deps.logger.debug(
@@ -127,6 +140,7 @@ export function runDatabaseMaintenanceSweep(
     return;
   }
 
+  const stats = getDatabaseCompactionStats(deps.db);
   if (
     !shouldCompactDatabase({
       minReclaimableBytes: DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,

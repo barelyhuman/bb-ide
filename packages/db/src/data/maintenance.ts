@@ -21,6 +21,11 @@ export const DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES = 1_024;
  * without stalling a busy server (unlike a full VACUUM).
  */
 export const DATABASE_INCREMENTAL_VACUUM_MAX_PAGES = 20_000;
+/**
+ * Maintenance should give way quickly to foreground database work. The sweep
+ * catches SQLITE_BUSY and tries again on a later hourly pass.
+ */
+export const DATABASE_MAINTENANCE_BUSY_TIMEOUT_MS = 100;
 
 const ACTIVE_COMMAND_STATES = ["pending", "fetched"] as const;
 const ACTIVE_THREAD_STATUSES = ["active", "provisioning"] as const;
@@ -40,6 +45,10 @@ interface PageSizeRow {
 
 interface FreelistCountRow {
   freelist_count: number;
+}
+
+interface BusyTimeoutRow {
+  timeout: number;
 }
 
 interface DbstatUnusedRow {
@@ -71,9 +80,31 @@ export interface DatabaseCompactionDecisionArgs {
   stats: DatabaseCompactionStats;
 }
 
+export interface DatabaseFreelistStats {
+  databaseBytes: number;
+  freelistBytes: number;
+  freelistCount: number;
+  pageCount: number;
+  pageSize: number;
+}
+
+export interface DatabaseIncrementalVacuumDecisionArgs {
+  minFreelistPages: number;
+  stats: DatabaseFreelistStats;
+}
+
 export interface CompactDatabaseResult {
   after: DatabaseCompactionStats;
   before: DatabaseCompactionStats;
+}
+
+export interface RunIncrementalVacuumArgs {
+  maxPages: number;
+}
+
+interface RunWithMaintenanceBusyTimeoutArgs<TValue> {
+  db: DbConnection;
+  work: () => TValue;
 }
 
 function countValue(row: CountRow | undefined): number {
@@ -102,6 +133,13 @@ function readFreelistCount(db: DbConnection): number {
   );
 }
 
+function readBusyTimeoutMs(db: DbConnection): number {
+  return (
+    db.$client.prepare<[], BusyTimeoutRow>("PRAGMA busy_timeout").get()
+      ?.timeout ?? 0
+  );
+}
+
 function readDbstatUnusedBytes(db: DbConnection): number {
   try {
     return (
@@ -113,6 +151,20 @@ function readDbstatUnusedBytes(db: DbConnection): number {
     );
   } catch {
     return 0;
+  }
+}
+
+function runWithMaintenanceBusyTimeout<TValue>(
+  args: RunWithMaintenanceBusyTimeoutArgs<TValue>,
+): TValue {
+  const originalBusyTimeoutMs = readBusyTimeoutMs(args.db);
+  args.db.$client.exec(
+    `PRAGMA busy_timeout = ${DATABASE_MAINTENANCE_BUSY_TIMEOUT_MS}`,
+  );
+  try {
+    return args.work();
+  } finally {
+    args.db.$client.exec(`PRAGMA busy_timeout = ${originalBusyTimeoutMs}`);
   }
 }
 
@@ -203,15 +255,14 @@ export function isDatabaseMaintenanceIdle(
   );
 }
 
-export function getDatabaseCompactionStats(
+export function getDatabaseFreelistStats(
   db: DbConnection,
-): DatabaseCompactionStats {
+): DatabaseFreelistStats {
   const pageCount = readPageCount(db);
   const pageSize = readPageSize(db);
   const freelistCount = readFreelistCount(db);
   const databaseBytes = pageCount * pageSize;
   const freelistBytes = freelistCount * pageSize;
-  const unusedBytes = readDbstatUnusedBytes(db);
 
   return {
     databaseBytes,
@@ -219,7 +270,18 @@ export function getDatabaseCompactionStats(
     freelistCount,
     pageCount,
     pageSize,
-    reclaimableBytes: freelistBytes + unusedBytes,
+  };
+}
+
+export function getDatabaseCompactionStats(
+  db: DbConnection,
+): DatabaseCompactionStats {
+  const freelistStats = getDatabaseFreelistStats(db);
+  const unusedBytes = readDbstatUnusedBytes(db);
+
+  return {
+    ...freelistStats,
+    reclaimableBytes: freelistStats.freelistBytes + unusedBytes,
     unusedBytes,
   };
 }
@@ -236,6 +298,12 @@ export function shouldCompactDatabase(
     args.stats.reclaimableBytes / args.stats.databaseBytes >=
       args.minReclaimableRatio
   );
+}
+
+export function shouldRunIncrementalVacuum(
+  args: DatabaseIncrementalVacuumDecisionArgs,
+): boolean {
+  return args.stats.freelistCount >= args.minFreelistPages;
 }
 
 export type DatabaseAutoVacuumMode = "none" | "full" | "incremental";
@@ -262,41 +330,50 @@ export function getDatabaseAutoVacuumMode(
 }
 
 export function compactDatabase(db: DbConnection): CompactDatabaseResult {
-  const before = getDatabaseCompactionStats(db);
+  return runWithMaintenanceBusyTimeout({
+    db,
+    work: () => {
+      const before = getDatabaseCompactionStats(db);
 
-  // Convert to incremental auto-vacuum (no-op if already incremental) so that
-  // after this one full rewrite, future reclamation can run via
-  // incremental_vacuum without requiring a fully-idle instance. The mode change
-  // only takes effect because of the VACUUM that immediately follows.
-  db.$client.exec("PRAGMA auto_vacuum = INCREMENTAL");
-  db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  db.$client.exec("VACUUM");
-  db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      // Convert to incremental auto-vacuum (no-op if already incremental). For
+      // legacy auto_vacuum=NONE databases, SQLite applies this mode change only
+      // when the full VACUUM below completes successfully.
+      db.$client.exec("PRAGMA auto_vacuum = INCREMENTAL");
+      db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      db.$client.exec("VACUUM");
+      db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
-  return {
-    after: getDatabaseCompactionStats(db),
-    before,
-  };
+      return {
+        after: getDatabaseCompactionStats(db),
+        before,
+      };
+    },
+  });
 }
 
 /**
  * Reclaims up to `maxPages` freelist pages on an incremental-auto-vacuum
- * database. Unlike {@link compactDatabase} this does not rewrite the whole file
- * or require an exclusive long-held lock, so it is safe to run while the
- * instance is busy.
+ * database. Unlike {@link compactDatabase} this does not rewrite the whole
+ * file, but it still performs maintenance writes and passive WAL checkpoints.
+ * Lock contention is bounded by DATABASE_MAINTENANCE_BUSY_TIMEOUT_MS.
  */
 export function runIncrementalVacuum(
   db: DbConnection,
-  args: { maxPages: number },
+  args: RunIncrementalVacuumArgs,
 ): CompactDatabaseResult {
-  const before = getDatabaseCompactionStats(db);
+  return runWithMaintenanceBusyTimeout({
+    db,
+    work: () => {
+      const before = getDatabaseCompactionStats(db);
 
-  db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  db.$client.exec(`PRAGMA incremental_vacuum(${args.maxPages})`);
-  db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      db.$client.exec("PRAGMA wal_checkpoint(PASSIVE)");
+      db.$client.exec(`PRAGMA incremental_vacuum(${args.maxPages})`);
+      db.$client.exec("PRAGMA wal_checkpoint(PASSIVE)");
 
-  return {
-    after: getDatabaseCompactionStats(db),
-    before,
-  };
+      return {
+        after: getDatabaseCompactionStats(db),
+        before,
+      };
+    },
+  });
 }
