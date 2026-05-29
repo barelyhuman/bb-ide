@@ -17,11 +17,20 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY_FIXED_PANEL_TABS_STATE,
+  createEmptyFixedPanelTabsState,
+  createTerminalFixedPanelTab,
   getFixedPanelTabsStateStorageKey,
   parseFixedPanelTabsState,
+  serializeFixedPanelTabsState,
   type FixedPanelTabsState,
 } from "@/lib/fixed-panel-tabs-state";
 import { useSetThreadTerminalPanelOpen } from "@/lib/thread-terminal-panel";
+import {
+  DEFAULT_TERMINAL_PANEL_HEIGHT_PERCENT,
+  THREAD_TERMINAL_PANEL_STATE_STORAGE_VERSION,
+  getThreadTerminalPanelStateStorageKey,
+  type ThreadTerminalPanelState,
+} from "@/lib/thread-terminal-panel-state";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ThreadTerminalPanel } from "./ThreadTerminalPanel";
 
@@ -71,6 +80,19 @@ interface RenderPanelArgs {
   canCreateTerminal?: boolean;
 }
 
+interface LegacyThreadTerminalPanelState extends ThreadTerminalPanelState {
+  activeTerminalId: string | null;
+}
+
+interface WriteFixedBottomTerminalTabsStateArgs {
+  activeTerminalId: string;
+  terminalIds: readonly string[];
+}
+
+interface WriteLegacyThreadTerminalPanelStateArgs {
+  activeTerminalId: string | null;
+}
+
 let serverSessions: TerminalSession[] = [];
 
 function makeTerminalSession(
@@ -108,6 +130,45 @@ function readFixedPanelTabsState(): FixedPanelTabsState {
       getFixedPanelTabsStateStorageKey({ threadId: THREAD_ID }),
     ),
   });
+}
+
+function writeLegacyThreadTerminalPanelState({
+  activeTerminalId,
+}: WriteLegacyThreadTerminalPanelStateArgs): void {
+  const state: LegacyThreadTerminalPanelState = {
+    version: THREAD_TERMINAL_PANEL_STATE_STORAGE_VERSION,
+    isOpen: true,
+    activeTerminalId,
+    panelHeightPercent: DEFAULT_TERMINAL_PANEL_HEIGHT_PERCENT,
+    lastUsedAt: Date.now(),
+  };
+  window.localStorage.setItem(
+    getThreadTerminalPanelStateStorageKey({ threadId: THREAD_ID }),
+    JSON.stringify(state),
+  );
+}
+
+function writeFixedBottomTerminalTabsState({
+  activeTerminalId,
+  terminalIds,
+}: WriteFixedBottomTerminalTabsStateArgs): void {
+  const terminalTabs = terminalIds.map((terminalId) =>
+    createTerminalFixedPanelTab({ terminalId }),
+  );
+  const activeTabId = createTerminalFixedPanelTab({
+    terminalId: activeTerminalId,
+  }).id;
+  const state = createEmptyFixedPanelTabsState({
+    bottom: {
+      tabs: terminalTabs,
+      activeTabId,
+    },
+    lastUsedAt: Date.now(),
+  });
+  window.localStorage.setItem(
+    getFixedPanelTabsStateStorageKey({ threadId: THREAD_ID }),
+    serializeFixedPanelTabsState({ state }),
+  );
 }
 
 async function listTerminals(): Promise<ThreadTerminalListResponse> {
@@ -238,6 +299,31 @@ describe("ThreadTerminalPanel", () => {
     });
     expect(screen.queryByText("Start terminal")).toBeNull();
     expect(await screen.findByText("Terminal 1")).toBeTruthy();
+  });
+
+  it("uses fixed bottom tabs instead of legacy panel storage for the active terminal", async () => {
+    serverSessions = [
+      makeTerminalSession({ id: "term_1", title: "Terminal 1" }),
+      makeTerminalSession({
+        id: "term_2",
+        title: "Terminal 2",
+        createdAt: 2,
+        updatedAt: 2,
+      }),
+    ];
+    writeLegacyThreadTerminalPanelState({ activeTerminalId: "term_1" });
+    writeFixedBottomTerminalTabsState({
+      activeTerminalId: "term_2",
+      terminalIds: ["term_1", "term_2"],
+    });
+
+    renderPanel();
+
+    expect(await screen.findByText("Input term_2")).toBeTruthy();
+    expect(screen.queryByText("Input term_1")).toBeNull();
+    expect(
+      screen.getByTitle("Terminal 2 (running)").getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("closes an unused panel-created terminal when the panel is hidden", async () => {

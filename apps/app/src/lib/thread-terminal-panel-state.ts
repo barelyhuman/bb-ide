@@ -12,6 +12,18 @@ const threadTerminalPanelStateSchema = z
   .object({
     version: z.literal(THREAD_TERMINAL_PANEL_STATE_STORAGE_VERSION),
     isOpen: z.boolean(),
+    panelHeightPercent: z
+      .number()
+      .int()
+      .min(MIN_TERMINAL_PANEL_HEIGHT_PERCENT)
+      .max(MAX_TERMINAL_PANEL_HEIGHT_PERCENT),
+    lastUsedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+const legacyThreadTerminalPanelStateSchema = z
+  .object({
+    version: z.literal(THREAD_TERMINAL_PANEL_STATE_STORAGE_VERSION),
+    isOpen: z.boolean(),
     activeTerminalId: z.string().min(1).nullable(),
     panelHeightPercent: z
       .number()
@@ -25,9 +37,12 @@ const threadTerminalPanelStateSchema = z
 export interface ThreadTerminalPanelState {
   version: typeof THREAD_TERMINAL_PANEL_STATE_STORAGE_VERSION;
   isOpen: boolean;
-  activeTerminalId: string | null;
   panelHeightPercent: number;
   lastUsedAt: number;
+}
+
+interface LegacyThreadTerminalPanelState extends ThreadTerminalPanelState {
+  activeTerminalId: string | null;
 }
 
 interface ThreadTerminalPanelStorageKeyArgs {
@@ -35,7 +50,6 @@ interface ThreadTerminalPanelStorageKeyArgs {
 }
 
 interface CreateThreadTerminalPanelStateArgs {
-  activeTerminalId?: string | null;
   isOpen?: boolean;
   lastUsedAt?: number;
   panelHeightPercent?: number;
@@ -65,6 +79,10 @@ interface PruneThreadTerminalPanelStorageArgs {
   now: number;
 }
 
+interface MigrateLegacyThreadTerminalPanelStateArgs {
+  state: LegacyThreadTerminalPanelState;
+}
+
 function getLocalStorage(): Storage | null {
   if (typeof window === "undefined") {
     return null;
@@ -76,13 +94,23 @@ function normalizeStorageSegment(value: string): string {
   return encodeURIComponent(value.trim());
 }
 
+function migrateLegacyThreadTerminalPanelState({
+  state,
+}: MigrateLegacyThreadTerminalPanelStateArgs): ThreadTerminalPanelState {
+  return {
+    version: state.version,
+    isOpen: state.isOpen,
+    panelHeightPercent: state.panelHeightPercent,
+    lastUsedAt: state.lastUsedAt,
+  };
+}
+
 export function createEmptyThreadTerminalPanelState(
   args: CreateThreadTerminalPanelStateArgs = {},
 ): ThreadTerminalPanelState {
   return {
     version: THREAD_TERMINAL_PANEL_STATE_STORAGE_VERSION,
     isOpen: args.isOpen ?? false,
-    activeTerminalId: args.activeTerminalId ?? null,
     panelHeightPercent:
       args.panelHeightPercent ?? DEFAULT_TERMINAL_PANEL_HEIGHT_PERCENT,
     lastUsedAt: args.lastUsedAt ?? 0,
@@ -149,14 +177,33 @@ function parseThreadTerminalPanelStateForStorage({
   }
 
   const stateResult = threadTerminalPanelStateSchema.safeParse(parsedValue);
-  if (!stateResult.success) {
+  if (stateResult.success) {
+    if (isThreadTerminalPanelStateExpired({ now, state: stateResult.data })) {
+      return {
+        shouldPrune: true,
+        state: initialValue,
+      };
+    }
+
+    return {
+      shouldPrune: false,
+      state: stateResult.data,
+    };
+  }
+
+  const legacyStateResult =
+    legacyThreadTerminalPanelStateSchema.safeParse(parsedValue);
+  if (!legacyStateResult.success) {
     return {
       shouldPrune: true,
       state: initialValue,
     };
   }
 
-  if (isThreadTerminalPanelStateExpired({ now, state: stateResult.data })) {
+  const migratedState = migrateLegacyThreadTerminalPanelState({
+    state: legacyStateResult.data,
+  });
+  if (isThreadTerminalPanelStateExpired({ now, state: migratedState })) {
     return {
       shouldPrune: true,
       state: initialValue,
@@ -165,7 +212,7 @@ function parseThreadTerminalPanelStateForStorage({
 
   return {
     shouldPrune: false,
-    state: stateResult.data,
+    state: migratedState,
   };
 }
 

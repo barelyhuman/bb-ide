@@ -14,7 +14,6 @@ import {
 import {
   useSetThreadTerminalPanelOpen,
   useThreadTerminalPanelState,
-  useUpdateThreadTerminalPanelState,
 } from "@/lib/thread-terminal-panel";
 import { normalizeTerminalTitle } from "./thread-terminal-title";
 
@@ -95,7 +94,6 @@ export function useThreadTerminalController({
   threadId,
 }: ThreadTerminalControllerArgs): ThreadTerminalController {
   const panelState = useThreadTerminalPanelState(threadId);
-  const updatePanelState = useUpdateThreadTerminalPanelState(threadId);
   const setPanelOpen = useSetThreadTerminalPanelOpen(threadId);
   const activeFixedTerminalId = useActiveFixedBottomTerminalId(threadId);
   const setActiveFixedTerminal =
@@ -128,11 +126,21 @@ export function useThreadTerminalController({
     visibleSessions.find((session) => session.id === activeTerminalId) ?? null;
 
   useEffect(() => {
+    if (!panelState.isOpen || terminalsQuery.isLoading || terminalsQuery.error) {
+      return;
+    }
     if (activeFixedTerminalId === activeTerminalId) {
       return;
     }
     setActiveFixedTerminal(activeTerminalId);
-  }, [activeFixedTerminalId, activeTerminalId, setActiveFixedTerminal]);
+  }, [
+    activeFixedTerminalId,
+    activeTerminalId,
+    panelState.isOpen,
+    setActiveFixedTerminal,
+    terminalsQuery.error,
+    terminalsQuery.isLoading,
+  ]);
 
   useEffect(() => {
     const wasPanelOpen = wasPanelOpenRef.current;
@@ -246,12 +254,9 @@ export function useThreadTerminalController({
   const handleSelectTerminal = useCallback(
     (terminalId: string) => {
       setActiveFixedTerminal(terminalId);
-      updatePanelState((current) => ({
-        ...current,
-        isOpen: true,
-      }));
+      setPanelOpen(true);
     },
-    [setActiveFixedTerminal, updatePanelState],
+    [setActiveFixedTerminal, setPanelOpen],
   );
 
   const handleCloseTerminal = useCallback(
