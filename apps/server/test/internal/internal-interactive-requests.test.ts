@@ -1,11 +1,14 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { deleteThread } from "@bb/db";
 import type { HostDaemonInteractiveRequest } from "@bb/host-daemon-contract";
+import { renderTemplate } from "@bb/templates";
 import { describe, expect, it } from "vitest";
 import {
   internalAuthHeaders,
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -13,6 +16,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
   seedTurnStarted,
 } from "../helpers/seed.js";
 import {
@@ -504,6 +508,123 @@ describe("internal interactive request lifecycle", () => {
       expect(
         harness.deps.pendingInteractions.listThreadInteractions(thread.id),
       ).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("notifies a parent manager when a managed child needs attention for a pending interaction", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-managed-child-needs-attention",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const managerEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/managed-child-needs-attention-manager",
+        projectId: project.id,
+      });
+      const childEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/managed-child-needs-attention-child",
+        projectId: project.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        environmentId: managerEnvironment.id,
+        projectId: project.id,
+        title: "Project manager",
+        type: "manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        environmentId: managerEnvironment.id,
+        inputText: "Initial manager task",
+        providerThreadId: "provider-manager-needs-attention",
+        threadId: managerThread.id,
+      });
+      const childThread = seedThread(harness.deps, {
+        environmentId: childEnvironment.id,
+        parentThreadId: managerThread.id,
+        projectId: project.id,
+        title: "Backend port validation cleanup",
+      });
+      const body = buildCommandApprovalInteractiveRequest({
+        sessionId: session.id,
+        suffix: "managed-child-needs-attention",
+        threadId: childThread.id,
+      });
+
+      const response = await registerInteractiveRequest({ body, harness });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
+
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.state === "pending" &&
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
+      );
+      const preferencesReadResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(preferencesReadResponse.status).toBe(200);
+
+      const managerTurnCommand = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command, row }) =>
+          row.state === "pending" &&
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
+      );
+      if (managerTurnCommand.command.type !== "turn.submit") {
+        throw new Error(
+          `Expected manager turn command, got ${managerTurnCommand.command.type}`,
+        );
+      }
+      expect(managerTurnCommand.command.input).toEqual(
+        expect.arrayContaining([
+          {
+            type: "text",
+            text: renderTemplate("systemMessageManagedThreadNeedsAttention", {
+              threadId: childThread.id,
+              titleSuffix: " (Backend port validation cleanup)",
+            }),
+          },
+        ]),
+      );
+
+      const retryResponse = await registerInteractiveRequest({
+        body,
+        harness,
+      });
+      expect(retryResponse.status).toBe(200);
+      await expect(readJson(retryResponse)).resolves.toMatchObject({
+        outcome: "existing",
+        status: "pending",
+      });
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          managerTurnCommand.row.cursor,
+          ({ command }) =>
+            command.type === "host.read_file" &&
+            command.path === managerPreferencesPath,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
     } finally {
       await harness.cleanup();
     }

@@ -229,6 +229,20 @@ export const templateDefinitions = [
     }
   },
   {
+    "id": "systemMessageManagedThreadNeedsAttention",
+    "body": "[bb system]\n\nManaged thread needs attention: {{threadId}}{{titleSuffix}}\nThe thread is blocked on a pending interaction. Inspect it and decide whether to ask the user, redirect the worker, or take another management action.",
+    "fileName": "system-message-managed-thread-needs-attention.md",
+    "kind": "prompt",
+    "title": "Managed Thread Needs Attention",
+    "summary": "Notifies a manager that one of its worker threads is blocked on a pending interaction.",
+    "intent": "Prompt the manager to inspect the blocker and decide whether to involve the user or redirect the work.",
+    "editingNotes": "Keep this focused on manager triage; do not imply the manager can approve or reject on the user's behalf.",
+    "variables": {
+      "threadId": "The worker thread's ID.",
+      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
+    }
+  },
+  {
     "id": "systemMessageManagerPreferencesCurrent",
     "body": "[bb system]\n\nCurrent PREFERENCES.md contents:\n\n{{fence}}md\n{{preferencesContent}}\n{{fence}}",
     "fileName": "system-message-manager-preferences-current.md",
@@ -425,6 +439,10 @@ export interface TemplateVariables {
     titleSuffix?: string;
   };
   systemMessageManagedThreadInterrupted: {
+    threadId: string;
+    titleSuffix?: string;
+  };
+  systemMessageManagedThreadNeedsAttention: {
     threadId: string;
     titleSuffix?: string;
   };

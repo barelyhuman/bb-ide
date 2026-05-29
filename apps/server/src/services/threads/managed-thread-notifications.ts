@@ -9,11 +9,22 @@ interface RenderManagedThreadTurnStatusMessageArgs {
   turnStatus: ThreadEventTurnStatus;
 }
 
+interface RenderManagedThreadNeedsAttentionMessageArgs {
+  managedThreadId: string;
+  title: string | null;
+}
+
 export interface QueueManagedThreadTurnNotificationArgs {
   managedThreadId: string;
   managerThreadId: string;
   title: string | null;
   turnStatus: ThreadEventTurnStatus;
+}
+
+export interface QueueManagedThreadNeedsAttentionNotificationArgs {
+  managedThreadId: string;
+  managerThreadId: string;
+  title: string | null;
 }
 
 function formatManagedThreadTitleSuffix(title: string | null): string {
@@ -42,6 +53,15 @@ function renderManagedThreadTurnStatusMessage(
   }
 }
 
+function renderManagedThreadNeedsAttentionMessage(
+  args: RenderManagedThreadNeedsAttentionMessageArgs,
+): string {
+  return renderTemplate("systemMessageManagedThreadNeedsAttention", {
+    threadId: args.managedThreadId,
+    titleSuffix: formatManagedThreadTitleSuffix(args.title),
+  });
+}
+
 /**
  * Queues a manager-facing notification for managed thread turn outcomes.
  * Normal turn-completion event side effects pass the actual terminal status;
@@ -66,6 +86,27 @@ export async function queueManagedThreadTurnNotificationBestEffort(
         err: error,
       },
       "Failed to queue manager turn notification",
+    );
+  }
+}
+
+export async function queueManagedThreadNeedsAttentionNotificationBestEffort(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: QueueManagedThreadNeedsAttentionNotificationArgs,
+): Promise<void> {
+  try {
+    await queueManagerSystemMessage(deps, {
+      managerThreadId: args.managerThreadId,
+      messageText: renderManagedThreadNeedsAttentionMessage(args),
+    });
+  } catch (error) {
+    deps.logger.error(
+      {
+        managedThreadId: args.managedThreadId,
+        managerThreadId: args.managerThreadId,
+        err: error,
+      },
+      "Failed to queue manager needs-attention notification",
     );
   }
 }

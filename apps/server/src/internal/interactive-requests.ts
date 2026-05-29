@@ -4,14 +4,51 @@ import {
   typedRoutes,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
-import { hasStoredTurnStarted } from "@bb/db";
+import { getThread, hasStoredTurnStarted } from "@bb/db";
 import { isUserQuestionPendingInteractionPayload } from "@bb/domain";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import {
+  runWithDaemonCommandWaitForbidden,
+  scheduleAfterDaemonIngressResponse,
+} from "../services/hosts/command-wait-context.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
-import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
+import {
+  queueManagedThreadNeedsAttentionNotificationBestEffort,
+} from "../services/threads/managed-thread-notifications.js";
 import { requireAuthenticatedDaemonSession } from "./session-state.js";
+
+interface RequestManagedThreadNeedsAttentionNotificationArgs {
+  managedThreadId: string;
+}
+
+function requestManagedThreadNeedsAttentionNotification(
+  deps: AppDeps,
+  args: RequestManagedThreadNeedsAttentionNotificationArgs,
+): void {
+  const managedThread = getThread(deps.db, args.managedThreadId);
+  if (!managedThread?.parentThreadId) {
+    return;
+  }
+  const managerThreadId = managedThread.parentThreadId;
+
+  scheduleAfterDaemonIngressResponse({
+    config: deps.config,
+    context: {
+      managedThreadId: managedThread.id,
+      managerThreadId,
+    },
+    logger: deps.logger,
+    name: "Managed thread needs-attention notification",
+    work: () =>
+      queueManagedThreadNeedsAttentionNotificationBestEffort(deps, {
+        managedThreadId: managedThread.id,
+        managerThreadId,
+        title: managedThread.title,
+      }),
+  });
+}
 
 export function registerInternalInteractiveRequestRoutes(
   app: Hono,
@@ -93,6 +130,11 @@ export function registerInternalInteractiveRequestRoutes(
             return context.json({
               outcome: "rejected",
               reason: registered.reason,
+            });
+          }
+          if (registered.outcome === "created") {
+            requestManagedThreadNeedsAttentionNotification(deps, {
+              managedThreadId: registered.interaction.threadId,
             });
           }
 
