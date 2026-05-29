@@ -159,6 +159,32 @@ interface ApplyCommandResultSideEffectsArgs<TType extends ParsedCommandType> {
   report: CommandResultReportForType<TType>;
 }
 
+interface CommandResultSettlementContext<TType extends ParsedCommandType> {
+  command: ParsedCommandForType<TType>;
+  commandRow: HostDaemonCommandRow;
+  deps: CommandResultSettlementDeps;
+}
+
+interface CommandResultFailureSettlementContext<
+  TType extends ParsedCommandType,
+> extends CommandResultSettlementContext<TType> {
+  errorMessage: string;
+}
+
+interface CommandResultSuccessSettlementContext<
+  TType extends ParsedCommandType,
+> extends CommandResultSettlementContext<TType> {
+  result: HostDaemonCommandResult<TType>;
+}
+
+interface CommandResultSettlementHandlers<TType extends ParsedCommandType> {
+  complete(
+    context: CommandResultSuccessSettlementContext<TType>,
+  ): CommandResultSideEffectsResult | void;
+  fail(context: CommandResultFailureSettlementContext<TType>): boolean | void;
+  isActive?(context: CommandResultSettlementContext<TType>): boolean;
+}
+
 interface CommandResultOwner<TType extends ParsedCommandType> {
   applySideEffects?(
     args: ApplyCommandResultSideEffectsArgs<TType>,
@@ -167,6 +193,35 @@ interface CommandResultOwner<TType extends ParsedCommandType> {
 
 function emptyCommandResultSideEffects(): CommandResultSideEffectsResult {
   return { postCommitActions: [] };
+}
+
+function settleOwnerCommandResult<TType extends ParsedCommandType>(
+  args: ApplyCommandResultSideEffectsArgs<TType>,
+  handlers: CommandResultSettlementHandlers<TType>,
+): CommandResultSideEffectsResult {
+  const context: CommandResultSettlementContext<TType> = {
+    command: args.command,
+    commandRow: args.commandRow,
+    deps: args.deps,
+  };
+  if (handlers.isActive && !handlers.isActive(context)) {
+    return emptyCommandResultSideEffects();
+  }
+
+  if (!args.report.ok) {
+    handlers.fail({
+      ...context,
+      errorMessage: args.report.errorMessage,
+    });
+    return emptyCommandResultSideEffects();
+  }
+
+  return (
+    handlers.complete({
+      ...context,
+      result: args.report.result,
+    }) ?? emptyCommandResultSideEffects()
+  );
 }
 
 function getThreadFailureCommandErrorScope(
@@ -510,45 +565,47 @@ function handleProvisionCommandResult(
 function handleEnvironmentDestroyResult(
   args: ApplyCommandResultSideEffectsArgs<"environment.destroy">,
 ): CommandResultSideEffectsResult {
-  const postCommitActions: CommandResultPostCommitAction[] = [];
-  if (
-    !hasActiveEnvironmentDestroyOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return emptyCommandResultSideEffects();
-  }
-
-  const environment = getEnvironment(args.deps.db, args.command.environmentId);
-  if (!args.report.ok) {
-    failEnvironmentDestroyForCommand(args.deps, {
-      commandId: args.commandRow.id,
-      failureReason: args.report.errorMessage,
-    });
-    return emptyCommandResultSideEffects();
-  }
-  if (!environment) {
-    return emptyCommandResultSideEffects();
-  }
-  if (
-    !completeEnvironmentDestroyForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return emptyCommandResultSideEffects();
-  }
-
-  postCommitActions.push({
-    name: "Terminal cleanup after environment destroy",
-    context: {
-      environmentId: environment.id,
-    },
-    run: (deps) =>
-      deps.terminalSessions.closeDestroyedEnvironmentTerminals({
-        environmentId: environment.id,
+  return settleOwnerCommandResult(args, {
+    isActive: ({ deps, commandRow }) =>
+      hasActiveEnvironmentDestroyOperationForCommand(deps, {
+        commandId: commandRow.id,
       }),
+    fail: ({ deps, commandRow, errorMessage }) =>
+      failEnvironmentDestroyForCommand(deps, {
+        commandId: commandRow.id,
+        failureReason: errorMessage,
+      }),
+    complete: ({ deps, command, commandRow }) => {
+      const environment = getEnvironment(deps.db, command.environmentId);
+      if (!environment) {
+        return emptyCommandResultSideEffects();
+      }
+      if (
+        !completeEnvironmentDestroyForCommand(deps, {
+          commandId: commandRow.id,
+        })
+      ) {
+        return emptyCommandResultSideEffects();
+      }
+
+      return {
+        postCommitActions: [
+          {
+            name: "Terminal cleanup after environment destroy",
+            context: {
+              environmentId: environment.id,
+            },
+            run: (sideEffectDeps) =>
+              sideEffectDeps.terminalSessions.closeDestroyedEnvironmentTerminals(
+                {
+                  environmentId: environment.id,
+                },
+              ),
+          },
+        ],
+      };
+    },
   });
-  return { postCommitActions };
 }
 
 function handleThreadCommandFailure(
@@ -640,51 +697,51 @@ function handleThreadStartResult(
 function handleThreadStopResult(
   args: ApplyCommandResultSideEffectsArgs<"thread.stop">,
 ): CommandResultSideEffectsResult {
-  const postCommitActions: CommandResultPostCommitAction[] = [];
-  if (
-    !hasActiveThreadStopOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return emptyCommandResultSideEffects();
-  }
-  if (!args.report.ok) {
-    failThreadStopForCommand(args.deps, {
-      commandId: args.commandRow.id,
-      failureReason: args.report.errorMessage,
-    });
-    return emptyCommandResultSideEffects();
-  }
-
-  finalizeStoppedThreadInTransaction(args.deps, {
-    cancelPendingCommand: false,
-    expectedCommandId: args.commandRow.id,
-    threadId: args.command.threadId,
-  });
-  postCommitActions.push({
-    name: "Provider archive forwarding after thread stop",
-    context: {
-      environmentId: args.command.environmentId,
-      threadId: args.command.threadId,
-    },
-    run: (deps) => {
-      queueSettledArchivedThreadProviderArchiveCommand(deps, {
-        threadId: args.command.threadId,
-      });
-    },
-  });
-  postCommitActions.push({
-    name: "Environment cleanup advance after thread stop",
-    context: {
-      environmentId: args.command.environmentId,
-      threadId: args.command.threadId,
-    },
-    run: (deps) =>
-      runEnvironmentCleanupAdvance(deps, {
-        environmentId: args.command.environmentId,
+  return settleOwnerCommandResult(args, {
+    isActive: ({ deps, commandRow }) =>
+      hasActiveThreadStopOperationForCommand(deps, {
+        commandId: commandRow.id,
       }),
+    fail: ({ deps, commandRow, errorMessage }) =>
+      failThreadStopForCommand(deps, {
+        commandId: commandRow.id,
+        failureReason: errorMessage,
+      }),
+    complete: ({ deps, command, commandRow }) => {
+      finalizeStoppedThreadInTransaction(deps, {
+        cancelPendingCommand: false,
+        expectedCommandId: commandRow.id,
+        threadId: command.threadId,
+      });
+      return {
+        postCommitActions: [
+          {
+            name: "Provider archive forwarding after thread stop",
+            context: {
+              environmentId: command.environmentId,
+              threadId: command.threadId,
+            },
+            run: (sideEffectDeps) => {
+              queueSettledArchivedThreadProviderArchiveCommand(sideEffectDeps, {
+                threadId: command.threadId,
+              });
+            },
+          },
+          {
+            name: "Environment cleanup advance after thread stop",
+            context: {
+              environmentId: command.environmentId,
+              threadId: command.threadId,
+            },
+            run: (sideEffectDeps) =>
+              runEnvironmentCleanupAdvance(sideEffectDeps, {
+                environmentId: command.environmentId,
+              }),
+          },
+        ],
+      };
+    },
   });
-  return { postCommitActions };
 }
 
 function handleInteractiveResolveResult(
