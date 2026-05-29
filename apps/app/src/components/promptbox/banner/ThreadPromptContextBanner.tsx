@@ -14,6 +14,7 @@ import {
 import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
 import {
+  formatChangeSummary,
   renderChangeSummary,
   toChangeTally,
   type WorkspaceChangedFileSelection,
@@ -141,6 +142,8 @@ const KIND_PREFIX: Record<WorkspaceChangedFilesSection["kind"], string> = {
   committed: "Committed",
 };
 
+const ARCHIVED_THREAD_STATUS_LABEL = "Thread is archived";
+
 // Stable ids for aria-controls / aria-labelledby pairing between each
 // section's toggle button and its expanded body region.
 const SECTION_IDS = {
@@ -203,23 +206,27 @@ function ManagedChildIcon({ className }: { className?: string }) {
   );
 }
 
+interface SectionToggleButtonProps {
+  id: string;
+  controlsId: string;
+  ariaLabel?: string;
+  icon: ReactNode;
+  label: ReactNode;
+  hideLabelInCompact?: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
 function SectionToggleButton({
   id,
   controlsId,
   ariaLabel,
   icon,
   label,
+  hideLabelInCompact = true,
   isExpanded,
   onToggle,
-}: {
-  id: string;
-  controlsId: string;
-  ariaLabel?: string;
-  icon: ReactNode;
-  label: ReactNode;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
+}: SectionToggleButtonProps) {
   return (
     <button
       type="button"
@@ -240,7 +247,14 @@ function SectionToggleButton({
     >
       {icon}
       {label !== null && label !== undefined ? (
-        <span className="min-w-0 truncate">{label}</span>
+        <span
+          className="min-w-0 truncate"
+          data-promptbox-hide-compact={
+            hideLabelInCompact ? "" : undefined
+          }
+        >
+          {label}
+        </span>
       ) : null}
       <Icon
         name="ChevronDown"
@@ -418,6 +432,7 @@ export function ThreadPromptContextBanner({
   if (archivedSection) {
     const isManagedByExpandedInArchived =
       expandedSection === "managedBy" && managedBySection !== null;
+    const hasMultipleArchivedSegments = managedBySection !== null;
     return (
       <PromptStackCard
         ariaLabel="Thread context before sending"
@@ -442,13 +457,25 @@ export function ThreadPromptContextBanner({
               onToggle={() => onToggleSection("managedBy")}
             />
           ) : null}
-          <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5">
+          <div
+            className="flex min-w-0 items-center gap-1.5 px-1 py-0.5"
+            role="status"
+            aria-label={ARCHIVED_THREAD_STATUS_LABEL}
+          >
             <Icon
               name="Archive"
               className="size-3.5 shrink-0"
               aria-hidden="true"
             />
-            <span className="min-w-0 truncate">Thread is archived</span>
+            <span
+              className="min-w-0 truncate"
+              data-promptbox-hide-compact={
+                hasMultipleArchivedSegments ? "" : undefined
+              }
+              aria-hidden="true"
+            >
+              {ARCHIVED_THREAD_STATUS_LABEL}
+            </span>
           </div>
         </div>
         {managedBySection ? (
@@ -475,8 +502,15 @@ export function ThreadPromptContextBanner({
   if (!showTodo && !showGit && !showManagedBy && !showManagerChildren) {
     return null;
   }
+  const visibleSegmentCount =
+    Number(showManagedBy) +
+    Number(showManagerChildren) +
+    Number(showTodo) +
+    Number(showGit);
+  const hasSingleVisibleSegment = visibleSegmentCount === 1;
   const todoItems =
     showTodo && todoSection ? todoSection.pendingTodos.items : [];
+  const todoCountLabel = renderTodoCounts(todoItems);
   const isTodoExpanded = expandedSection === "todos" && showTodo;
   // selectWorkspaceChangedFilesSection only emits a section when files exist,
   // so showGit implies a non-empty file list.
@@ -485,12 +519,15 @@ export function ThreadPromptContextBanner({
   const isManagerChildrenExpanded =
     expandedSection === "managerChildren" && showManagerChildren;
 
-  const gitSummary: ReactNode = showGit ? (
-    <>
-      {showTodo ? null : <>{KIND_PREFIX[gitSection.changedFiles.kind]} · </>}
-      {renderChangeSummary(toChangeTally(gitSection.changedFiles.stats))}
-    </>
-  ) : null;
+  const gitTally = showGit ? toChangeTally(gitSection.changedFiles.stats) : null;
+  const gitSummaryText = gitTally ? formatChangeSummary(gitTally) : "";
+  const gitSummary: ReactNode =
+    showGit && gitTally ? (
+      <>
+        {showTodo ? null : <>{KIND_PREFIX[gitSection.changedFiles.kind]} · </>}
+        {renderChangeSummary(gitTally)}
+      </>
+    ) : null;
 
   const mergeBaseCandidates =
     showGit && gitSection.mergeBase
@@ -517,7 +554,10 @@ export function ThreadPromptContextBanner({
     >
       <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
         {showManagedBy && managedBySection && isManagedByOnly ? (
-          <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5">
+          <div
+            className="flex min-w-0 items-center gap-1.5 px-1 py-0.5"
+            title={`Managed by ${managedBySection.managerName}`}
+          >
             <Icon
               name="UserRound"
               className="size-3.5 shrink-0"
@@ -565,6 +605,10 @@ export function ThreadPromptContextBanner({
             label={`${managerChildrenSection.items.length} active managed ${
               managerChildrenSection.items.length === 1 ? "thread" : "threads"
             }`}
+            hideLabelInCompact={!hasSingleVisibleSegment}
+            ariaLabel={`${managerChildrenSection.items.length} active managed ${
+              managerChildrenSection.items.length === 1 ? "thread" : "threads"
+            }`}
             isExpanded={isManagerChildrenExpanded}
             onToggle={() => onToggleSection("managerChildren")}
           />
@@ -580,7 +624,9 @@ export function ThreadPromptContextBanner({
                 aria-hidden="true"
               />
             }
-            label={renderTodoCounts(todoItems)}
+            label={todoCountLabel}
+            hideLabelInCompact={!hasSingleVisibleSegment}
+            ariaLabel={`Todos: ${todoCountLabel ?? todoItems.length}`}
             isExpanded={isTodoExpanded}
             onToggle={() => onToggleSection("todos")}
           />
@@ -597,12 +643,17 @@ export function ThreadPromptContextBanner({
               />
             }
             label={gitSummary}
+            hideLabelInCompact={!hasSingleVisibleSegment}
+            ariaLabel={`Changed files: ${gitSummaryText}`}
             isExpanded={isGitExpanded}
             onToggle={() => onToggleSection("git")}
           />
         ) : null}
         {showGit && gitSection.mergeBase ? (
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <div
+            className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+            data-promptbox-hide-compact=""
+          >
             <span className="shrink-0">Merge base:</span>
             <BranchPicker
               value={gitSection.mergeBase.branch}

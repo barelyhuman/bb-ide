@@ -21,6 +21,19 @@ export interface ThreadEnvironmentSummaryProps {
   onCreateNewThreadInWorktree?: () => void;
 }
 
+function getCompactEnvironmentLabel(label: string): string {
+  if (label.includes("remotely")) {
+    return "Remote";
+  }
+  if (label.includes("locally")) {
+    return "Local";
+  }
+  if (label.includes("Worktree")) {
+    return "Worktree";
+  }
+  return label;
+}
+
 /**
  * Inline strip shown in the follow-up composer that describes the thread's
  * current environment: label, host connection status, and (when on a
@@ -28,9 +41,11 @@ export interface ThreadEnvironmentSummaryProps {
  * elsewhere.
  *
  * Responsive behavior:
- * - Mode label always visible, never truncates.
- * - Remote host suffix hidden below `lg` (1024px).
- * - Branch chip hidden below `md` (768px), truncates within its space above.
+ * - Promptbox container queries collapse the environment label to a concise value.
+ * - The summary can shrink inside the follow-up strip so permission/context
+ *   controls stay pinned and text truncates instead of wrapping.
+ * - Branch chip hides in compact promptbox shells and truncates within its
+ *   available space above that breakpoint.
  */
 export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   environmentLabel,
@@ -45,7 +60,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-2 pr-1.5">
+    <div className="flex min-w-0 max-w-full items-center gap-2 pr-1.5">
       {environmentLabel ? (
         <OptionDisplay
           label="Environment"
@@ -65,12 +80,14 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
               ) : null}
             </span>
           }
+          compactValue={getCompactEnvironmentLabel(environmentLabel)}
+          compactValueHiddenWhenTiny
           leading={
             environmentIcon ? (
               <Icon name={environmentIcon} className="size-4 shrink-0" />
             ) : null
           }
-          className="h-6 shrink-0"
+          className="h-6 min-w-0"
           muted
         />
       ) : environmentHostConnected !== undefined ? (
@@ -79,7 +96,8 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
       {environmentBranchName ? (
         <button
           type="button"
-          className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground md:flex"
+          data-promptbox-hide-compact=""
+          className="flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
           title={`Copy branch name: ${environmentBranchName}`}
           onClick={() => {
             void copyToClipboardWithToast(environmentBranchName, {

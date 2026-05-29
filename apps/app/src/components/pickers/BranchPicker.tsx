@@ -22,9 +22,9 @@ import {
 } from "@/components/ui/popover.js";
 import {
   OPTION_BASE_CLASS_NAME,
-  OPTION_CONTENT_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
   OPTION_MUTED_CLASS_NAME,
+  OPTION_TRIGGER_CONTENT_CLASS_NAME,
 } from "./OptionPicker";
 import { cn } from "@/lib/utils";
 import type { GitBranchRefClassification } from "@bb/domain";
@@ -140,6 +140,7 @@ interface BranchPickerTextProps {
   label: string;
   emphasizePlainLabel?: boolean;
   className?: string;
+  compactAffixesInPromptbox?: boolean;
 }
 
 interface BranchPickerSectionHeaderProps {
@@ -307,7 +308,32 @@ function BranchPickerText({
   label,
   emphasizePlainLabel = false,
   className,
+  compactAffixesInPromptbox = false,
 }: BranchPickerTextProps) {
+  const compactAffixProps = compactAffixesInPromptbox
+    ? { "data-promptbox-hide-compact": "" }
+    : {};
+  if (label === CREATE_NEW_BRANCH_LABEL) {
+    return (
+      <span className={cn("flex min-w-0 items-baseline", className)}>
+        <span
+          className={cn(
+            "min-w-0 truncate",
+            emphasizePlainLabel && "font-medium text-foreground",
+          )}
+        >
+          New
+        </span>
+        <span
+          {...compactAffixProps}
+          className="shrink-0 text-muted-foreground"
+        >
+          {" branch"}
+        </span>
+      </span>
+    );
+  }
+
   const parts = splitBranchLabel(label);
   if (parts.kind === "plain") {
     return (
@@ -326,18 +352,33 @@ function BranchPickerText({
   if (parts.kind === "parenthetical") {
     return (
       <span className={cn("flex min-w-0 items-baseline", className)}>
-        <span className="shrink-0 text-muted-foreground">{parts.prefix} (</span>
+        <span
+          {...compactAffixProps}
+          className="shrink-0 text-muted-foreground"
+        >
+          {parts.prefix} (
+        </span>
         <span className="min-w-0 truncate font-medium text-foreground">
           {parts.value}
         </span>
-        <span className="shrink-0 text-muted-foreground">)</span>
+        <span
+          {...compactAffixProps}
+          className="shrink-0 text-muted-foreground"
+        >
+          )
+        </span>
       </span>
     );
   }
 
   return (
     <span className={cn("flex min-w-0 items-baseline gap-1", className)}>
-      <span className="shrink-0 text-muted-foreground">{parts.prefix}</span>
+      <span
+        {...compactAffixProps}
+        className="shrink-0 text-muted-foreground"
+      >
+        {parts.prefix}
+      </span>
       <span className="min-w-0 truncate font-medium text-foreground">
         {parts.value}
       </span>
@@ -960,7 +1001,7 @@ export function BranchPicker({
           aria-expanded={open}
         >
           {variant === "option" ? (
-            <span className={OPTION_CONTENT_CLASS_NAME}>
+            <span className={OPTION_TRIGGER_CONTENT_CLASS_NAME}>
               <Icon
                 name="GitMerge"
                 className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
@@ -969,14 +1010,18 @@ export function BranchPicker({
                 label={triggerLabel}
                 emphasizePlainLabel={triggerHasPlainBranchValue}
                 className="truncate"
+                compactAffixesInPromptbox
               />
             </span>
           ) : (
-            <BranchPickerText
-              label={triggerLabel}
-              emphasizePlainLabel={triggerHasPlainBranchValue}
-              className="truncate text-left"
-            />
+            <span className="flex min-w-0 items-center overflow-hidden">
+              <BranchPickerText
+                label={triggerLabel}
+                emphasizePlainLabel={triggerHasPlainBranchValue}
+                className="truncate text-left"
+                compactAffixesInPromptbox
+              />
+            </span>
           )}
           <Icon
             name="ChevronDown"

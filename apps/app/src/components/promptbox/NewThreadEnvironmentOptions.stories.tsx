@@ -72,70 +72,72 @@ function EnvironmentOptionsStrip({
   );
   const environmentValue = environment?.value ?? `host:${HOST_IDS.local}:local`;
   const showWorktreePicker = environmentValue === "reuse";
-  // Mirrors NewThreadPromptBox's strip chrome: mt-1, transparent border, px-3
-  // so the content column aligns with the prompt-box card above.
+  // The shell mirrors NewThreadPromptBox's container-query scope so browser
+  // resizing exercises the same compact picker behavior as production.
   return (
-    <div className="mt-1 flex min-w-0 max-w-full items-center gap-1 border border-transparent px-3">
-      <ProjectSelector
-        projects={STORY_PROJECTS}
-        value={projectValue}
-        onChange={setProjectValue}
-        allowNoProject={project?.allowNoProject ?? false}
-        className="h-7 px-1.5"
-        modal={false}
-      />
-      {projectless ? (
-        <HostPicker
-          hosts={[...STORY_HOSTS]}
-          eligibleHosts={connectedHosts}
-          selectedHostId={HOST_IDS.local}
-          onChange={noop}
-          isLocalHost={storyIsLocalHost}
-          muted
+    <div data-promptbox-shell="" className="w-full min-w-0 max-w-[760px]">
+      <div className="mt-1 flex min-w-0 max-w-full items-center gap-1 border border-transparent px-3.5">
+        <ProjectSelector
+          projects={STORY_PROJECTS}
+          value={projectValue}
+          onChange={setProjectValue}
+          allowNoProject={project?.allowNoProject ?? false}
+          className="h-7 px-1.5"
           modal={false}
         />
-      ) : (
-        <>
-          <EnvironmentPickerUI
-            value={environmentValue}
+        {projectless ? (
+          <HostPicker
+            hosts={[...STORY_HOSTS]}
+            eligibleHosts={connectedHosts}
+            selectedHostId={HOST_IDS.local}
             onChange={noop}
-            sources={STORY_PROJECT_SOURCES}
-            hosts={STORY_HOSTS}
             isLocalHost={storyIsLocalHost}
             muted
             modal={false}
-            {...environment}
           />
-          {showWorktreePicker ? (
-            <WorktreePicker
-              options={STORY_WORKTREE_OPTIONS}
-              value={worktreeValue}
+        ) : (
+          <>
+            <EnvironmentPickerUI
+              value={environmentValue}
               onChange={noop}
+              sources={STORY_PROJECT_SOURCES}
+              hosts={STORY_HOSTS}
+              isLocalHost={storyIsLocalHost}
               muted
               modal={false}
+              {...environment}
             />
-          ) : (
-            <BranchPicker
-              variant="option"
-              muted
-              value={null}
-              currentBranch="main"
-              options={STORY_BRANCH_OPTIONS}
-              currentOptionLabel="Current: main"
-              currentOptionTitle="Use the current checkout without switching branches"
-              placeholder="Current checkout"
-              triggerLabel="Current (main)"
-              triggerTitle="Current: main"
-              menuKind={getStoryBranchMenuKind(environmentValue)}
-              onChange={noop}
-              onClear={noop}
-              onCreate={noop}
-              modal={false}
-              {...branch}
-            />
-          )}
-        </>
-      )}
+            {showWorktreePicker ? (
+              <WorktreePicker
+                options={STORY_WORKTREE_OPTIONS}
+                value={worktreeValue}
+                onChange={noop}
+                muted
+                modal={false}
+              />
+            ) : (
+              <BranchPicker
+                variant="option"
+                muted
+                value={null}
+                currentBranch="main"
+                options={STORY_BRANCH_OPTIONS}
+                currentOptionLabel="Current: main"
+                currentOptionTitle="Use the current checkout without switching branches"
+                placeholder="Current checkout"
+                triggerLabel="Current (main)"
+                triggerTitle="Current: main"
+                menuKind={getStoryBranchMenuKind(environmentValue)}
+                onChange={noop}
+                onClear={noop}
+                onCreate={noop}
+                modal={false}
+                {...branch}
+              />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

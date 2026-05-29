@@ -56,6 +56,61 @@
 }
 
 @layer components {
+  [data-promptbox] {
+    container: promptbox / inline-size;
+  }
+
+  [data-promptbox-shell] {
+    container: promptbox-shell / inline-size;
+  }
+
+  [data-promptbox-compact-label] {
+    display: none;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @container promptbox (max-width: 30rem) {
+    [data-promptbox] [data-promptbox-full-label],
+    [data-promptbox] [data-promptbox-hide-compact] {
+      display: none !important;
+    }
+
+    [data-promptbox] [data-promptbox-compact-label] {
+      display: block;
+      flex: 1 1 auto;
+    }
+
+    [data-promptbox] [data-promptbox-icon-only-control] {
+      flex-shrink: 0;
+    }
+  }
+
+  @container promptbox-shell (max-width: 34rem) {
+    [data-promptbox-shell] [data-promptbox-full-label],
+    [data-promptbox-shell] [data-promptbox-hide-compact] {
+      display: none !important;
+    }
+
+    [data-promptbox-shell] [data-promptbox-compact-label] {
+      display: block;
+      flex: 1 1 auto;
+    }
+
+    [data-promptbox-shell] [data-promptbox-icon-only-control] {
+      flex-shrink: 0;
+    }
+  }
+
+  @container promptbox-shell (max-width: 28rem) {
+    [data-promptbox-shell] [data-promptbox-hide-tiny] {
+      display: none !important;
+    }
+  }
+
   /*
    * Sonner clips collapsed native toasts on the toast node. Our custom card
    * lives inside that node, so clip it there too when it is behind the front

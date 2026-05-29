@@ -9,9 +9,9 @@ import { getHostIconName } from "@/lib/host-display";
 import { cn } from "@/lib/utils";
 import {
   OPTION_BASE_CLASS_NAME,
-  OPTION_CONTENT_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
   OPTION_MUTED_CLASS_NAME,
+  OPTION_TRIGGER_CONTENT_CLASS_NAME,
 } from "./OptionPicker";
 
 interface HostPickerProps {
@@ -52,21 +52,24 @@ export function HostPicker({
           size="sm"
           aria-label="Host"
           title={`Host: ${label}`}
+          data-promptbox-icon-only-control=""
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
             muted && OPTION_MUTED_CLASS_NAME,
           )}
         >
-          <span className={OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_TRIGGER_CONTENT_CLASS_NAME}>
             <Icon name={selectedHostIcon} className="size-3.5 shrink-0" />
             {isCompact ? null : (
-              <span className="truncate">{label}</span>
+              <span className="min-w-0 truncate" data-promptbox-full-label="">
+                {label}
+              </span>
             )}
           </span>
           <Icon
             name="ChevronDown"
-            className="size-3.5 text-muted-foreground"
+            className="size-3.5 shrink-0 text-muted-foreground"
           />
         </Button>
       </DropdownMenuTrigger>

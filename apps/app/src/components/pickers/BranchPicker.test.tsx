@@ -87,6 +87,24 @@ describe("BranchPicker", () => {
     ).toHaveLength(1);
   });
 
+  it("does not duplicate compact trigger text in the DOM", () => {
+    render(
+      <BranchPicker
+        value="main"
+        triggerLabel="Current (main)"
+        variant="option"
+        options={["main", "develop"]}
+        remoteOptions={[]}
+        onChange={vi.fn()}
+        modal={false}
+      />,
+    );
+
+    expect(screen.getByRole("combobox", { name: "Branch" }).textContent).toBe(
+      "Current (main)",
+    );
+  });
+
   it("debounces outward search query changes", () => {
     vi.useFakeTimers();
     const handleSearchQueryChange = vi.fn();

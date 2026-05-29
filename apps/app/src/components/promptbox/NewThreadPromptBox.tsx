@@ -265,7 +265,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
     isProjectless: isProjectlessPrompt,
   });
   return (
-    <>
+    <div data-promptbox-shell="" className="w-full">
       {/* Mode selector above the prompt-box: a quiet dropdown trigger that
           shares the prompt-box option sizing used by the footer and project
           strip controls, keeping their leading icons on the same left edge. */}
@@ -309,7 +309,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
           `space-y-1` wrapper in RootComposeView (now gone since the
           standalone project row was removed). */}
       <div className="mt-1 flex items-center justify-between gap-2 px-3.5">
-        <div className="flex min-w-0 items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           {project ? (
             <ProjectSelector
               projects={project.projects}
@@ -333,16 +333,18 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
             />
           )}
         </div>
-        {modeConfig.mode === "thread" ? (
-          <PermissionModePicker
-            value={modeConfig.permission.value}
-            options={modeConfig.permission.options}
-            onChange={modeConfig.permission.onChange}
-            supported={modeConfig.permission.supported}
-          />
-        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          {modeConfig.mode === "thread" ? (
+            <PermissionModePicker
+              value={modeConfig.permission.value}
+              options={modeConfig.permission.options}
+              onChange={modeConfig.permission.onChange}
+              supported={modeConfig.permission.supported}
+            />
+          ) : null}
+        </div>
       </div>
-    </>
+    </div>
   );
 });
 

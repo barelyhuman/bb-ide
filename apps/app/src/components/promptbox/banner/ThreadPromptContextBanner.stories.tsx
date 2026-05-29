@@ -24,11 +24,15 @@ export default {
 
 const noop = () => {};
 
-// Production max width matches PageShell's footer cap (760px). Without it the
-// banner stretches the full row width and the merge-base picker drifts far
-// right of the summary, which doesn't reflect production layout.
+// Production max width matches PageShell's footer cap (760px). The promptbox
+// shell attribute enables the same container-query compaction used in the
+// follow-up composer as the story viewport narrows.
 function PromptStage({ children }: { children: React.ReactNode }) {
-  return <div className="w-full max-w-[760px]">{children}</div>;
+  return (
+    <div data-promptbox-shell="" className="w-full min-w-0 max-w-[760px]">
+      {children}
+    </div>
+  );
 }
 
 const promptboxBannerFiles: WorkspaceFileStatus[] = [

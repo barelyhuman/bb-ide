@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { cn } from "@/lib/utils";
 
 export const OPTION_BASE_CLASS_NAME =
-  "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight";
+  "h-8 w-fit max-w-full min-w-0 items-center justify-start gap-1 px-1 text-xs leading-tight";
 // `data-[state=open]:hover:bg-transparent` overrides the ghost button variant's
 // compound selector that otherwise paints bg-state-active when the trigger is
 // hovered while the menu is open. Hidden in production by `modal=true` (the
@@ -17,6 +17,8 @@ export const OPTION_INTERACTIVE_CLASS_NAME =
   "border-none bg-transparent shadow-none hover:bg-transparent data-[state=open]:bg-transparent data-[state=open]:hover:bg-transparent";
 export const OPTION_CONTENT_CLASS_NAME =
   "flex min-w-0 items-center gap-1.5";
+export const OPTION_TRIGGER_CONTENT_CLASS_NAME =
+  "contents";
 export const OPTION_MUTED_CLASS_NAME =
   "text-muted-foreground hover:text-foreground";
 const OPTION_WARNING_TEXT_CLASS_NAME = "text-warning-text";
@@ -27,6 +29,7 @@ const OPTION_WARNING_ICON_CLASS_NAME = "text-warning-text";
 export interface PickerOption<T extends string> {
   value: T;
   label: string;
+  compactLabel?: string;
   description?: string;
   tone?: "default" | "warning";
   icon?: ComponentType<{ className?: string }>;
@@ -39,6 +42,8 @@ interface OptionDisplayProps {
   icon?: ComponentType<{ className?: string }>;
   /** Pre-rendered leading element (e.g. an Icon). Takes precedence over `icon`. */
   leading?: ReactNode;
+  compactValue?: ReactNode;
+  compactValueHiddenWhenTiny?: boolean;
   className?: string;
   title?: string;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
@@ -68,6 +73,8 @@ export function OptionDisplay({
   tone = "default",
   icon: BrandIcon,
   leading,
+  compactValue,
+  compactValueHiddenWhenTiny,
   className,
   title,
   muted,
@@ -89,7 +96,20 @@ export function OptionDisplay({
       <span className={OPTION_CONTENT_CLASS_NAME}>
         {leading ?? (BrandIcon ? <BrandIcon className="size-4 shrink-0" /> : null)}
         <span className="sr-only">{label}: </span>
-        <span className="truncate">{value}</span>
+        <span className="min-w-0 truncate" data-promptbox-full-label="">
+          {value}
+        </span>
+        {compactValue ? (
+          <span
+            className="min-w-0 truncate"
+            data-promptbox-compact-label=""
+            data-promptbox-hide-tiny={
+              compactValueHiddenWhenTiny ? "" : undefined
+            }
+          >
+            {compactValue}
+          </span>
+        ) : null}
       </span>
     </div>
   );
@@ -111,6 +131,7 @@ export function OptionPicker<T extends string>({
   const selectedIsWarning = selectedOption?.tone === "warning";
   const SelectedIcon = selectedOption?.icon;
   const selectedLabel = selectedOption?.label ?? value;
+  const selectedCompactLabel = selectedOption?.compactLabel;
   const selectedTitle = selectedOption?.description
     ? `${label}: ${selectedLabel} - ${selectedOption.description}`
     : `${label}: ${selectedLabel}`;
@@ -133,15 +154,29 @@ export function OptionPicker<T extends string>({
             className,
           )}
         >
-          <span className={OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_TRIGGER_CONTENT_CLASS_NAME}>
             {SelectedIcon ? (
               <SelectedIcon className="size-3.5 shrink-0" />
             ) : null}
-            <span className="truncate">{selectedLabel}</span>
+            {selectedCompactLabel ? (
+              <>
+                <span className="min-w-0 truncate" data-promptbox-full-label="">
+                  {selectedLabel}
+                </span>
+                <span
+                  className="min-w-0 truncate"
+                  data-promptbox-compact-label=""
+                >
+                  {selectedCompactLabel}
+                </span>
+              </>
+            ) : (
+              <span className="min-w-0 truncate">{selectedLabel}</span>
+            )}
           </span>
           <Icon name="ChevronDown"
             className={cn(
-              "size-3.5",
+              "size-3.5 shrink-0",
               selectedIsWarning
                 ? OPTION_WARNING_ICON_CLASS_NAME
                 : "text-muted-foreground",

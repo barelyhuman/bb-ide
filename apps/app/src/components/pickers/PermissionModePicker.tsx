@@ -1,5 +1,29 @@
+import { useMemo } from "react";
 import type { PermissionMode } from "@bb/domain";
 import { OptionPicker, type PickerOption } from "./OptionPicker";
+
+type PermissionModeOption = PickerOption<PermissionMode>;
+
+function getPermissionModeCompactLabel(value: PermissionMode): string {
+  switch (value) {
+    case "full":
+      return "Full";
+    case "workspace-write":
+      return "Write";
+    case "readonly":
+      return "Read";
+  }
+}
+
+function addPermissionModeCompactLabels(
+  options: readonly PermissionModeOption[],
+): PermissionModeOption[] {
+  return options.map((option) => ({
+    ...option,
+    compactLabel:
+      option.compactLabel ?? getPermissionModeCompactLabel(option.value),
+  }));
+}
 
 export interface PermissionModePickerProps {
   value?: PermissionMode;
@@ -30,6 +54,10 @@ export function PermissionModePicker({
   defaultOpen,
   modal,
 }: PermissionModePickerProps) {
+  const compactOptions = useMemo(
+    () => addPermissionModeCompactLabels(options),
+    [options],
+  );
   if (!supported || value === undefined || options.length <= 1) {
     return null;
   }
@@ -37,7 +65,7 @@ export function PermissionModePicker({
     <OptionPicker
       label="Permission mode"
       value={value}
-      options={options}
+      options={compactOptions}
       onChange={onChange}
       className={className}
       contentClassName="max-w-72"

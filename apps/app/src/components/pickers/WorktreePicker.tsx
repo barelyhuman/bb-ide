@@ -17,9 +17,9 @@ import {
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import {
   OPTION_BASE_CLASS_NAME,
-  OPTION_CONTENT_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
   OPTION_MUTED_CLASS_NAME,
+  OPTION_TRIGGER_CONTENT_CLASS_NAME,
 } from "./OptionPicker";
 
 const REUSE_THREAD_PREVIEW_LIMIT = 2;
@@ -76,23 +76,26 @@ export function WorktreePicker({
           size="sm"
           aria-label="Worktree"
           title={`Worktree: ${triggerLabel}`}
+          data-promptbox-icon-only-control=""
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
             muted && OPTION_MUTED_CLASS_NAME,
           )}
         >
-          <span className={OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_TRIGGER_CONTENT_CLASS_NAME}>
             <Icon
               name={branchIcon}
               className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
             />
-            <span className="truncate">{triggerLabel}</span>
+            <span className="min-w-0 truncate" data-promptbox-full-label="">
+              {triggerLabel}
+            </span>
           </span>
           <Icon
             name="ChevronDown"
             className={cn(
-              "text-muted-foreground",
+              "shrink-0 text-muted-foreground",
               COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
             )}
           />

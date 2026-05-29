@@ -222,7 +222,7 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
       <ThreadTimelineScrollToBottomButton
         active={composer.threadRuntimeDisplayStatus === "active"}
       />
-      <div className="space-y-2">
+      <div data-promptbox-shell="" className="space-y-2">
         <div ref={stackRef} className="space-y-2">
           {stack}
         </div>
@@ -262,7 +262,7 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
           footerStart={footerStart}
         />
         <div className="mt-1 flex min-h-6 items-center justify-between gap-2 pl-[15px] pr-3.5">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
             {environmentSummary}
           </div>
           <div className="flex shrink-0 items-center gap-2">

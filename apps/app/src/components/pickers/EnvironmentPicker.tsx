@@ -27,9 +27,9 @@ import {
 import { cn } from "@/lib/utils";
 import {
   OPTION_BASE_CLASS_NAME,
-  OPTION_CONTENT_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
   OPTION_MUTED_CLASS_NAME,
+  OPTION_TRIGGER_CONTENT_CLASS_NAME,
 } from "./OptionPicker";
 import {
   encodeHostValue,
@@ -82,6 +82,7 @@ function buildHostSections(
 
 interface SelectedEnvironment {
   modeLabel: string;
+  compactModeLabel: string;
   hostLabel?: string;
   icon: IconName;
   hostConnected?: boolean;
@@ -125,10 +126,17 @@ export function EnvironmentPickerUI({
   const parsed = useMemo(() => parseEnvironmentValue(value), [value]);
 
   const selected = useMemo((): SelectedEnvironment => {
-    if (!parsed) return { modeLabel: "Environment", icon: "Laptop" as const };
+    if (!parsed) {
+      return {
+        modeLabel: "Environment",
+        compactModeLabel: "Env",
+        icon: "Laptop" as const,
+      };
+    }
     if (parsed.type === "reuse") {
       return {
         modeLabel: "Reuse worktree",
+        compactModeLabel: "Reuse",
         icon: getEnvironmentWorkspaceLabelIconName("managed-worktree"),
       };
     }
@@ -140,14 +148,17 @@ export function EnvironmentPickerUI({
         : isLocal
           ? "Work locally"
           : "Work remotely";
+    const compactModeLabel =
+      parsed.mode === "worktree" ? "Worktree" : isLocal ? "Local" : "Remote";
     const icon = getEnvironmentWorkspaceLabelIconName(
       parsed.mode === "worktree" ? "managed-worktree" : "other",
     );
     if (isLocal) {
-      return { modeLabel, icon };
+      return { modeLabel, compactModeLabel, icon };
     }
     return {
       modeLabel,
+      compactModeLabel,
       hostLabel: host?.name ?? "Unknown",
       icon,
       hostConnected: host?.status === "connected",
@@ -163,18 +174,19 @@ export function EnvironmentPickerUI({
           size="sm"
           aria-label="Environment"
           title={`Environment: ${selected.modeLabel}${selected.hostLabel ? ` · ${selected.hostLabel}` : ""}`}
+          data-promptbox-icon-only-control=""
           className={cn(
             OPTION_BASE_CLASS_NAME,
             OPTION_INTERACTIVE_CLASS_NAME,
             muted && OPTION_MUTED_CLASS_NAME,
           )}
         >
-          <span className={OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_TRIGGER_CONTENT_CLASS_NAME}>
             <Icon
               name={selected.icon}
               className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
             />
-            <span className="truncate">
+            <span className="min-w-0 truncate" data-promptbox-full-label="">
               {selected.modeLabel}
               {selected.hostLabel ? (
                 <span className="text-muted-foreground">
@@ -183,6 +195,13 @@ export function EnvironmentPickerUI({
                 </span>
               ) : null}
             </span>
+            <span
+              className="min-w-0 truncate"
+              data-promptbox-compact-label=""
+              data-promptbox-hide-tiny=""
+            >
+              {selected.compactModeLabel}
+            </span>
             {selected.hostConnected !== undefined ? (
               <HostStatusBadge connected={selected.hostConnected} />
             ) : null}
@@ -190,7 +209,7 @@ export function EnvironmentPickerUI({
           <Icon
             name="ChevronDown"
             className={cn(
-              "text-muted-foreground",
+              "shrink-0 text-muted-foreground",
               COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
             )}
           />

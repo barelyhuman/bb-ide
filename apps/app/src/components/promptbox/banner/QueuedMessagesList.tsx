@@ -145,8 +145,20 @@ const QueuedMessageRow = memo(function QueuedMessageRow({
             className="h-auto px-0 pr-1 text-xs text-muted-foreground underline"
             disabled={sendDisabled || isProcessing}
             onClick={() => onSendImmediately(queuedMessage.id)}
+            aria-label={isProcessing ? "Sending queued message" : "Send now"}
           >
-            {isProcessing ? "Sending..." : "Send now"}
+            {isProcessing ? (
+              "Sending..."
+            ) : (
+              <>
+                <span className="underline" data-promptbox-full-label="">
+                  Send now
+                </span>
+                <span className="underline" data-promptbox-compact-label="">
+                  Send
+                </span>
+              </>
+            )}
           </Button>
           <Button
             type="button"

@@ -882,6 +882,7 @@ export function PromptBoxInternal({
   return (
     <form
       ref={formRef}
+      data-promptbox=""
       onSubmit={handleSubmit}
       onDragOver={(event) => {
         if (!onAttachFiles) return;

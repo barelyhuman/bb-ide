@@ -22,8 +22,8 @@ import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,
-  OPTION_CONTENT_CLASS_NAME,
   OPTION_MUTED_CLASS_NAME,
+  OPTION_TRIGGER_CONTENT_CLASS_NAME,
   type PickerOption,
 } from "./OptionPicker";
 import {
@@ -234,7 +234,7 @@ export function ModelReasoningPicker({
             className,
           )}
         >
-          <span className={OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_TRIGGER_CONTENT_CLASS_NAME}>
             {showSelectedFastMode ? (
               <Icon
                 name="Zap"
@@ -243,14 +243,20 @@ export function ModelReasoningPicker({
             ) : TriggerIcon ? (
               <TriggerIcon className="size-3.5 shrink-0" />
             ) : null}
-            <span className="truncate">{triggerModelLabel}</span>
+            <span className="min-w-0 truncate">{triggerModelLabel}</span>
             {triggerReasoningLabel ? (
-              <span className="text-subtle-foreground">
+              <span
+                className="shrink-0 text-subtle-foreground"
+                data-promptbox-hide-compact=""
+              >
                 {triggerReasoningLabel}
               </span>
             ) : null}
           </span>
-          <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
+          <Icon
+            name="ChevronDown"
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent
