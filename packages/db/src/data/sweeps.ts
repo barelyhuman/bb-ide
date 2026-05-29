@@ -174,6 +174,33 @@ export interface SweepExpiredLeasesResult {
   sessionsClosed: number;
 }
 
+type SqlPredicate = ReturnType<typeof and>;
+
+function isExpiredFetchedCommandPredicate(currentTime: number): SqlPredicate {
+  return and(
+    eq(hostDaemonCommands.state, "fetched"),
+    isNotNull(hostDaemonCommands.fetchedAt),
+    sql`(${currentTime} - ${hostDaemonCommands.fetchedAt}) >= CASE
+      WHEN ${hostDaemonCommands.type} = 'environment.provision' THEN ${PROVISION_COMMAND_TTL_MS}
+      ELSE ${STANDARD_COMMAND_TTL_MS}
+    END`,
+  );
+}
+
+function isFirstExpiredCommandAttemptPredicate(currentTime: number): SqlPredicate {
+  return and(
+    isExpiredFetchedCommandPredicate(currentTime),
+    eq(hostDaemonCommands.retryCount, 0),
+  );
+}
+
+function isRetriedExpiredCommandPredicate(currentTime: number): SqlPredicate {
+  return and(
+    isExpiredFetchedCommandPredicate(currentTime),
+    sql`${hostDaemonCommands.retryCount} >= 1`,
+  );
+}
+
 export function pruneCompletedCommandPayloads(
   db: DbConnection,
   args: PruneCompletedCommandPayloadsArgs,
@@ -499,68 +526,46 @@ export function sweepExpiredCommands(
   now?: number,
 ) {
   const currentTime = now ?? Date.now();
-  const requeuedCommandIds: string[] = [];
-  const threadsToError = new Set<string>();
-  const erroredCommandIds: string[] = [];
+  const requeuedResult = db
+    .update(hostDaemonCommands)
+    .set({
+      state: "pending",
+      fetchedAt: null,
+      retryCount: 1,
+    })
+    .where(isFirstExpiredCommandAttemptPredicate(currentTime))
+    .run();
 
-  // Find fetched commands that have exceeded their type-specific TTL
-  const fetchedCommands = db
-    .select()
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.state, "fetched"),
-        sql`${hostDaemonCommands.fetchedAt} IS NOT NULL`,
-        sql`(${currentTime} - ${hostDaemonCommands.fetchedAt}) >= CASE
-          WHEN ${hostDaemonCommands.type} = 'environment.provision' THEN ${PROVISION_COMMAND_TTL_MS}
-          ELSE ${STANDARD_COMMAND_TTL_MS}
-        END`,
-      ),
-    )
+  const erroredCommands = db
+    .update(hostDaemonCommands)
+    .set({
+      state: "error",
+      completedAt: currentTime,
+      resultPayload: JSON.stringify({
+        errorCode: EXPIRED_COMMAND_ERROR_CODE,
+        errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
+      }),
+    })
+    .where(isRetriedExpiredCommandPredicate(currentTime))
+    .returning({
+      id: hostDaemonCommands.id,
+      payload: hostDaemonCommands.payload,
+    })
     .all();
-
-  for (const cmd of fetchedCommands) {
-    if (cmd.retryCount === 0) {
-      requeuedCommandIds.push(cmd.id);
-      continue;
-    }
-
-    erroredCommandIds.push(cmd.id);
-
-    // Try to extract threadId from payload and error the thread
-    try {
-      const payload = JSON.parse(cmd.payload);
-      if (typeof payload.threadId === "string") {
-        threadsToError.add(payload.threadId);
-      }
-    } catch {
-      // payload may not contain threadId, that's fine
-    }
-  }
-
-  if (requeuedCommandIds.length > 0) {
-    db.update(hostDaemonCommands)
-      .set({
-        state: "pending",
-        fetchedAt: null,
-        retryCount: 1,
-      })
-      .where(inArray(hostDaemonCommands.id, requeuedCommandIds))
-      .run();
-  }
+  const erroredCommandIds = erroredCommands.map((row) => row.id);
 
   if (erroredCommandIds.length > 0) {
-    db.update(hostDaemonCommands)
-      .set({
-        state: "error",
-        completedAt: currentTime,
-        resultPayload: JSON.stringify({
-          errorCode: EXPIRED_COMMAND_ERROR_CODE,
-          errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-        }),
-      })
-      .where(inArray(hostDaemonCommands.id, erroredCommandIds))
-      .run();
+    const threadsToError = new Set<string>();
+    for (const command of erroredCommands) {
+      try {
+        const payload = JSON.parse(command.payload);
+        if (typeof payload.threadId === "string") {
+          threadsToError.add(payload.threadId);
+        }
+      } catch {
+        // payload may not contain threadId, that's fine
+      }
+    }
 
     transitionThreadsToError(db, notifier, {
       now: currentTime,
@@ -569,7 +574,7 @@ export function sweepExpiredCommands(
   }
 
   return {
-    requeued: requeuedCommandIds.length,
+    requeued: requeuedResult.changes,
     errored: erroredCommandIds.length,
     erroredCommandIds,
   };

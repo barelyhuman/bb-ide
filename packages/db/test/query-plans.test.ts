@@ -297,34 +297,92 @@ describe("slow query index plans", () => {
     db.$client.close();
   });
 
-  it("uses the fetched-at index for emitted expired-command sweep SQL", () => {
+  it("uses SQL-side retry predicates for expired-command sweep updates", () => {
     const { db, host, logger } = setup();
     const now = Date.now();
-    const command = queueCommand(db, noopNotifier, {
+    const firstAttemptCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
       payload: JSON.stringify({ threadId: "thr_expired_query_plan" }),
+      type: "workspace.status",
+    });
+    const retriedCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      payload: JSON.stringify({ threadId: "thr_retried_expired_query_plan" }),
       type: "workspace.status",
     });
     fetchCommands(db, noopNotifier, { hostId: host.id });
     db.update(hostDaemonCommands)
       .set({ fetchedAt: now - 70_000 })
-      .where(eq(hostDaemonCommands.id, command.id))
+      .where(eq(hostDaemonCommands.id, firstAttemptCommand.id))
+      .run();
+    db.update(hostDaemonCommands)
+      .set({ fetchedAt: now - 70_000, retryCount: 1 })
+      .where(eq(hostDaemonCommands.id, retriedCommand.id))
       .run();
     logger.clear();
 
     sweepExpiredCommands(db, noopNotifier, now);
 
-    const debugLog = findOnlyDebugLog({
+    expect(
+      logger.debugLogs.filter(
+        (debugLog) =>
+          debugLog.fields.operation === "all" &&
+          debugLog.fields.sql.includes('from "host_daemon_commands"') &&
+          debugLog.fields.sql.includes(
+            '"host_daemon_commands"."fetched_at" is not null',
+          ),
+      ),
+    ).toEqual([]);
+
+    const requeueLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
-        fields.operation === "all" &&
-        fields.sql.includes('"host_daemon_commands"."fetched_at" IS NOT NULL'),
+        fields.operation === "run" &&
+        fields.sql.startsWith('update "host_daemon_commands"') &&
+        fields.sql.includes('"state" = ?') &&
+        fields.sql.includes('"retry_count" = ?') &&
+        fields.sql.match(/"retry_count"/g)?.length === 2,
     });
     assertEmittedQueryPlanUsesIndex({
       db,
-      debugLog,
+      debugLog: requeueLog,
       indexName: "host_daemon_commands_state_fetched_at_idx",
-      params: ["fetched", now, 20 * 60_000, 60_000],
+      params: [
+        "pending",
+        null,
+        1,
+        "fetched",
+        now,
+        20 * 60_000,
+        60_000,
+        0,
+      ],
+    });
+
+    const errorLog = findOnlyDebugLog({
+      logger,
+      predicate: (fields) =>
+        fields.operation === "all" &&
+        fields.sql.startsWith('update "host_daemon_commands"') &&
+        fields.sql.includes('"completed_at" = ?') &&
+        fields.sql.includes('"retry_count" >= 1'),
+    });
+    assertEmittedQueryPlanUsesIndex({
+      db,
+      debugLog: errorLog,
+      indexName: "host_daemon_commands_state_fetched_at_idx",
+      params: [
+        "error",
+        now,
+        JSON.stringify({
+          errorCode: "command_expired",
+          errorMessage: "Command expired after retry",
+        }),
+        "fetched",
+        now,
+        20 * 60_000,
+        60_000,
+      ],
     });
 
     db.$client.close();
