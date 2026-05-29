@@ -3930,6 +3930,106 @@ describe("buildThreadTimeline", () => {
     );
   });
 
+  it("surfaces provider and system errors in manager conversation timelines", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 1,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789af",
+        source: "tell",
+        initiator: "user",
+        senderThreadId: null,
+        input: [{ type: "text", text: "Please coordinate this task" }],
+        target: { kind: "new-turn" },
+        request: { method: "turn/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "provider/error",
+      data: {
+        message: "Provider error",
+        detail: "The provider stream closed unexpectedly",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      scope: threadScope(),
+      sequence: 4,
+      type: "system/error",
+      data: {
+        code: "thread_command_failed",
+        message: "Command turn.submit failed",
+        detail: "Payload exceeded provider limit",
+      },
+    });
+
+    const timeline = buildManagerConversationTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+    const sourceRows = flattenTimelineSourceRows(timeline.rows);
+
+    expect(sourceRows).toContainEqual(
+      expect.objectContaining({
+        kind: "system",
+        status: "error",
+        systemKind: "error",
+        title: "The provider stream closed unexpectedly",
+      }),
+    );
+    expect(sourceRows).toContainEqual(
+      expect.objectContaining({
+        kind: "system",
+        status: "error",
+        systemKind: "error",
+        title: "Command turn.submit failed",
+        detail: "Payload exceeded provider limit",
+      }),
+    );
+  });
+
   it("shows system client requests only in manager standard timeline details", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

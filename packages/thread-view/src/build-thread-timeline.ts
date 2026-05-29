@@ -77,6 +77,7 @@ export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
     "provider/error",
     "provider/unhandled",
     "provider/warning",
+    "system/error",
     "system/manager/user_message",
     "system/operation",
     "system/permissionGrant/lifecycle",
@@ -949,15 +950,16 @@ function buildTurnRows({
 
 /**
  * For manager threads in the default (non-debug) view, only show user messages,
- * message_user output, and lifecycle operations (provisioning, compaction).
- * Everything else (assistant text, delegations, other tool calls, etc.) is
- * internal manager machinery.
+ * message_user output, lifecycle operations (provisioning, compaction), and
+ * errors. Everything else (assistant text, delegations, other tool calls, etc.)
+ * is internal manager machinery.
  */
 function isManagerConversationMessage(
   message: EventProjectionMessage,
 ): boolean {
   if (message.kind === "user") return true;
   if (message.kind === "operation") return true;
+  if (message.kind === "error") return true;
   return (
     message.kind === "assistant-text" && message.isManagerUserMessage === true
   );

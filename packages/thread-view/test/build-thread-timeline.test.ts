@@ -444,6 +444,25 @@ function buildTimelineRows(
   }).rows;
 }
 
+function buildManagerConversationTimelineRows(
+  events: ThreadEventWithMeta[],
+  threadStatus: BuildTimelineRowsThreadStatus = "idle",
+): TimelineRow[] {
+  return buildThreadTimelineFromEvents({
+    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    contextWindowEvents: [],
+    events,
+    options: {
+      includeDebugRawEvents: false,
+      includeProviderUnhandledOperations: false,
+      isLatestPage: true,
+      systemClientRequestVisibility: "hidden",
+      threadStatus,
+      viewMode: "manager-conversation",
+    },
+  }).rows;
+}
+
 function buildTimelineRowsWithAcceptedContext(
   events: ThreadEventWithMeta[],
   acceptedClientRequestEvents: ThreadEventWithMeta[],
@@ -827,6 +846,36 @@ describe("buildThreadTimelineFromEvents", () => {
         status: "error",
         title: "Provider rate limit reached",
         detail: "You've hit your limit - resets at 2:00 PM",
+      }),
+    ]);
+  });
+
+  it("keeps errors in manager conversation timelines", () => {
+    const rows = buildManagerConversationTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      providerErrorEvent({
+        detail: "The provider stream closed unexpectedly",
+        seq: 2,
+      }),
+      systemErrorEvent({
+        code: "thread_command_failed",
+        message: "Command turn.submit failed",
+        detail: "Payload exceeded provider limit",
+        seq: 3,
+      }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        status: "error",
+        title: "The provider stream closed unexpectedly",
+      }),
+      expect.objectContaining({
+        systemKind: "error",
+        status: "error",
+        title: "Command turn.submit failed",
+        detail: "Payload exceeded provider limit",
       }),
     ]);
   });
