@@ -16,32 +16,16 @@ import {
   updateCachedThreadListPendingInteractionState,
 } from "./queries/query-cache";
 import {
-  allProjectPathsQueryKeyPrefix,
-  allProjectSourceBranchesQueryKeyPrefix,
   allHostQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
   allThreadComposerBootstrapQueryKeyPrefix,
-  allThreadQueuedMessagesQueryKeyPrefix,
-  allThreadPendingInteractionsQueryKeyPrefix,
-  allThreadQueryKeyPrefix,
   allThreadTerminalsQueryKeyPrefix,
-  allThreadTimelineQueryKeyPrefix,
   environmentFilePreviewQueryKeyPrefix,
   environmentGitDiffQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
   hostsQueryKey,
-  localPathExistenceQueryKeyPrefix,
-  projectPathsQueryKeyPrefix,
-  projectPromptHistoryQueryKey,
-  projectPromptHistoryQueryKeyPrefix,
-  projectSourceBranchesQueryKeyPrefix,
-  projectsQueryKey,
   sidebarBootstrapQueryKey,
   systemProvidersQueryKey,
-  threadQueuedMessagesQueryKey,
-  threadPendingInteractionsQueryKey,
-  threadPromptHistoryQueryKey,
-  threadPromptHistoryQueryKeyPrefix,
   threadListQueryKey,
   threadQueryKey,
   threadTerminalsQueryKey,
@@ -49,8 +33,18 @@ import {
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
   threadStoragePathsForThreadQueryKeyPrefix,
-  threadTimelineQueryKeyPrefix,
 } from "./queries/query-keys";
+import {
+  getProjectListInvalidationQueryKeys,
+  getProjectPromptHistoryInvalidationQueryKeys,
+  getProjectSourceDependentInvalidationQueryKeys,
+  getThreadDetailInvalidationQueryKeys,
+  getThreadListInvalidationQueryKeys,
+  getThreadPendingInteractionInvalidationQueryKeys,
+  getThreadPromptHistoryInvalidationQueryKeys,
+  getThreadQueueContentInvalidationQueryKeys,
+  getThreadTimelineInvalidationQueryKeys,
+} from "./cache-invalidation-groups";
 
 export const REALTIME_THREAD_CHANGE_REGISTRY = {
   "thread-created": {
@@ -102,8 +96,7 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
   "queue-changed": {
     flush: "debounced",
     dirty: [
-      dirtyThreadQueuedMessageQueries, // Composer queue reads queued messages directly.
-      dirtyThreadPromptHistoryQueries, // Composer recall includes queued messages.
+      dirtyThreadQueueContentQueries, // Composer queue and recall include queued messages.
     ],
   },
   "archived-changed": {
@@ -372,13 +365,7 @@ function dirtyThreadListQueries({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  const threadListQueryKeys = projectId
-    ? getCachedProjectThreadListInvalidationQueryKeys({
-        projectId,
-        queryClient,
-      })
-    : [threadsQueryKey()];
-  return [...threadListQueryKeys, sidebarBootstrapQueryKey()];
+  return getThreadListInvalidationQueryKeys({ projectId, queryClient });
 }
 
 function dirtyManagerOrderThreadListQueries({
@@ -408,31 +395,19 @@ function dirtyManagerOrderThreadListQueries({
 function dirtyThreadDetailQueries({
   threadId,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  return threadId ? [threadQueryKey(threadId)] : [allThreadQueryKeyPrefix()];
+  return getThreadDetailInvalidationQueryKeys({ threadId });
 }
 
 function dirtyThreadTimelineQueries({
   threadId,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  return threadId
-    ? [threadTimelineQueryKeyPrefix(threadId)]
-    : [allThreadTimelineQueryKeyPrefix()];
+  return getThreadTimelineInvalidationQueryKeys({ threadId });
 }
 
-function dirtyThreadQueuedMessageQueries({
+function dirtyThreadQueueContentQueries({
   threadId,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  return threadId
-    ? [threadQueuedMessagesQueryKey(threadId)]
-    : [allThreadQueuedMessagesQueryKeyPrefix()];
-}
-
-function dirtyThreadPromptHistoryQueries({
-  threadId,
-}: ThreadRealtimeDirtyContext): QueryKey[] {
-  return threadId
-    ? [threadPromptHistoryQueryKey(threadId)]
-    : [threadPromptHistoryQueryKeyPrefix()];
+  return getThreadQueueContentInvalidationQueryKeys({ threadId });
 }
 
 function dirtyThreadPromptHistoryQueriesForTurnRequests({
@@ -442,17 +417,13 @@ function dirtyThreadPromptHistoryQueriesForTurnRequests({
   if (!eventTypes?.includes("client/turn/requested")) {
     return [];
   }
-  return threadId
-    ? [threadPromptHistoryQueryKey(threadId)]
-    : [threadPromptHistoryQueryKeyPrefix()];
+  return getThreadPromptHistoryInvalidationQueryKeys({ threadId });
 }
 
 function dirtyThreadPendingInteractionQueries({
   threadId,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
-  return threadId
-    ? [threadPendingInteractionsQueryKey(threadId)]
-    : [allThreadPendingInteractionsQueryKeyPrefix()];
+  return getThreadPendingInteractionInvalidationQueryKeys({ threadId });
 }
 
 function dirtyThreadTerminalQueries({
@@ -466,9 +437,7 @@ function dirtyThreadTerminalQueries({
 function dirtyProjectPromptHistoryQueries({
   projectId,
 }: ProjectRealtimeDirtyContext | ThreadRealtimeDirtyContext): QueryKey[] {
-  return projectId
-    ? [projectPromptHistoryQueryKey(projectId)]
-    : [projectPromptHistoryQueryKeyPrefix()];
+  return getProjectPromptHistoryInvalidationQueryKeys({ projectId });
 }
 
 function markThreadDetailQueryStale({
@@ -581,29 +550,13 @@ function dirtyThreadStorageQueriesForEnvironment({
 }
 
 function dirtyProjectListQueries(): QueryKey[] {
-  return [projectsQueryKey(), sidebarBootstrapQueryKey()];
+  return getProjectListInvalidationQueryKeys();
 }
 
 function dirtyProjectSourceDependentQueries({
   projectId,
 }: ProjectRealtimeDirtyContext): QueryKey[] {
-  const sharedKeys: QueryKey[] = [
-    projectsQueryKey(),
-    sidebarBootstrapQueryKey(),
-    localPathExistenceQueryKeyPrefix(),
-  ];
-  if (!projectId) {
-    return [
-      ...sharedKeys,
-      allProjectPathsQueryKeyPrefix(),
-      allProjectSourceBranchesQueryKeyPrefix(),
-    ];
-  }
-  return [
-    ...sharedKeys,
-    projectPathsQueryKeyPrefix(projectId),
-    projectSourceBranchesQueryKeyPrefix(projectId),
-  ];
+  return getProjectSourceDependentInvalidationQueryKeys({ projectId });
 }
 
 function dirtyHostAvailabilityQueries(): QueryKey[] {
