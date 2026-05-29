@@ -7,7 +7,10 @@ import type {
   ThreadTimelinePendingTodos,
   ThreadWithRuntime,
 } from "@bb/domain";
-import type { ThreadTimelineResponse } from "@bb/server-contract";
+import type {
+  ThreadComposerBootstrapResponse,
+  ThreadTimelineResponse,
+} from "@bb/server-contract";
 import { ThreadPendingInteractionBanner } from "@/components/thread/pending-interactions/ThreadPendingInteractionBanner";
 import {
   ThreadPromptContextBanner,
@@ -70,6 +73,7 @@ export const THREAD_DETAIL_COMPOSER_TEXTAREA_ID =
 
 interface ThreadDetailPromptAreaProps {
   canUseGitUi: boolean;
+  composerBootstrap?: ThreadComposerBootstrapResponse;
   composerQueriesEnabled: boolean;
   composerQueriesRefetchOnMount: ComposerQueryRefetchOnMount;
   composerQueriesStaleTime?: number;
@@ -122,6 +126,7 @@ interface SendQueuedMessageByIdArgs {
 
 export function ThreadDetailPromptArea({
   canUseGitUi,
+  composerBootstrap,
   composerQueriesEnabled,
   composerQueriesRefetchOnMount,
   composerQueriesStaleTime,
@@ -146,11 +151,13 @@ export function ThreadDetailPromptArea({
   sendMessage,
   thread,
 }: ThreadDetailPromptAreaProps) {
+  const composerQueryThreadId = composerQueriesEnabled ? thread.id : "";
   const defaultExecutionOptionsQuery = useThreadDefaultExecutionOptions(
-    thread.id,
+    composerQueryThreadId,
     {
       enabled: composerQueriesEnabled,
       refetchOnMount: composerQueriesRefetchOnMount,
+      initialData: composerBootstrap?.defaultExecutionOptions,
       staleTime: composerQueriesStaleTime,
     },
   );
@@ -166,11 +173,15 @@ export function ThreadDetailPromptArea({
   });
   const isDefaultExecutionOptionsLoading =
     defaultExecutionOptionsState === "loading";
-  const { data: queuedMessages = [] } = useThreadQueuedMessages(thread.id, {
-    enabled: composerQueriesEnabled,
-    refetchOnMount: composerQueriesRefetchOnMount,
-    staleTime: composerQueriesStaleTime,
-  });
+  const { data: queuedMessages = [] } = useThreadQueuedMessages(
+    composerQueryThreadId,
+    {
+      enabled: composerQueriesEnabled,
+      refetchOnMount: composerQueriesRefetchOnMount,
+      initialData: composerBootstrap?.queuedMessages,
+      staleTime: composerQueriesStaleTime,
+    },
+  );
   // Ref-backed lookup keeps queued-message action handlers stable across
   // queue refetches so memoized rows do not rerender on unrelated queue updates.
   const queuedMessagesByIdRef = useRef<
@@ -186,10 +197,11 @@ export function ThreadDetailPromptArea({
   const queuedMessagesRef = useRef<readonly ThreadQueuedMessage[]>([]);
   queuedMessagesRef.current = queuedMessages;
   const { data: promptHistoryEntries = [] } = useThreadPromptHistory(
-    thread.id,
+    composerQueryThreadId,
     {
       enabled: composerQueriesEnabled,
       refetchOnMount: composerQueriesRefetchOnMount,
+      initialData: composerBootstrap?.promptHistory,
       staleTime: composerQueriesStaleTime,
     },
   );
@@ -247,6 +259,8 @@ export function ThreadDetailPromptArea({
     environmentId: thread.environmentId ?? undefined,
     scope: "component-local",
     resetKey: thread.id,
+    initialExecutionOptions: composerBootstrap?.executionOptions,
+    initialExecutionOptionsProviderId: thread.providerId,
     initialProviderId: thread.providerId,
     initialModel: defaultExecutionOptions?.model,
     initialServiceTier: defaultExecutionOptions?.serviceTier,

@@ -13,7 +13,10 @@ import type {
   ReasoningLevel,
   ServiceTier,
 } from "@bb/domain";
-import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
+import type {
+  SystemExecutionOptionsModelLoadError,
+  SystemExecutionOptionsResponse,
+} from "@bb/server-contract";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import {
   createLocalStorageEnumStorage,
@@ -85,6 +88,8 @@ interface UsePromptModelReasoningOptions {
   initialReasoningLevel?: ReasoningLevel;
   initialPermissionMode?: PermissionMode;
   initialEnvironmentSelectionValue?: string;
+  initialExecutionOptions?: SystemExecutionOptionsResponse;
+  initialExecutionOptionsProviderId?: string;
 }
 
 interface ThreadPromptSelections {
@@ -313,6 +318,8 @@ export function useThreadCreationOptions(
     enabled = true,
     environmentId,
     initialEnvironmentSelectionValue,
+    initialExecutionOptions,
+    initialExecutionOptionsProviderId,
     initialModel,
     initialProviderId,
     initialPermissionMode,
@@ -426,15 +433,27 @@ export function useThreadCreationOptions(
       : renderedThreadSelections.environmentSelectionValue;
 
   // --- Provider selection ---
+  const executionOptionsQueryEnabled =
+    enabled && (scope !== "component-local" || environmentId !== undefined);
   const executionOptionsEnvironmentId =
-    scope === "component-local" ? environmentId : undefined;
+    scope === "component-local" && executionOptionsQueryEnabled
+      ? environmentId
+      : undefined;
+  const executionOptionsProviderId = executionOptionsQueryEnabled
+    ? rawSelectedProviderId || undefined
+    : undefined;
+  const executionOptionsInitialData =
+    initialExecutionOptionsProviderId !== undefined &&
+    executionOptionsProviderId === initialExecutionOptionsProviderId
+      ? initialExecutionOptions
+      : undefined;
   const executionOptionsQuery = useSystemExecutionOptions({
-    enabled:
-      enabled &&
-      (scope !== "component-local" ||
-        executionOptionsEnvironmentId !== undefined),
+    enabled: executionOptionsQueryEnabled,
     environmentId: executionOptionsEnvironmentId,
-    providerId: rawSelectedProviderId || undefined,
+    initialData: executionOptionsQueryEnabled
+      ? executionOptionsInitialData
+      : undefined,
+    providerId: executionOptionsProviderId,
   });
   const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
   const modelLoadError =

@@ -247,22 +247,26 @@ export function ThreadDetailView() {
     {
       enabled: threadQueryState.status === "ready" && Boolean(thread?.id),
       environmentId: thread?.environmentId ?? undefined,
-      providerId: thread?.providerId ?? undefined,
     },
   );
   const hasThreadComposerBootstrapSettled =
     threadComposerBootstrapQuery.isSuccess ||
     threadComposerBootstrapQuery.isError;
-  const composerSeededStaleTime = threadComposerBootstrapQuery.isSuccess
+  const composerBootstrapData = threadComposerBootstrapQuery.data;
+  const composerQueryThreadId = hasThreadComposerBootstrapSettled
+    ? (thread?.id ?? "")
+    : "";
+  const composerInitialDataStaleTime = threadComposerBootstrapQuery.isSuccess
     ? 10_000
     : undefined;
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: pendingInteractions = [] } = useThreadPendingInteractions(
-    thread?.id ?? "",
+    composerQueryThreadId,
     {
       enabled: hasThreadComposerBootstrapSettled,
       refetchOnMount: threadComposerBootstrapQuery.isSuccess ? false : "always",
-      staleTime: composerSeededStaleTime,
+      initialData: composerBootstrapData?.pendingInteractions,
+      staleTime: composerInitialDataStaleTime,
     },
   );
   const hasPendingInteraction =
@@ -1134,11 +1138,12 @@ export function ThreadDetailView() {
       }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
+      composerBootstrap={composerBootstrapData}
       composerQueriesEnabled={hasThreadComposerBootstrapSettled}
       composerQueriesRefetchOnMount={
         threadComposerBootstrapQuery.isSuccess ? false : "always"
       }
-      composerQueriesStaleTime={composerSeededStaleTime}
+      composerQueriesStaleTime={composerInitialDataStaleTime}
       onChangedFileClick={handleChangedFileClick}
       openThreadDiffPanel={openSecondaryPanelDiffPanel}
       projectId={projectId}

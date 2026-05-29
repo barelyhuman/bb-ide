@@ -3,7 +3,6 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  type QueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type {
@@ -44,7 +43,6 @@ import {
   environmentQueryKey,
   hostQueryKey,
   hostsQueryKey,
-  systemExecutionOptionsQueryKey,
   threadComposerBootstrapQueryKey,
   threadDetailBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
@@ -75,7 +73,6 @@ const THREAD_LIST_STALE_TIME_MS = 10_000;
 
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
-  providerId?: string;
 }
 
 interface ThreadTimelinePrefetchOptions {
@@ -99,12 +96,20 @@ interface UpsertHostListArgs {
   hosts: HostListQueryData;
 }
 
-interface SeedThreadComposerBootstrapCachesArgs {
-  bootstrap: ThreadComposerBootstrapResponse;
-  environmentId: string | null;
-  providerId: string | null;
-  queryClient: QueryClient;
-  threadId: string;
+interface ThreadDefaultExecutionOptionsQueryOptions extends QueryOptions {
+  initialData?: ResolvedThreadExecutionOptions | null;
+}
+
+interface ThreadQueuedMessagesQueryOptions extends QueryOptions {
+  initialData?: ThreadQueuedMessageListResponse;
+}
+
+interface ThreadPromptHistoryQueryOptions extends QueryOptions {
+  initialData?: PromptHistoryResponse;
+}
+
+interface ThreadPendingInteractionsQueryOptions extends QueryOptions {
+  initialData?: ThreadPendingInteractionsResponse;
 }
 
 export interface UseThreadsFilters extends Omit<
@@ -385,42 +390,6 @@ function upsertHostList({ host, hosts }: UpsertHostListArgs): HostList {
   return found ? nextHosts : [...hosts, host];
 }
 
-function seedThreadComposerBootstrapCaches({
-  bootstrap,
-  environmentId,
-  providerId,
-  queryClient,
-  threadId,
-}: SeedThreadComposerBootstrapCachesArgs): void {
-  queryClient.setQueryData(
-    threadDefaultExecutionOptionsQueryKey(threadId),
-    bootstrap.defaultExecutionOptions,
-  );
-  queryClient.setQueryData(
-    threadQueuedMessagesQueryKey(threadId),
-    bootstrap.queuedMessages,
-  );
-  queryClient.setQueryData(
-    threadPromptHistoryQueryKey(threadId),
-    bootstrap.promptHistory,
-  );
-  queryClient.setQueryData(
-    threadPendingInteractionsQueryKey(threadId),
-    bootstrap.pendingInteractions,
-  );
-  const resolvedProviderId =
-    providerId ?? bootstrap.executionOptions.providers[0]?.id;
-  if (resolvedProviderId) {
-    queryClient.setQueryData(
-      systemExecutionOptionsQueryKey({
-        environmentId,
-        providerId: resolvedProviderId,
-      }),
-      bootstrap.executionOptions,
-    );
-  }
-}
-
 export function useThreadDetailBootstrap(
   id: string,
   options?: ThreadDetailBootstrapQueryOptions,
@@ -466,20 +435,9 @@ export function useThreadDetailBootstrap(
       }
       if (options?.composerBootstrapPrefetch) {
         const environmentId = thread.environmentId ?? null;
-        const providerId = thread.providerId ?? null;
         void queryClient.prefetchQuery({
           queryKey: threadComposerBootstrapQueryKey(thread.id, environmentId),
-          queryFn: async () => {
-            const bootstrap = await api.getThreadComposerBootstrap(thread.id);
-            seedThreadComposerBootstrapCaches({
-              bootstrap,
-              environmentId,
-              providerId,
-              queryClient,
-              threadId: thread.id,
-            });
-            return bootstrap;
-          },
+          queryFn: () => api.getThreadComposerBootstrap(thread.id),
         });
       }
       return thread;
@@ -493,25 +451,14 @@ export function useThreadComposerBootstrap(
   id: string,
   options?: ThreadComposerBootstrapQueryOptions,
 ) {
-  const queryClient = useQueryClient();
   const environmentId = options?.environmentId ?? null;
-  const providerId = options?.providerId ?? null;
 
   return useQuery<ThreadComposerBootstrapResponse>({
     queryKey: threadComposerBootstrapQueryKey(id, environmentId),
-    queryFn: async () => {
-      const bootstrap = await api.getThreadComposerBootstrap(
+    queryFn: () =>
+      api.getThreadComposerBootstrap(
         requireThreadId(id, "useThreadComposerBootstrap"),
-      );
-      seedThreadComposerBootstrapCaches({
-        bootstrap,
-        environmentId,
-        providerId,
-        queryClient,
-        threadId: id,
-      });
-      return bootstrap;
-    },
+      ),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
@@ -523,7 +470,7 @@ export function useThreadComposerBootstrap(
 
 export function useThreadDefaultExecutionOptions(
   id: string,
-  options?: QueryOptions,
+  options?: ThreadDefaultExecutionOptionsQueryOptions,
 ) {
   return useQuery<ResolvedThreadExecutionOptions | null>({
     queryKey: threadDefaultExecutionOptionsQueryKey(id),
@@ -535,10 +482,16 @@ export function useThreadDefaultExecutionOptions(
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
     staleTime: options?.staleTime,
+    ...(options?.initialData === undefined
+      ? {}
+      : { initialData: options.initialData }),
   });
 }
 
-export function useThreadQueuedMessages(id: string, options?: QueryOptions) {
+export function useThreadQueuedMessages(
+  id: string,
+  options?: ThreadQueuedMessagesQueryOptions,
+) {
   return useQuery<ThreadQueuedMessageListResponse>({
     queryKey: threadQueuedMessagesQueryKey(id),
     queryFn: () =>
@@ -549,10 +502,16 @@ export function useThreadQueuedMessages(id: string, options?: QueryOptions) {
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
     staleTime: options?.staleTime,
+    ...(options?.initialData === undefined
+      ? {}
+      : { initialData: options.initialData }),
   });
 }
 
-export function useThreadPromptHistory(id: string, options?: QueryOptions) {
+export function useThreadPromptHistory(
+  id: string,
+  options?: ThreadPromptHistoryQueryOptions,
+) {
   return useQuery<PromptHistoryResponse>({
     queryKey: threadPromptHistoryQueryKey(id),
     queryFn: ({ signal }) =>
@@ -563,12 +522,15 @@ export function useThreadPromptHistory(id: string, options?: QueryOptions) {
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     staleTime: options?.staleTime ?? 10_000,
+    ...(options?.initialData === undefined
+      ? {}
+      : { initialData: options.initialData }),
   });
 }
 
 export function useThreadPendingInteractions(
   id: string,
-  options?: QueryOptions,
+  options?: ThreadPendingInteractionsQueryOptions,
 ) {
   return useQuery<ThreadPendingInteractionsResponse>({
     queryKey: threadPendingInteractionsQueryKey(id),
@@ -581,6 +543,9 @@ export function useThreadPendingInteractions(
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
     staleTime: options?.staleTime,
+    ...(options?.initialData === undefined
+      ? {}
+      : { initialData: options.initialData }),
   });
 }
 

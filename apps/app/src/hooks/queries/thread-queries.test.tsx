@@ -498,20 +498,11 @@ describe("thread query bootstraps", () => {
         threadComposerBootstrapQueryKey("thread-1", "environment-1"),
       ),
     ).toEqual(composerBootstrap);
-    expect(
-      queryClient.getQueryData(
-        systemExecutionOptionsQueryKey({
-          environmentId: "environment-1",
-          providerId: "provider-1",
-        }),
-      ),
-    ).toEqual(composerBootstrap.executionOptions);
 
     const composerResult = renderHook(
       () =>
         useThreadComposerBootstrap("thread-1", {
           environmentId: "environment-1",
-          providerId: "provider-1",
         }),
       { wrapper },
     );
@@ -522,7 +513,7 @@ describe("thread query bootstraps", () => {
     expect(composerBootstrapRequestCount).toBe(1);
   });
 
-  it("primes composer caches from the thread composer bootstrap", async () => {
+  it("initializes composer caches from the thread composer bootstrap", async () => {
     const defaultExecutionOptions = {
       model: "gpt-5.5",
       permissionMode: "workspace-write",
@@ -660,33 +651,44 @@ describe("thread query bootstraps", () => {
       () => {
         const bootstrap = useThreadComposerBootstrap("thread-1", {
           environmentId: "environment-1",
-          providerId: "claude-code",
         });
         const canonicalEnabled = bootstrap.isSuccess || bootstrap.isError;
-        const seededStaleTime = bootstrap.isSuccess ? 10_000 : undefined;
-        const defaultExecution = useThreadDefaultExecutionOptions("thread-1", {
+        const canonicalThreadId = canonicalEnabled ? "thread-1" : "";
+        const bootstrapInitialDataStaleTime = bootstrap.isSuccess
+          ? 10_000
+          : undefined;
+        const defaultExecution = useThreadDefaultExecutionOptions(
+          canonicalThreadId,
+          {
+            enabled: canonicalEnabled,
+            refetchOnMount: bootstrap.isSuccess ? false : "always",
+            initialData: bootstrap.data?.defaultExecutionOptions,
+            staleTime: bootstrapInitialDataStaleTime,
+          },
+        );
+        const queuedMessageList = useThreadQueuedMessages(canonicalThreadId, {
           enabled: canonicalEnabled,
           refetchOnMount: bootstrap.isSuccess ? false : "always",
-          staleTime: seededStaleTime,
+          initialData: bootstrap.data?.queuedMessages,
+          staleTime: bootstrapInitialDataStaleTime,
         });
-        const queuedMessageList = useThreadQueuedMessages("thread-1", {
+        const history = useThreadPromptHistory(canonicalThreadId, {
           enabled: canonicalEnabled,
           refetchOnMount: bootstrap.isSuccess ? false : "always",
-          staleTime: seededStaleTime,
+          initialData: bootstrap.data?.promptHistory,
+          staleTime: bootstrapInitialDataStaleTime,
         });
-        const history = useThreadPromptHistory("thread-1", {
+        const interactions = useThreadPendingInteractions(canonicalThreadId, {
           enabled: canonicalEnabled,
           refetchOnMount: bootstrap.isSuccess ? false : "always",
-          staleTime: seededStaleTime,
-        });
-        const interactions = useThreadPendingInteractions("thread-1", {
-          enabled: canonicalEnabled,
-          refetchOnMount: bootstrap.isSuccess ? false : "always",
-          staleTime: seededStaleTime,
+          initialData: bootstrap.data?.pendingInteractions,
+          staleTime: bootstrapInitialDataStaleTime,
         });
         const creationOptions = useThreadCreationOptions({
           enabled: canonicalEnabled,
           environmentId: "environment-1",
+          initialExecutionOptions: bootstrap.data?.executionOptions,
+          initialExecutionOptionsProviderId: "claude-code",
           initialModel: "gpt-5.5",
           initialProviderId: "claude-code",
           resetKey: "thread-1",
@@ -760,6 +762,169 @@ describe("thread query bootstraps", () => {
       expect(executionOptionsScopedRequestCount).toBe(1);
     });
     expect(executionOptionsHostlessRequestCount).toBe(0);
+  });
+
+  it("fetches provider-scoped execution options after switching providers from bootstrap data", async () => {
+    const claudeExecutionOptions: ThreadComposerBootstrapResponse["executionOptions"] =
+      {
+        providers: [
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            available: true,
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportsUserQuestion: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+          },
+          {
+            id: "codex",
+            displayName: "Codex",
+            available: true,
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportsUserQuestion: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+          },
+        ],
+        models: [
+          {
+            id: "claude-sonnet",
+            model: "claude-sonnet",
+            displayName: "Claude Sonnet",
+            description: "Claude model",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "medium",
+                description: "Balanced",
+              },
+            ],
+            defaultReasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+        selectedOnlyModels: [],
+        modelLoadError: null,
+      };
+    const codexExecutionOptions: ThreadComposerBootstrapResponse["executionOptions"] =
+      {
+        ...claudeExecutionOptions,
+        models: [
+          {
+            id: "gpt-5.5",
+            model: "gpt-5.5",
+            displayName: "GPT-5.5",
+            description: "Codex model",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "high",
+                description: "High",
+              },
+            ],
+            defaultReasoningEffort: "high",
+            isDefault: true,
+          },
+        ],
+      };
+    let bootstrapRequestCount = 0;
+    let codexExecutionOptionsRequestCount = 0;
+    let claudeExecutionOptionsRequestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/composer-bootstrap",
+        handler: () => {
+          bootstrapRequestCount += 1;
+          return jsonResponse({
+            defaultExecutionOptions: {
+              model: "claude-sonnet",
+              permissionMode: "workspace-write",
+              reasoningLevel: "medium",
+              serviceTier: "default",
+              source: "client/turn/requested",
+            },
+            queuedMessages: [],
+            executionOptions: claudeExecutionOptions,
+            pendingInteractions: [],
+            promptHistory: [],
+          });
+        },
+      },
+      {
+        pathname: "/api/v1/system/execution-options",
+        handler: (request) => {
+          const providerId = new URL(request.url).searchParams.get(
+            "providerId",
+          );
+          if (providerId === "codex") {
+            codexExecutionOptionsRequestCount += 1;
+            return jsonResponse(codexExecutionOptions);
+          }
+          if (providerId === "claude-code") {
+            claudeExecutionOptionsRequestCount += 1;
+            return jsonResponse(claudeExecutionOptions);
+          }
+          return jsonResponse(claudeExecutionOptions);
+        },
+      },
+    ]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () => {
+        const bootstrap = useThreadComposerBootstrap("thread-1", {
+          environmentId: "environment-1",
+        });
+        const creationOptions = useThreadCreationOptions({
+          enabled: bootstrap.isSuccess,
+          environmentId: "environment-1",
+          initialExecutionOptions: bootstrap.data?.executionOptions,
+          initialExecutionOptionsProviderId: "claude-code",
+          initialModel: "claude-sonnet",
+          initialProviderId: "claude-code",
+          resetKey: "thread-1",
+          scope: "component-local",
+        });
+        return {
+          bootstrap,
+          creationOptions,
+        };
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.bootstrap.status).toBe("success");
+      expect(result.current.creationOptions.modelOptions).toEqual([
+        {
+          label: "Claude Sonnet",
+          value: "claude-sonnet",
+        },
+      ]);
+    });
+    expect(bootstrapRequestCount).toBe(1);
+    expect(claudeExecutionOptionsRequestCount).toBe(0);
+
+    act(() => {
+      result.current.creationOptions.setSelectedProviderId("codex");
+    });
+
+    await waitFor(() => {
+      expect(codexExecutionOptionsRequestCount).toBe(1);
+      expect(result.current.creationOptions.selectedProviderId).toBe("codex");
+      expect(result.current.creationOptions.modelOptions).toEqual([
+        {
+          label: "GPT-5.5",
+          value: "gpt-5.5",
+        },
+      ]);
+    });
+    expect(claudeExecutionOptionsRequestCount).toBe(0);
   });
 });
 
