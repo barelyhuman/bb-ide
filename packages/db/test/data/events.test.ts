@@ -23,7 +23,6 @@ import {
   listEvents,
   listFilteredStoredEventRows,
   listRecentStoredEventRows,
-  listStandardTimelineSegmentAnchorRows,
   listTimelineSegmentAnchorsDescending,
   findTimelineSegmentAnchorSequenceAfter,
   getTimelineSegmentAnchorAtSequence,
@@ -1102,7 +1101,7 @@ describe("events", () => {
     ).toEqual([1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
   });
 
-  it("lists standard timeline segment anchors with SQL-visible request rules", () => {
+  it("lists bounded timeline segment anchors with SQL-visible request rules", () => {
     const { db, thread } = setup();
 
     insertEvents(db, noopNotifier, [
@@ -1215,48 +1214,70 @@ describe("events", () => {
           target: { kind: "new-turn" },
         }),
       },
-    ]);
-
-    const userVisibleAnchors = listStandardTimelineSegmentAnchorRows(db, {
-      includeSystemClientRequests: false,
-      threadId: thread.id,
-    });
-    expect(userVisibleAnchors).toEqual([
-      { rowId: `${thread.id}:user-seed:1`, sequence: 1 },
-      { rowId: `${thread.id}:user-seed:4`, sequence: 4 },
-      { rowId: `${thread.id}:user-seed:7`, sequence: 7 },
-      { rowId: `${thread.id}:user-seed:8`, sequence: 8 },
-      { rowId: `${thread.id}:user-seed:9`, sequence: 9 },
-      { rowId: `${thread.id}:user-seed:10`, sequence: 10 },
+      {
+        threadId: thread.id,
+        sequence: 11,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          initiator: "agent",
+          input: [{ type: "text", text: "agent message" }],
+          target: { kind: "new-turn" },
+        }),
+      },
     ]);
 
     expect(
-      listStandardTimelineSegmentAnchorRows(db, {
-        includeSystemClientRequests: true,
+      listTimelineSegmentAnchorsDescending(db, {
+        audience: "non-system",
+        limit: 8,
+        threadId: thread.id,
+      }),
+    ).toEqual([
+      { rowId: `${thread.id}:user-seed:11`, sequence: 11 },
+      { rowId: `${thread.id}:user-seed:10`, sequence: 10 },
+      { rowId: `${thread.id}:user-seed:9`, sequence: 9 },
+      { rowId: `${thread.id}:user-seed:8`, sequence: 8 },
+      { rowId: `${thread.id}:user-seed:7`, sequence: 7 },
+      { rowId: `${thread.id}:user-seed:4`, sequence: 4 },
+      { rowId: `${thread.id}:user-seed:1`, sequence: 1 },
+    ]);
+
+    expect(
+      listTimelineSegmentAnchorsDescending(db, {
+        audience: "all",
+        limit: 9,
         threadId: thread.id,
       }).map((row) => row.sequence),
-    ).toEqual([1, 2, 4, 7, 8, 9, 10]);
+    ).toEqual([11, 10, 9, 8, 7, 4, 2, 1]);
+    expect(
+      listTimelineSegmentAnchorsDescending(db, {
+        audience: "user",
+        limit: 7,
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([10, 9, 8, 7, 4, 1]);
 
-    // The bounded queries used by timeline pagination must select the same
-    // anchors as the full scan, windowed by limit/sequence so a page load
-    // never enumerates the whole thread.
+    // The timeline pagination helpers select only the requested page of
+    // anchors, so latest/older page resolution never enumerates a whole thread.
     expect(
       listTimelineSegmentAnchorsDescending(db, {
         audience: "non-system",
         limit: 3,
         threadId: thread.id,
       }).map((row) => row.sequence),
-    ).toEqual([10, 9, 8]);
+    ).toEqual([11, 10, 9]);
     expect(
       listTimelineSegmentAnchorsDescending(db, {
         audience: "non-system",
         beforeSequence: 8,
-        limit: 2,
+        limit: 3,
         threadId: thread.id,
       }),
     ).toEqual([
       { rowId: `${thread.id}:user-seed:7`, sequence: 7 },
       { rowId: `${thread.id}:user-seed:4`, sequence: 4 },
+      { rowId: `${thread.id}:user-seed:1`, sequence: 1 },
     ]);
     expect(
       getTimelineSegmentAnchorAtSequence(db, {
@@ -1292,6 +1313,13 @@ describe("events", () => {
       findTimelineSegmentAnchorSequenceAfter(db, {
         audience: "non-system",
         sequence: 10,
+        threadId: thread.id,
+      }),
+    ).toBe(11);
+    expect(
+      findTimelineSegmentAnchorSequenceAfter(db, {
+        audience: "non-system",
+        sequence: 11,
         threadId: thread.id,
       }),
     ).toBeUndefined();

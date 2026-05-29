@@ -703,15 +703,6 @@ export interface ListRecentStoredEventRowsArgs {
   threadId: string;
 }
 
-export interface ListStandardTimelineSegmentAnchorRowsArgs {
-  includeSystemClientRequests: boolean;
-  threadId: string;
-}
-
-export interface ListManagerConversationTimelineSegmentAnchorRowsArgs {
-  threadId: string;
-}
-
 export interface StoredEventRowTypeFilter {
   eventTypes: readonly ThreadEventType[];
   itemEventTypes: readonly ThreadEventType[];
@@ -1113,11 +1104,6 @@ export interface StandardTimelineSegmentAnchorRow {
   sequence: number;
 }
 
-export interface ManagerConversationTimelineSegmentAnchorRow {
-  rowId: string;
-  sequence: number;
-}
-
 /**
  * Which `client/turn/requested` turns count as timeline segment anchors:
  * - `all`: every turn (standard timeline with system client requests visible)
@@ -1150,8 +1136,6 @@ function timelineSegmentAnchorConditions(
   threadId: string,
   audience: TimelineSegmentAnchorAudience,
 ): SQL | undefined {
-  // Shared anchor predicate so the unbounded and bounded queries select the
-  // exact same set of turns.
   return and(
     eq(events.threadId, threadId),
     eq(events.type, "client/turn/requested"),
@@ -1253,35 +1237,6 @@ export function getTimelineSegmentAnchorAtSequence(
     )
     .limit(1)
     .get();
-}
-
-export function listStandardTimelineSegmentAnchorRows(
-  db: DbConnection,
-  args: ListStandardTimelineSegmentAnchorRowsArgs,
-): StandardTimelineSegmentAnchorRow[] {
-  return db
-    .select(timelineSegmentAnchorSelection())
-    .from(events)
-    .where(
-      timelineSegmentAnchorConditions(
-        args.threadId,
-        args.includeSystemClientRequests ? "all" : "non-system",
-      ),
-    )
-    .orderBy(events.sequence)
-    .all();
-}
-
-export function listManagerConversationTimelineSegmentAnchorRows(
-  db: DbConnection,
-  args: ListManagerConversationTimelineSegmentAnchorRowsArgs,
-): ManagerConversationTimelineSegmentAnchorRow[] {
-  return db
-    .select(timelineSegmentAnchorSelection())
-    .from(events)
-    .where(timelineSegmentAnchorConditions(args.threadId, "user"))
-    .orderBy(events.sequence)
-    .all();
 }
 
 export function listStoredTimelineWindowEventRows(

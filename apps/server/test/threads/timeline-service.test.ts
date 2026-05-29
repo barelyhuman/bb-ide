@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
 import type { StoredThreadEventDataForType, Thread } from "@bb/domain";
-import { listStandardTimelineSegmentAnchorRows } from "@bb/db";
-import type { DbConnection, StandardTimelineSegmentAnchorRow } from "@bb/db";
+import type { DbConnection } from "@bb/db";
 import type { TimelineRow } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
@@ -70,11 +69,6 @@ interface SeedTimelineClientTurnRequestedArgs {
   threadId: string;
 }
 
-interface ProjectedTimelineSegmentAnchorRow {
-  rowId: string;
-  sequence: number;
-}
-
 interface ReconstructManagerConversationTimelineByPagesArgs {
   db: DbConnection;
   isDevelopment: boolean;
@@ -115,33 +109,6 @@ function flattenTimelineSourceRows(
   }
 
   return sourceRows;
-}
-
-function extractProjectedTimelineSegmentAnchorRows(
-  rows: readonly TimelineRow[],
-): ProjectedTimelineSegmentAnchorRow[] {
-  const anchors: ProjectedTimelineSegmentAnchorRow[] = [];
-  for (const row of rows) {
-    if (
-      row.kind !== "conversation" ||
-      row.role !== "user" ||
-      row.turnRequest.kind !== "message"
-    ) {
-      continue;
-    }
-    anchors.push({
-      rowId: row.id,
-      sequence: row.sourceSeqStart,
-    });
-  }
-  return anchors;
-}
-
-function expectSqlAnchorsMatchProjectedAnchors(
-  projectedAnchors: readonly ProjectedTimelineSegmentAnchorRow[],
-  sqlAnchors: readonly StandardTimelineSegmentAnchorRow[],
-): void {
-  expect(sqlAnchors).toEqual(projectedAnchors);
 }
 
 function buildThreadTimeline(
@@ -1133,23 +1100,13 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const anchors = listStandardTimelineSegmentAnchorRows(harness.db, {
-      includeSystemClientRequests: false,
-      threadId: thread.id,
-    });
-    const laterAnchor = anchors.find((anchor) => anchor.sequence === 5);
-    expect(laterAnchor).toBeDefined();
-    if (!laterAnchor) {
-      throw new Error("Expected anchor for later request");
-    }
-
     const olderPage = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
       page: {
         kind: "older",
         beforeCursor: {
-          anchorId: laterAnchor.rowId,
-          anchorSeq: laterAnchor.sequence,
+          anchorId: `${thread.id}:user-seed:5`,
+          anchorSeq: 5,
         },
         segmentLimit: 1,
       },
@@ -1403,7 +1360,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("keeps SQL standard timeline anchors aligned with projected pagination anchors", async () => {
+  it("paginates standard timeline anchors with server visibility rules", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -1462,31 +1419,64 @@ describe("buildThreadTimeline", () => {
       });
     }
 
-    const standardTimeline = buildThreadTimeline(harness.db, standardThread, {
-      isDevelopment: false,
-    });
-    expectSqlAnchorsMatchProjectedAnchors(
-      extractProjectedTimelineSegmentAnchorRows(standardTimeline.rows),
-      listStandardTimelineSegmentAnchorRows(harness.db, {
-        includeSystemClientRequests: false,
-        threadId: standardThread.id,
-      }),
+    const standardLatestPage = buildThreadTimeline(
+      harness.db,
+      standardThread,
+      {
+        isDevelopment: false,
+        page: {
+          kind: "latest",
+          segmentLimit: 2,
+        },
+      },
+    );
+    const standardUserTexts = flattenTimelineSourceRows(
+      standardLatestPage.rows,
+    ).flatMap((row) =>
+      row.kind === "conversation" && row.role === "user" ? [row.text] : [],
     );
 
-    const managerStandardTimeline = buildThreadTimeline(
+    expect(standardLatestPage.timelinePage).toMatchObject({
+      kind: "latest",
+      segmentLimit: 2,
+      returnedSegmentCount: 2,
+      hasOlderRows: false,
+      olderCursor: null,
+    });
+    expect(standardUserTexts).toContain("User message");
+    expect(standardUserTexts).toContain("Auto new turn");
+    expect(standardUserTexts).not.toContain("System message");
+
+    const managerStandardLatestPage = buildThreadTimeline(
       harness.db,
       managerThread,
       {
         isDevelopment: false,
+        page: {
+          kind: "latest",
+          segmentLimit: 2,
+        },
       },
     );
-    expectSqlAnchorsMatchProjectedAnchors(
-      extractProjectedTimelineSegmentAnchorRows(managerStandardTimeline.rows),
-      listStandardTimelineSegmentAnchorRows(harness.db, {
-        includeSystemClientRequests: true,
-        threadId: managerThread.id,
-      }),
+    const managerStandardUserTexts = flattenTimelineSourceRows(
+      managerStandardLatestPage.rows,
+    ).flatMap((row) =>
+      row.kind === "conversation" && row.role === "user" ? [row.text] : [],
     );
+
+    expect(managerStandardLatestPage.timelinePage).toMatchObject({
+      kind: "latest",
+      segmentLimit: 2,
+      returnedSegmentCount: 2,
+      hasOlderRows: true,
+      olderCursor: {
+        anchorId: `${managerThread.id}:user-seed:2`,
+        anchorSeq: 2,
+      },
+    });
+    expect(managerStandardUserTexts).not.toContain("User message");
+    expect(managerStandardUserTexts).toContain("System message");
+    expect(managerStandardUserTexts).toContain("Auto new turn");
   });
 
   it("preserves completed assistant content and excludes summary-noise rows after compaction", async () => {
