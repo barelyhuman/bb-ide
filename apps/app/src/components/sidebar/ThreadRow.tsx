@@ -430,6 +430,7 @@ function ThreadRowComponent({
           >
             <ThreadActionsMenu
               thread={thread}
+              showManagerArchiveAll={isManager && managedChildCount > 0}
               triggerClassName={cn(
                 "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
@@ -465,6 +466,7 @@ function ThreadRowComponent({
   return (
     <ThreadActionsContextMenu
       thread={thread}
+      showManagerArchiveAll={isManager && managedChildCount > 0}
       onOpenChange={setIsContextActionsOpen}
     >
       {row}

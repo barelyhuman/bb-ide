@@ -12,6 +12,7 @@ import { appToast } from "@/components/ui/app-toast";
 import type { Thread } from "@bb/domain";
 import {
   useArchiveThread,
+  useArchiveManagerThreads,
   useDeleteThread,
   useMarkThreadRead,
   useMarkThreadUnread,
@@ -41,6 +42,7 @@ import { getRootComposeRoutePath } from "@/lib/app-route-paths";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 
 export interface ThreadActionsContextValue {
+  archiveAllAssigned: (thread: Thread) => void;
   requestRename: (thread: Thread) => void;
   requestDelete: (thread: Thread) => void;
   toggleArchive: (thread: Thread) => void;
@@ -76,6 +78,16 @@ interface ThreadActionContext {
   assignedChildCount: number;
 }
 
+function formatArchiveAllSuccessMessage(archivedThreadCount: number): string {
+  if (archivedThreadCount <= 1) {
+    return "Archived manager";
+  }
+  const assignedThreadCount = archivedThreadCount - 1;
+  return assignedThreadCount === 1
+    ? "Archived manager and 1 assigned thread"
+    : `Archived manager and ${assignedThreadCount} assigned threads`;
+}
+
 export function ThreadActionsProvider({
   children,
 }: ThreadActionsProviderProps) {
@@ -83,6 +95,7 @@ export function ThreadActionsProvider({
   const setRootComposeProjectId = useSetRootComposeProjectId();
   const { threadId: viewedThreadId } = useAppRoute();
   const archiveThread = useArchiveThread();
+  const archiveManagerThreads = useArchiveManagerThreads();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
@@ -96,6 +109,7 @@ export function ThreadActionsProvider({
   // identities on every isPending flip and force every useThreadActions()
   // consumer to re-render whenever any mutation fires.
   const { mutate: archiveMutate } = archiveThread;
+  const { mutate: archiveManagerThreadsMutate } = archiveManagerThreads;
   const { mutate: unarchiveMutate } = unarchiveThread;
   const { mutate: markReadMutate } = markThreadRead;
   const { mutate: markUnreadMutate } = markThreadUnread;
@@ -287,12 +301,7 @@ export function ThreadActionsProvider({
         },
       );
     },
-    [
-      archiveMutate,
-      navigateAwayIfViewing,
-      showArchiveError,
-      unarchiveMutate,
-    ],
+    [archiveMutate, navigateAwayIfViewing, showArchiveError, unarchiveMutate],
   );
 
   const toggleArchive = useCallback(
@@ -304,6 +313,43 @@ export function ThreadActionsProvider({
       archiveWithUndoToast(thread);
     },
     [archiveWithUndoToast, unarchiveMutate],
+  );
+
+  const archiveAllAssigned = useCallback(
+    (thread: Thread) => {
+      archiveManagerThreadsMutate(
+        { id: thread.id },
+        {
+          onSuccess: (response) => {
+            if (
+              viewedThreadId &&
+              response.archivedThreadIds.includes(viewedThreadId)
+            ) {
+              setRootComposeProjectId(thread.projectId);
+              navigate(getRootComposeRoutePath());
+            }
+            appToast.success(
+              formatArchiveAllSuccessMessage(response.archivedThreadIds.length),
+            );
+          },
+          onError: (error) => {
+            appToast.error(
+              getMutationErrorMessage({
+                error,
+                fallbackMessage: "Failed to archive manager threads",
+                lifecycleOperation: "archive_thread",
+              }),
+            );
+          },
+        },
+      );
+    },
+    [
+      archiveManagerThreadsMutate,
+      navigate,
+      setRootComposeProjectId,
+      viewedThreadId,
+    ],
   );
 
   const toggleRead = useCallback(
@@ -350,11 +396,19 @@ export function ThreadActionsProvider({
     () => ({
       requestRename,
       requestDelete,
+      archiveAllAssigned,
       toggleArchive,
       togglePin,
       toggleRead,
     }),
-    [requestRename, requestDelete, toggleArchive, togglePin, toggleRead],
+    [
+      archiveAllAssigned,
+      requestRename,
+      requestDelete,
+      toggleArchive,
+      togglePin,
+      toggleRead,
+    ],
   );
 
   return (

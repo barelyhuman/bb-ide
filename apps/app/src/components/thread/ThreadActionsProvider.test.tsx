@@ -8,15 +8,16 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ThreadWithRuntime } from "@bb/domain";
+import { PERSONAL_PROJECT_ID, type ThreadWithRuntime } from "@bb/domain";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { Provider as JotaiProvider } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ThreadAssignedChildSummaryResponse } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { createAppQueryClient } from "@/lib/query-client";
+import { useRootComposeProjectId } from "@/lib/root-compose-selection";
 import {
   ThreadActionsProvider,
   useThreadActions,
@@ -53,6 +54,10 @@ interface SonnerCustomToast {
   renderToast: (id: string | number) => ReactElement;
 }
 
+interface RenderWithProviderOptions {
+  initialEntries?: string[];
+}
+
 const threadToastState = vi.hoisted(() => {
   const invocations: SonnerCustomToast[] = [];
   return {
@@ -83,6 +88,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
+    archiveManagerThreads: vi.fn(),
     archiveThread: vi.fn(),
     deleteThread: vi.fn(),
     getThreadAssignedChildSummary: vi.fn(),
@@ -141,7 +147,10 @@ function makeAssignedChildSummary(
   };
 }
 
-function renderWithProvider(children: ReactNode) {
+function renderWithProvider(
+  children: ReactNode,
+  options: RenderWithProviderOptions = {},
+) {
   const queryClient = createAppQueryClient({
     defaultOptions: {
       mutations: { retry: false },
@@ -151,7 +160,7 @@ function renderWithProvider(children: ReactNode) {
   return render(
     <JotaiProvider>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={options.initialEntries}>
           <ThreadActionsProvider>{children}</ThreadActionsProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -167,6 +176,18 @@ function HookProbe({
   const actions = useThreadActions();
   onReady(actions);
   return null;
+}
+
+function RouteProbe() {
+  const location = useLocation();
+  const [rootComposeProjectId] = useRootComposeProjectId();
+
+  return (
+    <>
+      <span data-testid="route-pathname">{location.pathname}</span>
+      <span data-testid="root-compose-project-id">{rootComposeProjectId}</span>
+    </>
+  );
 }
 
 function readThreadToast(toast: SonnerCustomToast): ThreadToastInvocation {
@@ -273,6 +294,75 @@ describe("ThreadActionsProvider", () => {
     await waitFor(() => {
       expect(api.unarchiveThread).toHaveBeenCalledWith(thread.id);
     });
+  });
+
+  it("archives all assigned manager threads with a grouped success toast", async () => {
+    const thread = makeThread({ id: "manager-1", type: "manager" });
+    vi.mocked(api.archiveManagerThreads).mockResolvedValue({
+      ok: true,
+      archivedThreadIds: ["child-1", thread.id],
+    });
+
+    let actions: ReturnType<typeof useThreadActions> | null = null;
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
+
+    act(() => {
+      actions!.archiveAllAssigned(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.archiveManagerThreads).toHaveBeenCalledWith(thread.id);
+    });
+    const successInvocation = requireLatestThreadToastInvocation();
+    expect(successInvocation.props.tone).toBe("success");
+    expect(successInvocation.props.title).toBe(
+      "Archived manager and 1 assigned thread",
+    );
+  });
+
+  it("returns to root compose when archive all includes the current projectless thread", async () => {
+    const thread = makeThread({
+      id: "manager-1",
+      projectId: PERSONAL_PROJECT_ID,
+      type: "manager",
+    });
+    vi.mocked(api.archiveManagerThreads).mockResolvedValue({
+      ok: true,
+      archivedThreadIds: ["child-1", thread.id],
+    });
+
+    let actions: ReturnType<typeof useThreadActions> | null = null;
+    renderWithProvider(
+      <>
+        <HookProbe
+          onReady={(a) => {
+            actions = a;
+          }}
+        />
+        <RouteProbe />
+      </>,
+      { initialEntries: ["/threads/child-1"] },
+    );
+
+    act(() => {
+      actions!.archiveAllAssigned(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.archiveManagerThreads).toHaveBeenCalledWith(thread.id);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("route-pathname").textContent).toBe("/");
+    });
+    expect(screen.getByTestId("root-compose-project-id").textContent).toBe(
+      PERSONAL_PROJECT_ID,
+    );
   });
 
   it("confirms before deleting a manager with assigned child threads", async () => {

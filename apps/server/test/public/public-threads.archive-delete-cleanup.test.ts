@@ -27,7 +27,10 @@ import {
   type WorkspaceProvisionType,
 } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
-import { environmentArchiveThreadsResponseSchema } from "@bb/server-contract";
+import {
+  environmentArchiveThreadsResponseSchema,
+  managerArchiveThreadsResponseSchema,
+} from "@bb/server-contract";
 import {
   listQueuedEnvironmentCommands,
   listQueuedThreadCommands,
@@ -233,6 +236,147 @@ describe("public thread archive delete cleanup routes", () => {
           nextParentThreadId: null,
         },
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives managers and assigned child threads as a group", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const managerEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/archive-manager-all",
+      });
+      const childEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/archive-manager-all-child",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: managerEnvironment.id,
+        type: "manager",
+      });
+      const childInManagerEnvironment = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: managerEnvironment.id,
+        parentThreadId: managerThread.id,
+      });
+      const childInSharedEnvironment = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: childEnvironment.id,
+        parentThreadId: managerThread.id,
+      });
+      const alreadyArchivedChild = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: childEnvironment.id,
+        parentThreadId: managerThread.id,
+      });
+      archiveThread(harness.db, harness.hub, alreadyArchivedChild.id);
+      seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: childEnvironment.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/archive-all`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = managerArchiveThreadsResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(body.archivedThreadIds).toHaveLength(3);
+      expect(body.archivedThreadIds).toEqual(
+        expect.arrayContaining([
+          childInManagerEnvironment.id,
+          childInSharedEnvironment.id,
+          managerThread.id,
+        ]),
+      );
+      expect(body.archivedThreadIds.at(-1)).toBe(managerThread.id);
+      expect(getThread(harness.db, managerThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(getThread(harness.db, childInManagerEnvironment.id)).toMatchObject(
+        {
+          archivedAt: expect.any(Number),
+          parentThreadId: managerThread.id,
+        },
+      );
+      expect(getThread(harness.db, childInSharedEnvironment.id)).toMatchObject({
+        archivedAt: expect.any(Number),
+        parentThreadId: managerThread.id,
+      });
+      expect(getThread(harness.db, alreadyArchivedChild.id)).toMatchObject({
+        parentThreadId: managerThread.id,
+      });
+      expect(getEnvironment(harness.db, managerEnvironment.id)).toMatchObject({
+        cleanupRequestedAt: expect.any(Number),
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: managerEnvironment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({
+        kind: "destroy",
+      });
+      expect(getEnvironment(harness.db, childEnvironment.id)).toMatchObject({
+        cleanupRequestedAt: null,
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: childEnvironment.id,
+          kind: "destroy",
+        }),
+      ).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects archive all for non-manager threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive-all`,
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeNull();
     } finally {
       await harness.cleanup();
     }

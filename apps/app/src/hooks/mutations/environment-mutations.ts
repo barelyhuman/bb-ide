@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { QueryClient } from "@tanstack/react-query";
-import type { Environment, ThreadWithRuntime } from "@bb/domain";
+import type { Environment } from "@bb/domain";
 import type {
   EnvironmentArchiveThreadsResponse,
   EnvironmentActionResponse,
@@ -18,13 +17,17 @@ import {
   threadsQueryKey,
 } from "../queries/query-keys";
 import {
-  applyToCachedThreadLists,
-  getCachedThreadLists,
-  iterateThreadListCacheEntries,
   restoreCachedThreadLists,
   snapshotCachedThreadLists,
   type CachedThreadListSnapshot,
 } from "../queries/thread-list-cache-data";
+import {
+  getCachedLiveThreadIdsMatching,
+  getCachedThreadSnapshots,
+  optimisticallyArchiveThreads,
+  removeLiveThreadsFromCachedLists,
+  type CachedThreadSnapshot,
+} from "./thread-archive-cache";
 type UpdateEnvironmentMutationRequest = {
   id: string;
 } & UpdateEnvironmentRequest;
@@ -33,77 +36,10 @@ interface ArchiveEnvironmentThreadsMutationRequest {
   id: string;
 }
 
-interface CachedThreadSnapshot {
-  id: string;
-  thread: ThreadWithRuntime | undefined;
-}
-
 interface ArchiveEnvironmentThreadsMutationContext {
   archivedThreadIds: string[];
   previousThreadLists: CachedThreadListSnapshot;
   previousThreads: CachedThreadSnapshot[];
-}
-
-interface EnvironmentThreadCacheArgs {
-  environmentId: string;
-  queryClient: QueryClient;
-}
-
-interface OptimisticallyArchiveThreadsArgs {
-  queryClient: QueryClient;
-  threadIds: readonly string[];
-}
-
-function getCachedLiveThreadIdsForEnvironment({
-  environmentId,
-  queryClient,
-}: EnvironmentThreadCacheArgs): string[] {
-  const threadIds = new Set<string>();
-  for (const { data } of getCachedThreadLists(queryClient, {
-    queryKey: threadsQueryKey(),
-  })) {
-    for (const thread of iterateThreadListCacheEntries(data)) {
-      if (
-        thread.environmentId === environmentId &&
-        thread.archivedAt === null
-      ) {
-        threadIds.add(thread.id);
-      }
-    }
-  }
-  return Array.from(threadIds);
-}
-
-function removeEnvironmentThreadsFromLists({
-  environmentId,
-  queryClient,
-}: EnvironmentThreadCacheArgs): void {
-  applyToCachedThreadLists(queryClient, {
-    queryKey: threadsQueryKey(),
-    mapper: (list) =>
-      list.filter(
-        (thread) =>
-          thread.environmentId !== environmentId || thread.archivedAt !== null,
-      ),
-  });
-}
-
-function optimisticallyArchiveThreads({
-  queryClient,
-  threadIds,
-}: OptimisticallyArchiveThreadsArgs): void {
-  const archivedAt = Date.now();
-  for (const threadId of threadIds) {
-    queryClient.setQueryData<ThreadWithRuntime>(
-      threadQueryKey(threadId),
-      (thread) => {
-        if (!thread) {
-          return thread;
-        }
-        return { ...thread, archivedAt };
-      },
-    );
-  }
 }
 
 export function useRequestEnvironmentAction() {
@@ -141,8 +77,8 @@ export function useArchiveEnvironmentThreads() {
       api.archiveEnvironmentThreads(id),
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
-      const archivedThreadIds = getCachedLiveThreadIdsForEnvironment({
-        environmentId: id,
+      const archivedThreadIds = getCachedLiveThreadIdsMatching({
+        matchesThread: (thread) => thread.environmentId === id,
         queryClient,
       });
       await Promise.all(
@@ -154,18 +90,19 @@ export function useArchiveEnvironmentThreads() {
       const previousThreadLists = snapshotCachedThreadLists(queryClient, {
         queryKey: threadsQueryKey(),
       });
-      const previousThreads = archivedThreadIds.map((threadId) => ({
-        id: threadId,
-        thread: queryClient.getQueryData<ThreadWithRuntime>(
-          threadQueryKey(threadId),
-        ),
-      }));
+      const previousThreads = getCachedThreadSnapshots({
+        queryClient,
+        threadIds: archivedThreadIds,
+      });
 
       optimisticallyArchiveThreads({
         queryClient,
         threadIds: archivedThreadIds,
       });
-      removeEnvironmentThreadsFromLists({ environmentId: id, queryClient });
+      removeLiveThreadsFromCachedLists({
+        matchesThread: (thread) => thread.environmentId === id,
+        queryClient,
+      });
 
       return {
         archivedThreadIds,

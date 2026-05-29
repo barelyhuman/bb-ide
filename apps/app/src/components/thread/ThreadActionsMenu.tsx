@@ -1,7 +1,21 @@
 import type { Thread } from "@bb/domain";
 import type { ReactNode } from "react";
-import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu.js";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
@@ -21,6 +35,7 @@ interface ThreadActionsMenuBaseProps {
   viewerToggleLabel?: string;
   viewerToggleChecked?: boolean;
   onViewerToggleCheckedChange?: (checked: boolean) => void;
+  showManagerArchiveAll?: boolean;
 }
 
 interface ThreadActionsMenuProps extends ThreadActionsMenuBaseProps {
@@ -127,13 +142,23 @@ function ThreadActionsMenuItems({
   viewerToggleLabel,
   viewerToggleChecked,
   onViewerToggleCheckedChange,
+  showManagerArchiveAll = false,
   surface,
 }: ThreadActionsMenuItemsProps) {
-  const { requestRename, requestDelete, toggleArchive, togglePin, toggleRead } =
-    useThreadActions();
+  const {
+    archiveAllAssigned,
+    requestRename,
+    requestDelete,
+    toggleArchive,
+    togglePin,
+    toggleRead,
+  } = useThreadActions();
   const isRead = isThreadRead(thread);
   const isArchived = thread.archivedAt != null;
   const isPinned = thread.pinnedAt !== null;
+  const isManager = thread.type === "manager";
+  const archiveLabel = isManager ? "Archive Manager" : "Archive";
+  const canArchiveAll = isManager && !isArchived && showManagerArchiveAll;
 
   return (
     <>
@@ -178,8 +203,21 @@ function ThreadActionsMenuItems({
           toggleArchive(thread);
         }}
       >
-        {isArchived ? "Unarchive" : "Archive"}
+        {isArchived ? "Unarchive" : archiveLabel}
       </ThreadActionMenuItem>
+      {canArchiveAll ? (
+        <ThreadActionMenuItem
+          surface={surface}
+          onSelect={(event) => {
+            if (surface === "dropdown") {
+              event.preventDefault();
+            }
+            archiveAllAssigned(thread);
+          }}
+        >
+          Archive All
+        </ThreadActionMenuItem>
+      ) : null}
       {canDelete ? (
         <ThreadActionMenuItem
           surface={surface}
@@ -222,6 +260,7 @@ export function ThreadActionsMenu({
   viewerToggleLabel,
   viewerToggleChecked,
   onViewerToggleCheckedChange,
+  showManagerArchiveAll,
   onOpenChange,
   triggerClassName,
   align = "end",
@@ -243,7 +282,10 @@ export function ThreadActionsMenu({
             event.stopPropagation();
           }}
         >
-          <Icon name="MoreHorizontal" className={COARSE_POINTER_ICON_SIZE_CLASS} />
+          <Icon
+            name="MoreHorizontal"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">
@@ -253,6 +295,7 @@ export function ThreadActionsMenu({
           viewerToggleLabel={viewerToggleLabel}
           viewerToggleChecked={viewerToggleChecked}
           onViewerToggleCheckedChange={onViewerToggleCheckedChange}
+          showManagerArchiveAll={showManagerArchiveAll}
           surface="dropdown"
         />
       </DropdownMenuContent>
@@ -267,6 +310,7 @@ export function ThreadActionsContextMenu({
   viewerToggleLabel,
   viewerToggleChecked,
   onViewerToggleCheckedChange,
+  showManagerArchiveAll,
   onOpenChange,
 }: ThreadActionsContextMenuProps) {
   const label = threadTypeLabel(thread.type);
@@ -285,6 +329,7 @@ export function ThreadActionsContextMenu({
           viewerToggleLabel={viewerToggleLabel}
           viewerToggleChecked={viewerToggleChecked}
           onViewerToggleCheckedChange={onViewerToggleCheckedChange}
+          showManagerArchiveAll={showManagerArchiveAll}
           surface="context"
         />
       </ContextMenuContent>

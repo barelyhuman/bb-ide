@@ -892,6 +892,14 @@ export type EnvironmentArchiveThreadsResponse = z.infer<
   typeof environmentArchiveThreadsResponseSchema
 >;
 
+export const managerArchiveThreadsResponseSchema = z.object({
+  ok: z.literal(true),
+  archivedThreadIds: z.array(z.string().min(1)),
+});
+export type ManagerArchiveThreadsResponse = z.infer<
+  typeof managerArchiveThreadsResponseSchema
+>;
+
 export const threadListQuerySchema = z.object({
   projectId: z.string().min(1).optional(),
   type: threadTypeSchema.optional(),

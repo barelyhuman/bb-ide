@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
+  ManagerArchiveThreadsResponse,
   ProjectResponse,
   ReorderPinnedThreadRequest,
   UpdateThreadRequest,
@@ -27,6 +28,13 @@ import {
   snapshotCachedThreadLists,
   type CachedThreadListSnapshot,
 } from "../queries/thread-list-cache-data";
+import {
+  getCachedLiveThreadIdsMatching,
+  getCachedThreadSnapshots,
+  optimisticallyArchiveThreads,
+  removeLiveThreadsFromCachedLists,
+  type CachedThreadSnapshot,
+} from "./thread-archive-cache";
 
 interface ThreadMutationRequest {
   id: string;
@@ -42,6 +50,10 @@ interface UpdateThreadMutationOptions {
 }
 
 interface ArchiveThreadMutationRequest {
+  id: string;
+}
+
+interface ArchiveManagerThreadsMutationRequest {
   id: string;
 }
 
@@ -64,6 +76,12 @@ interface ThreadListMutationContext {
 
 interface PinnedThreadOrderMutationContext {
   previousThreadLists: CachedThreadListSnapshot;
+}
+
+interface ArchiveManagerThreadsMutationContext {
+  archivedThreadIds: string[];
+  previousThreadLists: CachedThreadListSnapshot;
+  previousThreads: CachedThreadSnapshot[];
 }
 
 interface UpdateThreadInListsArgs {
@@ -435,6 +453,81 @@ export function useArchiveThread() {
         queryClient,
         threadId: variables.id,
       });
+    },
+  });
+}
+
+export function useArchiveManagerThreads() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    meta: {
+      errorMessage: "Failed to archive manager threads.",
+      lifecycleOperation: "archive_thread",
+      showErrorToast: false,
+    },
+    mutationFn: ({
+      id,
+    }: ArchiveManagerThreadsMutationRequest): Promise<ManagerArchiveThreadsResponse> =>
+      api.archiveManagerThreads(id),
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
+      const archivedThreadIds = getCachedLiveThreadIdsMatching({
+        matchesThread: (thread) =>
+          thread.id === id || thread.parentThreadId === id,
+        queryClient,
+      });
+      await Promise.all(
+        archivedThreadIds.map((threadId) =>
+          queryClient.cancelQueries({ queryKey: threadQueryKey(threadId) }),
+        ),
+      );
+
+      const previousThreadLists = snapshotCachedThreadLists(queryClient, {
+        queryKey: threadsQueryKey(),
+      });
+      const previousThreads = getCachedThreadSnapshots({
+        queryClient,
+        threadIds: archivedThreadIds,
+      });
+
+      optimisticallyArchiveThreads({
+        queryClient,
+        threadIds: archivedThreadIds,
+      });
+      removeLiveThreadsFromCachedLists({
+        matchesThread: (thread) =>
+          thread.id === id || thread.parentThreadId === id,
+        queryClient,
+      });
+
+      return {
+        archivedThreadIds,
+        previousThreadLists,
+        previousThreads,
+      };
+    },
+    onError: (
+      _error,
+      _variables,
+      context?: ArchiveManagerThreadsMutationContext,
+    ) => {
+      if (!context) {
+        return;
+      }
+
+      restoreCachedThreadLists(queryClient, context.previousThreadLists);
+      for (const snapshot of context.previousThreads) {
+        queryClient.setQueryData(threadQueryKey(snapshot.id), snapshot.thread);
+      }
+    },
+    onSettled: (data, _error, _variables, context) => {
+      queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+      for (const threadId of data?.archivedThreadIds ??
+        context?.archivedThreadIds ??
+        []) {
+        queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
+      }
     },
   });
 }

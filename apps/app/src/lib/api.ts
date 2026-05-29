@@ -28,6 +28,7 @@ import type {
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
   EnvironmentStatusResponse,
+  ManagerArchiveThreadsResponse,
   CreateThreadRequest,
   CreateThreadTerminalRequest,
   ProjectBranchesResponse,
@@ -1156,6 +1157,14 @@ export async function archiveThread(id: string): Promise<void> {
     apiClient.threads[":id"].archive.$post({
       param: { id },
     }),
+  );
+}
+
+export async function archiveManagerThreads(
+  id: string,
+): Promise<ManagerArchiveThreadsResponse> {
+  return request<ManagerArchiveThreadsResponse>(
+    apiClient.threads[":id"]["archive-all"].$post({ param: { id } }),
   );
 }
 

@@ -54,6 +54,7 @@ import {
   toThreadResponseFromThread,
 } from "../../services/threads/thread-runtime-display.js";
 import {
+  archiveManagerThreads,
   archiveThreadWithLifecycleEffects,
   wouldCleanupAfterThreadArchive,
 } from "../../services/threads/thread-archive.js";
@@ -317,6 +318,25 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       });
     }
     return context.json({ ok: true });
+  });
+
+  post("/threads/:id/archive-all", (context) => {
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    if (thread.type !== "manager") {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Archive all is only available for manager threads",
+      );
+    }
+
+    const result = archiveManagerThreads(deps, {
+      managerThread: thread,
+    });
+    return context.json({
+      ok: true,
+      archivedThreadIds: result.archivedThreadIds,
+    });
   });
 
   post("/threads/:id/unarchive", (context) => {

@@ -54,6 +54,7 @@ import type {
   EnvironmentArchiveThreadsResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
+  ManagerArchiveThreadsResponse,
   ThreadStorageContentQuery,
   ThreadHostFileContentQuery,
   ThreadStorageFilesQuery,
@@ -520,6 +521,15 @@ export type PublicApiSchema = {
      * unmerged work.
      */
     $post: Endpoint<PathId, { ok: true }>;
+  };
+  "/threads/:id/archive-all": {
+    /**
+     * Archive a manager thread and every live thread assigned to it. Child
+     * threads are archived before the manager so archived child ownership is
+     * preserved, and cleanup is requested for each affected managed environment
+     * once it has no live threads.
+     */
+    $post: Endpoint<PathId, ManagerArchiveThreadsResponse>;
   };
   "/threads/:id/unarchive": {
     /** Unarchive a thread and cancel any still-pending cleanup for its environment. */
