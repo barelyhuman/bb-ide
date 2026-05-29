@@ -308,4 +308,28 @@ describe("BottomAnchoredScrollBody", () => {
 
     expect(scrollArea.scrollTop).toBe(1_100);
   });
+
+  it("restores bottom within the observed frame when the scrollport shrinks", () => {
+    const { scrollArea } = renderBody();
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_000,
+      clientHeight: 300,
+      scrollTop: 700,
+    });
+    flushAnimationFrames(1);
+
+    // Window resize shrinks the scrollport: clientHeight drops while content
+    // height is unchanged, so the bottom drifts out of view. CSS scroll
+    // anchoring does not compensate for scrollport size changes, so the
+    // ResizeObserver callback must correct scrollTop synchronously rather than
+    // waiting for the next animation frame.
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_000,
+      clientHeight: 100,
+      scrollTop: 700,
+    });
+    getResizeObserverInstance().trigger();
+
+    expect(scrollArea.scrollTop).toBe(900);
+  });
 });

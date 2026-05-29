@@ -191,39 +191,55 @@ export function BottomAnchoredScrollBody({
     restoreFramesRemainingRef.current = 0;
   }, []);
 
+  // Snap scrollTop back to the bottom if anchoring has let us drift away.
+  // Returns whether it actually scrolled, so the rAF settle tail can stop early
+  // once we're pinned again.
+  //
+  // CSS scroll anchoring (the trailing sentinel) keeps scrollTop pinned at
+  // sub-pixel precision during content growth/shrink. `scrollElementToBottom`
+  // sets `scrollTop = scrollHeight - clientHeight` — both integer-rounded
+  // Web API values — so calling it while we're already within sub-pixel
+  // range yanks scrollTop by ±1px against the browser's fractional value,
+  // producing visible jitter on every frame of a row expand/collapse.
+  // Restore only when anchoring has actually let us drift away from bottom.
+  const restoreBottomOnce = useCallback(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea || !shouldStickToBottomRef.current) return false;
+    if (isScrolledNearBottom(scrollArea)) return false;
+    scrollElementToBottom(scrollArea);
+    return true;
+  }, []);
+
   const runQueuedRestore = useCallback(() => {
     restoreFrameRef.current = null;
-    const scrollArea = scrollAreaRef.current;
-    if (!scrollArea || !shouldStickToBottomRef.current) {
+    if (!restoreBottomOnce()) {
       restoreFramesRemainingRef.current = 0;
       return;
     }
-
-    // CSS scroll anchoring (the trailing sentinel) keeps scrollTop pinned at
-    // sub-pixel precision during content growth/shrink. `scrollElementToBottom`
-    // sets `scrollTop = scrollHeight - clientHeight` — both integer-rounded
-    // Web API values — so calling it while we're already within sub-pixel
-    // range yanks scrollTop by ±1px against the browser's fractional value,
-    // producing visible jitter on every frame of a row expand/collapse.
-    // Restore only when anchoring has actually let us drift away from bottom.
-    if (isScrolledNearBottom(scrollArea)) {
-      restoreFramesRemainingRef.current = 0;
-      return;
-    }
-
-    scrollElementToBottom(scrollArea);
     restoreFramesRemainingRef.current -= 1;
     if (restoreFramesRemainingRef.current > 0) {
       restoreFrameRef.current = window.requestAnimationFrame(runQueuedRestore);
     }
-  }, []);
+  }, [restoreBottomOnce]);
 
   const queueBottomRestore = useCallback(() => {
     if (!shouldStickToBottomRef.current) return;
+    // Restore synchronously in the frame the size change was observed.
+    // ResizeObserver callbacks run after layout but before paint, so setting
+    // scrollTop here takes effect this frame. CSS scroll anchoring does not
+    // compensate for the scrollport's own size changing (only for content
+    // shifts above the anchor), so a window/panel vertical resize drifts us
+    // off-bottom with nothing to correct it within the frame. Deferring the
+    // first restore to a rAF paints that drifted frame; during a continuous
+    // resize drag the one-frame lag recurs every frame and reads as the
+    // timeline fighting the browser and jumping. The rAF tail still covers
+    // cascading layout (sidebar collapse, prompt/footer height changes) that
+    // isn't final in the observed frame.
+    restoreBottomOnce();
     restoreFramesRemainingRef.current = BOTTOM_RESTORE_SETTLE_FRAME_COUNT;
     if (restoreFrameRef.current !== null) return;
     restoreFrameRef.current = window.requestAnimationFrame(runQueuedRestore);
-  }, [runQueuedRestore]);
+  }, [restoreBottomOnce, runQueuedRestore]);
 
   const scrollToBottom = useCallback(() => {
     const scrollArea = scrollAreaRef.current;
