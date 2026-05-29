@@ -77,7 +77,6 @@ import type {
   UploadedPromptAttachment,
   ThreadStorageFileListResponse,
   ThreadStoragePathListResponse,
-  WorkspaceFileListResponse,
   WorkspacePathListResponse,
   ReplayCaptureListResponse,
   ReplayRunRequest,
@@ -625,31 +624,13 @@ export async function removeProjectSource(
   );
 }
 
-interface SearchProjectFilesArgs {
+interface SearchProjectPathsArgs {
   projectId: string;
   query: string;
   limit: number;
   environmentId: string | null;
-}
-
-interface SearchProjectPathsArgs extends SearchProjectFilesArgs {
   includeFiles: boolean;
   includeDirectories: boolean;
-}
-
-export async function searchProjectFiles(
-  args: SearchProjectFilesArgs,
-): Promise<WorkspaceFileListResponse> {
-  return request<WorkspaceFileListResponse>(
-    apiClient.projects[":id"].files.$get({
-      param: { id: args.projectId },
-      query: {
-        query: args.query,
-        limit: String(args.limit),
-        environmentId: args.environmentId ?? "",
-      },
-    }),
-  );
 }
 
 function toPathListIncludeQueryValue(

@@ -6,13 +6,11 @@ import type {
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
   SidebarBootstrapResponse,
-  WorkspaceFileListResponse,
   WorkspacePathListResponse,
 } from "@bb/server-contract";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import * as api from "@/lib/api";
 import {
-  projectFilesQueryKey,
   projectDefaultExecutionOptionsQueryKey,
   projectPathsQueryKey,
   projectPromptHistoryQueryKey,
@@ -192,39 +190,6 @@ export function useProjectDefaultExecutionOptions(
     enabled: (options?.enabled ?? true) && Boolean(projectId),
     staleTime: 10_000,
     placeholderData: (previousData) => (projectId ? previousData : undefined),
-  });
-}
-
-export function useProjectFileSuggestions(args: {
-  projectId: string | undefined;
-  query: string | null;
-  limit?: number;
-  environmentId: string | null;
-}) {
-  const { projectId, query, limit = 8, environmentId } = args;
-  const trimmedQuery = query?.trim() ?? "";
-
-  return useQuery<WorkspaceFileListResponse>({
-    queryKey: projectFilesQueryKey(
-      projectId,
-      trimmedQuery,
-      limit,
-      environmentId,
-    ),
-    queryFn: () =>
-      api.searchProjectFiles({
-        projectId: projectId ?? "",
-        query: trimmedQuery,
-        limit,
-        environmentId,
-      }),
-    enabled: Boolean(projectId) && trimmedQuery.length > 0,
-    staleTime: 15_000,
-    retry: false,
-    refetchOnWindowFocus: false,
-    // Hold the previous query's results while a new query is fetching so the
-    // mention menu doesn't flicker through "loading" between every keystroke.
-    placeholderData: (previousData) => previousData,
   });
 }
 

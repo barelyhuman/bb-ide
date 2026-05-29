@@ -16,7 +16,6 @@ import {
   updateCachedThreadListPendingInteractionState,
 } from "./queries/query-cache";
 import {
-  allProjectFilesQueryKeyPrefix,
   allProjectPathsQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   allHostQueryKeyPrefix,
@@ -32,7 +31,6 @@ import {
   environmentWorkStatusQueryKeyPrefix,
   hostsQueryKey,
   localPathExistenceQueryKeyPrefix,
-  projectFilesQueryKeyPrefix,
   projectPathsQueryKeyPrefix,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
@@ -589,14 +587,12 @@ function dirtyProjectSourceDependentQueries({
   if (!projectId) {
     return [
       ...sharedKeys,
-      allProjectFilesQueryKeyPrefix(),
       allProjectPathsQueryKeyPrefix(),
       allProjectSourceBranchesQueryKeyPrefix(),
     ];
   }
   return [
     ...sharedKeys,
-    projectFilesQueryKeyPrefix(projectId),
     projectPathsQueryKeyPrefix(projectId),
     projectSourceBranchesQueryKeyPrefix(projectId),
   ];

@@ -12,7 +12,7 @@ import {
   environmentGitDiffQueryKey,
   environmentWorkStatusQueryKey,
   localPathExistenceQueryKey,
-  projectFilesQueryKey,
+  projectPathsQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
@@ -847,17 +847,21 @@ describe("createRealtimeCacheEffects", () => {
     const localPathKey = localPathExistenceQueryKey("host-1", [
       "/workspace/project",
     ]);
-    const firstProjectFilesKey = projectFilesQueryKey(
+    const firstProjectPathsKey = projectPathsQueryKey(
       "project-1",
       "",
       20,
       null,
+      true,
+      true,
     );
-    const secondProjectFilesKey = projectFilesQueryKey(
+    const secondProjectPathsKey = projectPathsQueryKey(
       "project-2",
       "",
       20,
       null,
+      true,
+      true,
     );
     const firstProjectSourceBranchesKey = projectSourceBranchesQueryKey(
       "project-1",
@@ -869,8 +873,8 @@ describe("createRealtimeCacheEffects", () => {
     );
     queryClient.setQueryData(projectsKey, []);
     queryClient.setQueryData(localPathKey, []);
-    queryClient.setQueryData(firstProjectFilesKey, []);
-    queryClient.setQueryData(secondProjectFilesKey, []);
+    queryClient.setQueryData(firstProjectPathsKey, []);
+    queryClient.setQueryData(secondProjectPathsKey, []);
     queryClient.setQueryData(firstProjectSourceBranchesKey, []);
     queryClient.setQueryData(secondProjectSourceBranchesKey, []);
 
@@ -883,14 +887,14 @@ describe("createRealtimeCacheEffects", () => {
 
     expect(queryClient.getQueryState(projectsKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(localPathKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(firstProjectFilesKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(firstProjectPathsKey)?.isInvalidated).toBe(
       true,
     );
     expect(
       queryClient.getQueryState(firstProjectSourceBranchesKey)?.isInvalidated,
     ).toBe(true);
     expect(
-      queryClient.getQueryState(secondProjectFilesKey)?.isInvalidated,
+      queryClient.getQueryState(secondProjectPathsKey)?.isInvalidated,
     ).not.toBe(true);
     expect(
       queryClient.getQueryState(secondProjectSourceBranchesKey)?.isInvalidated,

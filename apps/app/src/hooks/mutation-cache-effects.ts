@@ -1,10 +1,8 @@
 import {
-  allProjectFilesQueryKeyPrefix,
   allProjectPathsQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   localPathExistenceQueryKeyPrefix,
   projectDefaultExecutionOptionsQueryKeyPrefix,
-  projectFilesQueryKeyPrefix,
   projectPathsQueryKeyPrefix,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
@@ -45,9 +43,6 @@ export function invalidateProjectUpdateQueries({
 }: ProjectArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
   queryClient.invalidateQueries({
-    queryKey: projectFilesQueryKeyPrefix(projectId),
-  });
-  queryClient.invalidateQueries({
     queryKey: projectPathsQueryKeyPrefix(projectId),
   });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
@@ -71,9 +66,6 @@ export function invalidateProjectSourceQueries({
   });
   if (!projectId) {
     queryClient.invalidateQueries({
-      queryKey: allProjectFilesQueryKeyPrefix(),
-    });
-    queryClient.invalidateQueries({
       queryKey: allProjectPathsQueryKeyPrefix(),
     });
     queryClient.invalidateQueries({
@@ -81,9 +73,6 @@ export function invalidateProjectSourceQueries({
     });
     return;
   }
-  queryClient.invalidateQueries({
-    queryKey: projectFilesQueryKeyPrefix(projectId),
-  });
   queryClient.invalidateQueries({
     queryKey: projectPathsQueryKeyPrefix(projectId),
   });

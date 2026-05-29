@@ -15,7 +15,6 @@ import type { ManagerTimelineView } from "@bb/server-contract";
 export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
 export const PROJECTS_QUERY_KEY = "projects";
-export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const PROJECT_PATHS_QUERY_KEY = "projectPaths";
 export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
 export const PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
@@ -87,9 +86,6 @@ export type HostQueryId = string | null | undefined;
 export type HostQueryKey = readonly [typeof HOST_QUERY_KEY, HostQueryId];
 export type AllHostQueryKeyPrefix = readonly [typeof HOST_QUERY_KEY];
 export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
-export type AllProjectFilesQueryKeyPrefix = readonly [
-  typeof PROJECT_FILES_QUERY_KEY,
-];
 export type AllProjectPathsQueryKeyPrefix = readonly [
   typeof PROJECT_PATHS_QUERY_KEY,
 ];
@@ -116,13 +112,6 @@ export type ProjectPromptHistoryQueryKey = readonly [
   typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
   string | null | undefined,
 ];
-export type ProjectFilesQueryKey = readonly [
-  typeof PROJECT_FILES_QUERY_KEY,
-  string | undefined,
-  string,
-  number,
-  string | null,
-];
 export type ProjectPathsQueryKey = readonly [
   typeof PROJECT_PATHS_QUERY_KEY,
   string | undefined,
@@ -131,10 +120,6 @@ export type ProjectPathsQueryKey = readonly [
   string | null,
   boolean,
   boolean,
-];
-export type ProjectFilesQueryKeyPrefix = readonly [
-  typeof PROJECT_FILES_QUERY_KEY,
-  string,
 ];
 export type ProjectPathsQueryKeyPrefix = readonly [
   typeof PROJECT_PATHS_QUERY_KEY,
@@ -428,15 +413,6 @@ export function projectsQueryKey(): ProjectsQueryKey {
   return [PROJECTS_QUERY_KEY];
 }
 
-export function projectFilesQueryKey(
-  projectId: string | undefined,
-  query: string,
-  limit: number,
-  environmentId: string | null,
-): ProjectFilesQueryKey {
-  return [PROJECT_FILES_QUERY_KEY, projectId, query, limit, environmentId];
-}
-
 export function projectPathsQueryKey(
   projectId: string | undefined,
   query: string,
@@ -454,10 +430,6 @@ export function projectPathsQueryKey(
     includeFiles,
     includeDirectories,
   ];
-}
-
-export function allProjectFilesQueryKeyPrefix(): AllProjectFilesQueryKeyPrefix {
-  return [PROJECT_FILES_QUERY_KEY];
 }
 
 export function allProjectPathsQueryKeyPrefix(): AllProjectPathsQueryKeyPrefix {
@@ -485,12 +457,6 @@ export function projectDefaultExecutionOptionsQueryKeyPrefix({
 
 export function projectPromptHistoryQueryKeyPrefix(): ProjectPromptHistoryQueryKeyPrefix {
   return [PROJECT_PROMPT_HISTORY_QUERY_KEY];
-}
-
-export function projectFilesQueryKeyPrefix(
-  projectId: string,
-): ProjectFilesQueryKeyPrefix {
-  return [PROJECT_FILES_QUERY_KEY, projectId];
 }
 
 export function projectPathsQueryKeyPrefix(
