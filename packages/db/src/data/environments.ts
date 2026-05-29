@@ -13,6 +13,7 @@ import { createEnvironmentId } from "../ids.js";
 
 type EnvironmentReadConnection = DbConnection | DbTransaction;
 type EnvironmentWriteConnection = DbConnection | DbTransaction;
+type EnvironmentRow = typeof environments.$inferSelect;
 
 export interface CreateEnvironmentInput {
   cleanupMode?: EnvironmentCleanupMode | null;
@@ -121,10 +122,25 @@ interface EnvironmentMetadataUpdateColumns {
   path?: string | null;
 }
 
-interface EnvironmentLifecycleUpdateColumns {
-  cleanupMode?: EnvironmentCleanupMode | null;
-  cleanupRequestedAt?: number | null;
-  status?: EnvironmentStatus;
+interface EnvironmentCleanupUpdateColumns {
+  cleanupMode: EnvironmentCleanupMode | null;
+  cleanupRequestedAt: number | null;
+}
+
+interface EnvironmentMetadataChangeArgs {
+  existing: EnvironmentRow;
+  metadata: EnvironmentMetadataUpdateColumns;
+  updated: EnvironmentRow;
+}
+
+interface EnvironmentCleanupChangeArgs {
+  existing: EnvironmentRow;
+  updated: EnvironmentRow;
+}
+
+interface EnvironmentStatusChangeArgs {
+  existing: EnvironmentRow;
+  updated: EnvironmentRow;
 }
 
 export interface ApplyProvisionedEnvironmentInput extends DiscoveredWorkspaceProperties {
@@ -164,34 +180,10 @@ function buildEnvironmentMetadataUpdateSet(
   return set;
 }
 
-function buildEnvironmentLifecycleUpdateSet(
-  input: EnvironmentLifecycleUpdateColumns,
-): EnvironmentLifecycleUpdateColumns {
-  const set: EnvironmentLifecycleUpdateColumns = {};
-  if ("status" in input) set.status = input.status;
-  if ("cleanupRequestedAt" in input) {
-    set.cleanupRequestedAt = input.cleanupRequestedAt;
-  }
-  if ("cleanupMode" in input) set.cleanupMode = input.cleanupMode;
-  return set;
-}
-
-function buildEnvironmentChangeKinds(args: {
-  existing: typeof environments.$inferSelect;
-  lifecycle: EnvironmentLifecycleUpdateColumns;
-  metadata: EnvironmentMetadataUpdateColumns;
-  updated: typeof environments.$inferSelect;
-}): EnvironmentChangeKind[] {
-  const changes: EnvironmentChangeKind[] = [];
-
-  if (
-    "status" in args.lifecycle &&
-    args.updated.status !== args.existing.status
-  ) {
-    changes.push("status-changed");
-  }
-
-  const metadataChanged =
+function environmentMetadataChanged(
+  args: EnvironmentMetadataChangeArgs,
+): boolean {
+  return (
     ("baseBranch" in args.metadata &&
       args.updated.baseBranch !== args.existing.baseBranch) ||
     ("path" in args.metadata && args.updated.path !== args.existing.path) ||
@@ -204,41 +196,34 @@ function buildEnvironmentChangeKinds(args: {
     ("defaultBranch" in args.metadata &&
       args.updated.defaultBranch !== args.existing.defaultBranch) ||
     ("mergeBaseBranch" in args.metadata &&
-      args.updated.mergeBaseBranch !== args.existing.mergeBaseBranch) ||
-    ("cleanupRequestedAt" in args.lifecycle &&
-      args.updated.cleanupRequestedAt !== args.existing.cleanupRequestedAt) ||
-    ("cleanupMode" in args.lifecycle &&
-      args.updated.cleanupMode !== args.existing.cleanupMode);
-
-  if (metadataChanged) {
-    changes.push("metadata-changed");
-  }
-
-  return changes;
+      args.updated.mergeBaseBranch !== args.existing.mergeBaseBranch)
+  );
 }
 
-function updateEnvironmentRecord(
+function environmentCleanupChanged(args: EnvironmentCleanupChangeArgs): boolean {
+  return (
+    args.updated.cleanupRequestedAt !== args.existing.cleanupRequestedAt ||
+    args.updated.cleanupMode !== args.existing.cleanupMode
+  );
+}
+
+function environmentStatusChanged(args: EnvironmentStatusChangeArgs): boolean {
+  return args.updated.status !== args.existing.status;
+}
+
+function updateEnvironmentMetadataRecord(
   db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
-  args: {
-    lifecycle?: EnvironmentLifecycleUpdateColumns;
-    metadata?: EnvironmentMetadataUpdateColumns;
-  },
+  metadataInput: EnvironmentMetadataUpdateColumns,
 ) {
-  const existing = db
-    .select()
-    .from(environments)
-    .where(eq(environments.id, id))
-    .get();
+  const existing = getEnvironment(db, id);
   if (!existing) return null;
 
-  const now = Date.now();
-  const metadata = buildEnvironmentMetadataUpdateSet(args.metadata ?? {});
-  const lifecycle = buildEnvironmentLifecycleUpdateSet(args.lifecycle ?? {});
+  const metadata = buildEnvironmentMetadataUpdateSet(metadataInput);
   const updated = db
     .update(environments)
-    .set({ ...metadata, ...lifecycle, updatedAt: now })
+    .set({ ...metadata, updatedAt: Date.now() })
     .where(eq(environments.id, id))
     .returning()
     .get();
@@ -247,35 +232,65 @@ function updateEnvironmentRecord(
     return null;
   }
 
-  const changes = buildEnvironmentChangeKinds({
-    existing,
-    lifecycle,
-    metadata,
-    updated,
-  });
-  if (changes.length > 0) {
-    notifier.notifyEnvironment(id, changes);
+  if (environmentMetadataChanged({ existing, metadata, updated })) {
+    notifier.notifyEnvironment(id, ["metadata-changed"]);
   }
 
   return updated;
 }
 
-function updateEnvironmentMetadataRecord(
+function updateEnvironmentStatusRecord(
   db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
-  metadata: EnvironmentMetadataUpdateColumns,
+  status: EnvironmentStatus,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, { metadata });
+  const existing = getEnvironment(db, id);
+  if (!existing) return null;
+
+  const updated = db
+    .update(environments)
+    .set({ status, updatedAt: Date.now() })
+    .where(eq(environments.id, id))
+    .returning()
+    .get();
+
+  if (!updated) {
+    return null;
+  }
+
+  if (environmentStatusChanged({ existing, updated })) {
+    notifier.notifyEnvironment(id, ["status-changed"]);
+  }
+
+  return updated;
 }
 
-function updateEnvironmentLifecycleRecord(
+function updateEnvironmentCleanupRecord(
   db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
-  lifecycle: EnvironmentLifecycleUpdateColumns,
+  cleanup: EnvironmentCleanupUpdateColumns,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, { lifecycle });
+  const existing = getEnvironment(db, id);
+  if (!existing) return null;
+
+  const updated = db
+    .update(environments)
+    .set({ ...cleanup, updatedAt: Date.now() })
+    .where(eq(environments.id, id))
+    .returning()
+    .get();
+
+  if (!updated) {
+    return null;
+  }
+
+  if (environmentCleanupChanged({ existing, updated })) {
+    notifier.notifyEnvironment(id, ["metadata-changed"]);
+  }
+
+  return updated;
 }
 
 export function applyProvisionedEnvironmentRecord(
@@ -284,24 +299,43 @@ export function applyProvisionedEnvironmentRecord(
   id: string,
   input: ApplyProvisionedEnvironmentInput,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, {
-    lifecycle: {
-      status: input.status,
-    },
-    metadata: {
-      path: input.path,
-      isGitRepo: input.isGitRepo,
-      isWorktree: input.isWorktree,
-      branchName: input.branchName,
-      ...(input.baseBranch !== undefined
-        ? { baseBranch: input.baseBranch }
-        : {}),
-      defaultBranch: input.defaultBranch,
-      ...(input.mergeBaseBranch !== undefined
-        ? { mergeBaseBranch: input.mergeBaseBranch }
-        : {}),
-    },
+  const existing = getEnvironment(db, id);
+  if (!existing) return null;
+
+  const metadata = buildEnvironmentMetadataUpdateSet({
+    path: input.path,
+    isGitRepo: input.isGitRepo,
+    isWorktree: input.isWorktree,
+    branchName: input.branchName,
+    ...(input.baseBranch !== undefined ? { baseBranch: input.baseBranch } : {}),
+    defaultBranch: input.defaultBranch,
+    ...(input.mergeBaseBranch !== undefined
+      ? { mergeBaseBranch: input.mergeBaseBranch }
+      : {}),
   });
+  const updated = db
+    .update(environments)
+    .set({ ...metadata, status: input.status, updatedAt: Date.now() })
+    .where(eq(environments.id, id))
+    .returning()
+    .get();
+
+  if (!updated) {
+    return null;
+  }
+
+  const changes: EnvironmentChangeKind[] = [];
+  if (environmentStatusChanged({ existing, updated })) {
+    changes.push("status-changed");
+  }
+  if (environmentMetadataChanged({ existing, metadata, updated })) {
+    changes.push("metadata-changed");
+  }
+  if (changes.length > 0) {
+    notifier.notifyEnvironment(id, changes);
+  }
+
+  return updated;
 }
 
 export function updateEnvironmentMetadata(
@@ -321,9 +355,7 @@ export function setEnvironmentStatus(
   id: string,
   input: UpdateEnvironmentStatusInput,
 ) {
-  return updateEnvironmentLifecycleRecord(db, notifier, id, {
-    status: input.status,
-  });
+  return updateEnvironmentStatusRecord(db, notifier, id, input.status);
 }
 
 export function recordEnvironmentCleanupRequest(
@@ -337,7 +369,7 @@ export function recordEnvironmentCleanupRequest(
     return null;
   }
 
-  return updateEnvironmentLifecycleRecord(db, notifier, id, {
+  return updateEnvironmentCleanupRecord(db, notifier, id, {
     cleanupRequestedAt:
       existing.cleanupRequestedAt ?? input.requestedAt ?? Date.now(),
     cleanupMode: "safe",
@@ -349,7 +381,7 @@ export function clearEnvironmentCleanupRequestRecord(
   notifier: DbNotifier,
   id: string,
 ) {
-  return updateEnvironmentLifecycleRecord(db, notifier, id, {
+  return updateEnvironmentCleanupRecord(db, notifier, id, {
     cleanupRequestedAt: null,
     cleanupMode: null,
   });
@@ -360,13 +392,36 @@ export function setEnvironmentRecordDestroyed(
   notifier: DbNotifier,
   id: string,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, {
-    lifecycle: {
-      cleanupRequestedAt: null,
-      cleanupMode: null,
-      status: "destroyed",
-    },
-  });
+  const existing = getEnvironment(db, id);
+  if (!existing) return null;
+
+  const cleanup: EnvironmentCleanupUpdateColumns = {
+    cleanupRequestedAt: null,
+    cleanupMode: null,
+  };
+  const updated = db
+    .update(environments)
+    .set({ ...cleanup, status: "destroyed", updatedAt: Date.now() })
+    .where(eq(environments.id, id))
+    .returning()
+    .get();
+
+  if (!updated) {
+    return null;
+  }
+
+  const changes: EnvironmentChangeKind[] = [];
+  if (environmentStatusChanged({ existing, updated })) {
+    changes.push("status-changed");
+  }
+  if (environmentCleanupChanged({ existing, updated })) {
+    changes.push("metadata-changed");
+  }
+  if (changes.length > 0) {
+    notifier.notifyEnvironment(id, changes);
+  }
+
+  return updated;
 }
 
 export function claimManagedEnvironmentReprovisionRecord(
