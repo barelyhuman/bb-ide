@@ -313,19 +313,20 @@ function ThreadRowComponent({
   const managedChildActivity =
     managerOptions?.managedChildActivity ?? NO_COLLAPSED_CHILD_ACTIVITY;
   const hasManagedChildren = managedChildCount > 0;
-  // A collapsed manager hides its children, so its trailing glyph speaks for
-  // them; an expanded manager (and any leaf row) shows its own status, since
-  // the children are then visible with their own glyphs.
+  // A collapsed manager hides both itself and its children behind one glyph, so
+  // it must surface its own status combined with the rolled-up child activity;
+  // an expanded manager (and any leaf row) shows its own status, since the
+  // children are then visible with their own glyphs.
   const hasHiddenChildren =
     isManager && isManagerCollapsed && hasManagedChildren;
   const trailingHasPendingInteraction = hasHiddenChildren
-    ? managedChildActivity.pending
+    ? hasPendingInteraction || managedChildActivity.pending
     : hasPendingInteraction;
   const trailingIsBusy = hasHiddenChildren
-    ? managedChildActivity.working
+    ? threadIsBusy || managedChildActivity.working
     : threadIsBusy;
   const trailingShowUnreadBadge = hasHiddenChildren
-    ? managedChildActivity.unread
+    ? showUnreadBadge || managedChildActivity.unread
     : showUnreadBadge;
   // Env-grouped children sit under a header that already shows the
   // worktree branch + icon, so suppress the redundant trailing icon.
