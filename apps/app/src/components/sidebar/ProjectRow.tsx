@@ -374,6 +374,7 @@ function ProjectThreadTreeGroup({
 }: ProjectThreadTreeGroupProps) {
   return (
     <div
+      data-sidebar-sticky-section={variant === "section" ? "" : undefined}
       className={cn(
         "relative space-y-0.5 group-data-[collapsible=icon]:hidden",
         getProjectThreadTreeGroupLineClassName(variant),

@@ -383,6 +383,7 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
 
   return (
     <div
+      data-sidebar-sticky-section=""
       className="relative space-y-0.5 group-data-[collapsible=icon]:hidden"
       onClickCapture={handleClickCapture}
     >

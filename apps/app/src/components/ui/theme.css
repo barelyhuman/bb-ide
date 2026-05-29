@@ -255,6 +255,22 @@
     margin-top: var(--bb-sidebar-sticky-row-gap);
   }
 
+  /* Section-variant trees (Pinned, projectless Threads) have no project tier:
+     the hierarchy is label -> manager -> managed-env. Shift the manager and
+     environment sticky offsets up one level so a manager pins directly under
+     the section label instead of reserving an empty project-row slot. */
+  [data-sidebar-sticky-stack]
+    [data-sidebar-sticky-section]
+    [data-sidebar-sticky-tier="manager"] {
+    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-project-top);
+  }
+
+  [data-sidebar-sticky-stack]
+    [data-sidebar-sticky-section]
+    [data-sidebar-sticky-tier="environment"] {
+    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-manager-top);
+  }
+
   @media (max-width: 767px) and (pointer: coarse) {
     [data-sidebar-sticky-stack] {
       --bb-sidebar-sticky-row-height: var(--bb-sidebar-row-height-coarse);
