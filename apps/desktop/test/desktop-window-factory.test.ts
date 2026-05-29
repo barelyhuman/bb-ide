@@ -12,7 +12,12 @@ import {
   type DesktopWindowWebContents,
 } from "../src/desktop-window-factory.js";
 import { readPersistedWindowStateEntries } from "../src/window-state.js";
-import type { WindowBounds, WindowStateKey } from "../src/types.js";
+import {
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  type WindowBounds,
+  type WindowStateKey,
+} from "../src/types.js";
 
 interface TempDir {
   path: string;
@@ -195,6 +200,8 @@ describe("desktop window factory", () => {
     expect(firstWindow).not.toBe(secondWindow);
     expect(createdWindows).toHaveLength(2);
     expect(createdWindows[0]?.options.frame).toBe(false);
+    expect(createdWindows[0]?.options.minHeight).toBe(MIN_WINDOW_HEIGHT);
+    expect(createdWindows[0]?.options.minWidth).toBe(MIN_WINDOW_WIDTH);
     expect(createdWindows[0]?.options.titleBarStyle).toBe("hiddenInset");
     expect(createdWindows[0]?.options.trafficLightPosition).toEqual({
       x: 12,
