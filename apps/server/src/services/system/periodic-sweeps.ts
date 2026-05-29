@@ -50,7 +50,10 @@ import {
   advanceEnvironmentProvisioning,
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
-import { handleExpiredCommands } from "../hosts/expired-commands.js";
+import {
+  handleExpiredCommands,
+  settleLegacyTerminalizedExpiredLifecycleCommands,
+} from "../hosts/expired-commands.js";
 import { handleExpiredHostSessionLeases } from "../../internal/session-owner-side-effects.js";
 import { sweepDueNudges } from "../scheduling/nudge-sweep.js";
 import {
@@ -392,9 +395,18 @@ export async function runPeriodicSweeps(
         commandIds: expired.expiredCommandIds,
       });
     }
-    pruneCompletedCommandPayloads(deps.db, {
-      completedBefore: now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
-    });
+    const legacyExpired =
+      await settleLegacyTerminalizedExpiredLifecycleCommands(deps);
+    if (legacyExpired.hasMore) {
+      deps.logger.warn(
+        { legacyExpired },
+        "Legacy expired lifecycle command settlement has remaining rows; preserving durable command evidence for next sweep",
+      );
+    } else {
+      pruneCompletedCommandPayloads(deps.db, {
+        completedBefore: now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+      });
+    }
     truncateCompletedEventItemOutputs(deps.db, {
       createdBefore: now - COMPLETED_EVENT_OUTPUT_RETENTION_MS,
       limit: DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
@@ -404,10 +416,12 @@ export async function runPeriodicSweeps(
       completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
       limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
     });
-    pruneCompletedDurableCommandRows(deps.db, {
-      completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
-      limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
-    });
+    if (!legacyExpired.hasMore) {
+      pruneCompletedDurableCommandRows(deps.db, {
+        completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
+        limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
+      });
+    }
     pruneClosedSessions(deps.db, {
       closedBefore: now - CLOSED_SESSION_ROW_RETENTION_MS,
       limit: DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
+  COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
   createPendingInteraction,
   getEnvironment,
   getEnvironmentOperation,
@@ -12,8 +13,15 @@ import {
 } from "@bb/db";
 import { setEnvironmentStatus } from "@bb/db/internal-lifecycle";
 import { describe, expect, it } from "vitest";
-import { handleExpiredCommands } from "../../src/services/hosts/expired-commands.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import {
+  handleExpiredCommands,
+  settleLegacyTerminalizedExpiredLifecycleCommands,
+} from "../../src/services/hosts/expired-commands.js";
+import { runPeriodicSweeps } from "../../src/services/system/periodic-sweeps.js";
+import {
+  createTestAppHarness,
+  type TestAppHarness,
+} from "../helpers/test-app.js";
 import {
   seedEnvironment,
   seedHost,
@@ -32,6 +40,22 @@ const EXPIRED_RESULT_PAYLOAD = JSON.stringify({
   errorCode: "command_expired",
   errorMessage: "Command expired after retry",
 });
+
+function markCommandTerminalizedBeforeSettlement(
+  harness: TestAppHarness,
+  commandId: string,
+  completedAt: number,
+): void {
+  harness.db
+    .update(hostDaemonCommands)
+    .set({
+      state: "error",
+      completedAt,
+      resultPayload: EXPIRED_RESULT_PAYLOAD,
+    })
+    .where(eq(hostDaemonCommands.id, commandId))
+    .run();
+}
 
 describe("expired commands", () => {
   it.each([
@@ -552,6 +576,180 @@ describe("expired commands", () => {
       });
 
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("settles legacy terminalized lifecycle rows before periodic durable pruning", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const now = Date.now();
+      const oldCompletedAt = now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS - 1_000;
+      const host = seedHost(harness.deps, {
+        id: "host-legacy-expired-destroy-prune",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/legacy-expired-destroy-prune",
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const command = queueEnvironmentDestroyLifecycleCommand(harness, {
+        hostId: host.id,
+        environmentId: environment.id,
+        sessionId: null,
+        command: {
+          type: "environment.destroy",
+          environmentId: environment.id,
+          workspaceContext: {
+            workspacePath:
+              environment.path ?? "/tmp/legacy-expired-destroy-prune",
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+        },
+      });
+      setEnvironmentStatus(harness.db, harness.hub, environment.id, {
+        status: "destroying",
+      });
+      markCommandTerminalizedBeforeSettlement(
+        harness,
+        command.id,
+        oldCompletedAt,
+      );
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({
+        failureReason: "Command expired after retry",
+        state: "failed",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, command.id))
+          .get(),
+      ).toMatchObject({
+        payload: "{}",
+        resultPayload: null,
+        state: "error",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("repairs legacy terminalized thread and interaction owner rows once", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-legacy-expired-mixed" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const stopCommand = queueThreadStopLifecycleCommand(harness, {
+        hostId: host.id,
+        threadId: thread.id,
+        sessionId: null,
+        command: {
+          type: "thread.stop",
+          environmentId: environment.id,
+          threadId: thread.id,
+        },
+      });
+      markCommandTerminalizedBeforeSettlement(harness, stopCommand.id, 100);
+
+      seedTurnStarted(harness.deps, {
+        environmentId: environment.id,
+        threadId: thread.id,
+        turnId: "turn_legacy_interactive",
+      });
+      const interaction = createPendingInteraction(harness.db, {
+        threadId: thread.id,
+        turnId: "turn_legacy_interactive",
+        providerId: "codex",
+        providerThreadId: "provider-legacy-interactive",
+        providerRequestId: "request-legacy-interactive",
+        sessionId: "session-legacy-interactive",
+        payload: JSON.stringify({
+          kind: "approval",
+          subject: {
+            kind: "command",
+            itemId: "item-legacy-interactive",
+            command: "git status",
+            cwd: null,
+            actions: [],
+            sessionGrant: null,
+          },
+          reason: null,
+          availableDecisions: ["deny"],
+        }),
+      });
+      const resolution = { decision: "deny" };
+      const interactionCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        type: "interactive.resolve",
+        payload: JSON.stringify({
+          type: "interactive.resolve",
+          environmentId: environment.id,
+          threadId: thread.id,
+          interactionId: interaction.id,
+          providerId: "codex",
+          providerThreadId: "provider-legacy-interactive",
+          providerRequestId: "request-legacy-interactive",
+          resolution,
+        }),
+      });
+      setPendingInteractionResolving(harness.db, {
+        commandId: interactionCommand.id,
+        id: interaction.id,
+        resolution: JSON.stringify(resolution),
+      });
+      markCommandTerminalizedBeforeSettlement(
+        harness,
+        interactionCommand.id,
+        200,
+      );
+
+      await expect(
+        settleLegacyTerminalizedExpiredLifecycleCommands(harness.deps),
+      ).resolves.toEqual({ hasMore: false, settled: 2 });
+
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: thread.id,
+          kind: "stop",
+        }),
+      ).toMatchObject({
+        failureReason: "Command expired after retry",
+        state: "failed",
+      });
+      expect(getPendingInteraction(harness.db, interaction.id)).toMatchObject({
+        status: "interrupted",
+        statusReason: "Command expired after retry",
+      });
+      await expect(
+        settleLegacyTerminalizedExpiredLifecycleCommands(harness.deps),
+      ).resolves.toEqual({ hasMore: false, settled: 0 });
     } finally {
       await harness.cleanup();
     }

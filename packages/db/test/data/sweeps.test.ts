@@ -14,6 +14,7 @@ import {
   pruneCompletedDurableCommandRows,
   pruneCompletedReadOnlyCommandRows,
   pruneCompletedCommandPayloads,
+  listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
@@ -32,7 +33,19 @@ import {
   createEnvironment,
   recordEnvironmentCleanupRequest,
 } from "../../src/data/environments.js";
+import {
+  markEnvironmentOperationRecordQueued,
+  upsertEnvironmentOperationRecord,
+} from "../../src/data/environment-operations.js";
 import { openSession } from "../../src/data/sessions.js";
+import {
+  createPendingInteraction,
+  setPendingInteractionResolving,
+} from "../../src/data/pending-interactions.js";
+import {
+  markThreadOperationRecordQueued,
+  upsertThreadOperationRecord,
+} from "../../src/data/thread-operations.js";
 import {
   queueCommand,
   fetchCommands,
@@ -58,6 +71,30 @@ function setup() {
     source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
   });
   return { db, host, project };
+}
+
+const LEGACY_EXPIRED_RESULT_PAYLOAD = JSON.stringify({
+  errorCode: "command_expired",
+  errorMessage: "Command expired after retry",
+});
+
+interface MarkCommandLegacyExpiredArgs {
+  commandId: string;
+  completedAt?: number;
+  db: DbConnection;
+  resultPayload?: string;
+}
+
+function markCommandLegacyExpired(args: MarkCommandLegacyExpiredArgs): void {
+  args.db
+    .update(hostDaemonCommands)
+    .set({
+      state: "error",
+      completedAt: args.completedAt ?? 100,
+      resultPayload: args.resultPayload ?? LEGACY_EXPIRED_RESULT_PAYLOAD,
+    })
+    .where(eq(hostDaemonCommands.id, args.commandId))
+    .run();
 }
 
 interface InsertCompletedItemEventArgs {
@@ -260,6 +297,168 @@ describe("sweepExpiredCommands", () => {
         .where(eq(threads.id, stopPendingThread.id))
         .get()?.status,
     ).toBe("active");
+  });
+});
+
+describe("listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement", () => {
+  it("returns exact legacy expired rows with active owner records", () => {
+    const { db, host, project } = setup();
+    const environment = createEnvironment(db, noopNotifier, {
+      hostId: host.id,
+      projectId: project.id,
+      status: "destroying",
+      workspaceProvisionType: "managed-worktree",
+    });
+    const thread = createThread(db, noopNotifier, {
+      environmentId: environment.id,
+      projectId: project.id,
+      providerId: "codex",
+      status: "active",
+    });
+
+    const environmentCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.destroy",
+      payload: JSON.stringify({
+        type: "environment.destroy",
+        environmentId: environment.id,
+        workspaceContext: {
+          workspacePath: environment.path ?? "/tmp/legacy-env",
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+      }),
+    });
+    upsertEnvironmentOperationRecord(db, {
+      environmentId: environment.id,
+      kind: "destroy",
+      payload: "{}",
+    });
+    markEnvironmentOperationRecordQueued(db, {
+      commandId: environmentCommand.id,
+      environmentId: environment.id,
+      kind: "destroy",
+    });
+    markCommandLegacyExpired({
+      commandId: environmentCommand.id,
+      completedAt: 10,
+      db,
+    });
+
+    const threadCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "thread.stop",
+      payload: JSON.stringify({
+        type: "thread.stop",
+        environmentId: environment.id,
+        threadId: thread.id,
+      }),
+    });
+    upsertThreadOperationRecord(db, {
+      kind: "stop",
+      payload: "{}",
+      threadId: thread.id,
+    });
+    markThreadOperationRecordQueued(db, {
+      commandId: threadCommand.id,
+      kind: "stop",
+      threadId: thread.id,
+    });
+    markCommandLegacyExpired({
+      commandId: threadCommand.id,
+      completedAt: 20,
+      db,
+    });
+
+    const interaction = createPendingInteraction(db, {
+      payload: JSON.stringify({ kind: "approval" }),
+      providerId: "codex",
+      providerRequestId: "request-legacy",
+      providerThreadId: "provider-legacy",
+      sessionId: "session-legacy",
+      threadId: thread.id,
+      turnId: "turn_legacy",
+    });
+    const interactionCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "interactive.resolve",
+      payload: JSON.stringify({
+        type: "interactive.resolve",
+        environmentId: environment.id,
+        interactionId: interaction.id,
+        providerId: "codex",
+        providerRequestId: "request-legacy",
+        providerThreadId: "provider-legacy",
+        resolution: { decision: "deny" },
+        threadId: thread.id,
+      }),
+    });
+    setPendingInteractionResolving(db, {
+      commandId: interactionCommand.id,
+      id: interaction.id,
+      resolution: JSON.stringify({ decision: "deny" }),
+    });
+    markCommandLegacyExpired({
+      commandId: interactionCommand.id,
+      completedAt: 30,
+      db,
+    });
+
+    const wrongPayloadCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.destroy",
+      payload: "{}",
+    });
+    const wrongPayloadEnvironment = createEnvironment(db, noopNotifier, {
+      hostId: host.id,
+      projectId: project.id,
+      status: "destroying",
+      workspaceProvisionType: "managed-worktree",
+    });
+    upsertEnvironmentOperationRecord(db, {
+      environmentId: wrongPayloadEnvironment.id,
+      kind: "destroy",
+      payload: "{}",
+    });
+    markEnvironmentOperationRecordQueued(db, {
+      commandId: wrongPayloadCommand.id,
+      environmentId: wrongPayloadEnvironment.id,
+      kind: "destroy",
+    });
+    markCommandLegacyExpired({
+      commandId: wrongPayloadCommand.id,
+      db,
+      resultPayload: JSON.stringify({
+        errorMessage: "Command expired after retry",
+        errorCode: "command_expired",
+      }),
+    });
+
+    const ownerlessCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "thread.stop",
+      payload: "{}",
+    });
+    markCommandLegacyExpired({ commandId: ownerlessCommand.id, db });
+
+    expect(
+      listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement(db, {
+        limit: 10,
+      }),
+    ).toEqual([
+      environmentCommand.id,
+      threadCommand.id,
+      interactionCommand.id,
+    ]);
+    expect(
+      listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement(db, {
+        limit: 2,
+      }),
+    ).toEqual([environmentCommand.id, threadCommand.id]);
+    expect(
+      listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement(db, {
+        limit: 0,
+      }),
+    ).toEqual([]);
   });
 });
 

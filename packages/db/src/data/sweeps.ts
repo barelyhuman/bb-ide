@@ -1,4 +1,5 @@
 import {
+  asc,
   eq,
   and,
   isNotNull,
@@ -8,14 +9,20 @@ import {
   inArray,
   or,
 } from "drizzle-orm";
-import type { ThreadEventItemType } from "@bb/domain";
+import {
+  activeLifecycleOperationStates,
+  type ThreadEventItemType,
+} from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
+  environmentOperations,
   hostDaemonCommands,
   hostDaemonSessions,
   environments,
   maintenanceScanCursors,
+  pendingInteractions,
+  threadOperations,
 } from "../schema.js";
 
 /** Standard command TTL: 60 seconds */
@@ -23,6 +30,22 @@ const STANDARD_COMMAND_TTL_MS = 60_000;
 
 /** Provision command TTL: 20 minutes */
 const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
+
+const LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD = JSON.stringify({
+  errorCode: "command_expired",
+  errorMessage: "Command expired after retry",
+});
+const LEGACY_TERMINALIZED_EXPIRED_ENVIRONMENT_LIFECYCLE_COMMAND_TYPES = [
+  "environment.destroy",
+  "environment.provision",
+];
+const LEGACY_TERMINALIZED_EXPIRED_THREAD_LIFECYCLE_COMMAND_TYPES = [
+  "thread.start",
+  "thread.stop",
+];
+const LEGACY_TERMINALIZED_EXPIRED_INTERACTION_LIFECYCLE_COMMAND_TYPES = [
+  "interactive.resolve",
+];
 
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
@@ -173,6 +196,10 @@ export interface SweepExpiredLeasesResult {
 export interface SweepExpiredCommandsResult {
   expiredCommandIds: string[];
   requeued: number;
+}
+
+export interface ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs {
+  limit: number;
 }
 
 type SqlPredicate = ReturnType<typeof and>;
@@ -549,6 +576,136 @@ export function sweepExpiredCommands(
     requeued: requeuedResult.changes,
     expiredCommandIds,
   };
+}
+
+/**
+ * Temporary compatibility scan for rows terminalized by pre-unification sweep
+ * code before command owner side effects ran. Remove after deployed instances
+ * have had at least one durable-command retention window to drain this backlog.
+ */
+export function listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement(
+  db: DbConnection,
+  args: ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs,
+): string[] {
+  if (args.limit <= 0) {
+    return [];
+  }
+
+  const activeStates = [...activeLifecycleOperationStates];
+  const environmentCommandIds = db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .innerJoin(
+      environmentOperations,
+      eq(environmentOperations.commandId, hostDaemonCommands.id),
+    )
+    .where(
+      and(
+        inArray(hostDaemonCommands.type, [
+          ...LEGACY_TERMINALIZED_EXPIRED_ENVIRONMENT_LIFECYCLE_COMMAND_TYPES,
+        ]),
+        eq(hostDaemonCommands.state, "error"),
+        isNotNull(hostDaemonCommands.completedAt),
+        eq(
+          hostDaemonCommands.resultPayload,
+          LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD,
+        ),
+        or(
+          and(
+            eq(hostDaemonCommands.type, "environment.destroy"),
+            eq(environmentOperations.kind, "destroy"),
+          ),
+          and(
+            eq(hostDaemonCommands.type, "environment.provision"),
+            inArray(environmentOperations.kind, ["provision", "reprovision"]),
+          ),
+        ),
+        inArray(environmentOperations.state, activeStates),
+      ),
+    )
+    .orderBy(asc(hostDaemonCommands.completedAt), asc(hostDaemonCommands.id))
+    .limit(args.limit)
+    .all()
+    .map((row) => row.id);
+
+  const remainingThreadLimit = args.limit - environmentCommandIds.length;
+  if (remainingThreadLimit <= 0) {
+    return environmentCommandIds;
+  }
+
+  const threadCommandIds = db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .innerJoin(
+      threadOperations,
+      eq(threadOperations.commandId, hostDaemonCommands.id),
+    )
+    .where(
+      and(
+        inArray(hostDaemonCommands.type, [
+          ...LEGACY_TERMINALIZED_EXPIRED_THREAD_LIFECYCLE_COMMAND_TYPES,
+        ]),
+        eq(hostDaemonCommands.state, "error"),
+        isNotNull(hostDaemonCommands.completedAt),
+        eq(
+          hostDaemonCommands.resultPayload,
+          LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD,
+        ),
+        or(
+          and(
+            eq(hostDaemonCommands.type, "thread.start"),
+            eq(threadOperations.kind, "start"),
+          ),
+          and(
+            eq(hostDaemonCommands.type, "thread.stop"),
+            eq(threadOperations.kind, "stop"),
+          ),
+        ),
+        inArray(threadOperations.state, activeStates),
+      ),
+    )
+    .orderBy(asc(hostDaemonCommands.completedAt), asc(hostDaemonCommands.id))
+    .limit(remainingThreadLimit)
+    .all()
+    .map((row) => row.id);
+
+  const remainingInteractionLimit =
+    args.limit - environmentCommandIds.length - threadCommandIds.length;
+  if (remainingInteractionLimit <= 0) {
+    return [...environmentCommandIds, ...threadCommandIds];
+  }
+
+  const interactionCommandIds = db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .innerJoin(
+      pendingInteractions,
+      eq(pendingInteractions.resolvingCommandId, hostDaemonCommands.id),
+    )
+    .where(
+      and(
+        inArray(hostDaemonCommands.type, [
+          ...LEGACY_TERMINALIZED_EXPIRED_INTERACTION_LIFECYCLE_COMMAND_TYPES,
+        ]),
+        eq(hostDaemonCommands.state, "error"),
+        isNotNull(hostDaemonCommands.completedAt),
+        eq(
+          hostDaemonCommands.resultPayload,
+          LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD,
+        ),
+        eq(pendingInteractions.status, "resolving"),
+      ),
+    )
+    .orderBy(asc(hostDaemonCommands.completedAt), asc(hostDaemonCommands.id))
+    .limit(remainingInteractionLimit)
+    .all()
+    .map((row) => row.id);
+
+  return [
+    ...environmentCommandIds,
+    ...threadCommandIds,
+    ...interactionCommandIds,
+  ];
 }
 
 /**
