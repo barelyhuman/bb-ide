@@ -44,6 +44,7 @@ import {
   threadQueuedMessagesQueryKey,
   threadsQueryKey,
   threadTimelineQueryKeyPrefix,
+  threadTimelineTurnSummaryDetailsQueryKeyPrefix,
 } from "../queries/query-keys";
 import {
   invalidateProjectPromptHistoryQueries,
@@ -333,6 +334,11 @@ export function useSendThreadMessage() {
         queryClient.cancelQueries({ queryKey: threadQueryKey(variables.id) }),
         queryClient.cancelQueries({
           queryKey: threadTimelineQueryKeyPrefix(variables.id),
+        }),
+        queryClient.cancelQueries({
+          queryKey: threadTimelineTurnSummaryDetailsQueryKeyPrefix(
+            variables.id,
+          ),
         }),
       ]);
 

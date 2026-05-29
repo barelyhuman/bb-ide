@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import type { Thread } from "@bb/domain";
-import type { TimelineTurnRow } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
@@ -216,8 +215,6 @@ function noopSecondaryPanelChange(_panel: ThreadSecondaryPanelTab): void {}
 
 function noopOpenFile(_path: string): void {}
 
-function noopLoadTurnSummaryRows(_entry: TimelineTurnRow): void {}
-
 function makeThread(): Thread {
   return {
     id: "thr_test",
@@ -311,18 +308,13 @@ function buildSecondaryContentProps({
       isLoadingOlderTimelineRows: false,
       isThreadTimelinePending: false,
       timelineError: false,
-      loadingTurnSummaryIds: new Set<string>(),
-      erroredTurnSummaryIds: new Set<string>(),
       onLoadOlderRows: noop,
-      onLoadTurnSummaryRows: noopLoadTurnSummaryRows,
       projectId: "proj_test",
       showOngoingIndicator: false,
       stopRequestedAt: null,
       timelineRows: [],
       threadId: "thr_test",
       threadRuntimeDisplayStatus: "idle",
-      turnSummaryRowsIdentity: "empty",
-      turnSummaryRowsById: {},
       unreadDividerAutoScroll: false,
       unreadDividerPlacement: null,
       workspaceRootPath: undefined,

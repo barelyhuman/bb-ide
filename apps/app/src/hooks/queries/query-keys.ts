@@ -48,6 +48,8 @@ export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 export const ENVIRONMENT_DIFF_FILE_QUERY_KEY = "environmentDiffFile";
 export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
+export const THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY =
+  "threadTimelineTurnSummaryDetails";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
 export const SYSTEM_CONFIG_QUERY_KEY = "systemConfig";
 export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
@@ -303,12 +305,34 @@ export type ThreadTimelineQueryKey = readonly [
   string,
   ManagerTimelineView | undefined,
 ];
+export interface ThreadTimelineTurnSummaryDetailsQueryIdentity {
+  managerTimelineView: ManagerTimelineView | undefined;
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+  threadId: string;
+  turnId: string;
+}
+export type ThreadTimelineTurnSummaryDetailsQueryKey = readonly [
+  typeof THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY,
+  string,
+  ManagerTimelineView | undefined,
+  string,
+  number,
+  number,
+];
 export type ThreadTimelineQueryKeyPrefix = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
   string,
 ];
 export type AllThreadTimelineQueryKeyPrefix = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
+];
+export type ThreadTimelineTurnSummaryDetailsQueryKeyPrefix = readonly [
+  typeof THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY,
+  string,
+];
+export type AllThreadTimelineTurnSummaryDetailsQueryKeyPrefix = readonly [
+  typeof THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY,
 ];
 export type EnvironmentGitDiffQueryKey = readonly [
   typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY,
@@ -757,6 +781,23 @@ export function threadTimelineQueryKey(
   return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView];
 }
 
+export function threadTimelineTurnSummaryDetailsQueryKey({
+  managerTimelineView,
+  sourceSeqEnd,
+  sourceSeqStart,
+  threadId,
+  turnId,
+}: ThreadTimelineTurnSummaryDetailsQueryIdentity): ThreadTimelineTurnSummaryDetailsQueryKey {
+  return [
+    THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY,
+    threadId,
+    managerTimelineView,
+    turnId,
+    sourceSeqStart,
+    sourceSeqEnd,
+  ];
+}
+
 export function managerTimelineViewFromThreadTimelineQueryKey(
   queryKey: QueryKey | undefined,
 ): ManagerTimelineView | undefined {
@@ -794,6 +835,16 @@ export function threadTimelineQueryKeyPrefix(
 
 export function allThreadTimelineQueryKeyPrefix(): AllThreadTimelineQueryKeyPrefix {
   return [THREAD_TIMELINE_QUERY_KEY];
+}
+
+export function threadTimelineTurnSummaryDetailsQueryKeyPrefix(
+  threadId: string,
+): ThreadTimelineTurnSummaryDetailsQueryKeyPrefix {
+  return [THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY, threadId];
+}
+
+export function allThreadTimelineTurnSummaryDetailsQueryKeyPrefix(): AllThreadTimelineTurnSummaryDetailsQueryKeyPrefix {
+  return [THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY];
 }
 
 export function environmentGitDiffQueryKey(

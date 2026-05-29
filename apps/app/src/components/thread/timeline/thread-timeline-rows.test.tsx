@@ -5,8 +5,10 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   type RenderResult,
 } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineRow } from "@bb/server-contract";
 import {
@@ -21,6 +23,9 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline/ThreadTimelineRows";
+import { threadTimelineTurnSummaryDetailsQueryKey } from "@/hooks/queries/query-keys";
+import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
+import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 
 type ElementScrollMetricName = "clientHeight" | "scrollHeight";
 type ThreadTimelineRowsPropsOverrides = Partial<
@@ -36,25 +41,38 @@ interface RerenderTimelineRowsArgs extends ThreadTimelineRowsFixtureArgs {
   view: RenderResult;
 }
 
+interface ThreadTimelineRowsRenderResult extends RenderResult {
+  queryClient: QueryClient;
+}
+
+interface RequestUrlRef {
+  current: URL | null;
+}
+
 function threadTimelineRowsProps({
   overrides = {},
   timelineRows,
 }: ThreadTimelineRowsFixtureArgs): ThreadTimelineRowsProps {
   return {
-    loadingTurnSummaryIds: new Set(),
-    erroredTurnSummaryIds: new Set(),
-    onLoadTurnSummaryRows: () => {},
+    threadId: "thread-1",
     threadRuntimeDisplayStatus: "idle",
-    turnSummaryRowsIdentity: "test-view",
-    turnSummaryRowsById: {},
     workspaceRootPath: undefined,
     ...overrides,
     timelineRows,
   };
 }
 
-function renderTimelineRows(args: ThreadTimelineRowsFixtureArgs): RenderResult {
-  return render(<ThreadTimelineRows {...threadTimelineRowsProps(args)} />);
+function renderTimelineRows(
+  args: ThreadTimelineRowsFixtureArgs,
+): ThreadTimelineRowsRenderResult {
+  const harness = createQueryClientTestHarness();
+  const view = render(
+    <ThreadTimelineRows {...threadTimelineRowsProps(args)} />,
+    {
+      wrapper: harness.wrapper,
+    },
+  );
+  return Object.assign(view, { queryClient: harness.queryClient });
 }
 
 function rerenderTimelineRows({
@@ -115,6 +133,7 @@ function withElementScrollMetrics(run: () => void): void {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("ThreadTimelineRows", () => {
@@ -240,146 +259,194 @@ describe("ThreadTimelineRows", () => {
     ).toBeTruthy();
   });
 
-  it("requests lazy turn details when expanding a turn summary", () => {
-    const onLoadTurnSummaryRows = vi.fn();
+  it("requests lazy turn details when expanding a turn summary", async () => {
+    let requestCount = 0;
+    const requestUrlRef: RequestUrlRef = { current: null };
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/timeline/turn-summary-details",
+        handler: (request) => {
+          requestCount += 1;
+          requestUrlRef.current = new URL(request.url);
+          return jsonResponse({
+            rows: [
+              conversationRow({
+                id: "turn-detail-message",
+                sourceSeqStart: 11,
+                text: "Loaded turn details",
+              }),
+            ],
+          });
+        },
+      },
+    ]);
     const view = renderTimelineRows({
       timelineRows: [turnRow()],
-      overrides: {
-        onLoadTurnSummaryRows,
-      },
     });
 
     fireEvent.click(screen.getByRole("button"));
-    expect(onLoadTurnSummaryRows).toHaveBeenCalled();
-    expect(onLoadTurnSummaryRows).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "turn-summary-1",
-        sourceSeqStart: 10,
-        sourceSeqEnd: 10,
-      }),
-    );
-
-    rerenderTimelineRows({
-      view,
-      timelineRows: [turnRow()],
-      overrides: {
-        onLoadTurnSummaryRows,
-      },
-    });
-
     expect(view.container.textContent ?? "").toContain(
       "Loading turn details...",
     );
+
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain("Loaded turn details");
+    });
+    expect(requestCount).toBe(1);
+    const requestUrl = requestUrlRef.current;
+    if (requestUrl === null) {
+      throw new Error("Expected turn-summary detail request URL.");
+    }
+    expect(requestUrl.searchParams.get("turnId")).toBe("turn-1");
+    expect(requestUrl.searchParams.get("sourceSeqStart")).toBe("10");
+    expect(requestUrl.searchParams.get("sourceSeqEnd")).toBe("10");
+    expect(requestUrl.searchParams.get("managerTimelineView")).toBeNull();
   });
 
-  it("retries lazy turn details from the error state", () => {
-    const onLoadTurnSummaryRows = vi.fn();
+  it("retries lazy turn details from the error state", async () => {
+    let requestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/timeline/turn-summary-details",
+        handler: () => {
+          requestCount += 1;
+          if (requestCount === 1) {
+            return jsonResponse({ message: "failed" }, { status: 500 });
+          }
+          return jsonResponse({
+            rows: [
+              conversationRow({
+                id: "retry-detail-message",
+                sourceSeqStart: 11,
+                text: "Retried turn details",
+              }),
+            ],
+          });
+        },
+      },
+    ]);
     const view = renderTimelineRows({
       timelineRows: [turnRow()],
-      overrides: {
-        onLoadTurnSummaryRows,
-      },
     });
 
     fireEvent.click(screen.getByRole("button"));
-    expect(onLoadTurnSummaryRows).toHaveBeenCalled();
-    onLoadTurnSummaryRows.mockClear();
 
-    rerenderTimelineRows({
-      view,
-      timelineRows: [turnRow()],
-      overrides: {
-        erroredTurnSummaryIds: new Set(["turn-summary-1"]),
-        onLoadTurnSummaryRows,
-      },
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain(
+        "Failed to load turn details.",
+      );
     });
-
-    expect(view.container.textContent ?? "").toContain(
-      "Failed to load turn details.",
-    );
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain(
+        "Retried turn details",
+      );
+    });
+    expect(requestCount).toBe(2);
   });
 
-  it("reloads lazy turn details after the loaded-row identity changes", () => {
-    const onLoadTurnSummaryRows = vi.fn();
+  it("keys lazy turn details by manager timeline view", async () => {
+    const requestedViews: string[] = [];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/timeline/turn-summary-details",
+        handler: (request) => {
+          const url = new URL(request.url);
+          const requestedView =
+            url.searchParams.get("managerTimelineView") ?? "conversation";
+          requestedViews.push(requestedView);
+          return jsonResponse({
+            rows: [
+              conversationRow({
+                id: `${requestedView}-detail-message`,
+                sourceSeqStart: 11,
+                text:
+                  requestedView === "standard"
+                    ? "Standard view details"
+                    : "Conversation view details",
+              }),
+            ],
+          });
+        },
+      },
+    ]);
     const view = renderTimelineRows({
       timelineRows: [turnRow()],
-      overrides: {
-        onLoadTurnSummaryRows,
-        turnSummaryRowsIdentity: "thread-1:conversation",
-      },
     });
 
-    const turnButton = screen.getByRole("button", {
-      name: /Worked for\s*4s/u,
+    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain(
+        "Conversation view details",
+      );
     });
-    fireEvent.click(turnButton);
-    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(1);
 
     rerenderTimelineRows({
       view,
       timelineRows: [turnRow()],
       overrides: {
-        onLoadTurnSummaryRows,
-        turnSummaryRowsIdentity: "thread-1:conversation",
-        turnSummaryRowsById: {
-          "turn-summary-1": [
-            conversationRow({
-              id: "conversation-detail-1",
-              text: "Conversation view details",
-            }),
-          ],
-        },
+        managerTimelineView: "standard",
       },
     });
-    expect(view.container.textContent ?? "").toContain(
+
+    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain(
+        "Standard view details",
+      );
+    });
+
+    expect(requestedViews).toEqual(["conversation", "standard"]);
+    expect(view.container.textContent ?? "").not.toContain(
       "Conversation view details",
     );
+  });
 
-    fireEvent.click(turnButton);
-    expect(turnButton.getAttribute("aria-expanded")).toBe("false");
-
-    rerenderTimelineRows({
-      view,
-      timelineRows: [turnRow()],
-      overrides: {
-        onLoadTurnSummaryRows,
-        turnSummaryRowsIdentity: "thread-1:standard",
-      },
-    });
-
-    const standardTurnButton = screen.getByRole("button", {
-      name: /Worked for\s*4s/u,
-    });
-    fireEvent.click(standardTurnButton);
-    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(2);
-    expect(view.container.textContent ?? "").toContain(
-      "Loading turn details...",
-    );
-
-    rerenderTimelineRows({
-      view,
-      timelineRows: [turnRow()],
-      overrides: {
-        onLoadTurnSummaryRows,
-        turnSummaryRowsIdentity: "thread-1:standard",
-        turnSummaryRowsById: {
-          "turn-summary-1": [
-            conversationRow({
-              id: "standard-detail-1",
-              text: "Standard view details",
-            }),
-          ],
+  it("reloads lazy turn details after the source sequence range changes", async () => {
+    const requestedSourceSeqEnds: string[] = [];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/timeline/turn-summary-details",
+        handler: (request) => {
+          const url = new URL(request.url);
+          const sourceSeqEnd = url.searchParams.get("sourceSeqEnd") ?? "";
+          requestedSourceSeqEnds.push(sourceSeqEnd);
+          return jsonResponse({
+            rows: [
+              conversationRow({
+                id: `seq-${sourceSeqEnd}-detail-message`,
+                sourceSeqStart: 11,
+                text: `Details through seq ${sourceSeqEnd}`,
+              }),
+            ],
+          });
         },
       },
+    ]);
+    const view = renderTimelineRows({
+      timelineRows: [turnRow()],
     });
-    expect(view.container.textContent ?? "").toContain("Standard view details");
-    expect(view.container.textContent ?? "").not.toContain(
-      "Loading turn details...",
-    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain(
+        "Details through seq 10",
+      );
+    });
+
+    rerenderTimelineRows({
+      view,
+      timelineRows: [turnRow({ sourceSeqEnd: 20 })],
+    });
+
+    await waitFor(() => {
+      expect(view.container.textContent ?? "").toContain(
+        "Details through seq 20",
+      );
+    });
+    expect(requestedSourceSeqEnds).toEqual(["10", "20"]);
   });
 
   it("updates expanded pending command output when source sequence advances", () => {
@@ -445,45 +512,52 @@ describe("ThreadTimelineRows", () => {
     // sequence of bundles and leaves instead of one step-summary,
     // exactly the bug seen on the live timeline. See `timeline-view.ts`
     // `closeOpenStepAtBoundary` vs `flushOpenStepAsBundles`.
-    renderTimelineRows({
+    const view = renderTimelineRows({
       timelineRows: [turnRow()],
-      overrides: {
-        turnSummaryRowsById: {
-          "turn-summary-1": [
-            commandRow({
-              id: "nested-tool-1",
-              command: "rg pattern",
-              sourceSeqStart: 11,
-            }),
-            commandRow({
-              id: "nested-tool-2",
-              command: "pnpm test",
-              sourceSeqStart: 12,
-            }),
-            fileChangeRow({
-              id: "nested-edit-1",
-              path: "src/a.ts",
-              sourceSeqStart: 13,
-            }),
-            fileChangeRow({
-              id: "nested-edit-2",
-              path: "src/b.ts",
-              sourceSeqStart: 14,
-            }),
-            commandRow({
-              id: "nested-tool-3",
-              command: "pnpm typecheck",
-              sourceSeqStart: 15,
-            }),
-            fileChangeRow({
-              id: "nested-edit-3",
-              path: "src/c.ts",
-              sourceSeqStart: 16,
-            }),
-          ],
-        },
-      },
     });
+    view.queryClient.setQueryData(
+      threadTimelineTurnSummaryDetailsQueryKey({
+        managerTimelineView: undefined,
+        sourceSeqEnd: 10,
+        sourceSeqStart: 10,
+        threadId: "thread-1",
+        turnId: "turn-1",
+      }),
+      {
+        rows: [
+          commandRow({
+            id: "nested-tool-1",
+            command: "rg pattern",
+            sourceSeqStart: 11,
+          }),
+          commandRow({
+            id: "nested-tool-2",
+            command: "pnpm test",
+            sourceSeqStart: 12,
+          }),
+          fileChangeRow({
+            id: "nested-edit-1",
+            path: "src/a.ts",
+            sourceSeqStart: 13,
+          }),
+          fileChangeRow({
+            id: "nested-edit-2",
+            path: "src/b.ts",
+            sourceSeqStart: 14,
+          }),
+          commandRow({
+            id: "nested-tool-3",
+            command: "pnpm typecheck",
+            sourceSeqStart: 15,
+          }),
+          fileChangeRow({
+            id: "nested-edit-3",
+            path: "src/c.ts",
+            sourceSeqStart: 16,
+          }),
+        ],
+      },
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
 
@@ -546,5 +620,4 @@ describe("ThreadTimelineRows", () => {
       expect(scrollArea.scrollTop).toBe(500);
     });
   });
-
 });

@@ -7,6 +7,7 @@ import {
   allThreadQueuedMessagesQueryKeyPrefix,
   allThreadQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
+  allThreadTimelineTurnSummaryDetailsQueryKeyPrefix,
   localPathExistenceQueryKeyPrefix,
   projectPathsQueryKeyPrefix,
   projectPromptHistoryQueryKey,
@@ -21,6 +22,7 @@ import {
   threadQueryKey,
   threadsQueryKey,
   threadTimelineQueryKeyPrefix,
+  threadTimelineTurnSummaryDetailsQueryKeyPrefix,
 } from "./queries/query-keys";
 
 interface ProjectScopedInvalidationArgs {
@@ -92,8 +94,14 @@ export function getThreadTimelineInvalidationQueryKeys({
   threadId,
 }: ThreadScopedInvalidationArgs): QueryKey[] {
   return threadId
-    ? [threadTimelineQueryKeyPrefix(threadId)]
-    : [allThreadTimelineQueryKeyPrefix()];
+    ? [
+        threadTimelineQueryKeyPrefix(threadId),
+        threadTimelineTurnSummaryDetailsQueryKeyPrefix(threadId),
+      ]
+    : [
+        allThreadTimelineQueryKeyPrefix(),
+        allThreadTimelineTurnSummaryDetailsQueryKeyPrefix(),
+      ];
 }
 
 export function getThreadQueueContentInvalidationQueryKeys({

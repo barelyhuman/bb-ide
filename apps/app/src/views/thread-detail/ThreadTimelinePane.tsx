@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
+import type { ManagerTimelineView, TimelineRow } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
 import { ConversationTimeline } from "@/components/ui/conversation.js";
 import { HeightTransition } from "@/components/ui/height-transition.js";
@@ -34,10 +34,8 @@ interface ThreadTimelinePaneProps {
   isLoadingOlderTimelineRows: boolean;
   isThreadTimelinePending: boolean;
   timelineError: boolean;
-  loadingTurnSummaryIds: ReadonlySet<string>;
-  erroredTurnSummaryIds: ReadonlySet<string>;
+  managerTimelineView?: ManagerTimelineView;
   onLoadOlderRows: () => void;
-  onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -48,8 +46,6 @@ interface ThreadTimelinePaneProps {
   timelineRows: TimelineRow[];
   threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
-  turnSummaryRowsIdentity: string;
-  turnSummaryRowsById: Record<string, TimelineRow[]>;
   unreadDividerAutoScroll: boolean;
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
   workspaceRootPath: string | undefined;
@@ -135,10 +131,8 @@ export function ThreadTimelinePane({
   isLoadingOlderTimelineRows,
   isThreadTimelinePending,
   timelineError,
-  loadingTurnSummaryIds,
-  erroredTurnSummaryIds,
+  managerTimelineView,
   onLoadOlderRows,
-  onLoadTurnSummaryRows,
   onOpenLink,
   onOpenLocalFileLink,
   onTitleAction,
@@ -149,8 +143,6 @@ export function ThreadTimelinePane({
   timelineRows,
   threadId,
   threadRuntimeDisplayStatus,
-  turnSummaryRowsIdentity,
-  turnSummaryRowsById,
   unreadDividerAutoScroll,
   unreadDividerPlacement,
   workspaceRootPath,
@@ -202,9 +194,7 @@ export function ThreadTimelinePane({
             />
           ) : timelineRowsWithPendingStop.length > 0 ? (
             <ThreadTimelineRows
-              loadingTurnSummaryIds={loadingTurnSummaryIds}
-              erroredTurnSummaryIds={erroredTurnSummaryIds}
-              onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+              managerTimelineView={managerTimelineView}
               onOpenLink={onOpenLink}
               onOpenLocalFileLink={onOpenLocalFileLink}
               onTitleAction={onTitleAction}
@@ -212,9 +202,8 @@ export function ThreadTimelinePane({
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}
               timelineRows={timelineRowsWithPendingStop}
+              threadId={threadId}
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
-              turnSummaryRowsIdentity={turnSummaryRowsIdentity}
-              turnSummaryRowsById={turnSummaryRowsById}
               unreadDividerAutoScroll={unreadDividerAutoScroll}
               unreadDividerPlacement={unreadDividerPlacement}
               workspaceRootPath={workspaceRootPath}

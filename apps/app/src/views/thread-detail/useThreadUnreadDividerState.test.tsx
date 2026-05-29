@@ -79,13 +79,9 @@ function ThreadUnreadTimelineHarness({
 
   return (
     <ThreadTimelineRows
-      erroredTurnSummaryIds={new Set()}
-      loadingTurnSummaryIds={new Set()}
-      onLoadTurnSummaryRows={() => {}}
+      threadId={thread?.id}
       threadRuntimeDisplayStatus="idle"
       timelineRows={timelineRows}
-      turnSummaryRowsById={{}}
-      turnSummaryRowsIdentity="thread-unread-test"
       unreadDividerAutoScroll={unreadDividerState.autoScroll}
       unreadDividerPlacement={unreadDividerState.placement}
       workspaceRootPath={undefined}

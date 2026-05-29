@@ -1,6 +1,5 @@
 import {
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -23,7 +22,6 @@ import type {
   ThreadStorageFileListResponse,
   ThreadStoragePathListResponse,
   ThreadTimelineResponse,
-  TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
   AppDetail,
   AppSummary,
@@ -59,6 +57,8 @@ import {
   threadAppsQueryKey,
   threadHostFilePreviewQueryKey,
   threadTimelineQueryKey,
+  threadTimelineTurnSummaryDetailsQueryKey,
+  type ThreadTimelineTurnSummaryDetailsQueryIdentity,
   type ArchivedThreadsKindFilter,
 } from "./query-keys";
 import { ARCHIVED_THREADS_PAGE_SIZE } from "./archived-threads-page-size";
@@ -87,6 +87,8 @@ interface ThreadDetailBootstrapQueryOptions extends QueryOptions {
 interface ThreadTimelineQueryOptions extends QueryOptions {
   managerTimelineView?: ManagerTimelineView;
 }
+
+type ThreadTimelineTurnSummaryDetailsQueryOptions = QueryOptions;
 
 type HostList = Host[];
 type HostListQueryData = HostList | undefined;
@@ -144,10 +146,6 @@ interface BuildThreadSubsetListFiltersArgs {
 }
 
 type ThreadListItem = ThreadListResponse[number];
-
-interface ThreadTimelineTurnSummaryDetailsMutationRequest extends TimelineTurnSummaryDetailsRequest {
-  id: string;
-}
 
 function requireThreadId(id: string, hookName: string): string {
   if (!id) {
@@ -726,16 +724,33 @@ export function useThreadTimeline(
   });
 }
 
-export function useThreadTimelineTurnSummaryDetails() {
-  return useMutation({
+export function useThreadTimelineTurnSummaryDetails(
+  identity: ThreadTimelineTurnSummaryDetailsQueryIdentity,
+  options?: ThreadTimelineTurnSummaryDetailsQueryOptions,
+) {
+  return useQuery<TimelineTurnSummaryDetailsResponse>({
+    queryKey: threadTimelineTurnSummaryDetailsQueryKey(identity),
+    queryFn: () =>
+      api.getThreadTimelineTurnSummaryDetails({
+        id: requireThreadId(
+          identity.threadId,
+          "useThreadTimelineTurnSummaryDetails",
+        ),
+        managerTimelineView: identity.managerTimelineView,
+        sourceSeqEnd: identity.sourceSeqEnd,
+        sourceSeqStart: identity.sourceSeqStart,
+        turnId: identity.turnId,
+      }),
+    enabled:
+      (options?.enabled ?? true) &&
+      Boolean(identity.threadId) &&
+      Boolean(identity.turnId),
     meta: {
       errorMessage: "Failed to load turn summary details.",
       showErrorToast: false,
     },
-    mutationFn: (
-      request: ThreadTimelineTurnSummaryDetailsMutationRequest,
-    ): Promise<TimelineTurnSummaryDetailsResponse> =>
-      api.getThreadTimelineTurnSummaryDetails(request),
+    refetchOnMount: options?.refetchOnMount ?? true,
+    staleTime: options?.staleTime ?? Infinity,
   });
 }
 

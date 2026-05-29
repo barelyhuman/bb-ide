@@ -63,7 +63,6 @@ import {
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { useGitDiffPanel } from "@/components/secondary-panel/git-diff/useGitDiffPanel";
-import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTurnSummaryRows";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import {
   ThreadDetailPromptArea,
@@ -785,16 +784,6 @@ export function ThreadDetailView() {
       return { items: activeItems };
     }, [isManagerThread, projectThreadSubsetQuery.data]);
   const isThreadTimelinePending = timelineLoading && timelineRows.length === 0;
-  const {
-    erroredTurnSummaryIds,
-    handleLoadTurnSummaryRows,
-    loadingTurnSummaryIds,
-    turnSummaryRowsById,
-  } = useThreadDetailTurnSummaryRows({
-    managerTimelineView,
-    timelineRows,
-    threadId,
-  });
   useThreadReadTracking({
     markThreadRead,
     thread,
@@ -1017,9 +1006,6 @@ export function ThreadDetailView() {
       </PageShell>
     );
   }
-  const turnSummaryRowsIdentity = `${thread.id}:${
-    managerTimelineView ?? "default"
-  }`;
   const hasAssignableManager = managerSelectorOptions.some(
     (option) => option.value !== "none",
   );
@@ -1350,10 +1336,8 @@ export function ThreadDetailView() {
           isLoadingOlderTimelineRows,
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
-          loadingTurnSummaryIds,
-          erroredTurnSummaryIds,
+          managerTimelineView,
           onLoadOlderRows: loadOlderTimelineRows,
-          onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
           onOpenLink: handleOpenTimelineLink,
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
           onTitleAction: handleTimelineTitleAction,
@@ -1375,8 +1359,6 @@ export function ThreadDetailView() {
           stopRequestedAt: thread.stopRequestedAt,
           threadId: thread.id,
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
-          turnSummaryRowsIdentity,
-          turnSummaryRowsById,
           unreadDividerAutoScroll: unreadDividerState.autoScroll,
           unreadDividerPlacement: unreadDividerState.placement,
           workspaceRootPath: environment?.path ?? undefined,

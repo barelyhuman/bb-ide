@@ -9,7 +9,11 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
+import type {
+  ManagerTimelineView,
+  TimelineRow,
+  TimelineTurnRow,
+} from "@bb/server-contract";
 import {
   assertNever,
   buildTimelineActivityIntentTitles,
@@ -62,9 +66,12 @@ import {
   timelineRowsSignature,
 } from "./timelineRowSignatures.js";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
+import { useThreadTimelineTurnSummaryDetails } from "@/hooks/queries/thread-queries";
+import type { ThreadTimelineTurnSummaryDetailsQueryIdentity } from "@/hooks/queries/query-keys";
 
 export interface ThreadTimelineRowsProps {
-  erroredTurnSummaryIds: ReadonlySet<string>;
+  /** @deprecated Turn-summary detail errors are owned by React Query. */
+  erroredTurnSummaryIds?: ReadonlySet<string>;
   /**
    * Row ids to start expanded on first render. Non-recursive: an id only
    * applies to the row it names — bundle/step/turn children are unaffected.
@@ -72,8 +79,11 @@ export interface ThreadTimelineRowsProps {
    * a running runtime status.
    */
   initialExpanded?: ReadonlySet<string>;
-  loadingTurnSummaryIds: ReadonlySet<string>;
-  onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
+  /** @deprecated Turn-summary detail loading state is owned by React Query. */
+  loadingTurnSummaryIds?: ReadonlySet<string>;
+  managerTimelineView?: ManagerTimelineView;
+  /** @deprecated Turn-summary detail loading is owned by React Query. */
+  onLoadTurnSummaryRows?: (entry: TimelineTurnRow) => void;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -81,9 +91,12 @@ export interface ThreadTimelineRowsProps {
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType?: ThreadTimelineTheme;
   timelineRows: TimelineRow[];
+  threadId?: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
-  turnSummaryRowsIdentity: string;
-  turnSummaryRowsById: Record<string, TimelineRow[]>;
+  /** @deprecated Timeline view identity is derived from threadId and managerTimelineView. */
+  turnSummaryRowsIdentity?: string;
+  /** @deprecated Turn-summary detail rows are owned by React Query. */
+  turnSummaryRowsById?: Record<string, TimelineRow[]>;
   /** Omit for standalone initial-unread rendering, pass false for live updates. */
   unreadDividerAutoScroll?: boolean;
   unreadDividerPlacement?: ThreadTimelineUnreadDividerPlacement | null;
@@ -104,7 +117,7 @@ export interface ThreadTimelineRowsProps {
  */
 interface TimelineRendererStaticContextValue {
   getViewRows: GetTimelineViewRows;
-  onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
+  managerTimelineView: ManagerTimelineView | undefined;
   onOpenLink: ThreadTimelineLinkHandler | undefined;
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
   onTitleAction: TimelineTitleActionResolver | undefined;
@@ -112,19 +125,17 @@ interface TimelineRendererStaticContextValue {
   resolveSegmentLinkHref: TimelineTitleLinkResolver | undefined;
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
+  threadId: string | undefined;
   workspaceRootPath: string | undefined;
 }
 
 /**
- * Volatile row/turn state. Changes when a turn summary loads, errors, or
- * auto-expansion is recomputed. Only consumed by row components that need
- * these flags so other rows do not rerender on unrelated turn updates.
+ * Volatile row/turn state. Changes when auto-expansion is recomputed. Only
+ * consumed by row components that need this flag so other rows do not rerender
+ * on unrelated turn updates.
  */
 interface TimelineTurnStateContextValue {
   autoExpandedRowIds: ReadonlySet<string>;
-  loadingTurnSummaryIds: ReadonlySet<string>;
-  erroredTurnSummaryIds: ReadonlySet<string>;
-  turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
 interface TimelineRowsListProps {
@@ -169,6 +180,13 @@ interface TimelineExpandableBodyProps {
   row: ThreadTimelineViewRow;
 }
 
+interface TurnRowBodyProps {
+  compactActivityIntents: boolean;
+  row: TimelineViewTurnRow;
+}
+
+type LazyTurnRowBodyProps = TurnRowBodyProps;
+
 interface TimelineSystemDetailBlockProps {
   detail: string;
   streaming: boolean;
@@ -189,11 +207,6 @@ interface IsUnreadDividerCandidateAfterCutoffArgs {
   row: ThreadTimelineViewRow;
 }
 
-interface RequestLazyTurnRowsArgs {
-  onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
-  row: TimelineViewTurnRow;
-}
-
 interface ActiveSummaryTreatmentArgs {
   activeLatestBundleId: string | null;
   row: ThreadTimelineViewRow;
@@ -210,6 +223,18 @@ interface TimelineRowTitleOptionsArgs extends ActiveSummaryTreatmentArgs {}
 interface TimelineRowTitleRenderStateCache {
   key: string;
   state: TimelineRowTitleRenderState;
+}
+
+interface BuildTurnSummaryDetailsIdentityArgs {
+  managerTimelineView: ManagerTimelineView | undefined;
+  row: TimelineViewTurnRow;
+  threadId: string | undefined;
+}
+
+interface TimelineRowsOwnerKeyArgs {
+  managerTimelineView: ManagerTimelineView | undefined;
+  threadId: string | undefined;
+  timelineRows: readonly TimelineRow[];
 }
 
 type TimelineConversationViewRow = Extract<
@@ -245,11 +270,6 @@ type TimelineRowsListItem =
 
 interface ConversationRowProps {
   row: TimelineConversationViewRow;
-}
-
-interface TurnRowBodyProps {
-  compactActivityIntents: boolean;
-  row: TimelineViewTurnRow;
 }
 
 const NESTED_ROWS_GROUP_LINE_CLASS =
@@ -397,28 +417,27 @@ function useStableReadonlySet(
   return valuesRef.current;
 }
 
-function toLazyTurnRequest(row: TimelineViewTurnRow): TimelineTurnRow {
+function buildTurnSummaryDetailsIdentity({
+  managerTimelineView,
+  row,
+  threadId,
+}: BuildTurnSummaryDetailsIdentityArgs): ThreadTimelineTurnSummaryDetailsQueryIdentity {
   return {
-    id: row.id,
-    threadId: row.threadId,
-    turnId: row.turnId,
-    sourceSeqStart: row.sourceSeqStart,
+    managerTimelineView,
     sourceSeqEnd: row.sourceSeqEnd,
-    startedAt: row.startedAt,
-    createdAt: row.createdAt,
-    kind: "turn",
-    status: row.status,
-    summaryCount: row.summaryCount,
-    completedAt: row.completedAt,
-    children: null,
+    sourceSeqStart: row.sourceSeqStart,
+    threadId: threadId ?? row.threadId,
+    turnId: row.turnId,
   };
 }
 
-function requestLazyTurnRows({
-  onLoadTurnSummaryRows,
-  row,
-}: RequestLazyTurnRowsArgs): void {
-  onLoadTurnSummaryRows(toLazyTurnRequest(row));
+function timelineRowsOwnerKey({
+  managerTimelineView,
+  threadId,
+  timelineRows,
+}: TimelineRowsOwnerKeyArgs): string {
+  const ownerThreadId = threadId ?? timelineRows[0]?.threadId ?? "";
+  return `${ownerThreadId}:${managerTimelineView ?? "default"}`;
 }
 
 function useTimelineViewRowsCache(): GetTimelineViewRows {
@@ -736,48 +755,66 @@ function TimelineExpandableBody({
 }
 
 function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
-  const { getViewRows, onLoadTurnSummaryRows } =
+  if (row.children === null) {
+    return (
+      <LazyTurnRowBody
+        compactActivityIntents={compactActivityIntents}
+        row={row}
+      />
+    );
+  }
+
+  return (
+    <TimelineRowsList
+      rows={row.children}
+      scopeActive={false}
+      compactActivityIntents={compactActivityIntents}
+      spacing="nested"
+      className={NESTED_ROWS_GROUP_LINE_CLASS}
+      unreadDividerAutoScroll={false}
+      unreadDividerPlacement={null}
+    />
+  );
+}
+
+function LazyTurnRowBody({
+  compactActivityIntents,
+  row,
+}: LazyTurnRowBodyProps) {
+  const { getViewRows, managerTimelineView, threadId } =
     useTimelineRendererStaticContext();
-  const { loadingTurnSummaryIds, erroredTurnSummaryIds, turnSummaryRowsById } =
-    useTimelineTurnStateContext();
-  const loadedRows = turnSummaryRowsById[row.id];
-  const hasInlineChildren = row.children !== null;
-  const hasLoadedRows = loadedRows !== undefined;
-  const rows = hasInlineChildren
-    ? row.children
-    : loadedRows
-      ? // Lazy turn-detail children belong to a completed turn — flag the
-        // scope as closed so trailing work in the children collapses into a
-        // step-summary at end-of-input, matching the inline-children path.
-        getViewRows(loadedRows, { closedScope: true })
-      : null;
-  const isLoading = loadingTurnSummaryIds.has(row.id);
-  const isError = erroredTurnSummaryIds.has(row.id);
-  const handleRetry = useCallback((): void => {
-    requestLazyTurnRows({
-      onLoadTurnSummaryRows,
-      row,
-    });
-  }, [onLoadTurnSummaryRows, row]);
-
-  useEffect(() => {
-    if (hasInlineChildren || hasLoadedRows || isLoading || isError) {
-      return;
-    }
-    requestLazyTurnRows({
-      onLoadTurnSummaryRows,
-      row,
-    });
-  }, [
-    hasLoadedRows,
-    hasInlineChildren,
+  const identity = useMemo<ThreadTimelineTurnSummaryDetailsQueryIdentity>(
+    () =>
+      buildTurnSummaryDetailsIdentity({
+        managerTimelineView,
+        row,
+        threadId,
+      }),
+    [
+      managerTimelineView,
+      row.sourceSeqEnd,
+      row.sourceSeqStart,
+      row.threadId,
+      row.turnId,
+      threadId,
+    ],
+  );
+  const {
+    data: detail,
     isError,
-    isLoading,
-    onLoadTurnSummaryRows,
-    row,
-  ]);
+    refetch,
+  } = useThreadTimelineTurnSummaryDetails(identity);
+  const handleRetry = useCallback((): void => {
+    void refetch();
+  }, [refetch]);
+  const rows = detail
+    ? // Lazy turn-detail children belong to a completed turn — flag the
+      // scope as closed so trailing work in the children collapses into a
+      // step-summary at end-of-input, matching the inline-children path.
+      getViewRows(detail.rows, { closedScope: true })
+    : null;
 
-  if (isError) {
+  if (!rows && isError) {
     return (
       <div className="flex items-center gap-2 text-sm text-destructive">
         <span>Failed to load turn details.</span>
@@ -887,35 +924,9 @@ function TimelineExpandableRowView({
   horizontalPadding,
   row,
 }: TimelineExpandableRowViewProps) {
-  const { onLoadTurnSummaryRows, onTitleAction, resolveSegmentLinkHref } =
+  const { onTitleAction, resolveSegmentLinkHref } =
     useTimelineRendererStaticContext();
-  const {
-    autoExpandedRowIds,
-    loadingTurnSummaryIds,
-    erroredTurnSummaryIds,
-    turnSummaryRowsById,
-  } = useTimelineTurnStateContext();
-
-  const handleBeforeExpand = useCallback((): void => {
-    if (
-      row.kind === "turn" &&
-      row.children === null &&
-      !turnSummaryRowsById[row.id] &&
-      !loadingTurnSummaryIds.has(row.id) &&
-      !erroredTurnSummaryIds.has(row.id)
-    ) {
-      requestLazyTurnRows({
-        onLoadTurnSummaryRows,
-        row,
-      });
-    }
-  }, [
-    erroredTurnSummaryIds,
-    loadingTurnSummaryIds,
-    onLoadTurnSummaryRows,
-    row,
-    turnSummaryRowsById,
-  ]);
+  const { autoExpandedRowIds } = useTimelineTurnStateContext();
   const renderBody = useCallback(
     () => (
       <TimelineExpandableBody
@@ -932,7 +943,6 @@ function TimelineExpandableRowView({
       title={title}
       horizontalPadding={horizontalPadding}
       autoExpanded={autoExpandedRowIds.has(row.id)}
-      onBeforeExpand={handleBeforeExpand}
       onTitleAction={onTitleAction}
       resolveSegmentLinkHref={resolveSegmentLinkHref}
       renderBody={renderBody}
@@ -1060,15 +1070,15 @@ function TimelineRowsList({
 }
 
 function ThreadTimelineRowsComponent(props: ThreadTimelineRowsProps) {
-  return (
-    <ThreadTimelineRowsForIdentity
-      key={props.turnSummaryRowsIdentity}
-      {...props}
-    />
-  );
+  const ownerKey = timelineRowsOwnerKey({
+    managerTimelineView: props.managerTimelineView,
+    threadId: props.threadId,
+    timelineRows: props.timelineRows,
+  });
+  return <ThreadTimelineRowsForTimelineView key={ownerKey} {...props} />;
 }
 
-function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
+function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
   const getViewRows = useTimelineViewRowsCache();
   const rows = useMemo(
     () => getViewRows(props.timelineRows),
@@ -1090,29 +1100,6 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
     return ids;
   }, [rows, scopeActive, props.initialExpanded]);
   const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
-  const loadingTurnSummaryIds = useStableReadonlySet(
-    props.loadingTurnSummaryIds,
-  );
-  const erroredTurnSummaryIds = useStableReadonlySet(
-    props.erroredTurnSummaryIds,
-  );
-  const onLoadTurnSummaryRows = props.onLoadTurnSummaryRows;
-  const requestedTurnSummaryRowIdsRef = useRef(new Set<string>());
-  useEffect(() => {
-    for (const rowId of erroredTurnSummaryIds) {
-      requestedTurnSummaryRowIdsRef.current.delete(rowId);
-    }
-  }, [erroredTurnSummaryIds]);
-  const handleLoadTurnSummaryRows = useCallback(
-    (entry: TimelineTurnRow): void => {
-      if (requestedTurnSummaryRowIdsRef.current.has(entry.id)) {
-        return;
-      }
-      requestedTurnSummaryRowIdsRef.current.add(entry.id);
-      onLoadTurnSummaryRows(entry);
-    },
-    [onLoadTurnSummaryRows],
-  );
   const projectId = props.projectId;
   const resolveSegmentLinkHref = useMemo<
     TimelineTitleLinkResolver | undefined
@@ -1132,7 +1119,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
   const staticContextValue = useMemo<TimelineRendererStaticContextValue>(
     () => ({
       getViewRows,
-      onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
+      managerTimelineView: props.managerTimelineView,
       onOpenLink: props.onOpenLink,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
@@ -1140,17 +1127,19 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       resolveSegmentLinkHref,
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
       themeType,
+      threadId: props.threadId,
       workspaceRootPath: props.workspaceRootPath,
     }),
     [
       getViewRows,
-      handleLoadTurnSummaryRows,
+      props.managerTimelineView,
       props.onOpenLink,
       props.onOpenLocalFileLink,
       props.onTitleAction,
       projectId,
       resolveSegmentLinkHref,
       props.resolveUserAttachmentImageSrc,
+      props.threadId,
       props.workspaceRootPath,
       themeType,
     ],
@@ -1158,16 +1147,8 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
   const turnStateContextValue = useMemo<TimelineTurnStateContextValue>(
     () => ({
       autoExpandedRowIds,
-      erroredTurnSummaryIds,
-      loadingTurnSummaryIds,
-      turnSummaryRowsById: props.turnSummaryRowsById,
     }),
-    [
-      autoExpandedRowIds,
-      erroredTurnSummaryIds,
-      loadingTurnSummaryIds,
-      props.turnSummaryRowsById,
-    ],
+    [autoExpandedRowIds],
   );
 
   return (

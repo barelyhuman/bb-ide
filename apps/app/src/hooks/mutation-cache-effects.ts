@@ -11,6 +11,7 @@ import {
   threadStorageFilesForThreadQueryKeyPrefix,
   threadStoragePathsForThreadQueryKeyPrefix,
   threadTimelineQueryKeyPrefix,
+  threadTimelineTurnSummaryDetailsQueryKeyPrefix,
 } from "./queries/query-keys";
 import type {
   ProjectArg,
@@ -262,6 +263,9 @@ export function removeThreadScopedQueries({
   queryClient.removeQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.removeQueries({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
+  });
+  queryClient.removeQueries({
+    queryKey: threadTimelineTurnSummaryDetailsQueryKeyPrefix(threadId),
   });
   queryClient.removeQueries({
     queryKey: threadDefaultExecutionOptionsQueryKey(threadId),

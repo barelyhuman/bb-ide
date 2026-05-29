@@ -25,17 +25,12 @@ function renderLoadingTimelinePane(): RenderResult {
       isLoadingOlderTimelineRows={false}
       isThreadTimelinePending={true}
       timelineError={false}
-      loadingTurnSummaryIds={new Set()}
-      erroredTurnSummaryIds={new Set()}
       onLoadOlderRows={() => {}}
-      onLoadTurnSummaryRows={() => {}}
       showOngoingIndicator={false}
       stopRequestedAt={null}
       timelineRows={[]}
       threadId="thread-1"
       threadRuntimeDisplayStatus="idle"
-      turnSummaryRowsIdentity="thread-1:default"
-      turnSummaryRowsById={{}}
       unreadDividerAutoScroll={false}
       unreadDividerPlacement={null}
       workspaceRootPath={undefined}
@@ -78,17 +73,12 @@ describe("ThreadTimelinePane", () => {
         isLoadingOlderTimelineRows={false}
         isThreadTimelinePending={false}
         timelineError={false}
-        loadingTurnSummaryIds={new Set()}
-        erroredTurnSummaryIds={new Set()}
         onLoadOlderRows={() => {}}
-        onLoadTurnSummaryRows={() => {}}
         showOngoingIndicator={false}
         stopRequestedAt={null}
         timelineRows={[]}
         threadId="thread-1"
         threadRuntimeDisplayStatus="idle"
-        turnSummaryRowsIdentity="thread-1:default"
-        turnSummaryRowsById={{}}
         unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
         workspaceRootPath={undefined}
@@ -109,17 +99,12 @@ describe("ThreadTimelinePane", () => {
         isLoadingOlderTimelineRows={false}
         isThreadTimelinePending={false}
         timelineError={false}
-        loadingTurnSummaryIds={new Set()}
-        erroredTurnSummaryIds={new Set()}
         onLoadOlderRows={() => {}}
-        onLoadTurnSummaryRows={() => {}}
         showOngoingIndicator={false}
         stopRequestedAt={123}
         timelineRows={[]}
         threadId="thread-1"
         threadRuntimeDisplayStatus="active"
-        turnSummaryRowsIdentity="thread-1:default"
-        turnSummaryRowsById={{}}
         unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
         workspaceRootPath={undefined}
@@ -157,17 +142,12 @@ describe("ThreadTimelinePane", () => {
         isLoadingOlderTimelineRows={false}
         isThreadTimelinePending={false}
         timelineError={false}
-        loadingTurnSummaryIds={new Set()}
-        erroredTurnSummaryIds={new Set()}
         onLoadOlderRows={() => {}}
-        onLoadTurnSummaryRows={() => {}}
         showOngoingIndicator={false}
         stopRequestedAt={123}
         timelineRows={[confirmedStopRow]}
         threadId="thread-1"
         threadRuntimeDisplayStatus="idle"
-        turnSummaryRowsIdentity="thread-1:default"
-        turnSummaryRowsById={{}}
         unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
         workspaceRootPath={undefined}
