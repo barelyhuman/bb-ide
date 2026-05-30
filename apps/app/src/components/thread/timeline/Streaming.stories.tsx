@@ -8,15 +8,10 @@ export default {
 };
 
 const baseProps = {
-  loadingTurnSummaryIds: new Set<string>(),
-  erroredTurnSummaryIds: new Set<string>(),
-  onLoadTurnSummaryRows: () => {},
   // Active scope so the trailing row is the active-latest frontier and
   // auto-expands while streaming (matches production behavior on a running
   // thread).
   threadRuntimeDisplayStatus: "active" as const,
-  turnSummaryRowsIdentity: "story",
-  turnSummaryRowsById: {},
   workspaceRootPath: undefined,
 };
 

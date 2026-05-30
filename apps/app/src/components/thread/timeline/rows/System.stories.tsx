@@ -11,15 +11,10 @@ function TimelineStage({ children }: { children: React.ReactNode }) {
 }
 
 const baseProps = {
-  loadingTurnSummaryIds: new Set<string>(),
-  erroredTurnSummaryIds: new Set<string>(),
-  onLoadTurnSummaryRows: () => {},
   // projectId enables the thread-link resolver in `ThreadTimelineRows`, so
   // manager-assignment titles render as `<a>` links to the manager thread.
   projectId: "proj_gyz9przugq",
   threadRuntimeDisplayStatus: "idle" as const,
-  turnSummaryRowsIdentity: "story",
-  turnSummaryRowsById: {},
   workspaceRootPath: undefined,
 };
 

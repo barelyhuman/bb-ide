@@ -35,12 +35,7 @@ export default {
 };
 
 const baseProps = {
-  loadingTurnSummaryIds: new Set<string>(),
-  erroredTurnSummaryIds: new Set<string>(),
-  onLoadTurnSummaryRows: () => {},
   threadRuntimeDisplayStatus: "active" as const,
-  turnSummaryRowsIdentity: "story",
-  turnSummaryRowsById: {},
   workspaceRootPath: undefined,
 };
 
@@ -59,8 +54,8 @@ function PinnedTimelineStage({
   rows: readonly TimelineRow[];
   indicator: ReactNode;
   showIndicator: boolean;
-  // Threaded into `turnSummaryRowsIdentity` so consumers can observe the
-  // story re-mounting the row list each loop cycle if needed.
+  // Threaded into the React key so consumers can observe the story
+  // re-mounting the row list each loop cycle if needed.
   cycle?: number;
 }) {
   return (
@@ -84,7 +79,6 @@ function PinnedTimelineStage({
           <ThreadTimelineRows
             key={`cycle-${cycle}`}
             {...baseProps}
-            turnSummaryRowsIdentity={`story-cycle-${cycle}`}
             timelineRows={rows.slice()}
           />
           <HeightTransition visible={showIndicator}>{indicator}</HeightTransition>

@@ -29,12 +29,7 @@ function TimelineStage({ children }: TimelineStageProps) {
 }
 
 const baseProps: TimelineRowsBaseProps = {
-  loadingTurnSummaryIds: new Set<string>(),
-  erroredTurnSummaryIds: new Set<string>(),
-  onLoadTurnSummaryRows: () => {},
   threadRuntimeDisplayStatus: "idle",
-  turnSummaryRowsIdentity: "story",
-  turnSummaryRowsById: {},
   workspaceRootPath: undefined,
 };
 

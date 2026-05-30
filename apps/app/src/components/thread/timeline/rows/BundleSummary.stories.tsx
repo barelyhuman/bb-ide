@@ -11,15 +11,10 @@ function TimelineStage({ children }: { children: React.ReactNode }) {
 }
 
 const baseProps = {
-  loadingTurnSummaryIds: new Set<string>(),
-  erroredTurnSummaryIds: new Set<string>(),
-  onLoadTurnSummaryRows: () => {},
   // Idle scope — keeps the non-active-latest bundle rendering visible so
   // a regression in the muted-bundle path stays catchable. The story rows
   // expand bodies via `initialExpanded` instead of claiming active state.
   threadRuntimeDisplayStatus: "idle" as const,
-  turnSummaryRowsIdentity: "story",
-  turnSummaryRowsById: {},
   workspaceRootPath: undefined,
 };
 

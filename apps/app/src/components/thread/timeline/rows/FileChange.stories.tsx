@@ -15,12 +15,7 @@ function TimelineStage({ children }: { children: React.ReactNode }) {
 }
 
 const baseProps = {
-  loadingTurnSummaryIds: new Set<string>(),
-  erroredTurnSummaryIds: new Set<string>(),
-  onLoadTurnSummaryRows: () => {},
   threadRuntimeDisplayStatus: "idle" as const,
-  turnSummaryRowsIdentity: "story",
-  turnSummaryRowsById: {},
   workspaceRootPath: "/Users/michael/.bb-dev/worktrees/env_story/bb",
 };
 

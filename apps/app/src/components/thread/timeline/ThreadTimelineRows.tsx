@@ -12,7 +12,6 @@ import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type {
   ManagerTimelineView,
   TimelineRow,
-  TimelineTurnRow,
 } from "@bb/server-contract";
 import {
   assertNever,
@@ -70,8 +69,6 @@ import { useThreadTimelineTurnSummaryDetails } from "@/hooks/queries/thread-quer
 import type { ThreadTimelineTurnSummaryDetailsQueryIdentity } from "@/hooks/queries/query-keys";
 
 export interface ThreadTimelineRowsProps {
-  /** @deprecated Turn-summary detail errors are owned by React Query. */
-  erroredTurnSummaryIds?: ReadonlySet<string>;
   /**
    * Row ids to start expanded on first render. Non-recursive: an id only
    * applies to the row it names — bundle/step/turn children are unaffected.
@@ -79,11 +76,7 @@ export interface ThreadTimelineRowsProps {
    * a running runtime status.
    */
   initialExpanded?: ReadonlySet<string>;
-  /** @deprecated Turn-summary detail loading state is owned by React Query. */
-  loadingTurnSummaryIds?: ReadonlySet<string>;
   managerTimelineView?: ManagerTimelineView;
-  /** @deprecated Turn-summary detail loading is owned by React Query. */
-  onLoadTurnSummaryRows?: (entry: TimelineTurnRow) => void;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -93,10 +86,6 @@ export interface ThreadTimelineRowsProps {
   timelineRows: TimelineRow[];
   threadId?: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
-  /** @deprecated Timeline view identity is derived from threadId and managerTimelineView. */
-  turnSummaryRowsIdentity?: string;
-  /** @deprecated Turn-summary detail rows are owned by React Query. */
-  turnSummaryRowsById?: Record<string, TimelineRow[]>;
   /** Omit for standalone initial-unread rendering, pass false for live updates. */
   unreadDividerAutoScroll?: boolean;
   unreadDividerPlacement?: ThreadTimelineUnreadDividerPlacement | null;
@@ -227,7 +216,10 @@ interface TimelineRowTitleRenderStateCache {
 
 interface BuildTurnSummaryDetailsIdentityArgs {
   managerTimelineView: ManagerTimelineView | undefined;
-  row: TimelineViewTurnRow;
+  rowSourceSeqEnd: TimelineViewTurnRow["sourceSeqEnd"];
+  rowSourceSeqStart: TimelineViewTurnRow["sourceSeqStart"];
+  rowThreadId: TimelineViewTurnRow["threadId"];
+  rowTurnId: TimelineViewTurnRow["turnId"];
   threadId: string | undefined;
 }
 
@@ -419,15 +411,18 @@ function useStableReadonlySet(
 
 function buildTurnSummaryDetailsIdentity({
   managerTimelineView,
-  row,
+  rowSourceSeqEnd,
+  rowSourceSeqStart,
+  rowThreadId,
+  rowTurnId,
   threadId,
 }: BuildTurnSummaryDetailsIdentityArgs): ThreadTimelineTurnSummaryDetailsQueryIdentity {
   return {
     managerTimelineView,
-    sourceSeqEnd: row.sourceSeqEnd,
-    sourceSeqStart: row.sourceSeqStart,
-    threadId: threadId ?? row.threadId,
-    turnId: row.turnId,
+    sourceSeqEnd: rowSourceSeqEnd,
+    sourceSeqStart: rowSourceSeqStart,
+    threadId: threadId ?? rowThreadId,
+    turnId: rowTurnId,
   };
 }
 
@@ -783,19 +778,28 @@ function LazyTurnRowBody({
 }: LazyTurnRowBodyProps) {
   const { getViewRows, managerTimelineView, threadId } =
     useTimelineRendererStaticContext();
+  const {
+    sourceSeqEnd: rowSourceSeqEnd,
+    sourceSeqStart: rowSourceSeqStart,
+    threadId: rowThreadId,
+    turnId: rowTurnId,
+  } = row;
   const identity = useMemo<ThreadTimelineTurnSummaryDetailsQueryIdentity>(
     () =>
       buildTurnSummaryDetailsIdentity({
         managerTimelineView,
-        row,
+        rowSourceSeqEnd,
+        rowSourceSeqStart,
+        rowThreadId,
+        rowTurnId,
         threadId,
       }),
     [
       managerTimelineView,
-      row.sourceSeqEnd,
-      row.sourceSeqStart,
-      row.threadId,
-      row.turnId,
+      rowSourceSeqEnd,
+      rowSourceSeqStart,
+      rowThreadId,
+      rowTurnId,
       threadId,
     ],
   );
