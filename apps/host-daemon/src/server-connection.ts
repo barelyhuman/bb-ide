@@ -158,6 +158,7 @@ export class ServerConnection {
         protocolVersion:
           this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: this.options.getActiveThreads?.() ?? [],
+        loadedEnvironments: this.options.getLoadedEnvironments?.() ?? [],
       });
       this.session = session;
       return session;

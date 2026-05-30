@@ -84,6 +84,8 @@ class PathChangeWatcher {
   private disposed = false;
   private readonly changedPaths = new Set<string>();
   private missingTargetWarningReported = false;
+  private readonly pendingStarts = new Set<Promise<void>>();
+  private readonly pendingStops = new Set<Promise<void>>();
   private retryAttempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private subscription: ParcelWatcherAsyncSubscription | null = null;
@@ -116,10 +118,13 @@ class PathChangeWatcher {
   }
 
   start(): void {
-    void this.startAsync();
+    const pendingStart = this.startAsync().finally(() => {
+      this.pendingStarts.delete(pendingStart);
+    });
+    this.pendingStarts.add(pendingStart);
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.disposed = true;
     this.changeScheduler.dispose();
     this.changedPaths.clear();
@@ -127,14 +132,34 @@ class PathChangeWatcher {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
-    if (this.subscription === null) {
-      return;
+    if (this.subscription !== null) {
+      const subscription = this.subscription;
+      this.subscription = null;
+      await this.stopSubscription(subscription);
     }
-    const subscription = this.subscription;
-    this.subscription = null;
-    void subscription.unsubscribe().catch(() => {
-      // Ignore unsubscribe failures during watcher teardown.
-    });
+    await Promise.all([...this.pendingStarts]);
+    await this.awaitPendingStops();
+  }
+
+  private async awaitPendingStops(): Promise<void> {
+    while (this.pendingStops.size > 0) {
+      await Promise.all([...this.pendingStops]);
+    }
+  }
+
+  private stopSubscription(
+    subscription: ParcelWatcherAsyncSubscription,
+  ): Promise<void> {
+    const pendingStop = subscription
+      .unsubscribe()
+      .catch(() => {
+        // Ignore unsubscribe failures during watcher teardown.
+      })
+      .finally(() => {
+        this.pendingStops.delete(pendingStop);
+      });
+    this.pendingStops.add(pendingStop);
+    return pendingStop;
   }
 
   private scheduleRetry(): void {
@@ -149,7 +174,7 @@ class PathChangeWatcher {
     this.retryTimer = setTimeout(
       () => {
         this.retryTimer = null;
-        void this.startAsync();
+        this.start();
       },
       calculateExponentialBackoffDelay({
         attempt: this.retryAttempt,
@@ -208,9 +233,7 @@ class PathChangeWatcher {
         },
       );
       if (this.disposed) {
-        void subscription.unsubscribe().catch(() => {
-          // Ignore late unsubscribe failures after disposal.
-        });
+        await this.stopSubscription(subscription);
         return;
       }
       this.missingTargetWarningReported = false;
@@ -232,9 +255,7 @@ class PathChangeWatcher {
     if (this.subscription !== null) {
       const subscription = this.subscription;
       this.subscription = null;
-      void subscription.unsubscribe().catch(() => {
-        // Ignore unsubscribe failures while recovering a watcher.
-      });
+      void this.stopSubscription(subscription);
     }
     this.scheduleRetry();
   }
@@ -251,7 +272,7 @@ export type {
 export function watchPathChanges(
   watchedPath: string,
   args: PathChangeWatchArgs,
-): () => void {
+): () => Promise<void> {
   const watcher = new PathChangeWatcher({
     path: watchedPath,
     debounceMs: PATH_CHANGE_WATCH_DEBOUNCE_MS,
@@ -262,7 +283,5 @@ export function watchPathChanges(
     retryDelayMs: PATH_CHANGE_WATCH_RETRY_DELAY_MS,
   });
   watcher.start();
-  return () => {
-    watcher.dispose();
-  };
+  return () => watcher.dispose();
 }

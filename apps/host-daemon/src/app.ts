@@ -30,7 +30,7 @@ import {
   type TerminalManagerOptions,
 } from "./terminals/terminal-manager.js";
 import { createReplayCaptureService } from "@bb/replay-capture/writer";
-import { createServerClient } from "./server-client.js";
+import { createServerClient, ServerResponseError } from "./server-client.js";
 import { AppDataChangeReporter } from "./app-data-change-reporter.js";
 import {
   ServerConnection,
@@ -315,6 +315,14 @@ interface PendingInteractiveInterruptRequest {
   threadIds: readonly string[];
 }
 
+function isRetiredEnvironmentResponse(error: unknown): boolean {
+  return (
+    error instanceof ServerResponseError &&
+    ((error.status === 404 && error.code === "environment_not_found") ||
+      (error.status === 410 && error.code === "environment_destroyed"))
+  );
+}
+
 export async function createHostDaemonApp(
   options: CreateHostDaemonAppOptions,
 ): Promise<HostDaemonApp> {
@@ -331,6 +339,7 @@ export async function createHostDaemonApp(
     string,
     PendingInteractiveInterruptRequest
   >();
+  let runtimeManager: RuntimeManager;
   let flushPendingInteractiveInterruptsPromise: Promise<void> | null = null;
   let interactiveInterruptRetryTimeout: ReturnType<typeof setTimeout> | null =
     null;
@@ -366,8 +375,17 @@ export async function createHostDaemonApp(
   const environmentChangeReporter = createEnvironmentChangeReporter({
     debounceMs: ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
     logger: options.logger,
-    reportEnvironmentChange: (change) =>
-      serverClient.postEnvironmentChange(change),
+    reportEnvironmentChange: async (change) => {
+      try {
+        await serverClient.postEnvironmentChange(change);
+      } catch (error) {
+        if (isRetiredEnvironmentResponse(error)) {
+          await runtimeManager.forgetEnvironment(change.environmentId);
+          return;
+        }
+        throw error;
+      }
+    },
   });
   const appDataChangeReporter = new AppDataChangeReporter({
     logger: options.logger,
@@ -493,7 +511,7 @@ export async function createHostDaemonApp(
     },
   });
 
-  const runtimeManager = new RuntimeManager({
+  runtimeManager = new RuntimeManager({
     bridgeBundleDir: options.bridgeBundleDir,
     createRuntime: options.createRuntime,
     hostWatcher: options.hostWatcher,
@@ -713,10 +731,25 @@ export async function createHostDaemonApp(
     serverClient,
     createWebSocket: options.createWebSocket,
     getActiveThreads: () => runtimeManager.listActiveThreads(),
+    getLoadedEnvironments: () => runtimeManager.listLoadedEnvironments(),
     onCommandsAvailable: () => commandFetchLoop.request(),
     onTerminalMessage: (message) => terminalManager.handleMessage(message),
-    onSessionOpened: (session) => {
+    onSessionOpened: async (session) => {
       sessionState.value = session.sessionId;
+      if (session.retiredEnvironmentIds.length > 0) {
+        await Promise.all(
+          session.retiredEnvironmentIds.map((environmentId) =>
+            runtimeManager.forgetEnvironment(environmentId),
+          ),
+        );
+        options.logger.info(
+          {
+            environmentIds: session.retiredEnvironmentIds,
+            sessionId: session.sessionId,
+          },
+          "Retired locally loaded environments after session reconciliation",
+        );
+      }
       runtimeManager.replaceTrackedThreadStorageTargets(
         session.trackedThreadTargets,
       );

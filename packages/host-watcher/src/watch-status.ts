@@ -13,14 +13,12 @@ export type {
 export function watchWorkspaceStatus(
   cwd: string,
   args: WorkspaceStatusWatchArgs,
-): () => void {
+): () => Promise<void> {
   const watcher = createWorkspaceStatusWatcher({
     cwd,
     onChange: args.onChange,
     onWatchError: args.onWatchError,
   });
   watcher.start();
-  return () => {
-    watcher.dispose();
-  };
+  return () => watcher.dispose();
 }

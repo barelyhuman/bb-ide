@@ -1103,7 +1103,7 @@ describe("threads", () => {
     ).toBe(false);
   });
 
-  it("tracks storage targets only for non-archived, non-deleted threads", () => {
+  it("tracks storage targets only for live threads on non-destroyed environments", () => {
     const { db, project, host } = setup();
     const environment = createEnvironment(db, noopNotifier, {
       projectId: project.id,
@@ -1112,9 +1112,21 @@ describe("threads", () => {
       workspaceProvisionType: "unmanaged",
       status: "ready",
     });
+    const destroyedEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/destroyed-thread-storage-targets",
+      workspaceProvisionType: "managed-worktree",
+      status: "destroyed",
+    });
     const activeThread = createThread(db, noopNotifier, {
       projectId: project.id,
       environmentId: environment.id,
+      providerId: "codex",
+    });
+    const destroyedEnvironmentThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: destroyedEnvironment.id,
       providerId: "codex",
     });
     const archivedThread = createThread(db, noopNotifier, {
@@ -1136,7 +1148,12 @@ describe("threads", () => {
     expect(
       [...listHostThreadIds(db, { hostId: host.id })].sort(),
     ).toEqual(
-      [activeThread.id, archivedThread.id, deletedThread.id].sort(),
+      [
+        activeThread.id,
+        archivedThread.id,
+        deletedThread.id,
+        destroyedEnvironmentThread.id,
+      ].sort(),
     );
   });
 });

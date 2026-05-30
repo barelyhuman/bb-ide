@@ -45,8 +45,8 @@ type SteerTurnArgs = Parameters<AgentRuntime["steerTurn"]>[0];
 type StopThreadArgs = Parameters<AgentRuntime["stopThread"]>[0];
 type RenameThreadArgs = Parameters<AgentRuntime["renameThread"]>[0];
 type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
-type StopWatchingStatus = () => void;
-type StopWatchingPathChanges = () => void;
+type StopWatchingStatus = () => void | Promise<void>;
+type StopWatchingPathChanges = () => void | Promise<void>;
 type WatchWorkspaceImplementation = (
   args: WatchWorkspaceArgs,
 ) => StopWatchingStatus;
@@ -598,6 +598,68 @@ describe("RuntimeManager", () => {
     expect(watchWorkspace).toHaveBeenCalledTimes(1);
     expect(stopWatchingStatus).toHaveBeenCalledTimes(1);
     expect(workspace.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for workspace watcher teardown before destroying the workspace", async () => {
+    const watcherStopped = createDeferred<void>();
+    const stopWatchingStatus = vi.fn(async () => watcherStopped.promise);
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (_args) => stopWatchingStatus,
+    });
+    const runtime = createFakeRuntime();
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-1").mockResolvedValue(workspace),
+      createRuntime: vi.fn(() => runtime),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    const destroyPromise = manager.destroyEnvironment("env-1");
+
+    await vi.waitFor(() => {
+      expect(stopWatchingStatus).toHaveBeenCalledTimes(1);
+    });
+    expect(runtime.shutdown).not.toHaveBeenCalled();
+    expect(workspace.destroy).not.toHaveBeenCalled();
+
+    watcherStopped.resolve(undefined);
+    await destroyPromise;
+
+    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+    expect(workspace.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets a retired environment without destroying its workspace", async () => {
+    const stopWatchingStatus = vi.fn(() => undefined);
+    const workspace = createFakeWorkspace("/tmp/env-retired");
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (_args) => stopWatchingStatus,
+    });
+    const runtime = createFakeRuntime();
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-retired").mockResolvedValue(
+          workspace,
+        ),
+      createRuntime: vi.fn(() => runtime),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-retired",
+      workspacePath: "/tmp/env-retired",
+    });
+    await manager.forgetEnvironment("env-retired");
+
+    expect(manager.get("env-retired")).toBeUndefined();
+    expect(stopWatchingStatus).toHaveBeenCalledTimes(1);
+    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+    expect(workspace.destroy).not.toHaveBeenCalled();
   });
 
   it("installs the workspace status watcher once and reports workspace status changes", async () => {

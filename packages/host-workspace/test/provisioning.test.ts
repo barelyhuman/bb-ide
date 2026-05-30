@@ -341,4 +341,51 @@ describe("workspace provisioning", () => {
     await removeDirectory({ path: directoryPath });
     await expect(fs.stat(directoryPath)).rejects.toThrow();
   });
+
+  it("removes orphaned worktree directories after the .git file is gone", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+    const parentDir = await makeTempDir("bb-remove-orphan-gitfile-");
+    const targetPath = path.join(parentDir, "feature");
+
+    await createWorktree({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName: "feature-orphan-gitfile",
+      baseBranch: "main",
+      timeoutMs: 900000,
+    });
+    await fs.rm(path.join(targetPath, ".git"), { force: true });
+
+    await removeWorktree({ path: targetPath, force: true });
+
+    await expect(fs.stat(targetPath)).rejects.toThrow();
+  });
+
+  it("removes directories that no longer resolve as git repositories", async () => {
+    const targetPath = await makeTempDir("bb-remove-non-git-dir-");
+    await fs.writeFile(path.join(targetPath, "file.txt"), "data\n", "utf8");
+
+    await removeWorktree({ path: targetPath, force: true });
+
+    await expect(fs.stat(targetPath)).rejects.toThrow();
+  });
+
+  it("removes worktree directories when git metadata cleanup fails", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+    const parentDir = await makeTempDir("bb-remove-metadata-failure-");
+    const targetPath = path.join(parentDir, "feature");
+
+    await createWorktree({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName: "feature-metadata-failure",
+      baseBranch: "main",
+      timeoutMs: 900000,
+    });
+    await fs.writeFile(path.join(targetPath, "local.txt"), "dirty\n", "utf8");
+
+    await removeWorktree({ path: targetPath, force: false });
+
+    await expect(fs.stat(targetPath)).rejects.toThrow();
+  });
 });

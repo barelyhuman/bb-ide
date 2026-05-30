@@ -1347,6 +1347,30 @@ describe("host-daemon session schemas", () => {
     ).toMatchObject({
       hostId: "host_123",
       hostType: "persistent",
+      loadedEnvironments: [],
+    });
+
+    expect(
+      hostDaemonSessionOpenRequestSchema.parse({
+        hostId: "host_123",
+        instanceId: "instance_1",
+        hostName: "Michael's MacBook",
+        hostType: "persistent",
+        dataDir: "/tmp/bb-data",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        activeThreads: [],
+        loadedEnvironments: [
+          {
+            environmentId: "env_123",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      loadedEnvironments: [
+        {
+          environmentId: "env_123",
+        },
+      ],
     });
 
     expect(() =>
@@ -1415,6 +1439,7 @@ describe("host-daemon session schemas", () => {
       }),
     ).toMatchObject({
       sessionId: "session_123",
+      retiredEnvironmentIds: [],
       trackedThreadTargets: [
         {
           environmentId: "env_123",

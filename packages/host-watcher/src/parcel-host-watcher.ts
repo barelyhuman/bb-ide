@@ -135,7 +135,7 @@ export function collectThreadStorageObservedChanges(
   return observedChanges;
 }
 
-function watchWorkspace(args: WatchWorkspaceArgs): () => void {
+function watchWorkspace(args: WatchWorkspaceArgs): () => Promise<void> {
   return watchWorkspaceStatus(args.workspacePath, {
     onChange: (event) => {
       args.onChange({
@@ -156,7 +156,9 @@ function watchWorkspace(args: WatchWorkspaceArgs): () => void {
   });
 }
 
-function watchThreadStorageRoot(args: WatchThreadStorageRootArgs): () => void {
+function watchThreadStorageRoot(
+  args: WatchThreadStorageRootArgs,
+): () => Promise<void> {
   return watchPathChanges(args.threadStorageRootPath, {
     onChange: ({ changedPaths }) => {
       const events = collectThreadStorageObservedChanges({

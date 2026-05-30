@@ -923,6 +923,7 @@ export function listTrackedThreadStorageTargetsOnHost(
     .where(
       and(
         eq(environments.hostId, args.hostId),
+        ne(environments.status, "destroyed"),
         isNull(threads.archivedAt),
         isNull(threads.deletedAt),
       ),

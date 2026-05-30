@@ -8,6 +8,7 @@ import {
   clearEnvironmentCleanupRequestRecord,
   claimManagedEnvironmentReprovisionRecord,
   createEnvironment,
+  listRetiredLoadedEnvironmentIdsOnHost,
   recordEnvironmentCleanupRequest,
   setEnvironmentRecordDestroyed,
   setEnvironmentStatus,
@@ -252,6 +253,56 @@ describe("environments", () => {
     expect(notifier.notifyEnvironment).toHaveBeenCalledWith(environment.id, [
       "status-changed",
       "metadata-changed",
+    ]);
+  });
+
+  it("lists loaded environments that no longer belong to the host as live records", () => {
+    const { db, host, project } = setup();
+    const otherHost = upsertHost(db, noopNotifier, {
+      name: "other-host",
+      type: "persistent",
+    });
+    const { project: otherProject } = createProject(db, noopNotifier, {
+      name: "other-project",
+      source: {
+        type: "local_path",
+        hostId: otherHost.id,
+        path: "/tmp/other",
+      },
+    });
+    const retainedEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const destroyedEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "unmanaged",
+      status: "destroyed",
+    });
+    const otherHostEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: otherProject.id,
+      hostId: otherHost.id,
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+
+    expect(
+      listRetiredLoadedEnvironmentIdsOnHost(db, {
+        hostId: host.id,
+        environmentIds: [
+          retainedEnvironment.id,
+          destroyedEnvironment.id,
+          otherHostEnvironment.id,
+          "env_missing",
+        ],
+      }),
+    ).toEqual([
+      destroyedEnvironment.id,
+      otherHostEnvironment.id,
+      "env_missing",
     ]);
   });
 });

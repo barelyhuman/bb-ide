@@ -39,6 +39,7 @@ describe("fetchCommands with unknown command types", () => {
       dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
+      loadedEnvironments: [],
     });
     sessionState.value = session.sessionId;
 
@@ -100,6 +101,7 @@ describe("fetchCommands with unknown command types", () => {
       dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
+      loadedEnvironments: [],
     });
     sessionState.value = session.sessionId;
 
@@ -141,6 +143,7 @@ describe("fetchCommands with unknown command types", () => {
       dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
+      loadedEnvironments: [],
     });
     sessionState.value = session.sessionId;
 
@@ -180,6 +183,7 @@ describe("fetchCommands with unknown command types", () => {
       dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
+      loadedEnvironments: [],
     });
     sessionState.value = session.sessionId;
 

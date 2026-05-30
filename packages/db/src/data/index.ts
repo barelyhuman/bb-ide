@@ -212,11 +212,13 @@ export {
   findEnvironmentByHostPath,
   listEnvironments,
   listEnvironmentsByIds,
+  listRetiredLoadedEnvironmentIdsOnHost,
   updateEnvironmentMetadata,
   deleteEnvironment,
 } from "./environments.js";
 export type {
   CreateEnvironmentInput,
+  ListRetiredLoadedEnvironmentIdsOnHostArgs,
   UpdateEnvironmentMetadataInput,
 } from "./environments.js";
 

@@ -41,6 +41,14 @@ export function registerInternalEnvironmentChangeRoutes(
               "Environment does not belong to the session host",
             );
           }
+          if (environment.status === "destroyed") {
+            throw new ApiError(
+              410,
+              "environment_destroyed",
+              "Environment has been destroyed",
+              { retryable: false },
+            );
+          }
 
           deps.hub.notifyEnvironment(environment.id, [payload.change]);
           return context.json({ ok: true });

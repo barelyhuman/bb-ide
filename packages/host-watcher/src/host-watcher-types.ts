@@ -71,8 +71,10 @@ export interface WatchThreadStorageRootArgs {
 }
 
 export interface HostWatcher {
-  watchWorkspace(args: WatchWorkspaceArgs): () => void;
-  watchThreadStorageRoot(args: WatchThreadStorageRootArgs): () => void;
+  watchWorkspace(args: WatchWorkspaceArgs): () => void | Promise<void>;
+  watchThreadStorageRoot(
+    args: WatchThreadStorageRootArgs,
+  ): () => void | Promise<void>;
 }
 
 export interface CreateHostWatcherArgs {

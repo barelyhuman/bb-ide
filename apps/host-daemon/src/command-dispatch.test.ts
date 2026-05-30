@@ -152,4 +152,34 @@ describe("dispatchCommand", () => {
     expect(result).toEqual({});
     expect(abort.signal.aborted).toBe(true);
   });
+
+  it("treats thread.rename as best-effort when the runtime is not loaded", async () => {
+    const runtime = createRuntime();
+    const manager = new RuntimeManager({
+      createRuntime: () => runtime,
+      provisionWorkspace: async () => createWorkspace(),
+    });
+    const command: CommandOf<"thread.rename"> = {
+      type: "thread.rename",
+      environmentId: "env-missing-runtime",
+      threadId: "thread-1",
+      title: "Renamed",
+    };
+
+    const result = await dispatchCommand(command, {
+      dataDir: "/tmp/bb-data",
+      eventSink: {
+        emit: vi.fn(),
+        flush: vi.fn(async () => undefined),
+      },
+      fetchProjectAttachment: async () => {
+        throw new Error("Unexpected project attachment fetch");
+      },
+      runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-thread-storage",
+    });
+
+    expect(result).toEqual({});
+    expect(runtime.renameThread).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type {
   DiscoveredWorkspaceProperties,
   EnvironmentChangeKind,
@@ -164,6 +164,40 @@ export interface RequestEnvironmentCleanupInput {
 export interface ClaimManagedEnvironmentReprovisionArgs {
   environmentId: string;
   now?: number;
+}
+
+export interface ListRetiredLoadedEnvironmentIdsOnHostArgs {
+  environmentIds: readonly string[];
+  hostId: string;
+}
+
+export function listRetiredLoadedEnvironmentIdsOnHost(
+  db: EnvironmentReadConnection,
+  args: ListRetiredLoadedEnvironmentIdsOnHostArgs,
+): string[] {
+  const environmentIds = [...new Set(args.environmentIds)];
+  if (environmentIds.length === 0) {
+    return [];
+  }
+
+  const retainedRows = db
+    .select({ id: environments.id })
+    .from(environments)
+    .where(
+      and(
+        inArray(environments.id, environmentIds),
+        eq(environments.hostId, args.hostId),
+        ne(environments.status, "destroyed"),
+      ),
+    )
+    .all();
+  const retainedEnvironmentIds = new Set(
+    retainedRows.map((environment) => environment.id),
+  );
+
+  return environmentIds.filter(
+    (environmentId) => !retainedEnvironmentIds.has(environmentId),
+  );
 }
 
 function buildEnvironmentMetadataUpdateSet(

@@ -184,10 +184,12 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "thread.rename" }>,
     options: CommandDispatchOptions,
   ) => {
-    const entry = await requireExistingEnvironment(
+    const entry = await options.runtimeManager.getOrAwait(
       command.environmentId,
-      options.runtimeManager,
     );
+    if (!entry) {
+      return {};
+    }
     await entry.runtime.renameThread({
       threadId: command.threadId,
       title: command.title,

@@ -22,6 +22,7 @@ import {
 import type {
   HostDaemonActiveThread,
   HostDaemonEnvironmentChange,
+  HostDaemonLoadedEnvironment,
   HostDaemonTrackedThreadTarget,
 } from "@bb/host-daemon-contract";
 import type {
@@ -36,7 +37,9 @@ import {
   type ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
 
-const STOP_WATCHING = () => undefined;
+type StopWatching = () => void | Promise<void>;
+
+const STOP_WATCHING: StopWatching = () => undefined;
 const PROVIDER_MAINTENANCE_WORKSPACE_DIR = "provider-maintenance-workspace";
 const PROVIDER_PROCESS_EXIT_DETAIL_MAX_LENGTH = 4000;
 const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKind[] =
@@ -146,7 +149,7 @@ function workspaceWatchKindsIncludeSharedRefs(
 export interface RuntimeEntry {
   environmentId: string;
   runtime: AgentRuntime;
-  stopWatchingStatus: () => void;
+  stopWatchingStatus: StopWatching;
   workspace: HostWorkspace;
   path: string;
   terminals: Set<string>;
@@ -226,7 +229,7 @@ export class RuntimeManager {
   private pendingProviderMaintenanceRuntime: Promise<AgentRuntime> | null =
     null;
   private managedShellEnv: NonNullable<AgentRuntimeOptions["shellEnv"]> = {};
-  private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
+  private stopWatchingThreadStorageRoot: StopWatching = STOP_WATCHING;
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
@@ -468,6 +471,12 @@ export class RuntimeManager {
     return activeThreads;
   }
 
+  listLoadedEnvironments(): HostDaemonLoadedEnvironment[] {
+    return [...this.entries.keys()].map((environmentId) => ({
+      environmentId,
+    }));
+  }
+
   getShellEnv(): NonNullable<AgentRuntimeOptions["shellEnv"]> {
     return {
       ...this.baseShellEnv,
@@ -585,10 +594,34 @@ export class RuntimeManager {
 
     this.entries.delete(environmentId);
     this.removeTrackedThreadStorageTargetsForEnvironment(environmentId);
-    this.stopWatchingStatus(entry);
+    await this.stopWatchingStatus(entry);
     this.stopWatchingThreadStorageIfNoTrackedThreads();
     await entry.runtime.shutdown();
     await entry.workspace.destroy();
+  }
+
+  async forgetEnvironment(environmentId: string): Promise<void> {
+    const existing = this.entries.get(environmentId);
+    const pending = this.pendingEntries.get(environmentId);
+    let entry = existing;
+    if (!entry && pending) {
+      try {
+        entry = await pending;
+      } catch {
+        entry = undefined;
+      }
+    }
+
+    this.removeTrackedThreadStorageTargetsForEnvironment(environmentId);
+    this.stopWatchingThreadStorageIfNoTrackedThreads();
+
+    if (!entry) {
+      return;
+    }
+
+    this.entries.delete(environmentId);
+    await this.stopWatchingStatus(entry);
+    await entry.runtime.shutdown();
   }
 
   async evictIdleEnvironments(): Promise<string[]> {
@@ -607,7 +640,7 @@ export class RuntimeManager {
     });
 
     for (const entry of idleEntries) {
-      this.stopWatchingStatus(entry);
+      await this.stopWatchingStatus(entry);
       this.entries.delete(entry.environmentId);
     }
 
@@ -643,7 +676,7 @@ export class RuntimeManager {
     this.trackedThreadStorageTargets.clear();
 
     for (const entry of entries) {
-      this.stopWatchingStatus(entry);
+      await this.stopWatchingStatus(entry);
       await entry.runtime.shutdown();
       // Do NOT call workspace.destroy() — the server owns managed workspace
       // lifecycle via explicit environment.destroy commands. Daemon shutdown
@@ -659,7 +692,7 @@ export class RuntimeManager {
     if (providerMaintenanceRuntime) {
       await providerMaintenanceRuntime.shutdown();
     }
-    this.stopWatchingThreadStorageRoot();
+    await this.stopWatchingThreadStorageRoot();
     this.stopWatchingThreadStorageRoot = STOP_WATCHING;
   }
 
@@ -861,7 +894,7 @@ export class RuntimeManager {
             current?.runtime === runtime &&
             runtime?.listRunningProviders().length === 0
           ) {
-            this.stopWatchingStatus(current);
+            void this.stopWatchingStatus(current);
             this.entries.delete(args.environmentId);
             this.stopWatchingThreadStorageIfNoTrackedThreads();
           }
@@ -869,7 +902,7 @@ export class RuntimeManager {
         },
       });
     } catch (error) {
-      stopWatchingStatus();
+      await stopWatchingStatus();
       throw error;
     }
 
@@ -884,10 +917,10 @@ export class RuntimeManager {
     };
   }
 
-  private stopWatchingStatus(entry: RuntimeEntry): void {
+  private async stopWatchingStatus(entry: RuntimeEntry): Promise<void> {
     const stopWatchingStatus = entry.stopWatchingStatus;
     entry.stopWatchingStatus = STOP_WATCHING;
-    stopWatchingStatus();
+    await stopWatchingStatus();
   }
 
   private ensureThreadStorageWatcher(): void {
@@ -958,6 +991,6 @@ export class RuntimeManager {
     }
     const stopWatchingThreadStorageRoot = this.stopWatchingThreadStorageRoot;
     this.stopWatchingThreadStorageRoot = STOP_WATCHING;
-    stopWatchingThreadStorageRoot();
+    void stopWatchingThreadStorageRoot();
   }
 }

@@ -239,6 +239,76 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("returns server-retired loaded environments when opening a session", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const hostA = seedHostSession(harness.deps, {
+        id: "host-loaded-env-a",
+      });
+      const hostB = seedHostSession(harness.deps, {
+        id: "host-loaded-env-b",
+      });
+      const projectA = seedProjectWithSource(harness.deps, {
+        hostId: hostA.host.id,
+      }).project;
+      const projectB = seedProjectWithSource(harness.deps, {
+        hostId: hostB.host.id,
+      }).project;
+      const retainedEnvironment = seedEnvironment(harness.deps, {
+        hostId: hostA.host.id,
+        path: "/tmp/loaded-env-retained",
+        projectId: projectA.id,
+        status: "ready",
+      });
+      const destroyedEnvironment = seedEnvironment(harness.deps, {
+        hostId: hostA.host.id,
+        path: "/tmp/loaded-env-destroyed",
+        projectId: projectA.id,
+        status: "destroyed",
+      });
+      const otherHostEnvironment = seedEnvironment(harness.deps, {
+        hostId: hostB.host.id,
+        path: "/tmp/loaded-env-other-host",
+        projectId: projectB.id,
+        status: "ready",
+      });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: hostA.host.id,
+          hostType: hostA.host.type,
+        }),
+        body: JSON.stringify({
+          hostId: hostA.host.id,
+          instanceId: "instance-loaded-env-reconcile",
+          hostName: hostA.host.name,
+          hostType: hostA.host.type,
+          dataDir: "/tmp/host-loaded-env-reconcile",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+          loadedEnvironments: [
+            { environmentId: retainedEnvironment.id },
+            { environmentId: destroyedEnvironment.id },
+            { environmentId: otherHostEnvironment.id },
+            { environmentId: "env_missing_loaded" },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      await expect(readJson(response)).resolves.toMatchObject({
+        retiredEnvironmentIds: [
+          destroyedEnvironment.id,
+          otherHostEnvironment.id,
+          "env_missing_loaded",
+        ],
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects a session open whose protocol version does not match the server", async () => {
     const server = await startTestServer();
     try {

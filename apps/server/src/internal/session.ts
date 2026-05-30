@@ -1,5 +1,6 @@
 import {
   getActiveSession,
+  listRetiredLoadedEnvironmentIdsOnHost,
   listTrackedThreadStorageTargetsOnHost,
   openSession,
   upsertHost,
@@ -90,6 +91,15 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
             environmentId: target.environmentId,
             threadId: target.threadId,
           }));
+          const retiredEnvironmentIds = listRetiredLoadedEnvironmentIdsOnHost(
+            deps.db,
+            {
+              hostId: daemon.hostId,
+              environmentIds: (payload.loadedEnvironments ?? []).map(
+                (environment) => environment.environmentId,
+              ),
+            },
+          );
 
           return context.json(
             {
@@ -97,6 +107,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
               heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
               leaseTimeoutMs: LEASE_TIMEOUT_MS,
               trackedThreadTargets,
+              retiredEnvironmentIds,
             },
             201,
           );

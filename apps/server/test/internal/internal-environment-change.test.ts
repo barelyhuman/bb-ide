@@ -199,6 +199,90 @@ describe("internal environment change route", () => {
     }
   });
 
+  it("rejects change hints for destroyed environments without notifying clients", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-env-change-destroyed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/env-change-destroyed",
+        status: "destroyed",
+      });
+      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            environmentId: environment.id,
+            change: "work-status-changed",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(410);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "environment_destroyed",
+        retryable: false,
+      });
+      expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("checks host ownership before returning destroyed-environment hints", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const hostA = seedHostSession(harness.deps, {
+        id: "host-env-change-destroyed-a",
+      });
+      const hostB = seedHostSession(harness.deps, {
+        id: "host-env-change-destroyed-b",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: hostB.host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: hostB.host.id,
+        projectId: project.id,
+        path: "/tmp/env-change-destroyed-other-host",
+        status: "destroyed",
+      });
+      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: hostA.session.id,
+            environmentId: environment.id,
+            change: "work-status-changed",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(403);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns 400 for invalid environment change kinds", async () => {
     const harness = await createTestAppHarness();
     try {

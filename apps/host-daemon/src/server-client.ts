@@ -30,6 +30,7 @@ import {
   type HostDaemonCommandResultReportWithoutSession,
   type HostDaemonEventEnvelope,
   type HostDaemonEnvironmentChangePayload,
+  type HostDaemonLoadedEnvironment,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
   type HostDaemonToolCallResponse,
@@ -210,6 +211,9 @@ export interface OpenSessionArgs {
   dataDir: string;
   instanceId: string;
   activeThreads: HostDaemonActiveThread[] | Promise<HostDaemonActiveThread[]>;
+  loadedEnvironments:
+    | HostDaemonLoadedEnvironment[]
+    | Promise<HostDaemonLoadedEnvironment[]>;
   protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
 }
 
@@ -445,6 +449,7 @@ export function createServerClient(
         dataDir: args.dataDir,
         protocolVersion: args.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: await args.activeThreads,
+        loadedEnvironments: await args.loadedEnvironments,
       });
       const response = await fetchFn(buildInternalUrl("/session/open"), {
         method: "POST",

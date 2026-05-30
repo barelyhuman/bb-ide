@@ -472,6 +472,9 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
     );
   }
 
+  // Git metadata cleanup is best-effort because broken teardown states often
+  // leave a directory that no longer resolves as a worktree. The managed
+  // workspace directory itself is the authoritative cleanup target.
   await fs.rm(workspacePath, { recursive: true, force: true });
   if (args.pruneEmptyParent) {
     await removeDirectoryIfEmpty(parentPath);

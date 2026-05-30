@@ -7,6 +7,7 @@ import {
   hostDaemonInteractiveInterruptRequestSchema,
   type HostDaemonInteractiveRequestResponse,
 } from "@bb/host-daemon-contract";
+import type { HostWatcher } from "@bb/host-watcher";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCommandFetchLoop,
@@ -41,6 +42,7 @@ interface FetchRecorder {
 interface CreateFetchRecorderArgs {
   interactiveRequestError?: Error;
   interactiveRequestResponse?: HostDaemonInteractiveRequestResponse;
+  retiredEnvironmentIds?: string[];
 }
 
 interface RuntimeOptionsRef {
@@ -132,6 +134,7 @@ function createFetchRecorder(
           heartbeatIntervalMs: 30000,
           leaseTimeoutMs: 90000,
           trackedThreadTargets: [],
+          retiredEnvironmentIds: args.retiredEnvironmentIds ?? [],
         },
         { status: 201 },
       );
@@ -570,6 +573,7 @@ describe("createHostDaemonApp", () => {
             heartbeatIntervalMs: 30000,
             leaseTimeoutMs: 90000,
             trackedThreadTargets: [],
+            retiredEnvironmentIds: [],
           },
           { status: 201 },
         );
@@ -628,6 +632,64 @@ describe("createHostDaemonApp", () => {
       await startPromise;
     } finally {
       commandFetchResponse.resolve(new Response(null, { status: 204 }));
+      await app.daemon.shutdown("test");
+    }
+  });
+
+  it("forgets server-retired loaded environments when opening a session", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-app-retired-");
+    const workspacePath = await makeTempDir(
+      "bb-host-daemon-retired-workspace-",
+    );
+    const logger = createLogger();
+    const fetchRecorder = createFetchRecorder({
+      retiredEnvironmentIds: ["env-app-retired"],
+    });
+    const stopWatchingStatus = vi.fn(async () => undefined);
+    const runtime = {
+      ...createFakeRuntime(),
+      shutdown: vi.fn(async () => undefined),
+    } satisfies AgentRuntime;
+    const hostWatcher = {
+      watchWorkspace: vi.fn(() => stopWatchingStatus),
+      watchThreadStorageRoot: vi.fn(() => () => undefined),
+    } satisfies HostWatcher;
+    const app = await createHostDaemonApp({
+      dataDir,
+      serverUrl: "http://127.0.0.1:3334",
+      hostKey: "host-key-retired-env",
+      hostType: "persistent",
+      hostId: "host-retired-env",
+      hostName: "Retired Environment Host",
+      instanceId: "instance-retired-env",
+      logger,
+      releaseLock: async () => undefined,
+      localApiConfig: null,
+      createRuntime: () => runtime,
+      fetchFn: fetchRecorder.fetchFn,
+      hostWatcher,
+      createWebSocket: createOpeningWebSocket(),
+    });
+
+    try {
+      await app.runtimeManager.ensureEnvironment({
+        environmentId: "env-app-retired",
+        workspacePath,
+      });
+      expect(app.runtimeManager.get("env-app-retired")).toBeDefined();
+
+      await app.connection.start();
+
+      expect(app.runtimeManager.get("env-app-retired")).toBeUndefined();
+      expect(stopWatchingStatus).toHaveBeenCalledTimes(1);
+      expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+      const openSessionBody = fetchRecorder.requests
+        .filter((request) => request.pathname === "/internal/session/open")
+        .map((request) => JSON.parse(request.body ?? "{}"));
+      expect(openSessionBody[0]).toMatchObject({
+        loadedEnvironments: [{ environmentId: "env-app-retired" }],
+      });
+    } finally {
       await app.daemon.shutdown("test");
     }
   });

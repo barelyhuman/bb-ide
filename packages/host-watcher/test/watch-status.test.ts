@@ -434,11 +434,7 @@ describe.sequential("watchWorkspaceStatus", () => {
       const firstEventAt = Date.now();
       const eventIntervalMs = 60;
       const earlyFlushGuardMs = 180;
-      for (
-        let elapsedMs = 0;
-        elapsedMs < 600;
-        elapsedMs += eventIntervalMs
-      ) {
+      for (let elapsedMs = 0; elapsedMs < 600; elapsedMs += eventIntervalMs) {
         emitWorkspaceRootEvents([
           {
             path: path.join(repoPath, "README.md"),
@@ -488,11 +484,7 @@ describe.sequential("watchWorkspaceStatus", () => {
           type: "update",
         },
       ]);
-      await waitForCallCount(
-        () => callbackCount,
-        1,
-        WATCH_TEST_TIMEOUT_MS,
-      );
+      await waitForCallCount(() => callbackCount, 1, WATCH_TEST_TIMEOUT_MS);
       expect(callbackCount).toBe(1);
       expect(watchErrors).toHaveLength(1);
       expect(watchErrors[0]).toContain(repoPath);
@@ -506,11 +498,7 @@ describe.sequential("watchWorkspaceStatus", () => {
           type: "update",
         },
       ]);
-      await waitForCallCount(
-        () => callbackCount,
-        2,
-        WATCH_TEST_TIMEOUT_MS,
-      );
+      await waitForCallCount(() => callbackCount, 2, WATCH_TEST_TIMEOUT_MS);
       expect(callbackCount).toBe(2);
       expect(watchErrors).toHaveLength(1);
     } finally {
@@ -845,6 +833,53 @@ describe.sequential("watchWorkspaceStatus", () => {
     } finally {
       stopWatching();
     }
+  });
+
+  it("waits for late workspace subscription unsubscribe when stopped during startup", async () => {
+    const repoPath = await initRepo();
+    const rootPaths: string[] = [];
+    const subscriptionDeferred =
+      createDeferredPromise<ParcelWatcherSubscribeResult>();
+    const unsubscribeDeferred = createDeferredPromise<void>();
+    const unsubscribe = vi.fn<() => Promise<void>>(
+      async () => unsubscribeDeferred.promise,
+    );
+    const mockSubscribe = async (
+      ...watchArgs: ParcelWatcherSubscribeArgs
+    ): Promise<ParcelWatcherSubscribeResult> => {
+      if (isWorkspaceRootSubscription(watchArgs, repoPath)) {
+        rootPaths.push(watchArgs[0]);
+        return subscriptionDeferred.promise;
+      }
+      return createMockWatcherSubscription();
+    };
+    vi.spyOn(parcelWatcher, "subscribe").mockImplementation(mockSubscribe);
+    const stopWatching = watchWorkspaceStatusImpl(repoPath, {
+      onChange: () => undefined,
+      onWatchError: ignoreWatchError,
+    });
+
+    await waitForCallCount(() => rootPaths.length, 1, WATCH_TEST_TIMEOUT_MS);
+    let stopResolved = false;
+    const stopPromise = stopWatching().then(() => {
+      stopResolved = true;
+    });
+    await Promise.resolve();
+    expect(stopResolved).toBe(false);
+
+    subscriptionDeferred.resolve({ unsubscribe });
+    await waitForCallCount(
+      () => unsubscribe.mock.calls.length,
+      1,
+      WATCH_TEST_TIMEOUT_MS,
+    );
+    expect(stopResolved).toBe(false);
+
+    unsubscribeDeferred.resolve(undefined);
+    await stopPromise;
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(stopResolved).toBe(true);
   });
 
   it("ignores shared common-dir index updates for detached worktree environments", async () => {

@@ -256,11 +256,15 @@ describe.sequential("watchPathChanges", () => {
     }
   });
 
-  it("unsubscribes a late subscription if disposed during startup", async () => {
+  it("waits for late startup unsubscribe when disposed during startup", async () => {
     const threadStorageRoot = path.join("/tmp", "bb-watch-path-late");
     const subscriptionDeferred =
       createDeferredPromise<ParcelWatcherSubscribeResult>();
-    const { rootPaths, unsubscribe, watchPathChanges } =
+    const unsubscribeDeferred = createDeferredPromise<void>();
+    const unsubscribe = vi.fn<() => Promise<void>>(
+      async () => unsubscribeDeferred.promise,
+    );
+    const { rootPaths, watchPathChanges } =
       await importWatchPathWithMockedWatcher({
         pathExistsImplementation: async () => true,
         subscribeImplementation: async () => subscriptionDeferred.promise,
@@ -275,15 +279,26 @@ describe.sequential("watchPathChanges", () => {
       () => rootPaths.length,
       (count) => count === 1,
     );
-    stopWatching();
+    let stopResolved = false;
+    const stopPromise = stopWatching().then(() => {
+      stopResolved = true;
+    });
+    await Promise.resolve();
+    expect(stopResolved).toBe(false);
+
     subscriptionDeferred.resolve({ unsubscribe });
 
     await waitFor(
       () => unsubscribe.mock.calls.length,
       (callCount) => callCount === 1,
     );
+    expect(stopResolved).toBe(false);
+
+    unsubscribeDeferred.resolve(undefined);
+    await stopPromise;
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(stopResolved).toBe(true);
   });
 
   it("coalesces repeated batches before flushing", async () => {

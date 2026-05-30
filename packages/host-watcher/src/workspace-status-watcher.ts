@@ -20,8 +20,7 @@ const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
 const WORKSPACE_STATUS_WATCH_MAX_WAIT_MS = 500;
 const WORKSPACE_STATUS_WATCH_RETRY_DELAY_MS = 250;
 const WORKSPACE_STATUS_WATCH_MAX_RETRY_DELAY_MS = 30_000;
-const FSEVENTS_DROPPED_EVENTS_RESCAN_MESSAGE =
-  "File system must be re-scanned";
+const FSEVENTS_DROPPED_EVENTS_RESCAN_MESSAGE = "File system must be re-scanned";
 
 type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
 type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
@@ -86,6 +85,8 @@ export class WorkspaceStatusWatcher {
   private metadataRetryAttempt = 0;
   private metadataStartRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly pendingRecoveryRescanRootPaths = new Set<string>();
+  private readonly pendingSubscriptionStarts = new Set<Promise<void>>();
+  private readonly pendingSubscriptionStops = new Set<Promise<void>>();
   private readonly retryAttempts = new Map<string, number>();
   private readonly retryTimers = new Map<
     string,
@@ -131,7 +132,7 @@ export class WorkspaceStatusWatcher {
     void this.startAsync();
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.disposed = true;
     this.changeScheduler.dispose();
     this.changedPaths.clear();
@@ -145,8 +146,24 @@ export class WorkspaceStatusWatcher {
       clearTimeout(retryTimer);
     }
     this.retryTimers.clear();
-    for (const rootPath of [...this.subscriptions.keys()]) {
-      this.stopSubscription(rootPath);
+    await Promise.all(
+      [...this.subscriptions.keys()].map((rootPath) =>
+        this.stopSubscription(rootPath),
+      ),
+    );
+    await this.awaitPendingSubscriptionStarts();
+    await this.awaitPendingSubscriptionStops();
+  }
+
+  private async awaitPendingSubscriptionStarts(): Promise<void> {
+    while (this.pendingSubscriptionStarts.size > 0) {
+      await Promise.all([...this.pendingSubscriptionStarts]);
+    }
+  }
+
+  private async awaitPendingSubscriptionStops(): Promise<void> {
+    while (this.pendingSubscriptionStops.size > 0) {
+      await Promise.all([...this.pendingSubscriptionStops]);
     }
   }
 
@@ -163,7 +180,7 @@ export class WorkspaceStatusWatcher {
     this.startMetadataWatchSubscriptions();
   }
 
-  private stopSubscription(rootPath: string): void {
+  private async stopSubscription(rootPath: string): Promise<void> {
     const retryTimer = this.retryTimers.get(rootPath);
     if (retryTimer !== undefined) {
       clearTimeout(retryTimer);
@@ -174,9 +191,22 @@ export class WorkspaceStatusWatcher {
       return;
     }
     this.subscriptions.delete(rootPath);
-    void subscription.unsubscribe().catch(() => {
-      // Ignore unsubscribe failures during watcher teardown.
-    });
+    await this.unsubscribeSubscription(subscription);
+  }
+
+  private unsubscribeSubscription(
+    subscription: ParcelWatcherAsyncSubscription,
+  ): Promise<void> {
+    const pendingStop = subscription
+      .unsubscribe()
+      .catch(() => {
+        // Ignore unsubscribe failures during watcher teardown.
+      })
+      .finally(() => {
+        this.pendingSubscriptionStops.delete(pendingStop);
+      });
+    this.pendingSubscriptionStops.add(pendingStop);
+    return pendingStop;
   }
 
   private resetWatchRetryState(rootPath: string): void {
@@ -241,7 +271,7 @@ export class WorkspaceStatusWatcher {
   }
 
   private handleWatchFailure(spec: WatchSubscriptionSpec): void {
-    this.stopSubscription(spec.rootPath);
+    void this.stopSubscription(spec.rootPath);
     this.scheduleWatchRetry(spec);
   }
 
@@ -261,7 +291,10 @@ export class WorkspaceStatusWatcher {
   }
 
   private startWatchSubscription(spec: WatchSubscriptionSpec): void {
-    void this.startWatchSubscriptionAsync(spec);
+    const pendingStart = this.startWatchSubscriptionAsync(spec).finally(() => {
+      this.pendingSubscriptionStarts.delete(pendingStart);
+    });
+    this.pendingSubscriptionStarts.add(pendingStart);
   }
 
   private async startWatchSubscriptionAsync(
@@ -315,15 +348,11 @@ export class WorkspaceStatusWatcher {
         spec.options,
       );
       if (this.disposed) {
-        void subscription.unsubscribe().catch(() => {
-          // Ignore unsubscribe failures after late subscription setup.
-        });
+        await this.unsubscribeSubscription(subscription);
         return;
       }
       if (this.subscriptions.has(spec.rootPath)) {
-        void subscription.unsubscribe().catch(() => {
-          // Ignore duplicate unsubscribe failures.
-        });
+        await this.unsubscribeSubscription(subscription);
         return;
       }
       this.resetWatchRetryState(spec.rootPath);

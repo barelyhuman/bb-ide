@@ -34,6 +34,13 @@ export type HostDaemonActiveThread = z.infer<
   typeof hostDaemonActiveThreadSchema
 >;
 
+export const hostDaemonLoadedEnvironmentSchema = z.object({
+  environmentId: z.string().min(1),
+});
+export type HostDaemonLoadedEnvironment = z.infer<
+  typeof hostDaemonLoadedEnvironmentSchema
+>;
+
 export const hostDaemonTrackedThreadTargetSchema = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
@@ -52,8 +59,9 @@ export const hostDaemonSessionOpenRequestSchema = z.object({
   // actionable protocol mismatch instead of an opaque validation failure.
   protocolVersion: z.number().int().positive(),
   activeThreads: z.array(hostDaemonActiveThreadSchema),
+  loadedEnvironments: z.array(hostDaemonLoadedEnvironmentSchema).default([]),
 });
-export type HostDaemonSessionOpenRequest = z.infer<
+export type HostDaemonSessionOpenRequest = z.input<
   typeof hostDaemonSessionOpenRequestSchema
 >;
 
@@ -84,6 +92,7 @@ export const hostDaemonSessionOpenResponseSchema = z
     heartbeatIntervalMs: z.number().int().positive(),
     leaseTimeoutMs: z.number().int().positive(),
     trackedThreadTargets: z.array(hostDaemonTrackedThreadTargetSchema),
+    retiredEnvironmentIds: z.array(z.string().min(1)).default([]),
   })
   .strict();
 export type HostDaemonSessionOpenResponse = z.infer<
