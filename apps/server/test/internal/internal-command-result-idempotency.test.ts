@@ -264,16 +264,15 @@ describe("internal command result idempotency", () => {
       const threadNotifications: string[] = [];
       const environmentNotifications: string[] = [];
       const originalNotifyThread = harness.hub.notifyThread.bind(harness.hub);
-      const originalNotifyEnvironment =
-        harness.hub.notifyEnvironment.bind(harness.hub);
+      const originalNotifyEnvironment = harness.hub.notifyEnvironment.bind(
+        harness.hub,
+      );
       harness.hub.notifyThread = (threadId, changes) => {
         threadNotifications.push(`${threadId}:${changes.join(",")}`);
         originalNotifyThread(threadId, changes);
       };
       harness.hub.notifyEnvironment = (environmentId, changes) => {
-        environmentNotifications.push(
-          `${environmentId}:${changes.join(",")}`,
-        );
+        environmentNotifications.push(`${environmentId}:${changes.join(",")}`);
         originalNotifyEnvironment(environmentId, changes);
       };
 
@@ -540,8 +539,9 @@ describe("internal command result idempotency", () => {
       ).toMatchObject({ commandId: queuedStop.row.id, state: "completed" });
 
       expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeNull();
-      expect(getEnvironment(harness.db, environment.id)?.cleanupRequestedAt)
-        .not.toBeNull();
+      expect(
+        getEnvironment(harness.db, environment.id)?.cleanupRequestedAt,
+      ).not.toBeNull();
       expect(
         getEnvironmentOperation(harness.db, {
           environmentId: environment.id,

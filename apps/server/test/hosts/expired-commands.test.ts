@@ -585,7 +585,8 @@ describe("expired commands", () => {
     const harness = await createTestAppHarness();
     try {
       const now = Date.now();
-      const oldCompletedAt = now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS - 1_000;
+      const oldCompletedAt =
+        now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS - 1_000;
       const host = seedHost(harness.deps, {
         id: "host-legacy-expired-destroy-prune",
       });
