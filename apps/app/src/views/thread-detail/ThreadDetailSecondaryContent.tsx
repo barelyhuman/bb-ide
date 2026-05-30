@@ -112,7 +112,8 @@ export function ThreadDetailSecondaryContent({
   const isConversationCollapsedActive =
     canCollapseConversation && isConversationCollapsed;
   // Real, in-scope activity signal for the collapsed rail: the agent is running.
-  const isConversationWorking = timeline.threadRuntimeDisplayStatus === "active";
+  const isConversationWorking =
+    timeline.threadRuntimeDisplayStatus === "active";
 
   const horizontalPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(
     null,

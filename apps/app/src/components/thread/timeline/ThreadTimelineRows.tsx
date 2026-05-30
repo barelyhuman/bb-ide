@@ -9,10 +9,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type {
-  ManagerTimelineView,
-  TimelineRow,
-} from "@bb/server-contract";
+import type { ManagerTimelineView, TimelineRow } from "@bb/server-contract";
 import {
   assertNever,
   buildTimelineActivityIntentTitles,
@@ -537,8 +534,12 @@ function timelineRowsListGapClassName(
 }
 
 function ConversationRow({ row }: ConversationRowProps) {
-  const { onOpenLink, onOpenLocalFileLink, projectId, resolveUserAttachmentImageSrc } =
-    useTimelineRendererStaticContext();
+  const {
+    onOpenLink,
+    onOpenLocalFileLink,
+    projectId,
+    resolveUserAttachmentImageSrc,
+  } = useTimelineRendererStaticContext();
   if (row.role === "user") {
     return (
       <ConversationMessageContent

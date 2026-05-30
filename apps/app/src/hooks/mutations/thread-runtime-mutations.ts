@@ -71,8 +71,7 @@ interface DeleteThreadQueuedMessageMutationRequest {
   queuedMessageId: string;
 }
 
-interface ReorderThreadQueuedMessageMutationRequest
-  extends QueuedMessageReorderRequest {
+interface ReorderThreadQueuedMessageMutationRequest extends QueuedMessageReorderRequest {
   id: string;
 }
 

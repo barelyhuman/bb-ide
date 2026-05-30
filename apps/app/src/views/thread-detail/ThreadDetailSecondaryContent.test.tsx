@@ -501,9 +501,10 @@ interface DesktopTrafficLightScenario {
   expected: DesktopTrafficLightExpectation;
 }
 
-function renderForTrafficLightCase(
-  state: DesktopTrafficLightScenarioState,
-): { rail: HTMLElement; panel: HTMLElement } {
+function renderForTrafficLightCase(state: DesktopTrafficLightScenarioState): {
+  rail: HTMLElement;
+  panel: HTMLElement;
+} {
   desktopChromeRef.current = state.desktopChrome;
   sidebarShowingRef.current = state.sidebarShowing;
   render(

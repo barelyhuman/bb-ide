@@ -81,7 +81,9 @@ function PinnedTimelineStage({
             {...baseProps}
             timelineRows={rows.slice()}
           />
-          <HeightTransition visible={showIndicator}>{indicator}</HeightTransition>
+          <HeightTransition visible={showIndicator}>
+            {indicator}
+          </HeightTransition>
         </ConversationTimeline>
       </PageShell>
     </div>
@@ -199,7 +201,13 @@ function OptimisticUserMessageFlicker({
   // Three phases per cycle: empty → optimistic → real. The interval is short
   // enough that the optimistic row's mount animation is still in flight when
   // the real row replaces it, reproducing the visible "animate twice" jank.
-  const { step, cycle } = useStreamingTickLoop(2, 200, 18, restartKey, isPaused);
+  const { step, cycle } = useStreamingTickLoop(
+    2,
+    200,
+    18,
+    restartKey,
+    isPaused,
+  );
   const rows: TimelineRow[] = [];
   if (step === 1) {
     rows.push(buildOptimisticUserRow("user-optimistic"));
@@ -713,10 +721,7 @@ const BUNDLE_EXPLORATION_STEPS: readonly ExplorationStep[] = [
   },
 ];
 
-function bundleExplorationRow(
-  step: ExplorationStep,
-  seq: number,
-): TimelineRow {
+function bundleExplorationRow(step: ExplorationStep, seq: number): TimelineRow {
   return {
     id: `streaming-rows-bundle:${step.callId}`,
     threadId: THREAD_ID,

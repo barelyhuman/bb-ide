@@ -126,7 +126,11 @@ export function useThreadTerminalController({
     visibleSessions.find((session) => session.id === activeTerminalId) ?? null;
 
   useEffect(() => {
-    if (!panelState.isOpen || terminalsQuery.isLoading || terminalsQuery.error) {
+    if (
+      !panelState.isOpen ||
+      terminalsQuery.isLoading ||
+      terminalsQuery.error
+    ) {
       return;
     }
     if (activeFixedTerminalId === activeTerminalId) {

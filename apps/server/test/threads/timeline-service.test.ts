@@ -850,12 +850,8 @@ describe("buildThreadTimeline", () => {
       timelineViewMode: "manager-conversation",
     }).profile;
 
-    expect(latestProfile.selectionStrategy).toBe(
-      "manager-conversation-window",
-    );
-    expect(latestProfile.eventRowCount).toBeLessThan(
-      fullProfile.eventRowCount,
-    );
+    expect(latestProfile.selectionStrategy).toBe("manager-conversation-window");
+    expect(latestProfile.eventRowCount).toBeLessThan(fullProfile.eventRowCount);
   });
 
   it("uses the same manager conversation range selector without anchors", async () => {
@@ -1419,17 +1415,13 @@ describe("buildThreadTimeline", () => {
       });
     }
 
-    const standardLatestPage = buildThreadTimeline(
-      harness.db,
-      standardThread,
-      {
-        isDevelopment: false,
-        page: {
-          kind: "latest",
-          segmentLimit: 2,
-        },
+    const standardLatestPage = buildThreadTimeline(harness.db, standardThread, {
+      isDevelopment: false,
+      page: {
+        kind: "latest",
+        segmentLimit: 2,
       },
-    );
+    });
     const standardUserTexts = flattenTimelineSourceRows(
       standardLatestPage.rows,
     ).flatMap((row) =>

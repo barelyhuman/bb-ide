@@ -256,7 +256,9 @@ interface ConversationCollapseProbeProps {
 // reads/writes, and exposes a button that stands in for the collapsed rail's
 // expand control so a sidebar-only test can drive the same state. Keyed by
 // threadId so a test can probe several threads independently.
-function ConversationCollapseProbe({ threadId }: ConversationCollapseProbeProps) {
+function ConversationCollapseProbe({
+  threadId,
+}: ConversationCollapseProbeProps) {
   const [collapsed, setCollapsed] = useAtom(
     getThreadConversationCollapsedAtom(threadId),
   );
@@ -435,9 +437,7 @@ describe("ProjectList", () => {
       expect(fetchMock).toHaveBeenCalled();
       expect(
         queryClient.getQueryState(sidebarBootstrapQueryKey())?.status,
-      ).toBe(
-        "error",
-      );
+      ).toBe("error");
     });
     expect(screen.queryByText("Projects unavailable")).toBeNull();
     expect(screen.queryByText("No projects")).toBeNull();
@@ -1742,9 +1742,7 @@ describe("ProjectList", () => {
 
     // Selecting the agent/thread row is the inverse: it restores the
     // conversation by clearing this thread's own collapse flag.
-    fireEvent.click(
-      screen.getByRole("link", { name: "Open Sidebar Manager" }),
-    );
+    fireEvent.click(screen.getByRole("link", { name: "Open Sidebar Manager" }));
 
     await waitFor(() => {
       expect(

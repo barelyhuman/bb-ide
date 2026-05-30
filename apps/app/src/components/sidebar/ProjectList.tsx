@@ -557,9 +557,7 @@ export function ProjectListActionButtons({
 }: ProjectListActionButtonsProps) {
   const isNewChatDisabled = !onNewChat;
   const isNewManagerDisabled = !onNewManager;
-  const newChatTitle = isNewChatDisabled
-    ? "Start a new thread"
-    : "New thread";
+  const newChatTitle = isNewChatDisabled ? "Start a new thread" : "New thread";
   const newManagerTitle = isNewManagerDisabled
     ? "Hire a new manager"
     : "New manager";
@@ -602,9 +600,7 @@ export function ProjectListActionButtons({
   );
 }
 
-export function ProjectListShell({
-  children,
-}: ProjectListShellProps) {
+export function ProjectListShell({ children }: ProjectListShellProps) {
   return (
     <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
       <SidebarGroupContent>{children}</SidebarGroupContent>
@@ -717,9 +713,12 @@ function ProjectListComponent({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-  const handleProjectDragStart = useCallback((_event: DragStartEvent) => {
-    beginProjectDragClickSuppression();
-  }, [beginProjectDragClickSuppression]);
+  const handleProjectDragStart = useCallback(
+    (_event: DragStartEvent) => {
+      beginProjectDragClickSuppression();
+    },
+    [beginProjectDragClickSuppression],
+  );
   const handleProjectDragCancel = useCallback(() => {
     clearProjectDragClickSuppressionSoon();
   }, [clearProjectDragClickSuppressionSoon]);
@@ -975,9 +974,12 @@ function ProjectListComponent({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-  const handleSidebarSectionDragStart = useCallback((_event: DragStartEvent) => {
-    beginSidebarSectionDragClickSuppression();
-  }, [beginSidebarSectionDragClickSuppression]);
+  const handleSidebarSectionDragStart = useCallback(
+    (_event: DragStartEvent) => {
+      beginSidebarSectionDragClickSuppression();
+    },
+    [beginSidebarSectionDragClickSuppression],
+  );
   const handleSidebarSectionDragCancel = useCallback(() => {
     clearSidebarSectionDragClickSuppressionSoon();
   }, [clearSidebarSectionDragClickSuppressionSoon]);
@@ -1017,11 +1019,10 @@ function ProjectListComponent({
     ],
   );
 
-  const projectlessThreadListState =
-    getProjectThreadListState({
-      status: projectsState.status,
-      threads: threadsByProject.get(PERSONAL_PROJECT_ID),
-    });
+  const projectlessThreadListState = getProjectThreadListState({
+    status: projectsState.status,
+    threads: threadsByProject.get(PERSONAL_PROJECT_ID),
+  });
 
   const pinnedSectionContent = (
     <PinnedThreadTree
@@ -1194,7 +1195,9 @@ function ProjectListComponent({
                   id={sectionId}
                   label="Pinned"
                   disabled={visibleSidebarSectionOrder.length < 2}
-                  consumeClickSuppression={consumeSidebarSectionClickSuppression}
+                  consumeClickSuppression={
+                    consumeSidebarSectionClickSuppression
+                  }
                 >
                   {pinnedSectionContent}
                 </SortableSidebarSection>
@@ -1206,7 +1209,9 @@ function ProjectListComponent({
                   disabled={visibleSidebarSectionOrder.length < 2}
                   actions={projectsSectionActions}
                   actionsAlwaysVisible={projectsSectionActionsAlwaysVisible}
-                  consumeClickSuppression={consumeSidebarSectionClickSuppression}
+                  consumeClickSuppression={
+                    consumeSidebarSectionClickSuppression
+                  }
                 >
                   {projectsSectionContent}
                 </SortableSidebarSection>
@@ -1217,7 +1222,9 @@ function ProjectListComponent({
                   label="Threads"
                   disabled={visibleSidebarSectionOrder.length < 2}
                   actions={threadsSectionActions}
-                  consumeClickSuppression={consumeSidebarSectionClickSuppression}
+                  consumeClickSuppression={
+                    consumeSidebarSectionClickSuppression
+                  }
                 >
                   {threadsSectionContent}
                 </SortableSidebarSection>

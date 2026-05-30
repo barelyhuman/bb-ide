@@ -525,7 +525,8 @@ const explorationBundleRows: TimelineRow[] = [
     },
     intentPath: "packages/core-ui/src",
     intentType: "search",
-    output: "src/assistant-stream-projection.ts:24\nsrc/to-view-messages.ts:131",
+    output:
+      "src/assistant-stream-projection.ts:24\nsrc/to-view-messages.ts:131",
   }),
   explorationToolRow({
     id: "call_explore_glob_tests",

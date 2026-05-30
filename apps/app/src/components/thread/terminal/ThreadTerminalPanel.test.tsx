@@ -448,9 +448,7 @@ describe("ThreadTerminalPanel", () => {
     expect(await screen.findByText("Terminal disconnected")).toBeTruthy();
     expect(screen.queryByText("This session can't reconnect.")).toBeNull();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Start new terminal" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start new terminal" }));
 
     await waitFor(() => {
       expect(apiMocks.createThreadTerminal).toHaveBeenCalledTimes(1);

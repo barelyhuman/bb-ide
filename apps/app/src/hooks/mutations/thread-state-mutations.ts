@@ -255,7 +255,9 @@ export function usePinThread() {
         queryKey: threadsQueryKey(),
         mapper: (list) =>
           list.map((thread) =>
-            thread.id === id ? { ...thread, pinnedAt, pinSortKey: null } : thread,
+            thread.id === id
+              ? { ...thread, pinnedAt, pinSortKey: null }
+              : thread,
           ),
       });
 

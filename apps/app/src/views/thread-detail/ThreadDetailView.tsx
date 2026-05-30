@@ -88,7 +88,10 @@ import { AppTabContent } from "@/components/secondary-panel/AppTabContent";
 import { BrowserTabDeck } from "@/components/secondary-panel/BrowserTabDeck";
 import { NewTabPage } from "@/components/secondary-panel/NewTabPage";
 import { Icon } from "@/components/ui/icon.js";
-import { getDesktopBrowserApi, isDesktopBrowserAvailable } from "@/lib/bb-desktop";
+import {
+  getDesktopBrowserApi,
+  isDesktopBrowserAvailable,
+} from "@/lib/bb-desktop";
 import {
   resolveChatLinkOpenTarget,
   useOpenLinksInAppBrowserPreference,
@@ -612,7 +615,9 @@ export function ThreadDetailView() {
             id: tab.id,
             filename: browserLabel.length > 0 ? browserLabel : "New tab",
             isActive: activeBrowserTab?.id === tab.id,
-            leadingVisual: <Icon name="Globe" className="size-3.5" aria-hidden />,
+            leadingVisual: (
+              <Icon name="Globe" className="size-3.5" aria-hidden />
+            ),
             statusLabel: null,
             onSelect: () => activateBrowserTab(tab.id),
             onClose: () => closeBrowserTab(tab.id),
