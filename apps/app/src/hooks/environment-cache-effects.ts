@@ -8,6 +8,9 @@ import {
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
   systemExecutionOptionsEnvironmentQueryKeyPrefix,
+  threadAppMarkdownPreviewQueryKeyPrefix,
+  threadAppQueryKeyPrefix,
+  threadAppsQueryKey,
   threadComposerBootstrapEnvironmentQueryKeyPrefix,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
@@ -104,5 +107,14 @@ export function invalidateThreadStorageQueries({
   });
   queryClient.invalidateQueries({
     queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: threadAppsQueryKey(threadId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: threadAppQueryKeyPrefix(threadId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: threadAppMarkdownPreviewQueryKeyPrefix(threadId),
   });
 }

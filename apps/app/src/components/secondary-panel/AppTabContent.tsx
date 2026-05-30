@@ -12,9 +12,25 @@ import { FilePreview as FilePreviewSurface } from "./FilePreview";
 
 const APP_HEADER_MODE = "none";
 
+interface BuildReloadableAppEntryUrlArgs {
+  appId: string;
+  reloadToken: number;
+  threadId: string;
+}
+
 export interface AppTabContentProps {
   appId: string;
   threadId: string;
+}
+
+function buildReloadableAppEntryUrl({
+  appId,
+  reloadToken,
+  threadId,
+}: BuildReloadableAppEntryUrlArgs): string {
+  return `${buildThreadAppEntryUrl(threadId, appId)}?v=${encodeURIComponent(
+    String(reloadToken),
+  )}`;
 }
 
 export function AppTabContent({ appId, threadId }: AppTabContentProps) {
@@ -41,6 +57,15 @@ export function AppTabContent({ appId, threadId }: AppTabContentProps) {
     }
     return createAssetMarkdownUrlTransform(markdownAssetBaseUrl);
   }, [markdownAssetBaseUrl]);
+  const htmlEntryUrl = useMemo(
+    () =>
+      buildReloadableAppEntryUrl({
+        appId,
+        reloadToken: appDetail.dataUpdatedAt,
+        threadId,
+      }),
+    [appDetail.dataUpdatedAt, appId, threadId],
+  );
 
   if (appDetail.isError) {
     return (
@@ -77,7 +102,7 @@ export function AppTabContent({ appId, threadId }: AppTabContentProps) {
           kind: "iframe",
           sandbox: null,
           title: appDetail.data.name,
-          url: buildThreadAppEntryUrl(threadId, appId),
+          url: htmlEntryUrl,
         }}
       />
     );

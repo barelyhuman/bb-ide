@@ -26,6 +26,9 @@ import {
   hostsQueryKey,
   sidebarBootstrapQueryKey,
   systemProvidersQueryKey,
+  threadAppMarkdownPreviewQueryKeyPrefix,
+  threadAppQueryKeyPrefix,
+  threadAppsQueryKey,
   threadListQueryKey,
   threadQueryKey,
   threadTerminalsQueryKey,
@@ -545,6 +548,9 @@ function dirtyThreadStorageQueriesForEnvironment({
     queryKeys.push(threadStorageFilesForThreadQueryKeyPrefix(threadId));
     queryKeys.push(threadStoragePathsForThreadQueryKeyPrefix(threadId));
     queryKeys.push(threadStorageFilePreviewQueryKeyPrefix(threadId));
+    queryKeys.push(threadAppsQueryKey(threadId));
+    queryKeys.push(threadAppQueryKeyPrefix(threadId));
+    queryKeys.push(threadAppMarkdownPreviewQueryKeyPrefix(threadId));
   }
   return queryKeys;
 }

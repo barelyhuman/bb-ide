@@ -27,6 +27,7 @@ export function useResponsiveGitDiffPanelDisplay({
   const setPersistedWidthPercent = useSetAtom(secondaryPanelWidthPercentAtom);
   const secondaryPanelRef = useRef<HTMLElement>(null!);
   const secondaryResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
+  const isSecondaryPanelDraggingRef = useRef(false);
   const lastSecondaryPanelSizeRef = useRef(persistedWidthPercent);
   const lastDiffViewWideEnoughRef = useRef<boolean | null>(null);
   const hasExplicitDisplayModeRef = useRef(false);
@@ -104,6 +105,7 @@ export function useResponsiveGitDiffPanelDisplay({
   );
 
   const finishSecondaryPanelDragging = useCallback(() => {
+    isSecondaryPanelDraggingRef.current = false;
     setIsSecondaryPanelDragging(false);
     setIsResizing(false);
     clearResizeCursor();
@@ -118,6 +120,7 @@ export function useResponsiveGitDiffPanelDisplay({
     useCallback<SecondaryPanelDraggingHandler>(
       (isDragging) => {
         if (isDragging) {
+          isSecondaryPanelDraggingRef.current = true;
           setIsSecondaryPanelDragging(true);
           setIsResizing(true);
           applyResizeCursor("horizontal");
@@ -130,12 +133,25 @@ export function useResponsiveGitDiffPanelDisplay({
       [finishSecondaryPanelDragging, setIsResizing],
     );
 
+  useEffect(
+    () => () => {
+      if (!isSecondaryPanelDraggingRef.current) {
+        return;
+      }
+      isSecondaryPanelDraggingRef.current = false;
+      setIsResizing(false);
+      clearResizeCursor();
+    },
+    [setIsResizing],
+  );
+
   useEffect(() => {
     if (!isSecondaryPanelDragging) {
       return;
     }
 
     window.addEventListener("pointerup", finishSecondaryPanelDragging, true);
+    window.addEventListener("mouseup", finishSecondaryPanelDragging, true);
     window.addEventListener(
       "pointercancel",
       finishSecondaryPanelDragging,
@@ -149,6 +165,7 @@ export function useResponsiveGitDiffPanelDisplay({
         finishSecondaryPanelDragging,
         true,
       );
+      window.removeEventListener("mouseup", finishSecondaryPanelDragging, true);
       window.removeEventListener(
         "pointercancel",
         finishSecondaryPanelDragging,

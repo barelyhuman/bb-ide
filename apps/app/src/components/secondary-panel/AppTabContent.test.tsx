@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { AppDetail, AppSummary } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { threadAppsQueryKey } from "@/hooks/queries/query-keys";
+import {
+  threadAppQueryKey,
+  threadAppsQueryKey,
+} from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { AppTabContent } from "./AppTabContent";
 
@@ -37,6 +40,7 @@ const MARKDOWN_APP: AppDetail = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("AppTabContent", () => {
@@ -50,8 +54,8 @@ describe("AppTabContent", () => {
     render(<AppTabContent threadId="thr_1" appId="status" />, { wrapper });
 
     const frame = screen.getByTitle("Status");
-    expect(frame.getAttribute("src")).toBe(
-      "/api/v1/threads/thr_1/apps/status/",
+    expect(frame.getAttribute("src")).toMatch(
+      /^\/api\/v1\/threads\/thr_1\/apps\/status\/\?v=\d+$/u,
     );
     expect(api.getThreadApp).toHaveBeenCalledWith(
       "thr_1",
@@ -67,11 +71,43 @@ describe("AppTabContent", () => {
     render(<AppTabContent threadId="thr_1" appId="status" />, { wrapper });
 
     const frame = await screen.findByTitle("Status");
-    expect(frame.getAttribute("src")).toBe(
-      "/api/v1/threads/thr_1/apps/status/",
+    expect(frame.getAttribute("src")).toMatch(
+      /^\/api\/v1\/threads\/thr_1\/apps\/status\/\?v=\d+$/u,
     );
     expect(frame.getAttribute("sandbox")).toBeNull();
     expect(api.getThreadAppMarkdownPreview).not.toHaveBeenCalled();
+  });
+
+  it("reloads HTML app iframes when app detail data refreshes", async () => {
+    vi.mocked(api.getThreadApp).mockReturnValue(new Promise(() => {}));
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const appQueryKey = threadAppQueryKey("thr_1", "status");
+    queryClient.setQueryData<AppDetail>(appQueryKey, HTML_APP, {
+      updatedAt: 1_000,
+    });
+
+    render(<AppTabContent threadId="thr_1" appId="status" />, { wrapper });
+
+    const firstFrame = screen.getByTitle("Status");
+    const firstSrc = firstFrame.getAttribute("src");
+    act(() => {
+      queryClient.setQueryData<AppDetail>(
+        appQueryKey,
+        {
+          ...HTML_APP,
+          name: "Status",
+        },
+        {
+          updatedAt: 2_000,
+        },
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Status").getAttribute("src")).not.toBe(
+        firstSrc,
+      );
+    });
   });
 
   it("renders markdown apps through the static markdown preview path", async () => {
