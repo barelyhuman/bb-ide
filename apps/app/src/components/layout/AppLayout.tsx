@@ -30,6 +30,7 @@ import {
 } from "@/hooks/queries/thread-queries";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { applyResizeCursor, clearResizeCursor } from "@/lib/resizeCursor";
 import { cn } from "@/lib/utils";
 import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
@@ -150,7 +151,7 @@ function FloatingSidebarTrigger() {
 
 function resetSidebarResizeDocumentState(): void {
   document.body.classList.remove("sidebar-resizing");
-  document.body.style.cursor = "";
+  clearResizeCursor();
   document.body.style.userSelect = "";
 }
 
@@ -468,7 +469,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       startXRef.current = event.clientX;
       startWidthRef.current = liveWidthRef.current;
       document.body.classList.add("sidebar-resizing");
-      document.body.style.cursor = "col-resize";
+      applyResizeCursor("horizontal");
       document.body.style.userSelect = "none";
     },
     [],

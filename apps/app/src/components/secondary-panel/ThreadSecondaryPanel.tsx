@@ -10,7 +10,10 @@ import { Icon } from "@/components/ui/icon.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/lib/utils";
-import { PANEL_COLLAPSE_TRANSITION_CLASS } from "./panelTransitionTokens";
+import {
+  PANEL_COLLAPSE_TRANSITION_CLASS,
+  PANEL_RESIZE_HIT_AREA_MARGINS,
+} from "./panelTransitionTokens";
 import { resolveConversationCollapseControl } from "./panelToggleControlState";
 import { SecondaryPanelTabStrip } from "./SecondaryPanelTabStrip";
 import type { SecondaryPanelFileTab } from "./secondaryPanelFileTab";
@@ -494,6 +497,7 @@ function SecondaryPanelResizeHandle({
       // that state.
       disabled={!isOpen || isConversationCollapsed}
       onDragging={onDragging}
+      hitAreaMargins={PANEL_RESIZE_HIT_AREA_MARGINS}
       className={cn(
         "group relative shrink-0 overflow-visible bg-transparent transition-[width,opacity,background-color] before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']",
         PANEL_COLLAPSE_TRANSITION_CLASS,

@@ -38,7 +38,11 @@ import {
 } from "@/components/secondary-panel/ThreadMetadataContent";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { ConversationCollapsedRail } from "@/components/secondary-panel/ConversationCollapsedRail";
-import { PANEL_COLLAPSE_TRANSITION_CLASS } from "@/components/secondary-panel/panelTransitionTokens";
+import {
+  PANEL_COLLAPSE_TRANSITION_CLASS,
+  PANEL_RESIZE_HIT_AREA_MARGINS,
+} from "@/components/secondary-panel/panelTransitionTokens";
+import { applyResizeCursor, clearResizeCursor } from "@/lib/resizeCursor";
 
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
 const COLLAPSED_TIMELINE_PANEL_SIZE_PERCENT = 0;
@@ -194,9 +198,12 @@ export function ThreadDetailSecondaryContent({
   const handleTerminalPanelDragging = useCallback<TerminalPanelDraggingHandler>(
     (isDragging) => {
       isTerminalPanelDraggingRef.current = isDragging;
-      if (!isDragging) {
-        persistTerminalPanelSize();
+      if (isDragging) {
+        applyResizeCursor("vertical");
+        return;
       }
+      clearResizeCursor();
+      persistTerminalPanelSize();
     },
     [persistTerminalPanelSize],
   );
@@ -384,6 +391,7 @@ function TerminalPanelResizeHandle({
       id="thread-detail-terminal-panel-handle"
       disabled={!isOpen}
       onDragging={onDragging}
+      hitAreaMargins={PANEL_RESIZE_HIT_AREA_MARGINS}
       className={cn(
         "group relative shrink-0 cursor-row-resize overflow-visible bg-transparent transition-[height,opacity,background-color]",
         PANEL_COLLAPSE_TRANSITION_CLASS,

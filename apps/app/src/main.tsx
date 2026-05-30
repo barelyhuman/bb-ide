@@ -6,11 +6,13 @@ import { App } from "./App";
 import { AppToaster } from "./components/AppToaster";
 import { initializePreferredTheme } from "./hooks/useTheme";
 import { createAppQueryClient } from "./lib/query-client";
+import { takeOverPanelResizeCursor } from "./lib/resizeCursor";
 import "./app.css";
 
 const queryClient = createAppQueryClient();
 
 initializePreferredTheme();
+takeOverPanelResizeCursor();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

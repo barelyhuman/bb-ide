@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { useResizeObserver } from "usehooks-ts";
+import { applyResizeCursor, clearResizeCursor } from "@/lib/resizeCursor";
 import {
   secondaryPanelWidthPercentAtom,
   threadSecondaryPanelResizingAtom,
@@ -105,6 +106,7 @@ export function useResponsiveGitDiffPanelDisplay({
   const finishSecondaryPanelDragging = useCallback(() => {
     setIsSecondaryPanelDragging(false);
     setIsResizing(false);
+    clearResizeCursor();
 
     // Drag finished — persist the user's chosen width.
     if (lastSecondaryPanelSizeRef.current > 0) {
@@ -118,6 +120,7 @@ export function useResponsiveGitDiffPanelDisplay({
         if (isDragging) {
           setIsSecondaryPanelDragging(true);
           setIsResizing(true);
+          applyResizeCursor("horizontal");
           hasExplicitDisplayModeRef.current = false;
           return;
         }
