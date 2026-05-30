@@ -47,6 +47,7 @@ export function getEventProviderThreadId(
     case "system/permissionGrant/lifecycle":
     case "system/userQuestion/lifecycle":
     case "system/thread-provisioning":
+    case "system/provider-turn-watchdog":
       return undefined;
     default:
       return assertNever(decoded);
@@ -93,6 +94,7 @@ export function getEventParentToolCallId(
     case "system/permissionGrant/lifecycle":
     case "system/userQuestion/lifecycle":
     case "system/thread-provisioning":
+    case "system/provider-turn-watchdog":
       return undefined;
     default:
       return assertNever(decoded);

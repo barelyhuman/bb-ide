@@ -68,6 +68,7 @@ import {
 } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
 import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
+import { runProviderTurnWatchdogSweep } from "../threads/provider-turn-watchdog.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
@@ -350,6 +351,7 @@ export async function runThreadLifecycleSweep(
         requestThreadStop(deps, {
           environmentId: thread.environmentId,
           hostId: thread.hostId,
+          interruptionReason: "manual-stop",
           stopRequestedAt: thread.stopRequestedAt,
           threadId: thread.threadId,
         });
@@ -432,6 +434,7 @@ export async function runPeriodicSweeps(
     await sweepDueAutomations(deps);
     await sweepDueNudges(deps);
     await runEnvironmentProvisioningSweep(deps);
+    runProviderTurnWatchdogSweep(deps, { now });
     await runThreadLifecycleSweep(deps);
     await runQueuedMessageAutoSendSweep(deps);
     await runManagedEnvironmentArchiveCleanupSweep(

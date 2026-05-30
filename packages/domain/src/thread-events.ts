@@ -12,6 +12,8 @@ import {
 } from "./shared-types.js";
 import { jsonValueSchema } from "./json-value.js";
 import { clientTurnRequestIdSchema } from "./protocol-ids.js";
+import { systemProviderTurnWatchdogEventDataSchema } from "./provider-turn-watchdog.js";
+import type { SystemProviderTurnWatchdogEventData } from "./provider-turn-watchdog.js";
 
 export const systemEventTypeValues = [
   "client/thread/start",
@@ -24,6 +26,7 @@ export const systemEventTypeValues = [
   "system/permissionGrant/lifecycle",
   "system/userQuestion/lifecycle",
   "system/thread-provisioning",
+  "system/provider-turn-watchdog",
 ] as const;
 export const systemEventTypeSchema = z.enum(systemEventTypeValues);
 export type SystemEventType = z.infer<typeof systemEventTypeSchema>;
@@ -209,6 +212,7 @@ export type SystemUserQuestionLifecycleEventData = z.infer<
 export const systemThreadInterruptedReasonValues = [
   "manual-stop",
   "host-daemon-restarted",
+  "provider-turn-idle",
 ] as const;
 export const systemThreadInterruptedReasonSchema = z.enum(
   systemThreadInterruptedReasonValues,
@@ -286,7 +290,11 @@ export type ThreadEventDataByType = {
   "system/permissionGrant/lifecycle": SystemPermissionGrantLifecycleEventData;
   "system/userQuestion/lifecycle": SystemUserQuestionLifecycleEventData;
   "system/thread-provisioning": SystemThreadProvisioningEventData;
+  "system/provider-turn-watchdog": SystemProviderTurnWatchdogEventData;
 };
+
+export { systemProviderTurnWatchdogEventDataSchema };
+export type { SystemProviderTurnWatchdogEventData };
 
 export type ThreadEventData =
   | ThreadEventDataByType[SystemEventType]

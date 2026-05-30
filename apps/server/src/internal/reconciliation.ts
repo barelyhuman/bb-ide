@@ -64,6 +64,7 @@ export async function reconcileSessionThreads(
       requestThreadStop(deps, {
         environmentId: thread.environmentId,
         hostId,
+        interruptionReason: "manual-stop",
         stopRequestedAt: thread.stopRequestedAt,
         threadId: thread.id,
       });

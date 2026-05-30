@@ -163,6 +163,7 @@ describe("thread lifecycle interruption", () => {
       requestThreadStop(harness.deps, {
         environmentId: fixture.environmentId,
         hostId: fixture.hostId,
+        interruptionReason: "manual-stop",
         stopRequestedAt: null,
         threadId: fixture.threadId,
       });

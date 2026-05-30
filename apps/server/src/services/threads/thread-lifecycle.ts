@@ -16,7 +16,9 @@ import {
   type DbQueryConnection,
   type DbTransaction,
 } from "@bb/db";
+import type { ThreadOperationRow } from "@bb/db";
 import { assertNever } from "@bb/core-ui";
+import { z } from "zod";
 import {
   markThreadOperationRecordCompleted,
   markThreadOperationRecordFailed,
@@ -33,6 +35,7 @@ import {
   type ThreadEventType,
   type ThreadStatus,
   type WorkspaceProvisionType,
+  systemThreadInterruptedReasonSchema,
   threadScope,
   turnScope,
 } from "@bb/domain";
@@ -78,6 +81,7 @@ import { isPreStartThreadStatus } from "./thread-status.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.submit";
 type ThreadStartCommand = Awaited<ReturnType<typeof buildThreadStartCommand>>;
+type ThreadStopCommand = ReturnType<typeof buildThreadStopCommand>;
 type ThreadEventAppendArgs = Parameters<
   typeof appendThreadEventsInTransaction
 >[1][number];
@@ -106,6 +110,7 @@ export interface QueueReadyThreadTurnCommandArgs {
 }
 
 export interface RequestThreadStopArgs extends QueueThreadStopCommandArgs {
+  interruptionReason: SystemThreadInterruptedReason;
   stopRequestedAt: number | null;
 }
 
@@ -156,6 +161,24 @@ export interface QueueSettledArchivedThreadProviderArchiveCommandArgs {
   threadId: string;
 }
 
+interface ThreadStopOperationPayload {
+  command: ThreadStopCommand;
+  interruptionReason: SystemThreadInterruptedReason;
+}
+
+const threadStopOperationPayloadSchema = z.union([
+  threadStopCommandSchema.transform(
+    (command): ThreadStopOperationPayload => ({
+      command,
+      interruptionReason: "manual-stop",
+    }),
+  ),
+  z.object({
+    command: threadStopCommandSchema,
+    interruptionReason: systemThreadInterruptedReasonSchema,
+  }),
+]);
+
 function nextStatusForInterruptedThread(
   reason: SystemThreadInterruptedReason,
 ): Extract<ThreadStatus, "idle" | "error"> {
@@ -163,9 +186,68 @@ function nextStatusForInterruptedThread(
     case "manual-stop":
     case "host-daemon-restarted":
       return "idle";
+    case "provider-turn-idle":
+      return "error";
     default:
       return assertNever(reason);
   }
+}
+
+function pendingInteractionStopReason(
+  reason: SystemThreadInterruptedReason,
+): string {
+  switch (reason) {
+    case "manual-stop":
+      return "Thread stopped by user request";
+    case "host-daemon-restarted":
+      return "Host daemon restarted while awaiting user interaction";
+    case "provider-turn-idle":
+      return "Thread stopped after the provider stopped sending progress";
+    default:
+      return assertNever(reason);
+  }
+}
+
+function buildThreadStopOperationPayload(
+  args: RequestThreadStopArgs,
+): ThreadStopOperationPayload {
+  return {
+    command: buildThreadStopCommand(args),
+    interruptionReason: args.interruptionReason,
+  };
+}
+
+function parseThreadStopOperationPayload(
+  payload: string,
+): ThreadStopOperationPayload {
+  return parseJsonWithSchema(payload, threadStopOperationPayloadSchema);
+}
+
+function readThreadStopInterruptionReason(
+  operation: ThreadOperationRow | null,
+): SystemThreadInterruptedReason | null {
+  if (!operation) {
+    return null;
+  }
+  try {
+    return parseThreadStopOperationPayload(operation.payload)
+      .interruptionReason;
+  } catch {
+    return null;
+  }
+}
+
+function resolveRequestedThreadStopInterruptionReason(
+  existingOperation: ThreadOperationRow | null,
+  args: RequestThreadStopArgs,
+): SystemThreadInterruptedReason {
+  if (args.stopRequestedAt === null) {
+    return args.interruptionReason;
+  }
+  return (
+    readThreadStopInterruptionReason(existingOperation) ??
+    args.interruptionReason
+  );
 }
 
 interface RequestThreadStartHandoffArgs {
@@ -367,7 +449,11 @@ export function ensureThreadCanQueueStartRequest(
     isPreStartThreadStatus(thread.status) &&
     hasActiveThreadStartOperation(deps, thread.id)
   ) {
-    throwThreadNotWritable(thread, "still_starting", "Thread is still starting");
+    throwThreadNotWritable(
+      thread,
+      "still_starting",
+      "Thread is still starting",
+    );
   }
 }
 
@@ -704,17 +790,29 @@ export function requestThreadStop(
   });
   if (
     existingOperation &&
-    isActiveLifecycleOperationState(existingOperation.state) &&
-    hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
+    isActiveLifecycleOperationState(existingOperation.state)
   ) {
+    if (hasQueuedThreadOperationCommand(deps, existingOperation.commandId)) {
+      return;
+    }
+    advanceThreadStop(deps, {
+      hostId: args.hostId,
+      threadId: args.threadId,
+    });
     return;
   }
 
-  const command = buildThreadStopCommand(args);
+  const payload = buildThreadStopOperationPayload({
+    ...args,
+    interruptionReason: resolveRequestedThreadStopInterruptionReason(
+      existingOperation,
+      args,
+    ),
+  });
   upsertThreadOperationRecord(deps.db, {
     threadId: args.threadId,
     kind: "stop",
-    payload: JSON.stringify(command),
+    payload: JSON.stringify(payload),
   });
   advanceThreadStop(deps, {
     hostId: args.hostId,
@@ -739,6 +837,7 @@ export function requestThreadStopIfNeeded(
   requestThreadStop(deps, {
     environmentId: environment.id,
     hostId: environment.hostId,
+    interruptionReason: "manual-stop",
     stopRequestedAt: thread.stopRequestedAt,
     threadId: thread.id,
   });
@@ -904,10 +1003,7 @@ function advanceThreadStop(
   }
 
   const session = getActiveSession(deps.db, args.hostId);
-  const command = parseJsonWithSchema(
-    operation.payload,
-    threadStopCommandSchema,
-  );
+  const { command } = parseThreadStopOperationPayload(operation.payload);
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session?.id ?? null,
@@ -999,6 +1095,8 @@ export function finalizeStoppedThreadInTransaction(
     });
   }
 
+  const interruptionReason =
+    readThreadStopInterruptionReason(stopOperation) ?? "manual-stop";
   let appendedThreadInterruptedEvent = false;
   if (currentThread.status === "active") {
     appendedThreadInterruptedEvent = interruptActiveTurnForThreadInTransaction(
@@ -1006,11 +1104,16 @@ export function finalizeStoppedThreadInTransaction(
       {
         environmentId: currentThread.environmentId,
         threadId: currentThread.id,
-        reason: "manual-stop",
+        reason: interruptionReason,
       },
     );
     if (!appendedThreadInterruptedEvent) {
-      tryTransitionInTransaction(deps.db, deps.hub, currentThread.id, "idle");
+      tryTransitionInTransaction(
+        deps.db,
+        deps.hub,
+        currentThread.id,
+        nextStatusForInterruptedThread(interruptionReason),
+      );
     }
   }
 
@@ -1033,13 +1136,13 @@ export function finalizeStoppedThreadInTransaction(
       deps,
       {
         threadIds: [finalizedThread.id],
-        reason: "Thread stopped by user request",
+        reason: pendingInteractionStopReason(interruptionReason),
       },
     );
     if (!appendedThreadInterruptedEvent) {
       appendThreadInterruptedEventInTransaction(deps.db, {
         threadId: finalizedThread.id,
-        reason: "manual-stop",
+        reason: interruptionReason,
       });
       deps.hub.notifyThread(finalizedThread.id, ["events-appended"], {
         eventTypes: ["system/thread/interrupted"],

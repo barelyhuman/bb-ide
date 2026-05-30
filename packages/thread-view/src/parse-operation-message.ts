@@ -108,6 +108,8 @@ function threadInterruptedTitle(reason: SystemThreadInterruptedReason): string {
       return "Stopped manually";
     case "host-daemon-restarted":
       return "Host daemon restarted";
+    case "provider-turn-idle":
+      return "Provider turn stopped responding";
     default:
       return assertNever(reason);
   }
@@ -429,6 +431,17 @@ export function parseOperationMessage(
       opType: "thread-interrupted",
       title: threadInterruptedTitle(decoded.reason),
       status: "interrupted",
+    });
+  }
+
+  if (decoded.type === "system/provider-turn-watchdog") {
+    return op(decoded, meta, "provider-turn-watchdog", {
+      opType: "operation",
+      title: "Provider turn stopped responding",
+      detail: `No provider activity for ${Math.round(
+        decoded.elapsedMs / 1_000,
+      )}s after ${decoded.lastActivityEventType}`,
+      status: "error",
     });
   }
 

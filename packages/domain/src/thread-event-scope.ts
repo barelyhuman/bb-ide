@@ -159,6 +159,11 @@ export const threadEventScopeDefinitionByType = {
     rationale:
       "Workspace provisioning lifecycle event; environment setup belongs to the thread, not a turn.",
   },
+  "system/provider-turn-watchdog": {
+    policy: "thread",
+    rationale:
+      "Provider turn watchdog diagnostics describe server lifecycle ownership for the whole thread.",
+  },
 } as const satisfies ThreadEventScopePolicyDefinitionByType;
 
 function getThreadEventScopePolicyDefinitionEntries(): ThreadEventScopePolicyDefinitionEntry[] {

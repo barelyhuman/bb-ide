@@ -84,6 +84,7 @@ export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
     "system/userQuestion/lifecycle",
     "system/thread/interrupted",
     "system/thread-provisioning",
+    "system/provider-turn-watchdog",
     "thread/compacted",
     "turn/completed",
     "turn/input/accepted",

@@ -4,6 +4,7 @@ import type {
   JsonObject,
   OwnershipChangeOperationAction,
   ProviderErrorInfo,
+  ProviderTurnWatchdogActivityEventType,
   ThreadEventFileChange,
   ThreadEventItemStatus,
   UserQuestionPendingInteractionResolution,
@@ -82,6 +83,20 @@ interface SystemErrorEventArgs {
   detail?: string;
   message: string;
   seq: number;
+}
+
+interface SystemProviderTurnWatchdogEventArgs {
+  activeTurnId?: string;
+  activeTurnStartedAt?: number;
+  elapsedMs?: number;
+  firedAt?: number;
+  lastActivityEventAt?: number;
+  lastActivityEventSequence?: number;
+  lastActivityEventType?: ProviderTurnWatchdogActivityEventType;
+  providerId?: string;
+  providerThreadId?: string | null;
+  seq: number;
+  thresholdMs?: number;
 }
 
 interface ProviderErrorEventArgs {
@@ -287,6 +302,44 @@ function systemErrorEvent({
       message,
       ...(code !== undefined ? { code } : {}),
       ...(detail !== undefined ? { detail } : {}),
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
+function systemProviderTurnWatchdogEvent({
+  activeTurnId = "turn-1",
+  activeTurnStartedAt = 1,
+  elapsedMs = 901_000,
+  firedAt,
+  lastActivityEventAt = 100,
+  lastActivityEventSequence = 2,
+  lastActivityEventType = "turn/input/accepted",
+  providerId = "codex",
+  providerThreadId = "provider-thread-1",
+  seq,
+  thresholdMs = 900_000,
+}: SystemProviderTurnWatchdogEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "system/provider-turn-watchdog",
+      threadId: "thread-1",
+      scope: threadScope(),
+      reason: "provider-turn-idle",
+      thresholdMs,
+      elapsedMs,
+      activeTurnId,
+      activeTurnStartedAt,
+      lastActivityEventSequence,
+      lastActivityEventType,
+      lastActivityEventAt,
+      providerId,
+      providerThreadId,
+      firedAt: firedAt ?? seq,
     },
     meta: {
       id: `event-${seq}`,
@@ -939,6 +992,22 @@ describe("buildThreadTimelineFromEvents", () => {
         status: "error",
         title: "Provider error",
         detail: longMessage,
+      }),
+    ]);
+  });
+
+  it("renders provider turn watchdog diagnostics as an error operation row", () => {
+    const rows = buildTimelineRows([
+      systemProviderTurnWatchdogEvent({ seq: 1 }),
+    ]);
+
+    expect(collectSystemRows(rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "operation",
+        operationKind: "generic",
+        status: "error",
+        title: "Provider turn stopped responding",
+        detail: "No provider activity for 901s after turn/input/accepted",
       }),
     ]);
   });

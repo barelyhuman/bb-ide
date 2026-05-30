@@ -4,6 +4,7 @@ import {
   systemPermissionGrantLifecycleEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
+  systemProviderTurnWatchdogEventDataSchema,
   systemThreadProvisioningEventDataSchema,
   systemUserQuestionLifecycleEventDataSchema,
   systemEventTypeValues,
@@ -553,6 +554,12 @@ const unscopedSystemEventSchema = z.union([
       threadId: z.string(),
     })
     .merge(systemThreadProvisioningEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/provider-turn-watchdog"),
+      threadId: z.string(),
+    })
+    .merge(systemProviderTurnWatchdogEventDataSchema),
 ]);
 export const systemEventSchema = unscopedSystemEventSchema.and(
   scopedEventDataSchema,

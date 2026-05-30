@@ -381,6 +381,7 @@ export {
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
+  systemProviderTurnWatchdogEventDataSchema,
   systemEventTypeSchema,
   systemEventTypeValues,
   systemThreadInterruptedReasonSchema,
@@ -410,6 +411,7 @@ export type {
   SystemErrorEventData,
   SystemManagerUserMessageEventData,
   SystemOperationEventData,
+  SystemProviderTurnWatchdogEventData,
   SystemEventType,
   SystemThreadInterruptedReason,
   SystemThreadProvisioningEventData,
@@ -428,6 +430,17 @@ export type {
   TurnRequestTarget,
   TurnLifecycleEventData,
 } from "./thread-events.js";
+
+export {
+  providerTurnWatchdogActivityEventTypeSchema,
+  providerTurnWatchdogActivityEventTypeValues,
+  providerTurnWatchdogReasonSchema,
+  providerTurnWatchdogReasonValues,
+} from "./provider-turn-watchdog.js";
+export type {
+  ProviderTurnWatchdogActivityEventType,
+  ProviderTurnWatchdogReason,
+} from "./provider-turn-watchdog.js";
 
 export {
   buildThreadEvent,
