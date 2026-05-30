@@ -123,7 +123,9 @@ describe("usePromptMentions", () => {
     });
     const firstSuggestion = result.current.suggestions[0];
     if (!firstSuggestion || firstSuggestion.kind !== "thread") {
-      throw new Error("Expected first prompt mention suggestion to be a thread");
+      throw new Error(
+        "Expected first prompt mention suggestion to be a thread",
+      );
     }
     expect(result.current.threadSectionMode).toBe("all");
     expect(firstSuggestion.threadId).toBe("thr_frontend_manager");

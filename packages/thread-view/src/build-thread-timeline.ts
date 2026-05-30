@@ -49,9 +49,7 @@ import {
   buildAcceptedClientRequestById,
   type AcceptedClientRequestContext,
 } from "./accepted-client-request-context.js";
-import {
-  parsePendingSteerFromClientRequest,
-} from "./user-message-parsing.js";
+import { parsePendingSteerFromClientRequest } from "./user-message-parsing.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
 import {
   groupCompletedTurnMessages,

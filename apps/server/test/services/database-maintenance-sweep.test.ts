@@ -152,9 +152,9 @@ describe("runDatabaseMaintenanceSweep", () => {
     // old full-VACUUM path would have skipped maintenance.
     const before = getDatabaseFreelistStats(db);
     expect(before.freelistCount).toBeGreaterThan(0);
-    expect(
-      isDatabaseMaintenanceIdle(getDatabaseMaintenanceActivity(db)),
-    ).toBe(false);
+    expect(isDatabaseMaintenanceIdle(getDatabaseMaintenanceActivity(db))).toBe(
+      false,
+    );
 
     runDatabaseMaintenanceSweep({ db, logger: testLogger }, nextSweepTime());
 

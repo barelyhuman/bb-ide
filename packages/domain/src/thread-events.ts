@@ -184,9 +184,9 @@ export const systemPermissionGrantLifecycleEventDataSchema = z.object({
   providerId: z.string(),
   providerRequestId: z.string(),
   status: pendingInteractionStatusSchema,
-  resolution: approvalPendingInteractionResolutionSchema.nullable().default(
-    null,
-  ),
+  resolution: approvalPendingInteractionResolutionSchema
+    .nullable()
+    .default(null),
   statusReason: z.string().nullable().default(null),
   subject: pendingInteractionPermissionGrantApprovalSubjectSchema,
 });
@@ -199,9 +199,9 @@ export const systemUserQuestionLifecycleEventDataSchema = z.object({
   providerId: z.string(),
   providerRequestId: z.string(),
   status: pendingInteractionStatusSchema,
-  resolution: userQuestionPendingInteractionResolutionSchema.nullable().default(
-    null,
-  ),
+  resolution: userQuestionPendingInteractionResolutionSchema
+    .nullable()
+    .default(null),
   statusReason: z.string().nullable().default(null),
   payload: userQuestionPendingInteractionPayloadSchema,
 });
