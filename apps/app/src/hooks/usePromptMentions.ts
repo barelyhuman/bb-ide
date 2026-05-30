@@ -103,8 +103,11 @@ export function usePromptMentions(
   const isLoading =
     hasQuery &&
     suggestions.length === 0 &&
-    (pathSearch.isDebouncing || pathSearch.isLoading);
-  const isError = pathSearch.isError;
+    (pathSearch.isDebouncing ||
+      pathSearch.isLoading ||
+      threadsQuery.isLoading ||
+      threadsQuery.isFetching);
+  const isError = pathSearch.isError || threadsQuery.isError;
 
   return {
     query,

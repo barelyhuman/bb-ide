@@ -225,12 +225,15 @@ export function RootComposeView() {
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const { data: projectPromptHistory = [] } =
     useProjectPromptHistory(projectId);
+  const [mode, setMode] = useRootComposeMode();
   const promptMentions = usePromptMentions(
     isProjectless ? undefined : projectId,
-    { environmentId: null },
+    {
+      threadSuggestionMode: mode === "manager" ? "all" : "none",
+      environmentId: null,
+    },
   );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [mode, setMode] = useRootComposeMode();
   // Manager-mode selections. Held as raw user choices; the effective values
   // resolved against the loaded hosts / templates are computed below so a
   // stale selection (host disconnects, template removed) falls back to a
