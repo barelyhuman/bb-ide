@@ -297,7 +297,7 @@ describe("slow query index plans", () => {
     db.$client.close();
   });
 
-  it("uses SQL-side retry predicates for expired-command sweep updates", () => {
+  it("uses SQL-side retry predicates for expired-command sweep queries", () => {
     const { db, host, logger } = setup();
     const now = Date.now();
     const firstAttemptCommand = queueCommand(db, noopNotifier, {
@@ -323,17 +323,6 @@ describe("slow query index plans", () => {
 
     sweepExpiredCommands(db, noopNotifier, now);
 
-    expect(
-      logger.debugLogs.filter(
-        (debugLog) =>
-          debugLog.fields.operation === "all" &&
-          debugLog.fields.sql.includes('from "host_daemon_commands"') &&
-          debugLog.fields.sql.includes(
-            '"host_daemon_commands"."fetched_at" is not null',
-          ),
-      ),
-    ).toEqual([]);
-
     const requeueLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
@@ -347,42 +336,22 @@ describe("slow query index plans", () => {
       db,
       debugLog: requeueLog,
       indexName: "host_daemon_commands_state_fetched_at_idx",
-      params: [
-        "pending",
-        null,
-        1,
-        "fetched",
-        now,
-        20 * 60_000,
-        60_000,
-        0,
-      ],
+      params: ["pending", null, 1, "fetched", now, 20 * 60_000, 60_000, 0],
     });
 
-    const errorLog = findOnlyDebugLog({
+    const expiredIdsLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
         fields.operation === "all" &&
-        fields.sql.startsWith('update "host_daemon_commands"') &&
-        fields.sql.includes('"completed_at" = ?') &&
+        fields.sql.startsWith('select "id" from "host_daemon_commands"') &&
+        fields.sql.includes('"fetched_at" is not null') &&
         fields.sql.includes('"retry_count" >= 1'),
     });
     assertEmittedQueryPlanUsesIndex({
       db,
-      debugLog: errorLog,
+      debugLog: expiredIdsLog,
       indexName: "host_daemon_commands_state_fetched_at_idx",
-      params: [
-        "error",
-        now,
-        JSON.stringify({
-          errorCode: "command_expired",
-          errorMessage: "Command expired after retry",
-        }),
-        "fetched",
-        now,
-        20 * 60_000,
-        60_000,
-      ],
+      params: ["fetched", now, 20 * 60_000, 60_000],
     });
 
     db.$client.close();
