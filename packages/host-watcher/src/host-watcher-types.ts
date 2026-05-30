@@ -20,6 +20,12 @@ export type HostObservedChange =
       environmentId: string;
       path: AppDataPath;
       threadId: string;
+    }
+  | {
+      kind: "thread-app-data-resync";
+      appId: AppId;
+      environmentId: string;
+      threadId: string;
     };
 
 export type WorkspaceObservedChange = Extract<
@@ -30,7 +36,10 @@ export type WorkspaceObservedChange = Extract<
 export type ThreadStorageObservedChange = Extract<
   HostObservedChange,
   {
-    kind: "thread-storage-changed" | "thread-app-data-changed";
+    kind:
+      | "thread-storage-changed"
+      | "thread-app-data-changed"
+      | "thread-app-data-resync";
   }
 >;
 

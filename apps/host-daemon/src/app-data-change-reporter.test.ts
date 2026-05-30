@@ -209,4 +209,22 @@ describe("AppDataChangeReporter", () => {
       { appId: "status", threadId: "thr_one" },
     ]);
   });
+
+  it("posts requested app data resync hints", async () => {
+    const resyncs: Array<{ appId: string; threadId: string }> = [];
+    const reporter = new AppDataChangeReporter({
+      logger: createLogger(),
+      postAppDataChange: async () => undefined,
+      postAppDataResync: async (payload) => {
+        resyncs.push(payload);
+      },
+    });
+
+    await reporter.requestResync({
+      appId: "status",
+      threadId: "thr_one",
+    });
+
+    expect(resyncs).toEqual([{ appId: "status", threadId: "thr_one" }]);
+  });
 });

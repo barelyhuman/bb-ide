@@ -1,84 +1,51 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
-import type { ImperativePanelHandle } from "react-resizable-panels";
-import { useResizeObserver } from "usehooks-ts";
-import { applyResizeCursor, clearResizeCursor } from "@/lib/resizeCursor";
-import {
-  secondaryPanelWidthPercentAtom,
-  threadSecondaryPanelResizingAtom,
-} from "../threadSecondaryPanelAtoms";
+import type { GitDiffDisplayMode } from "../GitDiffToolbar";
+import type { SecondaryPanelWidthChangeHandler } from "../useSecondaryPanelResize";
 
 const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;
 
-type SecondaryPanelDraggingHandler = (isDragging: boolean) => void;
+type GitDiffDisplayModeChangeHandler = (mode: GitDiffDisplayMode) => void;
+type SecondaryPanelResizeStartHandler = () => void;
+
+interface UseResponsiveGitDiffPanelDisplayArgs {
+  isSecondaryPanelOpen: boolean;
+}
 
 export function useResponsiveGitDiffPanelDisplay({
   isSecondaryPanelOpen,
-}: {
-  isSecondaryPanelOpen: boolean;
-}) {
-  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<
-    "unified" | "split"
-  >("unified");
-  const [isSecondaryPanelDragging, setIsSecondaryPanelDragging] =
-    useState(false);
-  const setIsResizing = useSetAtom(threadSecondaryPanelResizingAtom);
-  const persistedWidthPercent = useAtomValue(secondaryPanelWidthPercentAtom);
-  const setPersistedWidthPercent = useSetAtom(secondaryPanelWidthPercentAtom);
-  const secondaryPanelRef = useRef<HTMLElement>(null!);
-  const secondaryResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
-  const isSecondaryPanelDraggingRef = useRef(false);
-  const lastSecondaryPanelSizeRef = useRef(persistedWidthPercent);
+}: UseResponsiveGitDiffPanelDisplayArgs) {
+  const [gitDiffDisplayMode, setGitDiffDisplayMode] =
+    useState<GitDiffDisplayMode>("unified");
   const lastDiffViewWideEnoughRef = useRef<boolean | null>(null);
   const hasExplicitDisplayModeRef = useRef(false);
 
-  const applyWidth = useCallback(
-    (nextWidth: number | undefined) => {
-      if (!isSecondaryPanelOpen || nextWidth === undefined) {
-        return;
-      }
+  const handleSecondaryPanelWidthChange =
+    useCallback<SecondaryPanelWidthChangeHandler>(
+      (nextWidth) => {
+        if (!isSecondaryPanelOpen || nextWidth === undefined) {
+          return;
+        }
 
-      const isWideEnough = nextWidth >= GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX;
-      const previousWideEnough = lastDiffViewWideEnoughRef.current;
-      const crossedBreakpoint =
-        previousWideEnough !== null && previousWideEnough !== isWideEnough;
+        const isWideEnough = nextWidth >= GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX;
+        const previousWideEnough = lastDiffViewWideEnoughRef.current;
+        const crossedBreakpoint =
+          previousWideEnough !== null && previousWideEnough !== isWideEnough;
 
-      if (crossedBreakpoint && hasExplicitDisplayModeRef.current) {
-        hasExplicitDisplayModeRef.current = false;
-      }
+        if (crossedBreakpoint && hasExplicitDisplayModeRef.current) {
+          hasExplicitDisplayModeRef.current = false;
+        }
 
-      if (!hasExplicitDisplayModeRef.current || crossedBreakpoint) {
-        const nextMode = isWideEnough ? "split" : "unified";
-        setGitDiffDisplayMode((current) =>
-          current === nextMode ? current : nextMode,
-        );
-      }
+        if (!hasExplicitDisplayModeRef.current || crossedBreakpoint) {
+          const nextMode = isWideEnough ? "split" : "unified";
+          setGitDiffDisplayMode((current) =>
+            current === nextMode ? current : nextMode,
+          );
+        }
 
-      lastDiffViewWideEnoughRef.current = isWideEnough;
-    },
-    [isSecondaryPanelOpen, setGitDiffDisplayMode],
-  );
-
-  const prevOpenRef = useRef(isSecondaryPanelOpen);
-  useEffect(() => {
-    // Skip initial mount — Panel's defaultSize handles it.
-    if (prevOpenRef.current === isSecondaryPanelOpen) {
-      return;
-    }
-    prevOpenRef.current = isSecondaryPanelOpen;
-
-    const panel = secondaryResizablePanelRef.current;
-    if (!panel) {
-      return;
-    }
-
-    if (isSecondaryPanelOpen) {
-      panel.expand(lastSecondaryPanelSizeRef.current);
-      applyWidth(secondaryPanelRef.current?.getBoundingClientRect().width);
-    } else {
-      panel.collapse();
-    }
-  }, [isSecondaryPanelOpen, applyWidth]);
+        lastDiffViewWideEnoughRef.current = isWideEnough;
+      },
+      [isSecondaryPanelOpen, setGitDiffDisplayMode],
+    );
 
   useEffect(() => {
     if (!isSecondaryPanelOpen) {
@@ -87,109 +54,24 @@ export function useResponsiveGitDiffPanelDisplay({
     }
   }, [isSecondaryPanelOpen]);
 
-  useResizeObserver({
-    ref: secondaryPanelRef,
-    onResize: ({ width }) => {
-      applyWidth(
-        width ?? secondaryPanelRef.current?.getBoundingClientRect().width,
-      );
-    },
-  });
-
-  const handleGitDiffDisplayModeChange = useCallback(
-    (nextMode: "unified" | "split") => {
-      hasExplicitDisplayModeRef.current = true;
-      setGitDiffDisplayMode(nextMode);
-    },
-    [setGitDiffDisplayMode],
-  );
-
-  const finishSecondaryPanelDragging = useCallback(() => {
-    isSecondaryPanelDraggingRef.current = false;
-    setIsSecondaryPanelDragging(false);
-    setIsResizing(false);
-    clearResizeCursor();
-
-    // Drag finished — persist the user's chosen width.
-    if (lastSecondaryPanelSizeRef.current > 0) {
-      setPersistedWidthPercent(lastSecondaryPanelSizeRef.current);
-    }
-  }, [setIsResizing, setPersistedWidthPercent]);
-
-  const handleSecondaryPanelDragging =
-    useCallback<SecondaryPanelDraggingHandler>(
-      (isDragging) => {
-        if (isDragging) {
-          isSecondaryPanelDraggingRef.current = true;
-          setIsSecondaryPanelDragging(true);
-          setIsResizing(true);
-          applyResizeCursor("horizontal");
-          hasExplicitDisplayModeRef.current = false;
-          return;
-        }
-
-        finishSecondaryPanelDragging();
+  const handleGitDiffDisplayModeChange =
+    useCallback<GitDiffDisplayModeChangeHandler>(
+      (nextMode) => {
+        hasExplicitDisplayModeRef.current = true;
+        setGitDiffDisplayMode(nextMode);
       },
-      [finishSecondaryPanelDragging, setIsResizing],
+      [setGitDiffDisplayMode],
     );
 
-  useEffect(
-    () => () => {
-      if (!isSecondaryPanelDraggingRef.current) {
-        return;
-      }
-      isSecondaryPanelDraggingRef.current = false;
-      setIsResizing(false);
-      clearResizeCursor();
-    },
-    [setIsResizing],
-  );
-
-  useEffect(() => {
-    if (!isSecondaryPanelDragging) {
-      return;
-    }
-
-    window.addEventListener("pointerup", finishSecondaryPanelDragging, true);
-    window.addEventListener("mouseup", finishSecondaryPanelDragging, true);
-    window.addEventListener(
-      "pointercancel",
-      finishSecondaryPanelDragging,
-      true,
-    );
-    window.addEventListener("blur", finishSecondaryPanelDragging);
-
-    return () => {
-      window.removeEventListener(
-        "pointerup",
-        finishSecondaryPanelDragging,
-        true,
-      );
-      window.removeEventListener("mouseup", finishSecondaryPanelDragging, true);
-      window.removeEventListener(
-        "pointercancel",
-        finishSecondaryPanelDragging,
-        true,
-      );
-      window.removeEventListener("blur", finishSecondaryPanelDragging);
-    };
-  }, [finishSecondaryPanelDragging, isSecondaryPanelDragging]);
-
-  const handleSecondaryPanelResize = useCallback((size: number) => {
-    if (size <= 0) {
-      return;
-    }
-
-    lastSecondaryPanelSizeRef.current = size;
-  }, []);
+  const handleSecondaryPanelResizeStart =
+    useCallback<SecondaryPanelResizeStartHandler>(() => {
+      hasExplicitDisplayModeRef.current = false;
+    }, []);
 
   return {
     gitDiffDisplayMode,
     handleGitDiffDisplayModeChange,
-    handleSecondaryPanelDragging,
-    handleSecondaryPanelResize,
-    persistedWidthPercent,
-    secondaryPanelRef,
-    secondaryResizablePanelRef,
+    handleSecondaryPanelResizeStart,
+    handleSecondaryPanelWidthChange,
   };
 }

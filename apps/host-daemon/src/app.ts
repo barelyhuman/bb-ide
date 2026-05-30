@@ -554,6 +554,9 @@ export async function createHostDaemonApp(
     onThreadAppDataChanged: (change) => {
       void appDataChangeReporter.observe(change);
     },
+    onThreadAppDataResync: (change) => {
+      void appDataChangeReporter.requestResync(change);
+    },
     onThreadStorageWatchError: ({ error }) => {
       options.logger.warn(
         {

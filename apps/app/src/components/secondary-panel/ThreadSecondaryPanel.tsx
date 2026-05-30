@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type FocusEvent,
   type ReactNode,
+  useCallback,
   useMemo,
   useState,
 } from "react";
@@ -22,6 +23,10 @@ import { GIT_DIFF_VIEW_BASE_OPTIONS } from "../git-diff/GitDiffCard";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useGitDiffPanelState } from "./git-diff/useGitDiffPanelState";
 import { useResponsiveGitDiffPanelDisplay } from "./git-diff/useResponsiveGitDiffPanelDisplay";
+import {
+  type SecondaryPanelDraggingHandler,
+  useSecondaryPanelResize,
+} from "./useSecondaryPanelResize";
 import {
   gitDiffCollapsedFileKeysAtom,
   gitDiffLoadingFileKeysAtom,
@@ -158,12 +163,29 @@ export function ThreadSecondaryPanel({
   const {
     gitDiffDisplayMode,
     handleGitDiffDisplayModeChange,
-    handleSecondaryPanelDragging,
+    handleSecondaryPanelResizeStart,
+    handleSecondaryPanelWidthChange,
+  } = useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: isOpen });
+  const {
+    handleSecondaryPanelDragging: handleResizeDragging,
     handleSecondaryPanelResize,
     persistedWidthPercent,
     secondaryPanelRef: panelRef,
     secondaryResizablePanelRef: resizablePanelRef,
-  } = useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: isOpen });
+  } = useSecondaryPanelResize({
+    isSecondaryPanelOpen: isOpen,
+    onPanelWidthChange: handleSecondaryPanelWidthChange,
+  });
+  const handleSecondaryPanelDragging: SecondaryPanelDraggingHandler =
+    useCallback(
+      (isDragging) => {
+        if (isDragging) {
+          handleSecondaryPanelResizeStart();
+        }
+        handleResizeDragging(isDragging);
+      },
+      [handleResizeDragging, handleSecondaryPanelResizeStart],
+    );
   const activePanel =
     !canUseGitUi && rawActivePanel === "git-diff"
       ? "thread-info"
@@ -480,7 +502,7 @@ function NewTabButton({ onOpenNewTab, usesDesktopChrome }: NewTabButtonProps) {
 interface SecondaryPanelResizeHandleProps {
   isOpen: boolean;
   isConversationCollapsed: boolean;
-  onDragging: (isDragging: boolean) => void;
+  onDragging: SecondaryPanelDraggingHandler;
 }
 
 function SecondaryPanelResizeHandle({

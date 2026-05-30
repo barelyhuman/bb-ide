@@ -31,6 +31,11 @@ interface ThreadAppDataPath {
   threadId: string;
 }
 
+interface ThreadAppDataRootPath {
+  appId: AppId;
+  threadId: string;
+}
+
 interface CollectThreadStorageObservedChangesArgs {
   changedPaths: string[];
   threadStorageRootPath: string;
@@ -69,11 +74,8 @@ function isAppDataSubtreePath(path: ThreadStoragePath): boolean {
 function toThreadAppDataPath(
   path: ThreadStoragePath,
 ): ThreadAppDataPath | null {
-  if (!isAppDataSubtreePath(path) || path.parts.length < 5) {
-    return null;
-  }
-  const appId = appIdSchema.safeParse(path.parts[2]);
-  if (!appId.success) {
+  const rootPath = toThreadAppDataRootPath(path);
+  if (!rootPath || path.parts.length < 5) {
     return null;
   }
   const dataPath = appDataPathSchema.safeParse(path.parts.slice(4).join("/"));
@@ -81,9 +83,25 @@ function toThreadAppDataPath(
     return null;
   }
   return {
-    appId: appId.data,
+    appId: rootPath.appId,
     threadId: path.threadId,
     path: dataPath.data,
+  };
+}
+
+function toThreadAppDataRootPath(
+  path: ThreadStoragePath,
+): ThreadAppDataRootPath | null {
+  if (!isAppDataSubtreePath(path)) {
+    return null;
+  }
+  const appId = appIdSchema.safeParse(path.parts[2]);
+  if (!appId.success) {
+    return null;
+  }
+  return {
+    appId: appId.data,
+    threadId: path.threadId,
   };
 }
 
@@ -92,6 +110,7 @@ export function collectThreadStorageObservedChanges(
 ): ThreadStorageObservedChange[] {
   const storageChanges = new Map<string, ThreadStorageWatchTarget>();
   const appDataChanges = new Map<string, ThreadStorageObservedChange>();
+  const appDataResyncs = new Map<string, ThreadStorageObservedChange>();
   for (const changedPath of args.changedPaths) {
     const storagePath = toThreadStoragePath({
       changedPath,
@@ -105,6 +124,7 @@ export function collectThreadStorageObservedChanges(
       continue;
     }
     if (isAppDataSubtreePath(storagePath)) {
+      const appDataRootPath = toThreadAppDataRootPath(storagePath);
       const appDataPath = toThreadAppDataPath(storagePath);
       if (appDataPath) {
         appDataChanges.set(
@@ -114,6 +134,20 @@ export function collectThreadStorageObservedChanges(
             appId: appDataPath.appId,
             environmentId: target.environmentId,
             path: appDataPath.path,
+            threadId: target.threadId,
+          },
+        );
+      } else if (appDataRootPath) {
+        storageChanges.set(
+          `${target.environmentId}:${target.threadId}`,
+          target,
+        );
+        appDataResyncs.set(
+          `${target.environmentId}:${target.threadId}:${appDataRootPath.appId}`,
+          {
+            kind: "thread-app-data-resync",
+            appId: appDataRootPath.appId,
+            environmentId: target.environmentId,
             threadId: target.threadId,
           },
         );
@@ -132,6 +166,7 @@ export function collectThreadStorageObservedChanges(
     });
   }
   observedChanges.push(...appDataChanges.values());
+  observedChanges.push(...appDataResyncs.values());
   return observedChanges;
 }
 

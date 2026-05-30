@@ -1,48 +1,50 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { getDefaultStore } from "jotai";
 import { afterEach, describe, expect, it } from "vitest";
-import { threadSecondaryPanelResizingAtom } from "../threadSecondaryPanelAtoms";
 import { useResponsiveGitDiffPanelDisplay } from "./useResponsiveGitDiffPanelDisplay";
 
 describe("useResponsiveGitDiffPanelDisplay", () => {
   afterEach(() => {
     cleanup();
-    getDefaultStore().set(threadSecondaryPanelResizingAtom, false);
   });
 
-  it("clears the iframe drag guard when unmounted during resize", () => {
-    const store = getDefaultStore();
-    const { result, unmount } = renderHook(() =>
-      useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: true }),
-    );
-
-    act(() => {
-      result.current.handleSecondaryPanelDragging(true);
-    });
-    expect(store.get(threadSecondaryPanelResizingAtom)).toBe(true);
-
-    unmount();
-
-    expect(store.get(threadSecondaryPanelResizingAtom)).toBe(false);
-  });
-
-  it("clears the iframe drag guard on mouseup fallback", () => {
-    const store = getDefaultStore();
+  it("switches git diff display mode from the secondary panel width", () => {
     const { result } = renderHook(() =>
       useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: true }),
     );
 
     act(() => {
-      result.current.handleSecondaryPanelDragging(true);
+      result.current.handleSecondaryPanelWidthChange(800);
     });
-    expect(store.get(threadSecondaryPanelResizingAtom)).toBe(true);
+    expect(result.current.gitDiffDisplayMode).toBe("split");
 
     act(() => {
-      window.dispatchEvent(new MouseEvent("mouseup"));
+      result.current.handleSecondaryPanelWidthChange(700);
     });
+    expect(result.current.gitDiffDisplayMode).toBe("unified");
+  });
 
-    expect(store.get(threadSecondaryPanelResizingAtom)).toBe(false);
+  it("keeps an explicit mode until panel resize starts", () => {
+    const { result } = renderHook(() =>
+      useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: true }),
+    );
+
+    act(() => {
+      result.current.handleSecondaryPanelWidthChange(800);
+    });
+    expect(result.current.gitDiffDisplayMode).toBe("split");
+
+    act(() => {
+      result.current.handleGitDiffDisplayModeChange("unified");
+      result.current.handleSecondaryPanelWidthChange(800);
+    });
+    expect(result.current.gitDiffDisplayMode).toBe("unified");
+
+    act(() => {
+      result.current.handleSecondaryPanelResizeStart();
+      result.current.handleSecondaryPanelWidthChange(800);
+    });
+    expect(result.current.gitDiffDisplayMode).toBe("split");
   });
 });

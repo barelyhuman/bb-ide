@@ -55,15 +55,6 @@ describe("thread storage watcher classification", () => {
         path.join(rootPath, "thr_one", "apps", "status", "data", "state.json"),
         path.join(rootPath, "thr_one", "apps", "kanban", "data", "cards", "1"),
         path.join(rootPath, "thr_one", "apps", "bad.app", "data", "state.json"),
-        path.join(rootPath, "thr_one", "apps", "status", "data", ".state.tmp"),
-        path.join(
-          rootPath,
-          "thr_one",
-          "apps",
-          "status",
-          "assets",
-          "index.html",
-        ),
         path.join(
           rootPath,
           "thr_unknown",
@@ -83,11 +74,6 @@ describe("thread storage watcher classification", () => {
 
     expect(changes).toEqual([
       {
-        kind: "thread-storage-changed",
-        environmentId: "env_one",
-        threadId: "thr_one",
-      },
-      {
         kind: "thread-app-data-changed",
         appId: "status",
         environmentId: "env_one",
@@ -99,6 +85,38 @@ describe("thread storage watcher classification", () => {
         appId: "kanban",
         environmentId: "env_one",
         path: "cards/1",
+        threadId: "thr_one",
+      },
+    ]);
+  });
+
+  it("emits resync hints and broad storage changes for unclassifiable app data changes", () => {
+    const rootPath = path.join("/tmp", "thread-storage");
+    const changes = collectThreadStorageObservedChanges({
+      threadStorageRootPath: rootPath,
+      changedPaths: [
+        path.join(rootPath, "thr_one", "apps", "status", "data"),
+        path.join(rootPath, "thr_one", "apps", "status", "data", ".state.tmp"),
+        path.join(rootPath, "thr_one", "apps", "status", "data"),
+      ],
+      resolveThreadTarget: createResolver({
+        thr_one: {
+          environmentId: "env_one",
+          threadId: "thr_one",
+        },
+      }),
+    });
+
+    expect(changes).toEqual([
+      {
+        kind: "thread-storage-changed",
+        environmentId: "env_one",
+        threadId: "thr_one",
+      },
+      {
+        kind: "thread-app-data-resync",
+        appId: "status",
+        environmentId: "env_one",
         threadId: "thr_one",
       },
     ]);

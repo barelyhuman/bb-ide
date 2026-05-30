@@ -164,6 +164,13 @@ export interface ThreadAppDataChangedNotification {
   threadStoragePath: string;
 }
 
+export interface ThreadAppDataResyncNotification {
+  appId: AppId;
+  environmentId: string;
+  threadId: string;
+  threadStoragePath: string;
+}
+
 export interface EnsureEnvironmentArgs {
   environmentId: string;
   personalWorkspaceRoot?: string;
@@ -193,6 +200,7 @@ export interface RuntimeManagerOptions {
     threadId: string;
   }) => void;
   onThreadAppDataChanged?: (args: ThreadAppDataChangedNotification) => void;
+  onThreadAppDataResync?: (args: ThreadAppDataResyncNotification) => void;
   onThreadStorageWatchError?: (args: {
     error: ThreadStorageWatchError;
   }) => void;
@@ -953,6 +961,17 @@ export class RuntimeManager {
               appId: event.appId,
               environmentId: event.environmentId,
               path: event.path,
+              threadId: event.threadId,
+              threadStoragePath: path.join(
+                threadStorageRootPath,
+                event.threadId,
+              ),
+            });
+          }
+          if (event.kind === "thread-app-data-resync") {
+            this.options.onThreadAppDataResync?.({
+              appId: event.appId,
+              environmentId: event.environmentId,
               threadId: event.threadId,
               threadStoragePath: path.join(
                 threadStorageRootPath,

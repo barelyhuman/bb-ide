@@ -16,9 +16,7 @@ import {
 
 interface CreateAppDataChangeReporterOptions {
   logger: HostDaemonLogger;
-  postAppDataChange: (
-    payload: HostDaemonAppDataChangePayload,
-  ) => Promise<void>;
+  postAppDataChange: (payload: HostDaemonAppDataChangePayload) => Promise<void>;
   postAppDataResync: (payload: AppDataResyncPayload) => Promise<void>;
 }
 
@@ -164,6 +162,14 @@ export class AppDataChangeReporter {
     return pending;
   }
 
+  requestResync(args: AppDataResyncPayload): Promise<void> {
+    this.trackApp({
+      appId: args.appId,
+      threadId: args.threadId,
+    });
+    return this.postResyncHint(args);
+  }
+
   private isCurrentGeneration(args: AppDataReporterGenerationArgs): boolean {
     return args.generation === this.generation;
   }
@@ -194,9 +200,7 @@ export class AppDataChangeReporter {
     appIds.add(args.appId);
   }
 
-  private cachedKeysForThread(args: {
-    threadId: string;
-  }): CachedAppDataKey[] {
+  private cachedKeysForThread(args: { threadId: string }): CachedAppDataKey[] {
     const prefix = `${args.threadId}\0`;
     return Array.from(this.cache.keys())
       .filter((cacheKey) => cacheKey.startsWith(prefix))
