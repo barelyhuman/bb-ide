@@ -50,33 +50,44 @@ function isHorizontalPlacement(placement: OverflowFadePlacement): boolean {
   return placement === "left" || placement === "right";
 }
 
-function getOverflowFadeToneClass(
-  placement: OverflowFadePlacement,
-  tone: OverflowFadeTone,
-): string {
-  // The fade always lands on the surface side: `above`/`left` fade *to* the
-  // surface (content first), `below`/`right` fade *from* the surface.
-  const startsAtSurface = placement === "below" || placement === "right";
-  if (startsAtSurface) {
-    return tone === "background" ? "from-background" : "from-sidebar";
-  }
-
-  return tone === "background" ? "to-background" : "to-sidebar";
+interface OverflowFadeGradientClasses {
+  background: string;
+  sidebar: string;
 }
+
+// Each fade runs transparent (content side) → surface color (outer edge). Both
+// gradient stops are spelled out as full literals per placement+tone so
+// Tailwind's content scanner keeps them — building `from-${color}` dynamically
+// would purge the classes. Pairing the transparent and surface stops here (one
+// `from-*`, one `to-*`) also prevents the collision where two `from-*` classes
+// fight over one stop and leave the other unset, degenerating the gradient.
+const OVERFLOW_FADE_GRADIENT_CLASSES: Record<
+  OverflowFadePlacement,
+  OverflowFadeGradientClasses
+> = {
+  above: {
+    background: "bg-gradient-to-b from-transparent to-background",
+    sidebar: "bg-gradient-to-b from-transparent to-sidebar",
+  },
+  below: {
+    background: "bg-gradient-to-b to-transparent from-background",
+    sidebar: "bg-gradient-to-b to-transparent from-sidebar",
+  },
+  left: {
+    background: "bg-gradient-to-l from-transparent to-background",
+    sidebar: "bg-gradient-to-l from-transparent to-sidebar",
+  },
+  right: {
+    background: "bg-gradient-to-r from-transparent to-background",
+    sidebar: "bg-gradient-to-r from-transparent to-sidebar",
+  },
+};
 
 function getOverflowFadeGradientClass(
   placement: OverflowFadePlacement,
+  tone: OverflowFadeTone,
 ): string {
-  switch (placement) {
-    case "above":
-      return "bg-gradient-to-b from-transparent";
-    case "below":
-      return "bg-gradient-to-b to-transparent";
-    case "left":
-      return "bg-gradient-to-l from-transparent";
-    case "right":
-      return "bg-gradient-to-r from-transparent";
-  }
+  return OVERFLOW_FADE_GRADIENT_CLASSES[placement][tone];
 }
 
 function getOverflowFadeLayoutClasses(
@@ -109,8 +120,7 @@ export function OverflowFade({
       className={cn(
         "pointer-events-none absolute",
         getOverflowFadeLayoutClasses(placement, size),
-        getOverflowFadeGradientClass(placement),
-        getOverflowFadeToneClass(placement, tone),
+        getOverflowFadeGradientClass(placement, tone),
         className,
       )}
     />
