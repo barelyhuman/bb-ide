@@ -9,7 +9,7 @@ import * as api from "@/lib/api";
 import type { RequestEnvironmentActionMutationRequest } from "./mutation-request-types";
 import {
   invalidateEnvironmentActionQueries,
-} from "../cache-effects";
+} from "../cache-owners/environment-cache-effects";
 import { applyEnvironmentUpdateResult } from "../cache-owners/environment-workspace-cache-owner";
 import {
   beginArchiveEnvironmentThreadsTransaction,

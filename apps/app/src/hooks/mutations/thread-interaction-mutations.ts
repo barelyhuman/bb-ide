@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PendingInteraction } from "@bb/domain";
 import type { ResolvePendingInteractionRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { invalidateThreadPendingInteractionResolutionQueries } from "../cache-effects";
+import { invalidateThreadPendingInteractionResolutionQueries } from "../cache-owners/mutation-cache-effects";
 
 export interface ResolveThreadPendingInteractionMutationRequest {
   threadId: string;
