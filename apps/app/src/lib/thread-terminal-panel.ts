@@ -57,9 +57,7 @@ const threadTerminalPanelStateAtomFamily = atomFamily((threadId: string) =>
   ),
 );
 
-function getThreadTerminalPanelStateAtom(
-  threadId: string | null | undefined,
-) {
+function getThreadTerminalPanelStateAtom(threadId: string | null | undefined) {
   return hasThreadId(threadId)
     ? threadTerminalPanelStateAtomFamily(threadId)
     : disabledThreadTerminalPanelStateAtom;
@@ -136,4 +134,3 @@ export function useToggleThreadTerminalPanel(
     }));
   }, [updateState]);
 }
-
