@@ -5,7 +5,6 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type {
-  Host,
   PendingInteraction,
   ResolvedThreadExecutionOptions,
   ThreadType,
@@ -38,9 +37,6 @@ import {
 import {
   archivedThreadsListQueryKey,
   disabledThreadListQueryKey,
-  environmentQueryKey,
-  hostQueryKey,
-  hostsQueryKey,
   threadComposerBootstrapQueryKey,
   threadDetailBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
@@ -62,6 +58,7 @@ import {
   type ArchivedThreadsKindFilter,
 } from "./query-keys";
 import { ARCHIVED_THREADS_PAGE_SIZE } from "./archived-threads-page-size";
+import { ingestThreadDetailBootstrap } from "../cache-owners/thread-detail-cache-owner";
 
 interface QueryOptions {
   enabled?: boolean;
@@ -89,14 +86,6 @@ interface ThreadTimelineQueryOptions extends QueryOptions {
 }
 
 type ThreadTimelineTurnSummaryDetailsQueryOptions = QueryOptions;
-
-type HostList = Host[];
-type HostListQueryData = HostList | undefined;
-
-interface UpsertHostListArgs {
-  host: Host;
-  hosts: HostListQueryData;
-}
 
 interface ThreadDefaultExecutionOptionsQueryOptions extends QueryOptions {
   initialData?: ResolvedThreadExecutionOptions | null;
@@ -364,30 +353,6 @@ export function useThread(id: string, options?: QueryOptions) {
   });
 }
 
-function stripThreadIncludes(
-  thread: ThreadWithIncludesResponse,
-): ThreadResponse {
-  const { environment, host, ...threadResponse } = thread;
-  return threadResponse;
-}
-
-function upsertHostList({ host, hosts }: UpsertHostListArgs): HostList {
-  if (!hosts) {
-    return [host];
-  }
-
-  let found = false;
-  const nextHosts = hosts.map((candidate) => {
-    if (candidate.id !== host.id) {
-      return candidate;
-    }
-    found = true;
-    return host;
-  });
-
-  return found ? nextHosts : [...hosts, host];
-}
-
 export function useThreadDetailBootstrap(
   id: string,
   options?: ThreadDetailBootstrapQueryOptions,
@@ -400,44 +365,16 @@ export function useThreadDetailBootstrap(
       const thread = await api.getThreadWithEnvironmentHost(
         requireThreadId(id, "useThreadDetailBootstrap"),
       );
-      queryClient.setQueryData(
-        threadQueryKey(thread.id),
-        stripThreadIncludes(thread),
-      );
-      if (thread.environment) {
-        queryClient.setQueryData(
-          environmentQueryKey(thread.environment.id),
-          thread.environment,
-        );
-      }
-      if (thread.host) {
-        const host = thread.host;
-        queryClient.setQueryData(hostQueryKey(host.id), host);
-        queryClient.setQueryData<HostList>(hostsQueryKey(), (hosts) =>
-          upsertHostList({ host, hosts }),
-        );
-      }
-      if (options?.timelinePrefetch) {
-        const managerTimelineView =
-          thread.type === "manager"
-            ? options.timelinePrefetch.managerTimelineView
-            : undefined;
-        void queryClient.prefetchQuery({
-          queryKey: threadTimelineQueryKey(thread.id, managerTimelineView),
-          queryFn: () =>
-            api.getThreadTimeline({
-              id: thread.id,
-              managerTimelineView,
-            }),
-        });
-      }
-      if (options?.composerBootstrapPrefetch) {
-        const environmentId = thread.environmentId ?? null;
-        void queryClient.prefetchQuery({
-          queryKey: threadComposerBootstrapQueryKey(thread.id, environmentId),
-          queryFn: () => api.getThreadComposerBootstrap(thread.id),
-        });
-      }
+      ingestThreadDetailBootstrap({
+        composerBootstrapPrefetch: options?.composerBootstrapPrefetch ?? false,
+        queryClient,
+        thread,
+        timelinePrefetch: options?.timelinePrefetch
+          ? {
+              managerTimelineView: options.timelinePrefetch.managerTimelineView,
+            }
+          : undefined,
+      });
       return thread;
     },
     enabled: (options?.enabled ?? true) && Boolean(id),
