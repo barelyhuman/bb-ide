@@ -7,6 +7,7 @@ import type {
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { getCachedThreadListPlaceholder } from "./query-cache";
+import { fetchAndHydrateThreadComposerBootstrap } from "./composer-cache-owner";
 import {
   environmentQueryKey,
   hostQueryKey,
@@ -133,7 +134,13 @@ export function ingestThreadDetailBootstrap({
     const environmentId = thread.environmentId ?? null;
     void queryClient.prefetchQuery({
       queryKey: threadComposerBootstrapQueryKey(thread.id, environmentId),
-      queryFn: () => api.getThreadComposerBootstrap(thread.id),
+      queryFn: () =>
+        fetchAndHydrateThreadComposerBootstrap({
+          environmentId,
+          providerId: thread.providerId,
+          queryClient,
+          threadId: thread.id,
+        }),
     });
   }
 }
@@ -142,7 +149,10 @@ export function applyThreadRuntimeResult({
   queryClient,
   thread,
 }: ThreadRuntimeCacheArgs): void {
-  queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
+  queryClient.setQueryData<ThreadWithRuntime>(
+    threadQueryKey(thread.id),
+    thread,
+  );
 }
 
 export function getCachedThreadProjectId({

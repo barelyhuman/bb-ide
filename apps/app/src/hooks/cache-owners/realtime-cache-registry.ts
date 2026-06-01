@@ -24,7 +24,6 @@ import {
   allHostQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
   allThreadQueryKeyPrefix,
-  allThreadComposerBootstrapQueryKeyPrefix,
   allThreadTerminalsQueryKeyPrefix,
   environmentFilePreviewQueryKeyPrefix,
   environmentGitDiffQueryKeyPrefix,
@@ -259,7 +258,6 @@ const HOST_CONNECTION_DIRTY_HANDLERS = [
   dirtyProjectListQueries, // Project source availability depends on host connectivity.
   dirtySystemProviderQueries, // Host-backed provider runtimes can appear/disappear.
   dirtySystemExecutionOptionQueries, // Execution options include host/provider availability.
-  dirtyThreadComposerBootstrapQueries, // Composer bootstrap seeds execution options.
 ] satisfies readonly RealtimeDirtyHandler<HostRealtimeDirtyContext>[];
 
 export const REALTIME_HOST_CHANGE_REGISTRY = {
@@ -273,11 +271,7 @@ export const REALTIME_HOST_CHANGE_REGISTRY = {
 
 export const REALTIME_SYSTEM_CHANGE_REGISTRY = {
   "config-changed": {
-    dirty: [
-      dirtySystemProviderQueries,
-      dirtySystemExecutionOptionQueries,
-      dirtyThreadComposerBootstrapQueries,
-    ],
+    dirty: [dirtySystemProviderQueries, dirtySystemExecutionOptionQueries],
   },
 } satisfies SystemChangeRegistry;
 
@@ -610,8 +604,4 @@ function dirtySystemProviderQueries(): QueryKey[] {
 
 function dirtySystemExecutionOptionQueries(): QueryKey[] {
   return [allSystemExecutionOptionsQueryKeyPrefix()];
-}
-
-function dirtyThreadComposerBootstrapQueries(): QueryKey[] {
-  return [allThreadComposerBootstrapQueryKeyPrefix()];
 }

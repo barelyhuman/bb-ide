@@ -29,6 +29,7 @@ import type { ThreadListFilters, FilePreview } from "@/lib/api";
 import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
+import { fetchAndHydrateThreadComposerBootstrap } from "../cache-owners/composer-cache-owner";
 import { getCachedThreadListPlaceholder } from "./query-cache";
 import {
   resolveThreadPlaceholder,
@@ -67,9 +68,12 @@ interface QueryOptions {
 }
 
 const THREAD_LIST_STALE_TIME_MS = 10_000;
+const THREAD_COMPOSER_BOOTSTRAP_STALE_TIME_MS = 10_000;
+const THREAD_COMPOSER_BOOTSTRAP_GC_TIME_MS = 30_000;
 
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
+  providerId?: string;
 }
 
 interface ThreadTimelinePrefetchOptions {
@@ -87,21 +91,13 @@ interface ThreadTimelineQueryOptions extends QueryOptions {
 
 type ThreadTimelineTurnSummaryDetailsQueryOptions = QueryOptions;
 
-interface ThreadDefaultExecutionOptionsQueryOptions extends QueryOptions {
-  initialData?: ResolvedThreadExecutionOptions | null;
-}
+type ThreadDefaultExecutionOptionsQueryOptions = QueryOptions;
 
-interface ThreadQueuedMessagesQueryOptions extends QueryOptions {
-  initialData?: ThreadQueuedMessageListResponse;
-}
+type ThreadQueuedMessagesQueryOptions = QueryOptions;
 
-interface ThreadPromptHistoryQueryOptions extends QueryOptions {
-  initialData?: PromptHistoryResponse;
-}
+type ThreadPromptHistoryQueryOptions = QueryOptions;
 
-interface ThreadPendingInteractionsQueryOptions extends QueryOptions {
-  initialData?: ThreadPendingInteractionsResponse;
-}
+type ThreadPendingInteractionsQueryOptions = QueryOptions;
 
 export interface UseThreadsFilters extends Omit<
   ThreadListFilters,
@@ -386,20 +382,24 @@ export function useThreadComposerBootstrap(
   id: string,
   options?: ThreadComposerBootstrapQueryOptions,
 ) {
+  const queryClient = useQueryClient();
   const environmentId = options?.environmentId ?? null;
+  const providerId = options?.providerId ?? null;
 
   return useQuery<ThreadComposerBootstrapResponse>({
     queryKey: threadComposerBootstrapQueryKey(id, environmentId),
     queryFn: () =>
-      api.getThreadComposerBootstrap(
-        requireThreadId(id, "useThreadComposerBootstrap"),
-      ),
+      fetchAndHydrateThreadComposerBootstrap({
+        environmentId,
+        providerId,
+        queryClient,
+        threadId: requireThreadId(id, "useThreadComposerBootstrap"),
+      }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
-    ...(options?.staleTime === undefined
-      ? {}
-      : { staleTime: options.staleTime }),
+    staleTime: options?.staleTime ?? THREAD_COMPOSER_BOOTSTRAP_STALE_TIME_MS,
+    gcTime: THREAD_COMPOSER_BOOTSTRAP_GC_TIME_MS,
   });
 }
 
@@ -417,9 +417,6 @@ export function useThreadDefaultExecutionOptions(
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
     staleTime: options?.staleTime,
-    ...(options?.initialData === undefined
-      ? {}
-      : { initialData: options.initialData }),
   });
 }
 
@@ -437,9 +434,6 @@ export function useThreadQueuedMessages(
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
     staleTime: options?.staleTime,
-    ...(options?.initialData === undefined
-      ? {}
-      : { initialData: options.initialData }),
   });
 }
 
@@ -457,9 +451,6 @@ export function useThreadPromptHistory(
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     staleTime: options?.staleTime ?? 10_000,
-    ...(options?.initialData === undefined
-      ? {}
-      : { initialData: options.initialData }),
   });
 }
 
@@ -478,9 +469,6 @@ export function useThreadPendingInteractions(
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
     staleTime: options?.staleTime,
-    ...(options?.initialData === undefined
-      ? {}
-      : { initialData: options.initialData }),
   });
 }
 

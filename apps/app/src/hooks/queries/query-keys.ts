@@ -163,9 +163,6 @@ export type ThreadComposerBootstrapQueryKey = readonly [
   string | null,
   string,
 ];
-export type ThreadComposerBootstrapQueryKeyPrefix = readonly [
-  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
-];
 export type ThreadComposerBootstrapEnvironmentQueryKeyPrefix = readonly [
   typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
   string | null,
@@ -560,10 +557,6 @@ export function threadComposerBootstrapQueryKey(
   environmentId: string | null,
 ): ThreadComposerBootstrapQueryKey {
   return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY, environmentId, threadId];
-}
-
-export function allThreadComposerBootstrapQueryKeyPrefix(): ThreadComposerBootstrapQueryKeyPrefix {
-  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY];
 }
 
 export function threadComposerBootstrapEnvironmentQueryKeyPrefix(

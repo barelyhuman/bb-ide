@@ -591,6 +591,7 @@ describe("thread query bootstraps", () => {
       () =>
         useThreadComposerBootstrap("thread-1", {
           environmentId: "environment-1",
+          providerId: "provider-1",
         }),
       { wrapper },
     );
@@ -739,8 +740,10 @@ describe("thread query bootstraps", () => {
       () => {
         const bootstrap = useThreadComposerBootstrap("thread-1", {
           environmentId: "environment-1",
+          providerId: "claude-code",
         });
-        const canonicalEnabled = bootstrap.isSuccess || bootstrap.isError;
+        const canonicalEnabled =
+          !bootstrap.isFetching && (bootstrap.isSuccess || bootstrap.isError);
         const canonicalThreadId = canonicalEnabled ? "thread-1" : "";
         const bootstrapInitialDataStaleTime = bootstrap.isSuccess
           ? 10_000
@@ -749,34 +752,24 @@ describe("thread query bootstraps", () => {
           canonicalThreadId,
           {
             enabled: canonicalEnabled,
-            refetchOnMount: bootstrap.isSuccess ? false : "always",
-            initialData: bootstrap.data?.defaultExecutionOptions,
             staleTime: bootstrapInitialDataStaleTime,
           },
         );
         const queuedMessageList = useThreadQueuedMessages(canonicalThreadId, {
           enabled: canonicalEnabled,
-          refetchOnMount: bootstrap.isSuccess ? false : "always",
-          initialData: bootstrap.data?.queuedMessages,
           staleTime: bootstrapInitialDataStaleTime,
         });
         const history = useThreadPromptHistory(canonicalThreadId, {
           enabled: canonicalEnabled,
-          refetchOnMount: bootstrap.isSuccess ? false : "always",
-          initialData: bootstrap.data?.promptHistory,
           staleTime: bootstrapInitialDataStaleTime,
         });
         const interactions = useThreadPendingInteractions(canonicalThreadId, {
           enabled: canonicalEnabled,
-          refetchOnMount: bootstrap.isSuccess ? false : "always",
-          initialData: bootstrap.data?.pendingInteractions,
           staleTime: bootstrapInitialDataStaleTime,
         });
         const creationOptions = useThreadCreationOptions({
           enabled: canonicalEnabled,
           environmentId: "environment-1",
-          initialExecutionOptions: bootstrap.data?.executionOptions,
-          initialExecutionOptionsProviderId: "claude-code",
           initialModel: "gpt-5.5",
           initialProviderId: "claude-code",
           resetKey: "thread-1",
@@ -850,6 +843,93 @@ describe("thread query bootstraps", () => {
       expect(executionOptionsScopedRequestCount).toBe(1);
     });
     expect(executionOptionsHostlessRequestCount).toBe(0);
+  });
+
+  it("does not let cached composer bootstrap suppress canonical queue refetches", async () => {
+    const staleQueuedMessages: ThreadComposerBootstrapResponse["queuedMessages"] =
+      [
+        {
+          id: "qmsg-stale",
+          content: [{ type: "text", text: "already sent" }],
+          createdAt: 1,
+          model: "gpt-5.5",
+          permissionMode: "workspace-write",
+          reasoningLevel: "medium",
+          serviceTier: "default",
+          updatedAt: 1,
+        },
+      ];
+    const freshQueuedMessages: ThreadComposerBootstrapResponse["queuedMessages"] =
+      [];
+    let queuedMessagesRequestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/queued-messages",
+        handler: () => {
+          queuedMessagesRequestCount += 1;
+          return jsonResponse(freshQueuedMessages);
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData(
+      threadComposerBootstrapQueryKey("thread-1", "environment-1"),
+      {
+        defaultExecutionOptions: null,
+        queuedMessages: staleQueuedMessages,
+        executionOptions: {
+          providers: [],
+          models: [],
+          selectedOnlyModels: [],
+          modelLoadError: null,
+        },
+        pendingInteractions: [],
+        promptHistory: [],
+      },
+    );
+    queryClient.setQueryData(
+      threadQueuedMessagesQueryKey("thread-1"),
+      staleQueuedMessages,
+    );
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: threadQueuedMessagesQueryKey("thread-1"),
+        refetchType: "none",
+      });
+    });
+
+    const { result } = renderHook(
+      () => {
+        const bootstrap = useThreadComposerBootstrap("thread-1", {
+          environmentId: "environment-1",
+          providerId: "codex",
+        });
+        const canonicalEnabled =
+          !bootstrap.isFetching && (bootstrap.isSuccess || bootstrap.isError);
+        const queuedMessageList = useThreadQueuedMessages(
+          canonicalEnabled ? "thread-1" : "",
+          {
+            enabled: canonicalEnabled,
+            staleTime: bootstrap.isSuccess ? 10_000 : undefined,
+          },
+        );
+        return { bootstrap, queuedMessageList };
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(queuedMessagesRequestCount).toBe(1);
+      expect(result.current.queuedMessageList.data).toEqual(
+        freshQueuedMessages,
+      );
+    });
+    expect(result.current.bootstrap.data?.queuedMessages).toEqual(
+      staleQueuedMessages,
+    );
+    expect(
+      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+    ).toEqual(freshQueuedMessages);
   });
 
   it("fetches provider-scoped execution options after switching providers from bootstrap data", async () => {
@@ -967,12 +1047,11 @@ describe("thread query bootstraps", () => {
       () => {
         const bootstrap = useThreadComposerBootstrap("thread-1", {
           environmentId: "environment-1",
+          providerId: "claude-code",
         });
         const creationOptions = useThreadCreationOptions({
-          enabled: bootstrap.isSuccess,
+          enabled: !bootstrap.isFetching && bootstrap.isSuccess,
           environmentId: "environment-1",
-          initialExecutionOptions: bootstrap.data?.executionOptions,
-          initialExecutionOptionsProviderId: "claude-code",
           initialModel: "claude-sonnet",
           initialProviderId: "claude-code",
           resetKey: "thread-1",

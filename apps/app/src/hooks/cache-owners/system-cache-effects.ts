@@ -8,7 +8,6 @@ import {
   allHostQueryKeyPrefix,
   allProjectPathsQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
-  allThreadComposerBootstrapQueryKeyPrefix,
   allThreadDefaultExecutionOptionsQueryKeyPrefix,
   allThreadAppMarkdownPreviewQueryKeyPrefix,
   allThreadAppQueryKeyPrefix,
@@ -70,9 +69,6 @@ export function invalidateHostChangeDependentQueries({
   queryClient.invalidateQueries({
     queryKey: allSystemExecutionOptionsQueryKeyPrefix(),
   });
-  queryClient.invalidateQueries({
-    queryKey: allThreadComposerBootstrapQueryKeyPrefix(),
-  });
 }
 
 export function invalidateHostDeleteDependentQueries({
@@ -98,7 +94,6 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allProjectPathsQueryKeyPrefix(),
     threadsQueryKey(),
     allThreadQueryKeyPrefix(),
-    allThreadComposerBootstrapQueryKeyPrefix(),
     allThreadTimelineQueryKeyPrefix(),
     allThreadTimelineTurnSummaryDetailsQueryKeyPrefix(),
     allThreadQueuedMessagesQueryKeyPrefix(),

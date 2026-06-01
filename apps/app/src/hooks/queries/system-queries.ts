@@ -23,7 +23,6 @@ import {
 export interface UseSystemExecutionOptionsArgs {
   enabled?: boolean;
   environmentId?: string;
-  initialData?: SystemExecutionOptionsResponse;
   providerId?: string;
 }
 
@@ -83,9 +82,6 @@ export function useSystemExecutionOptions(
         providerId: args.providerId,
       }),
     enabled: args.enabled ?? true,
-    ...(args.initialData === undefined
-      ? {}
-      : { initialData: args.initialData }),
     staleTime: 60_000,
   });
 }

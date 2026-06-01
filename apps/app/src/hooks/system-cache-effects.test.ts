@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
   allSystemExecutionOptionsQueryKeyPrefix,
-  allThreadComposerBootstrapQueryKeyPrefix,
   sidebarBootstrapQueryKey,
   systemExecutionOptionsQueryKey,
-  threadComposerBootstrapQueryKey,
 } from "./queries/query-keys";
 import {
   invalidateHostChangeDependentQueries,
@@ -45,24 +43,13 @@ const EMPTY_EXECUTION_OPTIONS = {
 };
 
 describe("system cache effects", () => {
-  it("invalidates env-scoped execution options and composer bootstrap caches after reconnect", () => {
+  it("invalidates env-scoped execution options after reconnect", () => {
     const queryClient = createCacheEffectQueryClient();
     const executionOptionsKey = scopedSystemExecutionOptionsKey({
       environmentId: "env-1",
     });
-    const composerBootstrapKey = threadComposerBootstrapQueryKey(
-      "thread-1",
-      "env-1",
-    );
     const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
-    queryClient.setQueryData(composerBootstrapKey, {
-      defaultExecutionOptions: null,
-      queuedMessages: [],
-      executionOptions: EMPTY_EXECUTION_OPTIONS,
-      pendingInteractions: [],
-      promptHistory: [],
-    });
     queryClient.setQueryData(sidebarBootstrapKey, {
       projects: [],
       personalProject: { threads: [] },
@@ -73,32 +60,18 @@ describe("system cache effects", () => {
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       true,
     );
-    expect(queryClient.getQueryState(composerBootstrapKey)?.isInvalidated).toBe(
-      true,
-    );
     expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
       true,
     );
   });
 
-  it("invalidates all execution options and composer bootstrap caches after host changes", () => {
+  it("invalidates all execution options after host changes", () => {
     const queryClient = createCacheEffectQueryClient();
     const executionOptionsKey = scopedSystemExecutionOptionsKey({
       environmentId: "env-1",
     });
-    const composerBootstrapKey = threadComposerBootstrapQueryKey(
-      "thread-1",
-      "env-1",
-    );
     const sidebarBootstrapKey = sidebarBootstrapQueryKey();
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
-    queryClient.setQueryData(composerBootstrapKey, {
-      defaultExecutionOptions: null,
-      queuedMessages: [],
-      executionOptions: EMPTY_EXECUTION_OPTIONS,
-      pendingInteractions: [],
-      promptHistory: [],
-    });
     queryClient.setQueryData(sidebarBootstrapKey, {
       projects: [],
       personalProject: { threads: [] },
@@ -111,13 +84,6 @@ describe("system cache effects", () => {
         ?.isInvalidated,
     ).toBeUndefined();
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
-      true,
-    );
-    expect(
-      queryClient.getQueryState(allThreadComposerBootstrapQueryKeyPrefix())
-        ?.isInvalidated,
-    ).toBeUndefined();
-    expect(queryClient.getQueryState(composerBootstrapKey)?.isInvalidated).toBe(
       true,
     );
     expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(

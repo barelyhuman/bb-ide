@@ -7,10 +7,7 @@ import type {
   ThreadTimelinePendingTodos,
   ThreadWithRuntime,
 } from "@bb/domain";
-import type {
-  ThreadComposerBootstrapResponse,
-  ThreadTimelineResponse,
-} from "@bb/server-contract";
+import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { ThreadPendingInteractionBanner } from "@/components/thread/pending-interactions/ThreadPendingInteractionBanner";
 import {
   ThreadPromptContextBanner,
@@ -64,8 +61,6 @@ import {
   type FollowUpExecutionSelection,
 } from "./threadDetailPromptSubmission";
 
-type ComposerQueryRefetchOnMount = boolean | "always";
-
 const ignorePromptBannerFileClick = () => {};
 
 export const THREAD_DETAIL_COMPOSER_TEXTAREA_ID =
@@ -73,9 +68,7 @@ export const THREAD_DETAIL_COMPOSER_TEXTAREA_ID =
 
 interface ThreadDetailPromptAreaProps {
   canUseGitUi: boolean;
-  composerBootstrap?: ThreadComposerBootstrapResponse;
   composerQueriesEnabled: boolean;
-  composerQueriesRefetchOnMount: ComposerQueryRefetchOnMount;
   composerQueriesStaleTime?: number;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
@@ -126,9 +119,7 @@ interface SendQueuedMessageByIdArgs {
 
 export function ThreadDetailPromptArea({
   canUseGitUi,
-  composerBootstrap,
   composerQueriesEnabled,
-  composerQueriesRefetchOnMount,
   composerQueriesStaleTime,
   contextWindowUsage,
   environmentBranchName,
@@ -156,8 +147,6 @@ export function ThreadDetailPromptArea({
     composerQueryThreadId,
     {
       enabled: composerQueriesEnabled,
-      refetchOnMount: composerQueriesRefetchOnMount,
-      initialData: composerBootstrap?.defaultExecutionOptions,
       staleTime: composerQueriesStaleTime,
     },
   );
@@ -177,8 +166,6 @@ export function ThreadDetailPromptArea({
     composerQueryThreadId,
     {
       enabled: composerQueriesEnabled,
-      refetchOnMount: composerQueriesRefetchOnMount,
-      initialData: composerBootstrap?.queuedMessages,
       staleTime: composerQueriesStaleTime,
     },
   );
@@ -200,8 +187,6 @@ export function ThreadDetailPromptArea({
     composerQueryThreadId,
     {
       enabled: composerQueriesEnabled,
-      refetchOnMount: composerQueriesRefetchOnMount,
-      initialData: composerBootstrap?.promptHistory,
       staleTime: composerQueriesStaleTime,
     },
   );
@@ -259,8 +244,6 @@ export function ThreadDetailPromptArea({
     environmentId: thread.environmentId ?? undefined,
     scope: "component-local",
     resetKey: thread.id,
-    initialExecutionOptions: composerBootstrap?.executionOptions,
-    initialExecutionOptionsProviderId: thread.providerId,
     initialProviderId: thread.providerId,
     initialModel: defaultExecutionOptions?.model,
     initialServiceTier: defaultExecutionOptions?.serviceTier,

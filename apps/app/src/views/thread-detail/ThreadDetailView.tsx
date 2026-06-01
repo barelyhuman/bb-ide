@@ -249,16 +249,17 @@ export function ThreadDetailView() {
     {
       enabled: threadQueryState.status === "ready" && Boolean(thread?.id),
       environmentId: thread?.environmentId ?? undefined,
+      providerId: thread?.providerId,
     },
   );
   const hasThreadComposerBootstrapSettled =
-    threadComposerBootstrapQuery.isSuccess ||
-    threadComposerBootstrapQuery.isError;
-  const composerBootstrapData = threadComposerBootstrapQuery.data;
+    !threadComposerBootstrapQuery.isFetching &&
+    (threadComposerBootstrapQuery.isSuccess ||
+      threadComposerBootstrapQuery.isError);
   const composerQueryThreadId = hasThreadComposerBootstrapSettled
     ? (thread?.id ?? "")
     : "";
-  const composerInitialDataStaleTime = threadComposerBootstrapQuery.isSuccess
+  const composerHydratedDataStaleTime = threadComposerBootstrapQuery.isSuccess
     ? 10_000
     : undefined;
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
@@ -266,9 +267,7 @@ export function ThreadDetailView() {
     composerQueryThreadId,
     {
       enabled: hasThreadComposerBootstrapSettled,
-      refetchOnMount: threadComposerBootstrapQuery.isSuccess ? false : "always",
-      initialData: composerBootstrapData?.pendingInteractions,
-      staleTime: composerInitialDataStaleTime,
+      staleTime: composerHydratedDataStaleTime,
     },
   );
   const hasPendingInteraction =
@@ -1129,12 +1128,8 @@ export function ThreadDetailView() {
       }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
-      composerBootstrap={composerBootstrapData}
       composerQueriesEnabled={hasThreadComposerBootstrapSettled}
-      composerQueriesRefetchOnMount={
-        threadComposerBootstrapQuery.isSuccess ? false : "always"
-      }
-      composerQueriesStaleTime={composerInitialDataStaleTime}
+      composerQueriesStaleTime={composerHydratedDataStaleTime}
       onChangedFileClick={handleChangedFileClick}
       openThreadDiffPanel={openSecondaryPanelDiffPanel}
       projectId={projectId}
