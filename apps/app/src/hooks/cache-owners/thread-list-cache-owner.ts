@@ -8,10 +8,10 @@ import type {
 } from "@bb/server-contract";
 import { applyNeighborReorder } from "@/lib/neighbor-reorder";
 import {
-  SIDEBAR_BOOTSTRAP_QUERY_KEY,
+  SIDEBAR_NAVIGATION_QUERY_KEY,
   THREADS_DISABLED_QUERY_KEY,
   THREADS_QUERY_KEY,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadListQueryKey,
   threadQueryKey,
   threadsQueryKey,
@@ -19,9 +19,9 @@ import {
 import type { CacheOwnerDescriptor } from "./cache-owner-types";
 import {
   optimisticallyInsertThread,
-  restoreCachedSidebarBootstrap,
-  snapshotCachedSidebarBootstrap,
-  type CachedSidebarBootstrapSnapshot,
+  restoreCachedSidebarNavigation,
+  snapshotCachedSidebarNavigation,
+  type CachedSidebarNavigationSnapshot,
 } from "./query-cache";
 import { invalidateThreadListQueries } from "./mutation-cache-effects";
 import {
@@ -58,8 +58,7 @@ interface CreatedThreadCacheArgs {
   thread: ThreadWithRuntime;
 }
 
-interface ReorderProjectManagerTransactionRequest
-  extends ReorderManagerThreadRequest {
+interface ReorderProjectManagerTransactionRequest extends ReorderManagerThreadRequest {
   projectId: string;
   threadId: string;
 }
@@ -83,13 +82,13 @@ interface ApplyReorderProjectManagerResultArgs {
 
 export interface ArchiveEnvironmentThreadsTransaction {
   archivedThreadIds: string[];
-  previousSidebarBootstrap: CachedSidebarBootstrapSnapshot;
+  previousSidebarNavigation: CachedSidebarNavigationSnapshot;
   previousThreadLists: CachedThreadListSnapshot;
   previousThreads: CachedThreadSnapshot[];
 }
 
 export interface ReorderProjectManagerTransaction {
-  previousSidebarBootstrap: CachedSidebarBootstrapSnapshot;
+  previousSidebarNavigation: CachedSidebarNavigationSnapshot;
   previousThreadList: ThreadListResponse | undefined;
 }
 
@@ -98,7 +97,7 @@ export const threadListCacheOwner = {
   ownedQueryRoots: [
     THREADS_QUERY_KEY,
     THREADS_DISABLED_QUERY_KEY,
-    SIDEBAR_BOOTSTRAP_QUERY_KEY,
+    SIDEBAR_NAVIGATION_QUERY_KEY,
   ],
   handledRealtimeEvents: [
     { entity: "thread", kind: "thread-created" },
@@ -155,11 +154,11 @@ function applyManagerThreadReorderToThreadList(
   });
 }
 
-function replaceSidebarBootstrapProjectThreads(
-  bootstrap: NonNullable<CachedSidebarBootstrapSnapshot>,
+function replaceSidebarNavigationProjectThreads(
+  navigation: NonNullable<CachedSidebarNavigationSnapshot>,
   projectId: string,
   threads: ThreadListResponse,
-): NonNullable<CachedSidebarBootstrapSnapshot> {
+): NonNullable<CachedSidebarNavigationSnapshot> {
   const replaceThreads = (
     project: ProjectWithThreadsResponse,
   ): ProjectWithThreadsResponse =>
@@ -173,8 +172,8 @@ function replaceSidebarBootstrapProjectThreads(
         }
       : project;
   return {
-    projects: bootstrap.projects.map(replaceThreads),
-    personalProject: replaceThreads(bootstrap.personalProject),
+    projects: navigation.projects.map(replaceThreads),
+    personalProject: replaceThreads(navigation.personalProject),
   };
 }
 
@@ -195,14 +194,16 @@ export function beginReorderProjectManagerTransaction({
   });
   const previousThreadList =
     queryClient.getQueryData<ThreadListResponse>(threadListKey);
-  const previousSidebarBootstrap =
-    queryClient.getQueryData<NonNullable<CachedSidebarBootstrapSnapshot>>(
-      sidebarBootstrapQueryKey(),
-    );
+  const previousSidebarNavigation = queryClient.getQueryData<
+    NonNullable<CachedSidebarNavigationSnapshot>
+  >(sidebarNavigationQueryKey());
 
-  void queryClient.cancelQueries({ queryKey: threadListKey }, { revert: false });
   void queryClient.cancelQueries(
-    { queryKey: sidebarBootstrapQueryKey() },
+    { queryKey: threadListKey },
+    { revert: false },
+  );
+  void queryClient.cancelQueries(
+    { queryKey: sidebarNavigationQueryKey() },
     { revert: false },
   );
   queryClient.setQueryData<ThreadListResponse>(
@@ -212,11 +213,11 @@ export function beginReorderProjectManagerTransaction({
         ? applyManagerThreadReorderToThreadList(currentThreads, request)
         : currentThreads,
   );
-  queryClient.setQueryData<NonNullable<CachedSidebarBootstrapSnapshot>>(
-    sidebarBootstrapQueryKey(),
-    (currentBootstrap) => {
-      if (!currentBootstrap) {
-        return currentBootstrap;
+  queryClient.setQueryData<NonNullable<CachedSidebarNavigationSnapshot>>(
+    sidebarNavigationQueryKey(),
+    (currentNavigation) => {
+      if (!currentNavigation) {
+        return currentNavigation;
       }
       const reorderProjectManagers = (
         project: ProjectWithThreadsResponse,
@@ -231,15 +232,15 @@ export function beginReorderProjectManagerTransaction({
             }
           : project;
       return {
-        projects: currentBootstrap.projects.map(reorderProjectManagers),
+        projects: currentNavigation.projects.map(reorderProjectManagers),
         personalProject: reorderProjectManagers(
-          currentBootstrap.personalProject,
+          currentNavigation.personalProject,
         ),
       };
     },
   );
 
-  return { previousThreadList, previousSidebarBootstrap };
+  return { previousThreadList, previousSidebarNavigation };
 }
 
 export function rollbackReorderProjectManagerTransaction({
@@ -253,8 +254,8 @@ export function rollbackReorderProjectManagerTransaction({
   });
   queryClient.setQueryData(threadListKey, transaction?.previousThreadList);
   queryClient.setQueryData(
-    sidebarBootstrapQueryKey(),
-    transaction?.previousSidebarBootstrap,
+    sidebarNavigationQueryKey(),
+    transaction?.previousSidebarNavigation,
   );
   invalidateThreadListQueries({ queryClient });
 }
@@ -275,16 +276,16 @@ export function applyReorderProjectManagerResult({
         ? applyThreadListOrderToExistingThreads(currentThreads, threads)
         : threads,
   );
-  queryClient.setQueryData<NonNullable<CachedSidebarBootstrapSnapshot>>(
-    sidebarBootstrapQueryKey(),
-    (currentBootstrap) =>
-      currentBootstrap
-        ? replaceSidebarBootstrapProjectThreads(
-            currentBootstrap,
+  queryClient.setQueryData<NonNullable<CachedSidebarNavigationSnapshot>>(
+    sidebarNavigationQueryKey(),
+    (currentNavigation) =>
+      currentNavigation
+        ? replaceSidebarNavigationProjectThreads(
+            currentNavigation,
             projectId,
             threads,
           )
-        : currentBootstrap,
+        : currentNavigation,
   );
 }
 
@@ -306,7 +307,8 @@ export async function beginArchiveEnvironmentThreadsTransaction({
   const previousThreadLists = snapshotCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
   });
-  const previousSidebarBootstrap = snapshotCachedSidebarBootstrap(queryClient);
+  const previousSidebarNavigation =
+    snapshotCachedSidebarNavigation(queryClient);
   const previousThreads = getCachedThreadSnapshots({
     queryClient,
     threadIds: archivedThreadIds,
@@ -323,7 +325,7 @@ export async function beginArchiveEnvironmentThreadsTransaction({
 
   return {
     archivedThreadIds,
-    previousSidebarBootstrap,
+    previousSidebarNavigation,
     previousThreadLists,
     previousThreads,
   };
@@ -338,9 +340,9 @@ export function rollbackArchiveEnvironmentThreadsTransaction({
   }
 
   restoreCachedThreadLists(queryClient, transaction.previousThreadLists);
-  restoreCachedSidebarBootstrap(
+  restoreCachedSidebarNavigation(
     queryClient,
-    transaction.previousSidebarBootstrap,
+    transaction.previousSidebarNavigation,
   );
   for (const snapshot of transaction.previousThreads) {
     queryClient.setQueryData(threadQueryKey(snapshot.id), snapshot.thread);
@@ -353,7 +355,7 @@ export function settleArchiveEnvironmentThreadsTransaction({
   transaction,
 }: SettleArchiveEnvironmentThreadsTransactionArgs): void {
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
   for (const threadId of response?.archivedThreadIds ??
     transaction?.archivedThreadIds ??
     []) {

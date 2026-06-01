@@ -8,7 +8,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   archivedThreadsListQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadListQueryKey,
   threadQueryKey,
 } from "../queries/query-keys";
@@ -68,7 +68,7 @@ function makeThreadListEntry(
   };
 }
 
-function makeSidebarBootstrapResponse(
+function makeSidebarNavigationResponse(
   threads: ThreadListEntry[],
 ): SidebarBootstrapResponse {
   return {
@@ -125,7 +125,7 @@ describe("environment mutations", () => {
       kind: "all",
       projectId: "project-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     queryClient.setQueryData(threadQueryKey(firstThread.id), firstThread);
     queryClient.setQueryData(threadQueryKey(secondThread.id), secondThread);
     const cachedThreads = [
@@ -141,8 +141,8 @@ describe("environment mutations", () => {
       alreadyArchivedThread,
     ]);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapKey,
-      makeSidebarBootstrapResponse(cachedThreads),
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse(cachedThreads),
     );
 
     const { result } = renderHook(() => useArchiveEnvironmentThreads(), {
@@ -159,7 +159,7 @@ describe("environment mutations", () => {
     ]);
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
         ?.projects.at(0)
         ?.threads.map((thread) => thread.id),
     ).toEqual([otherEnvironmentThread.id]);
@@ -175,7 +175,7 @@ describe("environment mutations", () => {
     expect(queryClient.getQueryState(archivedListKey)?.isInvalidated).toBe(
       true,
     );
-    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
       true,
     );
   });
@@ -192,12 +192,12 @@ describe("environment mutations", () => {
       archived: false,
       projectId: "project-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     queryClient.setQueryData(threadQueryKey(thread.id), thread);
     queryClient.setQueryData<ThreadListEntry[]>(activeListKey, [listEntry]);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapKey,
-      makeSidebarBootstrapResponse([listEntry]),
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse([listEntry]),
     );
 
     const { result } = renderHook(() => useArchiveEnvironmentThreads(), {
@@ -218,7 +218,7 @@ describe("environment mutations", () => {
     ]);
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
         ?.projects.at(0)?.threads,
     ).toEqual([listEntry]);
   });

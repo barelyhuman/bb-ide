@@ -23,7 +23,7 @@ import {
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
   isStandardManagerThreadTimelineQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
@@ -56,17 +56,17 @@ export interface ProjectThreadListInvalidationParams {
   queryClient: QueryClient;
 }
 
-type SidebarBootstrapProject = SidebarBootstrapResponse["projects"][number];
-type SidebarBootstrapThreadMapper = (
+type SidebarNavigationProject = SidebarBootstrapResponse["projects"][number];
+type SidebarNavigationThreadMapper = (
   threads: ThreadListEntry[],
 ) => ThreadListEntry[];
 
-interface ApplyToCachedSidebarBootstrapThreadsArgs {
-  mapper: SidebarBootstrapThreadMapper;
+interface ApplyToCachedSidebarNavigationThreadsArgs {
+  mapper: SidebarNavigationThreadMapper;
   queryClient: QueryClient;
 }
 
-export type CachedSidebarBootstrapSnapshot =
+export type CachedSidebarNavigationSnapshot =
   | SidebarBootstrapResponse
   | undefined;
 
@@ -188,32 +188,32 @@ export function getCachedProjectThreadListInvalidationQueryKeys({
   return queryKeys;
 }
 
-function mapSidebarBootstrapProjectThreads(
-  project: SidebarBootstrapProject,
-  mapper: SidebarBootstrapThreadMapper,
-): SidebarBootstrapProject {
+function mapSidebarNavigationProjectThreads(
+  project: SidebarNavigationProject,
+  mapper: SidebarNavigationThreadMapper,
+): SidebarNavigationProject {
   return {
     ...project,
     threads: mapper(project.threads),
   };
 }
 
-export function applyToCachedSidebarBootstrapThreads({
+export function applyToCachedSidebarNavigationThreads({
   mapper,
   queryClient,
-}: ApplyToCachedSidebarBootstrapThreadsArgs): void {
+}: ApplyToCachedSidebarNavigationThreadsArgs): void {
   queryClient.setQueryData<SidebarBootstrapResponse>(
-    sidebarBootstrapQueryKey(),
-    (currentBootstrap) => {
-      if (!currentBootstrap) {
-        return currentBootstrap;
+    sidebarNavigationQueryKey(),
+    (currentNavigation) => {
+      if (!currentNavigation) {
+        return currentNavigation;
       }
       return {
-        projects: currentBootstrap.projects.map((project) =>
-          mapSidebarBootstrapProjectThreads(project, mapper),
+        projects: currentNavigation.projects.map((project) =>
+          mapSidebarNavigationProjectThreads(project, mapper),
         ),
-        personalProject: mapSidebarBootstrapProjectThreads(
-          currentBootstrap.personalProject,
+        personalProject: mapSidebarNavigationProjectThreads(
+          currentNavigation.personalProject,
           mapper,
         ),
       };
@@ -221,34 +221,34 @@ export function applyToCachedSidebarBootstrapThreads({
   );
 }
 
-export function getCachedSidebarBootstrapThreads(
+export function getCachedSidebarNavigationThreads(
   queryClient: QueryClient,
 ): ThreadListEntry[] {
-  const bootstrap = queryClient.getQueryData<SidebarBootstrapResponse>(
-    sidebarBootstrapQueryKey(),
+  const navigation = queryClient.getQueryData<SidebarBootstrapResponse>(
+    sidebarNavigationQueryKey(),
   );
-  if (!bootstrap) {
+  if (!navigation) {
     return [];
   }
   return [
-    ...bootstrap.projects.flatMap((project) => project.threads),
-    ...bootstrap.personalProject.threads,
+    ...navigation.projects.flatMap((project) => project.threads),
+    ...navigation.personalProject.threads,
   ];
 }
 
-export function snapshotCachedSidebarBootstrap(
+export function snapshotCachedSidebarNavigation(
   queryClient: QueryClient,
-): CachedSidebarBootstrapSnapshot {
+): CachedSidebarNavigationSnapshot {
   return queryClient.getQueryData<SidebarBootstrapResponse>(
-    sidebarBootstrapQueryKey(),
+    sidebarNavigationQueryKey(),
   );
 }
 
-export function restoreCachedSidebarBootstrap(
+export function restoreCachedSidebarNavigation(
   queryClient: QueryClient,
-  snapshot: CachedSidebarBootstrapSnapshot,
+  snapshot: CachedSidebarNavigationSnapshot,
 ): void {
-  queryClient.setQueryData(sidebarBootstrapQueryKey(), snapshot);
+  queryClient.setQueryData(sidebarNavigationQueryKey(), snapshot);
 }
 
 export function getEnvironmentRecordInvalidationQueryKeys({
@@ -563,7 +563,7 @@ export function updateCachedThreadListPendingInteractionState(
       );
     },
   });
-  applyToCachedSidebarBootstrapThreads({
+  applyToCachedSidebarNavigationThreads({
     queryClient,
     mapper: (list) => {
       if (!list.some((thread) => thread.id === threadId)) {

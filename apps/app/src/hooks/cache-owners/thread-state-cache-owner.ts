@@ -8,7 +8,7 @@ import type {
 import { applyNeighborReorder } from "@/lib/neighbor-reorder";
 import {
   projectsQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
@@ -20,10 +20,10 @@ import {
   removeThreadScopedQueries,
 } from "./mutation-cache-effects";
 import {
-  applyToCachedSidebarBootstrapThreads,
-  restoreCachedSidebarBootstrap,
-  snapshotCachedSidebarBootstrap,
-  type CachedSidebarBootstrapSnapshot,
+  applyToCachedSidebarNavigationThreads,
+  restoreCachedSidebarNavigation,
+  snapshotCachedSidebarNavigation,
+  type CachedSidebarNavigationSnapshot,
 } from "./query-cache";
 import {
   applyToCachedThreadLists,
@@ -57,8 +57,7 @@ interface BeginThreadPinTransactionArgs extends ThreadIdCacheArgs {
   pinnedAt: number;
 }
 
-interface ReorderPinnedThreadTransactionRequest
-  extends ReorderPinnedThreadRequest {
+interface ReorderPinnedThreadTransactionRequest extends ReorderPinnedThreadRequest {
   id: string;
 }
 
@@ -122,7 +121,7 @@ export interface PinnedThreadOrderTransaction {
 
 export interface ArchiveThreadsTransaction {
   archivedThreadIds: string[];
-  previousSidebarBootstrap: CachedSidebarBootstrapSnapshot;
+  previousSidebarNavigation: CachedSidebarNavigationSnapshot;
   previousThreadLists: CachedThreadListSnapshot;
   previousThreads: CachedThreadSnapshot[];
 }
@@ -153,7 +152,7 @@ function updateThreadInLists({
     queryKey: threadsQueryKey(),
     mapper: updateThread,
   });
-  applyToCachedSidebarBootstrapThreads({
+  applyToCachedSidebarNavigationThreads({
     queryClient,
     mapper: updateThread,
   });
@@ -223,7 +222,10 @@ export function applyThreadUpdateResult({
   queryClient,
   thread,
 }: ThreadRuntimeCacheArgs): void {
-  queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
+  queryClient.setQueryData<ThreadWithRuntime>(
+    threadQueryKey(thread.id),
+    thread,
+  );
   invalidateThreadListQueries({ queryClient });
 }
 
@@ -323,7 +325,10 @@ export function rollbackThreadListMutationTransaction({
     return;
   }
 
-  queryClient.setQueryData(threadQueryKey(threadId), transaction.previousThread);
+  queryClient.setQueryData(
+    threadQueryKey(threadId),
+    transaction.previousThread,
+  );
   restoreCachedThreadLists(queryClient, transaction.previousThreadLists);
 }
 
@@ -332,7 +337,10 @@ export function applyThreadPinStateResult({
   queryClient,
   thread,
 }: ThreadPinSuccessArgs): void {
-  queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
+  queryClient.setQueryData<ThreadWithRuntime>(
+    threadQueryKey(thread.id),
+    thread,
+  );
   updateThreadPinStateInLists({ queryClient, thread, pinSortKey });
 }
 
@@ -472,7 +480,8 @@ export async function beginArchiveManagerThreadsTransaction({
   const previousThreadLists = snapshotCachedThreadLists(queryClient, {
     queryKey: threadsQueryKey(),
   });
-  const previousSidebarBootstrap = snapshotCachedSidebarBootstrap(queryClient);
+  const previousSidebarNavigation =
+    snapshotCachedSidebarNavigation(queryClient);
   const previousThreads = getCachedThreadSnapshots({
     queryClient,
     threadIds: archivedThreadIds,
@@ -491,7 +500,7 @@ export async function beginArchiveManagerThreadsTransaction({
 
   return {
     archivedThreadIds,
-    previousSidebarBootstrap,
+    previousSidebarNavigation,
     previousThreadLists,
     previousThreads,
   };
@@ -506,9 +515,9 @@ export function rollbackArchiveThreadsTransaction({
   }
 
   restoreCachedThreadLists(queryClient, transaction.previousThreadLists);
-  restoreCachedSidebarBootstrap(
+  restoreCachedSidebarNavigation(
     queryClient,
-    transaction.previousSidebarBootstrap,
+    transaction.previousSidebarNavigation,
   );
   for (const snapshot of transaction.previousThreads) {
     queryClient.setQueryData(threadQueryKey(snapshot.id), snapshot.thread);
@@ -521,7 +530,7 @@ export function settleArchiveThreadsTransaction({
   transaction,
 }: SettleArchiveThreadsTransactionArgs): void {
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
   for (const threadId of response?.archivedThreadIds ??
     transaction?.archivedThreadIds ??
     []) {
@@ -568,7 +577,10 @@ export function rollbackDeleteThreadTransaction({
     return;
   }
 
-  queryClient.setQueryData(threadQueryKey(threadId), transaction.previousThread);
+  queryClient.setQueryData(
+    threadQueryKey(threadId),
+    transaction.previousThread,
+  );
   restoreCachedThreadLists(queryClient, transaction.previousThreadLists);
   queryClient.setQueryData(projectsQueryKey(), transaction.previousProjects);
 }
@@ -590,6 +602,9 @@ export function applyThreadReadStateResult({
   queryClient,
   thread,
 }: ThreadRuntimeCacheArgs): void {
-  queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
+  queryClient.setQueryData<ThreadWithRuntime>(
+    threadQueryKey(thread.id),
+    thread,
+  );
   updateThreadInLists({ queryClient, thread });
 }

@@ -7,7 +7,7 @@ import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadListQueryKey,
   threadQueryKey,
 } from "../queries/query-keys";
@@ -68,7 +68,7 @@ function makeThreadListEntry(
   };
 }
 
-function makeSidebarBootstrapResponse(
+function makeSidebarNavigationResponse(
   threads: ThreadListEntry[],
 ): SidebarBootstrapResponse {
   return {
@@ -122,7 +122,7 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     queryClient.setQueryData(threadQueryKey(managerThread.id), managerThread);
     queryClient.setQueryData(threadQueryKey(childThread.id), childThread);
     const cachedThreads = [
@@ -140,8 +140,8 @@ describe("thread state mutations", () => {
     ];
     queryClient.setQueryData<ThreadListEntry[]>(listKey, cachedThreads);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapKey,
-      makeSidebarBootstrapResponse(cachedThreads),
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse(cachedThreads),
     );
 
     const { result } = renderHook(() => useArchiveManagerThreads(), {
@@ -158,7 +158,7 @@ describe("thread state mutations", () => {
     ]);
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
         ?.projects.at(0)
         ?.threads.map((thread) => thread.id),
     ).toEqual([otherThread.id]);
@@ -173,7 +173,7 @@ describe("thread state mutations", () => {
       )?.archivedAt,
     ).toBeTypeOf("number");
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
       true,
     );
   });
@@ -204,7 +204,7 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     queryClient.setQueryData(threadQueryKey(managerThread.id), managerThread);
     queryClient.setQueryData(threadQueryKey(childThread.id), childThread);
     queryClient.setQueryData<ThreadListEntry[]>(listKey, [
@@ -212,8 +212,8 @@ describe("thread state mutations", () => {
       childListEntry,
     ]);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapKey,
-      makeSidebarBootstrapResponse([managerListEntry, childListEntry]),
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse([managerListEntry, childListEntry]),
     );
 
     const { result } = renderHook(() => useArchiveManagerThreads(), {
@@ -242,7 +242,7 @@ describe("thread state mutations", () => {
     ]);
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
         ?.projects.at(0)?.threads,
     ).toEqual([managerListEntry, childListEntry]);
   });
@@ -260,7 +260,7 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     const unreadListEntry = makeThreadListEntry({
       lastReadAt: null,
       latestAttentionAt: 10,
@@ -268,8 +268,8 @@ describe("thread state mutations", () => {
     queryClient.setQueryData(threadQueryKey(unreadThread.id), unreadThread);
     queryClient.setQueryData<ThreadListEntry[]>(listKey, [unreadListEntry]);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapKey,
-      makeSidebarBootstrapResponse([unreadListEntry]),
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse([unreadListEntry]),
     );
 
     const { result } = renderHook(() => useMarkThreadRead(), { wrapper });
@@ -290,7 +290,7 @@ describe("thread state mutations", () => {
     });
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
         ?.projects.at(0)
         ?.threads.at(0),
     ).toMatchObject({
@@ -299,7 +299,7 @@ describe("thread state mutations", () => {
       latestAttentionAt: 10,
     });
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
-    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
       false,
     );
   });
@@ -314,7 +314,7 @@ describe("thread state mutations", () => {
       archived: false,
       projectId: "project-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     const readListEntry = makeThreadListEntry({
       lastReadAt: 10,
       latestAttentionAt: 10,
@@ -322,8 +322,8 @@ describe("thread state mutations", () => {
     queryClient.setQueryData(threadQueryKey(readThread.id), readThread);
     queryClient.setQueryData<ThreadListEntry[]>(listKey, [readListEntry]);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapKey,
-      makeSidebarBootstrapResponse([readListEntry]),
+      sidebarNavigationKey,
+      makeSidebarNavigationResponse([readListEntry]),
     );
 
     const { result } = renderHook(() => useMarkThreadUnread(), { wrapper });
@@ -344,7 +344,7 @@ describe("thread state mutations", () => {
     });
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapKey)
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationKey)
         ?.projects.at(0)
         ?.threads.at(0),
     ).toMatchObject({
@@ -353,7 +353,7 @@ describe("thread state mutations", () => {
       latestAttentionAt: 10,
     });
     expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
-    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
       false,
     );
   });

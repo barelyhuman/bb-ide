@@ -14,7 +14,7 @@ import {
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
   projectsQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
@@ -38,7 +38,7 @@ interface ThreadListInvalidationArgs extends ProjectScopedInvalidationArgs {
 }
 
 export function getProjectListInvalidationQueryKeys(): QueryKey[] {
-  return [projectsQueryKey(), sidebarBootstrapQueryKey()];
+  return [projectsQueryKey(), sidebarNavigationQueryKey()];
 }
 
 export function getProjectPromptHistoryInvalidationQueryKeys({
@@ -54,7 +54,7 @@ export function getProjectSourceDependentInvalidationQueryKeys({
 }: ProjectScopedInvalidationArgs): QueryKey[] {
   const sharedKeys: QueryKey[] = [
     projectsQueryKey(),
-    sidebarBootstrapQueryKey(),
+    sidebarNavigationQueryKey(),
     localPathExistenceQueryKeyPrefix(),
   ];
   if (!projectId) {
@@ -81,7 +81,7 @@ export function getThreadListInvalidationQueryKeys({
         queryClient,
       })
     : [threadsQueryKey()];
-  return [...threadListQueryKeys, sidebarBootstrapQueryKey()];
+  return [...threadListQueryKeys, sidebarNavigationQueryKey()];
 }
 
 export function getThreadDetailInvalidationQueryKeys({

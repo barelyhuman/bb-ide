@@ -23,7 +23,7 @@ import { createAppQueryClient } from "@/lib/query-client";
 import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
 import {
   projectsQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
 } from "@/hooks/queries/query-keys";
 import {
   ProjectActionsProvider,
@@ -86,10 +86,7 @@ function makeProjectWithThreadsResponse(
 
 function renderWithProvider(
   children: ReactNode,
-  {
-    initialEntries = ["/"],
-    jotaiStore,
-  }: RenderWithProviderOptions = {},
+  { initialEntries = ["/"], jotaiStore }: RenderWithProviderOptions = {},
 ): RenderWithProviderResult {
   const queryClient = createAppQueryClient({
     defaultOptions: {
@@ -195,7 +192,7 @@ describe("ProjectActionsProvider", () => {
       otherProject,
     ]);
     queryClient.setQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapQueryKey(),
+      sidebarNavigationQueryKey(),
       {
         projects: [
           makeProjectWithThreadsResponse(deletedProject),
@@ -225,7 +222,7 @@ describe("ProjectActionsProvider", () => {
     });
     expect(
       queryClient
-        .getQueryData<SidebarBootstrapResponse>(sidebarBootstrapQueryKey())
+        .getQueryData<SidebarBootstrapResponse>(sidebarNavigationQueryKey())
         ?.projects.map((project) => project.id),
     ).toEqual([otherProject.id]);
     await waitFor(() => {

@@ -37,7 +37,7 @@ import { useRootComposeReuseEnvironment } from "@/lib/root-compose-selection";
 import { encodeReuseValue } from "@/components/pickers/environment-picker-value";
 import {
   projectsQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadListQueryKey,
 } from "@/hooks/queries/query-keys";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
@@ -182,7 +182,7 @@ function buildProjectListHandler(args: ProjectListHandlerArgs) {
   };
 }
 
-function buildSidebarBootstrapResponse(args: {
+function buildSidebarNavigationResponse(args: {
   personalProject: ProjectWithThreadsResponse;
   projects: ProjectResponse[];
   threadsByProjectId?: Map<string, ProjectWithThreadsResponse["threads"]>;
@@ -309,8 +309,8 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
-  it("uses the sidebar bootstrap without fetching canonical project or thread lists", async () => {
-    let sidebarBootstrapRequestCount = 0;
+  it("uses the sidebar navigation without fetching canonical project or thread lists", async () => {
+    let sidebarNavigationRequestCount = 0;
     let leanProjectRequestCount = 0;
     let threadRequestCount = 0;
     const projects = [
@@ -330,7 +330,7 @@ describe("ProjectList", () => {
       name: "Personal",
       threads: [makeThreadListEntry(PERSONAL_PROJECT_ID, 4)],
     });
-    const sidebarBootstrap = buildSidebarBootstrapResponse({
+    const sidebarNavigation = buildSidebarNavigationResponse({
       personalProject,
       projects,
       threadsByProjectId,
@@ -339,8 +339,8 @@ describe("ProjectList", () => {
       {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () => {
-          sidebarBootstrapRequestCount += 1;
-          return jsonResponse(sidebarBootstrap);
+          sidebarNavigationRequestCount += 1;
+          return jsonResponse(sidebarNavigation);
         },
       },
       {
@@ -381,8 +381,8 @@ describe("ProjectList", () => {
       expect(screen.getByText("Thread 1")).toBeTruthy();
       expect(screen.getByText("Thread 4")).toBeTruthy();
     });
-    expect(queryClient.getQueryData(sidebarBootstrapQueryKey())).toEqual(
-      sidebarBootstrap,
+    expect(queryClient.getQueryData(sidebarNavigationQueryKey())).toEqual(
+      sidebarNavigation,
     );
     expect(queryClient.getQueryData(projectsQueryKey())).toBeUndefined();
     for (const project of projects) {
@@ -400,7 +400,7 @@ describe("ProjectList", () => {
         }),
       ),
     ).toBeUndefined();
-    expect(sidebarBootstrapRequestCount).toBe(1);
+    expect(sidebarNavigationRequestCount).toBe(1);
     expect(leanProjectRequestCount).toBe(0);
     expect(threadRequestCount).toBe(0);
   });
@@ -436,7 +436,7 @@ describe("ProjectList", () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalled();
       expect(
-        queryClient.getQueryState(sidebarBootstrapQueryKey())?.status,
+        queryClient.getQueryState(sidebarNavigationQueryKey())?.status,
       ).toBe("error");
     });
     expect(screen.queryByText("Projects unavailable")).toBeNull();
@@ -463,7 +463,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([[project.id, [thread]]]),
@@ -542,7 +542,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
@@ -623,7 +623,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([[project.id, [managerThread]]]),
@@ -703,7 +703,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
@@ -776,7 +776,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
             }),
@@ -886,7 +886,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
             }),
@@ -990,7 +990,7 @@ describe("ProjectList", () => {
     expect(screen.queryByText("No projects")).toBeNull();
   });
 
-  it("shows threads unavailable when the sidebar bootstrap fails after the websocket connects", async () => {
+  it("shows threads unavailable when the sidebar navigation fails after the websocket connects", async () => {
     const project = makeProjectResponse();
     installFetchRoutes([
       {
@@ -1047,7 +1047,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
             }),
@@ -1113,7 +1113,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
             }),
@@ -1173,7 +1173,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
@@ -1241,7 +1241,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([
@@ -1307,7 +1307,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [],
             }),
@@ -1374,7 +1374,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [],
             }),
@@ -1428,7 +1428,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
             }),
@@ -1508,7 +1508,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
             }),
@@ -1570,7 +1570,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([[project.id, [managerThread]]]),
@@ -1684,7 +1684,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([[project.id, [managerThread]]]),
@@ -1780,7 +1780,7 @@ describe("ProjectList", () => {
         pathname: "/api/v1/sidebar-bootstrap",
         handler: () =>
           jsonResponse(
-            buildSidebarBootstrapResponse({
+            buildSidebarNavigationResponse({
               personalProject,
               projects: [project],
               threadsByProjectId: new Map([[project.id, [managerA, managerB]]]),

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
   allSystemExecutionOptionsQueryKeyPrefix,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   systemExecutionOptionsQueryKey,
 } from "./queries/query-keys";
 import {
@@ -48,9 +48,9 @@ describe("system cache effects", () => {
     const executionOptionsKey = scopedSystemExecutionOptionsKey({
       environmentId: "env-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
-    queryClient.setQueryData(sidebarBootstrapKey, {
+    queryClient.setQueryData(sidebarNavigationKey, {
       projects: [],
       personalProject: { threads: [] },
     });
@@ -60,7 +60,7 @@ describe("system cache effects", () => {
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       true,
     );
-    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
       true,
     );
   });
@@ -70,9 +70,9 @@ describe("system cache effects", () => {
     const executionOptionsKey = scopedSystemExecutionOptionsKey({
       environmentId: "env-1",
     });
-    const sidebarBootstrapKey = sidebarBootstrapQueryKey();
+    const sidebarNavigationKey = sidebarNavigationQueryKey();
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
-    queryClient.setQueryData(sidebarBootstrapKey, {
+    queryClient.setQueryData(sidebarNavigationKey, {
       projects: [],
       personalProject: { threads: [] },
     });
@@ -86,7 +86,7 @@ describe("system cache effects", () => {
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       true,
     );
-    expect(queryClient.getQueryState(sidebarBootstrapKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(sidebarNavigationKey)?.isInvalidated).toBe(
       true,
     );
   });

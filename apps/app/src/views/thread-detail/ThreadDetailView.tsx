@@ -731,14 +731,7 @@ export function ThreadDetailView() {
   } = useLocalOpenTargets({
     enabled: threadEnvironmentIsLocal,
   });
-  const bootstrapResolvedMissingEnvironmentHost =
-    threadDetailBootstrapQuery.isSuccess &&
-    threadDetailBootstrapQuery.data.environment !== undefined &&
-    threadDetailBootstrapQuery.data.environment !== null &&
-    threadDetailBootstrapQuery.data.host === null;
-  const { data: environmentHost } = useEffectiveHost(environment?.hostId, {
-    enabled: !bootstrapResolvedMissingEnvironmentHost,
-  });
+  const { data: environmentHost } = useEffectiveHost(environment?.hostId);
   const managedBySection: ThreadPromptManagedBySection | null = useMemo(() => {
     if (!thread?.parentThreadId) return null;
     const href = getThreadRoutePath({

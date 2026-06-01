@@ -33,7 +33,7 @@ import {
 } from "@/hooks/useLocalPathPicker";
 import {
   stripProjectThreads,
-  useSidebarBootstrap,
+  useSidebarNavigation,
 } from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
@@ -52,12 +52,12 @@ function sourceLabel(
 
 export function ProjectSettingsView() {
   const { projectId } = useParams<{ projectId: string }>();
-  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const sidebarNavigationQuery = useSidebarNavigation();
   const projects = useMemo(
-    () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
-    [sidebarBootstrapQuery.data],
+    () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
+    [sidebarNavigationQuery.data],
   );
-  const isLoading = sidebarBootstrapQuery.isFetching && projects === undefined;
+  const isLoading = sidebarNavigationQuery.isFetching && projects === undefined;
   const { data: hosts = [] } = useEffectiveHosts();
   const queryClient = useQueryClient();
 

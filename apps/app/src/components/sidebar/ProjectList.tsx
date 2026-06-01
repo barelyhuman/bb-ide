@@ -46,7 +46,7 @@ import {
 } from "@/hooks/queries/connection-aware-query-state";
 import {
   stripProjectThreads,
-  useSidebarBootstrap,
+  useSidebarNavigation,
 } from "@/hooks/queries/project-queries";
 import {
   useReorderProject,
@@ -616,27 +616,27 @@ function ProjectListComponent({
   const navigate = useNavigate();
   const setRootComposeProjectId = useSetRootComposeProjectId();
   const setRootComposeMode = useSetRootComposeMode();
-  const sidebarBootstrapQuery = useSidebarBootstrap();
-  const sidebarBootstrap = sidebarBootstrapQuery.data;
+  const sidebarNavigationQuery = useSidebarNavigation();
+  const sidebarNavigation = sidebarNavigationQuery.data;
   const projects = useMemo(
-    () => sidebarBootstrap?.projects.map(stripProjectThreads),
-    [sidebarBootstrap],
+    () => sidebarNavigation?.projects.map(stripProjectThreads),
+    [sidebarNavigation],
   );
   const threads = useMemo(() => {
-    if (!sidebarBootstrap) {
+    if (!sidebarNavigation) {
       return [];
     }
     const sidebarThreads: ThreadListEntry[] = [];
-    for (const project of sidebarBootstrap.projects) {
+    for (const project of sidebarNavigation.projects) {
       sidebarThreads.push(...project.threads);
     }
-    sidebarThreads.push(...sidebarBootstrap.personalProject.threads);
+    sidebarThreads.push(...sidebarNavigation.personalProject.threads);
     return sidebarThreads;
-  }, [sidebarBootstrap]);
+  }, [sidebarNavigation]);
   const projectsState = useConnectionAwareQueryState({
     hasResolvedData: projects !== undefined,
-    isFetching: sidebarBootstrapQuery.isFetching,
-    isLoadingError: sidebarBootstrapQuery.isLoadingError,
+    isFetching: sidebarNavigationQuery.isFetching,
+    isLoadingError: sidebarNavigationQuery.isLoadingError,
   });
   const { localDaemonHostId } = useHostDaemon();
   const { threadId: selectedThreadId } = useAppRoute();

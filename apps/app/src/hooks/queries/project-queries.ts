@@ -14,7 +14,7 @@ import {
   projectPathsQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
 } from "./query-keys";
 import { resolveProjectSourceBranchesPlaceholder } from "./query-placeholders";
 
@@ -63,9 +63,9 @@ export function stripProjectThreads(
   return projectResponse;
 }
 
-export function useSidebarBootstrap(options?: QueryOptions) {
+export function useSidebarNavigation(options?: QueryOptions) {
   return useQuery<SidebarBootstrapResponse>({
-    queryKey: sidebarBootstrapQueryKey(),
+    queryKey: sidebarNavigationQueryKey(),
     queryFn: ({ signal }) => api.listProjectsWithThreads(signal),
     enabled: options?.enabled ?? true,
     staleTime: Infinity,

@@ -171,7 +171,7 @@ function makeProjectWithThreadsResponse(
   };
 }
 
-function buildSidebarBootstrapResponse(): SidebarBootstrapResponse {
+function buildSidebarNavigationResponse(): SidebarBootstrapResponse {
   return {
     projects: [],
     personalProject: makeProjectWithThreadsResponse(),
@@ -199,7 +199,7 @@ function installRootComposeFetchRoutes(
   installFetchRoutes([
     {
       pathname: "/api/v1/sidebar-bootstrap",
-      handler: () => jsonResponse(buildSidebarBootstrapResponse()),
+      handler: () => jsonResponse(buildSidebarNavigationResponse()),
     },
     {
       pathname: "/api/v1/projects",

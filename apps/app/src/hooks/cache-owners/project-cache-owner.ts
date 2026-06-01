@@ -12,7 +12,7 @@ import {
   PROJECT_SOURCE_BRANCHES_QUERY_KEY,
   PROJECTS_QUERY_KEY,
   projectsQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
 } from "../queries/query-keys";
 import type { CacheOwnerDescriptor } from "./cache-owner-types";
 import {
@@ -46,7 +46,7 @@ interface ApplyProjectDeleteResultArgs {
 
 export interface ReorderProjectTransaction {
   previousProjects: ProjectResponse[] | undefined;
-  previousSidebarBootstrap: SidebarBootstrapResponse | undefined;
+  previousSidebarNavigation: SidebarBootstrapResponse | undefined;
 }
 
 export const projectCacheOwner = {
@@ -82,15 +82,15 @@ function applyProjectOrderToProjectList(
   );
 }
 
-function applyProjectOrderToSidebarBootstrap(
-  currentBootstrap: SidebarBootstrapResponse,
+function applyProjectOrderToSidebarNavigation(
+  currentNavigation: SidebarBootstrapResponse,
   orderedProjects: readonly ProjectResponse[],
 ): SidebarBootstrapResponse {
   const currentProjectsById = new Map(
-    currentBootstrap.projects.map((project) => [project.id, project]),
+    currentNavigation.projects.map((project) => [project.id, project]),
   );
   return {
-    ...currentBootstrap,
+    ...currentNavigation,
     projects: orderedProjects.map((project) => {
       const currentProject = currentProjectsById.get(project.id);
       return currentProject ?? { ...project, threads: [] };
@@ -105,13 +105,13 @@ function removeProjectFromProjectList(
   return currentProjects.filter((project) => project.id !== projectId);
 }
 
-function removeProjectFromSidebarBootstrap(
-  currentBootstrap: SidebarBootstrapResponse,
+function removeProjectFromSidebarNavigation(
+  currentNavigation: SidebarBootstrapResponse,
   projectId: string,
 ): SidebarBootstrapResponse {
   return {
-    ...currentBootstrap,
-    projects: currentBootstrap.projects.filter(
+    ...currentNavigation,
+    projects: currentNavigation.projects.filter(
       (project) => project.id !== projectId,
     ),
   };
@@ -123,9 +123,9 @@ export function beginReorderProjectTransaction({
 }: ReorderProjectTransactionArgs): ReorderProjectTransaction {
   const previousProjects =
     queryClient.getQueryData<ProjectResponse[]>(projectsQueryKey());
-  const previousSidebarBootstrap =
+  const previousSidebarNavigation =
     queryClient.getQueryData<SidebarBootstrapResponse>(
-      sidebarBootstrapQueryKey(),
+      sidebarNavigationQueryKey(),
     );
 
   void queryClient.cancelQueries(
@@ -133,7 +133,7 @@ export function beginReorderProjectTransaction({
     { revert: false },
   );
   void queryClient.cancelQueries(
-    { queryKey: sidebarBootstrapQueryKey() },
+    { queryKey: sidebarNavigationQueryKey() },
     { revert: false },
   );
   queryClient.setQueryData<ProjectResponse[]>(
@@ -151,13 +151,13 @@ export function beginReorderProjectTransaction({
         : currentProjects,
   );
   queryClient.setQueryData<SidebarBootstrapResponse>(
-    sidebarBootstrapQueryKey(),
-    (currentBootstrap) =>
-      currentBootstrap
+    sidebarNavigationQueryKey(),
+    (currentNavigation) =>
+      currentNavigation
         ? {
-            ...currentBootstrap,
+            ...currentNavigation,
             projects: applyNeighborReorder({
-              items: currentBootstrap.projects,
+              items: currentNavigation.projects,
               request: {
                 itemId: request.projectId,
                 previousItemId: request.previousProjectId,
@@ -165,10 +165,10 @@ export function beginReorderProjectTransaction({
               },
             }),
           }
-        : currentBootstrap,
+        : currentNavigation,
   );
 
-  return { previousProjects, previousSidebarBootstrap };
+  return { previousProjects, previousSidebarNavigation };
 }
 
 export function rollbackReorderProjectTransaction({
@@ -177,8 +177,8 @@ export function rollbackReorderProjectTransaction({
 }: RollbackReorderProjectTransactionArgs): void {
   queryClient.setQueryData(projectsQueryKey(), transaction?.previousProjects);
   queryClient.setQueryData(
-    sidebarBootstrapQueryKey(),
-    transaction?.previousSidebarBootstrap,
+    sidebarNavigationQueryKey(),
+    transaction?.previousSidebarNavigation,
   );
   invalidateProjectListQueries({ queryClient });
 }
@@ -195,11 +195,11 @@ export function applyReorderProjectResult({
         : [...projects],
   );
   queryClient.setQueryData<SidebarBootstrapResponse>(
-    sidebarBootstrapQueryKey(),
-    (currentBootstrap) =>
-      currentBootstrap
-        ? applyProjectOrderToSidebarBootstrap(currentBootstrap, projects)
-        : currentBootstrap,
+    sidebarNavigationQueryKey(),
+    (currentNavigation) =>
+      currentNavigation
+        ? applyProjectOrderToSidebarNavigation(currentNavigation, projects)
+        : currentNavigation,
   );
 }
 
@@ -215,11 +215,11 @@ export function applyProjectDeleteResult({
         : currentProjects,
   );
   queryClient.setQueryData<SidebarBootstrapResponse>(
-    sidebarBootstrapQueryKey(),
-    (currentBootstrap) =>
-      currentBootstrap
-        ? removeProjectFromSidebarBootstrap(currentBootstrap, projectId)
-        : currentBootstrap,
+    sidebarNavigationQueryKey(),
+    (currentNavigation) =>
+      currentNavigation
+        ? removeProjectFromSidebarNavigation(currentNavigation, projectId)
+        : currentNavigation,
   );
   invalidateProjectDeleteQueries({ queryClient });
 }

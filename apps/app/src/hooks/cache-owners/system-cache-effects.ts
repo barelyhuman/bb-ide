@@ -24,7 +24,7 @@ import {
   localPathExistenceQueryKeyPrefix,
   projectsQueryKey,
   replayCapturesQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   systemProvidersQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
@@ -64,7 +64,7 @@ export function invalidateHostChangeDependentQueries({
 }: QueryClientArg): void {
   invalidateHostAvailabilityQueries({ queryClient });
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
   queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
   queryClient.invalidateQueries({
     queryKey: allSystemExecutionOptionsQueryKeyPrefix(),
@@ -76,7 +76,7 @@ export function invalidateHostDeleteDependentQueries({
 }: QueryClientArg): void {
   invalidateHostAvailabilityQueries({ queryClient });
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
 }
 
 export function invalidateReplayCaptures({
@@ -90,7 +90,7 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     hostsQueryKey(),
     allHostQueryKeyPrefix(),
     projectsQueryKey(),
-    sidebarBootstrapQueryKey(),
+    sidebarNavigationQueryKey(),
     allProjectPathsQueryKeyPrefix(),
     threadsQueryKey(),
     allThreadQueryKeyPrefix(),

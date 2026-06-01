@@ -20,7 +20,7 @@ import {
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import {
-  useSidebarBootstrap,
+  useSidebarNavigation,
   stripProjectThreads,
 } from "@/hooks/queries/project-queries";
 import {
@@ -345,10 +345,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     isSettingsView,
     isRootView,
   } = useAppRoute();
-  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const sidebarNavigationQuery = useSidebarNavigation();
   const projects = useMemo(
-    () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
-    [sidebarBootstrapQuery.data],
+    () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
+    [sidebarNavigationQuery.data],
   );
   const [storedUseStandardManagerTimeline] =
     useStandardManagerTimelinePreference();

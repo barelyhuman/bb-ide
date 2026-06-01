@@ -20,7 +20,7 @@ export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
 export const PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "projectDefaultExecutionOptions";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
-export const SIDEBAR_BOOTSTRAP_QUERY_KEY = "sidebarBootstrap";
+export const SIDEBAR_NAVIGATION_QUERY_KEY = "sidebarNavigation";
 export const THREADS_QUERY_KEY = "threads";
 export const THREADS_DISABLED_QUERY_KEY = "threadsDisabled";
 export const THREAD_QUERY_KEY = "thread";
@@ -135,8 +135,8 @@ export type ProjectSourceBranchesQueryKey = readonly [
   number,
   string,
 ];
-export type SidebarBootstrapQueryKey = readonly [
-  typeof SIDEBAR_BOOTSTRAP_QUERY_KEY,
+export type SidebarNavigationQueryKey = readonly [
+  typeof SIDEBAR_NAVIGATION_QUERY_KEY,
 ];
 export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [
@@ -514,8 +514,8 @@ export function projectSourceBranchesQueryKeyPrefix(
   return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId];
 }
 
-export function sidebarBootstrapQueryKey(): SidebarBootstrapQueryKey {
-  return [SIDEBAR_BOOTSTRAP_QUERY_KEY];
+export function sidebarNavigationQueryKey(): SidebarNavigationQueryKey {
+  return [SIDEBAR_NAVIGATION_QUERY_KEY];
 }
 
 export function threadsQueryKey(): ThreadsQueryKey {

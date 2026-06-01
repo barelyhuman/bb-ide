@@ -1,7 +1,7 @@
 import {
   projectDefaultExecutionOptionsQueryKeyPrefix,
   projectPathsQueryKeyPrefix,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadQueuedMessagesQueryKey,
   threadPromptHistoryQueryKey,
@@ -81,7 +81,7 @@ export function refetchThreadListsAfterComposerThreadCreate({
     type: "active",
   });
   void queryClient.refetchQueries({
-    queryKey: sidebarBootstrapQueryKey(),
+    queryKey: sidebarNavigationQueryKey(),
     type: "active",
   });
 }

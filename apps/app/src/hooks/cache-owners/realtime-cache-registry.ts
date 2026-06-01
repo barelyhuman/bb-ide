@@ -29,7 +29,7 @@ import {
   environmentGitDiffQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
   hostsQueryKey,
-  sidebarBootstrapQueryKey,
+  sidebarNavigationQueryKey,
   systemProvidersQueryKey,
   threadAppMarkdownPreviewQueryKeyPrefix,
   threadAppQueryKeyPrefix,
@@ -212,12 +212,12 @@ export const REALTIME_ENVIRONMENT_CHANGE_REGISTRY = {
 export const REALTIME_PROJECT_CHANGE_REGISTRY = {
   "project-created": {
     dirty: [
-      dirtyProjectListQueries, // Navigation and settings are backed by sidebar bootstrap/project caches.
+      dirtyProjectListQueries, // Navigation and settings are backed by sidebar navigation/project caches.
     ],
   },
   "project-updated": {
     dirty: [
-      dirtyProjectListQueries, // Name/settings fields are embedded in sidebar bootstrap/project caches.
+      dirtyProjectListQueries, // Name/settings fields are embedded in sidebar navigation/project caches.
     ],
   },
   "project-deleted": {
@@ -232,7 +232,7 @@ export const REALTIME_PROJECT_CHANGE_REGISTRY = {
   },
   "threads-changed": {
     dirty: [
-      dirtyProjectListQueries, // Sidebar bootstrap includes thread membership per project.
+      dirtyProjectListQueries, // Sidebar navigation includes thread membership per project.
       dirtyProjectPromptHistoryQueries, // Project thread changes can hide or reveal stored prompt history.
     ],
   },
@@ -404,7 +404,7 @@ function dirtyManagerOrderThreadListQueries({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): void {
-  queryClient.invalidateQueries({ queryKey: sidebarBootstrapQueryKey() });
+  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
   if (!projectId) {
     queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
     return;
@@ -490,7 +490,7 @@ function markThreadListQueriesStale({
   queryClient,
 }: ThreadRealtimeDirtyContext): void {
   queryClient.invalidateQueries({
-    queryKey: sidebarBootstrapQueryKey(),
+    queryKey: sidebarNavigationQueryKey(),
     refetchType: "none",
   });
   if (!projectId) {

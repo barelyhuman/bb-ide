@@ -2,8 +2,8 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { threadQueryKey, threadsQueryKey } from "../queries/query-keys";
 import {
-  applyToCachedSidebarBootstrapThreads,
-  getCachedSidebarBootstrapThreads,
+  applyToCachedSidebarNavigationThreads,
+  getCachedSidebarNavigationThreads,
 } from "./query-cache";
 import {
   applyToCachedThreadLists,
@@ -52,7 +52,7 @@ export function getCachedLiveThreadIdsMatching({
       }
     }
   }
-  for (const thread of getCachedSidebarBootstrapThreads(queryClient)) {
+  for (const thread of getCachedSidebarNavigationThreads(queryClient)) {
     if (thread.archivedAt === null && matchesThread(thread)) {
       threadIds.add(thread.id);
     }
@@ -102,7 +102,7 @@ export function removeLiveThreadsFromCachedLists({
     queryKey: threadsQueryKey(),
     mapper: removeMatchingLiveThreads,
   });
-  applyToCachedSidebarBootstrapThreads({
+  applyToCachedSidebarNavigationThreads({
     queryClient,
     mapper: removeMatchingLiveThreads,
   });

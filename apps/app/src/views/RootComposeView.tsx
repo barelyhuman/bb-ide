@@ -29,7 +29,7 @@ import {
   useProjectPromptHistory,
   useProjectDefaultExecutionOptions,
   useProjectSourceBranches,
-  useSidebarBootstrap,
+  useSidebarNavigation,
   stripProjectThreads,
 } from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
@@ -185,12 +185,12 @@ export function RootComposeView() {
   const location = useLocation();
   const navigate = useNavigate();
   const quickCreateProject = useQuickCreateProjectController();
-  const sidebarBootstrapQuery = useSidebarBootstrap();
-  const hasSidebarBootstrapSettled =
-    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const sidebarNavigationQuery = useSidebarNavigation();
+  const hasSidebarNavigationSettled =
+    sidebarNavigationQuery.isSuccess || sidebarNavigationQuery.isError;
   const projects = useMemo(
-    () => sidebarBootstrapQuery.data?.projects.map(stripProjectThreads),
-    [sidebarBootstrapQuery.data],
+    () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
+    [sidebarNavigationQuery.data],
   );
   const projectId = useMemo(() => {
     if (isProjectlessProjectId(rootComposeProjectId)) {
@@ -262,9 +262,9 @@ export function RootComposeView() {
   const currentProject = useMemo(
     () =>
       isProjectless
-        ? sidebarBootstrapQuery.data?.personalProject
+        ? sidebarNavigationQuery.data?.personalProject
         : projects?.find((p) => p.id === projectId),
-    [isProjectless, projectId, projects, sidebarBootstrapQuery.data],
+    [isProjectless, projectId, projects, sidebarNavigationQuery.data],
   );
   const projectSources = useMemo(
     () => currentProject?.sources ?? [],
@@ -1009,7 +1009,7 @@ export function RootComposeView() {
     );
   }, [clearReuseEnvironment, parsedEnvironment]);
 
-  if (!hasSidebarBootstrapSettled) {
+  if (!hasSidebarNavigationSettled) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-muted-foreground">
@@ -1018,7 +1018,7 @@ export function RootComposeView() {
       </PageShell>
     );
   }
-  if (!projects && sidebarBootstrapQuery.isError) {
+  if (!projects && sidebarNavigationQuery.isError) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-destructive">
