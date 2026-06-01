@@ -6,6 +6,7 @@ import type {
   ThreadWithIncludesResponse,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
+import { getCachedThreadListPlaceholder } from "./query-cache";
 import {
   environmentQueryKey,
   hostQueryKey,
@@ -33,6 +34,11 @@ interface UpsertHostListArgs {
 interface ThreadRuntimeCacheArgs {
   queryClient: QueryClient;
   thread: ThreadWithRuntime;
+}
+
+interface CachedThreadProjectIdArgs {
+  queryClient: QueryClient;
+  threadId: string;
 }
 
 export interface ThreadDetailBootstrapIngestionArgs {
@@ -143,4 +149,17 @@ export function applyThreadRuntimeResult({
   thread,
 }: ThreadRuntimeCacheArgs): void {
   queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
+}
+
+export function getCachedThreadProjectId({
+  queryClient,
+  threadId,
+}: CachedThreadProjectIdArgs): string | undefined {
+  const thread = queryClient.getQueryData<ThreadWithRuntime>(
+    threadQueryKey(threadId),
+  );
+  return (
+    thread?.projectId ??
+    getCachedThreadListPlaceholder(queryClient, threadId)?.projectId
+  );
 }

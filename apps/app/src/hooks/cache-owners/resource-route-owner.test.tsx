@@ -1,0 +1,176 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { Provider as JotaiProvider, createStore } from "jotai";
+import { QueryClientProvider } from "@tanstack/react-query";
+import type { ChangedMessage, ThreadWithRuntime } from "@bb/domain";
+import { afterEach, describe, expect, it } from "vitest";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
+import { createAppQueryClient } from "@/lib/query-client";
+import {
+  getLegacyProjectComposeRoutePath,
+  getThreadRoutePath,
+} from "@/lib/app-route-paths";
+import { useRootComposeProjectId } from "@/lib/root-compose-selection";
+import { threadQueryKey } from "../queries/query-keys";
+import {
+  useDeletedResourceRouteOwner,
+  type DeletedResourceRouteChangeHandler,
+} from "./resource-route-owner";
+
+interface RenderRouteOwnerOptions {
+  initialEntry: string;
+  jotaiStore?: ReturnType<typeof createStore>;
+}
+
+interface RenderRouteOwnerResult {
+  handleChanged: () => DeletedResourceRouteChangeHandler;
+  queryClient: ReturnType<typeof createAppQueryClient>;
+}
+
+function makeThread(
+  overrides: Partial<ThreadWithRuntime> = {},
+): ThreadWithRuntime {
+  return {
+    archivedAt: null,
+    automationId: null,
+    createdAt: 1,
+    deletedAt: null,
+    environmentId: "env_1",
+    id: "thr_1",
+    lastReadAt: null,
+    latestAttentionAt: 1,
+    parentThreadId: null,
+    pinnedAt: null,
+    projectId: "proj_1",
+    providerId: "provider_1",
+    stopRequestedAt: null,
+    status: "idle",
+    title: "Thread",
+    titleFallback: "Thread",
+    type: "standard",
+    updatedAt: 1,
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
+    ...overrides,
+  };
+}
+
+function RouteProbe() {
+  const location = useLocation();
+  const [rootComposeProjectId] = useRootComposeProjectId();
+  return (
+    <>
+      <span data-testid="location">{location.pathname}</span>
+      <span data-testid="root-compose-project-id">{rootComposeProjectId}</span>
+    </>
+  );
+}
+
+function HandlerProbe({
+  onReady,
+}: {
+  onReady: (handler: DeletedResourceRouteChangeHandler) => void;
+}) {
+  const handler = useDeletedResourceRouteOwner();
+  onReady(handler);
+  return <RouteProbe />;
+}
+
+function renderRouteOwner({
+  initialEntry,
+  jotaiStore,
+}: RenderRouteOwnerOptions): RenderRouteOwnerResult {
+  const queryClient = createAppQueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { gcTime: Infinity, retry: false },
+    },
+  });
+  let handler: DeletedResourceRouteChangeHandler | null = null;
+  render(
+    <JotaiProvider store={jotaiStore}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <HandlerProbe
+            onReady={(nextHandler) => {
+              handler = nextHandler;
+            }}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </JotaiProvider>,
+  );
+  return {
+    handleChanged: () => {
+      if (!handler) {
+        throw new Error("Route owner handler was not captured.");
+      }
+      return handler;
+    },
+    queryClient,
+  };
+}
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("useDeletedResourceRouteOwner", () => {
+  it("routes a remotely deleted active thread to root compose with its project selected", async () => {
+    const thread = makeThread();
+    const { handleChanged, queryClient } = renderRouteOwner({
+      initialEntry: getThreadRoutePath({
+        projectId: thread.projectId,
+        threadId: thread.id,
+      }),
+    });
+    queryClient.setQueryData(threadQueryKey(thread.id), thread);
+    const message: ChangedMessage = {
+      type: "changed",
+      entity: "thread",
+      id: thread.id,
+      changes: ["thread-deleted"],
+    };
+
+    act(() => {
+      handleChanged()(message);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe("/");
+    });
+    expect(screen.getByTestId("root-compose-project-id").textContent).toBe(
+      thread.projectId,
+    );
+  });
+
+  it("routes a remotely deleted active project to root and clears collapsed state", async () => {
+    const deletedProjectId = "proj_1";
+    const otherProjectId = "proj_2";
+    const jotaiStore = createStore();
+    jotaiStore.set(collapsedProjectIdsAtom, [deletedProjectId, otherProjectId]);
+    const { handleChanged } = renderRouteOwner({
+      initialEntry: getLegacyProjectComposeRoutePath(deletedProjectId),
+      jotaiStore,
+    });
+    const message: ChangedMessage = {
+      type: "changed",
+      entity: "project",
+      id: deletedProjectId,
+      changes: ["project-deleted"],
+    };
+
+    act(() => {
+      handleChanged()(message);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location").textContent).toBe("/");
+    });
+    expect(jotaiStore.get(collapsedProjectIdsAtom)).toEqual([otherProjectId]);
+  });
+});
