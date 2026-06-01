@@ -8,36 +8,6 @@
       "source": "./src/lib/run-dev-supervisor.ts",
       "types": "./src/lib/run-dev-supervisor.ts",
       "import": "./dist/lib/run-dev-supervisor.js"
-    },
-    "./request-dev-restart": {
-      "source": "./src/commands/request-dev-restart.ts",
-      "types": "./src/commands/request-dev-restart.ts",
-      "import": "./dist/commands/request-dev-restart.js"
-    },
-    "./run-dev": {
-      "source": "./src/commands/run-dev.ts",
-      "types": "./src/commands/run-dev.ts",
-      "import": "./dist/commands/run-dev.js"
-    },
-    "./run-cli": {
-      "source": "./src/commands/run-cli.ts",
-      "types": "./src/commands/run-cli.ts",
-      "import": "./dist/commands/run-cli.js"
-    },
-    "./run-host-daemon": {
-      "source": "./src/commands/run-host-daemon.ts",
-      "types": "./src/commands/run-host-daemon.ts",
-      "import": "./dist/commands/run-host-daemon.js"
-    },
-    "./reset-bb-data": {
-      "source": "./src/commands/reset-bb-data.ts",
-      "types": "./src/commands/reset-bb-data.ts",
-      "import": "./dist/commands/reset-bb-data.js"
-    },
-    "./archive-codex-tmp-bb-sessions": {
-      "source": "./src/commands/archive-codex-tmp-bb-sessions.ts",
-      "types": "./src/commands/archive-codex-tmp-bb-sessions.ts",
-      "import": "./dist/commands/archive-codex-tmp-bb-sessions.js"
     }
   },
   "files": [

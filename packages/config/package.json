@@ -13,11 +13,6 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
-    "./server-port": {
-      "source": "./src/server-port.ts",
-      "types": "./src/server-port.ts",
-      "default": "./src/server-port.ts"
-    },
     "./dev-env": {
       "source": "./src/dev-env.ts",
       "types": "./src/dev-env.ts",
@@ -72,11 +67,6 @@
       "source": "./src/loopback.ts",
       "types": "./src/loopback.ts",
       "default": "./src/loopback.ts"
-    },
-    "./database": {
-      "source": "./src/database.ts",
-      "types": "./src/database.ts",
-      "default": "./src/database.ts"
     },
     "./runtime": {
       "source": "./src/runtime.ts",

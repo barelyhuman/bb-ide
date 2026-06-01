@@ -12,10 +12,7 @@
     "standalone:cleanup": "tsx src/standalone/cleanup.ts"
   },
   "dependencies": {
-    "@bb/agent-providers": "workspace:*",
-    "@bb/db": "workspace:*",
     "@bb/domain": "workspace:*",
-    "@bb/host-daemon-contract": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "zod": "^4.3.6"
   },
