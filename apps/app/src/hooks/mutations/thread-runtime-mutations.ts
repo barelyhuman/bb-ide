@@ -1,60 +1,35 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import { nanoid } from "nanoid";
-import {
-  type PromptHistoryEntry,
-  type ThreadWithRuntime,
-  type ThreadQueuedMessage,
-} from "@bb/domain";
+import type { ThreadQueuedMessage } from "@bb/domain";
 import type {
-  PromptHistoryResponse,
   CreateQueuedMessageRequest,
   SendQueuedMessageMode,
   SendQueuedMessageResponse,
   ThreadQueuedMessageListResponse,
-  TimelineConversationAttachments,
-  TimelineRow,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import type { AppCreateThreadRequest } from "@/lib/api";
-import { prependPromptHistoryEntry } from "@/lib/prompt-history";
 import { wsManager } from "@/lib/ws";
-import { collectPromptAttachments } from "@/lib/prompt-attachments";
-import {
-  applyQueuedMessageReorder,
-  type QueuedMessageReorderRequest,
-} from "@/lib/queued-message-reorder";
+import type { QueuedMessageReorderRequest } from "@/lib/queued-message-reorder";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
 import {
-  insertOptimisticTimelineRow,
-  optimisticallyInsertThread,
-  removeOptimisticTimelineRow,
-  updateCachedThread,
-} from "../queries/query-cache";
-import {
-  applyToCachedThreadLists,
-  getCachedThreadLists,
-  type ThreadListCacheData,
-} from "../queries/thread-list-cache-data";
-import {
-  projectPromptHistoryQueryKey,
-  projectSourceBranchesQueryKeyPrefix,
-  threadQueryKey,
-  threadPromptHistoryQueryKey,
-  threadQueuedMessagesQueryKey,
-  threadsQueryKey,
-  threadTimelineQueryKeyPrefix,
-  threadTimelineTurnSummaryDetailsQueryKeyPrefix,
-} from "../queries/query-keys";
-import {
-  invalidateProjectPromptHistoryQueries,
-  refetchThreadListsAfterComposerThreadCreate,
-  invalidateThreadQueuedMessageSendQueries,
-  invalidateThreadAcceptedMessageQueries,
-  invalidateThreadAcceptedMessageQueriesWithoutRealtime,
-  invalidateThreadQueueQueries,
-  invalidateThreadStopQueries,
-} from "../cache-effects";
+  applyCreateThreadResult,
+  applyQueuedMessageCreateResult,
+  applyQueuedMessageDeleteResult,
+  applyQueuedMessageReorderResult,
+  applyQueuedMessageSendResult,
+  applySendThreadMessageSuccess,
+  beginCreateThreadTransaction,
+  beginReorderQueuedMessageTransaction,
+  beginSendThreadMessageTransaction,
+  beginStopThreadTransaction,
+  rollbackReorderQueuedMessageTransaction,
+  rollbackSendThreadMessageTransaction,
+  rollbackStopThreadTransaction,
+  settleStopThreadTransaction,
+  type ReorderQueuedMessageTransaction,
+  type SendThreadMessageTransaction,
+  type StopThreadTransaction,
+} from "../cache-owners/thread-runtime-cache-owner";
 
 interface CreateThreadQueuedMessageMutationRequest extends CreateQueuedMessageRequest {
   id: string;
@@ -75,118 +50,6 @@ interface ReorderThreadQueuedMessageMutationRequest extends QueuedMessageReorder
   id: string;
 }
 
-interface ReorderThreadQueuedMessageMutationContext {
-  previousQueuedMessages: ThreadQueuedMessageListResponse | undefined;
-}
-
-interface ThreadListSnapshotEntry {
-  queryKey: QueryKey;
-  data: ThreadListCacheData;
-}
-
-type ThreadListSnapshot = ThreadListSnapshotEntry[];
-
-interface StopThreadMutationContext {
-  previousThread: ThreadWithRuntime | undefined;
-  previousThreadLists: ThreadListSnapshot;
-}
-
-interface ApplyOptimisticStopRequestArgs {
-  queryClient: QueryClient;
-  requestedAt: number;
-  threadId: string;
-}
-
-function buildAcceptedPromptHistoryEntry(args: {
-  createdAt: number;
-  input: PromptHistoryEntry["input"];
-}): PromptHistoryEntry {
-  return {
-    id: `optimistic-prompt-history:${nanoid()}`,
-    createdAt: args.createdAt,
-    input: args.input,
-  };
-}
-
-function buildQueuedPromptHistoryEntry(
-  queuedMessage: ThreadQueuedMessage,
-): PromptHistoryEntry {
-  return {
-    id: `queued-message:${queuedMessage.id}`,
-    createdAt: queuedMessage.createdAt,
-    input: queuedMessage.content,
-  };
-}
-
-function prependProjectPromptHistory(
-  queryClient: ReturnType<typeof useQueryClient>,
-  projectId: string,
-  entry: PromptHistoryEntry,
-): void {
-  queryClient.setQueryData<PromptHistoryResponse>(
-    projectPromptHistoryQueryKey(projectId),
-    (currentEntries) => prependPromptHistoryEntry(currentEntries, entry),
-  );
-}
-
-function prependThreadPromptHistory(
-  queryClient: ReturnType<typeof useQueryClient>,
-  threadId: string,
-  entry: PromptHistoryEntry,
-): void {
-  queryClient.setQueryData<PromptHistoryResponse>(
-    threadPromptHistoryQueryKey(threadId),
-    (currentEntries) => prependPromptHistoryEntry(currentEntries, entry),
-  );
-}
-
-function hasUnmanagedCheckoutIntent(request: AppCreateThreadRequest): boolean {
-  return (
-    request.environment.type === "host" &&
-    request.environment.workspace.type === "unmanaged" &&
-    request.environment.workspace.branch !== undefined
-  );
-}
-
-function snapshotThreadLists(queryClient: QueryClient): ThreadListSnapshot {
-  return getCachedThreadLists(queryClient, { queryKey: threadsQueryKey() });
-}
-
-function restoreThreadLists(
-  queryClient: QueryClient,
-  threadLists: ThreadListSnapshot,
-): void {
-  for (const { queryKey, data } of threadLists) {
-    queryClient.setQueryData(queryKey, data);
-  }
-}
-
-function applyOptimisticStopRequest({
-  queryClient,
-  requestedAt,
-  threadId,
-}: ApplyOptimisticStopRequestArgs): void {
-  updateCachedThread(queryClient, threadId, (thread) => ({
-    ...thread,
-    stopRequestedAt: thread.stopRequestedAt ?? requestedAt,
-    updatedAt: Math.max(thread.updatedAt, requestedAt),
-  }));
-
-  applyToCachedThreadLists(queryClient, {
-    queryKey: threadsQueryKey(),
-    mapper: (list) =>
-      list.map((thread) =>
-        thread.id === threadId
-          ? {
-              ...thread,
-              stopRequestedAt: thread.stopRequestedAt ?? requestedAt,
-              updatedAt: Math.max(thread.updatedAt, requestedAt),
-            }
-          : thread,
-      ),
-  });
-}
-
 export function useCreateThread() {
   const queryClient = useQueryClient();
 
@@ -196,110 +59,15 @@ export function useCreateThread() {
       lifecycleOperation: "create_thread",
     },
     mutationFn: (request: AppCreateThreadRequest) => api.createThread(request),
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
-    },
+    onMutate: async () => beginCreateThreadTransaction({ queryClient }),
     onSuccess: (thread, variables) => {
-      queryClient.setQueryData<ThreadWithRuntime>(
-        threadQueryKey(thread.id),
+      applyCreateThreadResult({
+        queryClient,
+        request: variables,
         thread,
-      );
-      optimisticallyInsertThread(queryClient, thread);
-      prependProjectPromptHistory(
-        queryClient,
-        variables.projectId,
-        buildAcceptedPromptHistoryEntry({
-          createdAt: thread.createdAt,
-          input: variables.input,
-        }),
-      );
-      invalidateProjectPromptHistoryQueries({
-        queryClient,
-        projectId: variables.projectId,
       });
-      if (hasUnmanagedCheckoutIntent(variables)) {
-        queryClient.invalidateQueries({
-          queryKey: projectSourceBranchesQueryKeyPrefix(variables.projectId),
-        });
-      }
-      refetchThreadListsAfterComposerThreadCreate({ queryClient });
     },
   });
-}
-
-interface BuildOptimisticUserMessageRowParams {
-  createdAt: number;
-  input: SendThreadMessageMutationRequest["input"];
-  mode: SendThreadMessageMutationRequest["mode"];
-  threadId: string;
-  threadStatus: ThreadWithRuntime["status"] | null;
-}
-
-type OptimisticTurnRequestKind = "message" | "steer";
-type OptimisticTurnRequestKindArgs = Pick<
-  BuildOptimisticUserMessageRowParams,
-  "mode" | "threadStatus"
->;
-
-function optimisticTurnRequestKind({
-  mode,
-  threadStatus,
-}: OptimisticTurnRequestKindArgs): OptimisticTurnRequestKind {
-  if (mode === "steer") {
-    return "steer";
-  }
-  if (mode === "auto" && threadStatus === "active") {
-    return "steer";
-  }
-  return "message";
-}
-
-function buildOptimisticUserMessageRow({
-  createdAt,
-  input,
-  mode,
-  threadId,
-  threadStatus,
-}: BuildOptimisticUserMessageRowParams): TimelineRow {
-  const id = `optimistic-user-${nanoid()}`;
-  const text = input
-    .filter(
-      (entry): entry is Extract<typeof entry, { type: "text" }> =>
-        entry.type === "text",
-    )
-    .map((entry) => entry.text)
-    .join("\n\n");
-  const attachments = collectPromptAttachments(input);
-  const timelineAttachments: TimelineConversationAttachments | null =
-    attachments
-      ? {
-          webImages: attachments.webImages,
-          localImages: attachments.localImages,
-          localFiles: attachments.localFiles,
-          imageUrls: attachments.imageUrls ?? [],
-          localImagePaths: attachments.localImagePaths ?? [],
-          localFilePaths: attachments.localFilePaths ?? [],
-        }
-      : null;
-  return {
-    id,
-    kind: "conversation",
-    role: "user",
-    threadId,
-    turnId: null,
-    sourceSeqStart: 0,
-    sourceSeqEnd: 0,
-    startedAt: createdAt,
-    createdAt,
-    text,
-    attachments: timelineAttachments,
-    initiator: "user",
-    senderThreadId: null,
-    turnRequest: {
-      kind: optimisticTurnRequestKind({ mode, threadStatus }),
-      status: "pending",
-    },
-  };
 }
 
 export function useSendThreadMessage() {
@@ -328,94 +96,24 @@ export function useSendThreadMessage() {
         permissionMode,
         mode,
       }),
-    onMutate: async (variables) => {
-      await Promise.all([
-        queryClient.cancelQueries({ queryKey: threadQueryKey(variables.id) }),
-        queryClient.cancelQueries({
-          queryKey: threadTimelineQueryKeyPrefix(variables.id),
-        }),
-        queryClient.cancelQueries({
-          queryKey: threadTimelineTurnSummaryDetailsQueryKeyPrefix(
-            variables.id,
-          ),
-        }),
-      ]);
-
-      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
-        threadQueryKey(variables.id),
-      );
-      const optimisticCreatedAt = Date.now();
-
-      updateCachedThread(queryClient, variables.id, (thread) => ({
-        ...thread,
-        status: "active",
-        updatedAt: Math.max(thread.updatedAt, optimisticCreatedAt),
-        runtime: {
-          ...thread.runtime,
-          // Flip displayStatus so the working indicator mounts in the same
-          // render as the optimistic user-message row. Without this, the
-          // indicator waits for the server's runtime update and animates in
-          // separately, looking like a two-step reveal. Preserve
-          // host-reconnecting / waiting-for-host because they signal a known
-          // host blocker — promoting them to "active" would lie about the
-          // host's readiness to do work.
-          displayStatus:
-            thread.runtime.displayStatus === "host-reconnecting" ||
-            thread.runtime.displayStatus === "waiting-for-host"
-              ? thread.runtime.displayStatus
-              : "active",
-        },
-      }));
-
-      const optimisticRow = buildOptimisticUserMessageRow({
-        createdAt: optimisticCreatedAt,
-        input: variables.input,
-        mode: variables.mode,
-        threadId: variables.id,
-        threadStatus: previousThread?.status ?? null,
-      });
-      insertOptimisticTimelineRow(queryClient, variables.id, optimisticRow);
-
-      return {
-        previousThread,
-        optimisticCreatedAt,
-        optimisticRowId: optimisticRow.id,
-      };
-    },
+    onMutate: async (variables): Promise<SendThreadMessageTransaction> =>
+      beginSendThreadMessageTransaction({
+        queryClient,
+        request: variables,
+      }),
     onError: (_error, variables, context) => {
-      if (context?.optimisticRowId) {
-        removeOptimisticTimelineRow(
-          queryClient,
-          variables.id,
-          context.optimisticRowId,
-        );
-      }
-      if (!context?.previousThread) {
-        return;
-      }
-
-      queryClient.setQueryData<ThreadWithRuntime>(
-        threadQueryKey(variables.id),
-        context.previousThread,
-      );
+      rollbackSendThreadMessageTransaction({
+        queryClient,
+        request: variables,
+        transaction: context,
+      });
     },
     onSuccess: (_data, variables, context) => {
-      prependThreadPromptHistory(
+      applySendThreadMessageSuccess({
         queryClient,
-        variables.id,
-        buildAcceptedPromptHistoryEntry({
-          createdAt: context?.optimisticCreatedAt ?? Date.now(),
-          input: variables.input,
-        }),
-      );
-      const invalidateAcceptedMessageQueries =
-        wsManager.getConnectionState() === "connected"
-          ? invalidateThreadAcceptedMessageQueries
-          : invalidateThreadAcceptedMessageQueriesWithoutRealtime;
-
-      invalidateAcceptedMessageQueries({
-        queryClient,
-        threadId: variables.id,
+        realtimeConnected: wsManager.getConnectionState() === "connected",
+        request: variables,
+        transaction: context,
       });
     },
   });
@@ -446,12 +144,11 @@ export function useCreateThreadQueuedMessage() {
         permissionMode,
       }),
     onSuccess: (queuedMessage, variables) => {
-      prependThreadPromptHistory(
+      applyQueuedMessageCreateResult({
         queryClient,
-        variables.id,
-        buildQueuedPromptHistoryEntry(queuedMessage),
-      );
-      invalidateThreadQueueQueries({ queryClient, threadId: variables.id });
+        queuedMessage,
+        threadId: variables.id,
+      });
     },
   });
 }
@@ -472,7 +169,7 @@ export function useSendThreadQueuedMessage() {
     }: SendThreadQueuedMessageMutationRequest): Promise<SendQueuedMessageResponse> =>
       api.sendThreadQueuedMessage(id, queuedMessageId, { mode }),
     onSuccess: (_data, variables) => {
-      invalidateThreadQueuedMessageSendQueries({
+      applyQueuedMessageSendResult({
         queryClient,
         threadId: variables.id,
       });
@@ -499,47 +196,23 @@ export function useReorderThreadQueuedMessage() {
         previousQueuedMessageId,
         nextQueuedMessageId,
       }),
-    onMutate: async (
-      variables,
-    ): Promise<ReorderThreadQueuedMessageMutationContext> => {
-      const queryKey = threadQueuedMessagesQueryKey(variables.id);
-      await queryClient.cancelQueries({ queryKey });
-      const previousQueuedMessages =
-        queryClient.getQueryData<ThreadQueuedMessageListResponse>(queryKey);
-
-      queryClient.setQueryData<ThreadQueuedMessageListResponse>(
-        queryKey,
-        (currentQueuedMessages) =>
-          currentQueuedMessages
-            ? applyQueuedMessageReorder({
-                queuedMessages: currentQueuedMessages,
-                request: variables,
-              })
-            : currentQueuedMessages,
-      );
-
-      return { previousQueuedMessages };
-    },
-    onError: (_error, variables, context) => {
-      if (context?.previousQueuedMessages !== undefined) {
-        queryClient.setQueryData<ThreadQueuedMessageListResponse>(
-          threadQueuedMessagesQueryKey(variables.id),
-          context.previousQueuedMessages,
-        );
-      }
-      invalidateThreadQueueQueries({
+    onMutate: async (variables): Promise<ReorderQueuedMessageTransaction> =>
+      beginReorderQueuedMessageTransaction({
         queryClient,
-        threadId: variables.id,
+        request: variables,
+      }),
+    onError: (_error, variables, context) => {
+      rollbackReorderQueuedMessageTransaction({
+        queryClient,
+        request: variables,
+        transaction: context,
       });
     },
     onSuccess: (queuedMessages, variables) => {
-      queryClient.setQueryData<ThreadQueuedMessageListResponse>(
-        threadQueuedMessagesQueryKey(variables.id),
-        queuedMessages,
-      );
-      invalidateThreadQueueQueries({
+      applyQueuedMessageReorderResult({
         queryClient,
-        threadId: variables.id,
+        queuedMessages,
+        request: variables,
       });
     },
   });
@@ -559,7 +232,10 @@ export function useDeleteThreadQueuedMessage() {
     }: DeleteThreadQueuedMessageMutationRequest) =>
       api.deleteThreadQueuedMessage(id, queuedMessageId),
     onSuccess: (_data, variables) => {
-      invalidateThreadQueueQueries({ queryClient, threadId: variables.id });
+      applyQueuedMessageDeleteResult({
+        queryClient,
+        threadId: variables.id,
+      });
     },
   });
 }
@@ -573,41 +249,21 @@ export function useStopThread() {
       lifecycleOperation: "stop_thread",
     },
     mutationFn: (threadId: string) => api.stopThread(threadId),
-    onMutate: async (threadId) => {
-      await Promise.all([
-        queryClient.cancelQueries({ queryKey: threadQueryKey(threadId) }),
-        queryClient.cancelQueries({ queryKey: threadsQueryKey() }),
-      ]);
-
-      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
-        threadQueryKey(threadId),
-      );
-      const previousThreadLists = snapshotThreadLists(queryClient);
-
-      applyOptimisticStopRequest({
+    onMutate: async (threadId): Promise<StopThreadTransaction> =>
+      beginStopThreadTransaction({
         queryClient,
         requestedAt: Date.now(),
         threadId,
+      }),
+    onError: (_error, threadId, context) => {
+      rollbackStopThreadTransaction({
+        queryClient,
+        threadId,
+        transaction: context,
       });
-
-      return {
-        previousThread,
-        previousThreadLists,
-      };
-    },
-    onError: (_error, threadId, context?: StopThreadMutationContext) => {
-      if (!context) {
-        return;
-      }
-
-      queryClient.setQueryData(
-        threadQueryKey(threadId),
-        context.previousThread,
-      );
-      restoreThreadLists(queryClient, context.previousThreadLists);
     },
     onSettled: (_data, _error, threadId) => {
-      invalidateThreadStopQueries({ queryClient, threadId });
+      settleStopThreadTransaction({ queryClient, threadId });
     },
   });
 }
