@@ -118,8 +118,6 @@ export interface GitDiffToolbarProps {
   isSelectorDisabled: boolean;
 
   stats: GitDiffStats;
-  /** True while files are still being parsed (background work). */
-  isParsing: boolean;
 
   /** Whether the collapse-all action would expand or collapse next. */
   areAllFilesCollapsed: boolean;
@@ -137,7 +135,6 @@ export function GitDiffToolbar({
   onSelectionChange,
   isSelectorDisabled,
   stats,
-  isParsing,
   areAllFilesCollapsed,
   isCollapseAllDisabled,
   onToggleAllCollapsed,
@@ -168,12 +165,6 @@ export function GitDiffToolbar({
         >
           {renderChangeSummary(stats)}
         </span>
-        {isParsing ? (
-          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-            <Icon name="Spinner" className="size-3 animate-spin" />
-            Parsing
-          </span>
-        ) : null}
         <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
           <Button
             type="button"

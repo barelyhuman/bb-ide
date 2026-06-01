@@ -373,7 +373,6 @@ export function ThreadSecondaryPanel({
             onSelectionChange={onGitDiffSelectionChange}
             isSelectorDisabled={isGitDiffLoading || threadGitDiff === undefined}
             stats={gitDiffStats}
-            isParsing={isParsingGitDiffFiles}
             areAllFilesCollapsed={areAllGitDiffFilesCollapsed}
             isCollapseAllDisabled={!hasParsedGitDiffFiles || isGitDiffLoading}
             onToggleAllCollapsed={toggleAllGitDiffFilesCollapsed}
