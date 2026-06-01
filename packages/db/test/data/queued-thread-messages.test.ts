@@ -9,7 +9,6 @@ import {
   deleteClaimedQueuedThreadMessage,
   deleteClaimedQueuedThreadMessageInTransaction,
   deleteQueuedThreadMessage,
-  deleteQueuedThreadMessageInTransaction,
   getQueuedThreadMessage,
   listQueuedThreadMessages,
   releaseQueuedMessageClaim,
@@ -112,25 +111,6 @@ describe("queued thread messages", () => {
     expect(deleteQueuedThreadMessage(db, noopNotifier, queuedMessage.id)).toBe(true);
     expect(listQueuedThreadMessages(db, thread.id)).toHaveLength(0);
     expect(deleteQueuedThreadMessage(db, noopNotifier, queuedMessage.id)).toBe(false);
-  });
-
-  it("deletes a queued message in a caller-owned transaction", () => {
-    const { db, thread } = setup();
-    const queuedMessage = createQueuedThreadMessage(db, noopNotifier, {
-      threadId: thread.id,
-      content: defaultInput,
-      model: "gpt-5",
-      reasoningLevel: "medium",
-      permissionMode: "full",
-      serviceTier: "default",
-    });
-
-    const deleted = db.transaction((tx) =>
-      deleteQueuedThreadMessageInTransaction(tx, { id: queuedMessage.id }),
-    );
-
-    expect(deleted).toBe(true);
-    expect(getQueuedThreadMessage(db, queuedMessage.id)).toBeNull();
   });
 
   it("claims a queued message and hides it from the queue until the claim is released", () => {

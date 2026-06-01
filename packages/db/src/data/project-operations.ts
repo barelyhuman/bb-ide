@@ -6,7 +6,6 @@ import {
   buildLifecycleOperationUpdateValues,
   buildRequestedLifecycleOperationValues,
   createLifecycleOperationRepository,
-  getLifecycleOperationByCommandId,
   listLifecycleOperationRows,
   type LifecycleOperationReadConnection,
   type LifecycleOperationStore,
@@ -169,13 +168,6 @@ export function listProjectOperations(
     projectOperations,
     filters.length > 0 ? and(...filters) : undefined,
   );
-}
-
-export function getProjectOperationByCommandId(
-  db: ProjectOperationReadConnection,
-  commandId: string,
-): ProjectOperationRow | null {
-  return getLifecycleOperationByCommandId(db, projectOperations, commandId);
 }
 
 export const upsertProjectOperationRecord = projectOperationRepository.upsert;

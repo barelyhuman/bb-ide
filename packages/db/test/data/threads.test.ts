@@ -31,7 +31,6 @@ import {
   unarchiveThread,
   transitionThreadStatus,
   InvalidThreadStatusTransitionError,
-  transitionThreadsToError,
   ALLOWED_TRANSITIONS,
 } from "../../src/data/threads.js";
 import { createProject } from "../../src/data/projects.js";
@@ -1420,81 +1419,6 @@ describe("transitionThreadStatus", () => {
     transitionThreadStatus(db, spy, thread.id, "idle");
     expect(spy.notifyThread).toHaveBeenCalledWith(
       thread.id,
-      ["status-changed"],
-      { projectId: project.id },
-    );
-  });
-});
-
-describe("transitionThreadsToError", () => {
-  it("errors only eligible threads and skips deleted, stop-pending, and already errored threads", () => {
-    const { db, project } = setup();
-    const spy: DbNotifier = {
-      notifyThread: vi.fn(),
-      notifyEnvironment: vi.fn(),
-      notifyHost: vi.fn(),
-      notifyCommand: vi.fn(),
-      notifyProject: vi.fn(),
-      notifySystem: vi.fn(),
-    };
-
-    const createdThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      providerId: "codex",
-      status: "created",
-    });
-    const activeThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      providerId: "codex",
-      status: "active",
-    });
-    const erroredThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      providerId: "codex",
-      status: "error",
-    });
-    const deletedThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      providerId: "codex",
-      status: "idle",
-    });
-    const stopPendingThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      providerId: "codex",
-      status: "active",
-    });
-
-    markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
-    markThreadStopRequested(db, noopNotifier, {
-      threadId: stopPendingThread.id,
-      requestedAt: 123,
-    });
-
-    const transitionedIds = transitionThreadsToError(db, spy, {
-      now: 456,
-      threadIds: [
-        createdThread.id,
-        activeThread.id,
-        erroredThread.id,
-        deletedThread.id,
-        stopPendingThread.id,
-      ],
-    });
-
-    expect(transitionedIds).toEqual([createdThread.id, activeThread.id]);
-    expect(getThread(db, createdThread.id)?.status).toBe("error");
-    expect(getThread(db, activeThread.id)?.status).toBe("error");
-    expect(getThread(db, erroredThread.id)?.status).toBe("error");
-    expect(getThread(db, deletedThread.id)?.status).toBe("idle");
-    expect(getThread(db, stopPendingThread.id)?.status).toBe("active");
-    expect(spy.notifyThread).toHaveBeenCalledTimes(2);
-    expect(spy.notifyThread).toHaveBeenCalledWith(
-      createdThread.id,
-      ["status-changed"],
-      { projectId: project.id },
-    );
-    expect(spy.notifyThread).toHaveBeenCalledWith(
-      activeThread.id,
       ["status-changed"],
       { projectId: project.id },
     );

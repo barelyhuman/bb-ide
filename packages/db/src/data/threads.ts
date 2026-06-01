@@ -535,19 +535,7 @@ export interface HasNonTerminalThreadInEnvironmentArgs {
   environmentId: string;
 }
 
-export interface TransitionThreadsToErrorArgs {
-  now?: number;
-  threadIds: readonly string[];
-}
-
 const NON_TERMINAL_THREAD_STATUSES: readonly ThreadStatus[] = [
-  "created",
-  "provisioning",
-  "idle",
-  "active",
-];
-
-const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
   "created",
   "provisioning",
   "idle",
@@ -1606,64 +1594,4 @@ export function transitionThreadStatus(
     projectId: updated.projectId,
   });
   return updated;
-}
-
-export function transitionThreadsToError(
-  db: DbConnection,
-  notifier: DbNotifier,
-  args: TransitionThreadsToErrorArgs,
-): string[] {
-  if (args.threadIds.length === 0) {
-    return [];
-  }
-
-  const now = args.now ?? Date.now();
-  const eligibleThreads = db
-    .select({
-      id: threads.id,
-      projectId: threads.projectId,
-      status: threads.status,
-      type: threads.type,
-    })
-    .from(threads)
-    .where(
-      and(
-        inArray(threads.id, [...args.threadIds]),
-        inArray(threads.status, THREAD_STATUSES_ALLOWING_ERROR),
-        isNull(threads.deletedAt),
-        isNull(threads.stopRequestedAt),
-      ),
-    )
-    .all();
-  const threadOrderById = new Map(
-    args.threadIds.map((threadId, index) => [threadId, index]),
-  );
-  eligibleThreads.sort((left, right) => {
-    const leftIndex = threadOrderById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-    const rightIndex = threadOrderById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
-    return leftIndex - rightIndex;
-  });
-
-  for (const thread of eligibleThreads) {
-    const set: Partial<typeof threads.$inferInsert> = {
-      status: "error",
-      updatedAt: now,
-    };
-    if (
-      statusTransitionNeedsAttention({
-        currentStatus: thread.status,
-        newStatus: "error",
-        threadType: thread.type,
-      })
-    ) {
-      set.latestAttentionAt = now;
-    }
-
-    db.update(threads).set(set).where(eq(threads.id, thread.id)).run();
-    notifier.notifyThread(thread.id, ["status-changed"], {
-      projectId: thread.projectId,
-    });
-  }
-
-  return eligibleThreads.map((thread) => thread.id);
 }

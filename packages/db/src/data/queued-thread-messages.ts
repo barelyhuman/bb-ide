@@ -34,10 +34,6 @@ export interface QueuedMessageThreadRow {
   threadId: string;
 }
 
-export interface DeleteQueuedThreadMessageInTransactionArgs {
-  id: string;
-}
-
 export interface ReorderQueuedThreadMessageArgs {
   db: DbConnection;
   nextQueuedMessageId: string | null;
@@ -586,19 +582,6 @@ export function deleteClaimedQueuedThreadMessage(
 
   notifier.notifyThread(existing.threadId, ["queue-changed"]);
   return true;
-}
-
-export function deleteQueuedThreadMessageInTransaction(
-  db: DbTransaction,
-  args: DeleteQueuedThreadMessageInTransactionArgs,
-): boolean {
-  const deleted =
-    db
-      .delete(queuedThreadMessages)
-      .where(eq(queuedThreadMessages.id, args.id))
-      .returning({ id: queuedThreadMessages.id })
-      .get() ?? null;
-  return deleted !== null;
 }
 
 export function deleteQueuedThreadMessage(

@@ -11,10 +11,7 @@ import {
   getPendingInteractionByProviderRequest,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
-  listPendingInteractionThreadIds,
-  listPendingInteractionsByStatus,
   listPendingInteractionsByThread,
-  setPendingInteractionExpired,
   setPendingInteractionResolved,
 } from "../../src/data/pending-interactions.js";
 import { createThread } from "../../src/data/threads.js";
@@ -272,75 +269,4 @@ describe("pending interactions", () => {
     ).toEqual(new Set(targetThreadIds));
   });
 
-  it("lists pending interactions by status and expires them", () => {
-    const { db, thread } = setup();
-
-    const created = createPendingInteraction(db, {
-      threadId: thread.id,
-      turnId: "turn-expire-1",
-      providerId: "codex",
-      providerThreadId: "provider-thread-expire-1",
-      providerRequestId: "request-expire-1",
-      sessionId: "session-1",
-      payload: commandApprovalPayload("git push", "item-expire-1"),
-    });
-
-    expect(
-      listPendingInteractionsByStatus(db, { statuses: ["pending"] }).map(
-        (row) => row.id,
-      ),
-    ).toEqual([created.id]);
-
-    const expired = setPendingInteractionExpired(db, {
-      id: created.id,
-      statusReason: "Timed out",
-    });
-
-    expect(expired).toMatchObject({
-      id: created.id,
-      status: "expired",
-      statusReason: "Timed out",
-    });
-    expect(
-      listPendingInteractionsByStatus(db, { statuses: ["pending"] }),
-    ).toHaveLength(0);
-  });
-
-  it("chunks pending-thread lookups to stay under SQLite variable limits", () => {
-    const { db, thread } = setup();
-    const manyThreads = [thread];
-    for (let index = 0; index < 1_050; index += 1) {
-      manyThreads.push(
-        createThread(db, noopNotifier, {
-          projectId: thread.projectId,
-          environmentId: thread.environmentId,
-          providerId: "codex",
-        }),
-      );
-    }
-
-    const pendingThreadIds = [manyThreads[0], manyThreads[1_000]]
-      .filter((currentThread) => currentThread !== undefined)
-      .map((currentThread) => currentThread.id);
-
-    for (const [index, threadId] of pendingThreadIds.entries()) {
-      createPendingInteraction(db, {
-        threadId,
-        turnId: `turn-batched-${index}`,
-        providerId: "codex",
-        providerThreadId: `provider-thread-batched-${index}`,
-        providerRequestId: `request-batched-${index}`,
-        sessionId: "session-1",
-        payload: commandApprovalPayload("git push", `item-batched-${index}`),
-      });
-    }
-
-    expect(
-      new Set(
-        listPendingInteractionThreadIds(db, {
-          threadIds: manyThreads.map((currentThread) => currentThread.id),
-        }),
-      ),
-    ).toEqual(new Set(pendingThreadIds));
-  });
 });

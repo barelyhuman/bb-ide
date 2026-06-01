@@ -648,19 +648,6 @@ export interface ListStoredEventRowsInRangeArgs {
   threadId: string;
 }
 
-export interface ThreadSequenceKey {
-  sequence: number;
-  threadId: string;
-}
-
-export interface ListStoredEventRowsByThreadSequencesArgs {
-  keys: readonly ThreadSequenceKey[];
-}
-
-export interface StoredEventSequenceRow extends StoredEventRow {
-  environmentId: string | null;
-}
-
 export interface ListStoredTurnInputAcceptedRowsByClientRequestIdsArgs {
   afterSequence: number;
   clientRequestIds: readonly ClientTurnRequestId[];
@@ -707,11 +694,6 @@ export interface StoredEventRowTypeFilter {
   eventTypes: readonly ThreadEventType[];
   itemEventTypes: readonly ThreadEventType[];
   itemKinds: readonly ThreadEventItemType[];
-}
-
-export interface ListFilteredStoredEventRowsArgs {
-  filter: StoredEventRowTypeFilter;
-  threadId: string;
 }
 
 export interface ListFilteredStoredTimelineWindowEventRowsArgs
@@ -841,81 +823,6 @@ export function listStoredEventRowsInRange(
     )
     .orderBy(events.sequence)
     .all();
-}
-
-function buildThreadSequenceKey(key: ThreadSequenceKey): string {
-  return `${key.threadId}:${key.sequence}`;
-}
-
-function compareStoredEventSequenceRows(
-  left: StoredEventSequenceRow,
-  right: StoredEventSequenceRow,
-): number {
-  if (left.threadId < right.threadId) {
-    return -1;
-  }
-  if (left.threadId > right.threadId) {
-    return 1;
-  }
-  return left.sequence - right.sequence;
-}
-
-function listStoredEventRowsByThreadSequenceChunk(
-  db: DbQueryConnection,
-  keys: readonly ThreadSequenceKey[],
-): StoredEventSequenceRow[] {
-  const sequenceConditions = keys.map((key) =>
-    and(eq(events.threadId, key.threadId), eq(events.sequence, key.sequence)),
-  );
-
-  return db
-    .select({
-      ...storedEventRowFields,
-      environmentId: events.environmentId,
-    })
-    .from(events)
-    .where(or(...sequenceConditions))
-    .orderBy(events.threadId, events.sequence)
-    .all();
-}
-
-export function listStoredEventRowsByThreadSequences(
-  db: DbQueryConnection,
-  args: ListStoredEventRowsByThreadSequencesArgs,
-): StoredEventSequenceRow[] {
-  if (args.keys.length === 0) {
-    return [];
-  }
-
-  const uniqueKeys: ThreadSequenceKey[] = [];
-  const seenKeys = new Set<string>();
-  for (const key of args.keys) {
-    const lookupKey = buildThreadSequenceKey(key);
-    if (seenKeys.has(lookupKey)) {
-      continue;
-    }
-    seenKeys.add(lookupKey);
-    uniqueKeys.push(key);
-  }
-
-  const rows: StoredEventSequenceRow[] = [];
-  for (
-    let offset = 0;
-    offset < uniqueKeys.length;
-    offset += STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE
-  ) {
-    rows.push(
-      ...listStoredEventRowsByThreadSequenceChunk(
-        db,
-        uniqueKeys.slice(
-          offset,
-          offset + STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE,
-        ),
-      ),
-    );
-  }
-
-  return rows.sort(compareStoredEventSequenceRows);
 }
 
 export function listStoredClientTurnRequestIdsInRange(
@@ -1314,23 +1221,6 @@ function buildStoredEventRowTypeFilterCondition(
   return or(...conditions) ?? sql`0 = 1`;
 }
 
-export function listFilteredStoredEventRows(
-  db: DbConnection,
-  args: ListFilteredStoredEventRowsArgs,
-): StoredEventRow[] {
-  return db
-    .select(storedEventRowFields)
-    .from(events)
-    .where(
-      and(
-        eq(events.threadId, args.threadId),
-        buildStoredEventRowTypeFilterCondition(args.filter),
-      ),
-    )
-    .orderBy(events.sequence)
-    .all();
-}
-
 function listLatestRowsForContextWindowUsage(
   db: DbConnection,
   args: {
@@ -1427,22 +1317,6 @@ export function getLatestThreadSequence(
     .get();
 
   return row?.maxSequence ?? 0;
-}
-
-export function getLastStoredTurnId(
-  db: DbConnection,
-  threadId: string,
-): string | null {
-  const row = db
-    .select({ turnId: events.turnId })
-    .from(events)
-    .where(
-      sql`${events.threadId} = ${threadId} AND ${events.turnId} IS NOT NULL`,
-    )
-    .orderBy(sql`${events.sequence} DESC`)
-    .limit(1)
-    .get();
-  return row?.turnId ?? null;
 }
 
 export function getActiveStoredTurnId(

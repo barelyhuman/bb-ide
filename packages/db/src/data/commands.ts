@@ -85,20 +85,6 @@ function queueCommandRecord(
     .get();
 }
 
-export function getHostCommandCursor(
-  db: CommandReadConnection,
-  hostId: string,
-): number | null {
-  const row =
-    db
-      .select({ cursor: hosts.commandCursor })
-      .from(hosts)
-      .where(eq(hosts.id, hostId))
-      .get() ?? null;
-
-  return row?.cursor ?? null;
-}
-
 export function queueCommandInTransaction(
   db: DbTransaction,
   input: QueueCommandInput,

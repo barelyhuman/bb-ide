@@ -13,10 +13,6 @@ export interface GetActiveSessionByIdArgs {
   sessionId: string;
 }
 
-export interface GetCurrentSessionArgs {
-  hostId: string;
-}
-
 export interface GetMostRecentlyUpdatedConnectedHostIdArgs {
   hostType?: HostType;
 }
@@ -146,35 +142,6 @@ export function getActiveSession(db: SessionReadConnection, hostId: string) {
           gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
         ),
       )
-      .get() ?? null
-  );
-}
-
-/**
- * Returns the most recently updated active session row for the host without
- * applying the lease-expiry filter.
- *
- * Use this only for reconciliation/diagnostic paths that need to distinguish
- * "no active session exists" from "the latest active session record exists but
- * its lease has already expired". For normal readiness checks, use
- * `getActiveSession(...)` instead.
- */
-export function getCurrentSession(
-  db: SessionReadConnection,
-  args: GetCurrentSessionArgs,
-) {
-  return (
-    db
-      .select()
-      .from(hostDaemonSessions)
-      .where(
-        and(
-          eq(hostDaemonSessions.hostId, args.hostId),
-          eq(hostDaemonSessions.status, "active"),
-        ),
-      )
-      .orderBy(desc(hostDaemonSessions.updatedAt))
-      .limit(1)
       .get() ?? null
   );
 }

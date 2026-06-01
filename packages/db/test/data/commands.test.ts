@@ -4,7 +4,6 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
   getPendingEnvironmentCommand,
-  getHostCommandCursor,
   hasPendingHostCommandForThread,
   fetchCommands,
   queueCommand,
@@ -119,7 +118,6 @@ describe("commands", () => {
     });
 
     expect(next.cursor).toBe(4);
-    expect(getHostCommandCursor(db, host.id)).toBe(4);
   });
 
   it("fetches pending commands and marks as fetched", () => {

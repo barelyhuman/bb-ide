@@ -497,19 +497,3 @@ export function claimManagedEnvironmentReprovisionRecord(
 
   return claimed;
 }
-
-export function deleteEnvironment(
-  db: DbConnection,
-  notifier: DbNotifier,
-  id: string,
-) {
-  const existing = db
-    .select()
-    .from(environments)
-    .where(eq(environments.id, id))
-    .get();
-  if (!existing) return false;
-  db.delete(environments).where(eq(environments.id, id)).run();
-  notifier.notifyEnvironment(id, ["environment-deleted"]);
-  return true;
-}

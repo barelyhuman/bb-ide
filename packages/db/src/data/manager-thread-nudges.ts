@@ -196,23 +196,6 @@ export function deleteManagerThreadNudge(
   return true;
 }
 
-export function deleteManagerThreadNudgesForThread(
-  db: DbConnection,
-  notifier: DbNotifier,
-  threadId: string,
-) {
-  const existing = listManagerThreadNudgesByThread(db, threadId);
-  if (existing.length === 0) {
-    return 0;
-  }
-
-  db.delete(managerThreadNudges)
-    .where(eq(managerThreadNudges.threadId, threadId))
-    .run();
-  notifier.notifyProject(existing[0]!.projectId, ["nudges-changed"]);
-  return existing.length;
-}
-
 export function replaceManagerThreadNudges(
   db: DbConnection,
   notifier: DbNotifier,

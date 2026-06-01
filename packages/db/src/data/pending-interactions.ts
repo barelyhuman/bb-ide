@@ -32,12 +32,6 @@ export interface ListPendingInteractionsArgs {
   threadId: string;
 }
 
-export interface ListPendingInteractionsByStatusArgs {
-  limit?: number;
-  offset?: number;
-  statuses: readonly PendingInteractionStatus[];
-}
-
 export interface SetPendingInteractionTerminalStateArgs {
   allowedCurrentStatuses?: readonly PendingInteractionStatus[];
   id: string;
@@ -70,10 +64,6 @@ export interface InterruptPendingInteractionsForSessionIdsArgs {
   resolvedAt?: number;
   sessionIds: readonly string[];
   statusReason: string;
-}
-
-export interface ListPendingInteractionThreadIdsArgs {
-  threadIds: readonly string[];
 }
 
 const SQLITE_IN_CLAUSE_BATCH_SIZE = 900;
@@ -232,56 +222,6 @@ export function listPendingInteractionsByThread(
   return args.limit ? query.limit(args.limit).all() : query.all();
 }
 
-export function listPendingInteractionThreadIds(
-  db: PendingInteractionReadConnection,
-  args: ListPendingInteractionThreadIdsArgs,
-): string[] {
-  if (args.threadIds.length === 0) {
-    return [];
-  }
-
-  const pendingThreadIds = new Set<string>();
-  for (const threadIdsBatch of sliceInClauseBatches(args.threadIds)) {
-    const rows = db
-      .select({ threadId: pendingInteractions.threadId })
-      .from(pendingInteractions)
-      .where(
-        and(
-          inArray(pendingInteractions.threadId, threadIdsBatch),
-          inArray(pendingInteractions.status, ["pending", "resolving"]),
-        ),
-      )
-      .all();
-    for (const row of rows) {
-      pendingThreadIds.add(row.threadId);
-    }
-  }
-
-  return [...pendingThreadIds];
-}
-
-export function listPendingInteractionsByStatus(
-  db: PendingInteractionReadConnection,
-  args: ListPendingInteractionsByStatusArgs,
-): PendingInteractionRow[] {
-  const query = db
-    .select()
-    .from(pendingInteractions)
-    .where(inArray(pendingInteractions.status, [...args.statuses]))
-    .orderBy(desc(pendingInteractions.createdAt));
-
-  if (args.limit === undefined) {
-    return query.all();
-  }
-
-  const limitedQuery =
-    args.offset !== undefined
-      ? query.limit(args.limit).offset(args.offset)
-      : query.limit(args.limit);
-
-  return limitedQuery.all();
-}
-
 export function setPendingInteractionResolved(
   db: PendingInteractionWriteConnection,
   args: {
@@ -337,22 +277,6 @@ export function setPendingInteractionInterrupted(
     allowedCurrentStatuses: ["pending", "resolving"],
     resolution: null,
     status: "interrupted",
-    statusReason: args.statusReason,
-  });
-}
-
-export function setPendingInteractionExpired(
-  db: PendingInteractionWriteConnection,
-  args: {
-    id: string;
-    statusReason: string;
-  },
-): PendingInteractionRow | null {
-  return updatePendingInteractionTerminalState(db, {
-    id: args.id,
-    allowedCurrentStatuses: ["pending", "resolving"],
-    resolution: null,
-    status: "expired",
     statusReason: args.statusReason,
   });
 }

@@ -6,7 +6,6 @@ import {
   advanceManagerThreadNudgeAfterFireInTransaction,
   createManagerThreadNudge,
   deleteManagerThreadNudge,
-  deleteManagerThreadNudgesForThread,
   getManagerThreadNudge,
   listDueManagerThreadNudges,
   listManagerThreadNudgesByThread,
@@ -98,9 +97,6 @@ describe("manager thread nudges", () => {
     ).toEqual([due.id]);
     expect(deleteManagerThreadNudge(db, noopNotifier, due.id)).toBe(true);
     expect(deleteManagerThreadNudge(db, noopNotifier, due.id)).toBe(false);
-    expect(
-      deleteManagerThreadNudgesForThread(db, noopNotifier, thread.id),
-    ).toBe(1);
   });
 
   it("does not advance a nudge after it is disabled", () => {
