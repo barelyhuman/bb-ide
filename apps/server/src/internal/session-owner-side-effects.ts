@@ -13,7 +13,6 @@ import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
 } from "../types.js";
-import { markHostSessionOpened } from "../services/hosts/host-lifecycle.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
 
 const DAEMON_DISCONNECT_PENDING_INTERACTION_REASON =
@@ -69,10 +68,6 @@ export async function handleHostSessionOpened(
   deps: HostSessionOpenedDeps,
   args: HandleHostSessionOpenedArgs,
 ): Promise<void> {
-  await markHostSessionOpened(deps, {
-    hostId: args.hostId,
-  });
-
   deps.logger.info(
     {
       sessionId: args.openedSession.id,

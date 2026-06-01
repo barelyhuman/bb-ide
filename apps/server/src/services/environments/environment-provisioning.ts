@@ -40,8 +40,6 @@ import type {
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
-  appendThreadProvisioningEvent,
-  appendSystemErrorEvent,
   appendSystemErrorEventInTransaction,
   appendThreadProvisioningEventInTransaction,
 } from "../threads/thread-events.js";
@@ -63,11 +61,7 @@ import {
 } from "./environment-provision-request.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
-import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
-import {
-  tryTransition,
-  tryTransitionInTransaction,
-} from "../threads/thread-transitions.js";
+import { tryTransitionInTransaction } from "../threads/thread-transitions.js";
 import { readThreadProvisioningIdFromRecord } from "../threads/thread-provisioning-state.js";
 
 type EnvironmentProvisionOperationKind = Extract<
@@ -191,31 +185,6 @@ function resolveLiveThreadProvisioningId(
     provisioningStage: thread.provisionOperationProvisioningStage,
     workspaceReadyEventSequence: thread.workspaceReadyEventSequence,
   });
-}
-
-function appendThreadProvisioningEventToEnvironmentThreads(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: AppendThreadProvisioningEventToEnvironmentThreadsArgs,
-): void {
-  const liveThreads =
-    args.threads ??
-    // Refresh the thread list for in-progress broadcasts so reuse threads that
-    // attach mid-provision receive subsequent transcript updates.
-    listLiveEnvironmentThreads(deps, args.environmentId);
-
-  for (const thread of liveThreads) {
-    const provisioningId = resolveLiveThreadProvisioningId(
-      thread,
-      args.fallbackProvisioningId,
-    );
-    appendThreadProvisioningEvent(deps, {
-      entries: args.entries,
-      environmentId: args.environmentId,
-      provisioningId,
-      status: args.status,
-      threadId: thread.id,
-    });
-  }
 }
 
 function appendThreadProvisioningEventToEnvironmentThreadsInTransaction(
@@ -447,58 +416,6 @@ export function failEnvironmentProvisioning(
   return true;
 }
 
-export function recordEnvironmentProvisioningFailure(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: FailEnvironmentProvisioningDurablyArgs,
-): boolean {
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (!environment) {
-    return false;
-  }
-  const operation = args.commandId
-    ? getActiveProvisionOperationByCommandId(deps, args.commandId)
-    : getActiveProvisionOperation(deps, environment.id);
-  if (!operation) {
-    return false;
-  }
-  const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
-  const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
-
-  if (args.commandId) {
-    failEnvironmentProvisioningForCommand(deps, {
-      commandId: args.commandId,
-      failureReason: args.failureReason,
-    });
-  } else {
-    failEnvironmentProvisioning(deps, {
-      environmentId: environment.id,
-      failureReason: args.failureReason,
-    });
-  }
-
-  appendThreadProvisioningEventToEnvironmentThreads(deps, {
-    environmentId: environment.id,
-    fallbackProvisioningId: provisioningId,
-    status: "failed",
-    threads: liveThreads,
-    entries: [args.failureEntry],
-  });
-
-  for (const thread of liveThreads) {
-    appendSystemErrorEvent(deps, {
-      threadId: thread.id,
-      environmentId: environment.id,
-      code: "thread_provisioning_failed",
-      message: "Provisioning thread failed",
-      detail: args.failureReason,
-      scope: threadScope(),
-    });
-    tryTransition(deps.db, deps.hub, thread.id, "error");
-  }
-
-  return true;
-}
-
 export function recordEnvironmentProvisioningFailureInTransaction(
   deps: EnvironmentProvisionTransactionDeps,
   args: FailEnvironmentProvisioningDurablyArgs,
@@ -549,20 +466,6 @@ export function recordEnvironmentProvisioningFailureInTransaction(
   }
 
   return true;
-}
-
-export async function failEnvironmentProvisioningDurably(
-  deps: LoggedWorkSessionDeps,
-  args: FailEnvironmentProvisioningDurablyArgs,
-): Promise<void> {
-  const recorded = recordEnvironmentProvisioningFailure(deps, args);
-  if (!recorded) {
-    return;
-  }
-
-  await advanceEnvironmentCleanup(deps, {
-    environmentId: args.environmentId,
-  });
 }
 
 export function requestEnvironmentProvision(

@@ -1,11 +1,9 @@
 import { renderTemplate } from "@bb/templates";
-import { getEnvironment, getThread, updateThread } from "@bb/db";
+import { getThread, updateThread } from "@bb/db";
 import type { PromptInput } from "@bb/domain";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { Type } from "@mariozechner/pi-ai";
 import { InferenceTimeoutError, inferenceComplete } from "../ai/inference.js";
-import { queueThreadRenameCommand } from "./thread-commands.js";
-import { isPreStartThreadStatus } from "./thread-status.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
@@ -14,7 +12,6 @@ const MAX_BRANCH_SLUG_LENGTH = 48;
 
 type ThreadMetadataGenerationDeps = LoggedWorkSessionDeps;
 type ThreadTitleApplyDeps = Pick<AppDeps, "db" | "hub">;
-type ThreadTitleGenerationDeps = LoggedWorkSessionDeps;
 
 export interface ApplyGeneratedThreadTitleArgs {
   threadId: string;
@@ -26,11 +23,6 @@ export interface ThreadMetadataGenerationArgs {
   threadId: string;
   timeoutMaxAttempts?: number;
   timeoutMs?: number;
-}
-
-export interface ThreadTitleGenerationArgs {
-  input: PromptInput[];
-  threadId: string;
 }
 
 export interface GeneratedThreadMetadata {
@@ -219,14 +211,6 @@ export async function generateThreadMetadataWithOutcome(
   return complete(null, "failed");
 }
 
-export async function generateThreadMetadata(
-  deps: ThreadMetadataGenerationDeps,
-  args: ThreadMetadataGenerationArgs,
-): Promise<GeneratedThreadMetadata | null> {
-  const outcome = await generateThreadMetadataWithOutcome(deps, args);
-  return outcome.metadata;
-}
-
 export function applyGeneratedThreadTitle(
   deps: ThreadTitleApplyDeps,
   args: ApplyGeneratedThreadTitleArgs,
@@ -246,60 +230,4 @@ export function applyGeneratedThreadTitle(
   });
 
   return true;
-}
-
-export async function generateThreadTitle(
-  deps: ThreadTitleGenerationDeps,
-  args: ThreadTitleGenerationArgs,
-): Promise<void> {
-  const thread = getThread(deps.db, args.threadId);
-  if (!thread || thread.title) {
-    return;
-  }
-
-  const metadata = await generateThreadMetadata(deps, args);
-  if (!metadata?.title) {
-    return;
-  }
-
-  try {
-    if (
-      !applyGeneratedThreadTitle(deps, {
-        threadId: args.threadId,
-        title: metadata.title,
-      })
-    ) {
-      return;
-    }
-
-    const titledThread = getThread(deps.db, args.threadId);
-    const environment = titledThread?.environmentId
-      ? getEnvironment(deps.db, titledThread.environmentId)
-      : null;
-    if (
-      !titledThread ||
-      !environment ||
-      isPreStartThreadStatus(titledThread.status)
-    ) {
-      return;
-    }
-
-    queueThreadRenameCommand(deps, {
-      environment: {
-        id: environment.id,
-        hostId: environment.hostId,
-      },
-      providerId: titledThread.providerId,
-      threadId: titledThread.id,
-      title: metadata.title,
-    });
-  } catch (error) {
-    deps.logger.warn(
-      {
-        threadId: args.threadId,
-        ...runtimeErrorLogFields(deps.config, error),
-      },
-      "Failed to generate thread title",
-    );
-  }
 }

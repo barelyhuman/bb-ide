@@ -750,20 +750,6 @@ export function buildSystemErrorEventData(
   });
 }
 
-export function appendThreadInterruptedEvent(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: AppendThreadInterruptedEventArgs,
-): number {
-  return appendThreadEvent(deps, {
-    threadId: args.threadId,
-    type: "system/thread/interrupted",
-    scope: threadScope(),
-    data: {
-      reason: args.reason,
-    },
-  });
-}
-
 export function appendThreadInterruptedEventInTransaction(
   db: DbTransaction,
   args: AppendThreadInterruptedEventArgs,

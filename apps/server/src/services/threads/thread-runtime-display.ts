@@ -41,11 +41,6 @@ interface ToThreadResponseWithHostArgs extends ToThreadResponseFromThreadArgs {
   environmentHostId: string | null;
 }
 
-interface ToThreadListEntryResponseArgs {
-  now?: number;
-  thread: ThreadWithPendingInteractionState;
-}
-
 interface ToThreadListEntryResponsesArgs {
   now?: number;
   threads: readonly ThreadWithPendingInteractionState[];
@@ -192,23 +187,6 @@ export function toThreadResponseFromThread(
   return toThreadResponseWithHost(deps, {
     ...args,
     environmentHostId: resolveThreadEnvironmentHostId(deps, args.thread),
-  });
-}
-
-export function toThreadListEntryResponse(
-  deps: ThreadRuntimeDisplayDeps,
-  args: ToThreadListEntryResponseArgs,
-): ThreadListEntry {
-  const latestSession =
-    args.thread.status === "active" && args.thread.environmentHostId !== null
-      ? getLatestSessionForHost(deps.db, {
-          hostId: args.thread.environmentHostId,
-        })
-      : null;
-  return toThreadListEntryResponseFromLatestSession({
-    latestSession,
-    now: args.now,
-    thread: args.thread,
   });
 }
 

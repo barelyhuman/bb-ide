@@ -11,7 +11,6 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js";
 import {
   buildThreadTimeline as buildThreadTimelineWithResolvedMode,
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
@@ -288,7 +287,6 @@ function seedTimelineClientTurnRequested(
 }
 
 describe("buildThreadTimeline", () => {
-  const scenarios = getTimelineBenchmarkScenarios();
   const harnesses: TimelineTestHarness[] = [];
 
   afterEach(async () => {
@@ -300,13 +298,6 @@ describe("buildThreadTimeline", () => {
       await harness.cleanup();
     }
   });
-
-  for (const scenario of scenarios) {
-    it(`compacts ${scenario.id} before serializing the summary payload`, () => {
-      expect(scenario.summaryEventCount).toBeLessThan(scenario.eventCount);
-      expect(scenario.summaryBytes).toBeLessThan(scenario.fullBytes);
-    });
-  }
 
   it("resolves public manager timeline view defaults before timeline projection", async () => {
     const harness = await createTestAppHarness();

@@ -682,27 +682,6 @@ export function queueThreadUnarchiveCommand(
   });
 }
 
-export function queueThreadDeletedCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueThreadDeletedCommandArgs,
-): boolean {
-  const session = getActiveSession(deps.db, args.environment.hostId);
-  if (!session) {
-    return false;
-  }
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session.id,
-    type: "thread.deleted",
-    payload: JSON.stringify({
-      type: "thread.deleted",
-      environmentId: args.environment.id,
-      threadId: args.threadId,
-    }),
-  });
-  return true;
-}
-
 export function queueThreadDeletedCommandInTransaction(
   db: DbTransaction,
   args: QueueThreadDeletedCommandArgs,

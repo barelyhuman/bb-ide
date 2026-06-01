@@ -1,22 +1,16 @@
 import {
-  createEnvironment,
-  createEnvironmentProvisioningId,
   deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
   hasNonTerminalThreadInEnvironment,
 } from "@bb/db";
-import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
-import type { Environment, Project } from "@bb/domain";
+import type { Project } from "@bb/domain";
 import type { UnmanagedBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
-import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
-import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import { seedManagerThreadStorage } from "./manager-storage-templates.js";
 import {
@@ -29,16 +23,10 @@ import {
   resolveProjectExecutionDefaultsForCreate,
 } from "./project-execution-defaults.js";
 import {
-  buildEnvironmentProvisionCommand,
   createThreadRecord,
   getThreadSafe,
   requirePublicProjectForThreadCreate,
 } from "./thread-create-helpers.js";
-import {
-  advanceEnvironmentProvisioning,
-  requestEnvironmentProvision,
-} from "../environments/environment-provisioning.js";
-import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
 import { resolveStableThreadRequestEnvironment } from "./thread-request-eligibility.js";
 import { resolveCreateThreadEnvironment } from "./thread-default-policy.js";
 import { assertValidManagerParentThread } from "./thread-parent.js";
@@ -84,12 +72,6 @@ interface CreateProvisioningThreadArgs {
     typeof buildExecutionOptions
   >[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
-}
-
-interface EnsureProjectSourceEnvironmentArgs {
-  hostId: string;
-  path: string;
-  projectId: string;
 }
 
 type ThreadProvisionEnvironmentIntent =
@@ -465,85 +447,4 @@ export async function createThreadFromRequest(
     executionDefaults,
     request,
   });
-}
-
-export async function ensureProjectSourceEnvironment(
-  deps: Pick<
-    AppDeps,
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "logger"
-    | "machineAuth"
-  >,
-  args: EnsureProjectSourceEnvironmentArgs,
-): Promise<Environment> {
-  const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
-  if (existing && existing.status === "ready") {
-    return existing;
-  }
-
-  const environment =
-    existing ??
-    createEnvironment(deps.db, deps.hub, {
-      projectId: args.projectId,
-      hostId: args.hostId,
-      managed: false,
-      workspaceProvisionType: "unmanaged",
-      status: "provisioning",
-    });
-
-  await ensureHostSessionReadyForWork(deps, {
-    hostId: args.hostId,
-  });
-  const command = buildEnvironmentProvisionCommand({
-    environmentId: environment.id,
-    hostId: args.hostId,
-    initiator: null,
-    workspaceProvisionType: "unmanaged",
-    path: args.path,
-  });
-  requestEnvironmentProvision(deps, {
-    environmentId: environment.id,
-    kind: "provision",
-    request: buildDirectEnvironmentProvisionRequest({
-      command,
-      provisioningId: createEnvironmentProvisioningId(),
-    }),
-  });
-  const commandId = await advanceEnvironmentProvisioning(deps, {
-    environmentId: environment.id,
-  });
-  if (!commandId) {
-    throw new ApiError(
-      500,
-      "internal_error",
-      "Failed to queue environment provisioning",
-    );
-  }
-  const result = await waitForQueuedCommandResult(deps, {
-    commandId,
-    timeoutMs: COMMAND_TIMEOUT_MS,
-    type: "environment.provision",
-  });
-
-  const updated = applyProvisionedEnvironmentRecord(
-    deps.db,
-    deps.hub,
-    environment.id,
-    {
-      path: result.path,
-      status: "ready",
-      isGitRepo: result.isGitRepo,
-      isWorktree: result.isWorktree,
-      branchName: result.branchName,
-      defaultBranch: result.defaultBranch,
-    },
-  );
-  if (!updated) {
-    throw new ApiError(500, "internal_error", "Failed to update environment");
-  }
-  return updated;
 }
