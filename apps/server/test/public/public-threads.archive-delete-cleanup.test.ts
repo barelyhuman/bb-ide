@@ -884,7 +884,7 @@ describe("public thread archive delete cleanup routes", () => {
     });
   });
 
-  it("skips Codex unarchive forwarding because archive is BB-owned state", async () => {
+  it("queues Codex unarchive forwarding when the environment is still ready", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -914,7 +914,14 @@ describe("public thread archive delete cleanup routes", () => {
       expect(response.status).toBe(200);
       expect(
         listQueuedThreadCommands(harness, "thread.unarchive", thread.id),
-      ).toEqual([]);
+      ).toEqual([
+        {
+          type: "thread.unarchive",
+          threadId: thread.id,
+          providerId: "codex",
+          providerThreadId: "provider-unarchive-forward",
+        },
+      ]);
     });
   });
 
@@ -1056,7 +1063,7 @@ describe("public thread archive delete cleanup routes", () => {
     });
   });
 
-  it("cancels a queued managed destroy command when a thread is unarchived", async () => {
+  it("cancels queued managed destroy and queues Codex unarchive after restoring the environment", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1074,6 +1081,11 @@ describe("public thread archive delete cleanup routes", () => {
         environmentId: environment.id,
         status: "idle",
       });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-unarchive-restored-ready",
+      });
 
       const archiveResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/archive`,
@@ -1082,6 +1094,12 @@ describe("public thread archive delete cleanup routes", () => {
         },
       );
       expect(archiveResponse.status).toBe(200);
+      const nativeArchiveCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.archive" && command.threadId === thread.id,
+      );
+      await reportQueuedCommandSuccess(harness, nativeArchiveCommand, {});
       const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
         harness,
         {
@@ -1094,6 +1112,9 @@ describe("public thread archive delete cleanup routes", () => {
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
+      );
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
       );
 
       const response = await harness.app.request(
@@ -1117,6 +1138,16 @@ describe("public thread archive delete cleanup routes", () => {
           kind: "destroy",
         }),
       ).toMatchObject({ state: "cancelled" });
+      expect(
+        listQueuedThreadCommands(harness, "thread.unarchive", thread.id),
+      ).toEqual([
+        {
+          type: "thread.unarchive",
+          threadId: thread.id,
+          providerId: "codex",
+          providerThreadId: "provider-unarchive-restored-ready",
+        },
+      ]);
 
       const staleResultResponse = await reportQueuedCommandSuccess(
         harness,

@@ -342,9 +342,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   post("/threads/:id/unarchive", (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
     const providerThreadId = getLastProviderThreadId(deps, thread.id);
-    const environment = thread.environmentId
-      ? getEnvironment(deps.db, thread.environmentId)
-      : null;
     const cleanupCancellation = cancelPendingEnvironmentCleanup(deps, {
       environmentId: thread.environmentId,
     });
@@ -356,11 +353,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       );
     }
     unarchiveThread(deps.db, deps.hub, thread.id);
+    const environment = thread.environmentId
+      ? getEnvironment(deps.db, thread.environmentId)
+      : null;
     if (providerThreadId && environment) {
       queueThreadUnarchiveCommand(deps, {
-        host: {
-          hostId: environment.hostId,
-        },
+        environment,
         providerThreadId,
         thread,
       });

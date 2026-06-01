@@ -74,8 +74,10 @@ export interface ThreadHostCommandEnvironment {
   id: string;
 }
 
-export interface ThreadCommandHost {
+export interface ThreadUnarchiveCommandEnvironment {
   hostId: string;
+  id: string;
+  status: EnvironmentStatus;
 }
 
 export interface ThreadWorkspaceCommandEnvironment extends ThreadHostCommandEnvironment {
@@ -174,7 +176,7 @@ export interface QueueThreadArchiveCommandArgs {
 }
 
 export interface QueueThreadUnarchiveCommandArgs {
-  host: ThreadCommandHost;
+  environment: ThreadUnarchiveCommandEnvironment;
   providerThreadId: string;
   thread: Thread;
 }
@@ -201,20 +203,8 @@ function providerSupportsThreadRename(providerId: string): boolean {
   return getBuiltInAgentProviderInfo(providerId).capabilities.supportsRename;
 }
 
-type ThreadArchiveForwardingAction = "archive" | "unarchive";
-
-function providerSupportsThreadArchiveForwarding(
-  providerId: string,
-  action: ThreadArchiveForwardingAction,
-): boolean {
+function providerSupportsThreadArchiveForwarding(providerId: string): boolean {
   if (!isAgentProviderId(providerId)) {
-    return false;
-  }
-
-  // Codex archived threads remain follow-up-capable through thread/resume.
-  // Native unarchive would expose them in Codex's active list again, which is
-  // not needed for BB follow-ups and can fight BB-owned archive state.
-  if (providerId === "codex" && action === "unarchive") {
     return false;
   }
 
@@ -550,7 +540,7 @@ export function queueThreadArchiveCommand(
   args: QueueThreadArchiveCommandArgs,
 ): boolean {
   if (
-    !providerSupportsThreadArchiveForwarding(args.thread.providerId, "archive")
+    !providerSupportsThreadArchiveForwarding(args.thread.providerId)
   ) {
     return false;
   }
@@ -658,19 +648,17 @@ export function queueArchivedThreadProviderArchiveCommand(
 export function queueThreadUnarchiveCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadUnarchiveCommandArgs,
-): void {
-  if (
-    !providerSupportsThreadArchiveForwarding(
-      args.thread.providerId,
-      "unarchive",
-    )
-  ) {
-    return;
+): boolean {
+  if (!providerSupportsThreadArchiveForwarding(args.thread.providerId)) {
+    return false;
+  }
+  if (args.environment.status !== "ready") {
+    return false;
   }
 
-  const session = getActiveSession(deps.db, args.host.hostId);
+  const session = getActiveSession(deps.db, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
-    hostId: args.host.hostId,
+    hostId: args.environment.hostId,
     sessionId: session?.id ?? null,
     type: "thread.unarchive",
     payload: JSON.stringify({
@@ -680,6 +668,7 @@ export function queueThreadUnarchiveCommand(
       providerThreadId: args.providerThreadId,
     }),
   });
+  return true;
 }
 
 export function queueThreadDeletedCommandInTransaction(
