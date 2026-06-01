@@ -86,12 +86,6 @@ export function getMergeBaseBranchCandidateGroups({
   return { options: fromProps, remoteOptions: fromRemoteProps };
 }
 
-export function getMergeBaseBranchCandidates(
-  args: GetMergeBaseBranchCandidatesArgs,
-) {
-  return getMergeBaseBranchCandidateGroups(args).options;
-}
-
 const CREATE_NEW_BRANCH_LABEL = "New branch";
 const EMPTY_BRANCH_OPTIONS: readonly string[] = [];
 const BRANCH_LABEL_PREFIXES = [

@@ -19,7 +19,7 @@ of these:
 - Replacing it would feel like a design-system change, not a feature change.
 
 Examples: `Button`, `Dialog`, `DropdownMenu`, `Pill`, `DetailCard`,
-`ExpandablePanel`, `ThreePaneLayout`.
+`ExpandablePanel`.
 
 ## Domain Presentation
 

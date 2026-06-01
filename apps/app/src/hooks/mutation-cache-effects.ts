@@ -135,17 +135,6 @@ export function invalidateProjectPromptHistoryQueries({
   });
 }
 
-export function invalidateAllProjectsPromptHistoryQueries({
-  queryClient,
-}: QueryClientArg): void {
-  invalidateQueryKeys({
-    queryClient,
-    queryKeys: getProjectPromptHistoryInvalidationQueryKeys({
-      projectId: undefined,
-    }),
-  });
-}
-
 export function invalidateThreadDeleteQueries({
   queryClient,
 }: QueryClientArg): void {

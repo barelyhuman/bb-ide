@@ -105,21 +105,3 @@ export function DetailRow({
   );
 }
 
-export interface DetailMessageRowProps {
-  children: ReactNode;
-  className?: string;
-  contentClassName?: string;
-}
-
-export function DetailMessageRow({
-  children,
-  className,
-  contentClassName,
-}: DetailMessageRowProps) {
-  return (
-    <div className={cn(DETAIL_GRID_CLASS, "py-0.5", className)}>
-      <div aria-hidden="true" />
-      <div className={contentClassName}>{children}</div>
-    </div>
-  );
-}

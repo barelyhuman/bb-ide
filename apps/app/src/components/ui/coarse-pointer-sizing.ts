@@ -57,6 +57,3 @@ export const COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS =
 
 export const COARSE_POINTER_ROW_ACTION_SIZE_CLASS =
   "h-7 w-7 max-md:pointer-coarse:h-9 max-md:pointer-coarse:w-9";
-
-export const COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS =
-  "h-8 w-8 max-md:pointer-coarse:h-10 max-md:pointer-coarse:w-10";

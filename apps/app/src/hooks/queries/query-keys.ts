@@ -271,18 +271,11 @@ export type ThreadAppMarkdownPreviewQueryKeyPrefix = readonly [
   typeof THREAD_APP_MARKDOWN_PREVIEW_QUERY_KEY,
   string,
 ];
-export type AllThreadHostFilePreviewQueryKeyPrefix = readonly [
-  typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
-];
 export type ThreadHostFilePreviewQueryKey = readonly [
   typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
   string,
   string | null | undefined,
   string | null,
-];
-export type ThreadHostFilePreviewQueryKeyPrefix = readonly [
-  typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
-  string,
 ];
 export type EnvironmentQueryKeyPrefix = readonly [typeof ENVIRONMENT_QUERY_KEY];
 export type EnvironmentQueryKey = readonly [
@@ -369,13 +362,6 @@ export type EnvironmentDiffFileQueryKey = readonly [
   string | null,
   string,
   "old" | "new",
-];
-export type EnvironmentDiffFileQueryKeyRootPrefix = readonly [
-  typeof ENVIRONMENT_DIFF_FILE_QUERY_KEY,
-];
-export type EnvironmentDiffFileQueryKeyPrefix = readonly [
-  typeof ENVIRONMENT_DIFF_FILE_QUERY_KEY,
-  string,
 ];
 export type EnvironmentFilePreviewQueryKey = readonly [
   typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
@@ -549,15 +535,6 @@ export function archivedThreadsListQueryKey(
   filters: ArchivedThreadsListFilters,
 ): ArchivedThreadsListQueryKey {
   return [THREADS_QUERY_KEY, ARCHIVED_THREADS_LIST_KIND, filters];
-}
-
-export function isArchivedThreadsListQueryKey(
-  queryKey: QueryKey,
-): queryKey is ArchivedThreadsListQueryKey {
-  return (
-    queryKey[0] === THREADS_QUERY_KEY &&
-    queryKey[1] === ARCHIVED_THREADS_LIST_KIND
-  );
 }
 
 export function disabledThreadListQueryKey(
@@ -751,16 +728,6 @@ export function threadHostFilePreviewQueryKey(
   return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY, threadId, environmentId, path];
 }
 
-export function allThreadHostFilePreviewQueryKeyPrefix(): AllThreadHostFilePreviewQueryKeyPrefix {
-  return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY];
-}
-
-export function threadHostFilePreviewQueryKeyPrefix(
-  threadId: string,
-): ThreadHostFilePreviewQueryKeyPrefix {
-  return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY, threadId];
-}
-
 export function allEnvironmentQueryKeyPrefix(): EnvironmentQueryKeyPrefix {
   return [ENVIRONMENT_QUERY_KEY];
 }
@@ -919,16 +886,6 @@ export function environmentDiffFileQueryKey(
     path,
     side,
   ];
-}
-
-export function allEnvironmentDiffFileQueryKeyPrefix(): EnvironmentDiffFileQueryKeyRootPrefix {
-  return [ENVIRONMENT_DIFF_FILE_QUERY_KEY];
-}
-
-export function environmentDiffFileQueryKeyPrefix(
-  environmentId: string,
-): EnvironmentDiffFileQueryKeyPrefix {
-  return [ENVIRONMENT_DIFF_FILE_QUERY_KEY, environmentId];
 }
 
 export function environmentFilePreviewQueryKey(

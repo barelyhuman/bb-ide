@@ -88,7 +88,7 @@ export interface ThreadPromptArchivedSection {
  * bulk-stop slice lands) the children `Stop all` will target. Keep the set in
  * one place so future status additions don't drift across callers.
  */
-export const THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES: ReadonlySet<ThreadRuntimeDisplayStatus> =
+const THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES: ReadonlySet<ThreadRuntimeDisplayStatus> =
   new Set(["active", "host-reconnecting", "waiting-for-host"]);
 
 export function isThreadDisplayStatusBannerActive(

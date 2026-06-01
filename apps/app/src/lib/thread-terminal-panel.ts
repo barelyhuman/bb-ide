@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { atom } from "jotai";
 import { useAtomValue, useSetAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
@@ -13,18 +13,11 @@ import {
   type ThreadTerminalPanelState,
 } from "./thread-terminal-panel-state";
 
-const THREAD_TERMINAL_PANEL_TOUCH_THROTTLE_MS = 60 * 1000;
-
 type ThreadTerminalPanelThreadId = string | null | undefined;
 
 export type ThreadTerminalPanelStateUpdater = (
   state: ThreadTerminalPanelState,
 ) => ThreadTerminalPanelState;
-
-interface LastThreadTerminalPanelTouch {
-  threadId: ThreadTerminalPanelThreadId;
-  touchedAt: number;
-}
 
 function hasThreadId(threadId: string | null | undefined): threadId is string {
   return threadId !== null && threadId !== undefined && threadId.length > 0;
@@ -144,39 +137,3 @@ export function useToggleThreadTerminalPanel(
   }, [updateState]);
 }
 
-export function useTouchThreadTerminalPanelState(
-  threadId: string | null | undefined,
-): () => void {
-  const updateState = useUpdateThreadTerminalPanelState(threadId);
-  const lastTouchRef = useRef<LastThreadTerminalPanelTouch | null>(null);
-  return useCallback(() => {
-    const now = Date.now();
-    if (
-      lastTouchRef.current !== null &&
-      lastTouchRef.current.threadId === threadId &&
-      now - lastTouchRef.current.touchedAt <
-        THREAD_TERMINAL_PANEL_TOUCH_THROTTLE_MS
-    ) {
-      return;
-    }
-    lastTouchRef.current = {
-      threadId,
-      touchedAt: now,
-    };
-    updateState((current) => {
-      if (
-        !current.isOpen ||
-        now - current.lastUsedAt < THREAD_TERMINAL_PANEL_TOUCH_THROTTLE_MS
-      ) {
-        return current;
-      }
-      return { ...current };
-    });
-  }, [threadId, updateState]);
-}
-
-export function useIsThreadTerminalPanelOpen(
-  threadId: string | null | undefined,
-): boolean {
-  return useThreadTerminalPanelState(threadId).isOpen;
-}

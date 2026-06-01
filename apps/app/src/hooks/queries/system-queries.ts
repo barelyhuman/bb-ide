@@ -4,7 +4,6 @@ import type {
   ManagerTemplatesResponse,
   SystemConfigResponse,
   SystemExecutionOptionsResponse,
-  SystemProviderInfo,
   SystemVersionResponse,
 } from "@bb/server-contract";
 import type { ProviderCliStatusResponse } from "@bb/host-daemon-contract";
@@ -18,7 +17,6 @@ import {
   managerTemplatesQueryKey,
   systemConfigQueryKey,
   systemExecutionOptionsQueryKey,
-  systemProvidersQueryKey,
   systemVersionQueryKey,
 } from "./query-keys";
 
@@ -88,15 +86,6 @@ export function useSystemExecutionOptions(
     ...(args.initialData === undefined
       ? {}
       : { initialData: args.initialData }),
-    staleTime: 60_000,
-  });
-}
-
-export function useSystemProviders(options?: QueryOptions) {
-  return useQuery<SystemProviderInfo[]>({
-    queryKey: systemProvidersQueryKey(),
-    queryFn: () => api.listSystemProviders(),
-    enabled: options?.enabled ?? true,
     staleTime: 60_000,
   });
 }

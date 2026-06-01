@@ -23,7 +23,7 @@ interface HostOfflineBadgeProps {
 }
 
 /** Small badge indicating a host is offline. */
-export function HostOfflineBadge({ className }: HostOfflineBadgeProps) {
+function HostOfflineBadge({ className }: HostOfflineBadgeProps) {
   return (
     <Badge variant="muted" className={cn("shrink-0", className)}>
       offline

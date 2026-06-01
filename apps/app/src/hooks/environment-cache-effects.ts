@@ -8,25 +8,13 @@ import {
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
   systemExecutionOptionsEnvironmentQueryKeyPrefix,
-  threadAppMarkdownPreviewQueryKeyPrefix,
-  threadAppQueryKeyPrefix,
-  threadAppsQueryKey,
   threadComposerBootstrapEnvironmentQueryKeyPrefix,
-  threadStorageFilePreviewQueryKeyPrefix,
-  threadStorageFilesForThreadQueryKeyPrefix,
-  threadStoragePathsForThreadQueryKeyPrefix,
 } from "./queries/query-keys";
 import type {
   EnvironmentArg,
-  EnvironmentChangedArg,
   OptionalEnvironmentArg,
-  ThreadArg,
 } from "./cache-effect-types";
 import { invalidateQueryKeys } from "./cache-effect-utils";
-import {
-  executeRealtimeDirtyHandlers,
-  REALTIME_ENVIRONMENT_CHANGE_REGISTRY,
-} from "./realtime-cache-registry";
 
 export function removeEnvironmentScopedQueries({
   environmentId,
@@ -78,43 +66,3 @@ export function invalidateEnvironmentWorkspaceStateQueries({
   });
 }
 
-export function invalidateRealtimeEnvironmentChangeQueries({
-  changeKinds,
-  environmentId,
-  queryClient,
-}: EnvironmentChangedArg): void {
-  for (const changeKind of changeKinds) {
-    executeRealtimeDirtyHandlers({
-      context: {
-        environmentId,
-        getCachedThreadIdsForEnvironment: () => [],
-        queryClient,
-      },
-      handlers: REALTIME_ENVIRONMENT_CHANGE_REGISTRY[changeKind].dirty,
-    });
-  }
-}
-
-export function invalidateThreadStorageQueries({
-  queryClient,
-  threadId,
-}: ThreadArg): void {
-  queryClient.invalidateQueries({
-    queryKey: threadStorageFilesForThreadQueryKeyPrefix(threadId),
-  });
-  queryClient.invalidateQueries({
-    queryKey: threadStoragePathsForThreadQueryKeyPrefix(threadId),
-  });
-  queryClient.invalidateQueries({
-    queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),
-  });
-  queryClient.invalidateQueries({
-    queryKey: threadAppsQueryKey(threadId),
-  });
-  queryClient.invalidateQueries({
-    queryKey: threadAppQueryKeyPrefix(threadId),
-  });
-  queryClient.invalidateQueries({
-    queryKey: threadAppMarkdownPreviewQueryKeyPrefix(threadId),
-  });
-}
