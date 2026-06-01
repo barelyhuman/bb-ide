@@ -2,6 +2,11 @@ import fs from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  latestPublishedMigrationWhen,
+  publishedMigrationWhens,
+  publishedMigrationWhensByTag,
+} from "../src/migration-history.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const journalPath = resolve(
@@ -21,14 +26,6 @@ interface JournalEntry {
 interface Journal {
   entries: JournalEntry[];
 }
-
-const latestSquashedMigrationWhen = 1778891867195;
-const baselineTag = "0000_baseline";
-const publishedMigrationWhens = new Map<string, number>([
-  ["0000_baseline", 1778891867195],
-  ["0001_terminal_session_user_input", 1779139400000],
-  ["0002_closed_session_prune_indexes", 1779139400001],
-]);
 
 function readJournal(): Journal {
   return JSON.parse(fs.readFileSync(journalPath, "utf-8")) as Journal;
@@ -81,15 +78,21 @@ describe("migration journal integrity", () => {
     expect(missing).toEqual([]);
   });
 
-  it("preserves published migration timestamps", () => {
+  it("contains every published migration with its released timestamp", () => {
     const { entries } = readJournal();
+    const entriesByTag = new Map(entries.map((entry) => [entry.tag, entry]));
 
     const violations: string[] = [];
-    for (const entry of entries) {
-      const expectedWhen = publishedMigrationWhens.get(entry.tag);
-      if (expectedWhen !== undefined && entry.when !== expectedWhen) {
+    for (const publishedMigration of publishedMigrationWhens) {
+      const entry = entriesByTag.get(publishedMigration.tag);
+      if (entry === undefined) {
+        violations.push(`${publishedMigration.tag} is missing from journal`);
+        continue;
+      }
+
+      if (entry.when !== publishedMigration.when) {
         violations.push(
-          `${entry.tag} has when=${entry.when}, expected published when=${expectedWhen}`,
+          `${entry.tag} has when=${entry.when}, expected published when=${publishedMigration.when}`,
         );
       }
     }
@@ -97,18 +100,15 @@ describe("migration journal integrity", () => {
     expect(violations).toEqual([]);
   });
 
-  it("keeps post-baseline migrations after the squashed migration history", () => {
+  it("keeps new migrations after the published migration history", () => {
     const { entries } = readJournal();
-    const baseline = entries.find((entry) => entry.tag === baselineTag);
-
-    expect(baseline).toBeDefined();
 
     const violations = entries
-      .filter((entry) => entry.tag !== baselineTag)
-      .filter((entry) => entry.when <= latestSquashedMigrationWhen)
+      .filter((entry) => !publishedMigrationWhensByTag.has(entry.tag))
+      .filter((entry) => entry.when <= latestPublishedMigrationWhen)
       .map(
         (entry) =>
-          `${entry.tag} has when=${entry.when}, expected > ${latestSquashedMigrationWhen}`,
+          `${entry.tag} has when=${entry.when}, expected > ${latestPublishedMigrationWhen}`,
       );
 
     expect(violations).toEqual([]);

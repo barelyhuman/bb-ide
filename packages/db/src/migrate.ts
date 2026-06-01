@@ -1,8 +1,10 @@
 import { migrate as drizzleMigrate } from "drizzle-orm/better-sqlite3/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
 import { dirname, join, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { DbConnection } from "./connection.js";
+import { publishedMigrationWhensByTag } from "./migration-history.js";
 
 export interface ResolveMigrationsFolderForModuleDirArgs {
   moduleDir: string;
@@ -50,6 +52,21 @@ interface ExpectedIndex {
   unique: boolean;
 }
 
+interface MigrationJournalEntry {
+  tag: string;
+  when: number;
+}
+
+interface MigrationJournal {
+  entries: MigrationJournalEntry[];
+}
+
+interface ExpectedAppliedMigration {
+  createdAt: number;
+  hash: string;
+  tag: string;
+}
+
 export interface FutureAppliedMigration {
   createdAt: number;
   hash: string;
@@ -74,6 +91,20 @@ export interface MigrateOptions {
 interface AppliedMigrationRow {
   createdAt: number;
   hash: string;
+}
+
+interface AppliedMigrationIdentityRow {
+  createdAt: number | null;
+  hash: string;
+}
+
+type AppliedMigrationHistoryViolationReason =
+  | "hash-mismatch"
+  | "missing-created-at";
+
+interface AppliedMigrationHistoryViolation {
+  migration: ExpectedAppliedMigration;
+  reason: AppliedMigrationHistoryViolationReason;
 }
 
 const migrationModuleFilename = fileURLToPath(import.meta.url);
@@ -279,6 +310,38 @@ function parseIndexColumnName(value: unknown): string {
   return value.name;
 }
 
+function parseMigrationJournalEntry(value: unknown): MigrationJournalEntry {
+  if (!isObject(value)) {
+    throw new Error("Unexpected migration journal entry shape");
+  }
+
+  const tag = value.tag;
+  const when = value.when;
+  if (typeof tag !== "string" || typeof when !== "number") {
+    throw new Error("Unexpected migration journal entry fields");
+  }
+
+  return { tag, when };
+}
+
+function parseMigrationJournal(value: unknown): MigrationJournal {
+  if (!isObject(value) || !Array.isArray(value.entries)) {
+    throw new Error("Unexpected migration journal shape");
+  }
+
+  return {
+    entries: value.entries.map(parseMigrationJournalEntry),
+  };
+}
+
+function readMigrationJournal(migrationsFolder: string): MigrationJournal {
+  const journal: unknown = JSON.parse(
+    readFileSync(resolve(migrationsFolder, migrationJournalPath), "utf-8"),
+  );
+
+  return parseMigrationJournal(journal);
+}
+
 function getTableInfo(
   db: DbConnection,
   tableName: string,
@@ -319,6 +382,80 @@ function getIndexColumnNames(db: DbConnection, indexName: string): string[] {
   }
 
   return rows.map(parseIndexColumnName);
+}
+
+function readExpectedAppliedMigrations(
+  migrationsFolder: string,
+): ExpectedAppliedMigration[] {
+  const migrationFiles = readMigrationFiles({ migrationsFolder });
+  const journal = readMigrationJournal(migrationsFolder);
+
+  if (migrationFiles.length !== journal.entries.length) {
+    throw new Error(
+      `Migration journal length mismatch: found ${journal.entries.length} journal entries and ${migrationFiles.length} migration files`,
+    );
+  }
+
+  return migrationFiles.map((migration, index) => {
+    const journalEntry = journal.entries[index];
+    if (migration.folderMillis !== journalEntry.when) {
+      throw new Error(
+        `Migration journal timestamp mismatch for ${journalEntry.tag}: journal when=${journalEntry.when}, migration when=${migration.folderMillis}`,
+      );
+    }
+
+    return {
+      createdAt: migration.folderMillis,
+      hash: migration.hash,
+      tag: journalEntry.tag,
+    };
+  });
+}
+
+function hasPublishedTimestampFallback(
+  expectedMigration: ExpectedAppliedMigration,
+  appliedCreatedAts: Set<number>,
+): boolean {
+  const publishedWhen = publishedMigrationWhensByTag.get(expectedMigration.tag);
+  if (publishedWhen !== expectedMigration.createdAt) {
+    return false;
+  }
+
+  // Published squash-era migrations can already exist with historical hashes.
+  // Drizzle uses created_at as its high-water mark, so those released rows must
+  // be accepted by their pinned tag/timestamp when the current file hash differs.
+  return appliedCreatedAts.has(expectedMigration.createdAt);
+}
+
+function findAppliedMigrationHistoryViolation(
+  expectedMigration: ExpectedAppliedMigration,
+  appliedHashes: Set<string>,
+  appliedCreatedAts: Set<number>,
+): AppliedMigrationHistoryViolation | null {
+  if (appliedHashes.has(expectedMigration.hash)) {
+    return null;
+  }
+
+  if (hasPublishedTimestampFallback(expectedMigration, appliedCreatedAts)) {
+    return null;
+  }
+
+  const reason: AppliedMigrationHistoryViolationReason = appliedCreatedAts.has(
+    expectedMigration.createdAt,
+  )
+    ? "hash-mismatch"
+    : "missing-created-at";
+
+  return {
+    migration: expectedMigration,
+    reason,
+  };
+}
+
+function formatExpectedAppliedMigration(
+  migration: ExpectedAppliedMigration,
+): string {
+  return `${migration.tag} (when=${migration.createdAt}, hash=${migration.hash})`;
 }
 
 function formatExpectedColumn(column: ExpectedColumn): string {
@@ -466,6 +603,80 @@ function warnAboutFutureAppliedMigrations(
   );
 }
 
+function validateAppliedMigrationHistory(
+  db: DbConnection,
+  migrationsFolder: string,
+): void {
+  const expectedMigrations = readExpectedAppliedMigrations(migrationsFolder);
+  const appliedMigrations = db.$client
+    .prepare<[], AppliedMigrationIdentityRow>(
+      `
+        SELECT hash, created_at AS createdAt
+        FROM __drizzle_migrations
+      `,
+    )
+    .all();
+  const appliedHashes = new Set(
+    appliedMigrations.map((migration) => migration.hash),
+  );
+  const appliedCreatedAts = new Set(
+    appliedMigrations
+      .map((migration) => migration.createdAt)
+      .filter((createdAt): createdAt is number => createdAt !== null),
+  );
+  const historyViolations = expectedMigrations
+    .map((migration) =>
+      findAppliedMigrationHistoryViolation(
+        migration,
+        appliedHashes,
+        appliedCreatedAts,
+      ),
+    )
+    .filter(
+      (violation): violation is AppliedMigrationHistoryViolation =>
+        violation !== null,
+    );
+
+  if (historyViolations.length === 0) {
+    return;
+  }
+
+  const missingCreatedAtViolations = historyViolations.filter(
+    (violation) => violation.reason === "missing-created-at",
+  );
+  const hashMismatchViolations = historyViolations.filter(
+    (violation) => violation.reason === "hash-mismatch",
+  );
+
+  throw new Error(
+    [
+      "Database migration history is incomplete after migration.",
+      missingCreatedAtViolations.length > 0
+        ? `Missing applied migration timestamps: ${missingCreatedAtViolations
+            .map((violation) =>
+              formatExpectedAppliedMigration(violation.migration),
+            )
+            .join("; ")}.`
+        : null,
+      hashMismatchViolations.length > 0
+        ? `Mismatched applied migration hashes: ${hashMismatchViolations
+            .map((violation) =>
+              formatExpectedAppliedMigration(violation.migration),
+            )
+            .join("; ")}.`
+        : null,
+      missingCreatedAtViolations.length > 0
+        ? "Missing timestamps usually mean Drizzle skipped a migration because its journal timestamp is not newer than the latest applied migration."
+        : null,
+      hashMismatchViolations.length > 0
+        ? "Hash mismatches mean the migration ledger row exists at that timestamp but does not match the current migration file."
+        : null,
+    ]
+      .filter((line): line is string => line !== null)
+      .join(" "),
+  );
+}
+
 export function migrate(db: DbConnection, options: MigrateOptions = {}): void {
   const migrationsFolder = resolveMigrationsFolder();
   const sqlite = db.$client;
@@ -478,5 +689,6 @@ export function migrate(db: DbConnection, options: MigrateOptions = {}): void {
   }
 
   warnAboutFutureAppliedMigrations(db, options);
+  validateAppliedMigrationHistory(db, migrationsFolder);
   validatePendingInteractionsSchema(db);
 }

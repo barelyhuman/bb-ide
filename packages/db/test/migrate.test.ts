@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getPublishedMigrationWhen } from "../src/migration-history.js";
 import {
   createConnection,
   migrate,
@@ -10,6 +11,7 @@ import {
 } from "../src/index.js";
 
 type InsertMigrationParameters = [string, number];
+type DeleteMigrationParameters = [number];
 type TableNameParameters = [string];
 type QueuedMessageMigrationInsertParameters = [string, string, number, number];
 type ProjectSortKeyMigrationInsertParameters = [string, string, number, number];
@@ -57,10 +59,20 @@ interface ReadIndexNamesArgs {
   tableName: string;
 }
 
+interface ReplaceAppliedMigrationHashArgs {
+  db: DbConnection;
+  createdAt: number;
+  hash: string;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const baselineWhen = 1778891867195;
-const publishedTerminalSessionUserInputWhen = 1779139400000;
-const closedSessionPruneIndexesWhen = 1779139400001;
+const baselineWhen = getPublishedMigrationWhen({ tag: "0000_baseline" });
+const publishedTerminalSessionUserInputWhen = getPublishedMigrationWhen({
+  tag: "0001_terminal_session_user_input",
+});
+const closedSessionPruneIndexesWhen = getPublishedMigrationWhen({
+  tag: "0002_closed_session_prune_indexes",
+});
 const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
 const threadPinningMigrationWhen = 1779990051923;
@@ -116,6 +128,27 @@ function readLatestAppliedMigrationCreatedAt(db: DbConnection): number {
     throw new Error("Expected at least one applied migration timestamp");
   }
   return createdAt;
+}
+
+function replaceAppliedMigrationHash(
+  args: ReplaceAppliedMigrationHashArgs,
+): void {
+  args.db.$client
+    .prepare<DeleteMigrationParameters>(
+      `
+        DELETE FROM __drizzle_migrations
+        WHERE created_at = ?
+      `,
+    )
+    .run(args.createdAt);
+  args.db.$client
+    .prepare<InsertMigrationParameters>(
+      `
+        INSERT INTO __drizzle_migrations (hash, created_at)
+        VALUES (?, ?)
+      `,
+    )
+    .run(args.hash, args.createdAt);
 }
 
 function runQueuedMessageSortKeyMigration(db: DbConnection): void {
@@ -321,6 +354,64 @@ describe("migrate", () => {
       expect(migrationCreatedAts).toContain(threadDynamicContextFileStatesWhen);
       expect(migrationCreatedAts).toContain(commandLookupIndexesWhen);
       expect(migrationCreatedAts).toContain(threadPinningMigrationWhen);
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("throws when an applied migration hash is missing behind the latest timestamp", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      db.$client
+        .prepare<DeleteMigrationParameters>(
+          `
+            DELETE FROM __drizzle_migrations
+            WHERE created_at = ?
+          `,
+        )
+        .run(threadPinningMigrationWhen);
+
+      expect(() => migrate(db)).toThrow(
+        /Missing applied migration timestamps: 0008_thread_pinning/,
+      );
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("accepts a published migration row with a released timestamp and historical hash", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      replaceAppliedMigrationHash({
+        db,
+        createdAt: closedSessionPruneIndexesWhen,
+        hash: "published-0002-historical-hash",
+      });
+
+      expect(() => migrate(db)).not.toThrow();
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("rejects a non-published migration row with a matching timestamp and wrong hash", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+      replaceAppliedMigrationHash({
+        db,
+        createdAt: threadPinningMigrationWhen,
+        hash: "non-published-0008-wrong-hash",
+      });
+
+      expect(() => migrate(db)).toThrow(
+        /Mismatched applied migration hashes: 0008_thread_pinning/,
+      );
     } finally {
       closeConnection(db);
     }
