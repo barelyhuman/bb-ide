@@ -15,7 +15,7 @@ import {
   seedThreadRuntimeState,
   seedTurnStarted,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 interface ActiveSendPromptHistoryCase {
   input: PromptInput[];
@@ -44,8 +44,7 @@ const activeSendPromptHistoryCases: ActiveSendPromptHistoryCase[] = [
 
 describe("sendThreadMessage", () => {
   it("rejects user sends while the thread is awaiting interaction", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-thread-send-awaiting-interaction",
       });
@@ -103,14 +102,11 @@ describe("sendThreadMessage", () => {
       });
 
       expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("records thread prompt history for start sends on idle threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-send-start-history",
       });
@@ -155,16 +151,13 @@ describe("sendThreadMessage", () => {
           .all()
           .map((command) => command.type),
       ).toContain("thread.start");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it.each(activeSendPromptHistoryCases)(
     "records thread prompt history for $label sends on active threads",
     async ({ input, mode, providerThreadId, turnId }) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps, {
           id: `host-thread-send-${mode}-history`,
         });
@@ -219,15 +212,12 @@ describe("sendThreadMessage", () => {
             .all()
             .map((command) => command.type),
         ).toContain("turn.submit");
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("records thread prompt history for idle queued message auto-sends", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-send-queued-message-history",
       });
@@ -275,14 +265,11 @@ describe("sendThreadMessage", () => {
           .all()
           .map((command) => command.type),
       ).toContain("turn.submit");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("allows queued auto-dispatch while the thread is awaiting interaction", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-thread-send-auto-dispatch",
       });
@@ -337,14 +324,11 @@ describe("sendThreadMessage", () => {
       expect(["thread.start", "turn.submit"]).toContain(
         queuedCommands[0]?.type,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects active-thread sends while the host is unavailable before appending a client event", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-thread-send-waiting-for-host",
       });
@@ -390,8 +374,6 @@ describe("sendThreadMessage", () => {
 
       expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
       expect(listEvents(harness.db, { threadId: thread.id })).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

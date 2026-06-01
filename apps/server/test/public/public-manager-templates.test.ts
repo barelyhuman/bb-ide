@@ -6,12 +6,11 @@ import {
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import { seedHostSession } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("GET /api/v1/manager-templates", () => {
   it("returns the default-only template list and active pointer", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "host-templates-default" });
       const responsePromise = harness.app.request(
         "/api/v1/manager-templates",
@@ -31,14 +30,11 @@ describe("GET /api/v1/manager-templates", () => {
         templates: [{ name: "default", isActive: true }],
         activeName: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("marks the active template when multiple templates exist", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "host-templates-multi" });
       const responsePromise = harness.app.request(
         "/api/v1/manager-templates",
@@ -61,14 +57,11 @@ describe("GET /api/v1/manager-templates", () => {
         ],
         activeName: "sawyer-next",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns activeName even when active points at a missing template", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "host-templates-orphan-active" });
       const responsePromise = harness.app.request(
         "/api/v1/manager-templates",
@@ -92,14 +85,11 @@ describe("GET /api/v1/manager-templates", () => {
         templates: [{ name: "default", isActive: true }],
         activeName: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("surfaces daemon errors", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "host-templates-error" });
       const responsePromise = harness.app.request(
         "/api/v1/manager-templates",
@@ -115,8 +105,6 @@ describe("GET /api/v1/manager-templates", () => {
 
       const response = await responsePromise;
       expect(response.status).toBeGreaterThanOrEqual(400);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

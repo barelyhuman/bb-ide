@@ -33,8 +33,8 @@ import {
   seedTurnStarted,
 } from "../helpers/seed.js";
 import {
-  createTestAppHarness,
   type TestAppHarness,
+  withTestHarness,
 } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -77,8 +77,7 @@ describe("public thread send and steer routes", () => {
   });
 
   it("rejects follow-up sends while a created thread is still starting", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-created-thread-send-rejected",
       });
@@ -164,14 +163,11 @@ describe("public thread send and steer routes", () => {
       ).toMatchObject({
         state: "pending",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues turn.submit for idle and active threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -350,14 +346,11 @@ describe("public thread send and steer routes", () => {
           providerThreadId: "provider-turn",
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("formats sender-thread follow-ups with reply guidance", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -438,14 +431,11 @@ describe("public thread send and steer routes", () => {
         kind: "auto",
         expectedTurnId: "turn-receiver-thread",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("wraps sender-thread messages on the start path", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -511,14 +501,11 @@ describe("public thread send and steer routes", () => {
       expect(requestData.initiator).toBe("agent");
       expect(requestData.input).toEqual(expectedInput);
       expect(requestData.target).toEqual({ kind: "new-turn" });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("wraps sender-thread messages on the steer path", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -603,14 +590,11 @@ describe("public thread send and steer routes", () => {
         kind: "steer",
         expectedTurnId: "turn-receiver-steer",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid or deleted sender-thread metadata", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -684,14 +668,11 @@ describe("public thread send and steer routes", () => {
           subject: "sender",
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("formats sender-thread non-text input cases explicitly", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -851,14 +832,11 @@ describe("public thread send and steer routes", () => {
       });
       expect(mixedRequestData.initiator).toBe("agent");
       expect(mixedRequestData.input).toEqual(expectedMixedInput);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues explicit stale steer for daemon fallback to a new turn", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -959,14 +937,11 @@ describe("public thread send and steer routes", () => {
         "turn/completed",
         "client/turn/requested",
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects explicit start on active threads but sends steer on idle threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1039,14 +1014,11 @@ describe("public thread send and steer routes", () => {
         { type: "text", text: "Send as a regular message" },
       ]);
       expect(queuedSubmit.command.target).toEqual({ mode: "start" });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("treats stopping an idle thread as a no-op success", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1068,14 +1040,11 @@ describe("public thread send and steer routes", () => {
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, idleThread.id)?.stopRequestedAt).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("treats stopping an idle thread with a destroyed environment as a no-op success", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1102,14 +1071,11 @@ describe("public thread send and steer routes", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         0,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("steers queued messages for active threads with auto mode", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1180,14 +1146,11 @@ describe("public thread send and steer routes", () => {
         },
       });
       expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("sends queued messages with explicit steer mode", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1258,8 +1221,6 @@ describe("public thread send and steer routes", () => {
         },
       });
       expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -18,12 +18,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal authorization regressions", () => {
   it("rejects cross-host command results before mutating command state or side effects", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, { id: "host-auth-a" });
       const hostB = seedHostSession(harness.deps, { id: "host-auth-b" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -119,14 +118,11 @@ describe("internal authorization regressions", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         1,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects event rows for threads owned by a different host", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, { id: "host-events-a" });
       const hostB = seedHostSession(harness.deps, { id: "host-events-b" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -182,14 +178,11 @@ describe("internal authorization regressions", () => {
           .all(),
       ).toHaveLength(0);
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects reusing an environment from a different project", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reuse-check",
       });
@@ -236,8 +229,6 @@ describe("internal authorization regressions", () => {
           .where(eq(threads.projectId, projectA.id))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -9,12 +9,11 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../../helpers/seed.js";
-import { createTestAppHarness } from "../../helpers/test-app.js";
+import { withTestHarness } from "../../helpers/test-app.js";
 
 describe("project execution defaults persistence", () => {
   it("does not overwrite project defaults when an app thread reuses an existing environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reuse-defaults",
       });
@@ -68,14 +67,11 @@ describe("project execution defaults persistence", () => {
         permissionMode: "full",
         serviceTier: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does overwrite project defaults for a regular app thread (non-reuse env)", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-non-reuse-defaults",
       });
@@ -127,8 +123,6 @@ describe("project execution defaults persistence", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

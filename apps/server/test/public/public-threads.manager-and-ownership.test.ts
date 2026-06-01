@@ -47,6 +47,7 @@ import {
 import {
   createTestAppHarness,
   type TestAppHarness,
+  withTestHarness,
 } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
@@ -163,8 +164,7 @@ describe("public thread manager and ownership routes", () => {
   });
 
   it("summarizes non-deleted assigned child threads for a manager", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -201,14 +201,11 @@ describe("public thread manager and ownership routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         nonDeletedAssignedChildCount: 2,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns zero assigned child threads when a manager only has deleted children", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -233,14 +230,11 @@ describe("public thread manager and ownership routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         nonDeletedAssignedChildCount: 0,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("summarizes assigned child threads for archived manager threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -263,14 +257,11 @@ describe("public thread manager and ownership routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         nonDeletedAssignedChildCount: 1,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects assigned child summaries for non-manager threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -288,14 +279,11 @@ describe("public thread manager and ownership routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues thread.rename, returns thread events, sends queued messages, and creates manager threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -460,9 +448,7 @@ describe("public thread manager and ownership routes", () => {
       expect(managerStartCommand.command.instructions).toContain(
         `Thread storage: \`/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}\``,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("copies user-authored default template files into new manager thread storage", async () => {
@@ -1140,8 +1126,7 @@ describe("public thread manager and ownership routes", () => {
 
   for (const providerId of ["claude-code", "pi"]) {
     it(`does not queue thread.rename for ${providerId} threads`, async () => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps);
         const { project } = seedProjectWithSource(harness.deps, {
           hostId: host.id,
@@ -1186,15 +1171,12 @@ describe("public thread manager and ownership routes", () => {
           )
           .all();
         expect(queuedRenames).toEqual([]);
-      } finally {
-        await harness.cleanup();
-      }
+      });
     });
   }
 
   it("appends an ownership change event and queues a manager assignment message", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1373,14 +1355,11 @@ describe("public thread manager and ownership routes", () => {
       );
       expect(managerTurnData.input[0]).toEqual(queuedCommand.command.input[0]);
       expect(managerTurnData.input[1]).toEqual(queuedCommand.command.input[1]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("defaults manager-created child threads to managed worktrees and keeps explicit reuse opt-in", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-child-defaults",
       });
@@ -1487,14 +1466,11 @@ describe("public thread manager and ownership routes", () => {
         throw new Error("Expected thread.start command");
       }
       expect(reuseThreadStart.command.environmentId).toBe(reuseEnvironment.id);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid parentThreadId values when creating managed child threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-invalid-parent-create",
       });
@@ -1570,14 +1546,11 @@ describe("public thread manager and ownership routes", () => {
       expect(harness.db.select().from(threads).all()).toHaveLength(
         initialThreadCount,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid parentThreadId values when assigning ownership", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-invalid-parent-update",
       });
@@ -1654,14 +1627,11 @@ describe("public thread manager and ownership routes", () => {
           .from(hostDaemonCommands)
           .all(),
       ).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a manager unassignment message when ownership is cleared", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1813,14 +1783,11 @@ describe("public thread manager and ownership routes", () => {
       );
       expect(managerTurnData.input[0]).toEqual(queuedCommand.command.input[0]);
       expect(managerTurnData.input[1]).toEqual(queuedCommand.command.input[1]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps ownership updates successful when manager notification queuing fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const loggerError = vi.fn();
       harness.deps.logger.error = loggerError;
 
@@ -1887,8 +1854,6 @@ describe("public thread manager and ownership routes", () => {
         }),
         "Failed to queue manager ownership system message",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

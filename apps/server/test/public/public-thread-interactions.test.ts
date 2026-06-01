@@ -34,7 +34,7 @@ import {
   seedThreadRuntimeState,
   seedTurnStarted,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 import { appendThreadEvent } from "../../src/services/threads/thread-events.js";
 
 function registerPendingInteraction(
@@ -244,8 +244,7 @@ const invalidUserQuestionResolutionCases: InvalidUserQuestionResolutionCase[] = 
 
 describe("public thread interaction routes", () => {
   it("lists, gets, and resolves thread-owned interactions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interactions",
       });
@@ -404,14 +403,11 @@ describe("public thread interaction routes", () => {
       );
       expect(postResolveListResponse.status).toBe(200);
       await expect(readJson(postResolveListResponse)).resolves.toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects unavailable command decisions and malformed provider-specific resolutions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-invalid-resolution",
       });
@@ -511,14 +507,11 @@ describe("public thread interaction routes", () => {
         code: "invalid_request",
         message: `Pending interaction ${commandApproval.interaction.id} is already interrupted`,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("resolves permission requests and rejects grants outside the requested scope", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-permission-resolution",
       });
@@ -718,14 +711,11 @@ describe("public thread interaction routes", () => {
         message:
           "Granted network permissions must be a subset of the requested permissions",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects provider-specific command approval amendment resolutions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-amendment-resolution",
       });
@@ -788,16 +778,13 @@ describe("public thread interaction routes", () => {
         message:
           "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it.each(invalidUserQuestionResolutionCases)(
     "rejects invalid user-question resolutions: $name",
     async (testCase) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host, session } = seedHostSession(harness.deps, {
           id: `host-public-thread-question-${testCase.id}`,
         });
@@ -858,15 +845,12 @@ describe("public thread interaction routes", () => {
           resolution: null,
           status: "pending",
         });
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("rejects send and queued-message send while a thread awaits user interaction", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-blocked-send",
       });
@@ -951,14 +935,11 @@ describe("public thread interaction routes", () => {
         message:
           "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues turn commands with the resolved permission mode", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-public-thread-permission-mode",
       });
@@ -1009,14 +990,11 @@ describe("public thread interaction routes", () => {
         permissionMode: "full",
         permissionEscalation: null,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("resolves file-change interactions through thread routes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-extra-interactions",
       });
@@ -1070,14 +1048,11 @@ describe("public thread interaction routes", () => {
         status: "resolving",
         resolution: createAllowOnceResolution(),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("projects pending-interaction lifecycle updates into the thread timeline", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interaction-timeline",
       });
@@ -1165,14 +1140,11 @@ describe("public thread interaction routes", () => {
           ]),
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("projects denied command approvals into target-specific timeline rows", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interaction-denied-timeline",
       });
@@ -1260,14 +1232,11 @@ describe("public thread interaction routes", () => {
           ]),
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("projects file-change approvals into item-specific timeline rows without diffs", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interaction-file-timeline",
       });
@@ -1335,14 +1304,11 @@ describe("public thread interaction routes", () => {
           ]),
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("projects permission-grant approvals into typed lifecycle timeline rows", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interaction-permission-timeline",
       });
@@ -1419,8 +1385,6 @@ describe("public thread interaction routes", () => {
           ]),
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -26,7 +26,7 @@ import {
   createPermissionGrantApprovalPayload,
   createUserQuestionPayload,
 } from "../helpers/pending-interactions.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 type TestAppHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
@@ -115,8 +115,7 @@ function registerInteractiveRequest(
 
 describe("internal interactive request lifecycle", () => {
   it("persists an interactive request and delivers a later resolution through a command", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-resolve",
       });
@@ -230,18 +229,15 @@ describe("internal interactive request lifecycle", () => {
         status: "resolved",
         resolution: createAllowOnceResolution(),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects user-question interactive requests when the feature flag is disabled", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       featureFlags: {
         askUserQuestion: false,
       },
-    });
-    try {
+    }, async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-user-question-disabled",
       });
@@ -281,18 +277,15 @@ describe("internal interactive request lifecycle", () => {
       expect(
         harness.deps.pendingInteractions.listThreadInteractions(thread.id),
       ).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("persists user-question interactive requests when the feature flag is enabled", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       featureFlags: {
         askUserQuestion: true,
       },
-    });
-    try {
+    }, async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-user-question-enabled",
       });
@@ -341,14 +334,11 @@ describe("internal interactive request lifecycle", () => {
         },
         status: "pending",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("persists a session-scoped command approval resolution", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-session-resolve",
       });
@@ -458,14 +448,11 @@ describe("internal interactive request lifecycle", () => {
         {},
       );
       expect(retriedCommandResultResponse.status).toBe(200);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns the existing pending interaction when registration is retried", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-registration-retry",
       });
@@ -508,14 +495,11 @@ describe("internal interactive request lifecycle", () => {
       expect(
         harness.deps.pendingInteractions.listThreadInteractions(thread.id),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("notifies a parent manager when a managed child needs attention for a pending interaction", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-managed-child-needs-attention",
       });
@@ -625,14 +609,11 @@ describe("internal interactive request lifecycle", () => {
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns retryable 503 when interactive request turn/started has not landed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-turn-start-timeout",
       });
@@ -665,14 +646,11 @@ describe("internal interactive request lifecycle", () => {
       expect(
         harness.deps.pendingInteractions.listThreadInteractions(thread.id),
       ).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns the existing resolving interaction when registration retry arrives after user resolution", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-registration-retry-resolving",
       });
@@ -725,14 +703,11 @@ describe("internal interactive request lifecycle", () => {
           status: "resolving",
         }),
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("interrupts pending interactive requests for provider exits", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-interrupt",
       });
@@ -816,14 +791,11 @@ describe("internal interactive request lifecycle", () => {
           statusReason: "Provider exited",
         }),
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips deleted threads in interrupt batches and still interrupts live threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-interrupt-deleted-skip",
       });
@@ -913,14 +885,11 @@ describe("internal interactive request lifecycle", () => {
           statusReason: "Provider exited",
         }),
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("interrupts pending interactive requests before deleting threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-interaction-delete-thread",
       });
@@ -1005,14 +974,11 @@ describe("internal interactive request lifecycle", () => {
       expect(
         harness.deps.pendingInteractions.listThreadInteractions(thread.id),
       ).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("persists Claude interactive requests and resolves them through the same lifecycle", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-claude-interaction-resolve",
       });
@@ -1118,8 +1084,6 @@ describe("internal interactive request lifecycle", () => {
         id: interactionId,
         status: "resolved",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

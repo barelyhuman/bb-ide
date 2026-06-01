@@ -29,8 +29,8 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import {
-  createTestAppHarness,
   type TestAppHarness,
+  withTestHarness,
 } from "../helpers/test-app.js";
 
 interface WaitForThreadStatusArgs {
@@ -57,8 +57,7 @@ async function waitForThreadStatus(
 
 describe("public thread lifecycle regressions", () => {
   it("uses unique branch names for same-title managed worktree threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-branch-unique",
       });
@@ -152,14 +151,11 @@ describe("public thread lifecycle regressions", () => {
       expect(firstManagedProvision.command.branchName).not.toBe(
         secondManagedProvision.command.branchName,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a managed worktree follow-up without provisioning the primary checkout", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-managed-send",
       });
@@ -215,14 +211,11 @@ describe("public thread lifecycle regressions", () => {
       const response = await responsePromise;
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({ ok: true });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("leaves reused thread creation provisioning when the host is disconnected", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-reuse-disconnected" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -265,14 +258,11 @@ describe("public thread lifecycle regressions", () => {
         .where(eq(hostDaemonCommands.type, "thread.start"))
         .get();
       expect(queuedCommand).toBeUndefined();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails direct-host provisioning durably when the host is disconnected", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-direct-disconnected" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -322,14 +312,11 @@ describe("public thread lifecycle regressions", () => {
       expect(errorEvent ? JSON.parse(errorEvent.data) : null).toMatchObject({
         code: "thread_provisioning_failed",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("dedupes concurrent direct-host provisioning advances", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-direct-dedupe",
       });
@@ -381,14 +368,11 @@ describe("public thread lifecycle regressions", () => {
       expect(getThread(harness.db, createdThread.id)?.environmentId).toBe(
         createdEnvironments[0]?.id,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("only queues environment.destroy after the last thread in a managed environment is deleted", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-cleanup",
       });
@@ -526,14 +510,11 @@ describe("public thread lifecycle regressions", () => {
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails reused threads when a provisioning environment has no active lifecycle operation", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reuse-provisioning",
       });
@@ -591,8 +572,6 @@ describe("public thread lifecycle regressions", () => {
         detail:
           "Environment is provisioning without an active provision operation",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -12,7 +12,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
 
 async function postEventBatch(args: {
@@ -32,8 +32,7 @@ async function postEventBatch(args: {
 
 describe("internal event and tool-call routes", () => {
   it("appends event batches and returns accepted producer events", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: session.hostId,
@@ -99,14 +98,11 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(2);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects daemon turn-scoped events before turn/started is stored", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: session.hostId,
@@ -150,14 +146,11 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects producer event id reuse with a different payload", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: session.hostId,
@@ -217,14 +210,11 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("transitions active threads back to idle for a started/completed event batch", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: session.hostId,
@@ -272,14 +262,11 @@ describe("internal event and tool-call routes", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
       ).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not reactivate a thread when a started/completed batch is replayed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: session.hostId,
@@ -341,14 +328,11 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(2);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects unsupported tool calls", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-tool-call-unsupported",
       });
@@ -395,14 +379,11 @@ describe("internal event and tool-call routes", () => {
         .where(eq(threads.parentThreadId, managerThread.id))
         .all();
       expect(childThreads).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects message_user tool calls before the turn start is stored", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -447,14 +428,11 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, managerThread.id))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects empty tool call turn ids at the internal contract boundary", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -499,9 +477,7 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, managerThread.id))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("accepts message_user tool calls after the turn start is stored", async () => {

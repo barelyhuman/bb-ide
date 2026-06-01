@@ -24,12 +24,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("automation sweep", () => {
   it("creates a thread through the shared creation path for due automations", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-run",
       });
@@ -96,14 +95,11 @@ describe("automation sweep", () => {
       expect(updatedAutomation?.lastRunAt).toBeGreaterThanOrEqual(now);
       expect(updatedAutomation?.runCount).toBe(1);
       expect(updatedAutomation?.nextRunAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not create or claim automation threads for projects pending deletion", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-project-delete",
       });
@@ -185,14 +181,11 @@ describe("automation sweep", () => {
         },
         status: 404,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not overwrite project execution defaults when automation threads run", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-defaults",
       });
@@ -254,14 +247,11 @@ describe("automation sweep", () => {
         permissionMode: "full",
         serviceTier: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("inherits stored project execution defaults for omitted automation execution options", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-inherited-defaults",
       });
@@ -335,14 +325,11 @@ describe("automation sweep", () => {
         reasoningLevel: "high",
         serviceTier: "fast",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("continues processing later due automations when one has an invalid stored schedule", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-invalid-config",
       });
@@ -419,14 +406,11 @@ describe("automation sweep", () => {
       expect(getAutomation(harness.db, runnableAutomation.id)?.runCount).toBe(
         1,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("advances due automations without creating threads when the host is offline", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-automation-offline",
       });
@@ -480,14 +464,11 @@ describe("automation sweep", () => {
       expect(updatedAutomation?.lastRunAt).toBeGreaterThanOrEqual(now);
       expect(updatedAutomation?.runCount).toBe(1);
       expect(updatedAutomation?.nextRunAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("ignores disabled automations even if nextRunAt is in the past", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-disabled",
       });
@@ -542,14 +523,11 @@ describe("automation sweep", () => {
         nextRunAt: now - 1,
         runCount: 0,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips creating a new thread when the automation already has an open thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-dedupe",
       });
@@ -613,14 +591,11 @@ describe("automation sweep", () => {
       const updatedAutomation = getAutomation(harness.db, automation.id);
       expect(updatedAutomation?.runCount).toBe(1);
       expect(updatedAutomation?.lastRunAt).toBeGreaterThanOrEqual(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates a new thread after the previous automation thread is archived", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-archived-run",
       });
@@ -682,14 +657,11 @@ describe("automation sweep", () => {
       expect(
         createdThreads.filter((thread) => thread.archivedAt === null),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("restores the automation run state without retrying every sweep when thread creation fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-rollback",
       });
@@ -765,8 +737,6 @@ describe("automation sweep", () => {
       expect(getAutomation(harness.db, automation.id)?.nextRunAt).toBe(
         restoredAutomation?.nextRunAt,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

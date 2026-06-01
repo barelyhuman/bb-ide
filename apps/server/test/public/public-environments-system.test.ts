@@ -27,7 +27,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 interface MakeSystemProviderArgs {
   id: string;
@@ -151,8 +151,7 @@ describe("public environment and system routes", () => {
   });
 
   it("allows status without a merge-base branch and rejects branch-relative diff without one", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -209,14 +208,11 @@ describe("public environment and system routes", () => {
         code: "invalid_request",
         message: "A merge base branch is required",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns null status for non-git environments without queuing a git probe", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -252,14 +248,11 @@ describe("public environment and system routes", () => {
         .from(hostDaemonCommands)
         .all().length;
       expect(commandCountAfter).toBe(commandCountBefore);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns environment details and queues status, diff, and branch queries", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -404,14 +397,11 @@ describe("public environment and system routes", () => {
         remoteBranchesTruncated: false,
         selectedBranch: { name: "origin/main", kind: "remote" },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("updates an environment merge base branch", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -437,14 +427,11 @@ describe("public environment and system routes", () => {
         id: environment.id,
         mergeBaseBranch: "release",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues workspace.commit after checking status and diff, then returns the reported commit info", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -540,14 +527,11 @@ describe("public environment and system routes", () => {
         commitSha: "abc123",
         commitSubject: "bb: automated commit",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues workspace.squash_merge after checking status and diff, then returns the merge result", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -650,16 +634,13 @@ describe("public environment and system routes", () => {
         commitSha: "merge123",
         commitSubject: "bb: squash merge",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses fallback squash commit message when Codex inference fails", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -761,14 +742,11 @@ describe("public environment and system routes", () => {
         commitSha: "merge123",
         commitSubject: "bb: squash merge",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects squash merge with 409 when workspace is in detached HEAD state", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -820,14 +798,11 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects squash merge into a remote-only target before commit or diff", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -901,14 +876,11 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects commit with 409 when workspace has no uncommitted changes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -975,14 +947,11 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "no_changes",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("auto-commits dirty workspace before squash merge", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1092,21 +1061,18 @@ describe("public environment and system routes", () => {
         commitSha: "squash-sha",
         commitSubject: "bb: squash merge",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns runtime config from GET /system/config", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       featureFlags: {
         askUserQuestion: true,
       },
       hostDaemonPort: 4010,
       openAiApiKey: "",
       transcriptionModel: "codex/gpt-4o-mini-transcribe",
-    });
-    try {
+    }, async (harness) => {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
@@ -1117,17 +1083,14 @@ describe("public environment and system routes", () => {
         hostDaemonPort: 4010,
         voiceTranscriptionEnabled: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reports Codex voice transcription enabled when a persistent host is connected", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "",
       transcriptionModel: "codex/gpt-4o-mini-transcribe",
-    });
-    try {
+    }, async (harness) => {
       seedHostSession(harness.deps, {
         id: "host-voice-availability",
       });
@@ -1136,16 +1099,13 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         voiceTranscriptionEnabled: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reloads bb-app managed config from POST /system/config/reload", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "ambient-openai-key",
-    });
-    try {
+    }, async (harness) => {
       await writeFile(
         join(harness.config.dataDir, "env.json"),
         `${JSON.stringify({ env: { OPENAI_API_KEY: "stored-openai-key" } })}\n`,
@@ -1162,16 +1122,13 @@ describe("public environment and system routes", () => {
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({ ok: true });
       expect(harness.config.openAiApiKey).toBe("stored-openai-key");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid bb-app managed config reloads without changing runtime config", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "openai/gpt-4o-mini",
-    });
-    try {
+    }, async (harness) => {
       await writeFile(
         join(harness.config.dataDir, "config.json"),
         `${JSON.stringify({ config: { BB_INFERENCE: "gpt-4o-mini" } })}\n`,
@@ -1190,29 +1147,23 @@ describe("public environment and system routes", () => {
         code: "invalid_config",
       });
       expect(harness.config.inferenceModel).toBe("openai/gpt-4o-mini");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns ok from GET /health", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request("/health");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({ ok: true });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues provider list and provider list_models commands for system routes", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       featureFlags: {
         askUserQuestion: false,
       },
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-system-routes",
       });
@@ -1415,16 +1366,13 @@ describe("public environment and system routes", () => {
         selectedOnlyModels: [],
         modelLoadError: null,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it.each(PROVIDER_MODEL_LOOKUP_FAILURE_CASES)(
     "returns provider choices with a provider-specific error when model lookup fails: $name",
     async ({ errorCode, providerId, errorMessage, expectedCode }) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps, {
           id: `host-system-${providerId}-models-fail`,
         });
@@ -1496,15 +1444,12 @@ describe("public environment and system routes", () => {
             code: expectedCode,
           },
         });
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("does not degrade non-502/504 model lookup failures into modelLoadError", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-system-models-type-mismatch",
       });
@@ -1556,9 +1501,7 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "command_result_type_mismatch",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it.each([
@@ -1573,12 +1516,11 @@ describe("public environment and system routes", () => {
       name: "preserves user-question provider capability when the flag is enabled",
     },
   ])("$name", async ({ askUserQuestion, expectedCapability }) => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       featureFlags: {
         askUserQuestion,
       },
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: `host-system-provider-question-${askUserQuestion ? "enabled" : "disabled"}`,
       });
@@ -1623,14 +1565,11 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses a persistent host for default system provider lookups", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-system-default-persistent",
       });
@@ -1669,14 +1608,11 @@ describe("public environment and system routes", () => {
       );
 
       expect((await providersPromise).status).toBe(200);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 502 when no persistent host is connected for default system provider lookup", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request("/api/v1/system/providers");
 
       expect(response.status).toBe(502);
@@ -1684,14 +1620,11 @@ describe("public environment and system routes", () => {
         code: "host_disconnected",
         message: "Persistent host is not connected",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects destroyed hosts for system host lookups", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-system-destroyed",
       });
@@ -1712,14 +1645,11 @@ describe("public environment and system routes", () => {
           suspendedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects destroyed environment hosts for system execution-option lookups", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-system-env-destroyed",
       });
@@ -1747,14 +1677,11 @@ describe("public environment and system routes", () => {
           suspendedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid system query params with a 400", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request(
         "/api/v1/system/execution-options?providerId=",
       );
@@ -1762,9 +1689,7 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the configured OpenAI voice transcription model when selected", async () => {
@@ -1778,11 +1703,10 @@ describe("public environment and system routes", () => {
         },
       }),
     );
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "provider-key",
       transcriptionModel: "openai/gpt-4o-transcribe",
-    });
-    try {
+    }, async (harness) => {
       const formData = new FormData();
       formData.set(
         "file",
@@ -1828,17 +1752,14 @@ describe("public environment and system routes", () => {
         throw new Error("Expected transcription request file");
       }
       expect(file.name).toBe("audio.wav");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues Codex voice transcription through the persistent host", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "",
       transcriptionModel: "codex/gpt-4o-mini-transcribe",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-voice-transcription",
       });
@@ -1889,17 +1810,14 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         text: "transcribed through codex",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("maps Codex voice transcription timeouts to a retryable API error", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "",
       transcriptionModel: "codex/gpt-4o-mini-transcribe",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-voice-transcription-timeout",
       });
@@ -1942,17 +1860,14 @@ describe("public environment and system routes", () => {
         message: "Voice transcription timed out",
         retryable: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("surfaces Codex voice transcription auth failures", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "",
       transcriptionModel: "codex/gpt-4o-mini-transcribe",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-voice-transcription-auth-failure",
       });
@@ -1993,17 +1908,14 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "codex_auth_missing",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects OpenAI voice transcription requests when the API key is not configured", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       openAiApiKey: "",
       transcriptionModel: "openai/gpt-4o-transcribe",
-    });
-    try {
+    }, async (harness) => {
       const formData = new FormData();
       formData.set(
         "file",
@@ -2027,8 +1939,6 @@ describe("public environment and system routes", () => {
         message:
           "Voice transcription requires OPENAI_API_KEY for openai/* transcription",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

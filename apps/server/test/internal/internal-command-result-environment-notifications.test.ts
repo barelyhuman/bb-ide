@@ -8,7 +8,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 type WorkspaceMutationCommandType =
   | "workspace.commit"
@@ -69,8 +69,7 @@ describe("internal command result environment notifications", () => {
   it.each(WORKSPACE_MUTATION_CASES)(
     "emits work-status-changed for successful $name results",
     async ({ commandType, result, toPayload }) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host, session } = seedHostSession(harness.deps, {
           id: `host-${commandType}`,
         });
@@ -115,15 +114,12 @@ describe("internal command result environment notifications", () => {
         expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
           "work-status-changed",
         ]);
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("emits status-changed and work-status-changed for successful environment.provision results", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-provision-notify",
       });
@@ -184,14 +180,11 @@ describe("internal command result environment notifications", () => {
         environment.id,
         ["work-status-changed"],
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("records unmanaged new-branch bases from provision commands", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-provision-base",
       });
@@ -254,14 +247,11 @@ describe("internal command result environment notifications", () => {
         branchName: "bb/thread",
         mergeBaseBranch: "release/1.2",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("preserves branch metadata for personal provision results", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-personal-provision-metadata",
       });
@@ -322,14 +312,11 @@ describe("internal command result environment notifications", () => {
         branchName: null,
         mergeBaseBranch: "stored-merge-base",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("preserves branch metadata for managed-worktree reprovision results", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-managed-reprovision-metadata",
       });
@@ -396,8 +383,6 @@ describe("internal command result environment notifications", () => {
         branchName: "bb/command",
         mergeBaseBranch: "stored-merge-base",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

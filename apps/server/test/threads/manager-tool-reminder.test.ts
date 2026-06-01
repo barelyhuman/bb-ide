@@ -28,8 +28,8 @@ import {
   seedTurnStarted,
 } from "../helpers/seed.js";
 import {
-  createTestAppHarness,
   type TestAppHarness,
+  withTestHarness,
 } from "../helpers/test-app.js";
 
 interface ProviderReminderCase {
@@ -145,8 +145,7 @@ async function respondToManagerPreferencesRead(
 async function prepareTurnSubmitPayloadForThread(
   args: PrepareTurnSubmitPayloadForThreadArgs,
 ): Promise<PrepareTurnSubmitPayloadForThreadResult> {
-  const harness = await createTestAppHarness();
-  try {
+  return await withTestHarness(async (harness) => {
     const hostId = `host-manager-reminder-${args.threadType}-${args.providerId}`;
     const { host } = seedHostSession(harness.deps, { id: hostId });
     const { project } = seedProjectWithSource(harness.deps, {
@@ -176,9 +175,7 @@ async function prepareTurnSubmitPayloadForThread(
     return {
       payload,
     };
-  } finally {
-    await harness.cleanup();
-  }
+  });
 }
 
 function expectedReminderInput(providerId: AgentProviderId): PromptInput {
@@ -271,8 +268,7 @@ describe("manager tool reminders", () => {
   });
 
   it("appends the reminder on active manager steers without persisting it to the client turn event", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-reminder-steer",
       });
@@ -346,8 +342,6 @@ describe("manager tool reminders", () => {
         throw new Error("Expected client turn requested event");
       }
       expect(turnRequestEvent.data.input).toEqual(input);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -19,7 +19,7 @@ import {
   seedStoredEvent,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 interface SeedNoiseRowsArgs {
   endingSequence: number;
@@ -160,8 +160,7 @@ function seedResolvedAssistantMessage(
 
 describe("thread event pruning", () => {
   it("prunes idle-thread noise rows and resolved item deltas", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -210,14 +209,11 @@ describe("thread event pruning", () => {
           type: "item/agentMessage/delta",
         }),
       ).toEqual([306]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("preserves context window usage when idle pruning removes old context-usage rows", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -273,14 +269,11 @@ describe("thread event pruning", () => {
         modelContextWindow: 200_000,
         estimated: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("prunes thread history when turn completion returns the thread to idle", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -338,14 +331,11 @@ describe("thread event pruning", () => {
           type: "item/agentMessage/delta",
         }),
       ).toEqual([306]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("prunes thread history on archive with the archived retention window", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -392,14 +382,11 @@ describe("thread event pruning", () => {
           type: "item/agentMessage/delta",
         }),
       ).toEqual([131]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("logs and returns null when best-effort pruning cannot run", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -431,14 +418,11 @@ describe("thread event pruning", () => {
         }),
         "Failed to prune thread event history",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("prunes active-thread noise rows after ingest without dropping unresolved deltas", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -551,8 +535,6 @@ describe("thread event pruning", () => {
           itemId: "msg-active",
         }),
       ).toEqual([1_004, 1_005]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

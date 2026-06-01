@@ -21,7 +21,7 @@ import {
 import { buildBlankAppIndexHtml } from "../../src/services/threads/blank-app-scaffold.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
 import { seedHost } from "../helpers/seed.js";
-import { createTestAppHarness, testLogger } from "../helpers/test-app.js";
+import { createTestAppHarness, testLogger, withTestHarness } from "../helpers/test-app.js";
 
 const MINE_MANAGER_TEMPLATE_NAME: ManagerTemplateName = "mine";
 
@@ -162,14 +162,11 @@ async function seedStorage(args: SeedStorageArgs): Promise<string> {
 
 describe("manager storage templates", () => {
   it("does not create manager templates during server bootstrap", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       await expect(
         stat(managerTemplateRootPath({ dataDir: harness.config.dataDir })),
       ).rejects.toThrow();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("seeds the bundled status app when default resolves and no user template directory exists", async () => {

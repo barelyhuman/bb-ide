@@ -5,12 +5,11 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("public environment action regressions", () => {
   it("rejects malformed squash-merge payload with a 400", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const squashMergeResponse = await harness.app.request(
         "/api/v1/environments/env_missing/actions",
         {
@@ -25,14 +24,11 @@ describe("public environment action regressions", () => {
       await expect(readJson(squashMergeResponse)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects legacy environment action payloads that still send threadId", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-target",
       });
@@ -62,9 +58,7 @@ describe("public environment action regressions", () => {
       await expect(readJson(mismatchedResponse)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
 });

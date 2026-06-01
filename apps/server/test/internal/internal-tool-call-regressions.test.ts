@@ -9,12 +9,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal tool-call regressions", () => {
   it("rejects tool calls for threads owned by a different host", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, { id: "host-tool-a" });
       const hostB = seedHostSession(harness.deps, { id: "host-tool-b" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -60,8 +59,6 @@ describe("internal tool-call regressions", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -37,6 +37,7 @@ import {
   createTestDaemonHostKey,
   createTestAppHarness,
   startTestServer,
+  withTestHarness,
 } from "../helpers/test-app.js";
 
 async function waitForOpen(socket: WebSocket): Promise<void> {
@@ -121,8 +122,7 @@ function createDaemonWebSocket(args: {
 
 describe("internal session correctness", () => {
   it("throws ApiError for daemon websocket upgrades missing a sessionId", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       await expect(
         validateDaemonWebSocket(harness.deps, {
           authorizationHeader: buildHostDaemonWebSocketAuthorizationHeader(
@@ -141,14 +141,11 @@ describe("internal session correctness", () => {
           sessionId: null,
         }),
       ).rejects.toThrowError("Unauthorized");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects daemon websocket upgrades missing the daemon protocol", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       await expect(
         validateDaemonWebSocket(harness.deps, {
           authorizationHeader: buildHostDaemonWebSocketAuthorizationHeader(
@@ -158,14 +155,11 @@ describe("internal session correctness", () => {
           sessionId: "session-1",
         }),
       ).rejects.toThrowError("Unsupported host daemon websocket protocol");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns an empty command batch instead of timing out when the queue is empty", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps, {
         id: "host-empty-queue",
       });
@@ -181,9 +175,7 @@ describe("internal session correctness", () => {
       await expect(response.json()).resolves.toEqual({
         commands: [],
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("extends the session lease when the daemon websocket sends a heartbeat", async () => {
@@ -240,8 +232,7 @@ describe("internal session correctness", () => {
   });
 
   it("returns server-retired loaded environments when opening a session", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, {
         id: "host-loaded-env-a",
       });
@@ -304,9 +295,7 @@ describe("internal session correctness", () => {
           "env_missing_loaded",
         ],
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects a session open whose protocol version does not match the server", async () => {
@@ -513,8 +502,7 @@ describe("internal session correctness", () => {
   });
 
   it("logs inactive daemon heartbeats without an ApiError stack", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-inactive-heartbeat-log",
       });
@@ -560,14 +548,11 @@ describe("internal session correctness", () => {
         "Daemon heartbeat for inactive session, closing socket",
       );
       expect(logger.warn).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("warns and closes distinctly when daemon heartbeats use another host session", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps, {
         id: "host-heartbeat-owner",
       });
@@ -607,14 +592,11 @@ describe("internal session correctness", () => {
         "Daemon heartbeat for unauthorized session, closing socket",
       );
       expect(logger.info).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("closes the daemon session immediately when the websocket disconnects", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps, {
         id: "host-daemon-disconnect",
       });
@@ -628,9 +610,7 @@ describe("internal session correctness", () => {
         .get();
       expect(closedSession?.status).toBe("closed");
       expect(closedSession?.closeReason).toBe("daemon-disconnect");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps active threads active and reports host wait state after the grace period expires", async () => {
@@ -777,8 +757,7 @@ describe("internal session correctness", () => {
   });
 
   it("closes expired lease sockets and interrupts their pending interactions during sweeps", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-daemon-expired-lease-interaction",
       });
@@ -872,9 +851,7 @@ describe("internal session correctness", () => {
         displayStatus: "waiting-for-host",
         hostReconnectGraceExpiresAt: null,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("interrupts old-session pending interactions but keeps runtime connected when a replacement session opens during grace", async () => {
@@ -990,8 +967,7 @@ describe("internal session correctness", () => {
   });
 
   it("interrupts pending interactions when a replacement daemon session has a new instance id", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-daemon-session-restart-interaction",
       });
@@ -1072,8 +1048,6 @@ describe("internal session correctness", () => {
         .where(eq(hostDaemonSessions.id, session.id))
         .get();
       expect(originalSession?.closeReason).toBe("replaced");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

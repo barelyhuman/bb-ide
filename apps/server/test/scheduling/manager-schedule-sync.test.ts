@@ -15,7 +15,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
@@ -83,8 +83,7 @@ async function syncWithReadFileError(
 
 describe("manager schedule sync", () => {
   it("reconciles valid ASYNC.md schedules by updating, removing, and creating nudges", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-valid",
       });
@@ -153,14 +152,11 @@ describe("manager schedule sync", () => {
           enabled: true,
         }),
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("deletes existing nudges when ASYNC.md has no frontmatter", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-delete",
       });
@@ -198,14 +194,11 @@ describe("manager schedule sync", () => {
       expect(
         listManagerThreadNudgesByThread(harness.db, thread.id),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("leaves existing nudges unchanged when ASYNC.md frontmatter is malformed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-malformed",
       });
@@ -245,14 +238,11 @@ describe("manager schedule sync", () => {
           (nudge) => nudge.name,
         ),
       ).toEqual(["existing-reminder"]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("leaves existing nudges unchanged when ASYNC.md uses a language-suffixed delimiter", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-js-delimiter",
       });
@@ -292,14 +282,11 @@ describe("manager schedule sync", () => {
           (nudge) => nudge.name,
         ),
       ).toEqual(["existing-reminder"]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("leaves existing nudges unchanged when ASYNC.md is too large to parse", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-oversized",
       });
@@ -340,14 +327,11 @@ describe("manager schedule sync", () => {
           (nudge) => nudge.name,
         ),
       ).toEqual(["keep-existing"]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the actual content byte length when the daemon under-reports file size", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-byte-length",
       });
@@ -396,14 +380,11 @@ describe("manager schedule sync", () => {
           (nudge) => nudge.name,
         ),
       ).toEqual(["keep-existing"]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("clears existing nudges when ASYNC.md does not exist", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-missing",
       });
@@ -442,14 +423,11 @@ describe("manager schedule sync", () => {
       expect(
         listManagerThreadNudgesByThread(harness.db, thread.id),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips invalid cron entries while still syncing valid ASYNC.md schedules", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-invalid-cron",
       });
@@ -489,14 +467,11 @@ describe("manager schedule sync", () => {
           (nudge) => nudge.name,
         ),
       ).toEqual(["valid-recap"]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps only the first twenty ASYNC.md schedules", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-limit",
       });
@@ -533,14 +508,11 @@ describe("manager schedule sync", () => {
       const nudges = listManagerThreadNudgesByThread(harness.db, thread.id);
       expect(nudges).toHaveLength(20);
       expect(nudges.map((nudge) => nudge.name)).not.toContain("schedule-21");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips ASYNC.md schedules that run more often than every five minutes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-min-interval",
       });
@@ -580,8 +552,6 @@ describe("manager schedule sync", () => {
           (nudge) => nudge.name,
         ),
       ).toEqual(["valid-recap"]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

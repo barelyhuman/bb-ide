@@ -11,7 +11,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 function rawFileUrl(threadId: string, filePath: string): string {
   return `/api/v1/threads/${threadId}/files/raw?path=${encodeURIComponent(filePath)}`;
@@ -19,8 +19,7 @@ function rawFileUrl(threadId: string, filePath: string): string {
 
 describe("public file routes", () => {
   it("serves arbitrary absolute HTML files as sandboxed raw preview content", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "default-host" });
       const { host: threadHost } = seedHostSession(harness.deps, {
         id: "thread-host",
@@ -76,14 +75,11 @@ describe("public file routes", () => {
         "nosniff",
       );
       expect(await fileResponse.text()).toBe(html);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects non-HTML arbitrary raw file preview paths before queueing a read", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -116,14 +112,11 @@ describe("public file routes", () => {
           25,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("caps arbitrary raw HTML preview responses at 5 MB", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -159,8 +152,6 @@ describe("public file routes", () => {
         message: "HTML preview exceeds the 5 MB limit",
         retryable: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

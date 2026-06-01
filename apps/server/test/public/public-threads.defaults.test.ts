@@ -18,7 +18,7 @@ import {
   seedThreadRuntimeState,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 
 describe("public thread default routes", () => {
@@ -28,8 +28,7 @@ describe("public thread default routes", () => {
   });
 
   it("remembers resolved execution options after standard thread creation", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -99,14 +98,11 @@ describe("public thread default routes", () => {
         reasoningLevel: "high",
         permissionMode: "workspace-write",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not remember project defaults after CLI-origin thread creation", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -148,14 +144,11 @@ describe("public thread default routes", () => {
           threadType: "standard",
         }),
       ).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("inherits the remembered provider and execution defaults when thread creation omits them", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -210,14 +203,11 @@ describe("public thread default routes", () => {
           permissionEscalation: "ask",
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails thread creation without a model when the explicit provider does not match the remembered provider", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -263,14 +253,11 @@ describe("public thread default routes", () => {
         code: "invalid_request",
         message: expect.stringContaining("provider claude-code"),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails thread creation without a model when the project has no stored defaults for the provider", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -307,14 +294,11 @@ describe("public thread default routes", () => {
       expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
         0,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects thread creation without an origin at the public API boundary", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -348,14 +332,11 @@ describe("public thread default routes", () => {
         code: "invalid_request",
         message: expect.stringContaining('expected one of "app"|"cli"'),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not overwrite project execution defaults after a standard thread send", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -432,8 +413,6 @@ describe("public thread default routes", () => {
         reasoningLevel: "medium",
         permissionMode: "full",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

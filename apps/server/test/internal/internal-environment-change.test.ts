@@ -7,12 +7,11 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal environment change route", () => {
   it("notifies clients for valid session-owned environment change hints without mutating the environment row", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-env-change",
       });
@@ -46,14 +45,11 @@ describe("internal environment change route", () => {
         "work-status-changed",
       ]);
       expect(getEnvironment(harness.db, environment.id)).toEqual(before);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("accepts thread storage change hints for session-owned environments", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-env-thread-storage-change",
       });
@@ -85,14 +81,11 @@ describe("internal environment change route", () => {
       expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
         "thread-storage-changed",
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("accepts shared git ref change hints for session-owned environments", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-env-git-refs-change",
       });
@@ -124,14 +117,11 @@ describe("internal environment change route", () => {
       expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
         "git-refs-changed",
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects environment change hints for environments owned by a different host", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, { id: "host-env-change-a" });
       const hostB = seedHostSession(harness.deps, { id: "host-env-change-b" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -163,14 +153,11 @@ describe("internal environment change route", () => {
         code: "invalid_request",
       });
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 404 for unknown environments", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps, {
         id: "host-env-change-missing",
       });
@@ -194,14 +181,11 @@ describe("internal environment change route", () => {
         code: "environment_not_found",
       });
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects change hints for destroyed environments without notifying clients", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-env-change-destroyed",
       });
@@ -235,14 +219,11 @@ describe("internal environment change route", () => {
         retryable: false,
       });
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("checks host ownership before returning destroyed-environment hints", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, {
         id: "host-env-change-destroyed-a",
       });
@@ -278,14 +259,11 @@ describe("internal environment change route", () => {
         code: "invalid_request",
       });
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 400 for invalid environment change kinds", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { session } = seedHostSession(harness.deps, {
         id: "host-env-change-invalid",
       });
@@ -309,8 +287,6 @@ describe("internal environment change route", () => {
         code: "invalid_request",
       });
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

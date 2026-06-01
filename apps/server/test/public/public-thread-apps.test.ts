@@ -28,7 +28,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 interface ManagerThreadStorageFixture {
   hostId: string;
@@ -184,8 +184,7 @@ async function reportManifestRead(
 
 describe("public thread app routes", () => {
   it("lists app summaries from daemon-owned manifests", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps`,
@@ -229,9 +228,7 @@ describe("public thread app routes", () => {
       expect(apps.map((app) => app.id)).toEqual(["demo", "status"]);
       expect(apps[0]?.icon).toEqual({ kind: "builtin", name: "GridView" });
       expect(apps[1]?.icon).toEqual({ kind: "builtin", name: "ListTodo" });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips invalid app manifests when listing app summaries", async () => {
@@ -295,8 +292,7 @@ describe("public thread app routes", () => {
   });
 
   it("returns a provisioned-app error when app detail is missing manifest.json", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps/status`,
@@ -319,14 +315,11 @@ describe("public thread app routes", () => {
         code: "app_not_provisioned",
         message: expect.stringContaining("missing manifest.json"),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns an invalid-manifest error when app detail manifest validation fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps/broken`,
@@ -351,14 +344,11 @@ describe("public thread app routes", () => {
         message: expect.stringContaining("failed validation"),
       });
       expect(JSON.stringify(body)).not.toContain("NotAnIcon");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns an invalid-manifest error before serving app assets", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps/broken/index.html`,
@@ -381,14 +371,11 @@ describe("public thread app routes", () => {
         code: "invalid_manifest",
         message: expect.stringContaining("failed validation"),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves HTML app entries with capability-scoped window.bb injection", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const html =
         "<!doctype html><html><head></head><body>Status</body></html>";
@@ -441,14 +428,11 @@ describe("public thread app routes", () => {
       expect(body).toContain("window.bb");
       expect(body).toContain('"capabilities":["data","message"]');
       expect(body).toContain("<body>Status</body>");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves flat app asset URLs from the internal assets directory", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps/status/index-Cd7sCqsN.js`,
@@ -485,14 +469,11 @@ describe("public thread app routes", () => {
       );
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       await expect(response.text()).resolves.toBe("console.log('status');");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves nested flat app asset URLs without collapsing path segments", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps/status/chunks/index-Cd7sCqsN.js`,
@@ -529,9 +510,7 @@ describe("public thread app routes", () => {
       await expect(response.text()).resolves.toBe(
         "export const status = true;",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns JSON 404 for missing flat app assets instead of the outer SPA shell", async () => {
@@ -584,8 +563,7 @@ describe("public thread app routes", () => {
   });
 
   it("proxies app data list, read, write, and delete through generic daemon file commands", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const stateJson = `${JSON.stringify({ workers: [] }, null, 2)}\n`;
 
@@ -780,14 +758,11 @@ describe("public thread app routes", () => {
       const deleteResponse = await deleteRequest;
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists app data subtree prefixes when the prefix is a directory", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const oneJson = `${JSON.stringify({ title: "One" }, null, 2)}\n`;
       const twoJson = `${JSON.stringify({ title: "Two" }, null, 2)}\n`;
@@ -910,14 +885,11 @@ describe("public thread app routes", () => {
           ],
         },
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves top-level logo icons and 404s built-in icons", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const logoManifest: AppManifest = {
         manifestVersion: 1,
@@ -994,14 +966,11 @@ describe("public thread app routes", () => {
       });
       const builtInResponse = await builtInRequest;
       expect(builtInResponse.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not serve logo symlinks omitted by the daemon path listing", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const logoManifest: AppManifest = {
         manifestVersion: 1,
@@ -1034,14 +1003,11 @@ describe("public thread app routes", () => {
 
       const response = await request;
       expect(response.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("scaffolds status-template apps through the server lifecycle route", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps`,
@@ -1145,14 +1111,11 @@ describe("public thread app routes", () => {
         icon: { kind: "builtin", name: "ListTodo" },
         capabilities: ["data", "message"],
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("scaffolds blank-template apps with the bb-styled index.html", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const request = harness.app.request(
         `/api/v1/threads/${fixture.threadId}/apps`,
@@ -1278,14 +1241,11 @@ describe("public thread app routes", () => {
         icon: { kind: "builtin", name: "GridView" },
         capabilities: ["data", "message"],
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("HTML-escapes the app name in the blank scaffold to block XSS", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedManagerThreadStorage(harness);
       const maliciousName = `<script>alert(1)</script> & "q" 'a'`;
       const request = harness.app.request(
@@ -1410,8 +1370,6 @@ describe("public thread app routes", () => {
 
       const response = await request;
       expect(response.status).toBe(201);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

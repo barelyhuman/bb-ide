@@ -54,7 +54,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 interface ReuseThreadProvisionOperationArgs {
   clientRequestId: string;
@@ -98,8 +98,7 @@ function buildReuseThreadProvisionOperation(
 
 describe("internal command result idempotency", () => {
   it("does not replay side effects when the same command result is reported after terminal blobs are pruned", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-result-idempotent",
       });
@@ -217,14 +216,11 @@ describe("internal command result idempotency", () => {
         .all();
       expect(startCommands).toHaveLength(1);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rolls back owner side effects when command result settlement fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-command-result-rollback",
       });
@@ -340,14 +336,11 @@ describe("internal command result idempotency", () => {
       await expect(
         harness.hub.waitForCommandResult(command.id, 25),
       ).rejects.toThrow("Timed out waiting for command result");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("recovers environment provision post-commit work from the thread lifecycle sweep before scheduled dispatch runs", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-restart-window-provision-post-commit",
       });
@@ -471,14 +464,11 @@ describe("internal command result idempotency", () => {
         .where(eq(hostDaemonCommands.type, "thread.start"))
         .all();
       expect(startCommands).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("recovers thread stop cleanup post-commit work from the managed cleanup sweep before scheduled dispatch runs", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-restart-window-stop-cleanup-post-commit",
       });
@@ -603,14 +593,11 @@ describe("internal command result idempotency", () => {
         .where(eq(hostDaemonCommands.type, "environment.destroy"))
         .all();
       expect(destroyCommands).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("deduplicates concurrent thread.start requests during provisioning handoff", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-concurrent-thread-start-handoff",
       });
@@ -744,14 +731,11 @@ describe("internal command result idempotency", () => {
       });
       expect(completedProvisioningEvent).toBeDefined();
       expect(queuedStart.command.requestId).toBe(provisionRequest.requestId);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rolls back provisioning completion when start operation creation fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-atomic-thread-start-handoff",
       });
@@ -873,14 +857,11 @@ describe("internal command result idempotency", () => {
           return data.status === "completed";
         });
       expect(completedProvisioningEvents).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps the stored error cached when a settled command retry reports success", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-settled-stop-conflict",
       });
@@ -938,14 +919,11 @@ describe("internal command result idempotency", () => {
         ok: false,
         type: "thread.stop",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps the canonical expired error cached when a late daemon result arrives after sweep expiry", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-expired-late-result",
       });
@@ -1020,14 +998,11 @@ describe("internal command result idempotency", () => {
           errorMessage: "Command expired after retry",
         }),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps the stored success cached when a settled command retry reports error", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-settled-stop-conflict-inverse",
       });
@@ -1084,14 +1059,11 @@ describe("internal command result idempotency", () => {
         result: {},
         type: "thread.stop",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("ignores stale thread.start successes after the active start operation is repointed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-stale-thread-start-result",
       });
@@ -1192,14 +1164,11 @@ describe("internal command result idempotency", () => {
         commandId: requeuedStart.row.id,
         state: "queued",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("ignores stale environment.provision successes after the active operation is repointed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-stale-provision-result",
       });
@@ -1294,14 +1263,11 @@ describe("internal command result idempotency", () => {
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(
         "provisioning",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("durably fails direct environment.provision command errors", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-direct-provision-failure",
       });
@@ -1357,8 +1323,6 @@ describe("internal command result idempotency", () => {
         failureReason: "setup failed",
         state: "failed",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

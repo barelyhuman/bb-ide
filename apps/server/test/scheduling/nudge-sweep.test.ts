@@ -27,7 +27,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import { MANAGER_PREFERENCES_FILE_KEY } from "../../src/services/threads/manager-dynamic-file-delivery.js";
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
@@ -82,8 +82,7 @@ function seedRunnableManagerThread(args: {
 
 describe("nudge sweep", () => {
   it("queues turn.submit for due manager nudges", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-run",
       });
@@ -154,14 +153,11 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("prepends changed preferences to scheduled nudge turn events and commands", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-preferences-update",
       });
@@ -262,14 +258,11 @@ describe("nudge sweep", () => {
       );
       expect(turnRequest.input[0]).toEqual(queuedTurnSubmit.command.input[0]);
       expect(turnRequest.input[1]).toEqual(queuedTurnSubmit.command.input[1]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips due nudges that already have a pending turn.submit command", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-nudge-pending",
       });
@@ -346,14 +339,11 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips due nudges that already have a pending native archive command", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-nudge-pending-native-archive",
       });
@@ -425,14 +415,11 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("ignores disabled nudges even if nextFireAt is in the past", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-disabled",
       });
@@ -470,14 +457,11 @@ describe("nudge sweep", () => {
         lastFiredAt: null,
         nextFireAt: now - 1,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("deletes due nudges for archived threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-archived",
       });
@@ -516,14 +500,11 @@ describe("nudge sweep", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         0,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues due nudges as auto submits when the manager is already active", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-active",
       });
@@ -631,14 +612,11 @@ describe("nudge sweep", () => {
       expect(
         getManagerThreadNudge(harness.db, nudge.id)?.nextFireAt,
       ).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not queue a stale start nudge when the thread becomes active during preparation", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-idle-active-race",
       });
@@ -778,14 +756,11 @@ describe("nudge sweep", () => {
         kind: "auto",
         expectedTurnId: "turn-became-active",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not queue a stale active nudge when the active turn changes during preparation", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-active-race",
       });
@@ -922,14 +897,11 @@ describe("nudge sweep", () => {
         kind: "auto",
         expectedTurnId: "turn-replaced-active",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("advances due nudges without queueing work when the host is offline", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-nudge-offline",
       });
@@ -965,14 +937,11 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not queue work after losing the optimistic-lock race", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-lost-race",
       });
@@ -1037,8 +1006,6 @@ describe("nudge sweep", () => {
         lastFiredAt: null,
         nextFireAt: externallyAdvancedNextFireAt,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

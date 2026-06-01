@@ -19,7 +19,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import { waitForThreadEnvironment } from "./public-thread-assertions.js";
 import { createTestGitRepo } from "./public-thread-git-fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -32,8 +32,7 @@ describe("public thread creation routes", () => {
   });
 
   it("creates unmanaged host threads and queues environment provisioning", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -87,14 +86,11 @@ describe("public thread creation routes", () => {
         path: source.path,
         workspaceProvisionType: "unmanaged",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues unmanaged new branches with the requested base branch", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -147,14 +143,11 @@ describe("public thread creation routes", () => {
           baseBranch: "release/1.2",
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates host threads while the host is offline and leaves provisioning requested", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-thread-offline",
       });
@@ -214,14 +207,11 @@ describe("public thread creation routes", () => {
           .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails host thread creation when the host is destroyed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host: projectHost } = seedHostSession(harness.deps, {
         id: "host-thread-project",
       });
@@ -273,9 +263,7 @@ describe("public thread creation routes", () => {
         0,
       );
       expect(listEnvironments(harness.db, project.id)).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates managed-worktree threads and queues managed provisioning", async () => {
@@ -340,8 +328,7 @@ describe("public thread creation routes", () => {
   });
 
   it("rejects malformed managed base branches before queueing host commands", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -378,14 +365,11 @@ describe("public thread creation routes", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         0,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates managed-worktree threads on a non-default host using that host's source", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host: defaultHost } = seedHostSession(harness.deps, {
         id: "host-managed-default",
       });
@@ -457,14 +441,11 @@ describe("public thread creation routes", () => {
       expect(queued.command.targetPath).toBe(
         `/tmp/bb-host-data/${secondaryHost.id}/worktrees/${environment.id}/secondary-managed-source`,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 409 when the requested host has no configured project source", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host: defaultHost } = seedHostSession(harness.deps, {
         id: "host-source-default",
       });
@@ -503,14 +484,11 @@ describe("public thread creation routes", () => {
         code: "invalid_request",
         message: "No project source configured for this host",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates unmanaged threads with an explicit path even when the host has no project source", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host: defaultHost } = seedHostSession(harness.deps, {
         id: "host-unmanaged-default",
       });
@@ -562,8 +540,6 @@ describe("public thread creation routes", () => {
         path: "/tmp/explicit-unmanaged-workspace",
         workspaceProvisionType: "unmanaged",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

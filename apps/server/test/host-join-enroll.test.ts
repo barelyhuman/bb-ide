@@ -10,7 +10,7 @@ import { registerHostRoutes } from "../src/routes/hosts.js";
 import type { AppDeps } from "../src/types.js";
 import { readJson } from "./helpers/json.js";
 import { seedSession } from "./helpers/seed.js";
-import { createTestAppHarness, testLogger } from "./helpers/test-app.js";
+import { createTestAppHarness, testLogger, withTestHarness } from "./helpers/test-app.js";
 
 interface CreateHostRouteAppArgs {
   deps: AppDeps;
@@ -34,9 +34,7 @@ function createHostRouteApp(args: CreateHostRouteAppArgs): Hono {
 
 describe("host join and enroll routes", () => {
   it("creates join material for an additional host", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -63,9 +61,7 @@ describe("host join and enroll routes", () => {
         id: body.hostId,
         type: "persistent",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates local auto-join material without BB_APP_URL", async () => {
@@ -108,9 +104,7 @@ describe("host join and enroll routes", () => {
   });
 
   it("rejects join with app_url_required and no side effects when BB_APP_URL is unset", async () => {
-    const harness = await createTestAppHarness({ appUrl: undefined });
-
-    try {
+    await withTestHarness({ appUrl: undefined }, async (harness) => {
       const response = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -127,9 +121,7 @@ describe("host join and enroll routes", () => {
         code: "app_url_required",
       });
       expect(getHost(harness.db, "host_app_url_required")).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects spoofed Host loopback for local join without BB_APP_URL", async () => {
@@ -199,9 +191,7 @@ describe("host join and enroll routes", () => {
   });
 
   it("cancels pending host joins by revoking the enroll key and deleting the unconnected stub", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const joinResponse = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -242,15 +232,11 @@ describe("host join and enroll routes", () => {
       );
 
       expect(enrollResponse.status).toBe(401);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps hosts that have connected when canceling outstanding join material", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const joinResponse = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -295,15 +281,11 @@ describe("host join and enroll routes", () => {
       );
 
       expect(enrollResponse.status).toBe(401);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps active hosts when canceling outstanding join material", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const joinResponse = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -347,15 +329,11 @@ describe("host join and enroll routes", () => {
       );
 
       expect(enrollResponse.status).toBe(401);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("exchanges join material for a daemon host key exactly once", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const joinResponse = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -414,15 +392,11 @@ describe("host join and enroll routes", () => {
       );
 
       expect(replayResponse.status).toBe(401);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects enrollment when the join material is presented for a different host", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const joinResponse = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -449,15 +423,11 @@ describe("host join and enroll routes", () => {
       });
 
       expect(response.status).toBe(401);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("invalidates older join material when the same host requests a new join code", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const firstJoinResponse = await harness.app.request(
         "/api/v1/hosts/join",
         {
@@ -525,15 +495,11 @@ describe("host join and enroll routes", () => {
       );
 
       expect(secondEnrollResponse.status).toBe(201);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects enrollment after the join material expires", async () => {
-    const harness = await createTestAppHarness();
-
-    try {
+    await withTestHarness(async (harness) => {
       const joinResponse = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
         headers: {
@@ -583,8 +549,6 @@ describe("host join and enroll routes", () => {
       );
 
       expect(enrollResponse.status).toBe(401);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

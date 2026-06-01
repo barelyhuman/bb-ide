@@ -7,12 +7,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal app-data change route", () => {
   it("broadcasts daemon-reported app data changes for session-owned threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-app-data-change",
       });
@@ -62,14 +61,11 @@ describe("internal app-data change route", () => {
         deleted: false,
         version: "version-next",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects daemon-reported app data changes for threads owned by another host", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, {
         id: "host-app-data-change-a",
       });
@@ -117,14 +113,11 @@ describe("internal app-data change route", () => {
         code: "invalid_request",
       });
       expect(notifyThreadAppDataSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("broadcasts daemon-requested app data resync hints", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-app-data-resync",
       });
@@ -166,8 +159,6 @@ describe("internal app-data change route", () => {
         threadId: thread.id,
         appId: "status",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -37,7 +37,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
 import { runProjectDeletionSweep } from "../../src/services/system/periodic-sweeps.js";
 import {
@@ -141,8 +141,7 @@ async function respondToManagerPreferencesMissing(
 
 describe("public project and host routes", () => {
   it("supports project CRUD", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, { id: "host-projects" });
 
       const createResponse = await harness.app.request("/api/v1/projects", {
@@ -205,14 +204,11 @@ describe("public project and host routes", () => {
 
       const finalListResponse = await harness.app.request("/api/v1/projects");
       await expect(readJson(finalListResponse)).resolves.toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects personal project ids on standard-project mutation routes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-personal-standard-route-guard",
       });
@@ -245,14 +241,11 @@ describe("public project and host routes", () => {
         `/api/v1/projects/${PERSONAL_PROJECT_ID}/branches?hostId=${host.id}`,
       );
       expect(branchesResponse.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns personal project default execution options", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request(
         `/api/v1/projects/${PERSONAL_PROJECT_ID}/default-execution-options?threadType=manager`,
       );
@@ -265,14 +258,11 @@ describe("public project and host routes", () => {
         permissionMode: "full",
         serviceTier: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns personal project prompt history", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const personalThread = seedThread(harness.deps, {
         projectId: PERSONAL_PROJECT_ID,
         title: "Loose Thread",
@@ -300,14 +290,11 @@ describe("public project and host routes", () => {
           input: [{ type: "text", text: "Start projectless work" }],
         },
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reorders projects by neighboring project ids", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-order",
       });
@@ -347,14 +334,11 @@ describe("public project and host routes", () => {
         thirdProject.id,
         secondProject.id,
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reorders project manager threads by neighboring thread ids", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-order",
       });
@@ -394,14 +378,11 @@ describe("public project and host routes", () => {
         firstManager.id,
         secondManager.id,
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("embeds unarchived sidebar threads when requested", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-thread-include",
       });
@@ -499,14 +480,11 @@ describe("public project and host routes", () => {
       expect(secondProjectResponse?.threads.map((thread) => thread.id)).toEqual(
         [secondProjectThread.id],
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps the personal project out of project lists and returns it in sidebar bootstrap", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-sidebar-bootstrap",
       });
@@ -549,26 +527,20 @@ describe("public project and host routes", () => {
       expect(
         bootstrap.personalProject.threads.map((thread) => thread.id),
       ).toEqual([personalThread.id]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid project list include values", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request(
         "/api/v1/projects?include=threads,invalid",
       );
       expect(response.status).toBe(400);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects unsupported local project paths at the API boundary", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-path-validation",
       });
@@ -688,14 +660,11 @@ describe("public project and host routes", () => {
         code: "invalid_request",
         message: expect.stringContaining("filesystem root"),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns null when a project has no stored default execution options for a provider", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-defaults-none",
       });
@@ -710,14 +679,11 @@ describe("public project and host routes", () => {
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns the server manager defaults when a project has no remembered manager defaults", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-manager-defaults-none",
       });
@@ -738,14 +704,11 @@ describe("public project and host routes", () => {
         permissionMode: "full",
         serviceTier: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns the remembered provider and execution options for a project thread type", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-defaults",
       });
@@ -776,14 +739,11 @@ describe("public project and host routes", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns thread-type-matched stored default execution options for a project", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-manager-defaults",
       });
@@ -823,14 +783,11 @@ describe("public project and host routes", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("stores server-owned manager defaults separately from standard thread defaults when hiring a manager from the app", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-defaults",
       });
@@ -890,14 +847,11 @@ describe("public project and host routes", () => {
         permissionMode: "full",
         serviceTier: "default",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates personal project managers with a personal environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-personal-manager",
       });
@@ -985,14 +939,11 @@ describe("public project and host routes", () => {
       expect(startCommand.command.threadStoragePath).toBe(
         expectedThreadStoragePath,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("inherits remembered manager defaults for CLI-origin manager creation without overwriting them", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-defaults-cli",
       });
@@ -1040,14 +991,11 @@ describe("public project and host routes", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the server-owned manager defaults when the CLI omits provider and model with no stored manager defaults", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-defaults-cli-fallback",
       });
@@ -1083,14 +1031,11 @@ describe("public project and host routes", () => {
           threadType: "manager",
         }),
       ).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects manager creation without an origin at the public API boundary", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-missing-origin",
       });
@@ -1117,14 +1062,11 @@ describe("public project and host routes", () => {
         code: "invalid_request",
         message: expect.stringContaining('expected one of "app"|"cli"'),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps created threads pending deletion until queued thread.start work is stopped", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-delete-created-start",
       });
@@ -1215,14 +1157,11 @@ describe("public project and host routes", () => {
       const projectsResponse = await harness.app.request("/api/v1/projects");
       expect(projectsResponse.status).toBe(200);
       await expect(readJson(projectsResponse)).resolves.toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("hides live threads that appear after project deletion begins", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-delete-live-thread",
       });
@@ -1265,14 +1204,11 @@ describe("public project and host routes", () => {
         `/api/v1/threads/${liveThread.id}`,
       );
       expect(threadResponse.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("supports project source CRUD and reassigns the default source on delete", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, { id: "host-source-1" });
       const secondaryHost = seedHost(harness.deps, { id: "host-source-2" });
 
@@ -1369,14 +1305,11 @@ describe("public project and host routes", () => {
           isDefault: true,
         }),
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("derives host connection status from active sessions with valid leases", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const connected = seedHostSession(harness.deps, { id: "host-connected" });
       const disconnected = seedHost(harness.deps, { id: "host-disconnected" });
       const expired = seedHostSession(harness.deps, { id: "host-expired" });
@@ -1441,14 +1374,11 @@ describe("public project and host routes", () => {
           suspendedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects destroyed hosts for project sources", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-destroyed-source" });
       updateHost(harness.db, harness.hub, host.id, {
         destroyedAt: Date.now(),
@@ -1478,14 +1408,11 @@ describe("public project and host routes", () => {
           suspendedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues host.list_files for the default project source", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-files",
       });
@@ -1519,14 +1446,11 @@ describe("public project and host routes", () => {
         files: [{ path: "src/index.ts", name: "index.ts" }],
         truncated: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues host.list_paths for project paths with directories included", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-paths",
       });
@@ -1592,14 +1516,11 @@ describe("public project and host routes", () => {
         ],
         truncated: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues host.list_branches for the default project source", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-branches",
       });
@@ -1657,14 +1578,11 @@ describe("public project and host routes", () => {
         operation: { kind: "none" },
         selectedBranch: { name: "upstream/main", kind: "remote" },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 404 for branch listing on a missing project", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request(
         "/api/v1/projects/proj_missing/branches?hostId=host_missing",
       );
@@ -1673,14 +1591,11 @@ describe("public project and host routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "project_not_found",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("scopes host.list_files to a worktree environment when provided", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-files-worktree",
       });
@@ -1722,14 +1637,11 @@ describe("public project and host routes", () => {
         files: [{ path: "src/new-file.ts", name: "new-file.ts" }],
         truncated: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects an environmentId that belongs to a different project", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-files-cross",
       });
@@ -1757,14 +1669,11 @@ describe("public project and host routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "environment_not_found",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects a non-ready environmentId on the project files route", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-files-not-ready",
       });
@@ -1793,14 +1702,11 @@ describe("public project and host routes", () => {
           cleanupRequestedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("stores project attachments and serves their content", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-attachments",
       });
@@ -1843,14 +1749,11 @@ describe("public project and host routes", () => {
       expect(
         Buffer.from(await contentResponse.arrayBuffer()).toString("utf8"),
       ).toBe("attachment body");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("stores personal project attachments and serves their content", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const formData = new FormData();
       formData.set(
         "file",
@@ -1884,14 +1787,11 @@ describe("public project and host routes", () => {
       expect(
         Buffer.from(await contentResponse.arrayBuffer()).toString("utf8"),
       ).toBe("projectless attachment body");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues environment.destroy commands for managed environments when deleting a project", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, { id: "host-delete-env" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1972,14 +1872,11 @@ describe("public project and host routes", () => {
       expect(listResponse.status).toBe(200);
       await expect(readJson(listResponse)).resolves.toEqual([]);
       expect(getProject(harness.db, project.id)).not.toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("renames a host via PATCH", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, { id: "host-rename" });
 
       const patchResponse = await harness.app.request(
@@ -2002,14 +1899,11 @@ describe("public project and host routes", () => {
         id: host.id,
         name: "Renamed Host",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 404 when renaming a destroyed host via PATCH", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-rename-destroyed" });
       updateHost(harness.db, harness.hub, host.id, {
         destroyedAt: Date.now(),
@@ -2033,14 +1927,11 @@ describe("public project and host routes", () => {
           suspendedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("deletes a host via DELETE", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-delete" });
 
       const deleteResponse = await harness.app.request(
@@ -2052,14 +1943,11 @@ describe("public project and host routes", () => {
 
       const getResponse = await harness.app.request(`/api/v1/hosts/${host.id}`);
       expect(getResponse.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 404 when deleting a destroyed host via DELETE", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-delete-destroyed" });
       updateHost(harness.db, harness.hub, host.id, {
         destroyedAt: Date.now(),
@@ -2079,14 +1967,11 @@ describe("public project and host routes", () => {
           suspendedAt: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("deletes a host that has pending commands", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-delete-cmds",
       });
@@ -2133,27 +2018,21 @@ describe("public project and host routes", () => {
 
       const getResponse = await harness.app.request(`/api/v1/hosts/${host.id}`);
       expect(getResponse.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 404 when deleting a nonexistent host", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const deleteResponse = await harness.app.request(
         `/api/v1/hosts/host-nonexistent`,
         { method: "DELETE" },
       );
       expect(deleteResponse.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("retries managed project teardown after a partial destroy failure", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-delete-project-retry",
       });
@@ -2233,8 +2112,6 @@ describe("public project and host routes", () => {
       const listResponse = await harness.app.request("/api/v1/projects");
       expect(listResponse.status).toBe(200);
       await expect(readJson(listResponse)).resolves.toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

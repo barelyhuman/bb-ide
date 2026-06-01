@@ -208,6 +208,34 @@ export async function createTestAppHarness(
   };
 }
 
+export async function withTestHarness<T>(
+  run: (harness: TestAppHarness) => Promise<T>,
+): Promise<T>;
+export async function withTestHarness<T>(
+  overrides: TestAppHarnessConfigOverrides,
+  run: (harness: TestAppHarness) => Promise<T>,
+): Promise<T>;
+export async function withTestHarness<T>(
+  overridesOrRun:
+    | TestAppHarnessConfigOverrides
+    | ((harness: TestAppHarness) => Promise<T>),
+  maybeRun?: (harness: TestAppHarness) => Promise<T>,
+): Promise<T> {
+  const overrides: TestAppHarnessConfigOverrides =
+    typeof overridesOrRun === "function" ? {} : overridesOrRun;
+  const run =
+    typeof overridesOrRun === "function" ? overridesOrRun : maybeRun;
+  if (!run) {
+    throw new Error("withTestHarness requires a run callback");
+  }
+  const harness = await createTestAppHarness(overrides);
+  try {
+    return await run(harness);
+  } finally {
+    await harness.cleanup();
+  }
+}
+
 export async function startTestServer(
   overrides: TestAppHarnessConfigOverrides = {},
 ): Promise<RunningTestServer> {

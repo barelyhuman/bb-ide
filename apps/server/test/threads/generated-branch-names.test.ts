@@ -9,7 +9,7 @@ import {
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import { seedHostSession, seedProjectWithSource } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import { InferenceTimeoutError } from "../../src/services/ai/inference.js";
 import { generateThreadMetadataWithOutcome } from "../../src/services/threads/title-generation.js";
 
@@ -61,8 +61,7 @@ describe("generated managed branch names", () => {
       branchSlug: "unrelated-slug",
       title: "Improve Branch Names",
     });
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-generated-branch",
       });
@@ -113,9 +112,7 @@ describe("generated managed branch names", () => {
         `bb/improve-branch-names-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses two timeout attempts for managed worktree metadata inference", async () => {
@@ -127,8 +124,7 @@ describe("generated managed branch names", () => {
           title: "Recovered Managed Metadata",
         }),
       );
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-managed-metadata-retry",
       });
@@ -174,9 +170,7 @@ describe("generated managed branch names", () => {
         `bb/recovered-managed-metadata-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a daemon rename after a generated title thread starts", async () => {
@@ -184,8 +178,7 @@ describe("generated managed branch names", () => {
       branchSlug: "generated-rename-branch",
       title: "Generated Rename Title",
     });
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-generated-title-rename",
       });
@@ -268,14 +261,11 @@ describe("generated managed branch names", () => {
         threadId: thread.id,
         title: "Generated Rename Title",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not queue a daemon rename for user-supplied titles", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-user-title-no-rename",
       });
@@ -356,17 +346,14 @@ describe("generated managed branch names", () => {
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("falls back to the thread ID when no title is returned", async () => {
     mockThreadMetadata({
       branchSlug: "Slug Only Branch",
     });
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-generated-branch-slug-only",
       });
@@ -412,17 +399,14 @@ describe("generated managed branch names", () => {
         requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
       expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("falls back to thread ID branch names when inference is unavailable", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "openai/gpt-4o-mini",
       openAiApiKey: "",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-generated-branch-fallback",
       });
@@ -467,9 +451,7 @@ describe("generated managed branch names", () => {
       expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.getModel).toHaveBeenCalledWith("openai", "gpt-4o-mini");
       expect(piAiMocks.complete).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("ignores independently generated branch slugs when a title is available", async () => {
@@ -477,8 +459,7 @@ describe("generated managed branch names", () => {
       branchSlug: "wrong-slug",
       title: "Canonical Generated Title",
     });
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-generated-branch-invalid",
       });
@@ -528,9 +509,7 @@ describe("generated managed branch names", () => {
         `bb/canonical-generated-title-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns no metadata when inference times out", async () => {
@@ -625,8 +604,7 @@ describe("generated managed branch names", () => {
   it("does not retry non-timeout metadata inference failures", async () => {
     piAiMocks.getModel.mockReturnValue({ provider: "test" });
     piAiMocks.complete.mockRejectedValue(new Error("metadata failed"));
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       await expect(
         generateThreadMetadataWithOutcome(harness.deps, {
           input: [
@@ -644,8 +622,6 @@ describe("generated managed branch names", () => {
         reason: "failed",
       });
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

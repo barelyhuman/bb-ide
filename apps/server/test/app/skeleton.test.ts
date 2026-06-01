@@ -18,7 +18,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 type InsertMigrationParameters = [string, number];
 
@@ -44,19 +44,15 @@ function readLatestAppliedMigrationCreatedAt(db: DbConnection): number {
 
 describe("server skeleton", () => {
   it("serves public routes without auth", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request("/api/v1/hosts");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects internal routes without a bearer token", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request("/internal/session/open", {
         method: "POST",
         headers: {
@@ -77,14 +73,11 @@ describe("server skeleton", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "unauthorized",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns structured invalid_request errors for malformed JSON", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request("/api/v1/projects", {
         method: "POST",
         headers: {
@@ -97,9 +90,7 @@ describe("server skeleton", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("logs public API requests that exceed the slow request threshold", async () => {

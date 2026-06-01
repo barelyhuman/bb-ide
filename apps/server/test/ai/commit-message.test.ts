@@ -13,7 +13,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 const piAiMocks = vi.hoisted(() => ({
   complete: vi.fn(),
@@ -208,23 +208,19 @@ describe("commit message generation", () => {
   });
 
   it("returns null for Codex inference setup failures", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       await expect(
         generateCommitMessage(harness.deps, commitMessageArgs),
       ).resolves.toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns null for transient Codex inference command failures", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       seedHostSession(harness.deps);
       const messagePromise = generateCommitMessage(
         harness.deps,
@@ -241,17 +237,14 @@ describe("commit message generation", () => {
       });
 
       await expect(messagePromise).resolves.toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the route fallback message only after commit message timeout retries are exhausted", async () => {
     piAiMocks.complete.mockRejectedValue(
       new InferenceTimeoutError({ timeoutMs: 5_000 }),
     );
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -335,16 +328,13 @@ describe("commit message generation", () => {
         commitSubject: "bb: automated commit",
         ok: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the route fallback message when Codex commit-message inference fails", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -436,8 +426,6 @@ describe("commit message generation", () => {
         commitSubject: "bb: automated commit",
         ok: true,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

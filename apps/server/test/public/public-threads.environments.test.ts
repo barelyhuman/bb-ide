@@ -32,7 +32,7 @@ import {
   seedThread,
   seedThreadRuntimeState,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
@@ -71,8 +71,7 @@ describe("public thread environment routes", () => {
   });
 
   it("creates personal project threads with a personal environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-personal-thread-create",
       });
@@ -154,14 +153,11 @@ describe("public thread environment routes", () => {
         workspaceProvisionType: "personal",
       });
       expect(queuedStart.command.threadStoragePath).toBeUndefined();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates a fresh personal environment for each root personal thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, {
         id: "host-personal-root-fresh-env",
       });
@@ -200,14 +196,11 @@ describe("public thread environment routes", () => {
       expect(firstThread.environmentId).not.toBeNull();
       expect(secondThread.environmentId).not.toBeNull();
       expect(firstThread.environmentId).not.toBe(secondThread.environmentId);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reuses a personal manager environment for personal child threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-personal-manager-child-reuse",
       });
@@ -249,14 +242,11 @@ describe("public thread environment routes", () => {
       const childThread = threadSchema.parse(await readJson(response));
       expect(childThread.parentThreadId).toBe(managerThread.id);
       expect(childThread.environmentId).toBe(environment.id);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("sends personal project follow-ups in their personal environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-personal-thread-send",
       });
@@ -325,14 +315,11 @@ describe("public thread environment routes", () => {
         .all()
         .filter((event) => event.type === "client/turn/requested");
       expect(turnRequestEvents.at(-1)?.environmentId).toBe(environment.id);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("stops and archives personal project threads in their environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-personal-thread-stop-archive",
       });
@@ -390,14 +377,11 @@ describe("public thread environment routes", () => {
         throw new Error("Expected thread.stop command");
       }
       expect(archiveStopCommand.command.environmentId).toBe(environment.id);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects mismatched project and workspace combinations", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-personal-thread-mismatch",
       });
@@ -499,14 +483,11 @@ describe("public thread environment routes", () => {
         code: "invalid_request",
         message: "Standard project threads cannot reuse personal workspaces",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists threads across projects when projectId is omitted", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-list-all",
       });
@@ -539,14 +520,11 @@ describe("public thread environment routes", () => {
       expect(projectThreads.map((thread) => thread.id)).toEqual([
         standardThread.id,
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("includes hasPendingInteraction in thread list responses", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -588,14 +566,11 @@ describe("public thread environment routes", () => {
           }),
         ]),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("includes archived managed child threads in archived thread lists", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -654,14 +629,11 @@ describe("public thread environment routes", () => {
       expect(body.map((thread) => thread.id)).not.toContain(
         liveManagedThread.id,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("includes environmentWorkspaceDisplayKind in thread list responses", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -708,14 +680,11 @@ describe("public thread environment routes", () => {
           }),
         ]),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("includes runtime display state for active thread list entries", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-list-runtime",
       });
@@ -763,14 +732,11 @@ describe("public thread environment routes", () => {
           }),
         ]),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reuses the ready unmanaged environment for the default source path", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -845,14 +811,11 @@ describe("public thread environment routes", () => {
         .where(eq(hostDaemonCommands.type, "environment.provision"))
         .all();
       expect(provisionCommands).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reconciles explicit branch checkout before starting a thread on an existing unmanaged environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -966,14 +929,11 @@ describe("public thread environment routes", () => {
         branchName: "feature/reconcile",
         status: "ready",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("requeues stranded unmanaged checkout provisioning before starting the thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1054,16 +1014,13 @@ describe("public thread environment routes", () => {
           .where(eq(hostDaemonCommands.type, "thread.start"))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it.each(CHECKOUT_PREFLIGHT_FAILURES)(
     "fails unmanaged checkout provisioning without starting the thread when preflight fails with $errorCode",
     async ({ errorCode, errorMessage, path }) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps);
         const { project, source } = seedProjectWithSource(harness.deps, {
           hostId: host.id,
@@ -1122,17 +1079,14 @@ describe("public thread environment routes", () => {
             .where(eq(hostDaemonCommands.type, "thread.start"))
             .all(),
         ).toHaveLength(0);
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it.each(CHECKOUT_BLOCKING_THREAD_STATUSES)(
     "blocks explicit branch checkout when another thread is %s in the unmanaged environment",
     async (status) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps);
         const { project, source } = seedProjectWithSource(harness.deps, {
           hostId: host.id,
@@ -1189,15 +1143,12 @@ describe("public thread environment routes", () => {
             .where(eq(hostDaemonCommands.type, "environment.provision"))
             .all(),
         ).toHaveLength(0);
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("attaches new threads to an in-flight unmanaged environment without reprovisioning", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1242,14 +1193,11 @@ describe("public thread environment routes", () => {
 
       const queuedCommands = harness.db.select().from(hostDaemonCommands).all();
       expect(queuedCommands).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reuses an existing environment when requested", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1283,14 +1231,11 @@ describe("public thread environment routes", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails managed reprovision send when the host is disconnected", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-send-reprovision-offline",
       });
@@ -1346,8 +1291,6 @@ describe("public thread environment routes", () => {
           .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

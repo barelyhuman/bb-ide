@@ -11,7 +11,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 function resolveLocalTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -41,8 +41,7 @@ describe("thread runtime config", () => {
       requestedModel: "openai-codex/gpt-5.4",
     },
   ])("$name", async ({ childProviderId, expectedPermissionMode, managerProviderId, requestedModel }) => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: `host-runtime-${childProviderId}-${managerProviderId ?? "root"}`,
       });
@@ -78,14 +77,11 @@ describe("thread runtime config", () => {
       });
 
       expect(execution.permissionMode).toBe(expectedPermissionMode);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("ignores standard project permission defaults for managed child execution", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-managed-child-project-default-permission-mode",
       });
@@ -124,14 +120,11 @@ describe("thread runtime config", () => {
       });
 
       expect(execution.permissionMode).toBe("workspace-write");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("treats ghost parent references as root-thread execution defaults", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-deleted-parent-permission-mode",
       });
@@ -173,14 +166,11 @@ describe("thread runtime config", () => {
       });
 
       expect(execution.permissionMode).toBe("readonly");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("honors requested workspace-write permission mode when the provider supports it", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-permission-mode-workspace-write",
       });
@@ -206,14 +196,11 @@ describe("thread runtime config", () => {
       });
 
       expect(execution.permissionMode).toBe("workspace-write");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects permission modes unsupported by the provider", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-permission-mode-unsupported",
       });
@@ -240,14 +227,11 @@ describe("thread runtime config", () => {
           },
         }),
       ).rejects.toThrow("Provider pi only supports full permission mode.");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects reasoning levels unsupported by the provider", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-reasoning-level-unsupported",
       });
@@ -276,14 +260,11 @@ describe("thread runtime config", () => {
       ).rejects.toThrow(
         "Provider codex does not support max reasoning level. Supported reasoning levels: low, medium, high, xhigh.",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("consumes the sticky thread execution override across turns without a request value", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-execution-override",
       });
@@ -325,14 +306,11 @@ describe("thread runtime config", () => {
       });
       expect(oneOff.model).toBe("claude-sonnet-4-6");
       expect(oneOff.reasoningLevel).toBe("low");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("derives ask escalation only for direct user root-thread work", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-runtime-permission-escalation",
       });
@@ -382,14 +360,11 @@ describe("thread runtime config", () => {
           initiator: "user",
         }),
       ).toBe("deny");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostId = "host-runtime";
       seedHostSession(harness.deps, { id: hostId });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -437,9 +412,7 @@ describe("thread runtime config", () => {
       expect(runtimeConfig.instructions).toContain(
         `Local timezone: \`${resolveLocalTimezone()}\``,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
 });

@@ -10,7 +10,7 @@ import {
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import { seedHostSession } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 const titleSchema = Type.Object({
   title: Type.String(),
@@ -18,10 +18,9 @@ const titleSchema = Type.Object({
 
 describe("inferenceComplete", () => {
   it("surfaces missing host for codex inference", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       await expect(
         inferenceComplete(harness.deps, {
           prompt: "Generate a title",
@@ -34,16 +33,13 @@ describe("inferenceComplete", () => {
         },
         status: 502,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("routes codex inference through the host daemon and validates structured output", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const completion = inferenceComplete(harness.deps, {
         prompt: "Generate a title",
@@ -71,16 +67,13 @@ describe("inferenceComplete", () => {
       await expect(completion).resolves.toEqual({
         title: "Generated title",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("converts codex daemon timeouts into inference timeouts", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       seedHostSession(harness.deps);
       const completion = inferenceComplete(harness.deps, {
         prompt: "Generate a title",
@@ -98,16 +91,13 @@ describe("inferenceComplete", () => {
       });
 
       await expect(completion).rejects.toBeInstanceOf(InferenceTimeoutError);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("surfaces codex daemon auth errors", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
-    });
-    try {
+    }, async (harness) => {
       seedHostSession(harness.deps);
       const completion = inferenceComplete(harness.deps, {
         prompt: "Generate a title",
@@ -130,8 +120,6 @@ describe("inferenceComplete", () => {
         },
         status: 502,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

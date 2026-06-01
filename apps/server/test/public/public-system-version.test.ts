@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SystemVersionResponse } from "@bb/server-contract";
 import { readJson } from "../helpers/json.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 function createStubAppVersionService(response: SystemVersionResponse) {
   return {
@@ -21,22 +21,19 @@ describe("GET /api/v1/system/version", () => {
       isDevelopment: false,
       upgradeCommand: "npx bb-app@latest",
     };
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       appVersion: "0.0.5",
       appVersionService: createStubAppVersionService(expected),
       isDevelopment: false,
-    });
-    try {
+    }, async (harness) => {
       const response = await harness.app.request("/api/v1/system/version");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual(expected);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reports updateAvailable=false in development mode", async () => {
-    const harness = await createTestAppHarness({
+    await withTestHarness({
       appVersion: "0.0.5",
       appVersionService: createStubAppVersionService({
         currentVersion: "0.0.5",
@@ -47,16 +44,13 @@ describe("GET /api/v1/system/version", () => {
         upgradeCommand: "npx bb-app@latest",
       }),
       isDevelopment: true,
-    });
-    try {
+    }, async (harness) => {
       const response = await harness.app.request("/api/v1/system/version");
       expect(response.status).toBe(200);
       const body = (await readJson(response)) as SystemVersionResponse;
       expect(body.isDevelopment).toBe(true);
       expect(body.updateAvailable).toBe(false);
       expect(body.latestVersion).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

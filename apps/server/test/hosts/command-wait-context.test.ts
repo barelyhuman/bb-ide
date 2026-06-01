@@ -9,7 +9,7 @@ import {
   waitForQueuedCommandResult,
 } from "../../src/services/hosts/command-wait.js";
 import { runWithDaemonCommandWaitForbidden } from "../../src/services/hosts/command-wait-context.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import { seedHostSession } from "../helpers/seed.js";
 
 type ThreadStopCommand = Extract<HostDaemonCommand, { type: "thread.stop" }>;
@@ -253,8 +253,7 @@ async function waitForWorkspaceStatusCacheExpiry(): Promise<void> {
 
 describe("daemon command wait context", () => {
   it("rejects queue-and-wait inside a forbidden daemon-ingress context before queueing", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-forbidden",
       });
@@ -279,14 +278,11 @@ describe("daemon command wait context", () => {
         .where(eq(hostDaemonCommands.hostId, host.id))
         .all();
       expect(queuedCommands).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects waiting for an already queued command inside a forbidden daemon-ingress context", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       await expect(
         runWithDaemonCommandWaitForbidden({
           reason: "test command-result ingress",
@@ -300,14 +296,11 @@ describe("daemon command wait context", () => {
       ).rejects.toThrow(
         "Daemon command wait command hcmd-forbidden for thread.stop is forbidden in test command-result ingress",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("allows parallel command waits outside forbidden daemon-ingress contexts", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-parallel",
       });
@@ -358,9 +351,7 @@ describe("daemon command wait context", () => {
       }
 
       await expect(waitForResults).resolves.toEqual([{}, {}, {}]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("logs slow command waits that complete successfully", async () => {
@@ -487,8 +478,7 @@ describe("daemon command wait context", () => {
   });
 
   it("coalesces identical workspace status waits into one daemon command", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-workspace-status",
       });
@@ -539,14 +529,11 @@ describe("daemon command wait context", () => {
       });
 
       await expect(waitForResults).resolves.toEqual([result, result]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("invalidates cached workspace status after workspace mutations", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-workspace-status-mutation",
       });
@@ -628,14 +615,11 @@ describe("daemon command wait context", () => {
       await expect(refreshedStatusWait).resolves.toEqual(
         refreshedStatusResult,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues separate workspace status commands for different cache keys", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-workspace-status-keys",
       });
@@ -685,14 +669,11 @@ describe("daemon command wait context", () => {
         firstResult,
         secondResult,
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("evicts failed workspace status cache entries before retrying", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-workspace-status-failure",
       });
@@ -742,14 +723,11 @@ describe("daemon command wait context", () => {
         harness,
       });
       await expect(retryWait).resolves.toEqual(retryResult);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("evicts timed out workspace status cache entries before retrying", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-workspace-status-timeout",
       });
@@ -786,14 +764,11 @@ describe("daemon command wait context", () => {
         harness,
       });
       await expect(retryWait).resolves.toEqual(retryResult);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a new workspace status command after the cache ttl expires", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-command-wait-workspace-status-ttl",
       });
@@ -843,8 +818,6 @@ describe("daemon command wait context", () => {
         harness,
       });
       await expect(secondWait).resolves.toEqual(secondResult);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

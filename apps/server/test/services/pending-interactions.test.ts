@@ -21,7 +21,7 @@ import {
   createUserAnswerResolution,
   createUserQuestionPayload,
 } from "../helpers/pending-interactions.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 function registerPendingInteraction(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -42,8 +42,7 @@ function registerPendingInteraction(
 
 describe("pending interaction lifecycle", () => {
   it("includes project and pending state metadata in interaction change notifications", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-notification-metadata",
       });
@@ -100,14 +99,11 @@ describe("pending interaction lifecycle", () => {
         ["interactions-changed"],
         { hasPendingInteraction: false, projectId: project.id },
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips corrupt rows when listing pending interactions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const logger = {
         debug: vi.fn(),
         error: vi.fn(),
@@ -208,14 +204,11 @@ describe("pending interaction lifecycle", () => {
           interactionId: corrupt.interaction.id,
         }),
       ).toThrow("Stored pending interaction resolution is invalid");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("resolves user-question interactions with user answers", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-user-question-answer",
       });
@@ -278,14 +271,11 @@ describe("pending interaction lifecycle", () => {
         resolution: answerResolution,
         status: "resolved",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("interrupts pending user-question interactions without orphaning state", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-user-question-interrupted",
       });
@@ -342,14 +332,11 @@ describe("pending interaction lifecycle", () => {
       ).toThrowError(
         `Pending interaction ${created.interaction.id} is already interrupted`,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects reused provider request ids after the original interaction is terminal", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-terminal-dedupe",
       });
@@ -424,14 +411,11 @@ describe("pending interaction lifecycle", () => {
         reason:
           "Provider request request-terminal-dedupe was already handled and cannot be reused",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects interactions from providers that do not own the thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-provider-mismatch",
       });
@@ -472,14 +456,11 @@ describe("pending interaction lifecycle", () => {
         outcome: "rejected",
         reason: `Thread ${thread.id} belongs to provider codex, not claude-code`,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("treats reordered permission grants as idempotent resolution retries", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-idempotent-permissions",
       });
@@ -582,14 +563,11 @@ describe("pending interaction lifecycle", () => {
         .where(eq(pendingInteractionTable.id, created.interaction.id))
         .get();
       expect(resolvedRow?.resolvingCommandId).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects permission allow resolutions that grant nothing", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-empty-grant",
       });
@@ -651,14 +629,11 @@ describe("pending interaction lifecycle", () => {
           interactionId: created.interaction.id,
         }).status,
       ).toBe("pending");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("allows command approvals to grant explicit session permissions for session decisions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-command-grant",
       });
@@ -722,14 +697,11 @@ describe("pending interaction lifecycle", () => {
           }),
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects narrowed command session approval grants", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-narrowed-command-grant",
       });
@@ -787,14 +759,11 @@ describe("pending interaction lifecycle", () => {
       ).toThrow(
         "Command and file-change session approvals must grant the requested session permissions exactly",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects session command approvals without granted permissions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-null-session-grant",
       });
@@ -846,14 +815,11 @@ describe("pending interaction lifecycle", () => {
       ).toThrow(
         "Session approval resolutions must include granted permissions",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects file-change approvals that try to grant write-scope permissions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-file-change-grant",
       });
@@ -908,14 +874,11 @@ describe("pending interaction lifecycle", () => {
       ).toThrow(
         "This approval subject and decision cannot grant the requested permissions",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects a second active interaction on the same thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-concurrent-reject",
       });
@@ -976,14 +939,11 @@ describe("pending interaction lifecycle", () => {
         outcome: "rejected",
         reason: `Thread ${thread.id} is already awaiting user interaction`,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects command approvals with no available decisions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-empty-decisions",
       });
@@ -1023,14 +983,11 @@ describe("pending interaction lifecycle", () => {
         outcome: "rejected",
         reason: "Approvals must include at least one available decision",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects resolving interrupted interactions", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-resolve-interrupted",
       });
@@ -1084,14 +1041,11 @@ describe("pending interaction lifecycle", () => {
       ).toThrowError(
         `Pending interaction ${created.interaction.id} is already interrupted`,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not expire pending interactions on persistent hosts", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const pendingInteractions = new PendingInteractionLifecycle({
         db: harness.db,
         hub: harness.hub,
@@ -1144,8 +1098,6 @@ describe("pending interaction lifecycle", () => {
           interactionId: created.interaction.id,
         }).status,
       ).toBe("pending");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

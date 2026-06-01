@@ -11,12 +11,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal event envelope threadId regression", () => {
   it("uses the validated envelope threadId for side effects instead of the nested event threadId", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, { id: "host-envelope-a" });
       const hostB = seedHostSession(harness.deps, { id: "host-envelope-b" });
       const { project: projectA } = seedProjectWithSource(harness.deps, {
@@ -70,8 +69,6 @@ describe("internal event envelope threadId regression", () => {
       expect(response.status).toBe(200);
       expect(getThread(harness.db, threadA.id)?.title).toBe("hacked");
       expect(getThread(harness.db, threadB.id)?.title).toBe("Foreign thread");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

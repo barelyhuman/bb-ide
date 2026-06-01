@@ -8,12 +8,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal project attachment content", () => {
   it("returns attachment bytes to the daemon assigned to the thread environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-attachment-content",
       });
@@ -49,14 +48,11 @@ describe("internal project attachment content", () => {
         "application/octet-stream",
       );
       await expect(response.text()).resolves.toBe("har-content");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects a daemon that is not assigned to the thread environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, {
         id: "host-attachment-content-a",
       });
@@ -83,14 +79,11 @@ describe("internal project attachment content", () => {
       );
 
       expect(response.status).toBe(403);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects a project-scoped attachment token request for a mismatched project id", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-attachment-content-project-mismatch",
       });
@@ -114,8 +107,6 @@ describe("internal project attachment content", () => {
       );
 
       expect(response.status).toBe(403);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

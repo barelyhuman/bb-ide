@@ -23,8 +23,8 @@ import {
   seedTurnStarted,
 } from "../helpers/seed.js";
 import {
-  createTestAppHarness,
   type TestAppHarness,
+  withTestHarness,
 } from "../helpers/test-app.js";
 
 interface ExpectFailedManagerNotificationArgs {
@@ -207,8 +207,7 @@ async function queueManagedTurnSubmitScenario(
 
 describe("thread command failure side effects", () => {
   it("transitions thread to error when thread.start fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-start-fail",
       });
@@ -288,14 +287,11 @@ describe("thread command failure side effects", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         1,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a manager follow-up turn when a managed thread.start fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-start-fail-manager-notification",
       });
@@ -383,14 +379,11 @@ describe("thread command failure side effects", () => {
       });
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("transitions thread to error without manager notification when unmanaged turn.submit fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-turn-fail",
       });
@@ -490,14 +483,11 @@ describe("thread command failure side effects", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         1,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues one manager follow-up turn when a managed turn.submit fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const environmentPath = "/tmp/managed-turn-failure-environment";
       const { childThread, environment, host, managerThread, project, queued } =
         await queueManagedTurnSubmitScenario(harness, {
@@ -538,14 +528,11 @@ describe("thread command failure side effects", () => {
       ).toHaveLength(1);
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not duplicate manager notification or system error when a failed turn event precedes turn.submit failure", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const environmentPath = "/tmp/managed-turn-event-command-failure";
       const turnId = "turn-managed-event-command-failure";
       const { childThread, environment, host, managerThread, project, queued } =
@@ -617,14 +604,11 @@ describe("thread command failure side effects", () => {
       expect(errorEvents).toHaveLength(0);
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("preserves a completed turn event outcome when turn.submit later fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const environmentPath = "/tmp/managed-turn-completed-command-failure";
       const turnId = "turn-managed-completed-command-failure";
       const { childThread, environment, host, managerThread, project, queued } =
@@ -752,14 +736,11 @@ describe("thread command failure side effects", () => {
       expect(errorEvents).toHaveLength(0);
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not queue a manager follow-up turn when a managed turn.submit succeeds", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const environmentPath = "/tmp/managed-turn-success-environment";
       const { childThread, managerThread, queued } =
         await queueManagedTurnSubmitScenario(harness, {
@@ -785,14 +766,11 @@ describe("thread command failure side effects", () => {
       );
       expect(getThread(harness.db, managerThread.id)?.status).toBe("idle");
       expect(getThread(harness.db, childThread.id)?.status).toBe("active");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps thread active when a successful turn.submit result is retried", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-turn-success-retry",
       });
@@ -865,14 +843,11 @@ describe("thread command failure side effects", () => {
         .all()
         .filter((e) => e.type === "system/error");
       expect(errorEvents).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not transition thread when a successful thread.start is reported", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-start-ok",
       });
@@ -943,8 +918,6 @@ describe("thread command failure side effects", () => {
 
       const updated = getThread(harness.db, thread.id);
       expect(updated?.status).toBe("active");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

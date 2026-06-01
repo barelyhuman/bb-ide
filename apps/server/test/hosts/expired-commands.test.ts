@@ -19,8 +19,8 @@ import {
 } from "../../src/services/hosts/expired-commands.js";
 import { runPeriodicSweeps } from "../../src/services/system/periodic-sweeps.js";
 import {
-  createTestAppHarness,
   type TestAppHarness,
+  withTestHarness,
 } from "../helpers/test-app.js";
 import {
   seedEnvironment,
@@ -137,8 +137,7 @@ describe("expired commands", () => {
   ])(
     "reports expired $type results with the original command type",
     async ({ type, buildPayload }) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const host = seedHost(harness.deps, { id: `host-expired-${type}` });
         const { project } = seedProjectWithSource(harness.deps, {
           hostId: host.id,
@@ -181,15 +180,12 @@ describe("expired commands", () => {
           ok: false,
           type,
         });
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("settles expired commands without owners without parsing payload JSON", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-expired-invalid-workspace-status",
       });
@@ -221,14 +217,11 @@ describe("expired commands", () => {
         state: "error",
         resultPayload: EXPIRED_RESULT_PAYLOAD,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles expired environment.destroy through the command-result owner", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-destroy" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -281,14 +274,11 @@ describe("expired commands", () => {
         state: "error",
         resultPayload: EXPIRED_RESULT_PAYLOAD,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles expired environment.provision through the command-result owner", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-provision" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -331,14 +321,11 @@ describe("expired commands", () => {
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles expired thread.start through the command-result owner", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-thread-start" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -395,14 +382,11 @@ describe("expired commands", () => {
         state: "failed",
       });
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles expired thread.stop through the command-result owner", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-thread-stop" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -440,14 +424,11 @@ describe("expired commands", () => {
         failureReason: "Command expired after retry",
         state: "failed",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles expired interactive.resolve through the command-result owner", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-expired-interactive-resolve",
       });
@@ -518,14 +499,11 @@ describe("expired commands", () => {
         status: "interrupted",
         statusReason: "Command expired after retry",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles expired turn.submit through the command-result owner", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-turn-submit" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -576,14 +554,11 @@ describe("expired commands", () => {
       });
 
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("settles legacy terminalized lifecycle rows before periodic durable pruning", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const now = Date.now();
       const oldCompletedAt =
         now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS - 1_000;
@@ -646,14 +621,11 @@ describe("expired commands", () => {
         resultPayload: null,
         state: "error",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("repairs legacy terminalized thread and interaction owner rows once", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-legacy-expired-mixed" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -751,8 +723,6 @@ describe("expired commands", () => {
       await expect(
         settleLegacyTerminalizedExpiredLifecycleCommands(harness.deps),
       ).resolves.toEqual({ hasMore: false, settled: 0 });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

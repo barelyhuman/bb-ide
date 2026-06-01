@@ -13,7 +13,7 @@ import {
   seedThread,
   seedTurnStarted,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
 
 type ListedEvent = ReturnType<typeof listEvents>[number];
@@ -77,8 +77,7 @@ function getSingleEvent(
 
 describe("thread lifecycle interruption", () => {
   it("interrupts an active turn with provider state and idles the thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedActiveThreadWithTurn(harness);
 
       expect(
@@ -122,14 +121,11 @@ describe("thread lifecycle interruption", () => {
           reason: "manual-stop",
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not mutate an active thread when no active turn exists", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-lifecycle-no-turn",
       });
@@ -151,14 +147,11 @@ describe("thread lifecycle interruption", () => {
 
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
       expect(listEvents(harness.db, { threadId: thread.id })).toEqual([]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("finalizes a stopped active thread with one interrupted turn and thread event", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const fixture = seedActiveThreadWithTurn(harness);
       requestThreadStop(harness.deps, {
         environmentId: fixture.environmentId,
@@ -214,8 +207,6 @@ describe("thread lifecycle interruption", () => {
           reason: "manual-stop",
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

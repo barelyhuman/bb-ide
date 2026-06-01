@@ -8,12 +8,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("public thread pinning", () => {
   it("pins and unpins threads idempotently", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-pinning-idempotent",
       });
@@ -92,14 +91,11 @@ describe("public thread pinning", () => {
       );
       expect(repeatedUnpinnedThread.pinnedAt).toBeNull();
       expect(notifyThreadSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects missing and deleted threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-pinning-not-found",
       });
@@ -137,14 +133,11 @@ describe("public thread pinning", () => {
       ).toMatchObject({
         code: "thread_not_found",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reorders pinned threads and returns visible pinned roots", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-pinning-reorder",
       });
@@ -200,14 +193,11 @@ describe("public thread pinning", () => {
         expect.any(Number),
         expect.any(Number),
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("maps pinned reorder conflicts", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-pinning-reorder-conflicts",
       });
@@ -266,8 +256,6 @@ describe("public thread pinning", () => {
         code: "invalid_request",
         message: "Pinned thread order changed",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

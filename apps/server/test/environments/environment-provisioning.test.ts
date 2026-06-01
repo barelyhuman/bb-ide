@@ -18,12 +18,11 @@ import {
   requireManagedWorktreeEnvironmentProvisionQueuedCommand,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("environment reprovisioning", () => {
   it("queues managed reprovision at most once per environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reprovision-once",
       });
@@ -88,14 +87,11 @@ describe("environment reprovisioning", () => {
           .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("preserves the stored branch name during managed reprovision", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reprovision-branch",
       });
@@ -134,14 +130,11 @@ describe("environment reprovisioning", () => {
       expect(managedCommand.command.branchName).toBe(
         "bb/existing-readable-branch",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the persisted base branch during managed reprovision", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reprovision-base-branch",
       });
@@ -179,14 +172,11 @@ describe("environment reprovisioning", () => {
       const managedCommand =
         requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
       expect(managedCommand.command.baseBranch).toBe("release/2026-05");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("uses the source default base branch during managed reprovision", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reprovision-default-base-branch",
       });
@@ -224,14 +214,11 @@ describe("environment reprovisioning", () => {
       const managedCommand =
         requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
       expect(managedCommand.command.baseBranch).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails reprovision before mutating state when the host is disconnected", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-reprovision-offline",
       });
@@ -290,8 +277,6 @@ describe("environment reprovisioning", () => {
           .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -15,12 +15,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("public authorization regressions", () => {
   it("does not delete a project source through another project route", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-source-delete",
       });
@@ -58,14 +57,11 @@ describe("public authorization regressions", () => {
         projectId: projectB.id,
         path: "/tmp/source-delete-b",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not update a project source through another project route", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-source-update",
       });
@@ -98,14 +94,11 @@ describe("public authorization regressions", () => {
           .where(eq(projectSources.id, sourceB.id))
           .get()?.path,
       ).toBe("/original");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("validates managed workspace requirements before inserting environment or thread rows", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-managed-check",
       });
@@ -159,14 +152,11 @@ describe("public authorization regressions", () => {
           .where(eq(threads.projectId, project.id))
           .all(),
       ).toHaveLength(0);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not delete a queued message through another thread route", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-queued-message-delete",
       });
@@ -211,8 +201,6 @@ describe("public authorization regressions", () => {
         id: queuedMessageB.id,
         threadId: threadB.id,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

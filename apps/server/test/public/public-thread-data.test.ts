@@ -48,7 +48,7 @@ import {
   seedThread,
   seedThreadRuntimeState,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 const queuedMessageIdResponseSchema = z.object({
   id: z.string(),
@@ -67,8 +67,7 @@ type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
 
 describe("public thread data routes", () => {
   it("embeds thread environment and host snapshots when requested", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-include",
       });
@@ -103,14 +102,11 @@ describe("public thread data routes", () => {
       expect(includedThread.environment?.id).toBe(environment.id);
       expect(includedThread.host?.id).toBe(host.id);
       expect(includedThread.host?.status).toBe("connected");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns null thread includes when relations are absent or unresolved", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-null-include",
       });
@@ -150,14 +146,11 @@ describe("public thread data routes", () => {
       );
       expect(missingHostThread).not.toHaveProperty("environment");
       expect(missingHostThread.host).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid thread include values", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -170,14 +163,11 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}?include=environment,timeline`,
       );
       expect(response.status).toBe(400);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns timeline rows from thread events", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -221,14 +211,11 @@ describe("public thread data routes", () => {
           ]),
         }),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("hydrates timeline turn-summary details from the summary row identity and range", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -326,14 +313,11 @@ describe("public thread data routes", () => {
         expect(detailRow.workKind).toBe("tool");
         expect(detailRow.callId).toBe("tool-1");
       }
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("hydrates a single-event turn-summary detail range", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -399,14 +383,11 @@ describe("public thread data routes", () => {
         expect(details.rows[0].sourceSeqStart).toBe(2);
         expect(details.rows[0].sourceSeqEnd).toBe(2);
       }
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid thread data query params with a 400", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -427,14 +408,11 @@ describe("public thread data routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns thread output and default execution options from stored events", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -525,14 +503,11 @@ describe("public thread data routes", () => {
         serviceTier: "fast",
         source: "client/turn/requested",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns the manager user-visible output when a later assistant item is empty", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -583,14 +558,11 @@ describe("public thread data routes", () => {
       await expect(readJson(outputResponse)).resolves.toEqual({
         output: "Visible manager update",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips malformed item/completed events and returns the last valid output", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -645,14 +617,11 @@ describe("public thread data routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         output: "Earlier assistant reply",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns the latest stored execution options from request events", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -732,14 +701,11 @@ describe("public thread data routes", () => {
         serviceTier: "fast",
         source: "client/turn/requested",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails loudly when the latest stored request event is malformed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -811,14 +777,11 @@ describe("public thread data routes", () => {
         code: "internal_error",
         message: expect.stringContaining(`thread ${thread.id}`),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("marks threads as read and unread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -862,14 +825,11 @@ describe("public thread data routes", () => {
       expect(threadAfterUnread?.latestAttentionAt).toBe(
         thread.latestAttentionAt,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("creates and deletes thread queued messages", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -943,14 +903,11 @@ describe("public thread data routes", () => {
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
       expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("reorders thread queued messages", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-queued-message-reorder",
       });
@@ -1006,14 +963,11 @@ describe("public thread data routes", () => {
         firstQueuedMessage.id,
         secondQueuedMessage.id,
       ]);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("maps queued message reorder not-found and invalid-neighbor errors", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-queued-message-reorder-errors",
       });
@@ -1074,14 +1028,11 @@ describe("public thread data routes", () => {
         code: "invalid_request",
         message: "Queued message order is invalid",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns queued messages without notification for unchanged reorder requests", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-queued-message-reorder-unchanged",
       });
@@ -1130,14 +1081,11 @@ describe("public thread data routes", () => {
         thirdQueuedMessage.id,
       ]);
       expect(notifyThreadSpy).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects stale and claimed queued message reorder requests", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-queued-message-reorder-stale",
       });
@@ -1211,14 +1159,11 @@ describe("public thread data routes", () => {
         code: "invalid_request",
         message: "Queued message is already being sent",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("auto-sends queued messages created on idle provider threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-queued-message-create-idle-auto-send",
       });
@@ -1275,14 +1220,11 @@ describe("public thread data routes", () => {
       });
       expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists queued thread messages", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1339,14 +1281,11 @@ describe("public thread data routes", () => {
           }),
         ]),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("loads thread composer bootstrap state", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, {
         id: "host-composer-default",
       });
@@ -1500,14 +1439,11 @@ describe("public thread data routes", () => {
           [{ type: "text", text: "Queued message" }],
         ]),
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns empty composer execution options for archived threads on offline hosts", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-composer-archived-offline",
       });
@@ -1538,14 +1474,11 @@ describe("public thread data routes", () => {
         selectedOnlyModels: [],
         modelLoadError: null,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("inherits thread default execution options when queued message overrides are omitted", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1611,14 +1544,11 @@ describe("public thread data routes", () => {
         reasoningLevel: "medium",
         permissionMode: "full",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("persists queued message model and service tier and clears the queued message after reprovision send", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1716,14 +1646,11 @@ describe("public thread data routes", () => {
           )
           .all(),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("keeps queued messages when send is attempted while a created thread is still starting", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-queued-message-created-thread-send",
       });
@@ -1824,14 +1751,11 @@ describe("public thread data routes", () => {
           .where(eq(queuedThreadMessages.threadId, createdThread.id))
           .all(),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists thread storage files via host.list_files", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1880,14 +1804,11 @@ describe("public thread data routes", () => {
         truncated: false,
         storageRootPath: threadStoragePath,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists thread storage paths via host.list_paths", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1962,14 +1883,11 @@ describe("public thread data routes", () => {
         truncated: false,
         storageRootPath: threadStoragePath,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists thread storage files for standard threads with environments", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2008,14 +1926,11 @@ describe("public thread data routes", () => {
         truncated: false,
         storageRootPath: threadStoragePath,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("lists thread storage files without requiring a ready environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2065,14 +1980,11 @@ describe("public thread data routes", () => {
         truncated: false,
         storageRootPath: threadStoragePath,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves thread storage file content as raw bytes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2120,14 +2032,11 @@ describe("public thread data routes", () => {
       expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(
         pngBytes,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves worktree HTML preview content as raw text/html without app bridge injection", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2178,14 +2087,11 @@ describe("public thread data routes", () => {
       const body = await fileResponse.text();
       expect(body).toBe(html);
       expect(body).not.toContain("window.bb");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves thread storage HTML preview content as raw text/html without app bridge injection", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2235,14 +2141,11 @@ describe("public thread data routes", () => {
         "sandbox allow-scripts",
       );
       expect(await fileResponse.text()).toBe(html);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("caps generic HTML preview responses at 5 MB", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2282,14 +2185,11 @@ describe("public thread data routes", () => {
         message: "HTML preview exceeds the 5 MB limit",
         retryable: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("serves host file content from the thread environment host without requiring a ready environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "host-other" });
       const { host } = seedHostSession(harness.deps, {
         id: "host-thread-environment",
@@ -2352,14 +2252,11 @@ describe("public thread data routes", () => {
       expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(
         fileBytes,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects host file content requests for threads without environments", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2381,9 +2278,7 @@ describe("public thread data routes", () => {
           environmentStatus: null,
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it.each([
@@ -2405,8 +2300,7 @@ describe("public thread data routes", () => {
   ])(
     "maps host file $errorCode errors to user-facing responses",
     async ({ errorCode, errorMessage, expectedStatus }) => {
-      const harness = await createTestAppHarness();
-      try {
+      await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps);
         const { project } = seedProjectWithSource(harness.deps, {
           hostId: host.id,
@@ -2446,15 +2340,12 @@ describe("public thread data routes", () => {
           message: errorMessage,
           retryable: false,
         });
-      } finally {
-        await harness.cleanup();
-      }
+      });
     },
   );
 
   it("maps thread storage root-escape failures to invalid_path", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2500,14 +2391,11 @@ describe("public thread data routes", () => {
         message: "Path escapes read root",
         retryable: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns an empty thread storage file list when the durable storage is absent", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2547,14 +2435,11 @@ describe("public thread data routes", () => {
         truncated: false,
         storageRootPath: threadStoragePath,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("maps thread storage file read failures to user-facing 4xx responses", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2593,14 +2478,11 @@ describe("public thread data routes", () => {
         message: "File exceeds limit",
         retryable: false,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("fails loudly when stored queued message content is malformed", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2649,14 +2531,11 @@ describe("public thread data routes", () => {
         code: "internal_error",
         message: expect.stringContaining(`queued message ${queuedMessage.id}`),
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns existing matching event immediately from /events/wait", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2697,14 +2576,11 @@ describe("public thread data routes", () => {
       );
       expect(body.type).toBe("item/completed");
       expect(body.seq).toBe(2);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 204 on timeout when no matching event exists", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2731,14 +2607,11 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}/events/wait?type=item/completed&waitMs=100`,
       );
       expect(response.status).toBe(204);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("respects afterSeq when waiting for events", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2767,26 +2640,20 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}/events/wait?type=item/completed&afterSeq=5&waitMs=100`,
       );
       expect(response.status).toBe(204);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("returns 404 for nonexistent thread on /events/wait", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const response = await harness.app.request(
         `/api/v1/threads/nonexistent-thread-id/events/wait?type=item/completed&waitMs=100`,
       );
       expect(response.status).toBe(404);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects invalid event types on /events/wait", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -2808,8 +2675,6 @@ describe("public thread data routes", () => {
         code: "invalid_request",
         message: "Invalid event type",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

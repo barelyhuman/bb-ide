@@ -47,7 +47,7 @@ import { queueManagerSystemMessage } from "../../src/services/threads/manager-sy
 import { sendNextQueuedMessageIfPresent } from "../../src/services/threads/queued-messages.js";
 import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import { MANAGER_PREFERENCES_FILE_KEY } from "../../src/services/threads/manager-dynamic-file-delivery.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 function managerToolReminderInput() {
   return {
@@ -58,8 +58,7 @@ function managerToolReminderInput() {
 
 describe("internal event side effects", () => {
   it("logs side-effect failures and continues processing the rest of the batch", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-resilience",
       });
@@ -131,14 +130,11 @@ describe("internal event side effects", () => {
           .get()?.status,
       ).toBe("active");
       expect(loggerError).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("auto-sends the next queued message when a turn completes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-auto-send",
       });
@@ -221,14 +217,11 @@ describe("internal event side effects", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
       ).toBe("active");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("responds before manager queued-message auto-send waits on preferences", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-queued-message-auto-send",
       });
@@ -323,14 +316,11 @@ describe("internal event side effects", () => {
           serviceTier: "default",
         },
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("auto-sends the next queued message even when a pending interaction exists", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-auto-send-pending-interaction",
       });
@@ -411,14 +401,11 @@ describe("internal event side effects", () => {
           { type: "text", text: "Queued follow-up with pending interaction" },
         ],
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not reactivate a stop-requested thread from a late turn/started event", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-stop-requested-start",
       });
@@ -460,14 +447,11 @@ describe("internal event side effects", () => {
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("marks a thread errored when a provider process exit error is reported", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-provider-process-exit",
       });
@@ -507,14 +491,11 @@ describe("internal event side effects", () => {
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not error a stop-requested thread from provider process exit failure events", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-provider-process-exit-stop-requested",
       });
@@ -578,14 +559,11 @@ describe("internal event side effects", () => {
       const latestThread = getThread(harness.db, thread.id);
       expect(latestThread?.status).toBe("active");
       expect(latestThread?.stopRequestedAt).toBe(123);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("continues child turn-completed side effects when manager notification queuing fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const loggerError = vi.fn();
       harness.deps.logger.error = loggerError;
 
@@ -696,14 +674,11 @@ describe("internal event side effects", () => {
         }),
         "Failed to queue manager turn notification",
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a manager follow-up turn when a managed thread completes", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-follow-up",
       });
@@ -874,14 +849,11 @@ describe("internal event side effects", () => {
       expect(managerTurnData.input[1]).toEqual(queuedCommand.command.input[1]);
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips manager follow-up turns for deleted manager threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-deleted-manager-follow-up",
       });
@@ -950,14 +922,11 @@ describe("internal event side effects", () => {
         "number",
       );
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a manager follow-up turn when a managed thread fails", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-failed-follow-up",
       });
@@ -1075,14 +1044,11 @@ describe("internal event side effects", () => {
       });
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not duplicate manager failure notification when command-result failure precedes failed turn event", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-command-failure-dedupe",
       });
@@ -1283,14 +1249,11 @@ describe("internal event side effects", () => {
           .all(),
       ).toHaveLength(1);
       expect(getThread(harness.db, childThread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("queues a manager follow-up turn when a managed thread is interrupted", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-interrupted-follow-up",
       });
@@ -1408,14 +1371,11 @@ describe("internal event side effects", () => {
       });
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("records manager reprovision follow-ups as system-initiated turn requests", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-event-manager-reprovision-follow-up",
       });
@@ -1494,14 +1454,11 @@ describe("internal event side effects", () => {
         },
         source: "tell",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("syncs ASYNC.md when a manager thread goes idle", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-sync",
       });
@@ -1581,14 +1538,11 @@ describe("internal event side effects", () => {
           ),
         ).toEqual(["daily-recap"]);
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("auto-archives completed automation threads when enabled", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-auto-archive",
       });
@@ -1730,14 +1684,11 @@ describe("internal event side effects", () => {
       expect(
         listQueuedThreadCommands(harness, "thread.archive", thread.id),
       ).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("leaves completed automation threads visible when auto-archive is disabled", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-no-auto-archive",
       });
@@ -1814,14 +1765,11 @@ describe("internal event side effects", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.archivedAt,
       ).toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("does not replay turn/completed side effects for a duplicate batch", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-completed-dedupe",
       });
@@ -1920,14 +1868,11 @@ describe("internal event side effects", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
       ).toBe("active");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("applies only the newly inserted completion side effects from a mixed batch", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-completed-mixed-batch",
       });
@@ -2066,14 +2011,11 @@ describe("internal event side effects", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         2,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("skips manager system messages while the manager thread awaits interaction", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-event-manager-pending-interaction",
       });
@@ -2155,8 +2097,6 @@ describe("internal event side effects", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         existingQueuedCommandCount,
       );
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

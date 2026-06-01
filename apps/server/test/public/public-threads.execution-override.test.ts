@@ -12,7 +12,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
 
 async function stubClaudeCodeCatalog(
@@ -105,8 +105,7 @@ function patchThread(harness: TestAppHarness, threadId: string, body: unknown) {
 
 describe("PATCH /threads/:id execution override", () => {
   it("persists a model + reasoning override after catalog validation", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, thread } = seedClaudeCodeThread(harness);
 
       const responsePromise = patchThread(harness, thread.id, {
@@ -121,14 +120,11 @@ describe("PATCH /threads/:id execution override", () => {
         modelOverride: "claude-opus-4-8",
         reasoningLevelOverride: "high",
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects a model that is not in the provider's catalog", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host, thread } = seedClaudeCodeThread(harness);
 
       const responsePromise = patchThread(harness, thread.id, {
@@ -144,14 +140,11 @@ describe("PATCH /threads/:id execution override", () => {
         modelOverride: null,
         reasoningLevelOverride: null,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 
   it("rejects an in-place override for a non-claude-code thread", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { thread } = seedClaudeCodeThread(harness, "codex");
 
       // The provider gate rejects before any catalog command is queued.
@@ -166,8 +159,6 @@ describe("PATCH /threads/:id execution override", () => {
         modelOverride: null,
         reasoningLevelOverride: null,
       });
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });

@@ -8,12 +8,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import { withTestHarness } from "../helpers/test-app.js";
 
 describe("internal reconciliation idle-active regression", () => {
   it("promotes idle threads to active when the daemon reports them as active", async () => {
-    const harness = await createTestAppHarness();
-    try {
+    await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-idle-active-reconcile",
       });
@@ -50,8 +49,6 @@ describe("internal reconciliation idle-active regression", () => {
 
       expect(response.status).toBe(201);
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
-    } finally {
-      await harness.cleanup();
-    }
+    });
   });
 });
