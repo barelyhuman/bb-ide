@@ -81,7 +81,6 @@ function isCacheBoundarySubject(relativePath: string): boolean {
   return (
     relativePath.startsWith("hooks/mutations/") ||
     relativePath === "hooks/realtime-cache-effects.ts" ||
-    relativePath === "hooks/realtime-cache-registry.ts" ||
     relativePath.endsWith("ActionsProvider.tsx")
   );
 }

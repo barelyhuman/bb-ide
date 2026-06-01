@@ -1,4 +1,4 @@
-import type { Environment } from "@bb/domain";
+import type { Environment, Host } from "@bb/domain";
 import type { ThreadWithIncludesResponse } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import { threadDetailBootstrapResolvedMissingEnvironmentHost } from "./threadDetailBootstrapHostGate";
@@ -22,6 +22,19 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
     status: "ready",
     updatedAt: 1,
     workspaceProvisionType: "unmanaged",
+    ...overrides,
+  };
+}
+
+function makeHost(overrides: Partial<Host> = {}): Host {
+  return {
+    createdAt: 1,
+    id: "host-1",
+    lastSeenAt: 1,
+    name: "Host One",
+    status: "connected",
+    type: "persistent",
+    updatedAt: 1,
     ...overrides,
   };
 }
@@ -76,6 +89,30 @@ describe("threadDetailBootstrapResolvedMissingEnvironmentHost", () => {
         threadDetailBootstrap: makeThreadBootstrap(
           makeEnvironment({ hostId: "host-2" }),
         ),
+      }),
+    ).toBe(false);
+  });
+
+  it("does not suppress host fetches when the bootstrap includes a host", () => {
+    const environment = makeEnvironment();
+
+    expect(
+      threadDetailBootstrapResolvedMissingEnvironmentHost({
+        environment,
+        threadDetailBootstrap: makeThreadBootstrap(environment, {
+          host: makeHost(),
+        }),
+      }),
+    ).toBe(false);
+  });
+
+  it("does not suppress host fetches before the environment is resolved", () => {
+    const environment = makeEnvironment();
+
+    expect(
+      threadDetailBootstrapResolvedMissingEnvironmentHost({
+        environment: undefined,
+        threadDetailBootstrap: makeThreadBootstrap(environment),
       }),
     ).toBe(false);
   });

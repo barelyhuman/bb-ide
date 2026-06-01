@@ -148,6 +148,35 @@ describe("useDeletedResourceRouteOwner", () => {
     );
   });
 
+  it("does not route away when a different thread is deleted remotely", () => {
+    const activeThread = makeThread({ id: "thr_2" });
+    const deletedThread = makeThread({ id: "thr_1" });
+    const { handleChanged, queryClient } = renderRouteOwner({
+      initialEntry: getThreadRoutePath({
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+      }),
+    });
+    queryClient.setQueryData(threadQueryKey(deletedThread.id), deletedThread);
+    const message: ChangedMessage = {
+      type: "changed",
+      entity: "thread",
+      id: deletedThread.id,
+      changes: ["thread-deleted"],
+    };
+
+    act(() => {
+      handleChanged()(message);
+    });
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      getThreadRoutePath({
+        projectId: activeThread.projectId,
+        threadId: activeThread.id,
+      }),
+    );
+  });
+
   it("routes a remotely deleted active project to root and clears collapsed state", async () => {
     const deletedProjectId = "proj_1";
     const otherProjectId = "proj_2";
@@ -172,5 +201,34 @@ describe("useDeletedResourceRouteOwner", () => {
       expect(screen.getByTestId("location").textContent).toBe("/");
     });
     expect(jotaiStore.get(collapsedProjectIdsAtom)).toEqual([otherProjectId]);
+  });
+
+  it("does not route away when a different project is deleted remotely", () => {
+    const deletedProjectId = "proj_1";
+    const activeProjectId = "proj_2";
+    const jotaiStore = createStore();
+    jotaiStore.set(collapsedProjectIdsAtom, [
+      deletedProjectId,
+      activeProjectId,
+    ]);
+    const { handleChanged } = renderRouteOwner({
+      initialEntry: getLegacyProjectComposeRoutePath(activeProjectId),
+      jotaiStore,
+    });
+    const message: ChangedMessage = {
+      type: "changed",
+      entity: "project",
+      id: deletedProjectId,
+      changes: ["project-deleted"],
+    };
+
+    act(() => {
+      handleChanged()(message);
+    });
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      getLegacyProjectComposeRoutePath(activeProjectId),
+    );
+    expect(jotaiStore.get(collapsedProjectIdsAtom)).toEqual([activeProjectId]);
   });
 });
