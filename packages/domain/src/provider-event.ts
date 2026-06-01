@@ -77,9 +77,6 @@ export const threadEventFileChangeKindSchema = z.enum([
   "delete",
   "update",
 ]);
-export type ThreadEventFileChangeKind = z.infer<
-  typeof threadEventFileChangeKindSchema
->;
 
 export const threadEventFileChangeSchema = z.object({
   path: z.string(),
@@ -135,18 +132,12 @@ export const threadEventTextTruncationSchema = z.object({
   retainedTailLength: z.number(),
   truncatedAt: z.number(),
 });
-export type ThreadEventTextTruncation = z.infer<
-  typeof threadEventTextTruncationSchema
->;
 
 export const threadEventItemTruncationSchema = z.object({
   aggregatedOutput: threadEventTextTruncationSchema.optional(),
   result: threadEventTextTruncationSchema.optional(),
   resultText: threadEventTextTruncationSchema.optional(),
 });
-export type ThreadEventItemTruncation = z.infer<
-  typeof threadEventItemTruncationSchema
->;
 
 export const threadEventUserContentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
@@ -220,7 +211,6 @@ export const toolCallProgressEventSchema = z.object({
   message: z.string().optional(),
   parentToolCallId: z.string().optional(),
 });
-export type ToolCallProgressEvent = z.infer<typeof toolCallProgressEventSchema>;
 
 export const threadEventItemSchema = z.discriminatedUnion("type", [
   z
@@ -480,14 +470,6 @@ export type ProviderUnhandledEvent = Extract<
 export const providerEventTypeValues = unscopedProviderEventSchema.options.map(
   (option) => option.shape.type.value,
 );
-const providerEventTypeSet = new Set<string>(providerEventTypeValues);
-export type ProviderEventType = ProviderEvent["type"];
-export const providerEventTypeSchema = z
-  .string()
-  .refine(
-    (value): value is ProviderEventType => providerEventTypeSet.has(value),
-    "Invalid provider event type",
-  );
 
 /**
  * Events originating from the server/system layer (not from a provider process).
@@ -564,7 +546,6 @@ const unscopedSystemEventSchema = z.union([
 export const systemEventSchema = unscopedSystemEventSchema.and(
   scopedEventDataSchema,
 );
-export type SystemEvent = z.infer<typeof systemEventSchema>;
 
 const eventPropertyBagSchema = z.record(z.string(), z.unknown());
 const legacyClientRequestKey = ["clientRequest", "Sequence"].join("");

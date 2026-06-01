@@ -47,7 +47,6 @@ import { apiErrorSchema } from "./errors.js";
 import { timelineRowSchema } from "./thread-timeline.js";
 
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
-export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
 
 export const AUTOMATION_NAME_MAX_LENGTH = 200;
 export const BRANCH_LIST_QUERY_MAX_LENGTH = 256;
@@ -86,9 +85,6 @@ export const bbDesktopVersionFeedFileSchema = z.object({
   sha512: z.string().min(1),
   size: z.number().int().nonnegative(),
 });
-export type BbDesktopVersionFeedFile = z.infer<
-  typeof bbDesktopVersionFeedFileSchema
->;
 
 export const bbDesktopVersionFeedSchema = z.object({
   schemaVersion: z.literal(1),
@@ -225,9 +221,6 @@ export const bbDesktopBrowserTabRefSchema = z
     tabId: z.string().min(1),
   })
   .strict();
-export type BbDesktopBrowserTabRef = z.infer<
-  typeof bbDesktopBrowserTabRefSchema
->;
 
 /**
  * Current navigation state of a browser view, pushed main → renderer on every
@@ -443,9 +436,6 @@ export const scheduledThreadAutomationActionSchema = z.object({
   actionType: z.literal("scheduled-thread"),
   threadRequest: automationThreadRequestSchema,
 });
-export type ScheduledThreadAutomationAction = z.infer<
-  typeof scheduledThreadAutomationActionSchema
->;
 
 export const automationTriggerSchema = z.discriminatedUnion("triggerType", [
   automationScheduleTriggerSchema,
@@ -1103,7 +1093,6 @@ export const timelinePageMetadataSchema = z
     olderCursor: timelinePaginationCursorSchema.nullable(),
   })
   .strict();
-export type TimelinePageMetadata = z.infer<typeof timelinePageMetadataSchema>;
 
 export const threadTimelineQuerySchema = z
   .object({
@@ -1289,15 +1278,12 @@ export const appIconNameValues = [
   "Zap",
 ] as const;
 export const appIconNameSchema = z.enum(appIconNameValues);
-export type AppIconName = z.infer<typeof appIconNameSchema>;
 
 export const appEntryKindSchema = z.enum(["html", "md"]);
-export type AppEntryKind = z.infer<typeof appEntryKindSchema>;
 
 export const appEntryPathSchema = z
   .string()
   .refine(isValidAppEntryPath, "Invalid app entry path");
-export type AppEntryPath = z.infer<typeof appEntryPathSchema>;
 
 export const appEntrySchema = z
   .object({
@@ -1311,7 +1297,6 @@ export const appCapabilitySchema = z.enum(["data", "message"]);
 export type AppCapability = z.infer<typeof appCapabilitySchema>;
 
 export const appContributionSchema = z.enum(["thread.app"]);
-export type AppContribution = z.infer<typeof appContributionSchema>;
 
 export const appManifestSchema = z
   .object({
@@ -1435,9 +1420,6 @@ export const appDataChangedBroadcastMessageSchema = z
     version: z.string().min(1).nullable(),
   })
   .strict();
-export type AppDataChangedBroadcastMessage = z.infer<
-  typeof appDataChangedBroadcastMessageSchema
->;
 
 export const appDataResyncBroadcastMessageSchema = z
   .object({
@@ -1446,9 +1428,6 @@ export const appDataResyncBroadcastMessageSchema = z
     appId: appIdSchema,
   })
   .strict();
-export type AppDataResyncBroadcastMessage = z.infer<
-  typeof appDataResyncBroadcastMessageSchema
->;
 
 export const appDataBroadcastMessageSchema = z.discriminatedUnion("type", [
   appDataChangedBroadcastMessageSchema,
@@ -1548,7 +1527,6 @@ export type UpdateProjectSourceRequest = z.infer<
 >;
 
 export const environmentActionTypeSchema = z.enum(["commit", "squash_merge"]);
-export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const squashMergeOptionsSchema = z
   .object({
@@ -1811,9 +1789,6 @@ export const workspaceFileSchema = z.object({
 export type WorkspaceFile = z.infer<typeof workspaceFileSchema>;
 
 export const workspacePathEntryKindSchema = z.enum(["file", "directory"]);
-export type WorkspacePathEntryKind = z.infer<
-  typeof workspacePathEntryKindSchema
->;
 
 export const workspacePathEntrySchema = z.object({
   kind: workspacePathEntryKindSchema,

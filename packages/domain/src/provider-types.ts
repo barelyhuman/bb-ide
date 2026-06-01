@@ -45,7 +45,6 @@ export const toolCallOutputItemSchema = z.discriminatedUnion("type", [
     imageUrl: z.string(),
   }),
 ]);
-export type ToolCallOutputItem = z.infer<typeof toolCallOutputItemSchema>;
 
 export const toolCallRequestSchema = z.object({
   requestId: z.union([z.string().min(1), z.number()]),
@@ -76,9 +75,6 @@ export const messageUserToolArgumentsSchema = z
   .transform((value) => ({
     text: value.text ?? value.message ?? "",
   }));
-export type MessageUserToolArguments = z.infer<
-  typeof messageUserToolArgumentsSchema
->;
 
 export const dynamicToolSchema = z.object({
   name: z.string(),

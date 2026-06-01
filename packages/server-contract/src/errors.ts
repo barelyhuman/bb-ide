@@ -29,7 +29,6 @@ export const domainErrorCodeSchema = z.enum([
   "project_unavailable",
   "parent_thread_invalid",
 ]);
-export type DomainErrorCode = z.infer<typeof domainErrorCodeSchema>;
 
 /** Base public error envelope shared by server routes. Route-specific schemas
  *  may extend this with typed fields such as structured `details` while
@@ -82,9 +81,6 @@ export const threadEnvironmentUnavailableReasonSchema = z.enum([
   "provisioning",
   "errored",
 ]);
-export type ThreadEnvironmentUnavailableReason = z.infer<
-  typeof threadEnvironmentUnavailableReasonSchema
->;
 
 export const threadEnvironmentUnavailableErrorDetailsSchema = z.object({
   reason: threadEnvironmentUnavailableReasonSchema,
@@ -99,7 +95,6 @@ export const hostUnavailableReasonSchema = z.enum([
   "disconnected",
   "destroyed",
 ]);
-export type HostUnavailableReason = z.infer<typeof hostUnavailableReasonSchema>;
 
 export const hostUnavailableErrorDetailsSchema = z.object({
   reason: hostUnavailableReasonSchema,
@@ -115,9 +110,6 @@ export const projectUnavailableReasonSchema = z.enum([
   "deleted",
   "pending_deletion",
 ]);
-export type ProjectUnavailableReason = z.infer<
-  typeof projectUnavailableReasonSchema
->;
 
 export const projectUnavailableErrorDetailsSchema = z.object({
   reason: projectUnavailableReasonSchema,
@@ -155,50 +147,32 @@ export const environmentNotReadyApiErrorSchema = apiErrorSchema.extend({
   code: z.literal("environment_not_ready"),
   details: environmentNotReadyErrorDetailsSchema,
 });
-export type EnvironmentNotReadyApiError = z.infer<
-  typeof environmentNotReadyApiErrorSchema
->;
 
 export const threadNotWritableApiErrorSchema = apiErrorSchema.extend({
   code: z.literal("thread_not_writable"),
   details: threadNotWritableErrorDetailsSchema,
 });
-export type ThreadNotWritableApiError = z.infer<
-  typeof threadNotWritableApiErrorSchema
->;
 
 export const threadEnvironmentUnavailableApiErrorSchema =
   apiErrorSchema.extend({
     code: z.literal("thread_environment_unavailable"),
     details: threadEnvironmentUnavailableErrorDetailsSchema,
   });
-export type ThreadEnvironmentUnavailableApiError = z.infer<
-  typeof threadEnvironmentUnavailableApiErrorSchema
->;
 
 export const hostUnavailableApiErrorSchema = apiErrorSchema.extend({
   code: z.literal("host_unavailable"),
   details: hostUnavailableErrorDetailsSchema,
 });
-export type HostUnavailableApiError = z.infer<
-  typeof hostUnavailableApiErrorSchema
->;
 
 export const projectUnavailableApiErrorSchema = apiErrorSchema.extend({
   code: z.literal("project_unavailable"),
   details: projectUnavailableErrorDetailsSchema,
 });
-export type ProjectUnavailableApiError = z.infer<
-  typeof projectUnavailableApiErrorSchema
->;
 
 export const parentThreadInvalidApiErrorSchema = apiErrorSchema.extend({
   code: z.literal("parent_thread_invalid"),
   details: parentThreadInvalidErrorDetailsSchema,
 });
-export type ParentThreadInvalidApiError = z.infer<
-  typeof parentThreadInvalidApiErrorSchema
->;
 
 export const lifecycleApiErrorSchema = z.discriminatedUnion("code", [
   environmentNotReadyApiErrorSchema,

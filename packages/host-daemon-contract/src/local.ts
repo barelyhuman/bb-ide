@@ -10,11 +10,6 @@ import type { EmptyInput, Endpoint } from "./common.js";
 export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH = "/health";
 export const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
 export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE = "ok";
-export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST =
-  DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST;
-export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE =
-  "bb-host-daemon";
-export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT = 9111;
 
 export const workspaceOpenTargetIdValues = [
   "default-app",
@@ -116,9 +111,6 @@ export const providerCliInstallOutputStreamValues = [
 export const providerCliInstallOutputStreamSchema = z.enum(
   providerCliInstallOutputStreamValues,
 );
-export type ProviderCliInstallOutputStream = z.infer<
-  typeof providerCliInstallOutputStreamSchema
->;
 
 export const providerCliInstallSourceValues = [
   "notInstalled",
@@ -147,9 +139,6 @@ export const providerCliInstallCommandKindValues = ["exec", "shell"] as const;
 export const providerCliInstallCommandKindSchema = z.enum(
   providerCliInstallCommandKindValues,
 );
-export type ProviderCliInstallCommandKind = z.infer<
-  typeof providerCliInstallCommandKindSchema
->;
 
 export const providerCliInstallActionSchema = z.object({
   kind: providerCliInstallActionKindSchema,
@@ -197,9 +186,6 @@ export const providerCliInstallStartedEventSchema = z.object({
   provider: providerCliKeySchema,
   command: z.string().min(1),
 });
-export type ProviderCliInstallStartedEvent = z.infer<
-  typeof providerCliInstallStartedEventSchema
->;
 
 export const providerCliInstallOutputEventSchema = z.object({
   type: z.literal("output"),
@@ -207,9 +193,6 @@ export const providerCliInstallOutputEventSchema = z.object({
   stream: providerCliInstallOutputStreamSchema,
   text: z.string(),
 });
-export type ProviderCliInstallOutputEvent = z.infer<
-  typeof providerCliInstallOutputEventSchema
->;
 
 export const providerCliInstallCompletedEventSchema = z.object({
   type: z.literal("completed"),
@@ -227,9 +210,6 @@ export const providerCliInstallErrorEventSchema = z.object({
   provider: providerCliKeySchema,
   message: z.string().min(1),
 });
-export type ProviderCliInstallErrorEvent = z.infer<
-  typeof providerCliInstallErrorEventSchema
->;
 
 export const providerCliInstallEventSchema = z.discriminatedUnion("type", [
   providerCliInstallStartedEventSchema,

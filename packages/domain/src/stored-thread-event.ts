@@ -51,9 +51,6 @@ export type StoredThreadEventDataByType = {
   >;
 };
 
-export type StoredThreadEventData =
-  StoredThreadEventDataByType[ThreadEventType];
-
 export type StoredThreadEventDataForType<TType extends ThreadEventType> =
   StoredThreadEventDataByType[TType];
 
@@ -69,11 +66,6 @@ export type ThreadEventRowOfType<TType extends ThreadEventType> =
 export type ThreadEventRow = {
   [TType in ThreadEventType]: ThreadEventRowOfType<TType>;
 }[ThreadEventType];
-
-export type ThreadEventOfType<TType extends ThreadEventType> = Extract<
-  ThreadEventRow,
-  { type: TType }
->;
 
 const threadEventRowInputSchema = z.object({
   id: z.string(),
@@ -173,13 +165,6 @@ export function buildThreadEvent(row: ThreadEventRow): ThreadEvent {
     threadId: row.threadId,
     type: row.type,
   });
-}
-
-export function isThreadEventRowOfType<TType extends ThreadEventType>(
-  row: ThreadEventRow,
-  type: TType,
-): row is ThreadEventOfType<TType> {
-  return row.type === type;
 }
 
 function parseThreadEventRowInput(row: ThreadEventRowInput): ThreadEventRow {

@@ -79,9 +79,6 @@ export function isHostDaemonCommandType(
 
 export const hostDaemonExecutionOptionsSchema =
   runtimeThreadExecutionOptionsSchema;
-export type HostDaemonExecutionOptions = z.infer<
-  typeof hostDaemonExecutionOptionsSchema
->;
 
 export const workspaceContextSchema = z.object({
   workspacePath: z.string().min(1),
@@ -811,9 +808,6 @@ type HostDaemonUnknownCommandErrorResultReport =
 type HostDaemonCommandErrorResultReport =
   | HostDaemonKnownCommandErrorResultReportByType[HostDaemonCommandType]
   | HostDaemonUnknownCommandErrorResultReport;
-export type HostDaemonKnownCommandResultReport =
-  | HostDaemonCommandSuccessResultReport
-  | HostDaemonKnownCommandErrorResultReportByType[HostDaemonCommandType];
 type HostDaemonCommandErrorResultReportWithoutSession = Omit<
   HostDaemonCommandErrorResultReport,
   "sessionId"
@@ -832,12 +826,6 @@ export type HostDaemonCommandResultReport =
 export type HostDaemonCommandResultReportWithoutSession =
   | HostDaemonCommandSuccessResultReportWithoutSession
   | HostDaemonCommandErrorResultReportWithoutSession;
-
-export function isKnownHostDaemonCommandResultReport(
-  report: HostDaemonCommandResultReport,
-): report is HostDaemonKnownCommandResultReport {
-  return isHostDaemonCommandType(report.type);
-}
 
 function createHostDaemonCommandResultReportSchemasForType<
   TType extends HostDaemonCommandType,

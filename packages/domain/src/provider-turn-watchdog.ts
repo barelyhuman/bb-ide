@@ -4,9 +4,6 @@ export const providerTurnWatchdogReasonValues = ["provider-turn-idle"] as const;
 export const providerTurnWatchdogReasonSchema = z.enum(
   providerTurnWatchdogReasonValues,
 );
-export type ProviderTurnWatchdogReason = z.infer<
-  typeof providerTurnWatchdogReasonSchema
->;
 
 export const providerTurnWatchdogActivityEventTypeValues = [
   "turn/started",

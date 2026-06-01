@@ -6,7 +6,6 @@ export type HostType = z.infer<typeof hostTypeSchema>;
 
 export const hostStatusValues = ["connected", "disconnected"] as const;
 export const hostStatusSchema = z.enum(hostStatusValues);
-export type HostStatus = z.infer<typeof hostStatusSchema>;
 
 export const hostSchema = z.object({
   id: z.string(),

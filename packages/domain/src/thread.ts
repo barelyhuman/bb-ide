@@ -40,7 +40,6 @@ export const workspaceStateValues = [
   "dirty_and_committed_unmerged",
 ] as const;
 export const workspaceStateSchema = z.enum(workspaceStateValues);
-export type WorkspaceState = z.infer<typeof workspaceStateSchema>;
 
 export const workspaceFileStatusKindSchema = z.enum([
   "M",
@@ -108,7 +107,6 @@ export const workspaceBranchSchema = z.object({
   currentBranch: z.string().nullable(),
   defaultBranch: z.string(),
 });
-export type WorkspaceBranch = z.infer<typeof workspaceBranchSchema>;
 
 /**
  * Stats and file list are relative to the merge-base-to-HEAD range

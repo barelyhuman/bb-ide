@@ -45,9 +45,6 @@ export const threadProvisioningReasonValues = [
 export const threadProvisioningReasonSchema = z.enum(
   threadProvisioningReasonValues,
 );
-export type ThreadProvisioningReason = z.infer<
-  typeof threadProvisioningReasonSchema
->;
 
 export const threadEnvironmentStartReasonValues = [
   ...threadProvisioningReasonValues,
@@ -62,7 +59,6 @@ export type ThreadEnvironmentStartReason = z.infer<
 >;
 
 export const turnRequestOptionsSchema = resolvedThreadExecutionOptionsSchema;
-export type TurnRequestOptions = z.infer<typeof turnRequestOptionsSchema>;
 
 export const turnRequestTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("thread-start") }),
@@ -275,9 +271,6 @@ export const turnLifecycleEventDataSchema = z.object({
   turnId: z.string().optional(),
   input: z.array(promptInputSchema).optional(),
 });
-export type TurnLifecycleEventData = z.infer<
-  typeof turnLifecycleEventDataSchema
->;
 
 export type ThreadEventDataByType = {
   "client/thread/start": ClientTurnLifecycleEventData;
@@ -295,12 +288,3 @@ export type ThreadEventDataByType = {
 
 export { systemProviderTurnWatchdogEventDataSchema };
 export type { SystemProviderTurnWatchdogEventData };
-
-export type ThreadEventData =
-  | ThreadEventDataByType[SystemEventType]
-  | Record<string, unknown>;
-
-export type ThreadEventDataForType<TType extends string> =
-  TType extends SystemEventType
-    ? ThreadEventDataByType[TType]
-    : Record<string, unknown>;

@@ -147,9 +147,6 @@ export type HostDaemonEventBatchRequest = z.infer<
 export const hostDaemonEventRejectionReasonSchema = z.enum([
   "thread_not_owned_by_host",
 ]);
-export type HostDaemonEventRejectionReason = z.infer<
-  typeof hostDaemonEventRejectionReasonSchema
->;
 
 export const hostDaemonRejectedEventSchema = z
   .object({
@@ -324,9 +321,6 @@ export const hostDaemonTerminalOutputChunkSchema = z
     dataBase64: terminalDataBase64Schema,
   })
   .strict();
-export type HostDaemonTerminalOutputChunk = z.infer<
-  typeof hostDaemonTerminalOutputChunkSchema
->;
 
 const hostDaemonTerminalOpenMessageSchema = z
   .object({

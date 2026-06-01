@@ -115,9 +115,6 @@ export const timelineAssistantConversationRowSchema =
     role: z.literal("assistant"),
     turnRequest: z.null(),
   });
-export type TimelineAssistantConversationRow = z.infer<
-  typeof timelineAssistantConversationRowSchema
->;
 
 export const timelineConversationRowSchema = z.discriminatedUnion("role", [
   timelineUserConversationRowSchema,
@@ -161,9 +158,6 @@ export const timelineManagerAssignmentActionValues = [
 export const timelineManagerAssignmentActionSchema = z.enum(
   timelineManagerAssignmentActionValues,
 );
-export type TimelineManagerAssignmentAction = z.infer<
-  typeof timelineManagerAssignmentActionSchema
->;
 
 export const timelineManagerAssignmentSchema = z.object({
   action: timelineManagerAssignmentActionSchema,
@@ -197,9 +191,6 @@ export const timelineGenericOperationSystemRowSchema =
     operationKind: timelineGenericSystemOperationKindSchema,
     completedAt: z.number().nullable(),
   });
-export type TimelineGenericOperationSystemRow = z.infer<
-  typeof timelineGenericOperationSystemRowSchema
->;
 
 export const timelineManagerAssignmentSystemRowSchema =
   timelineSystemRowBaseSchema.extend({
@@ -220,9 +211,6 @@ export const timelineOperationSystemRowSchema = z.discriminatedUnion(
     timelineManagerAssignmentSystemRowSchema,
   ],
 );
-export type TimelineOperationSystemRow = z.infer<
-  typeof timelineOperationSystemRowSchema
->;
 
 export const timelineSystemRowSchema = z.union([
   timelineNonOperationSystemRowSchema,
@@ -467,12 +455,6 @@ export type TimelineSourceRow =
   | TimelineSystemRow;
 
 export type TimelineRow = TimelineSourceRow | TimelineTurnRow;
-
-export const timelineSourceRowSchema = z.union([
-  timelineConversationRowSchema,
-  timelineWorkRowSchema,
-  timelineSystemRowSchema,
-]);
 
 export const timelineRowSchema: z.ZodType<TimelineRow> = z.lazy(() =>
   z.union([

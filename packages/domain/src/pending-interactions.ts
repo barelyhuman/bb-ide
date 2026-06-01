@@ -44,35 +44,23 @@ export type PendingInteractionCommandAction = z.infer<
 export const pendingInteractionNetworkPermissionsSchema = z.object({
   enabled: z.boolean().nullable(),
 });
-export type PendingInteractionNetworkPermissions = z.infer<
-  typeof pendingInteractionNetworkPermissionsSchema
->;
 
 export const pendingInteractionFileSystemPermissionsSchema = z.object({
   read: z.array(z.string()),
   write: z.array(z.string()),
 });
-export type PendingInteractionFileSystemPermissions = z.infer<
-  typeof pendingInteractionFileSystemPermissionsSchema
->;
 
 const pendingInteractionMacOsPreferencesPermissionSchema = z.enum([
   "none",
   "read_only",
   "read_write",
 ]);
-export type PendingInteractionMacOsPreferencesPermission = z.infer<
-  typeof pendingInteractionMacOsPreferencesPermissionSchema
->;
 
 const pendingInteractionMacOsContactsPermissionSchema = z.enum([
   "none",
   "read_only",
   "read_write",
 ]);
-export type PendingInteractionMacOsContactsPermission = z.infer<
-  typeof pendingInteractionMacOsContactsPermissionSchema
->;
 
 const pendingInteractionMacOsAutomationPermissionSchema = z.union([
   z.literal("none"),
@@ -82,9 +70,6 @@ const pendingInteractionMacOsAutomationPermissionSchema = z.union([
     bundleIds: z.array(z.string()),
   }),
 ]);
-export type PendingInteractionMacOsAutomationPermission = z.infer<
-  typeof pendingInteractionMacOsAutomationPermissionSchema
->;
 
 export const pendingInteractionMacOsPermissionsSchema = z.object({
   preferences: pendingInteractionMacOsPreferencesPermissionSchema,
@@ -146,9 +131,6 @@ export const pendingInteractionCommandApprovalSubjectSchema = z.object({
   actions: z.array(pendingInteractionCommandActionSchema),
   sessionGrant: pendingInteractionGrantablePermissionProfileSchema.nullable(),
 });
-export type PendingInteractionCommandApprovalSubject = z.infer<
-  typeof pendingInteractionCommandApprovalSubjectSchema
->;
 
 export const pendingInteractionFileChangeApprovalSubjectSchema = z.object({
   kind: z.literal("file_change"),
@@ -156,9 +138,6 @@ export const pendingInteractionFileChangeApprovalSubjectSchema = z.object({
   writeScope: pendingInteractionFileChangeWriteScopeSchema.nullable(),
   sessionGrant: pendingInteractionGrantablePermissionProfileSchema.nullable(),
 });
-export type PendingInteractionFileChangeApprovalSubject = z.infer<
-  typeof pendingInteractionFileChangeApprovalSubjectSchema
->;
 
 export const pendingInteractionPermissionGrantApprovalSubjectSchema = z.object({
   kind: z.literal("permission_grant"),

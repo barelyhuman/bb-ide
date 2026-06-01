@@ -24,7 +24,6 @@ export type {
   PermissionMode,
   ProjectExecutionDefaults,
   PromptInput,
-  PromptInputVisibility,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
   RuntimeThreadExecutionOptions,
@@ -139,17 +138,10 @@ export type {
   PendingInteractionApprovalDecision,
   PendingInteractionApprovalSubject,
   PendingInteractionCommandAction,
-  PendingInteractionCommandApprovalSubject,
   PendingInteractionCreate,
-  PendingInteractionFileChangeApprovalSubject,
-  PendingInteractionFileSystemPermissions,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionGrantedPermissionProfile,
-  PendingInteractionMacOsAutomationPermission,
-  PendingInteractionMacOsContactsPermission,
   PendingInteractionMacOsPermissions,
-  PendingInteractionMacOsPreferencesPermission,
-  PendingInteractionNetworkPermissions,
   PendingInteractionPayload,
   PendingInteractionPermissionGrantApprovalSubject,
   PendingInteractionRequestedPermissionProfile,
@@ -176,11 +168,9 @@ export {
 export type {
   AvailableModel,
   DynamicTool,
-  MessageUserToolArguments,
   ModelReasoningEffort,
   ProviderCapabilities,
   ProviderInfo,
-  ToolCallOutputItem,
   ToolCallRequest,
   ToolCallResponse,
 } from "./provider-types.js";
@@ -318,7 +308,7 @@ export {
   hostTypeSchema,
   hostTypeValues,
 } from "./host.js";
-export type { Host, HostStatus, HostType } from "./host.js";
+export type { Host, HostType } from "./host.js";
 
 export {
   threadQueuedMessageSchema,
@@ -352,13 +342,11 @@ export type {
   ThreadStatus,
   ThreadType,
   ThreadWithRuntime,
-  WorkspaceBranch,
   WorkspaceChangeStats,
   WorkspaceCommitSummary,
   WorkspaceFileStatus,
   WorkspaceFileStatusKind,
   WorkspaceMergeBase,
-  WorkspaceState,
   WorkspaceStatus,
   WorkspaceWorkingTree,
 } from "./thread.js";
@@ -420,15 +408,10 @@ export type {
   SystemUserQuestionLifecycleEventData,
   ClientTurnLifecycleEventData,
   ThreadEnvironmentStartReason,
-  ThreadEventData,
   ThreadEventDataByType,
-  ThreadEventDataForType,
-  ThreadProvisioningReason,
   ThreadTurnInitiator,
   TurnRequestEventData,
-  TurnRequestOptions,
   TurnRequestTarget,
-  TurnLifecycleEventData,
 } from "./thread-events.js";
 
 export {
@@ -439,22 +422,18 @@ export {
 } from "./provider-turn-watchdog.js";
 export type {
   ProviderTurnWatchdogActivityEventType,
-  ProviderTurnWatchdogReason,
 } from "./provider-turn-watchdog.js";
 
 export {
   buildThreadEvent,
   buildThreadEventRow,
-  isThreadEventRowOfType,
   parseStoredThreadEvent,
   parseThreadEventRow,
   threadEventRowSchema,
 } from "./stored-thread-event.js";
 export type {
-  StoredThreadEventData,
   StoredThreadEventDataByType,
   StoredThreadEventDataForType,
-  ThreadEventOfType,
   ThreadEventRow,
   ThreadEventRowOfType,
 } from "./stored-thread-event.js";
@@ -495,7 +474,6 @@ export {
   providerErrorCategoryValues,
   providerErrorInfoSchema,
   providerEventSchema,
-  providerEventTypeSchema,
   providerEventTypeValues,
   providerRawEventSchema,
   systemEventSchema,
@@ -525,20 +503,15 @@ export type {
   ProviderUnhandledEvent,
   ProviderRawEvent,
   ProviderEvent,
-  ProviderEventType,
-  SystemEvent,
   ThreadEvent,
   ThreadEventContextWindowUsage,
   ThreadEventFileChange,
-  ThreadEventFileChangeKind,
   ThreadEventItem,
   ThreadEventItemType,
   ThreadEventItemApprovalStatus,
   ThreadEventItemStatus,
-  ThreadEventItemTruncation,
   ThreadEventPlanStep,
   ThreadEventPlanStepStatus,
-  ThreadEventTextTruncation,
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
   ThreadEventTurnStatus,
@@ -547,7 +520,6 @@ export type {
   ThreadEventWarningCategory,
   ThreadEventWebFetchItem,
   ThreadEventWebSearchItem,
-  ToolCallProgressEvent,
 } from "./provider-event.js";
 
 export { toPositiveNumber } from "./number-utils.js";

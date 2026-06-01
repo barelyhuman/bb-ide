@@ -38,9 +38,6 @@ export type PermissionEscalation = z.infer<typeof permissionEscalationSchema>;
 
 export const promptInputVisibilityValues = ["agent-only"] as const;
 export const promptInputVisibilitySchema = z.enum(promptInputVisibilityValues);
-export type PromptInputVisibility = z.infer<
-  typeof promptInputVisibilitySchema
->;
 
 const promptInputVisibilityFields = {
   visibility: promptInputVisibilitySchema.optional(),
