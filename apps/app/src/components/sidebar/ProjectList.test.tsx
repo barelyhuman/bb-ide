@@ -153,6 +153,17 @@ const STATUS_APP = makeApp({
   icon: { kind: "builtin", name: "ListTodo" },
 });
 
+// Manager app rows render after sidebar bootstrap plus a per-manager app query.
+const MANAGER_APP_ROW_TIMEOUT_MS = 5_000;
+
+function findStatusAppButton() {
+  return screen.findByRole(
+    "button",
+    { name: "Open Status app" },
+    { timeout: MANAGER_APP_ROW_TIMEOUT_MS },
+  );
+}
+
 interface ProjectListHandlerArgs {
   projects: ProjectResponse[];
   threadsByProjectId?: Map<string, ProjectWithThreadsResponse["threads"]>;
@@ -579,9 +590,7 @@ describe("ProjectList", () => {
 
     await renderProjectList();
 
-    const appRow = await screen.findByRole("button", {
-      name: "Open Status app",
-    });
+    const appRow = await findStatusAppButton();
     const managerLabel = screen.getByText("Sidebar Manager");
     const workerLabel = screen.getByText("Worker Thread");
 
@@ -662,7 +671,7 @@ describe("ProjectList", () => {
     );
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open Status app" }),
+      await findStatusAppButton(),
     );
 
     await waitFor(() => {
@@ -741,7 +750,7 @@ describe("ProjectList", () => {
     await renderProjectList();
 
     expect(
-      await screen.findByRole("button", { name: "Open Status app" }),
+      await findStatusAppButton(),
     ).toBeTruthy();
     expect(screen.getByText("Worker Thread")).toBeTruthy();
 
@@ -1615,9 +1624,7 @@ describe("ProjectList", () => {
       { extraUi: <ConversationCollapseProbe threadId={managerThread.id} /> },
     );
 
-    const appRow = await screen.findByRole("button", {
-      name: "Open Status app",
-    });
+    const appRow = await findStatusAppButton();
     const findManagerRow = () =>
       screen
         .getByText("Sidebar Manager")
@@ -1731,7 +1738,7 @@ describe("ProjectList", () => {
 
     // Opening the app collapses the conversation so the app fills the view.
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open Status app" }),
+      await findStatusAppButton(),
     );
     await waitFor(() => {
       expect(
@@ -1838,7 +1845,7 @@ describe("ProjectList", () => {
 
     // Collapse A's conversation by opening its app full-screen.
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open Status app" }),
+      await findStatusAppButton(),
     );
     await waitFor(() => {
       expect(
