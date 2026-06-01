@@ -26,6 +26,7 @@ import {
   replayCapturesQueryKey,
   sidebarNavigationQueryKey,
   systemProvidersQueryKey,
+  threadPromptHistoryQueryKeyPrefix,
   threadsQueryKey,
 } from "../queries/query-keys";
 import type { QueryClientArg } from "../cache-effect-types";
@@ -97,6 +98,7 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allThreadTimelineQueryKeyPrefix(),
     allThreadTimelineTurnSummaryDetailsQueryKeyPrefix(),
     allThreadQueuedMessagesQueryKeyPrefix(),
+    threadPromptHistoryQueryKeyPrefix(),
     allThreadPendingInteractionsQueryKeyPrefix(),
     allThreadDefaultExecutionOptionsQueryKeyPrefix(),
     allThreadAppsQueryKeyPrefix(),

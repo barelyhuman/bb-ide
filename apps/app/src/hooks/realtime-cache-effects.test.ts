@@ -34,7 +34,7 @@ import {
   REALTIME_HOST_CHANGE_REGISTRY,
   REALTIME_PROJECT_CHANGE_REGISTRY,
   REALTIME_THREAD_CHANGE_REGISTRY,
-} from "./realtime-cache-registry";
+} from "./cache-owners/realtime-cache-registry";
 
 const PROJECT_PROMPT_HISTORY_THREAD_CHANGES = [
   "thread-created",

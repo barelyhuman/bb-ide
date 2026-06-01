@@ -229,4 +229,40 @@ describe("ProjectActionsProvider", () => {
       expect(screen.getByTestId("location").textContent).toBe("/");
     });
   });
+
+  it("does not navigate when deleting a project outside the current route", async () => {
+    const deletedProject = makeProjectResponse();
+    const viewedProject = makeProjectResponse({
+      id: "project-2",
+      name: "Project Two",
+    });
+    vi.mocked(api.deleteProject).mockResolvedValue(undefined);
+
+    let actions: ReturnType<typeof useProjectActions> | null = null;
+    renderWithProvider(
+      <>
+        <HookProbe
+          onReady={(a) => {
+            actions = a;
+          }}
+        />
+        <LocationProbe />
+      </>,
+      { initialEntries: [`/projects/${viewedProject.id}`] },
+    );
+
+    act(() => {
+      actions!.requestDelete(deletedProject);
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove project/i }),
+    );
+
+    await waitFor(() => {
+      expect(api.deleteProject).toHaveBeenCalledWith(deletedProject.id);
+    });
+    expect(screen.getByTestId("location").textContent).toBe(
+      `/projects/${viewedProject.id}`,
+    );
+  });
 });

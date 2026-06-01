@@ -19,7 +19,7 @@ import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
   optimisticallyInsertThread,
-} from "./query-cache";
+} from "../cache-owners/query-cache";
 import {
   environmentGitDiffQueryKey,
   environmentWorkStatusQueryKey,

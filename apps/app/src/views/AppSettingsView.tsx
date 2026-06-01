@@ -47,7 +47,7 @@ import { useOpenLinksInAppBrowserPreference } from "@/lib/in-app-browser-link-pr
 import {
   invalidateHostDeleteDependentQueries,
   invalidateHostAvailabilityQueries,
-} from "@/hooks/cache-effects";
+} from "@/hooks/cache-owners/system-cache-effects";
 import * as api from "@/lib/api";
 import { HttpError } from "@/lib/api";
 import { showMutationErrorToast } from "@/lib/mutation-errors";

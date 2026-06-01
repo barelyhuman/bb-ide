@@ -140,6 +140,7 @@ import {
   useToggleThreadSecondaryPanelSelection,
 } from "./threadSecondaryPanelSelection";
 import { useAppRoute } from "@/hooks/useAppRoute";
+import { threadDetailBootstrapResolvedMissingEnvironmentHost } from "./threadDetailBootstrapHostGate";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 const EMPTY_PROJECT_THREAD_SUBSET_FILTERS =
@@ -731,7 +732,14 @@ export function ThreadDetailView() {
   } = useLocalOpenTargets({
     enabled: threadEnvironmentIsLocal,
   });
-  const { data: environmentHost } = useEffectiveHost(environment?.hostId);
+  const suppressMissingEnvironmentHostFetch =
+    threadDetailBootstrapResolvedMissingEnvironmentHost({
+      environment,
+      threadDetailBootstrap: threadDetailBootstrapQuery.data,
+    });
+  const { data: environmentHost } = useEffectiveHost(environment?.hostId, {
+    enabled: !suppressMissingEnvironmentHostFetch,
+  });
   const managedBySection: ThreadPromptManagedBySection | null = useMemo(() => {
     if (!thread?.parentThreadId) return null;
     const href = getThreadRoutePath({

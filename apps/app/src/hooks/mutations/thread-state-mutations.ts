@@ -24,7 +24,6 @@ import {
   rollbackThreadListMutationTransaction,
   settleArchiveThreadsTransaction,
   settleDeleteThreadTransaction,
-  settleReorderPinnedThreadTransaction,
   settleThreadListMembershipMutation,
   type ArchiveThreadsTransaction,
   type DeleteThreadTransaction,
@@ -165,9 +164,6 @@ export function useReorderPinnedThread() {
     },
     onSuccess: (orderedRoots) => {
       applyReorderPinnedThreadResult({ orderedRoots, queryClient });
-    },
-    onSettled: () => {
-      settleReorderPinnedThreadTransaction({ queryClient });
     },
   });
 }

@@ -1,26 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import {
-  ENVIRONMENT_CHANGE_KINDS,
-  HOST_CHANGE_KINDS,
-  PROJECT_CHANGE_KINDS,
-  SYSTEM_CHANGE_KINDS,
-  THREAD_CHANGE_KINDS,
-} from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import { cacheOwnerRegistry } from "./cache-owner-registry";
-import { CACHE_OWNER_IDS, type CacheOwnerRealtimeEvent } from "./cache-owner-types";
-
-interface QueryRootExport {
-  name: string;
-  value: string;
-}
-
-interface DuplicateQueryRootOwner {
-  owners: string[];
-  queryRoot: string;
-}
 
 interface SourceFileViolation {
   filePath: string;
@@ -47,54 +28,18 @@ const DISALLOWED_CACHE_IMPORT_SUFFIXES = [
   "/queries/thread-list-cache-data",
 ] as const;
 
-function hasExportModifier(node: ts.VariableStatement): boolean {
-  return (
-    node.modifiers?.some(
-      (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-    ) ?? false
-  );
-}
-
-function collectExportedQueryRootValues(): QueryRootExport[] {
-  const queryKeysUrl = new URL("../queries/query-keys.ts", import.meta.url);
-  const sourceText = readFileSync(queryKeysUrl, "utf8");
-  const sourceFile = ts.createSourceFile(
-    "query-keys.ts",
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const exports: QueryRootExport[] = [];
-
-  sourceFile.forEachChild((node) => {
-    if (!ts.isVariableStatement(node) || !hasExportModifier(node)) {
-      return;
-    }
-    for (const declaration of node.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name)) {
-        continue;
-      }
-      const name = declaration.name.text;
-      if (!name.endsWith("_QUERY_KEY")) {
-        continue;
-      }
-      if (
-        declaration.initializer === undefined ||
-        !ts.isStringLiteral(declaration.initializer)
-      ) {
-        continue;
-      }
-      exports.push({ name, value: declaration.initializer.text });
-    }
-  });
-
-  return exports;
-}
-
-function buildRealtimeEventKey(event: CacheOwnerRealtimeEvent): string {
-  return `${event.entity}:${event.kind}`;
-}
+const DEPRECATED_CACHE_SHIM_MODULES = new Set([
+  "hooks/cache-effect-utils",
+  "hooks/cache-effects",
+  "hooks/cache-invalidation-groups",
+  "hooks/environment-cache-effects",
+  "hooks/mutation-cache-effects",
+  "hooks/mutations/thread-archive-cache",
+  "hooks/queries/query-cache",
+  "hooks/queries/thread-list-cache-data",
+  "hooks/realtime-cache-registry",
+  "hooks/system-cache-effects",
+]);
 
 function getAppSourceRoot(): string {
   return path.resolve(new URL("../../", import.meta.url).pathname);
@@ -199,7 +144,10 @@ function collectCacheImportBoundaryViolations(): SourceFileViolation[] {
   const violations: SourceFileViolation[] = [];
   for (const filePath of collectSourceFilePaths(getAppSourceRoot())) {
     const relativePath = toAppRelativePath(filePath);
-    if (isTestOrStoryFile(relativePath) || !isCacheBoundarySubject(relativePath)) {
+    if (
+      isTestOrStoryFile(relativePath) ||
+      !isCacheBoundarySubject(relativePath)
+    ) {
       continue;
     }
     const sourceFile = parseSourceFile(filePath);
@@ -225,68 +173,65 @@ function collectCacheImportBoundaryViolations(): SourceFileViolation[] {
   return violations;
 }
 
-describe("cache owner registry", () => {
-  it("assigns every app-domain query root to exactly one owner", () => {
-    const exportedQueryRoots = collectExportedQueryRootValues();
-    const ownerIdsByQueryRoot = new Map<string, string[]>();
-
-    for (const owner of cacheOwnerRegistry) {
-      for (const queryRoot of owner.ownedQueryRoots) {
-        const ownerIds = ownerIdsByQueryRoot.get(queryRoot) ?? [];
-        ownerIds.push(owner.id);
-        ownerIdsByQueryRoot.set(queryRoot, ownerIds);
-      }
-    }
-
-    const missingOwners = exportedQueryRoots
-      .filter(({ value }) => !ownerIdsByQueryRoot.has(value))
-      .map(({ name, value }) => `${name}:${value}`);
-    const duplicateOwners: DuplicateQueryRootOwner[] = [];
-    for (const [queryRoot, owners] of ownerIdsByQueryRoot) {
-      if (owners.length > 1) {
-        duplicateOwners.push({ owners, queryRoot });
-      }
-    }
-
-    expect(missingOwners).toEqual([]);
-    expect(duplicateOwners).toEqual([]);
-  });
-
-  it("declares required machine-checkable ownership fields for every owner", () => {
-    expect(cacheOwnerRegistry.map((owner) => owner.id)).toEqual(
-      Array.from(CACHE_OWNER_IDS),
+function resolveAppImportModulePath(
+  relativePath: string,
+  modulePath: string,
+): string | null {
+  if (modulePath.startsWith("@/")) {
+    return modulePath.slice(2);
+  }
+  if (modulePath.startsWith("./") || modulePath.startsWith("../")) {
+    return path.posix.normalize(
+      path.posix.join(path.posix.dirname(relativePath), modulePath),
     );
+  }
+  return null;
+}
 
-    for (const owner of cacheOwnerRegistry) {
-      expect(owner.ownedQueryRoots.length, owner.id).toBeGreaterThan(0);
-      expect(Array.isArray(owner.handledRealtimeEvents), owner.id).toBe(true);
-    }
-  });
+function collectDeprecatedCacheShimImportViolations(): SourceFileViolation[] {
+  const violations: SourceFileViolation[] = [];
+  for (const filePath of collectSourceFilePaths(getAppSourceRoot())) {
+    const relativePath = toAppRelativePath(filePath);
+    const sourceFile = parseSourceFile(filePath);
+    sourceFile.forEachChild((node) => {
+      if (
+        !ts.isImportDeclaration(node) ||
+        !ts.isStringLiteral(node.moduleSpecifier)
+      ) {
+        return;
+      }
+      const resolvedModulePath = resolveAppImportModulePath(
+        relativePath,
+        node.moduleSpecifier.text,
+      );
+      if (
+        resolvedModulePath &&
+        DEPRECATED_CACHE_SHIM_MODULES.has(resolvedModulePath)
+      ) {
+        violations.push(
+          violationForNode(
+            sourceFile,
+            filePath,
+            node,
+            node.moduleSpecifier.text,
+          ),
+        );
+      }
+    });
+  }
+  return violations;
+}
 
-  it("covers every realtime change kind with at least one owner", () => {
-    const handledEvents = new Set(
-      cacheOwnerRegistry.flatMap((owner) =>
-        owner.handledRealtimeEvents.map(buildRealtimeEventKey),
-      ),
-    );
-    const expectedEvents = [
-      ...THREAD_CHANGE_KINDS.map((kind) => `thread:${kind}`),
-      ...PROJECT_CHANGE_KINDS.map((kind) => `project:${kind}`),
-      ...ENVIRONMENT_CHANGE_KINDS.map((kind) => `environment:${kind}`),
-      ...HOST_CHANGE_KINDS.map((kind) => `host:${kind}`),
-      ...SYSTEM_CHANGE_KINDS.map((kind) => `system:${kind}`),
-    ];
-
-    expect(
-      expectedEvents.filter((event) => !handledEvents.has(event)),
-    ).toEqual([]);
-  });
-
+describe("cache owner boundaries", () => {
   it("keeps raw app-domain cache writes inside cache owners", () => {
     expect(collectRawCacheWriteViolations()).toEqual([]);
   });
 
   it("keeps mutation, realtime, and action-provider files off query-key imports", () => {
     expect(collectCacheImportBoundaryViolations()).toEqual([]);
+  });
+
+  it("keeps imports off deprecated cache-owner re-export shims", () => {
+    expect(collectDeprecatedCacheShimImportViolations()).toEqual([]);
   });
 });

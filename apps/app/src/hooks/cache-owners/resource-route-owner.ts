@@ -9,7 +9,7 @@ import type {
 } from "@bb/domain";
 import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
 import { getRootComposeRoutePath } from "@/lib/app-route-paths";
-import { useRootComposeProjectId } from "@/lib/root-compose-selection";
+import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 import { useAppRoute } from "../useAppRoute";
 import { getCachedThreadProjectId } from "./thread-detail-cache-owner";
 
@@ -41,7 +41,7 @@ export function useDeletedResourceRouteOwner(): DeletedResourceRouteChangeHandle
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setCollapsedProjectIdList = useSetAtom(collapsedProjectIdsAtom);
-  const [, setRootComposeProjectId] = useRootComposeProjectId();
+  const setRootComposeProjectId = useSetRootComposeProjectId();
   const { projectId: routeProjectId, threadId: routeThreadId } = useAppRoute();
 
   return useCallback(

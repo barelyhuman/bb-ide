@@ -36,7 +36,7 @@ import {
   useSidebarNavigation,
 } from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
-import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
+import { invalidateProjectSourceQueries } from "@/hooks/cache-owners/mutation-cache-effects";
 import * as api from "@/lib/api";
 
 interface DeleteProjectSourceMutationRequest {

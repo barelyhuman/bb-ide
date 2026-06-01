@@ -3,11 +3,7 @@ import type {
   TerminalSession,
   ThreadTerminalListResponse,
 } from "@bb/server-contract";
-import {
-  THREAD_TERMINALS_QUERY_KEY,
-  threadTerminalsQueryKey,
-} from "../queries/query-keys";
-import type { CacheOwnerDescriptor } from "./cache-owner-types";
+import { threadTerminalsQueryKey } from "../queries/query-keys";
 
 interface TerminalSessionCacheArgs {
   queryClient: QueryClient;
@@ -17,12 +13,6 @@ interface TerminalSessionCacheArgs {
 interface CloseTerminalSessionCacheArgs extends TerminalSessionCacheArgs {
   terminalId: string;
 }
-
-export const terminalCacheOwner = {
-  id: "terminal",
-  ownedQueryRoots: [THREAD_TERMINALS_QUERY_KEY],
-  handledRealtimeEvents: [{ entity: "thread", kind: "terminals-changed" }],
-} satisfies CacheOwnerDescriptor;
 
 function upsertTerminalSession(
   current: ThreadTerminalListResponse | undefined,

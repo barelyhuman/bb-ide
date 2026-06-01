@@ -11,7 +11,7 @@ import {
 import {
   invalidateRealtimeQueriesAfterServerReconnect,
   refetchErroredRealtimeQueriesOnInitialConnect,
-} from "./system-cache-effects";
+} from "./cache-owners/system-cache-effects";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import {
   collectCachedThreadIdsForEnvironment,
@@ -22,9 +22,9 @@ import {
   REALTIME_SYSTEM_CHANGE_REGISTRY,
   REALTIME_THREAD_CHANGE_REGISTRY,
   shouldFlushThreadChangesImmediately,
-} from "./realtime-cache-registry";
+} from "./cache-owners/realtime-cache-registry";
 
-export { shouldFlushThreadChangesImmediately } from "./realtime-cache-registry";
+export { shouldFlushThreadChangesImmediately } from "./cache-owners/realtime-cache-registry";
 
 const INVALIDATION_DEBOUNCE_MS = 50;
 const INVALIDATION_MAX_WAIT_MS = 200;

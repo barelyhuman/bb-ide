@@ -6,15 +6,9 @@ import type {
 } from "@bb/server-contract";
 import { applyNeighborReorder } from "@/lib/neighbor-reorder";
 import {
-  PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
-  PROJECT_PATHS_QUERY_KEY,
-  PROJECT_PROMPT_HISTORY_QUERY_KEY,
-  PROJECT_SOURCE_BRANCHES_QUERY_KEY,
-  PROJECTS_QUERY_KEY,
   projectsQueryKey,
   sidebarNavigationQueryKey,
 } from "../queries/query-keys";
-import type { CacheOwnerDescriptor } from "./cache-owner-types";
 import {
   invalidateProjectDeleteQueries,
   invalidateProjectListQueries,
@@ -48,27 +42,6 @@ export interface ReorderProjectTransaction {
   previousProjects: ProjectResponse[] | undefined;
   previousSidebarNavigation: SidebarBootstrapResponse | undefined;
 }
-
-export const projectCacheOwner = {
-  id: "project",
-  ownedQueryRoots: [
-    PROJECTS_QUERY_KEY,
-    PROJECT_PATHS_QUERY_KEY,
-    PROJECT_SOURCE_BRANCHES_QUERY_KEY,
-    PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
-    PROJECT_PROMPT_HISTORY_QUERY_KEY,
-  ],
-  handledRealtimeEvents: [
-    { entity: "project", kind: "project-created" },
-    { entity: "project", kind: "project-updated" },
-    { entity: "project", kind: "project-deleted" },
-    { entity: "project", kind: "project-sources-changed" },
-    { entity: "project", kind: "threads-changed" },
-    { entity: "project", kind: "project-order-changed" },
-    { entity: "project", kind: "automations-changed" },
-    { entity: "project", kind: "nudges-changed" },
-  ],
-} satisfies CacheOwnerDescriptor;
 
 function applyProjectOrderToProjectList(
   currentProjects: readonly ProjectResponse[],

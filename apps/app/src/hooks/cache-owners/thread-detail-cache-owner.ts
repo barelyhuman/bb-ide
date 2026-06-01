@@ -12,13 +12,10 @@ import {
   environmentQueryKey,
   hostQueryKey,
   hostsQueryKey,
-  THREAD_DETAIL_BOOTSTRAP_QUERY_KEY,
-  THREAD_QUERY_KEY,
   threadComposerBootstrapQueryKey,
   threadQueryKey,
   threadTimelineQueryKey,
 } from "../queries/query-keys";
-import type { CacheOwnerDescriptor } from "./cache-owner-types";
 
 type HostList = Host[];
 type HostListQueryData = HostList | undefined;
@@ -48,22 +45,6 @@ export interface ThreadDetailBootstrapIngestionArgs {
   thread: ThreadWithIncludesResponse;
   timelinePrefetch: ThreadTimelinePrefetchPolicy | undefined;
 }
-
-export const threadDetailCacheOwner = {
-  id: "thread-detail",
-  ownedQueryRoots: [THREAD_QUERY_KEY, THREAD_DETAIL_BOOTSTRAP_QUERY_KEY],
-  handledRealtimeEvents: [
-    { entity: "thread", kind: "thread-created" },
-    { entity: "thread", kind: "thread-deleted" },
-    { entity: "thread", kind: "status-changed" },
-    { entity: "thread", kind: "title-changed" },
-    { entity: "thread", kind: "archived-changed" },
-    { entity: "thread", kind: "pin-state-changed" },
-    { entity: "thread", kind: "parent-changed" },
-    { entity: "thread", kind: "read-state-changed" },
-    { entity: "thread", kind: "manager-assignment-changed" },
-  ],
-} satisfies CacheOwnerDescriptor;
 
 function stripThreadIncludes(
   thread: ThreadWithIncludesResponse,

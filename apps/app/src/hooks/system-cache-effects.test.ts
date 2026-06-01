@@ -4,11 +4,15 @@ import {
   allSystemExecutionOptionsQueryKeyPrefix,
   sidebarNavigationQueryKey,
   systemExecutionOptionsQueryKey,
+  threadDefaultExecutionOptionsQueryKey,
+  threadPendingInteractionsQueryKey,
+  threadPromptHistoryQueryKey,
+  threadQueuedMessagesQueryKey,
 } from "./queries/query-keys";
 import {
   invalidateHostChangeDependentQueries,
   invalidateRealtimeQueriesAfterServerReconnect,
-} from "./system-cache-effects";
+} from "./cache-owners/system-cache-effects";
 
 function createCacheEffectQueryClient() {
   return createAppQueryClient({
@@ -43,12 +47,25 @@ const EMPTY_EXECUTION_OPTIONS = {
 };
 
 describe("system cache effects", () => {
-  it("invalidates env-scoped execution options after reconnect", () => {
+  it("invalidates canonical composer caches after reconnect", () => {
     const queryClient = createCacheEffectQueryClient();
+    const queuedMessagesKey = threadQueuedMessagesQueryKey("thread-1");
+    const promptHistoryKey = threadPromptHistoryQueryKey("thread-1");
+    const pendingInteractionsKey =
+      threadPendingInteractionsQueryKey("thread-1");
+    const defaultExecutionOptionsKey =
+      threadDefaultExecutionOptionsQueryKey("thread-1");
     const executionOptionsKey = scopedSystemExecutionOptionsKey({
       environmentId: "env-1",
     });
     const sidebarNavigationKey = sidebarNavigationQueryKey();
+    queryClient.setQueryData(queuedMessagesKey, []);
+    queryClient.setQueryData(promptHistoryKey, []);
+    queryClient.setQueryData(pendingInteractionsKey, []);
+    queryClient.setQueryData(
+      defaultExecutionOptionsKey,
+      EMPTY_EXECUTION_OPTIONS,
+    );
     queryClient.setQueryData(executionOptionsKey, EMPTY_EXECUTION_OPTIONS);
     queryClient.setQueryData(sidebarNavigationKey, {
       projects: [],
@@ -57,6 +74,18 @@ describe("system cache effects", () => {
 
     invalidateRealtimeQueriesAfterServerReconnect({ queryClient });
 
+    expect(queryClient.getQueryState(queuedMessagesKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(promptHistoryKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(
+      queryClient.getQueryState(pendingInteractionsKey)?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(defaultExecutionOptionsKey)?.isInvalidated,
+    ).toBe(true);
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       true,
     );

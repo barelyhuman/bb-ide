@@ -5,7 +5,7 @@ import {
   systemExecutionOptionsQueryKey,
   threadComposerBootstrapQueryKey,
 } from "./queries/query-keys";
-import { removeEnvironmentScopedQueries } from "./environment-cache-effects";
+import { removeEnvironmentScopedQueries } from "./cache-owners/environment-cache-effects";
 
 interface ScopedSystemExecutionOptionsKeyArgs {
   environmentId: string;

@@ -8,15 +8,11 @@ import type {
 } from "@bb/server-contract";
 import { applyNeighborReorder } from "@/lib/neighbor-reorder";
 import {
-  SIDEBAR_NAVIGATION_QUERY_KEY,
-  THREADS_DISABLED_QUERY_KEY,
-  THREADS_QUERY_KEY,
   sidebarNavigationQueryKey,
   threadListQueryKey,
   threadQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
-import type { CacheOwnerDescriptor } from "./cache-owner-types";
 import {
   optimisticallyInsertThread,
   restoreCachedSidebarNavigation,
@@ -91,32 +87,6 @@ export interface ReorderProjectManagerTransaction {
   previousSidebarNavigation: CachedSidebarNavigationSnapshot;
   previousThreadList: ThreadListResponse | undefined;
 }
-
-export const threadListCacheOwner = {
-  id: "thread-list",
-  ownedQueryRoots: [
-    THREADS_QUERY_KEY,
-    THREADS_DISABLED_QUERY_KEY,
-    SIDEBAR_NAVIGATION_QUERY_KEY,
-  ],
-  handledRealtimeEvents: [
-    { entity: "thread", kind: "thread-created" },
-    { entity: "thread", kind: "thread-deleted" },
-    { entity: "thread", kind: "status-changed" },
-    { entity: "thread", kind: "title-changed" },
-    { entity: "thread", kind: "archived-changed" },
-    { entity: "thread", kind: "pin-state-changed" },
-    { entity: "thread", kind: "parent-changed" },
-    { entity: "thread", kind: "read-state-changed" },
-    { entity: "thread", kind: "manager-assignment-changed" },
-    { entity: "thread", kind: "order-changed" },
-    { entity: "project", kind: "project-created" },
-    { entity: "project", kind: "project-updated" },
-    { entity: "project", kind: "project-deleted" },
-    { entity: "project", kind: "threads-changed" },
-    { entity: "project", kind: "project-order-changed" },
-  ],
-} satisfies CacheOwnerDescriptor;
 
 function applyThreadListOrderToExistingThreads(
   currentThreads: readonly ThreadListEntry[],

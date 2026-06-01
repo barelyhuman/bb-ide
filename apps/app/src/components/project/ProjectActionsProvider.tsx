@@ -8,6 +8,7 @@ import {
 import { useSetAtom } from "jotai";
 import { useNavigate } from "react-router-dom";
 import type { ProjectResponse } from "@bb/server-contract";
+import { useAppRoute } from "@/hooks/useAppRoute";
 import {
   useAddLocalProjectSource,
   useDeleteProject,
@@ -28,6 +29,7 @@ import {
   type ProjectRenameDialogTarget,
 } from "@/components/dialogs/ProjectRenameDialog";
 import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
+import { getRootComposeRoutePath } from "@/lib/app-route-paths";
 
 export interface ProjectActionsContextValue {
   requestRename: (project: ProjectResponse) => void;
@@ -57,6 +59,7 @@ export function ProjectActionsProvider({
   children,
 }: ProjectActionsProviderProps) {
   const navigate = useNavigate();
+  const { projectId: routeProjectId } = useAppRoute();
   const setCollapsedProjectIdList = useSetAtom(collapsedProjectIdsAtom);
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
@@ -124,7 +127,9 @@ export function ProjectActionsProvider({
           setCollapsedProjectIdList((current) =>
             current.filter((id) => id !== projectId),
           );
-          navigate("/", { replace: true });
+          if (routeProjectId === projectId) {
+            navigate(getRootComposeRoutePath(), { replace: true });
+          }
         },
       });
     },
@@ -132,6 +137,7 @@ export function ProjectActionsProvider({
       closeDeleteDialog,
       deleteProjectMutate,
       navigate,
+      routeProjectId,
       setCollapsedProjectIdList,
     ],
   );

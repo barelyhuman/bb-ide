@@ -7,8 +7,11 @@ import { Pill } from "@/components/ui/pill.js";
 import type { ReplayRunSpeed } from "@bb/server-contract";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { Button } from "@/components/ui/button.js";
-import { SplitButton, type SplitButtonAction } from "@/components/ui/split-button.js";
-import { invalidateReplayCaptures } from "@/hooks/cache-effects";
+import {
+  SplitButton,
+  type SplitButtonAction,
+} from "@/components/ui/split-button.js";
+import { invalidateReplayCaptures } from "@/hooks/cache-owners/system-cache-effects";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";
 import { cn } from "@/lib/utils";
@@ -167,7 +170,8 @@ export function InternalReplayListView() {
                       aria-expanded={isExpanded}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      <Icon name="ChevronRight"
+                      <Icon
+                        name="ChevronRight"
                         className={cn(
                           "size-3 shrink-0 text-muted-foreground transition-transform",
                           isExpanded && "rotate-90",

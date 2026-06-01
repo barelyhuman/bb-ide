@@ -30,7 +30,7 @@ import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
 import { fetchAndHydrateThreadComposerBootstrap } from "../cache-owners/composer-cache-owner";
-import { getCachedThreadListPlaceholder } from "./query-cache";
+import { getCachedThreadListPlaceholder } from "../cache-owners/query-cache";
 import {
   resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
