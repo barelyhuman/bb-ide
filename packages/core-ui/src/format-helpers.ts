@@ -1,77 +1,3 @@
-/** Get the effective start time of a message, falling back to createdAt. */
-export function getMessageStartedAt(message: {
-  createdAt: number;
-  startedAt?: number;
-}): number {
-  return message.startedAt ?? message.createdAt;
-}
-
-function getNonEmptyStringField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
-  const value = record?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-export function getFirstStringField(
-  record: Record<string, unknown> | null,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = getNonEmptyStringField(record, key);
-    if (value) return value;
-  }
-  return undefined;
-}
-
-export function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-export function durationToString(
-  durationMs: number | undefined,
-): string | undefined {
-  if (durationMs === undefined) return undefined;
-  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
-  const seconds = durationMs / 1_000;
-  if (seconds < 60)
-    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
-  return formatRoundedDurationSeconds(Math.round(seconds));
-}
-
-export function durationToCompactString(durationMs: number): string;
-export function durationToCompactString(durationMs: undefined): undefined;
-export function durationToCompactString(
-  durationMs: number | undefined,
-): string | undefined {
-  if (durationMs === undefined) return undefined;
-  if (!Number.isFinite(durationMs) || durationMs < 0) return "0s";
-  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
-  const totalSeconds = Math.round(durationMs / 1_000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  return formatRoundedDurationSeconds(totalSeconds);
-}
-
-function formatRoundedDurationSeconds(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-  const parts: string[] = [];
-
-  if (hours > 0) {
-    parts.push(`${hours}h`);
-  }
-  if (minutes > 0) {
-    parts.push(`${minutes}m`);
-  }
-  if (seconds > 0) {
-    parts.push(`${seconds}s`);
-  }
-
-  return parts.join(" ");
-}
-
 export function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "just now";
@@ -81,8 +7,4 @@ export function timeAgo(timestamp: number): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-export function messageId(threadId: string, kind: string, key: string): string {
-  return `${threadId}:${kind}:${key}`;
 }

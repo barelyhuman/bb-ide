@@ -19,6 +19,6 @@ export type {
   PendingInteractionPresentationSurface,
 } from "./pending-interaction-presentation.js";
 
-export { durationToCompactString, timeAgo } from "./format-helpers.js";
+export { timeAgo } from "./format-helpers.js";
 
 export { extractErrorMessage, toRecord } from "./unknown-helpers.js";
