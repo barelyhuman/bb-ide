@@ -7,19 +7,14 @@ import {
   type ThreadEventType,
   type ThreadChangeMetadata,
   type ThreadChangeKind,
-  type ThreadWithRuntime,
 } from "@bb/domain";
-import {
-  getCachedThreadLists,
-  iterateThreadListCacheEntries,
-} from "./queries/thread-list-cache-data";
-import { allThreadQueryKeyPrefix, threadsQueryKey } from "./queries/query-keys";
 import {
   invalidateRealtimeQueriesAfterServerReconnect,
   refetchErroredRealtimeQueriesOnInitialConnect,
 } from "./system-cache-effects";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import {
+  collectCachedThreadIdsForEnvironment,
   executeRealtimeDirtyHandlers,
   REALTIME_ENVIRONMENT_CHANGE_REGISTRY,
   REALTIME_HOST_CHANGE_REGISTRY,
@@ -117,30 +112,6 @@ function resetThreadChangeState(state: ThreadChangeState): void {
   state.changedThreadKinds.clear();
   state.globalChangeKinds.clear();
   state.metadataByThreadId.clear();
-}
-
-function collectCachedThreadIdsForEnvironment({
-  environmentId,
-  queryClient,
-}: EnvironmentArg): string[] {
-  const threadIds = new Set<string>();
-  for (const [, thread] of queryClient.getQueriesData<ThreadWithRuntime>({
-    queryKey: allThreadQueryKeyPrefix(),
-  })) {
-    if (thread?.environmentId === environmentId) {
-      threadIds.add(thread.id);
-    }
-  }
-  for (const { data } of getCachedThreadLists(queryClient, {
-    queryKey: threadsQueryKey(),
-  })) {
-    for (const thread of iterateThreadListCacheEntries(data)) {
-      if (thread.environmentId === environmentId) {
-        threadIds.add(thread.id);
-      }
-    }
-  }
-  return Array.from(threadIds);
 }
 
 function mergeThreadChanges({

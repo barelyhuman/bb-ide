@@ -6,6 +6,7 @@ import type {
   SystemChangeKind,
   ThreadChangeKind,
   ThreadEventType,
+  ThreadWithRuntime,
 } from "@bb/domain";
 import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
@@ -16,8 +17,13 @@ import {
   updateCachedThreadListPendingInteractionState,
 } from "./query-cache";
 import {
+  getCachedThreadLists,
+  iterateThreadListCacheEntries,
+} from "./thread-list-cache-data";
+import {
   allHostQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
+  allThreadQueryKeyPrefix,
   allThreadComposerBootstrapQueryKeyPrefix,
   allThreadTerminalsQueryKeyPrefix,
   environmentFilePreviewQueryKeyPrefix,
@@ -48,6 +54,11 @@ import {
   getThreadQueueContentInvalidationQueryKeys,
   getThreadTimelineInvalidationQueryKeys,
 } from "./cache-invalidation-groups";
+
+interface CollectCachedThreadIdsForEnvironmentArgs {
+  environmentId: string;
+  queryClient: QueryClient;
+}
 
 export const REALTIME_THREAD_CHANGE_REGISTRY = {
   "thread-created": {
@@ -362,6 +373,30 @@ export function shouldFlushThreadChangesImmediately(
   return changes.some(
     (change) => REALTIME_THREAD_CHANGE_REGISTRY[change].flush === "immediate",
   );
+}
+
+export function collectCachedThreadIdsForEnvironment({
+  environmentId,
+  queryClient,
+}: CollectCachedThreadIdsForEnvironmentArgs): string[] {
+  const threadIds = new Set<string>();
+  for (const [, thread] of queryClient.getQueriesData<ThreadWithRuntime>({
+    queryKey: allThreadQueryKeyPrefix(),
+  })) {
+    if (thread?.environmentId === environmentId) {
+      threadIds.add(thread.id);
+    }
+  }
+  for (const { data } of getCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+  })) {
+    for (const thread of iterateThreadListCacheEntries(data)) {
+      if (thread.environmentId === environmentId) {
+        threadIds.add(thread.id);
+      }
+    }
+  }
+  return Array.from(threadIds);
 }
 
 function dirtyThreadListQueries({
