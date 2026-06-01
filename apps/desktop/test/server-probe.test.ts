@@ -116,6 +116,7 @@ describe("probeBbServer", () => {
   });
 
   it("does not depend on the production version endpoint for startup compatibility", async () => {
+    let versionRequestCount = 0;
     const testServer = await startTestServer({
       handler(request, response) {
         if (request.url === "/health") {
@@ -135,6 +136,8 @@ describe("probeBbServer", () => {
           return;
         }
         if (request.url === "/api/v1/system/version") {
+          versionRequestCount += 1;
+          writeJson(response, 500, JSON.stringify({ message: "unexpected" }));
           return;
         }
         writeJson(response, 404, JSON.stringify({ message: "not found" }));
@@ -142,11 +145,12 @@ describe("probeBbServer", () => {
     });
 
     await expect(
-      probeBbServer({ serverUrl: testServer.url, timeoutMs: 50 }),
+      probeBbServer({ serverUrl: testServer.url, timeoutMs: 500 }),
     ).resolves.toEqual({
       kind: "compatible",
       serverUrl: testServer.url,
     });
+    expect(versionRequestCount).toBe(0);
   });
 
   it("reports unavailable when nothing is listening", async () => {
