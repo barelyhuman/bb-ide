@@ -104,6 +104,12 @@ interface ThreadTimelineFromEventsBaseOptions {
   isLatestPage: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
+  /**
+   * Absolute path of the thread's workspace root, used to relativize the
+   * absolute file paths persisted by provider file-edit tool calls. Null when
+   * the thread has no environment (the path is then left as-is).
+   */
+  workspaceRoot: string | null;
 }
 
 export interface StandardThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
@@ -144,6 +150,8 @@ export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadT
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
   viewMode: ThreadTimelineViewMode;
+  /** See {@link ThreadTimelineFromEventsBaseOptions.workspaceRoot}. */
+  workspaceRoot: string | null;
 }
 
 export interface BuildThreadTimelineTurnDetailsFromEventsArgs {
@@ -168,6 +176,7 @@ interface BuildTurnRowsArgs {
   includeNestedRows: boolean;
   rowIdPrefix: string;
   turn: EventProjectionTurn;
+  workspaceRoot: string | null;
 }
 
 interface TimelineMessageBounds {
@@ -194,11 +203,13 @@ interface BuildCompletedTurnSummaryRowsArgs {
   rowIdPrefix: string;
   summaryItems: CompletedTurnSummaryItem[];
   turn: EventProjectionTurn;
+  workspaceRoot: string | null;
 }
 
 interface BuildTimelineRowsOptions {
   includeNestedRows: boolean;
   rowIdPrefix: string;
+  workspaceRoot: string | null;
 }
 
 interface BuildGenericOperationSystemRowArgs {
@@ -384,13 +395,39 @@ function convertActivityIntent(
   }
 }
 
+/**
+ * File-edit tool calls persist the path the provider reported, which is
+ * absolute (e.g. `/Users/.../worktrees/env_x/bb/src/app.ts`). The timeline
+ * contract promises a workspace-relative path so it matches the repo-relative
+ * names produced by `git diff` in the diff panel, lets `open-file-diff` focus
+ * the right card, and keeps the inline diff header readable. Relativize once
+ * here at the projection boundary so every downstream consumer sees one
+ * canonical workspace-relative path.
+ */
+function relativizeWorkspacePath(
+  path: string,
+  workspaceRoot: string | null,
+): string {
+  if (!workspaceRoot) return path;
+  const normalizedRoot = workspaceRoot.replace(/\/+$/u, "");
+  if (normalizedRoot.length === 0) return path;
+  if (path.startsWith(`${normalizedRoot}/`)) {
+    return path.slice(normalizedRoot.length + 1);
+  }
+  return path;
+}
+
 function toTimelineFileChange(
   change: EventProjectionFileEditChange,
+  workspaceRoot: string | null,
 ): TimelineFileChange {
   return {
-    path: change.path,
+    path: relativizeWorkspacePath(change.path, workspaceRoot),
     kind: change.kind ?? null,
-    movePath: change.movePath ?? null,
+    movePath:
+      change.movePath == null
+        ? null
+        : relativizeWorkspacePath(change.movePath, workspaceRoot),
     diff: change.diff ?? null,
     diffStats: getFileChangeDiffStats(change),
   };
@@ -564,7 +601,7 @@ function convertMessage(
           workKind: "file-change",
           status: message.status,
           callId: message.callId,
-          change: toTimelineFileChange(change),
+          change: toTimelineFileChange(change, options.workspaceRoot),
           stdout: message.stdout ?? null,
           stderr: message.stderr ?? null,
           approvalStatus: message.approvalStatus,
@@ -613,6 +650,7 @@ function convertMessage(
           childRows: buildTimelineRows(message.childProjection, {
             includeNestedRows: true,
             rowIdPrefix: `${base.id}:child:`,
+            workspaceRoot: options.workspaceRoot,
           }),
         },
       ];
@@ -879,6 +917,7 @@ function buildCompletedTurnSummaryRows({
   rowIdPrefix,
   summaryItems,
   turn,
+  workspaceRoot,
 }: BuildCompletedTurnSummaryRowsArgs): TimelineRow[] {
   const rows: TimelineRow[] = [];
   for (const item of summaryItems) {
@@ -887,6 +926,7 @@ function buildCompletedTurnSummaryRows({
         ...convertMessage(item.message, {
           includeNestedRows,
           rowIdPrefix,
+          workspaceRoot,
         }),
       );
       continue;
@@ -894,7 +934,11 @@ function buildCompletedTurnSummaryRows({
 
     const sourceRows = includeNestedRows
       ? item.sourceMessages.flatMap((message) =>
-          convertMessage(message, { includeNestedRows, rowIdPrefix }),
+          convertMessage(message, {
+            includeNestedRows,
+            rowIdPrefix,
+            workspaceRoot,
+          }),
         )
       : [];
     const turnRow = buildTurnSummaryRow({
@@ -919,6 +963,7 @@ function buildTurnRows({
   includeNestedRows,
   rowIdPrefix,
   turn,
+  workspaceRoot,
 }: BuildTurnRowsArgs): TimelineRow[] {
   const messages = turn.messages ?? [];
   const isCompletedTurn =
@@ -926,23 +971,24 @@ function buildTurnRows({
 
   if (!isCompletedTurn) {
     return messages.flatMap((message) =>
-      convertMessage(message, { includeNestedRows, rowIdPrefix }),
+      convertMessage(message, { includeNestedRows, rowIdPrefix, workspaceRoot }),
     );
   }
 
   const { summaryItems, terminalMessages, trailingMessages } =
     groupCompletedTurnMessages(turn);
   const terminalRows = terminalMessages.flatMap((message) =>
-    convertMessage(message, { includeNestedRows, rowIdPrefix }),
+    convertMessage(message, { includeNestedRows, rowIdPrefix, workspaceRoot }),
   );
   const trailingRows = trailingMessages.flatMap((message) =>
-    convertMessage(message, { includeNestedRows, rowIdPrefix }),
+    convertMessage(message, { includeNestedRows, rowIdPrefix, workspaceRoot }),
   );
   const summaryRows = buildCompletedTurnSummaryRows({
     includeNestedRows,
     rowIdPrefix,
     summaryItems,
     turn,
+    workspaceRoot,
   });
   return [...summaryRows, ...terminalRows, ...trailingRows];
 }
@@ -966,6 +1012,7 @@ function isManagerConversationMessage(
 
 function buildManagerConversationRows(
   projection: EventProjection,
+  workspaceRoot: string | null,
 ): TimelineRow[] {
   const entries: EventProjectionEntry[] = flattenEventProjectionMessagesDeep(
     projection,
@@ -980,6 +1027,7 @@ function buildManagerConversationRows(
     {
       includeNestedRows: false,
       rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
+      workspaceRoot,
     },
   );
 }
@@ -1023,6 +1071,7 @@ function buildTimelineRows(
             turn: entry.turn,
             includeNestedRows,
             rowIdPrefix: options.rowIdPrefix,
+            workspaceRoot: options.workspaceRoot,
           }),
         );
         break;
@@ -1058,11 +1107,12 @@ export function buildThreadTimelineFromEvents(
 
   const rows =
     args.options.viewMode === "manager-conversation"
-      ? buildManagerConversationRows(projection)
+      ? buildManagerConversationRows(projection, args.options.workspaceRoot)
       : [
           ...buildTimelineRows(projection, {
             includeNestedRows: args.options.includeNestedRows,
             rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
+            workspaceRoot: args.options.workspaceRoot,
           }),
           ...buildPendingSteerRowsFromEvents(
             args.acceptedClientRequestContext,
@@ -1107,6 +1157,7 @@ export function buildThreadTimelineTurnDetailsFromEvents(
   const nestedRows = buildTimelineRows(projection, {
     includeNestedRows: true,
     rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
+    workspaceRoot: args.options.workspaceRoot,
   });
   const matchingTurnSummary = findMatchingTurnSummaryRow(
     nestedRows,

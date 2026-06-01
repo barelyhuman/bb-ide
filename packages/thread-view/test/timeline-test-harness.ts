@@ -1082,6 +1082,7 @@ export function renderTimelineFixture(
     systemClientRequestVisibility:
       args.projectionOptions.systemClientRequestVisibility,
     threadStatus: args.projectionOptions.threadStatus ?? "idle",
+    workspaceRoot: null,
   };
   const timeline = buildThreadTimelineFromEvents({
     acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,

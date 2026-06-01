@@ -969,6 +969,7 @@ export function buildBundle(args: {
       threadStatus: "idle",
       turnMessageDetail: "summary",
       viewMode: "standard",
+      workspaceRoot: null,
     },
   });
   const verboseTimelineProjection = buildThreadTimelineFromEvents({
@@ -984,6 +985,7 @@ export function buildBundle(args: {
       threadStatus: "idle",
       turnMessageDetail: "full",
       viewMode: "standard",
+      workspaceRoot: null,
     },
   });
   const timelineRows = timelineProjection.rows;

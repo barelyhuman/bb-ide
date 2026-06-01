@@ -75,33 +75,6 @@ function normalizePatchPath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\/+/u, "");
 }
 
-function stripWorkspaceRoot(
-  path: string | null,
-  root: string | undefined,
-): string | null {
-  if (!path || !root) return path;
-  const normalizedRoot = root.replace(/\/+$/u, "");
-  if (normalizedRoot.length === 0) return path;
-  if (path === normalizedRoot) return path;
-  if (path.startsWith(`${normalizedRoot}/`)) {
-    return path.slice(normalizedRoot.length + 1);
-  }
-  return path;
-}
-
-function normalizeChangePaths(
-  change: TimelineFileChange,
-  workspaceRootPath: string | undefined,
-): TimelineFileChange {
-  if (!workspaceRootPath) return change;
-  const nextPath = stripWorkspaceRoot(change.path, workspaceRootPath) ?? change.path;
-  const nextMovePath = stripWorkspaceRoot(change.movePath, workspaceRootPath);
-  if (nextPath === change.path && nextMovePath === change.movePath) {
-    return change;
-  }
-  return { ...change, path: nextPath, movePath: nextMovePath };
-}
-
 function buildSyntheticPatchBodyLines(
   lines: readonly string[],
   action: SyntheticPatchAction,
@@ -267,13 +240,9 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
   themeType,
   workspaceRootPath,
 }: TimelineFileDiffBlockProps) {
-  const normalizedChange = useMemo(
-    () => normalizeChangePaths(change, workspaceRootPath),
-    [change, workspaceRootPath],
-  );
   const renderedChange = useMemo(
-    () => buildRenderedFileChange(normalizedChange),
-    [normalizedChange],
+    () => buildRenderedFileChange(change),
+    [change],
   );
   const renderablePatch = renderedChange.renderablePatch;
   const cardDiffViewOptions = useMemo(

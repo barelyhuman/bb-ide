@@ -246,7 +246,7 @@ export function ThreadDetailSecondaryContent({
   ) : null;
 
   return (
-    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
+    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-clip md:-mx-5 md:-mb-5 md:-mt-5">
       <PanelGroup
         // Thread-scoped panel state should mount at its saved size instead of
         // animating from the previously selected thread's layout.
@@ -261,7 +261,7 @@ export function ThreadDetailSecondaryContent({
           }
           minSize={30}
           order={1}
-          className="min-w-0 overflow-hidden"
+          className="min-w-0 overflow-clip"
         >
           {/*
             When collapsed we keep the resizable PanelGroup mounted (the timeline
@@ -300,7 +300,7 @@ export function ThreadDetailSecondaryContent({
                 minSize={TIMELINE_PANEL_MIN_SIZE_PERCENT}
                 order={1}
                 className={cn(
-                  "min-w-0 overflow-hidden transition-[flex-grow,flex-basis]",
+                  "min-w-0 overflow-clip transition-[flex-grow,flex-basis]",
                   PANEL_COLLAPSE_TRANSITION_CLASS,
                 )}
               >

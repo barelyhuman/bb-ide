@@ -194,6 +194,7 @@ function createTimelineBenchmarkScenario(
               systemClientRequestVisibility: "hidden",
               threadStatus: thread.status,
               viewMode: timelineViewMode,
+              workspaceRoot: null,
             }
           : {
               includeDebugRawEvents: false,
@@ -204,6 +205,7 @@ function createTimelineBenchmarkScenario(
               threadStatus: thread.status,
               turnMessageDetail: "full",
               viewMode: timelineViewMode,
+              workspaceRoot: null,
             },
     }).rows;
   const buildSummaryRowsOnly = () =>
@@ -220,6 +222,7 @@ function createTimelineBenchmarkScenario(
               systemClientRequestVisibility: "hidden",
               threadStatus: thread.status,
               viewMode: timelineViewMode,
+              workspaceRoot: null,
             }
           : {
               includeDebugRawEvents: false,
@@ -230,6 +233,7 @@ function createTimelineBenchmarkScenario(
               threadStatus: thread.status,
               turnMessageDetail: "summary",
               viewMode: timelineViewMode,
+              workspaceRoot: null,
             },
     }).rows;
   const summaryBytes = Buffer.byteLength(buildAndSerializeSummary(), "utf8");

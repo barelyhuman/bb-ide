@@ -19,6 +19,7 @@ import type {
 } from "@bb/server-contract";
 import {
   findTimelineSegmentAnchorSequenceAfter,
+  getEnvironment,
   getTimelineSegmentAnchorAtSequence,
   listContextWindowUsageRows,
   listFilteredStoredTimelineWindowEventRows,
@@ -42,6 +43,21 @@ interface TimelineTurnSummarySelection {
   sourceSeqEnd: number;
   sourceSeqStart: number;
   turnId: string;
+}
+
+/**
+ * The absolute path of the thread's workspace root, or null when the thread has
+ * no environment. The projection uses it to relativize the absolute file paths
+ * persisted by provider file-edit tool calls into workspace-relative paths.
+ */
+function resolveThreadWorkspaceRoot(
+  db: DbConnection,
+  thread: Thread,
+): string | null {
+  if (thread.environmentId === null) {
+    return null;
+  }
+  return getEnvironment(db, thread.environmentId)?.path ?? null;
 }
 
 interface PartitionAcceptedInputRowsByRequestedTurnArgs {
@@ -1097,6 +1113,7 @@ function buildThreadTimelineInternal(
     isLatestPage: options.page.kind === "latest",
     systemClientRequestVisibility,
     threadStatus: thread.status,
+    workspaceRoot: resolveThreadWorkspaceRoot(db, thread),
   };
   const contextWindowEvents = measureThreadTimelineStage(
     profile,
@@ -1318,6 +1335,7 @@ export function buildTimelineTurnSummaryDetails(
       sourceSeqStart: sourceRange.sourceSeqStart,
       threadStatus: thread.status,
       viewMode,
+      workspaceRoot: resolveThreadWorkspaceRoot(db, thread),
     },
   });
 

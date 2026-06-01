@@ -472,6 +472,7 @@ function buildContextWindowUsage(
       threadStatus: "idle",
       turnMessageDetail: "summary",
       viewMode: "standard",
+      workspaceRoot: null,
     },
   }).contextWindowUsage;
 }
@@ -479,6 +480,7 @@ function buildContextWindowUsage(
 function buildTimelineRows(
   events: ThreadEventWithMeta[],
   threadStatus: BuildTimelineRowsThreadStatus = "idle",
+  workspaceRoot: string | null = null,
 ): TimelineRow[] {
   return buildThreadTimelineFromEvents({
     acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
@@ -493,6 +495,7 @@ function buildTimelineRows(
       threadStatus,
       turnMessageDetail: "full",
       viewMode: "standard",
+      workspaceRoot,
     },
   }).rows;
 }
@@ -512,6 +515,7 @@ function buildManagerConversationTimelineRows(
       systemClientRequestVisibility: "hidden",
       threadStatus,
       viewMode: "manager-conversation",
+      workspaceRoot: null,
     },
   }).rows;
 }
@@ -535,6 +539,7 @@ function buildTimelineRowsWithAcceptedContext(
       threadStatus: "idle",
       turnMessageDetail: "full",
       viewMode: "standard",
+      workspaceRoot: null,
     },
   }).rows;
 }
@@ -1617,5 +1622,62 @@ describe("buildThreadTimelineFromEvents", () => {
       path: "src/old.ts",
       movePath: "src/new.ts",
     });
+  });
+
+  it("relativizes absolute file-change paths against the workspace root", () => {
+    const workspaceRoot = "/Users/dev/worktrees/env_x/bb";
+    const rows = collectFileChangeRows(
+      buildTimelineRows(
+        [
+          turnStartedEvent({ seq: 0 }),
+          fileChangeItemEvent({
+            changes: [
+              {
+                path: `${workspaceRoot}/src/old.ts`,
+                kind: "update",
+                movePath: `${workspaceRoot}/src/new.ts`,
+                diff: "@@ -1 +1 @@\n-old\n+new",
+              },
+            ],
+            seq: 1,
+            type: "item/completed",
+          }),
+        ],
+        "idle",
+        workspaceRoot,
+      ),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.change).toMatchObject({
+      path: "src/old.ts",
+      movePath: "src/new.ts",
+    });
+  });
+
+  it("leaves file-change paths outside the workspace root untouched", () => {
+    const rows = collectFileChangeRows(
+      buildTimelineRows(
+        [
+          turnStartedEvent({ seq: 0 }),
+          fileChangeItemEvent({
+            changes: [
+              {
+                path: "/etc/hosts",
+                kind: "update",
+                diff: "@@ -1 +1 @@\n-old\n+new",
+              },
+            ],
+            seq: 1,
+            type: "item/completed",
+          }),
+        ],
+        "idle",
+        "/Users/dev/worktrees/env_x/bb",
+      ),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.change.path).toBe("/etc/hosts");
   });
 });

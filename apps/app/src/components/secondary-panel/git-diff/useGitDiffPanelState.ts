@@ -44,6 +44,47 @@ import {
 } from "./gitDiffPanelHelpers";
 import { useGitDiffFileRenderQueue } from "./useGitDiffFileRenderQueue";
 
+function findNearestScrollableAncestor(
+  element: HTMLElement,
+): HTMLElement | null {
+  for (
+    let node = element.parentElement;
+    node !== null;
+    node = node.parentElement
+  ) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+  }
+  return null;
+}
+
+/**
+ * Scroll a diff card to the top of its own scroll container.
+ *
+ * `Element.scrollIntoView()` adjusts *every* scrollable ancestor — including
+ * the app shell's `overflow-hidden` wrappers, which are still scrollable
+ * programmatically. That leaks the scroll up to the shell, nudging the page
+ * and leaving the thread header offset until a full reload resets the shell's
+ * `scrollTop`. We instead scroll only the nearest scrollable ancestor (the
+ * diff list), which keeps the movement contained and preserves the sticky
+ * headers. When no ancestor scrolls, the card is already fully visible, so
+ * doing nothing is correct — falling back to `scrollIntoView` would reintroduce
+ * the leak.
+ */
+function scrollDiffCardToContainerTop(target: HTMLElement): void {
+  const container = findNearestScrollableAncestor(target);
+  if (!container) {
+    return;
+  }
+  container.scrollTop +=
+    target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+}
+
 interface UseGitDiffPanelStateParams {
   environmentId?: string;
   isDiffPanelActive: boolean;
@@ -409,7 +450,9 @@ export function useGitDiffPanelState({
     }
 
     const scrollTarget = gitDiffFileRefs.current.get(targetEntry.key);
-    scrollTarget?.scrollIntoView({ block: "start", behavior: "instant" });
+    if (scrollTarget) {
+      scrollDiffCardToContainerTop(scrollTarget);
+    }
     setPendingGitDiffScrollPath(null);
   }, [
     collapsedGitDiffFileKeys,
