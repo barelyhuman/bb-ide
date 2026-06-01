@@ -66,11 +66,12 @@ export function ThreadDetailHeader({
 
   const center = (
     <>
-      <p className="truncate text-sm font-semibold">{threadTitle}</p>
+      <p className="min-w-0 truncate text-sm font-semibold">{threadTitle}</p>
       {isManagerThread ? <Pill variant="outline">manager</Pill> : null}
       {!isManagerThread && isManagedThread ? (
         <Pill variant="outline">managed</Pill>
       ) : null}
+      {actionsMenu}
     </>
   );
 
@@ -141,7 +142,6 @@ export function ThreadDetailHeader({
           <Icon name={showPanelControl.iconName} />
         </Button>
       ) : null}
-      {actionsMenu}
       {/*
         On a compact/drawer viewport the secondary panel opens as a drawer with
         no seam, so the header keeps a simple open/close toggle here. On a wide
