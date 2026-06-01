@@ -16,10 +16,4 @@ export const timelineCacheOwner = {
     { entity: "thread", kind: "events-appended" },
     { entity: "thread", kind: "interactions-changed" },
   ],
-  bootstrapPolicy:
-    "Owns timeline prefetch and turn-summary detail query families.",
-  deletionBehavior:
-    "Removes deleted thread timeline and turn-summary detail projections.",
-  reconnectBehavior:
-    "Refreshes timeline and turn-summary detail projections after reconnect.",
 } satisfies CacheOwnerDescriptor;

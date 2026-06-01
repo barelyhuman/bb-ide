@@ -117,12 +117,6 @@ export const threadListCacheOwner = {
     { entity: "project", kind: "threads-changed" },
     { entity: "project", kind: "project-order-changed" },
   ],
-  bootstrapPolicy:
-    "Owns sidebar bootstrap and thread-list ingestion, including project thread membership projections.",
-  deletionBehavior:
-    "Removes deleted threads from list/sidebar projections and marks remote deletes for route reconciliation.",
-  reconnectBehavior:
-    "Refreshes list and sidebar projections after reconnect.",
 } satisfies CacheOwnerDescriptor;
 
 function applyThreadListOrderToExistingThreads(

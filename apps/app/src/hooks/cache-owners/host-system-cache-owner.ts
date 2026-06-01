@@ -29,10 +29,4 @@ export const hostSystemCacheOwner = {
     { entity: "host", kind: "host-disconnected" },
     { entity: "system", kind: "config-changed" },
   ],
-  bootstrapPolicy:
-    "Owns host/system query families and host data ingested from thread detail bootstrap.",
-  deletionBehavior:
-    "Refreshes dependent host/system projections when host availability changes.",
-  reconnectBehavior:
-    "Refreshes host availability, provider, execution-option, and path-existence projections after reconnect.",
 } satisfies CacheOwnerDescriptor;

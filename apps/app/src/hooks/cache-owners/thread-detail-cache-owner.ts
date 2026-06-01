@@ -62,12 +62,6 @@ export const threadDetailCacheOwner = {
     { entity: "thread", kind: "read-state-changed" },
     { entity: "thread", kind: "manager-assignment-changed" },
   ],
-  bootstrapPolicy:
-    "Owns thread detail bootstrap ingestion and placeholder-to-detail reconciliation.",
-  deletionBehavior:
-    "Removes deleted thread detail/bootstrap projections and exposes tombstone state to route reconciliation.",
-  reconnectBehavior:
-    "Refreshes mounted thread detail and bootstrap projections after reconnect.",
 } satisfies CacheOwnerDescriptor;
 
 function stripThreadIncludes(

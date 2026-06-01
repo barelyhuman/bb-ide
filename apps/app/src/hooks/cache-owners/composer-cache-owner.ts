@@ -24,10 +24,4 @@ export const composerCacheOwner = {
     { entity: "host", kind: "host-disconnected" },
     { entity: "system", kind: "config-changed" },
   ],
-  bootstrapPolicy:
-    "Owns composer bootstrap ingestion, execution options, queued messages, prompt history, and pending interactions.",
-  deletionBehavior:
-    "Removes deleted thread composer projections and pending user input state from cache.",
-  reconnectBehavior:
-    "Refreshes composer bootstrap and execution-option projections after reconnect.",
 } satisfies CacheOwnerDescriptor;

@@ -252,16 +252,14 @@ describe("cache owner registry", () => {
     expect(duplicateOwners).toEqual([]);
   });
 
-  it("declares required ownership policy fields for every owner", () => {
+  it("declares required machine-checkable ownership fields for every owner", () => {
     expect(cacheOwnerRegistry.map((owner) => owner.id)).toEqual(
       Array.from(CACHE_OWNER_IDS),
     );
 
     for (const owner of cacheOwnerRegistry) {
       expect(owner.ownedQueryRoots.length, owner.id).toBeGreaterThan(0);
-      expect(owner.bootstrapPolicy.length, owner.id).toBeGreaterThan(0);
-      expect(owner.deletionBehavior.length, owner.id).toBeGreaterThan(0);
-      expect(owner.reconnectBehavior.length, owner.id).toBeGreaterThan(0);
+      expect(Array.isArray(owner.handledRealtimeEvents), owner.id).toBe(true);
     }
   });
 

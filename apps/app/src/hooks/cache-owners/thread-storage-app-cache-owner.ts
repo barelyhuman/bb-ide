@@ -22,10 +22,4 @@ export const threadStorageAppCacheOwner = {
     { entity: "environment", kind: "thread-storage-changed" },
     { entity: "thread", kind: "thread-deleted" },
   ],
-  bootstrapPolicy:
-    "Owns thread storage and first-class thread app projections, including HTML reload freshness.",
-  deletionBehavior:
-    "Removes deleted thread storage/app projections.",
-  reconnectBehavior:
-    "Refreshes storage/app projections after reconnect.",
 } satisfies CacheOwnerDescriptor;

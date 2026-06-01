@@ -68,12 +68,6 @@ export const projectCacheOwner = {
     { entity: "project", kind: "automations-changed" },
     { entity: "project", kind: "nudges-changed" },
   ],
-  bootstrapPolicy:
-    "Owns project records, source/path/default/prompt projections, and project-scoped bootstrap ingestion.",
-  deletionBehavior:
-    "Removes deleted project records and delegates sidebar route cleanup through cache events.",
-  reconnectBehavior:
-    "Refreshes project records, source/path suggestions, and project prompt projections after reconnect.",
 } satisfies CacheOwnerDescriptor;
 
 function applyProjectOrderToProjectList(

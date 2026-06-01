@@ -45,10 +45,7 @@ export type CacheOwnerRealtimeEvent =
     };
 
 export interface CacheOwnerDescriptor {
-  bootstrapPolicy: string;
-  deletionBehavior: string;
   handledRealtimeEvents: readonly CacheOwnerRealtimeEvent[];
   id: CacheOwnerId;
   ownedQueryRoots: readonly string[];
-  reconnectBehavior: string;
 }

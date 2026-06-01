@@ -37,12 +37,6 @@ export const environmentWorkspaceCacheOwner = {
     { entity: "environment", kind: "work-status-changed" },
     { entity: "environment", kind: "git-refs-changed" },
   ],
-  bootstrapPolicy:
-    "Owns environment record and workspace-derived query ingestion from thread detail bootstrap and workspace actions.",
-  deletionBehavior:
-    "Removes deleted environment workspace projections and dependent thread host-file previews.",
-  reconnectBehavior:
-    "Refreshes environment workspace projections after reconnect.",
 } satisfies CacheOwnerDescriptor;
 
 export function applyEnvironmentUpdateResult({
