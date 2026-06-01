@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { Host } from "@bb/domain";
+import type { Host, ThreadWithRuntime } from "@bb/domain";
 import type {
   ManagerTimelineView,
   ThreadResponse,
@@ -28,6 +28,11 @@ interface ThreadTimelinePrefetchPolicy {
 interface UpsertHostListArgs {
   host: Host;
   hosts: HostListQueryData;
+}
+
+interface ThreadRuntimeCacheArgs {
+  queryClient: QueryClient;
+  thread: ThreadWithRuntime;
 }
 
 export interface ThreadDetailBootstrapIngestionArgs {
@@ -131,4 +136,11 @@ export function ingestThreadDetailBootstrap({
       queryFn: () => api.getThreadComposerBootstrap(thread.id),
     });
   }
+}
+
+export function applyThreadRuntimeResult({
+  queryClient,
+  thread,
+}: ThreadRuntimeCacheArgs): void {
+  queryClient.setQueryData<ThreadWithRuntime>(threadQueryKey(thread.id), thread);
 }

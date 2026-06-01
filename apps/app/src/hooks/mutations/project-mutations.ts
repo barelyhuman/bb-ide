@@ -3,38 +3,39 @@ import type {
   PromptInput,
   ReasoningLevel,
   ServiceTier,
-  ThreadListEntry,
-  ThreadWithRuntime,
 } from "@bb/domain";
 import type {
   CreateProjectRequest,
   ManagerEnvironmentArgs,
   ProjectResponse,
-  ProjectWithThreadsResponse,
   ReorderManagerThreadRequest,
   ReorderProjectRequest,
-  SidebarBootstrapResponse,
   ThreadListResponse,
   UpdateProjectRequest,
   UploadedPromptAttachment,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { applyNeighborReorder } from "@/lib/neighbor-reorder";
-import { optimisticallyInsertThread } from "../queries/query-cache";
 import {
-  projectsQueryKey,
-  sidebarBootstrapQueryKey,
-  threadListQueryKey,
-  threadQueryKey,
-} from "../queries/query-keys";
+  applyProjectDeleteResult,
+  applyReorderProjectResult,
+  beginReorderProjectTransaction,
+  rollbackReorderProjectTransaction,
+  type ReorderProjectTransaction,
+} from "../cache-owners/project-cache-owner";
+import { applyThreadRuntimeResult } from "../cache-owners/thread-detail-cache-owner";
+import {
+  applyReorderProjectManagerResult,
+  beginReorderProjectManagerTransaction,
+  insertCreatedThreadIntoCachedLists,
+  rollbackReorderProjectManagerTransaction,
+  type ReorderProjectManagerTransaction,
+} from "../cache-owners/thread-list-cache-owner";
 import {
   invalidateProjectListQueries,
-  invalidateProjectDeleteQueries,
   invalidateProjectManagerHireQueries,
   invalidateProjectSourceQueries,
   invalidateProjectUpdateQueries,
-  invalidateThreadListQueries,
-} from "../cache-effects";
+} from "../cache-owners/mutation-cache-effects";
 
 interface AddLocalProjectSourceRequest {
   projectId: string;
@@ -77,125 +78,9 @@ interface ReorderProjectManagerMutationRequest extends ReorderManagerThreadReque
   threadId: string;
 }
 
-interface ReorderProjectMutationContext {
-  previousProjects: ProjectResponse[] | undefined;
-  previousSidebarBootstrap: SidebarBootstrapResponse | undefined;
-}
-
-interface ReorderProjectManagerMutationContext {
-  previousSidebarBootstrap: SidebarBootstrapResponse | undefined;
-  previousThreadList: ThreadListResponse | undefined;
-}
-
 interface UploadPromptAttachmentRequest {
   projectId: string;
   file: File;
-}
-
-function applyProjectOrderToProjectList(
-  currentProjects: readonly ProjectResponse[],
-  orderedProjects: readonly ProjectResponse[],
-): ProjectResponse[] {
-  const currentProjectsById = new Map(
-    currentProjects.map((project) => [project.id, project]),
-  );
-  return orderedProjects.map(
-    (project) => currentProjectsById.get(project.id) ?? project,
-  );
-}
-
-function applyProjectOrderToSidebarBootstrap(
-  currentBootstrap: SidebarBootstrapResponse,
-  orderedProjects: readonly ProjectResponse[],
-): SidebarBootstrapResponse {
-  const currentProjectsById = new Map(
-    currentBootstrap.projects.map((project) => [project.id, project]),
-  );
-  return {
-    ...currentBootstrap,
-    projects: orderedProjects.map((project) => {
-      const currentProject = currentProjectsById.get(project.id);
-      return currentProject ?? { ...project, threads: [] };
-    }),
-  };
-}
-
-function removeProjectFromProjectList(
-  currentProjects: readonly ProjectResponse[],
-  projectId: string,
-): ProjectResponse[] {
-  return currentProjects.filter((project) => project.id !== projectId);
-}
-
-function removeProjectFromSidebarBootstrap(
-  currentBootstrap: SidebarBootstrapResponse,
-  projectId: string,
-): SidebarBootstrapResponse {
-  return {
-    ...currentBootstrap,
-    projects: currentBootstrap.projects.filter(
-      (project) => project.id !== projectId,
-    ),
-  };
-}
-
-function applyThreadListOrderToExistingThreads(
-  currentThreads: readonly ThreadListEntry[],
-  orderedThreads: readonly ThreadListEntry[],
-): ThreadListResponse {
-  const currentThreadsById = new Map(
-    currentThreads.map((thread) => [thread.id, thread]),
-  );
-  return orderedThreads.map(
-    (thread) => currentThreadsById.get(thread.id) ?? thread,
-  );
-}
-
-function applyManagerThreadReorderToThreadList(
-  threads: readonly ThreadListEntry[],
-  request: ReorderProjectManagerMutationRequest,
-): ThreadListResponse {
-  const managerThreads = threads.filter((thread) => thread.type === "manager");
-  const reorderedManagers = applyNeighborReorder({
-    items: managerThreads,
-    request: {
-      itemId: request.threadId,
-      previousItemId: request.previousThreadId,
-      nextItemId: request.nextThreadId,
-    },
-  });
-  let managerIndex = 0;
-  return threads.map((thread) => {
-    if (thread.type !== "manager") {
-      return thread;
-    }
-    const reorderedManager = reorderedManagers[managerIndex];
-    managerIndex += 1;
-    return reorderedManager ?? thread;
-  });
-}
-
-function replaceSidebarBootstrapProjectThreads(
-  bootstrap: SidebarBootstrapResponse,
-  projectId: string,
-  threads: ThreadListResponse,
-): SidebarBootstrapResponse {
-  const replaceThreads = (
-    project: ProjectWithThreadsResponse,
-  ): ProjectWithThreadsResponse =>
-    project.id === projectId
-      ? {
-          ...project,
-          threads: applyThreadListOrderToExistingThreads(
-            project.threads,
-            threads,
-          ),
-        }
-      : project;
-  return {
-    projects: bootstrap.projects.map(replaceThreads),
-    personalProject: replaceThreads(bootstrap.personalProject),
-  };
 }
 
 export function useCreateProject() {
@@ -243,11 +128,8 @@ export function useHireProjectManager() {
         ...(input && input.length > 0 ? { input } : {}),
       }),
     onSuccess: (thread, variables) => {
-      queryClient.setQueryData<ThreadWithRuntime>(
-        threadQueryKey(thread.id),
-        thread,
-      );
-      optimisticallyInsertThread(queryClient, thread);
+      applyThreadRuntimeResult({ queryClient, thread });
+      insertCreatedThreadIntoCachedLists({ queryClient, thread });
       invalidateProjectManagerHireQueries({
         projectId: variables.projectId,
         queryClient,
@@ -288,79 +170,19 @@ export function useReorderProject() {
         previousProjectId,
         nextProjectId,
       }),
-    onMutate: (variables): ReorderProjectMutationContext => {
-      const previousProjects =
-        queryClient.getQueryData<ProjectResponse[]>(projectsQueryKey());
-      const previousSidebarBootstrap =
-        queryClient.getQueryData<SidebarBootstrapResponse>(
-          sidebarBootstrapQueryKey(),
-        );
-
-      void queryClient.cancelQueries(
-        { queryKey: projectsQueryKey() },
-        { revert: false },
-      );
-      void queryClient.cancelQueries(
-        { queryKey: sidebarBootstrapQueryKey() },
-        { revert: false },
-      );
-      queryClient.setQueryData<ProjectResponse[]>(
-        projectsQueryKey(),
-        (currentProjects) =>
-          currentProjects
-            ? applyNeighborReorder({
-                items: currentProjects,
-                request: {
-                  itemId: variables.projectId,
-                  previousItemId: variables.previousProjectId,
-                  nextItemId: variables.nextProjectId,
-                },
-              })
-            : currentProjects,
-      );
-      queryClient.setQueryData<SidebarBootstrapResponse>(
-        sidebarBootstrapQueryKey(),
-        (currentBootstrap) =>
-          currentBootstrap
-            ? {
-                ...currentBootstrap,
-                projects: applyNeighborReorder({
-                  items: currentBootstrap.projects,
-                  request: {
-                    itemId: variables.projectId,
-                    previousItemId: variables.previousProjectId,
-                    nextItemId: variables.nextProjectId,
-                  },
-                }),
-              }
-            : currentBootstrap,
-      );
-
-      return { previousProjects, previousSidebarBootstrap };
-    },
+    onMutate: (variables): ReorderProjectTransaction =>
+      beginReorderProjectTransaction({
+        queryClient,
+        request: variables,
+      }),
     onError: (_error, _variables, context) => {
-      queryClient.setQueryData(projectsQueryKey(), context?.previousProjects);
-      queryClient.setQueryData(
-        sidebarBootstrapQueryKey(),
-        context?.previousSidebarBootstrap,
-      );
-      invalidateProjectListQueries({ queryClient });
+      rollbackReorderProjectTransaction({
+        queryClient,
+        transaction: context,
+      });
     },
     onSuccess: (projects) => {
-      queryClient.setQueryData<ProjectResponse[]>(
-        projectsQueryKey(),
-        (currentProjects) =>
-          currentProjects
-            ? applyProjectOrderToProjectList(currentProjects, projects)
-            : projects,
-      );
-      queryClient.setQueryData<SidebarBootstrapResponse>(
-        sidebarBootstrapQueryKey(),
-        (currentBootstrap) =>
-          currentBootstrap
-            ? applyProjectOrderToSidebarBootstrap(currentBootstrap, projects)
-            : currentBootstrap,
-      );
+      applyReorderProjectResult({ projects, queryClient });
     },
   });
 }
@@ -383,97 +205,24 @@ export function useReorderProjectManager() {
         previousThreadId,
         nextThreadId,
       }),
-    onMutate: (variables): ReorderProjectManagerMutationContext => {
-      const threadListKey = threadListQueryKey({
-        projectId: variables.projectId,
-        archived: false,
-      });
-      const previousThreadList =
-        queryClient.getQueryData<ThreadListResponse>(threadListKey);
-      const previousSidebarBootstrap =
-        queryClient.getQueryData<SidebarBootstrapResponse>(
-          sidebarBootstrapQueryKey(),
-        );
-
-      void queryClient.cancelQueries(
-        { queryKey: threadListKey },
-        { revert: false },
-      );
-      void queryClient.cancelQueries(
-        { queryKey: sidebarBootstrapQueryKey() },
-        { revert: false },
-      );
-      queryClient.setQueryData<ThreadListResponse>(
-        threadListKey,
-        (currentThreads) =>
-          currentThreads
-            ? applyManagerThreadReorderToThreadList(currentThreads, variables)
-            : currentThreads,
-      );
-      queryClient.setQueryData<SidebarBootstrapResponse>(
-        sidebarBootstrapQueryKey(),
-        (currentBootstrap) => {
-          if (!currentBootstrap) {
-            return currentBootstrap;
-          }
-          const reorderProjectManagers = (
-            project: ProjectWithThreadsResponse,
-          ): ProjectWithThreadsResponse =>
-            project.id === variables.projectId
-              ? {
-                  ...project,
-                  threads: applyManagerThreadReorderToThreadList(
-                    project.threads,
-                    variables,
-                  ),
-                }
-              : project;
-          return {
-            projects: currentBootstrap.projects.map(reorderProjectManagers),
-            personalProject: reorderProjectManagers(
-              currentBootstrap.personalProject,
-            ),
-          };
-        },
-      );
-
-      return { previousThreadList, previousSidebarBootstrap };
-    },
+    onMutate: (variables): ReorderProjectManagerTransaction =>
+      beginReorderProjectManagerTransaction({
+        queryClient,
+        request: variables,
+      }),
     onError: (_error, variables, context) => {
-      const threadListKey = threadListQueryKey({
-        projectId: variables.projectId,
-        archived: false,
+      rollbackReorderProjectManagerTransaction({
+        queryClient,
+        request: variables,
+        transaction: context,
       });
-      queryClient.setQueryData(threadListKey, context?.previousThreadList);
-      queryClient.setQueryData(
-        sidebarBootstrapQueryKey(),
-        context?.previousSidebarBootstrap,
-      );
-      invalidateThreadListQueries({ queryClient });
     },
     onSuccess: (threads, variables) => {
-      const threadListKey = threadListQueryKey({
+      applyReorderProjectManagerResult({
         projectId: variables.projectId,
-        archived: false,
+        queryClient,
+        threads,
       });
-      queryClient.setQueryData<ThreadListResponse>(
-        threadListKey,
-        (currentThreads) =>
-          currentThreads
-            ? applyThreadListOrderToExistingThreads(currentThreads, threads)
-            : threads,
-      );
-      queryClient.setQueryData<SidebarBootstrapResponse>(
-        sidebarBootstrapQueryKey(),
-        (currentBootstrap) =>
-          currentBootstrap
-            ? replaceSidebarBootstrapProjectThreads(
-                currentBootstrap,
-                variables.projectId,
-                threads,
-              )
-            : currentBootstrap,
-      );
     },
   });
 }
@@ -487,21 +236,7 @@ export function useDeleteProject() {
     },
     mutationFn: (projectId: string) => api.deleteProject(projectId),
     onSuccess: (_data, projectId) => {
-      queryClient.setQueryData<ProjectResponse[]>(
-        projectsQueryKey(),
-        (currentProjects) =>
-          currentProjects
-            ? removeProjectFromProjectList(currentProjects, projectId)
-            : currentProjects,
-      );
-      queryClient.setQueryData<SidebarBootstrapResponse>(
-        sidebarBootstrapQueryKey(),
-        (currentBootstrap) =>
-          currentBootstrap
-            ? removeProjectFromSidebarBootstrap(currentBootstrap, projectId)
-            : currentBootstrap,
-      );
-      invalidateProjectDeleteQueries({ queryClient });
+      applyProjectDeleteResult({ projectId, queryClient });
     },
   });
 }
