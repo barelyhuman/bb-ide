@@ -16,7 +16,7 @@ import {
   type ThreadEvent,
 } from "@bb/domain";
 import { HOST_AUTH_FILE_NAME } from "@bb/host-daemon-contract";
-import { startHostDaemon } from "../../src/index.js";
+import { startHostDaemon } from "../../src/start-host-daemon.js";
 import {
   createTestServer,
   type CreateTestServerOptions,

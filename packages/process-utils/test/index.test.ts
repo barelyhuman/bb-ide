@@ -1,13 +1,18 @@
 import { once } from "node:events";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
   assertPortableOutputProcess,
   assertPortablePipedProcess,
+  installSafeProcessDiagnostics,
   resolveContainedPath,
   sanitizeInheritedChildProcessEnv,
   spawnPortableOutputProcess,
   spawnPortablePipedProcess,
   spawnPortableProcess,
+  writeSafeProcessDiagnosticReport,
 } from "../src/index.js";
 
 async function readProcessOutput() {
@@ -33,6 +38,79 @@ async function readProcessOutput() {
 }
 
 describe("process utils", () => {
+  it("installs safe diagnostics without enabling Node process reports", () => {
+    const originalDirectory = process.report.directory;
+    const originalReportOnFatalError = process.report.reportOnFatalError;
+    const originalReportOnUncaughtException =
+      process.report.reportOnUncaughtException;
+    const originalListenerCount = process.listenerCount(
+      "uncaughtExceptionMonitor",
+    );
+    const logsDir = join(
+      mkdtempSync(join(tmpdir(), "bb-process-utils-report-")),
+      "logs",
+    );
+
+    const dispose = installSafeProcessDiagnostics({
+      logsDir,
+      processName: "test-process",
+    });
+
+    try {
+      expect(existsSync(logsDir)).toBe(true);
+      expect(process.listenerCount("uncaughtExceptionMonitor")).toBe(
+        originalListenerCount + 1,
+      );
+      expect(process.report.directory).toBe(originalDirectory);
+      expect(process.report.reportOnFatalError).toBe(
+        originalReportOnFatalError,
+      );
+      expect(process.report.reportOnUncaughtException).toBe(
+        originalReportOnUncaughtException,
+      );
+    } finally {
+      dispose();
+    }
+
+    expect(process.listenerCount("uncaughtExceptionMonitor")).toBe(
+      originalListenerCount,
+    );
+  });
+
+  it("writes env-safe diagnostic reports", () => {
+    const logsDir = join(
+      mkdtempSync(join(tmpdir(), "bb-process-utils-report-")),
+      "logs",
+    );
+    const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+    const secretValue = "sk-test-secret-that-must-not-leak";
+    process.env.OPENAI_API_KEY = secretValue;
+
+    try {
+      const reportPath = writeSafeProcessDiagnosticReport({
+        kind: "startupFailure",
+        logsDir,
+        processName: "test-process",
+        error: new Error("startup failed"),
+        now: () => new Date("2026-06-01T12:00:00.000Z"),
+        createReportId: () => "report-id",
+      });
+      const reportText = readFileSync(reportPath, "utf8");
+
+      expect(reportText).toContain('"kind": "startupFailure"');
+      expect(reportText).toContain('"processName": "test-process"');
+      expect(reportText).toContain('"message": "startup failed"');
+      expect(reportText).not.toContain("OPENAI_API_KEY");
+      expect(reportText).not.toContain(secretValue);
+    } finally {
+      if (originalOpenAiApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+      }
+    }
+  });
+
   it("spawns a process with piped stdio", async () => {
     await expect(readProcessOutput()).resolves.toEqual({
       exitCode: 0,

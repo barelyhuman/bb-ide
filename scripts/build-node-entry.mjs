@@ -11,8 +11,26 @@ const [entryPointArg, outfileArg, ...flags] = process.argv.slice(2);
 
 if (!entryPointArg || !outfileArg) {
   throw new Error(
-    "Usage: node scripts/build-node-entry.mjs <entrypoint> <outfile> [--clean-dist] [--executable] [--templates] [--copy-dir <from> <to>]",
+    "Usage: node scripts/build-node-entry.mjs <entrypoint> <outfile> [--clean-dist] [--executable] [--templates] [--external <pattern>] [--copy-dir <from> <to>]",
   );
+}
+
+function parseExternalPatterns(args) {
+  const external = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== "--external") {
+      continue;
+    }
+
+    const pattern = args[index + 1];
+    if (!pattern) {
+      throw new Error("--external requires <pattern>");
+    }
+
+    external.push(pattern);
+    index += 1;
+  }
+  return external;
 }
 
 function parseCopyDirectories(args) {
@@ -43,6 +61,7 @@ await buildNodeEsmEntry({
   cleanDist: flags.includes("--clean-dist"),
   entryPoint: path.resolve(packageRoot, entryPointArg),
   executable: flags.includes("--executable"),
+  external: parseExternalPatterns(flags),
   outfile: path.resolve(packageRoot, outfileArg),
   packageRoot,
 });

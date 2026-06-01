@@ -458,6 +458,13 @@ function formatReadyOutputRow(label: string, value: string): string {
   return `${dim(label.padEnd("daemon".length))} ${value}`;
 }
 
+function warnExistingDaemonLock(lockDir: string): void {
+  log(yellow("!"), "Daemon lock exists - waiting or reclaiming if stale");
+  log(" ", dim(`lock: ${lockDir}`));
+  log(" ", dim("If startup fails, stop the other bb process or remove it."));
+  process.stdout.write("\n");
+}
+
 function isManagedConfigValueKey(
   value: string,
 ): value is ManagedConfigValueKey {
@@ -1840,13 +1847,7 @@ async function runHostDaemonOnly(args: RunHostDaemonOnlyArgs): Promise<void> {
   process.stdout.write(`\n  ${bold("bb host-daemon")}\n\n`);
 
   if (existsSync(args.context.daemonLockDir)) {
-    log(yellow("!"), "Daemon lock is held - another instance may be running");
-    log(" ", dim(`lock: ${args.context.daemonLockDir}`));
-    log(
-      " ",
-      dim("Remove it manually if the previous process exited uncleanly."),
-    );
-    process.stdout.write("\n");
+    warnExistingDaemonLock(args.context.daemonLockDir);
   }
 
   if (!enrollment.enrolled && enrollment.enrollKey === undefined) {
@@ -2091,13 +2092,7 @@ export async function runBbApp(
   process.stdout.write(`\n  ${bold("bb")}\n\n`);
 
   if (existsSync(runtime.context.daemonLockDir)) {
-    log(yellow("!"), "Daemon lock is held - another instance may be running");
-    log(" ", dim(`lock: ${runtime.context.daemonLockDir}`));
-    log(
-      " ",
-      dim("Remove it manually if the previous process exited uncleanly."),
-    );
-    process.stdout.write("\n");
+    warnExistingDaemonLock(runtime.context.daemonLockDir);
   }
 
   beginStep("Starting server");

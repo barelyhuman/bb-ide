@@ -1,10 +1,19 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-export { startHostDaemon } from "./start-host-daemon.js";
-export type { StartHostDaemonOptions } from "./start-host-daemon.js";
+import { loadHostDaemonStartConfig } from "@bb/config/host-daemon";
 import { loadHostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
-import { startHostDaemon } from "./start-host-daemon.js";
+import {
+  installSafeProcessDiagnostics,
+  writeSafeProcessDiagnosticReport,
+} from "@bb/process-utils";
+
+interface ReportStartupFailureArgs {
+  diagnosticsLogsDir: string;
+  error: unknown;
+}
+
+type MainFailureHandler = (error: unknown) => void;
 
 const entrypointDir = dirname(fileURLToPath(import.meta.url));
 
@@ -14,9 +23,43 @@ function resolveEntrypointBridgeBundleDir(): string | undefined {
     : undefined;
 }
 
-async function main(): Promise<void> {
+function resolveDiagnosticsLogsDir(): string {
+  const hostDaemonStartConfig = loadHostDaemonStartConfig({
+    enableLocalApi: true,
+  });
+
+  if (hostDaemonStartConfig.dataDir === undefined) {
+    throw new Error("Host daemon data directory is required");
+  }
+
+  return join(hostDaemonStartConfig.dataDir, "logs");
+}
+
+function reportStartupFailure(args: ReportStartupFailureArgs): void {
+  try {
+    writeSafeProcessDiagnosticReport({
+      kind: "startupFailure",
+      logsDir: args.diagnosticsLogsDir,
+      processName: "host-daemon",
+      error: args.error,
+    });
+  } catch {
+    // Keep the original startup failure visible even if diagnostic logging fails.
+  }
+
+  const message =
+    args.error instanceof Error
+      ? (args.error.stack ?? args.error.message)
+      : String(args.error);
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
+}
+
+async function runHostDaemonEntrypoint(): Promise<void> {
   const hostDaemonEntrypointConfig = loadHostDaemonEntrypointConfig();
-  const daemon = await startHostDaemon({
+  // Keep this import after diagnostics so ESM evaluation failures are reported.
+  const hostDaemonModule = await import("./start-host-daemon.js");
+  const daemon = await hostDaemonModule.startHostDaemon({
     bbExecutableDirectory: hostDaemonEntrypointConfig.BB_CLI_DIR,
     bridgeBundleDir:
       hostDaemonEntrypointConfig.BB_BRIDGE_DIR ??
@@ -35,10 +78,13 @@ const isMainModule =
   fileURLToPath(import.meta.url) === entrypointPath;
 
 if (isMainModule) {
-  void main().catch((error) => {
-    const message =
-      error instanceof Error ? (error.stack ?? error.message) : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exitCode = 1;
+  const diagnosticsLogsDir = resolveDiagnosticsLogsDir();
+  installSafeProcessDiagnostics({
+    logsDir: diagnosticsLogsDir,
+    processName: "host-daemon",
   });
+  const handleMainFailure: MainFailureHandler = (error) => {
+    reportStartupFailure({ diagnosticsLogsDir, error });
+  };
+  void runHostDaemonEntrypoint().catch(handleMainFailure);
 }
