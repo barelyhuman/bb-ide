@@ -45,4 +45,48 @@ describe("file-change-summary", () => {
       removed: 0,
     });
   });
+
+  it("counts plain created Markdown content with bullets as additions", () => {
+    expect(
+      getFileChangeDiffStats({
+        path: "plans/fund-toolkit-rearchitecture.md",
+        kind: "add",
+        diff: [
+          "# Fund Toolkit Rearchitecture Plan",
+          "",
+          "## Core Boundary",
+          "",
+          "- durable fund memory",
+          "- work records",
+          "- run records",
+          "",
+        ].join("\n"),
+      }),
+    ).toEqual({
+      added: 5,
+      removed: 0,
+    });
+  });
+
+  it("counts plain deleted Markdown content with bullets as removals", () => {
+    expect(
+      getFileChangeDiffStats({
+        path: "plans/fund-toolkit-rearchitecture.md",
+        kind: "delete",
+        diff: [
+          "# Fund Toolkit Rearchitecture Plan",
+          "",
+          "## Core Boundary",
+          "",
+          "- durable fund memory",
+          "- work records",
+          "- run records",
+          "",
+        ].join("\n"),
+      }),
+    ).toEqual({
+      added: 0,
+      removed: 5,
+    });
+  });
 });

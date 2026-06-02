@@ -139,12 +139,27 @@ function countPlainContentLines(diff: string): number {
     .filter((line) => !isPatchMetadataLine(line)).length;
 }
 
+function hasPatchMetadata(diff: string): boolean {
+  return diff.split("\n").some(isPatchMetadataLine);
+}
+
 export function getFileChangeDiffStats(
   change: FileChangeLike,
 ): FileChangeDiffStats {
   const diff = change.diff;
   if (!diff) {
     return EMPTY_DIFF_STATS;
+  }
+
+  const action = getFileChangeAction(change);
+  const plainContentLineCount = countPlainContentLines(diff);
+  if (
+    !hasPatchMetadata(diff) &&
+    (action === "created" || action === "deleted")
+  ) {
+    return action === "created"
+      ? { added: plainContentLineCount, removed: 0 }
+      : { added: 0, removed: plainContentLineCount };
   }
 
   let added = 0;
@@ -166,8 +181,7 @@ export function getFileChangeDiffStats(
     return { added, removed };
   }
 
-  const plainContentLineCount = countPlainContentLines(diff);
-  switch (getFileChangeAction(change)) {
+  switch (action) {
     case "created":
       return { added: plainContentLineCount, removed: 0 };
     case "deleted":
