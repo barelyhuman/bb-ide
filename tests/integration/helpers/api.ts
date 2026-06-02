@@ -14,7 +14,6 @@ import {
   pendingInteractionSchema,
   resolveEnvironmentMergeBaseBranch,
   threadEventRowSchema,
-  threadGitDiffResponseSchema,
   threadSchema,
 } from "@bb/domain";
 import { listPreferredTestModels } from "@bb/test-helpers";
@@ -40,6 +39,7 @@ import {
   createPublicApiClient,
   environmentActionResponseSchema,
   environmentDiffBranchesResponseSchema,
+  environmentDiffResponseSchema,
   environmentStatusResponseSchema,
   projectResponseSchema,
   systemExecutionOptionsResponseSchema,
@@ -303,7 +303,16 @@ export async function getEnvironmentDiff(
     },
   });
   await expectStatus(response, 200, `get environment diff ${environmentId}`);
-  return threadGitDiffResponseSchema.parse(await response.json());
+  const diffResponse = environmentDiffResponseSchema.parse(
+    await response.json(),
+  );
+  if (diffResponse.outcome === "available") {
+    return diffResponse.diff;
+  }
+  if (diffResponse.outcome === "not_applicable") {
+    throw new Error(diffResponse.message);
+  }
+  throw new Error(diffResponse.failure.message);
 }
 
 export async function getEnvironmentStatus(
