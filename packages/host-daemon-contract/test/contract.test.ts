@@ -1,9 +1,10 @@
 import { collectOptionalFieldPaths } from "@bb/test-helpers";
-import { threadScope } from "@bb/domain";
+import { threadScope, type JsonObject } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/index.js";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES,
   TERMINAL_COLS_MAX,
   TERMINAL_DATA_MAX_BASE64_LENGTH,
   TERMINAL_DATA_MAX_BYTES,
@@ -24,6 +25,8 @@ import {
   hostDaemonInteractiveRequestResponseSchema,
   hostDaemonInteractiveRequestSchema,
   hostDaemonOnlineRpcCommandSchema,
+  type HostDaemonOnlineRpcCommandType,
+  hostDaemonOnlineRpcResponseMessageSchema,
   hostDaemonOnlineRpcResultSchemaByType,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
@@ -33,6 +36,346 @@ import {
 
 const PRODUCER_EVENT_ID = "hdevt_23456789abcdefghijkm";
 const CLIENT_REQUEST_ID = "creq_23456789ab";
+
+type OnlineRpcResponseResultFixtures = Record<
+  HostDaemonOnlineRpcCommandType,
+  JsonObject
+>;
+
+interface OnlineRpcResponseMismatchCase {
+  commandType: HostDaemonOnlineRpcCommandType;
+  name: string;
+  result: JsonObject;
+}
+
+interface OnlineRpcResponseRoundTripCase {
+  commandType: HostDaemonOnlineRpcCommandType;
+  name: string;
+  result: JsonObject;
+}
+
+const RESOLVED_REPLAY_EXECUTION_OPTIONS: JsonObject = {
+  model: "test/model",
+  serviceTier: "default",
+  reasoningLevel: "medium",
+  permissionMode: "workspace-write",
+  source: "client/turn/requested",
+};
+
+const REPLAY_CAPTURE_SUMMARY_RESULT: JsonObject = {
+  captureId: "cap_lx0_abcdefgh",
+  capturedAt: 1_700_000_000_000,
+  completedAt: 1_700_000_000_100,
+  providerId: "codex",
+  projectId: "proj_123",
+  environmentId: "env_123",
+  threadId: "thr_123",
+  title: "Replay capture",
+  kind: "turn-start",
+  userInputPreview: "Run the test",
+  execution: RESOLVED_REPLAY_EXECUTION_OPTIONS,
+  eventCounts: {
+    rawProviderEvents: 2,
+    droppedRecords: 0,
+  },
+  errorMessage: null,
+};
+
+const REPLAY_CAPTURE_MANIFEST_RESULT: JsonObject = {
+  ...REPLAY_CAPTURE_SUMMARY_RESULT,
+  schemaVersion: 3,
+  source: "live-dev-capture",
+  providerThreadId: "provider-thread-123",
+  turns: [
+    {
+      turnId: "turn_123",
+      userInput: [
+        {
+          type: "text",
+          text: "Run the test",
+        },
+      ],
+      createdAt: 1_700_000_000_010,
+    },
+  ],
+};
+
+const WORKSPACE_UNAVAILABLE_RESULT: JsonObject = {
+  outcome: "unavailable",
+  failure: {
+    code: "path_not_found",
+    workspacePath: "/tmp/missing-workspace",
+    message: "Workspace path is missing",
+  },
+};
+
+const WORKSPACE_STATUS_AVAILABLE_RESULT: JsonObject = {
+  outcome: "available",
+  workspaceStatus: {
+    workingTree: {
+      insertions: 3,
+      deletions: 1,
+      files: [
+        {
+          path: "src/index.ts",
+          status: "M",
+          insertions: 3,
+          deletions: 1,
+        },
+      ],
+      hasUncommittedChanges: true,
+      state: "dirty_and_committed_unmerged",
+    },
+    branch: {
+      currentBranch: "feature/host-rpc",
+      defaultBranch: "main",
+    },
+    mergeBase: {
+      insertions: 5,
+      deletions: 0,
+      files: [
+        {
+          path: "README.md",
+          status: "A",
+          insertions: 5,
+          deletions: 0,
+        },
+      ],
+      mergeBaseBranch: "main",
+      baseRef: "abc123",
+      aheadCount: 1,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: true,
+      commits: [
+        {
+          sha: "abcdef123456",
+          shortSha: "abcdef1",
+          subject: "Add host RPC guard",
+          authorName: "Test User",
+          authoredAt: 1_700_000_000_000,
+        },
+      ],
+    },
+  },
+};
+
+const WORKSPACE_DIFF_AVAILABLE_RESULT: JsonObject = {
+  outcome: "available",
+  diff: {
+    diff: "diff --git a/src/index.ts b/src/index.ts\n",
+    truncated: false,
+    shortstat: "1 file changed, 3 insertions(+), 1 deletion(-)",
+    files: "src/index.ts\n",
+    mergeBaseRef: "abc123",
+  },
+};
+
+const ONLINE_RPC_RESPONSE_RESULT_FIXTURES: OnlineRpcResponseResultFixtures = {
+  "development.replay": {},
+  "host.list_files": {
+    files: [
+      {
+        path: "src/index.ts",
+        name: "index.ts",
+      },
+    ],
+    truncated: false,
+  },
+  "host.list_paths": {
+    paths: [
+      {
+        kind: "file",
+        path: "src/index.ts",
+        name: "index.ts",
+        score: 1,
+        positions: [0, 4],
+      },
+    ],
+    truncated: false,
+  },
+  "host.list_branches": {
+    branches: ["main"],
+    branchesTruncated: false,
+    checkout: {
+      kind: "branch",
+      branchName: "main",
+      headSha: "abc123",
+    },
+    defaultBranch: "main",
+    hasUncommittedChanges: false,
+    operation: {
+      kind: "none",
+    },
+    remoteBranches: ["origin/main"],
+    remoteBranchesTruncated: false,
+    selectedBranch: {
+      name: "main",
+      kind: "local",
+    },
+  },
+  "host.list_manager_templates": {
+    templates: [{ name: "default" }],
+    activeName: "default",
+  },
+  "host.file_metadata": {
+    path: "/tmp/report.html",
+    modifiedAtMs: 1234,
+    sizeBytes: 42,
+  },
+  "host.read_file": {
+    path: "/tmp/report.html",
+    content: "<!doctype html>",
+    contentEncoding: "utf8",
+    mimeType: "text/html",
+    sizeBytes: 15,
+  },
+  "host.read_file_relative": {
+    path: "assets/logo.png",
+    content: "iVBORw0KGgo=",
+    contentEncoding: "base64",
+    mimeType: "image/png",
+    sizeBytes: 8,
+  },
+  "provider.list": {
+    providers: [
+      {
+        id: "codex",
+        displayName: "Codex",
+        capabilities: {
+          supportsArchive: true,
+          supportsRename: true,
+          supportsServiceTier: true,
+          supportsUserQuestion: true,
+          supportedPermissionModes: ["workspace-write"],
+        },
+        available: true,
+      },
+    ],
+  },
+  "provider.list_models": {
+    models: [
+      {
+        id: "codex/gpt-5",
+        model: "gpt-5",
+        displayName: "GPT-5",
+        description: "Test model",
+        supportedReasoningEfforts: [
+          {
+            reasoningEffort: "medium",
+            description: "Balanced",
+          },
+        ],
+        defaultReasoningEffort: "medium",
+        isDefault: true,
+      },
+    ],
+    selectedOnlyModels: [],
+  },
+  "workspace.status": WORKSPACE_UNAVAILABLE_RESULT,
+  "workspace.diff": WORKSPACE_UNAVAILABLE_RESULT,
+};
+
+const ADDITIONAL_ONLINE_RPC_RESPONSE_ROUND_TRIP_CASES: OnlineRpcResponseRoundTripCase[] =
+  [
+    {
+      name: "development.replay capture-list result",
+      commandType: "development.replay",
+      result: {
+        captures: [REPLAY_CAPTURE_SUMMARY_RESULT],
+      },
+    },
+    {
+      name: "development.replay capture-get manifest result",
+      commandType: "development.replay",
+      result: REPLAY_CAPTURE_MANIFEST_RESULT,
+    },
+    {
+      name: "workspace.status available result",
+      commandType: "workspace.status",
+      result: WORKSPACE_STATUS_AVAILABLE_RESULT,
+    },
+    {
+      name: "workspace.diff available result",
+      commandType: "workspace.diff",
+      result: WORKSPACE_DIFF_AVAILABLE_RESULT,
+    },
+  ];
+
+const ONLINE_RPC_RESPONSE_MISMATCH_CASES: OnlineRpcResponseMismatchCase[] = [
+  {
+    name: "host.file_metadata command with a read-file result",
+    commandType: "host.file_metadata",
+    result: {
+      path: "/tmp/report.html",
+      content: "<!doctype html>",
+      contentEncoding: "utf8",
+      mimeType: "text/html",
+      sizeBytes: 15,
+    },
+  },
+  {
+    name: "host.read_file command with a metadata result",
+    commandType: "host.read_file",
+    result: {
+      path: "/tmp/report.html",
+      modifiedAtMs: 1234,
+      sizeBytes: 42,
+    },
+  },
+  {
+    name: "provider.list command with a provider-model result",
+    commandType: "provider.list",
+    result: {
+      models: [],
+      selectedOnlyModels: [],
+    },
+  },
+  {
+    name: "development.replay command with a provider-list result",
+    commandType: "development.replay",
+    result: {
+      providers: [],
+    },
+  },
+  {
+    name: "provider.list command with a replay-list result",
+    commandType: "provider.list",
+    result: {
+      captures: [],
+    },
+  },
+];
+
+function buildHostRpcResponseMessage(
+  commandType: HostDaemonOnlineRpcCommandType,
+  result: JsonObject,
+): JsonObject {
+  return {
+    type: "host-rpc.response",
+    requestId: `rpc-${commandType}`,
+    commandType,
+    ok: true,
+    result,
+  };
+}
+
+function expectHostRpcResponseRoundTrip(
+  commandType: HostDaemonOnlineRpcCommandType,
+  result: JsonObject,
+  name: string,
+): void {
+  const message = buildHostRpcResponseMessage(commandType, result);
+  const jsonRoundTripped = JSON.parse(JSON.stringify(message));
+
+  expect(
+    hostDaemonOnlineRpcResponseMessageSchema.parse(jsonRoundTripped),
+    name,
+  ).toEqual(message);
+  expect(
+    hostDaemonDaemonWsMessageSchema.parse(jsonRoundTripped),
+    name,
+  ).toEqual(message);
+}
 
 function terminalDataBase64(byteLength: number): string {
   return Buffer.alloc(byteLength, "a").toString("base64");
@@ -2039,6 +2382,50 @@ describe("host-daemon session schemas", () => {
         result: { models: [], selectedOnlyModels: [] },
       }).success,
     ).toBe(false);
+  });
+
+  it("round-trips every online RPC response success variant through daemon websocket schemas", () => {
+    // Keep this table-driven instead of inspecting Zod internals: the exported
+    // schema behavior is stable API, while union internals are not.
+    expect(Object.keys(ONLINE_RPC_RESPONSE_RESULT_FIXTURES).sort()).toEqual(
+      [...HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES].sort(),
+    );
+
+    for (const commandType of HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES) {
+      expectHostRpcResponseRoundTrip(
+        commandType,
+        ONLINE_RPC_RESPONSE_RESULT_FIXTURES[commandType],
+        commandType,
+      );
+    }
+
+    for (const testCase of ADDITIONAL_ONLINE_RPC_RESPONSE_ROUND_TRIP_CASES) {
+      expectHostRpcResponseRoundTrip(
+        testCase.commandType,
+        testCase.result,
+        testCase.name,
+      );
+    }
+  });
+
+  it("rejects online RPC response results that do not match commandType", () => {
+    for (const testCase of ONLINE_RPC_RESPONSE_MISMATCH_CASES) {
+      const message = buildHostRpcResponseMessage(
+        testCase.commandType,
+        testCase.result,
+      );
+      const jsonRoundTripped = JSON.parse(JSON.stringify(message));
+
+      expect(
+        hostDaemonOnlineRpcResponseMessageSchema.safeParse(jsonRoundTripped)
+          .success,
+        testCase.name,
+      ).toBe(false);
+      expect(
+        hostDaemonDaemonWsMessageSchema.safeParse(jsonRoundTripped).success,
+        testCase.name,
+      ).toBe(false);
+    }
   });
 
   it("bounds terminal dimensions in daemon websocket messages", () => {

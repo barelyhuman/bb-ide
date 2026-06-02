@@ -11,12 +11,18 @@ import {
   callHostRetryableOnlineRpc,
 } from "../../src/services/hosts/online-rpc.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
+import {
+  feedRawDaemonWebSocketMessage,
+  type TestDaemonWebSocket,
+} from "../helpers/daemon-ws.js";
 import { seedHostSession } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-interface TestHostRpcSocket {
-  close(code?: number, reason?: string): void;
-  send(data: string): void;
+type TestHostRpcSocket = TestDaemonWebSocket;
+
+interface DaemonSocketCloseRecord {
+  code: number | undefined;
+  reason: string | undefined;
 }
 
 interface DropThenReplaceSocketArgs {
@@ -129,6 +135,137 @@ describe("host online RPC retry semantics", () => {
       expect(requests.map((request) => request.command.type)).toEqual([
         "development.replay",
       ]);
+    });
+  });
+
+  it("rejects malformed host RPC responses at the daemon websocket boundary without resolving the waiter", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-online-rpc-boundary-rejects-malformed-response",
+      });
+      const filePath = "/tmp/report.html";
+      const requests: HostDaemonOnlineRpcRequestMessage[] = [];
+      const closes: DaemonSocketCloseRecord[] = [];
+      const socket: TestHostRpcSocket = {
+        close(code, reason) {
+          closes.push({ code, reason });
+        },
+        send(data) {
+          const request = parseHostRpcRequest(data);
+          requests.push(request);
+          feedRawDaemonWebSocketMessage({
+            harness,
+            hostId: host.id,
+            sessionId: session.id,
+            socket,
+            rawMessage: {
+              type: "host-rpc.response",
+              requestId: request.requestId,
+              commandType: "host.file_metadata",
+              ok: true,
+              result: {
+                path: filePath,
+                content: "<!doctype html>",
+                contentEncoding: "utf8",
+                mimeType: "text/html",
+                sizeBytes: 15,
+              },
+            },
+          });
+        },
+      };
+      harness.hub.unregisterDaemon(session.id);
+      harness.hub.registerDaemon(session.id, host.id, socket);
+
+      try {
+        await callHostOnlineRpc(harness.deps, {
+          hostId: host.id,
+          timeoutMs: 25,
+          command: {
+            type: "host.file_metadata",
+            path: filePath,
+          },
+        });
+        throw new Error("Expected malformed daemon response to time out");
+      } catch (error) {
+        if (!(error instanceof ApiError)) {
+          throw error;
+        }
+        expect(error.status).toBe(504);
+        expect(error.body.code).toBe("command_timeout");
+      }
+
+      expect(requests.map((request) => request.command)).toEqual([
+        {
+          type: "host.file_metadata",
+          path: filePath,
+        },
+      ]);
+      expect(closes).toEqual([{ code: 1008, reason: "invalid-message" }]);
+    });
+  });
+
+  it("rejects replay responses with provider-shaped results at the daemon websocket boundary", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-online-rpc-boundary-rejects-replay-provider-shape",
+      });
+      const requests: HostDaemonOnlineRpcRequestMessage[] = [];
+      const closes: DaemonSocketCloseRecord[] = [];
+      const socket: TestHostRpcSocket = {
+        close(code, reason) {
+          closes.push({ code, reason });
+        },
+        send(data) {
+          const request = parseHostRpcRequest(data);
+          requests.push(request);
+          feedRawDaemonWebSocketMessage({
+            harness,
+            hostId: host.id,
+            sessionId: session.id,
+            socket,
+            rawMessage: {
+              type: "host-rpc.response",
+              requestId: request.requestId,
+              commandType: "development.replay",
+              ok: true,
+              result: {
+                providers: [],
+              },
+            },
+          });
+        },
+      };
+      harness.hub.unregisterDaemon(session.id);
+      harness.hub.registerDaemon(session.id, host.id, socket);
+
+      try {
+        await callHostOnlineRpc(harness.deps, {
+          hostId: host.id,
+          timeoutMs: 25,
+          command: {
+            type: "development.replay",
+            operation: "capture-delete",
+            captureId: "rcap_abc123",
+          },
+        });
+        throw new Error("Expected malformed daemon response to time out");
+      } catch (error) {
+        if (!(error instanceof ApiError)) {
+          throw error;
+        }
+        expect(error.status).toBe(504);
+        expect(error.body.code).toBe("command_timeout");
+      }
+
+      expect(requests.map((request) => request.command)).toEqual([
+        {
+          type: "development.replay",
+          operation: "capture-delete",
+          captureId: "rcap_abc123",
+        },
+      ]);
+      expect(closes).toEqual([{ code: 1008, reason: "invalid-message" }]);
     });
   });
 });
