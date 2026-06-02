@@ -46,6 +46,10 @@ interface CodexRemoteControlStatusRawEvent {
   kind: "remote-control-status";
 }
 
+interface CodexThreadSettingsUpdatedRawEvent {
+  kind: "thread-settings-updated";
+}
+
 interface CodexUnknownRawEvent {
   kind: "unknown";
   method: string;
@@ -55,6 +59,7 @@ type CodexRawEvent =
   | CodexNotificationRawEvent
   | CodexMcpStartupStatusRawEvent
   | CodexRemoteControlStatusRawEvent
+  | CodexThreadSettingsUpdatedRawEvent
   | CodexUnknownRawEvent;
 
 const CODEX_SERVER_NOTIFICATION_METHODS = {
@@ -214,6 +219,12 @@ function parseCodexRawEvent(event: JsonRpcMessage): CodexRawEvent {
     };
   }
 
+  if (event.method === "thread/settings/updated") {
+    return {
+      kind: "thread-settings-updated",
+    };
+  }
+
   if (isCodexServerNotificationMethod(event.method)) {
     return {
       kind: "notification",
@@ -237,6 +248,9 @@ function describeParsedCodexRawEvent(
 
     case "remote-control-status":
       return { kind: "remoteControl/status/changed", coverage: "noise" };
+
+    case "thread-settings-updated":
+      return { kind: "thread/settings/updated", coverage: "noise" };
 
     case "notification":
       if (

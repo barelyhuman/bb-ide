@@ -4042,6 +4042,46 @@ describe("codex provider adapter", () => {
     expect(events).toEqual([]);
   });
 
+  it("translateEvent ignores thread settings updates", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "thread/settings/updated",
+      params: {
+        threadId: "t1",
+        threadSettings: {
+          cwd: "/tmp/project",
+          approvalPolicy: "never",
+          approvalsReviewer: "user",
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: ["/tmp/thread-storage"],
+            networkAccess: true,
+            excludeTmpdirEnvVar: false,
+            excludeSlashTmp: false,
+          },
+          activePermissionProfile: null,
+          model: "gpt-5.5",
+          modelProvider: "openai",
+          serviceTier: null,
+          effort: "xhigh",
+          summary: null,
+          collaborationMode: {
+            mode: "default",
+            settings: {
+              model: "gpt-5.5",
+              reasoning_effort: "xhigh",
+              developer_instructions: null,
+            },
+          },
+          personality: "pragmatic",
+        },
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
   it("decodeToolCallRequest preserves numeric request ids", () => {
     const adapter = createCodexProviderAdapter();
     expect(
