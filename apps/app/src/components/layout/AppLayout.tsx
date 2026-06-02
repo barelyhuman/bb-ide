@@ -52,7 +52,7 @@ import {
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
-import { IFRAME_POINTER_EVENTS_NONE_CLASS } from "@/lib/iframe-drag-guard";
+import { IframeDragGuardOverlay } from "@/lib/iframe-drag-guard";
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
 const SIDEBAR_OPEN_KEY = "bb.sidebar.open";
@@ -539,10 +539,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <ProjectActionsProvider>
       <ThreadActionsProvider>
+        <IframeDragGuardOverlay active={isSidebarResizing} />
         <SidebarStateBridge
-          className={
-            isSidebarResizing ? IFRAME_POINTER_EVENTS_NONE_CLASS : undefined
-          }
           providerRef={providerRef}
           style={sidebarProviderStyle}
         >

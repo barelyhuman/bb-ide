@@ -59,7 +59,10 @@ interface BuildActiveFileTabArgs {
 }
 
 const noop = () => {};
-const IFRAME_POINTER_EVENTS_NONE_CLASS = "[&_iframe]:pointer-events-none";
+const IFRAME_DRAG_GUARD_OVERLAY_TESTID = "iframe-drag-guard-overlay";
+// The class that used to disable iframe pointer-events during resize — asserted
+// absent so the regression that broke wheel-scroll can't be reintroduced.
+const IFRAME_POINTER_EVENTS_TOGGLE_CLASS = "[&_iframe]:pointer-events-none";
 const MACOS_DESKTOP_INFO: BbDesktopInfo = {
   lastCheckedAt: null,
   latestVersion: null,
@@ -292,7 +295,6 @@ describe("ThreadSecondaryPanel", () => {
         "#thread-detail-secondary-panel",
       );
       const aside = panel?.querySelector("aside");
-      const iframe = screen.getByTitle("Status app");
       const resizeHandle = screen.getByLabelText(
         "Resize thread and secondary panels",
       );
@@ -308,19 +310,24 @@ describe("ThreadSecondaryPanel", () => {
       });
 
       await waitFor(() => {
-        expect(aside?.className).toContain(IFRAME_POINTER_EVENTS_NONE_CLASS);
+        expect(
+          screen.queryByTestId(IFRAME_DRAG_GUARD_OVERLAY_TESTID),
+        ).not.toBeNull();
       });
+      // Regression guard: the drag must be intercepted by the overlay, never by
+      // disabling the iframe's pointer-events — that detaches the iframe's
+      // compositor scroll node in Chromium and kills wheel-scroll after resize.
+      expect(aside?.className).not.toContain(IFRAME_POINTER_EVENTS_TOGGLE_CLASS);
 
       finishDrag();
 
+      // Every drag-end path must tear the overlay down — a stuck overlay would
+      // leave the whole panel shielded from clicks and scrolling.
       await waitFor(() => {
-        expect(aside?.className).not.toContain(
-          IFRAME_POINTER_EVENTS_NONE_CLASS,
-        );
+        expect(
+          screen.queryByTestId(IFRAME_DRAG_GUARD_OVERLAY_TESTID),
+        ).toBeNull();
       });
-
-      expect(panel?.style.pointerEvents).toBe("auto");
-      expect(window.getComputedStyle(iframe).pointerEvents).toBe("auto");
     },
   );
 

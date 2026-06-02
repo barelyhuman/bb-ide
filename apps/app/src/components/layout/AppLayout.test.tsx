@@ -346,10 +346,8 @@ describe("AppLayout desktop chrome", () => {
       },
     },
   ])(
-    "disables iframe pointer events while sidebar resize is active and restores them after $name",
+    "shields iframes with a drag overlay while sidebar resize is active and removes it after $name",
     async ({ finishDrag }) => {
-      const iframePointerEventsNoneClass = "[&_iframe]:pointer-events-none";
-
       await renderAppLayout({
         desktopInfo: null,
         initialEntry: "/projects/proj_sidebar_resize",
@@ -361,9 +359,7 @@ describe("AppLayout desktop chrome", () => {
       const iframe = screen.getByTitle("Status app");
 
       expect(appLayoutRoot.contains(iframe)).toBe(true);
-      expect(appLayoutRoot.className).not.toContain(
-        iframePointerEventsNoneClass,
-      );
+      expect(screen.queryByTestId("iframe-drag-guard-overlay")).toBeNull();
 
       fireEvent.mouseDown(resizeHandle, {
         buttons: 1,
@@ -372,18 +368,22 @@ describe("AppLayout desktop chrome", () => {
       });
 
       await waitFor(() => {
-        expect(appLayoutRoot.className).toContain(
-          iframePointerEventsNoneClass,
-        );
+        expect(
+          screen.queryByTestId("iframe-drag-guard-overlay"),
+        ).not.toBeNull();
       });
       expect(document.body.style.cursor).toBe("col-resize");
+      // Regression guard: the drag must be intercepted by the overlay, never by
+      // disabling the iframe's pointer-events — that detaches the iframe's
+      // compositor scroll node in Chromium and kills wheel-scroll after resize.
+      expect(appLayoutRoot.className).not.toContain(
+        "[&_iframe]:pointer-events-none",
+      );
 
       finishDrag();
 
       await waitFor(() => {
-        expect(appLayoutRoot.className).not.toContain(
-          iframePointerEventsNoneClass,
-        );
+        expect(screen.queryByTestId("iframe-drag-guard-overlay")).toBeNull();
       });
       expect(document.body.style.cursor).toBe("");
       expect(document.body.style.userSelect).toBe("");
