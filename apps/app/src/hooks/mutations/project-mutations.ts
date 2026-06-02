@@ -1,10 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { PromptInput, ReasoningLevel, ServiceTier } from "@bb/domain";
 import type {
-  PromptInput,
-  ReasoningLevel,
-  ServiceTier,
-} from "@bb/domain";
-import type {
+  CreateManagerExecutionInputSources,
   CreateProjectRequest,
   ManagerEnvironmentArgs,
   ProjectResponse,
@@ -56,6 +53,7 @@ export interface HireProjectManagerRequest {
   model?: string;
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
+  executionInputSources?: CreateManagerExecutionInputSources;
   templateName?: string;
   environment: ManagerEnvironmentArgs;
   /** Optional user-provided first message; when empty the server uses
@@ -113,6 +111,7 @@ export function useHireProjectManager() {
       model,
       serviceTier,
       reasoningLevel,
+      executionInputSources,
       templateName,
       environment,
       input,
@@ -123,6 +122,7 @@ export function useHireProjectManager() {
         ...(model ? { model } : {}),
         ...(serviceTier ? { serviceTier } : {}),
         ...(reasoningLevel ? { reasoningLevel } : {}),
+        ...(executionInputSources ? { executionInputSources } : {}),
         ...(templateName ? { templateName } : {}),
         environment,
         ...(input && input.length > 0 ? { input } : {}),

@@ -25,6 +25,7 @@ import type {
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
+import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { RootComposeRoute } from "./RootComposeView";
 
@@ -348,8 +349,15 @@ describe("RootComposeRoute", () => {
       titleFallback: "Manager",
       type: "manager",
     });
-    installRootComposeFetchRoutes({ hiredManager: manager });
+    const requests = installRootComposeFetchRoutes({ hiredManager: manager });
     window.localStorage.setItem(ROOT_COMPOSE_MODE_STORAGE_KEY, "manager");
+    window.localStorage.setItem(
+      getProjectScopedStorageKey(
+        "bb.promptbox.permission-mode",
+        PERSONAL_PROJECT_ID,
+      ),
+      "workspace-write",
+    );
     renderRootComposeRoute();
 
     await screen.findByRole("textbox");
@@ -368,6 +376,14 @@ describe("RootComposeRoute", () => {
         }),
       );
     });
+    expect(requests.hireManager).toHaveLength(1);
+    const [hireRequest] = requests.hireManager;
+    if (!hireRequest) {
+      throw new Error("Expected manager hire request");
+    }
+    const hireBody = await hireRequest.json();
+    expect(hireBody).not.toHaveProperty("permissionMode");
+    expect(hireBody.executionInputSources).toEqual({});
   });
 
   it("does not navigate when new thread creation fails", async () => {

@@ -11,10 +11,7 @@ import {
   parseReasoningLevel,
   printContextLabel,
 } from "./helpers.js";
-import {
-  MANAGED_PERMISSION_MODE_HELP,
-  parsePermissionMode,
-} from "./thread/helpers.js";
+import { parseServiceTier } from "./thread/helpers.js";
 
 interface ManagerHireCommandOptions {
   json?: boolean;
@@ -23,9 +20,9 @@ interface ManagerHireCommandOptions {
   host?: string;
   provider?: string;
   model?: string;
+  serviceTier?: string;
   template?: string;
   reasoningLevel?: string;
-  permissionMode?: string;
 }
 
 interface ManagerListCommandOptions {
@@ -61,9 +58,7 @@ export function registerManagerCommands(
   program: Command,
   getUrl: () => string,
 ): void {
-  const manager = program
-    .command("manager")
-    .description("Manage managers");
+  const manager = program.command("manager").description("Manage managers");
 
   manager
     .command("hire [projectId]")
@@ -84,11 +79,11 @@ export function registerManagerCommands(
       "--template <name>",
       "Manager template set name from manager-templates/<name>",
     )
+    .option("--service-tier <tier>", "Service tier: fast or default")
     .option(
       "--reasoning-level <level>",
       "Reasoning level (low, medium, high, xhigh, max; provider-dependent)",
     )
-    .option("--permission-mode <mode>", MANAGED_PERMISSION_MODE_HELP)
     .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
     .action(
@@ -111,7 +106,7 @@ export function registerManagerCommands(
             );
           }
           const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
-          const permissionMode = parsePermissionMode(opts.permissionMode);
+          const serviceTier = parseServiceTier(opts.serviceTier);
           let hostId: string | undefined = opts.host;
           if (!hostId) {
             hostId = (await fetchLocalHostId()) ?? undefined;
@@ -129,10 +124,10 @@ export function registerManagerCommands(
                 ...(opts.name ? { name: opts.name } : {}),
                 ...(opts.provider ? { providerId: opts.provider } : {}),
                 ...(opts.model ? { model: opts.model } : {}),
+                ...(serviceTier ? { serviceTier } : {}),
                 ...(opts.template ? { templateName: opts.template } : {}),
                 environment: { type: "host", hostId },
                 ...(reasoningLevel ? { reasoningLevel } : {}),
-                ...(permissionMode ? { permissionMode } : {}),
               },
             }),
           );

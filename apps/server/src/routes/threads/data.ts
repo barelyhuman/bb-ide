@@ -56,9 +56,9 @@ import {
   getLastThreadOutput,
   listThreadEventRows,
 } from "../../services/threads/thread-data.js";
-import { getLastExecutionOptions } from "../../services/threads/thread-events.js";
 import { resolveSystemExecutionOptions } from "../../services/system/execution-options.js";
 import { listThreadPromptHistory } from "../../services/prompt-history.js";
+import { tryResolveExistingThreadExecutionPlan } from "../../services/threads/thread-execution-plan.js";
 import {
   parseInteger,
   parseOptionalInteger,
@@ -90,7 +90,13 @@ async function buildThreadComposerBootstrapResponse(
   threadId: string,
 ): Promise<ThreadComposerBootstrapResponse> {
   const thread = requirePublicThread(deps.db, threadId);
-  const defaultExecutionOptions = getLastExecutionOptions(deps, threadId);
+  const defaultExecutionOptions = (
+    await tryResolveExistingThreadExecutionPlan(deps, {
+      executionSource: "client/turn/requested",
+      input: {},
+      threadId,
+    })
+  )?.defaultView ?? null;
   const composerEnvironmentId = shouldResolveThreadComposerExecutionOptions({
     thread,
   })
@@ -492,9 +498,18 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     },
   );
 
-  get("/threads/:id/default-execution-options", (context) => {
-    requirePublicThread(deps.db, context.req.param("id"));
-    return context.json(getLastExecutionOptions(deps, context.req.param("id")));
+  get("/threads/:id/default-execution-options", async (context) => {
+    const threadId = context.req.param("id");
+    requirePublicThread(deps.db, threadId);
+    return context.json(
+      (
+        await tryResolveExistingThreadExecutionPlan(deps, {
+          executionSource: "client/turn/requested",
+          input: {},
+          threadId,
+        })
+      )?.defaultView ?? null,
+    );
   });
 
   // Generic iframe previews use path-shaped raw URLs so relative links resolve

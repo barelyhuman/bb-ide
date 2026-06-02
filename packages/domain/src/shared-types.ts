@@ -77,6 +77,17 @@ export const threadExecutionSourceSchema = z.enum([
 ]);
 export type ThreadExecutionSource = z.infer<typeof threadExecutionSourceSchema>;
 
+export const callerExecutionInputSourceValues = [
+  "explicit",
+  "client-preference",
+] as const;
+export const callerExecutionInputSourceSchema = z.enum(
+  callerExecutionInputSourceValues,
+);
+export type CallerExecutionInputSource = z.infer<
+  typeof callerExecutionInputSourceSchema
+>;
+
 export const threadExecutionOptionsSchema = z.object({
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),

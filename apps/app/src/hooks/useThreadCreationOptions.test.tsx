@@ -171,7 +171,121 @@ describe("useThreadCreationOptions", () => {
     });
 
     expect(result.current.reasoningLevel).toBe("xhigh");
+    expect(result.current.executionInputSources).toEqual({});
     expect(api.getSystemExecutionOptions).toHaveBeenCalled();
+  });
+
+  it("omits manager permission source metadata even when permission is stored and touched", async () => {
+    const projectId = "project-manager-permission-source";
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId),
+      "workspace-write",
+    );
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          capabilities: {
+            supportedPermissionModes: ["full", "workspace-write"],
+          },
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.5",
+          model: "gpt-5.5",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          initialModel: "gpt-5.5",
+          initialProviderId: "codex",
+          projectId,
+          scope: "new-manager",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedModel).toBe("gpt-5.5");
+    });
+
+    expect(result.current.executionInputSources).toEqual({});
+
+    act(() => {
+      result.current.setPermissionMode("full");
+    });
+
+    expect(result.current.executionInputSources).toEqual({});
+  });
+
+  it("marks stored create selections as client preferences", async () => {
+    const projectId = "project-stored-source";
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.provider", projectId),
+      "codex",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.model", projectId),
+      "gpt-5.4",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.reasoning", projectId),
+      "medium",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId),
+      "workspace-write",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.service-tier", projectId),
+      "fast",
+    );
+
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          capabilities: {
+            supportsServiceTier: true,
+          },
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          projectId,
+          scope: "new-thread",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedProviderId).toBe("codex");
+      expect(result.current.selectedModel).toBe("gpt-5.4");
+      expect(result.current.serviceTier).toBe("fast");
+    });
+
+    expect(result.current.executionInputSources).toEqual({
+      providerId: "client-preference",
+      model: "client-preference",
+      serviceTier: "client-preference",
+      reasoningLevel: "client-preference",
+      permissionMode: "client-preference",
+    });
   });
 
   it("falls back to valid provider and model values from query data", async () => {
@@ -421,6 +535,12 @@ describe("useThreadCreationOptions", () => {
         getProjectScopedStorageKey("bb.promptbox.environment", projectId),
       ),
     ).toBe("worktree");
+    expect(result.current.executionInputSources).toEqual({
+      model: "explicit",
+      serviceTier: "explicit",
+      reasoningLevel: "explicit",
+      permissionMode: "explicit",
+    });
   });
 
   it("preserves touched thread selections until the reset key changes", async () => {
@@ -574,6 +694,69 @@ describe("useThreadCreationOptions", () => {
 
     expect(renderedPermissionModes[0]).toBe("readonly");
     expect(result.current.permissionMode).toBe("readonly");
+  });
+
+  it("marks component-local execution sources explicit only after execution controls change", async () => {
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          capabilities: {
+            supportsServiceTier: true,
+          },
+          id: "codex",
+        }),
+      ],
+      models: [
+        makeModel({
+          id: "gpt-5",
+          model: "gpt-5",
+          supportedReasoningEfforts: [
+            {
+              description: "Medium effort",
+              reasoningEffort: "medium",
+            },
+            {
+              description: "High effort",
+              reasoningEffort: "high",
+            },
+          ],
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          environmentId: "env-component-local-sources",
+          initialModel: "gpt-5",
+          initialPermissionMode: "full",
+          initialProviderId: "codex",
+          initialReasoningLevel: "medium",
+          initialServiceTier: "default",
+          projectId: "project-component-local-sources",
+          resetKey: "thread-component-local-sources",
+          scope: "component-local",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedModel).toBe("gpt-5");
+    });
+
+    expect(result.current.executionInputSources).toEqual({});
+
+    act(() => {
+      result.current.setReasoningLevel("high");
+    });
+
+    expect(result.current.executionInputSources).toEqual({
+      model: "explicit",
+      serviceTier: "explicit",
+      reasoningLevel: "explicit",
+      permissionMode: "explicit",
+    });
   });
 
   it("preserves touched component-local permission mode until the reset key changes", async () => {

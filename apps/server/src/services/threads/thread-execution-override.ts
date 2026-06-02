@@ -14,7 +14,7 @@ import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { resolveSystemExecutionOptions } from "../system/execution-options.js";
 import { getLastExecutionOptions } from "./thread-events.js";
-import { getSupportedReasoningLevelsForProvider } from "./thread-runtime-config.js";
+import { getSupportedReasoningLevelsForProvider } from "./thread-reasoning-policy.js";
 
 /**
  * Provider whitelist for in-place execution overrides in v1. Only `claude-code`

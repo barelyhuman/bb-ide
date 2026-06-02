@@ -54,7 +54,10 @@ const projectSources: readonly ProjectSource[] = [
 const permissionModeOptions: readonly {
   value: PermissionMode;
   label: string;
-}[] = [{ value: "workspace-write", label: "Workspace Write" }];
+}[] = [
+  { value: "workspace-write", label: "Workspace Write" },
+  { value: "full", label: "Full" },
+];
 
 function TestProviderIcon({ className }: TestProviderIconProps) {
   return <svg className={className} aria-hidden />;
@@ -154,9 +157,7 @@ function renderNewThreadPrompt(modeConfig: NewThreadModeConfig): void {
         provider: {
           selectedId: "codex",
           hasMultiple: false,
-          options: [
-            { value: "codex", label: "Codex", icon: TestProviderIcon },
-          ],
+          options: [{ value: "codex", label: "Codex", icon: TestProviderIcon }],
         },
         model: {
           selected: "gpt-5",
@@ -190,6 +191,14 @@ describe("NewThreadPromptBoxUI", () => {
     expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(
       "Optional — instructions for the manager: what to work on, or how you like things done.",
     );
+  });
+
+  it("does not render permission controls in manager mode", () => {
+    renderNewThreadPrompt(buildManagerModeConfig());
+
+    expect(
+      screen.queryByRole("button", { name: /Permission mode/ }),
+    ).toBeNull();
   });
 
   it("uses a host picker instead of the environment picker for projectless threads", () => {

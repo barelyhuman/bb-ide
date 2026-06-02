@@ -256,7 +256,7 @@ describe("public thread default routes", () => {
     });
   });
 
-  it("fails thread creation without a model when the project has no stored defaults for the provider", async () => {
+  it("fails thread creation without a model when an explicit provider has no stored defaults", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -277,7 +277,7 @@ describe("public thread default routes", () => {
         body: JSON.stringify({
           origin: "app",
           projectId: project.id,
-          providerId: "codex",
+          providerId: "pi",
           input: [{ type: "text", text: "Create without defaults" }],
           environment: {
             type: "reuse",
@@ -289,7 +289,7 @@ describe("public thread default routes", () => {
       expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("has no stored execution defaults"),
+        message: expect.stringContaining("provider pi"),
       });
       expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
         0,

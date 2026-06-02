@@ -65,6 +65,7 @@ describe("threadDetailPromptSubmission", () => {
           reasoningLevel: "medium",
           serviceTier: "default",
           supportsServiceTier: true,
+          executionInputSources: {},
         },
         input: textInput,
         threadId: "thread-1",
@@ -77,6 +78,7 @@ describe("threadDetailPromptSubmission", () => {
       permissionMode: "full",
       reasoningLevel: "medium",
       serviceTier: "default",
+      executionInputSources: {},
     });
   });
 
@@ -103,6 +105,11 @@ describe("threadDetailPromptSubmission", () => {
           reasoningLevel: "high",
           serviceTier: "fast",
           supportsServiceTier: false,
+          executionInputSources: {
+            model: "explicit",
+            reasoningLevel: "explicit",
+            permissionMode: "explicit",
+          },
         },
         input: textInput,
         threadId: "thread-1",
@@ -113,6 +120,11 @@ describe("threadDetailPromptSubmission", () => {
       model: "gpt-5",
       permissionMode: "workspace-write",
       reasoningLevel: "high",
+      executionInputSources: {
+        model: "explicit",
+        reasoningLevel: "explicit",
+        permissionMode: "explicit",
+      },
     });
   });
 

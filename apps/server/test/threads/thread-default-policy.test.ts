@@ -67,7 +67,6 @@ describe("resolveCreateThreadExecutionDefaults", () => {
         threadType: "manager",
       }),
     ).toEqual({
-      kind: "resolved",
       providerId: "codex",
       executionDefaults: {
         providerId: "codex",
@@ -90,7 +89,6 @@ describe("resolveCreateThreadExecutionDefaults", () => {
         threadType: "manager",
       }),
     ).toEqual({
-      kind: "resolved",
       providerId: "pi",
       executionDefaults: null,
     });
@@ -108,7 +106,6 @@ describe("resolveCreateThreadExecutionDefaults", () => {
         threadType: "standard",
       }),
     ).toEqual({
-      kind: "resolved",
       providerId: "codex",
       executionDefaults: storedDefaults,
     });

@@ -725,6 +725,8 @@ describe("CLI command output contracts", () => {
         "claude-opus-4-7",
         "--template",
         "minimal",
+        "--service-tier",
+        "fast",
         "--reasoning-level",
         "high",
       ],
@@ -740,6 +742,7 @@ describe("CLI command output contracts", () => {
         name: "Manager",
         providerId: "claude-code",
         reasoningLevel: "high",
+        serviceTier: "fast",
         templateName: "minimal",
       },
     });
@@ -786,9 +789,7 @@ describe("CLI command output contracts", () => {
         origin: "cli",
       },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "  Project:  -",
-    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
   });
 
   it("bb manager hire prints the personal project as projectless when explicitly selected", async () => {
@@ -818,7 +819,14 @@ describe("CLI command output contracts", () => {
     );
 
     await runCommand(
-      ["manager", "hire", "--project", PERSONAL_PROJECT_ID, "--name", "Manager"],
+      [
+        "manager",
+        "hire",
+        "--project",
+        PERSONAL_PROJECT_ID,
+        "--name",
+        "Manager",
+      ],
       (program) => registerManagerCommands(program, () => "http://server"),
     );
 
@@ -830,9 +838,7 @@ describe("CLI command output contracts", () => {
         origin: "cli",
       },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "  Project:  -",
-    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
     expect(collectLogLines(vi.mocked(console.error)).join("\n")).not.toContain(
       PERSONAL_PROJECT_ID,
     );
@@ -877,9 +883,7 @@ describe("CLI command output contracts", () => {
         origin: "cli",
       },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "  Project:  -",
-    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
     expect(collectLogLines(vi.mocked(console.error))).toEqual([
       "Project - (from BB_PROJECT_ID)",
     ]);
@@ -985,78 +989,46 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb manager hire forwards managed permission mode", async () => {
-    const post = vi.fn(async () => ({
-      id: "thread-manager-4",
-      projectId: "project-123",
-      title: "Manager",
-      type: "manager",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(
-      asServerClient({
-        api: {
-          v1: {
-            projects: {
-              ":id": {
-                managers: {
-                  $post: post,
-                },
-              },
-            },
-          },
-        },
-      }),
-    );
-
-    await runCommand(
-      [
-        "manager",
-        "hire",
-        "project-123",
-        "--permission-mode",
-        "workspace-write",
-      ],
-      (program) => registerManagerCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      param: { id: "project-123" },
-      json: {
-        environment: { type: "host", hostId: "host-test-001" },
-        origin: "cli",
-        permissionMode: "workspace-write",
-      },
-    });
-  });
-
-  it("bb manager hire help lists permission modes and server defaults", async () => {
+  it("bb manager hire help lists server-defaulted execution options", async () => {
     const helpOutput = await getHelpOutput(["manager", "hire"], (program) =>
       registerManagerCommands(program, () => "http://server"),
     );
 
-    expect(helpOutput).toContain("--permission-mode <mode>");
+    expect(helpOutput).not.toContain("--permission-mode <mode>");
+    expect(helpOutput).toContain("--service-tier <tier>");
     expect(helpOutput).toContain("--template <name>");
-    expect(helpOutput).toMatch(
-      /Permission mode: full, workspace-write, or\s+readonly/,
-    );
     expect(helpOutput).toMatch(
       /remembered manager defaults or the server\s+manager policy/,
     );
   });
 
-  it("bb manager hire reports invalid permission mode choices", async () => {
-    await expect(
-      runCommand(
-        ["manager", "hire", "project-123", "--permission-mode", "unsafe"],
-        (program) => registerManagerCommands(program, () => "http://server"),
-      ),
-    ).rejects.toThrow("process.exit:1");
+  it("bb manager hire rejects permission mode options", async () => {
+    const program = new Command();
+    const writeErr = vi.fn();
+    program.exitOverride();
+    program.configureOutput({
+      writeOut: vi.fn(),
+      writeErr,
+    });
+    registerManagerCommands(program, () => "http://server");
 
-    expect(console.error).toHaveBeenCalledWith(
-      "Error: Invalid permission mode 'unsafe'. Expected full, workspace-write, or readonly.",
+    await expect(
+      program.parseAsync([
+        "node",
+        "bb",
+        "manager",
+        "hire",
+        "project-123",
+        "--permission-mode",
+        "workspace-write",
+      ]),
+    ).rejects.toMatchObject({
+      code: "commander.unknownOption",
+    });
+    expect(
+      writeErr.mock.calls.map((callArgs) => String(callArgs[0] ?? "")).join(""),
+    ).toContain(
+      "error: unknown option '--permission-mode'",
     );
   });
 
@@ -3399,13 +3371,7 @@ describe("CLI JSON output contracts", () => {
 
     await expect(
       runCommand(
-        [
-          "thread",
-          "update",
-          "thread-update-5",
-          "--reasoning-level",
-          "turbo",
-        ],
+        ["thread", "update", "thread-update-5", "--reasoning-level", "turbo"],
         (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -3484,6 +3450,55 @@ describe("CLI JSON output contracts", () => {
     ).toEqual({
       threadId: "thread-json-tell",
       ok: true,
+    });
+  });
+
+  it("bb thread tell forwards execution options", async () => {
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                send: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "tell",
+        "thread-execution-options",
+        "hello",
+        "--model",
+        "gpt-5.5",
+        "--service-tier",
+        "fast",
+        "--reasoning-level",
+        "high",
+        "--permission-mode",
+        "workspace-write",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-execution-options" },
+      json: {
+        input: [{ type: "text", text: "hello" }],
+        mode: "auto",
+        model: "gpt-5.5",
+        serviceTier: "fast",
+        reasoningLevel: "high",
+        permissionMode: "workspace-write",
+      },
     });
   });
 

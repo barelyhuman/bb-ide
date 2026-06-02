@@ -8,12 +8,19 @@ import {
   useState,
 } from "react";
 import type {
+  AvailableModel,
   PermissionMode,
   ProviderInfo,
   ReasoningLevel,
   ServiceTier,
 } from "@bb/domain";
-import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
+import type {
+  CreateExecutionInputSources,
+  CreateManagerExecutionInputSources,
+  ExecutionInputFieldSource,
+  ExistingThreadExecutionInputSources,
+  SystemExecutionOptionsModelLoadError,
+} from "@bb/server-contract";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import {
   createLocalStorageEnumStorage,
@@ -32,6 +39,8 @@ const PERMISSION_MODE_STORAGE_KEY = "bb.promptbox.permission-mode";
 const ENVIRONMENT_STORAGE_KEY = "bb.promptbox.environment";
 const PROVIDER_STORAGE_KEY = "bb.promptbox.provider";
 type StoredServiceTier = "" | ServiceTier;
+type StoredReasoningLevel = "" | ReasoningLevel;
+type StoredPermissionMode = "" | PermissionMode;
 const EMPTY_PROVIDERS: ProviderInfo[] = [];
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
@@ -87,6 +96,58 @@ interface UsePromptModelReasoningOptions {
   initialEnvironmentSelectionValue?: string;
 }
 
+interface UseNewThreadCreationOptions extends UsePromptModelReasoningOptions {
+  scope?: "new-thread";
+}
+
+interface UseNewManagerCreationOptions extends UsePromptModelReasoningOptions {
+  scope: "new-manager";
+}
+
+interface UseComponentLocalCreationOptions
+  extends UsePromptModelReasoningOptions {
+  scope: "component-local";
+}
+
+type ScopedExecutionInputSources =
+  | CreateExecutionInputSources
+  | CreateManagerExecutionInputSources
+  | ExistingThreadExecutionInputSources;
+
+type StringSelectionSetter = (value: string) => void;
+type ServiceTierSelectionSetter = (value: ServiceTier | undefined) => void;
+type ReasoningLevelSelectionSetter = (value: ReasoningLevel) => void;
+type PermissionModeSelectionSetter = (value: PermissionMode) => void;
+type ClearSelectionHandler = () => void;
+
+interface UseThreadCreationOptionsResult<TExecutionInputSources> {
+  selectedProviderId: string;
+  setSelectedProviderId: StringSelectionSetter;
+  providerOptions: PickerOption<string>[];
+  hasMultipleProviders: boolean;
+  selectedProviderDisplayName: string;
+  selectedModel: string;
+  setSelectedModel: StringSelectionSetter;
+  serviceTier: ServiceTier | undefined;
+  setServiceTier: ServiceTierSelectionSetter;
+  reasoningLevel: ReasoningLevel;
+  setReasoningLevel: ReasoningLevelSelectionSetter;
+  permissionMode: PermissionMode;
+  setPermissionMode: PermissionModeSelectionSetter;
+  environmentSelectionValue: string;
+  setEnvironmentSelectionValue: StringSelectionSetter;
+  clearReuseEnvironment: ClearSelectionHandler;
+  activeModel: AvailableModel | undefined;
+  modelOptions: PickerOption<string>[];
+  modelLoadError: SystemExecutionOptionsModelLoadError | null;
+  reasoningOptions: PickerOption<ReasoningLevel>[];
+  permissionModeOptions: PickerOption<PermissionMode>[];
+  supportsPermissionModeSelection: boolean;
+  supportsServiceTier: boolean;
+  serviceTierSupportByProvider: Record<string, boolean>;
+  executionInputSources: TExecutionInputSources;
+}
+
 interface ThreadPromptSelections {
   selectedProviderId: string;
   selectedModel: string;
@@ -97,6 +158,35 @@ interface ThreadPromptSelections {
 }
 
 type ThreadPromptField = keyof ThreadPromptSelections;
+
+interface ResolveCreateExecutionInputSourceArgs {
+  hasStoredValue: boolean;
+  hasValue: boolean;
+  touched: boolean;
+}
+
+interface StoredCreateExecutionValues {
+  selectedProviderId: string;
+  selectedModel: string;
+  serviceTier: StoredServiceTier;
+  reasoningLevel: StoredReasoningLevel;
+  permissionMode: StoredPermissionMode;
+}
+
+interface EffectiveCreateExecutionValues {
+  selectedProviderId: string;
+  selectedModel: string;
+  serviceTier: ServiceTier | undefined;
+  reasoningLevel: ReasoningLevel;
+  permissionMode: PermissionMode;
+}
+
+interface BuildExecutionInputSourcesArgs {
+  effectiveValues: EffectiveCreateExecutionValues;
+  scope: ThreadCreationOptionsScope;
+  storedValues: StoredCreateExecutionValues;
+  touchedFields: ReadonlySet<ThreadPromptField>;
+}
 
 interface SyncThreadPromptSelectionsArgs {
   currentSelections: ThreadPromptSelections;
@@ -141,14 +231,20 @@ function isStoredServiceTier(value: string): value is StoredServiceTier {
   return value === "" || isServiceTier(value);
 }
 
+function isStoredReasoningLevel(value: string): value is StoredReasoningLevel {
+  return value === "" || isReasoningLevel(value);
+}
+
+function isStoredPermissionMode(value: string): value is StoredPermissionMode {
+  return value === "" || isPermissionMode(value);
+}
+
 const storedServiceTierStorage =
   createLocalStorageEnumStorage<StoredServiceTier>(isStoredServiceTier);
-const reasoningLevelStorage = createLocalStorageEnumStorage<ReasoningLevel>(
-  (value): value is ReasoningLevel => isReasoningLevel(value),
-);
-const permissionModeStorage = createLocalStorageEnumStorage<PermissionMode>(
-  (value): value is PermissionMode => isPermissionMode(value),
-);
+const storedReasoningLevelStorage =
+  createLocalStorageEnumStorage<StoredReasoningLevel>(isStoredReasoningLevel);
+const storedPermissionModeStorage =
+  createLocalStorageEnumStorage<StoredPermissionMode>(isStoredPermissionMode);
 const providerIdAtomFamily = createProjectScopedStorageAtomFamily(
   PROVIDER_STORAGE_KEY,
   "",
@@ -167,13 +263,13 @@ const serviceTierAtomFamily =
   );
 const reasoningLevelAtomFamily = createProjectScopedStorageAtomFamily(
   REASONING_STORAGE_KEY,
-  "medium",
-  reasoningLevelStorage,
+  "",
+  storedReasoningLevelStorage,
 );
 const permissionModeAtomFamily = createProjectScopedStorageAtomFamily(
   PERMISSION_MODE_STORAGE_KEY,
-  "full",
-  permissionModeStorage,
+  "",
+  storedPermissionModeStorage,
 );
 const environmentSelectionAtomFamily = createProjectScopedStorageAtomFamily(
   ENVIRONMENT_STORAGE_KEY,
@@ -265,6 +361,119 @@ function updateThreadPromptSelections({
   };
 }
 
+function hasValue(value: string): boolean {
+  return value.length > 0;
+}
+
+function resolveCreateExecutionInputSource({
+  hasStoredValue,
+  hasValue,
+  touched,
+}: ResolveCreateExecutionInputSourceArgs): ExecutionInputFieldSource | undefined {
+  if (!hasValue) {
+    return undefined;
+  }
+  if (touched) {
+    return "explicit";
+  }
+  if (hasStoredValue) {
+    return "client-preference";
+  }
+  return undefined;
+}
+
+function buildExecutionInputSources({
+  effectiveValues,
+  scope,
+  storedValues,
+  touchedFields,
+}: BuildExecutionInputSourcesArgs): ScopedExecutionInputSources {
+  const usesStoredValues = scope === "new-thread" || scope === "new-manager";
+  const hasTouchedExecutionField =
+    touchedFields.has("selectedProviderId") ||
+    touchedFields.has("selectedModel") ||
+    touchedFields.has("serviceTier") ||
+    touchedFields.has("reasoningLevel") ||
+    touchedFields.has("permissionMode");
+  // Existing-thread submissions are all-or-nothing once an execution control is
+  // touched, so the server never merges stale last-run values with new UI picks.
+  const forcesExplicitExecutionFields =
+    scope === "component-local" && hasTouchedExecutionField;
+
+  if (!usesStoredValues && scope !== "component-local") {
+    return {};
+  }
+
+  const providerSource = resolveCreateExecutionInputSource({
+    hasStoredValue:
+      usesStoredValues &&
+      hasValue(storedValues.selectedProviderId) &&
+      storedValues.selectedProviderId === effectiveValues.selectedProviderId,
+    hasValue: hasValue(effectiveValues.selectedProviderId),
+    touched: touchedFields.has("selectedProviderId"),
+  });
+  const modelSource = resolveCreateExecutionInputSource({
+    hasStoredValue:
+      usesStoredValues &&
+      hasValue(storedValues.selectedModel) &&
+      storedValues.selectedModel === effectiveValues.selectedModel,
+    hasValue: hasValue(effectiveValues.selectedModel),
+    touched:
+      forcesExplicitExecutionFields || touchedFields.has("selectedModel"),
+  });
+  const serviceTierSource = resolveCreateExecutionInputSource({
+    hasStoredValue:
+      usesStoredValues &&
+      storedValues.serviceTier !== "" &&
+      storedValues.serviceTier === effectiveValues.serviceTier,
+    hasValue: effectiveValues.serviceTier !== undefined,
+    touched:
+      forcesExplicitExecutionFields || touchedFields.has("serviceTier"),
+  });
+  const reasoningLevelSource = resolveCreateExecutionInputSource({
+    hasStoredValue: usesStoredValues && storedValues.reasoningLevel !== "",
+    hasValue: hasValue(effectiveValues.reasoningLevel),
+    touched:
+      forcesExplicitExecutionFields || touchedFields.has("reasoningLevel"),
+  });
+  const permissionModeSource = resolveCreateExecutionInputSource({
+    hasStoredValue: usesStoredValues && storedValues.permissionMode !== "",
+    hasValue: hasValue(effectiveValues.permissionMode),
+    touched:
+      forcesExplicitExecutionFields || touchedFields.has("permissionMode"),
+  });
+
+  if (scope === "new-manager") {
+    return {
+      ...(providerSource ? { providerId: providerSource } : {}),
+      ...(modelSource ? { model: modelSource } : {}),
+      ...(serviceTierSource ? { serviceTier: serviceTierSource } : {}),
+      ...(reasoningLevelSource ? { reasoningLevel: reasoningLevelSource } : {}),
+    };
+  }
+
+  if (scope === "component-local") {
+    return {
+      ...(modelSource ? { model: modelSource } : {}),
+      ...(serviceTierSource ? { serviceTier: serviceTierSource } : {}),
+      ...(reasoningLevelSource ? { reasoningLevel: reasoningLevelSource } : {}),
+      ...(permissionModeSource
+        ? { permissionMode: permissionModeSource }
+        : {}),
+    };
+  }
+
+  return {
+    ...(providerSource ? { providerId: providerSource } : {}),
+    ...(modelSource ? { model: modelSource } : {}),
+    ...(serviceTierSource ? { serviceTier: serviceTierSource } : {}),
+    ...(reasoningLevelSource ? { reasoningLevel: reasoningLevelSource } : {}),
+    ...(permissionModeSource
+      ? { permissionMode: permissionModeSource }
+      : {}),
+  };
+}
+
 export function resolvePermissionModeSelection({
   rawPermissionMode,
   supportedPermissionModes,
@@ -307,8 +516,17 @@ function sanitizeStoredEnvironmentValue(stored: string): string {
 }
 
 export function useThreadCreationOptions(
+  options: UseNewManagerCreationOptions,
+): UseThreadCreationOptionsResult<CreateManagerExecutionInputSources>;
+export function useThreadCreationOptions(
+  options: UseComponentLocalCreationOptions,
+): UseThreadCreationOptionsResult<ExistingThreadExecutionInputSources>;
+export function useThreadCreationOptions(
+  options?: UseNewThreadCreationOptions,
+): UseThreadCreationOptionsResult<CreateExecutionInputSources>;
+export function useThreadCreationOptions(
   options?: UsePromptModelReasoningOptions,
-) {
+): UseThreadCreationOptionsResult<ScopedExecutionInputSources> {
   const {
     enabled = true,
     environmentId,
@@ -361,6 +579,8 @@ export function useThreadCreationOptions(
     resetKey,
   );
   const usesLocalThreadSelections = scope !== "new-thread";
+  const usesStoredCreateSelections =
+    scope === "new-thread" || scope === "new-manager";
   const nextThreadSelections = useMemo(
     () =>
       getInitialThreadPromptSelections({
@@ -400,24 +620,24 @@ export function useThreadCreationOptions(
   ]);
 
   const rawSelectedProviderId =
-    scope === "new-thread"
-      ? storedProviderId
+    usesStoredCreateSelections
+      ? storedProviderId || renderedThreadSelections.selectedProviderId
       : renderedThreadSelections.selectedProviderId;
   const rawSelectedModel =
-    scope === "new-thread"
-      ? storedSelectedModel
+    usesStoredCreateSelections
+      ? storedSelectedModel || renderedThreadSelections.selectedModel
       : renderedThreadSelections.selectedModel;
   const rawServiceTier =
-    scope === "new-thread"
-      ? storedServiceTier || undefined
+    usesStoredCreateSelections
+      ? storedServiceTier || renderedThreadSelections.serviceTier
       : renderedThreadSelections.serviceTier;
   const rawReasoningLevel =
-    scope === "new-thread"
-      ? storedReasoningLevel
+    usesStoredCreateSelections
+      ? storedReasoningLevel || renderedThreadSelections.reasoningLevel
       : renderedThreadSelections.reasoningLevel;
   const rawPermissionMode =
-    scope === "new-thread"
-      ? storedPermissionMode
+    usesStoredCreateSelections
+      ? storedPermissionMode || renderedThreadSelections.permissionMode
       : renderedThreadSelections.permissionMode;
   const rawEnvironmentSelectionValue =
     scope === "new-thread"
@@ -593,6 +813,40 @@ export function useThreadCreationOptions(
     supportedPermissionModes,
   });
   const environmentSelectionValue = rawEnvironmentSelectionValue;
+  const executionInputSources = useMemo(
+    () =>
+      buildExecutionInputSources({
+        effectiveValues: {
+          selectedProviderId: effectiveProviderId,
+          selectedModel,
+          serviceTier,
+          reasoningLevel,
+          permissionMode,
+        },
+        scope,
+        storedValues: {
+          selectedProviderId: storedProviderId,
+          selectedModel: storedSelectedModel,
+          serviceTier: storedServiceTier,
+          reasoningLevel: storedReasoningLevel,
+          permissionMode: storedPermissionMode,
+        },
+        touchedFields: touchedThreadFieldsRef.current,
+      }),
+    [
+      effectiveProviderId,
+      permissionMode,
+      reasoningLevel,
+      scope,
+      selectedModel,
+      serviceTier,
+      storedPermissionMode,
+      storedProviderId,
+      storedReasoningLevel,
+      storedSelectedModel,
+      storedServiceTier,
+    ],
+  );
 
   useLayoutEffect(() => {
     if (!usesLocalThreadSelections) return;
@@ -613,11 +867,11 @@ export function useThreadCreationOptions(
 
   const setSelectedProviderId = useCallback(
     (value: string) => {
-      if (scope === "new-thread") {
+      touchedThreadFieldsRef.current.add("selectedProviderId");
+      if (usesStoredCreateSelections) {
         setStoredProviderId(value);
         return;
       }
-      touchedThreadFieldsRef.current.add("selectedProviderId");
       setThreadSelections((currentSelections) =>
         updateThreadPromptSelections({
           currentSelections,
@@ -629,16 +883,16 @@ export function useThreadCreationOptions(
       // derived values will fall back to the default if the current
       // selection isn't in the new provider's model list.
     },
-    [scope, setStoredProviderId],
+    [setStoredProviderId, usesStoredCreateSelections],
   );
 
   const setSelectedModel = useCallback(
     (value: string) => {
-      if (scope === "new-thread") {
+      touchedThreadFieldsRef.current.add("selectedModel");
+      if (usesStoredCreateSelections) {
         setStoredSelectedModel(value);
         return;
       }
-      touchedThreadFieldsRef.current.add("selectedModel");
       setThreadSelections((currentSelections) =>
         updateThreadPromptSelections({
           currentSelections,
@@ -647,15 +901,15 @@ export function useThreadCreationOptions(
         }),
       );
     },
-    [scope, setStoredSelectedModel],
+    [setStoredSelectedModel, usesStoredCreateSelections],
   );
   const setServiceTier = useCallback(
     (value: ServiceTier | undefined) => {
-      if (scope === "new-thread") {
+      touchedThreadFieldsRef.current.add("serviceTier");
+      if (usesStoredCreateSelections) {
         setStoredServiceTier(value ?? "");
         return;
       }
-      touchedThreadFieldsRef.current.add("serviceTier");
       setThreadSelections((currentSelections) =>
         updateThreadPromptSelections({
           currentSelections,
@@ -664,15 +918,15 @@ export function useThreadCreationOptions(
         }),
       );
     },
-    [scope, setStoredServiceTier],
+    [setStoredServiceTier, usesStoredCreateSelections],
   );
   const setReasoningLevel = useCallback(
     (value: ReasoningLevel) => {
-      if (scope === "new-thread") {
+      touchedThreadFieldsRef.current.add("reasoningLevel");
+      if (usesStoredCreateSelections) {
         setStoredReasoningLevel(value);
         return;
       }
-      touchedThreadFieldsRef.current.add("reasoningLevel");
       setThreadSelections((currentSelections) =>
         updateThreadPromptSelections({
           currentSelections,
@@ -681,15 +935,15 @@ export function useThreadCreationOptions(
         }),
       );
     },
-    [scope, setStoredReasoningLevel],
+    [setStoredReasoningLevel, usesStoredCreateSelections],
   );
   const setPermissionMode = useCallback(
     (value: PermissionMode) => {
-      if (scope === "new-thread") {
+      touchedThreadFieldsRef.current.add("permissionMode");
+      if (usesStoredCreateSelections) {
         setStoredPermissionMode(value);
         return;
       }
-      touchedThreadFieldsRef.current.add("permissionMode");
       setThreadSelections((currentSelections) =>
         updateThreadPromptSelections({
           currentSelections,
@@ -698,7 +952,7 @@ export function useThreadCreationOptions(
         }),
       );
     },
-    [scope, setStoredPermissionMode],
+    [setStoredPermissionMode, usesStoredCreateSelections],
   );
   const setEnvironmentSelectionValue = useCallback(
     (value: string) => {
@@ -759,5 +1013,6 @@ export function useThreadCreationOptions(
     supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,
+    executionInputSources,
   };
 }

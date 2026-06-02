@@ -127,12 +127,18 @@ interface ControlledMode {
   onModeChange: (next: ThreadCreationMode) => void;
 }
 
-function useControlledMode(initial: ThreadCreationMode = "thread"): ControlledMode {
+function useControlledMode(
+  initial: ThreadCreationMode = "thread",
+): ControlledMode {
   const [current, setCurrent] = useState<ThreadCreationMode>(initial);
   const modeConfig = useMemo<NewThreadModeConfig>(
     () =>
       current === "manager"
-        ? { mode: "manager", host: baseHost, template: baseTemplate }
+        ? {
+            mode: "manager",
+            host: baseHost,
+            template: baseTemplate,
+          }
         : {
             mode: "thread",
             environment: baseEnvironment,
@@ -252,7 +258,11 @@ function FullAccessRow() {
   const { value, onChange } = useControlledValue("");
   const modeConfig: NewThreadModeConfig =
     current === "manager"
-      ? { mode: "manager", host: baseHost, template: baseTemplate }
+      ? {
+          mode: "manager",
+          host: baseHost,
+          template: baseTemplate,
+        }
       : {
           mode: "thread",
           environment: baseEnvironment,

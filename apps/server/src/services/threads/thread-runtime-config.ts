@@ -1,15 +1,9 @@
-import {
-  getBuiltInAgentProviderInfo,
-  isAgentProviderId,
-} from "@bb/agent-providers";
-import { getDefaultProjectSource, getProject, getThread } from "@bb/db";
+import { getDefaultProjectSource, getProject } from "@bb/db";
 import type {
   DynamicTool,
   InstructionMode,
   PermissionEscalation,
-  PermissionMode,
   ProjectExecutionDefaults,
-  ReasoningLevel,
   ResolvedThreadExecutionOptions,
   Thread,
   ThreadExecutionOptions,
@@ -22,38 +16,13 @@ import { renderTemplate } from "@bb/templates";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
-import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStorageContext } from "./thread-storage.js";
 import {
-  DEFAULT_REASONING_LEVEL,
-  DEFAULT_SERVICE_TIER,
-  resolveThreadExecutionPermissionMode,
-} from "./thread-default-policy.js";
+  buildExistingThreadExecutionInput,
+  resolveExistingThreadExecutionPlan,
+} from "./thread-execution-plan.js";
+export { getSupportedReasoningLevelsForProvider } from "./thread-reasoning-policy.js";
 
-type ReasoningPolicyProviderId = "claude-code" | "codex" | "pi";
-const SUPPORTED_REASONING_LEVELS_BY_PROVIDER: Record<
-  ReasoningPolicyProviderId,
-  readonly ReasoningLevel[]
-> = {
-  "claude-code": ["low", "medium", "high", "xhigh", "max"],
-  codex: ["low", "medium", "high", "xhigh"],
-  pi: ["low", "medium", "high", "xhigh"],
-};
-
-/**
- * The coarse, per-provider reasoning levels. Used as a fallback when a precise
- * per-model `supportedReasoningEfforts` set is unavailable (e.g. validating a
- * reasoning override against a legacy/selected-only model not in the active
- * catalog). Returns an empty list for unknown providers.
- */
-export function getSupportedReasoningLevelsForProvider(
-  providerId: string,
-): readonly ReasoningLevel[] {
-  if (!isAgentProviderId(providerId)) {
-    return [];
-  }
-  return SUPPORTED_REASONING_LEVELS_BY_PROVIDER[providerId];
-}
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
   "standardAgentInstructions",
   {},
@@ -140,46 +109,6 @@ function requireWorkspacePath(
   return environment.path;
 }
 
-function validateProviderPermissionMode(
-  providerId: string | undefined,
-  permissionMode: PermissionMode,
-): void {
-  if (!providerId || !isAgentProviderId(providerId)) {
-    return;
-  }
-
-  const provider = getBuiltInAgentProviderInfo(providerId);
-  if (provider.capabilities.supportedPermissionModes.includes(permissionMode)) {
-    return;
-  }
-
-  throw new ApiError(
-    400,
-    "invalid_request",
-    `Provider ${providerId} only supports ${provider.capabilities.supportedPermissionModes.join(", ")} permission mode.`,
-  );
-}
-
-function validateProviderReasoningLevel(
-  providerId: string | undefined,
-  reasoningLevel: ReasoningLevel,
-): void {
-  if (!providerId || !isAgentProviderId(providerId)) {
-    return;
-  }
-
-  const supportedLevels = SUPPORTED_REASONING_LEVELS_BY_PROVIDER[providerId];
-  if (supportedLevels.includes(reasoningLevel)) {
-    return;
-  }
-
-  throw new ApiError(
-    400,
-    "invalid_request",
-    `Provider ${providerId} does not support ${reasoningLevel} reasoning level. Supported reasoning levels: ${supportedLevels.join(", ")}.`,
-  );
-}
-
 export function resolvePermissionEscalation(
   args: ResolvePermissionEscalationArgs,
 ): PermissionEscalation {
@@ -198,61 +127,15 @@ export async function resolveExecutionOptions(
   deps: Pick<AppDeps, "db">,
   args: ResolveExecutionOptionsArgs,
 ): Promise<ResolvedThreadExecutionOptions> {
-  const lastExecution = getLastExecutionOptions(deps, args.threadId);
-  const projectExecution = args.projectDefaults ?? null;
-  const thread = getThread(deps.db, args.threadId);
-  if (!thread) {
-    throw new ApiError(404, "thread_not_found", "Thread not found");
-  }
-  // The sticky thread-level override sits between the explicit per-turn request
-  // (a one-off `tell --model` still wins for that turn) and `lastExecution` (so
-  // it persists across turns that don't specify a model/reasoning level). The
-  // next turn's `reconfigureThreadIfNeeded` applies the change to the live
-  // session.
-  const model =
-    args.requestedExecution.model ??
-    thread.modelOverride ??
-    lastExecution?.model ??
-    projectExecution?.model;
-  if (!model) {
-    throw new ApiError(
-      500,
-      "internal_error",
-      `Thread ${args.threadId} has no stored execution model`,
-    );
-  }
-  const parentThread =
-    thread.parentThreadId !== null
-      ? getThread(deps.db, thread.parentThreadId)
-      : null;
-
-  const permissionMode = resolveThreadExecutionPermissionMode({
-    requestedPermissionMode: args.requestedExecution.permissionMode,
-    lastExecutionPermissionMode: lastExecution?.permissionMode,
-    parentThread,
-    projectExecutionPermissionMode: projectExecution?.permissionMode,
-    thread,
+  const plan = await resolveExistingThreadExecutionPlan(deps, {
+    ...(args.projectDefaults !== undefined
+      ? { projectDefaults: args.projectDefaults }
+      : {}),
+    executionSource: args.requestedExecution.source,
+    input: buildExistingThreadExecutionInput(args.requestedExecution),
+    threadId: args.threadId,
   });
-  validateProviderPermissionMode(thread.providerId, permissionMode);
-  const reasoningLevel =
-    args.requestedExecution.reasoningLevel ??
-    thread.reasoningLevelOverride ??
-    lastExecution?.reasoningLevel ??
-    projectExecution?.reasoningLevel ??
-    DEFAULT_REASONING_LEVEL;
-  validateProviderReasoningLevel(thread.providerId, reasoningLevel);
-
-  return {
-    model,
-    serviceTier:
-      args.requestedExecution.serviceTier ??
-      lastExecution?.serviceTier ??
-      projectExecution?.serviceTier ??
-      DEFAULT_SERVICE_TIER,
-    reasoningLevel,
-    permissionMode,
-    source: args.requestedExecution.source,
-  };
+  return plan.resolvedExecution;
 }
 
 export async function resolveThreadRuntimeCommandConfig(

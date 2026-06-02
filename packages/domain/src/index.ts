@@ -1,5 +1,7 @@
 export {
   instructionModeValues,
+  callerExecutionInputSourceSchema,
+  callerExecutionInputSourceValues,
   instructionModeSchema,
   permissionEscalationSchema,
   permissionEscalationValues,
@@ -19,6 +21,7 @@ export {
   resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 export type {
+  CallerExecutionInputSource,
   InstructionMode,
   PermissionEscalation,
   PermissionMode,

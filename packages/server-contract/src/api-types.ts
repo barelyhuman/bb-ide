@@ -36,10 +36,12 @@ import {
   jsonValueSchema,
   appDataPathSchema,
   appIdSchema,
+  callerExecutionInputSourceSchema,
 } from "@bb/domain";
 import type {
   AppDataPath,
   AppId,
+  CallerExecutionInputSource,
   GitBranchName,
   JsonValue,
 } from "@bb/domain";
@@ -375,6 +377,46 @@ export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
 export const threadCreateOriginSchema = z.enum(["app", "cli"]);
 export type ThreadCreateOrigin = z.infer<typeof threadCreateOriginSchema>;
 
+export const executionInputFieldSourceSchema = callerExecutionInputSourceSchema;
+export type ExecutionInputFieldSource = CallerExecutionInputSource;
+
+export const createExecutionInputSourcesSchema = z
+  .object({
+    providerId: executionInputFieldSourceSchema.optional(),
+    model: executionInputFieldSourceSchema.optional(),
+    serviceTier: executionInputFieldSourceSchema.optional(),
+    reasoningLevel: executionInputFieldSourceSchema.optional(),
+    permissionMode: executionInputFieldSourceSchema.optional(),
+  })
+  .strict();
+export type CreateExecutionInputSources = z.infer<
+  typeof createExecutionInputSourcesSchema
+>;
+
+export const createManagerExecutionInputSourcesSchema = z
+  .object({
+    providerId: executionInputFieldSourceSchema.optional(),
+    model: executionInputFieldSourceSchema.optional(),
+    serviceTier: executionInputFieldSourceSchema.optional(),
+    reasoningLevel: executionInputFieldSourceSchema.optional(),
+  })
+  .strict();
+export type CreateManagerExecutionInputSources = z.infer<
+  typeof createManagerExecutionInputSourcesSchema
+>;
+
+export const existingThreadExecutionInputSourcesSchema = z
+  .object({
+    model: executionInputFieldSourceSchema.optional(),
+    serviceTier: executionInputFieldSourceSchema.optional(),
+    reasoningLevel: executionInputFieldSourceSchema.optional(),
+    permissionMode: executionInputFieldSourceSchema.optional(),
+  })
+  .strict();
+export type ExistingThreadExecutionInputSources = z.infer<
+  typeof existingThreadExecutionInputSourcesSchema
+>;
+
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
   providerId: z.string().min(1).optional(),
@@ -385,6 +427,7 @@ export const createThreadRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
+  executionInputSources: createExecutionInputSourcesSchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
 });
@@ -527,6 +570,7 @@ export const sendMessageRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
+  executionInputSources: existingThreadExecutionInputSourcesSchema.optional(),
   mode: sendMessageModeSchema,
   senderThreadId: z.string().min(1).optional(),
 });
@@ -541,6 +585,7 @@ export const createQueuedMessageRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
+  executionInputSources: existingThreadExecutionInputSourcesSchema.optional(),
 });
 export type CreateQueuedMessageRequest = z.infer<
   typeof createQueuedMessageRequestSchema
@@ -775,26 +820,28 @@ export type ManagerEnvironmentArgs = z.infer<
   typeof managerEnvironmentArgsSchema
 >;
 
-export const createManagerThreadRequestSchema = z.object({
-  name: z.string().min(1).optional(),
-  providerId: z.string().min(1).optional(),
-  origin: threadCreateOriginSchema,
-  templateName: managerTemplateNameSchema.optional(),
-  model: z.string().min(1).optional(),
-  serviceTier: serviceTierSchema.optional(),
-  reasoningLevel: reasoningLevelSchema.optional(),
-  permissionMode: permissionModeSchema.optional(),
-  environment: managerEnvironmentArgsSchema,
-  /**
-   * Optional user-provided first message. When present and contains
-   * meaningful content (any non-text part, or text with non-whitespace
-   * content), replaces the default `systemMessageManagerWelcome` template
-   * as the manager's first message. Omit to use the welcome-message
-   * fallback — the schema rejects empty arrays. Whitespace-only text
-   * input is also treated as no-input at the route boundary.
-   */
-  input: z.array(promptInputSchema).min(1).optional(),
-});
+export const createManagerThreadRequestSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    providerId: z.string().min(1).optional(),
+    origin: threadCreateOriginSchema,
+    templateName: managerTemplateNameSchema.optional(),
+    model: z.string().min(1).optional(),
+    serviceTier: serviceTierSchema.optional(),
+    reasoningLevel: reasoningLevelSchema.optional(),
+    executionInputSources: createManagerExecutionInputSourcesSchema.optional(),
+    environment: managerEnvironmentArgsSchema,
+    /**
+     * Optional user-provided first message. When present and contains
+     * meaningful content (any non-text part, or text with non-whitespace
+     * content), replaces the default `systemMessageManagerWelcome` template
+     * as the manager's first message. Omit to use the welcome-message
+     * fallback — the schema rejects empty arrays. Whitespace-only text
+     * input is also treated as no-input at the route boundary.
+     */
+    input: z.array(promptInputSchema).min(1).optional(),
+  })
+  .strict();
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
 >;

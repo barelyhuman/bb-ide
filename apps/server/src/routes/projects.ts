@@ -1,7 +1,6 @@
 import {
   countProjectSources,
   createProject,
-  getProjectExecutionDefaults,
   getPersonalProject,
   createProjectSource,
   deleteProjectSource,
@@ -64,7 +63,7 @@ import {
 } from "../services/lib/entity-lookup.js";
 import { PROMPT_HISTORY_ENTRY_LIMIT, type PromptInput } from "@bb/domain";
 import { createThreadFromRequest } from "../services/threads/thread-create.js";
-import { buildInitialProjectExecutionDefaults } from "../services/threads/thread-default-policy.js";
+import { resolveProjectCreateDefaultExecutionPlan } from "../services/threads/thread-execution-plan.js";
 import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
@@ -397,16 +396,11 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     (context, query) => {
       const projectId = context.req.param("id");
       requirePublicProject(deps.db, projectId);
-      const storedDefaults = getProjectExecutionDefaults(deps.db, {
+      const plan = resolveProjectCreateDefaultExecutionPlan(deps, {
         projectId,
         threadType: query.threadType,
       });
-      return context.json(
-        storedDefaults ??
-          (query.threadType === "manager"
-            ? buildInitialProjectExecutionDefaults("manager")
-            : null),
-      );
+      return context.json(plan.defaultView);
     },
   );
 
@@ -832,8 +826,8 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         ...(payload.reasoningLevel
           ? { reasoningLevel: payload.reasoningLevel }
           : {}),
-        ...(payload.permissionMode
-          ? { permissionMode: payload.permissionMode }
+        ...(payload.executionInputSources
+          ? { executionInputSources: payload.executionInputSources }
           : {}),
         environment,
       });

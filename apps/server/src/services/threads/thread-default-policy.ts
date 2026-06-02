@@ -21,8 +21,8 @@ export const DEFAULT_SERVICE_TIER: ServiceTier = "default";
 export const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
 const MANAGED_CHILD_PERMISSION_MODE: PermissionMode = "workspace-write";
-const MANAGER_DEFAULT_PROVIDER_ID = "codex";
-const MANAGER_DEFAULT_MODEL = "gpt-5.5";
+const PRODUCT_DEFAULT_PROVIDER_ID = "codex";
+const PRODUCT_DEFAULT_MODEL = "gpt-5.5";
 const MANAGER_DEFAULT_REASONING_LEVEL: ReasoningLevel = "xhigh";
 
 export interface ResolveCreateThreadExecutionDefaultsArgs {
@@ -33,17 +33,8 @@ export interface ResolveCreateThreadExecutionDefaultsArgs {
 
 export interface CreateThreadExecutionDefaultsResolved {
   executionDefaults: ProjectExecutionDefaults | null;
-  kind: "resolved";
   providerId: string;
 }
-
-export interface CreateThreadExecutionDefaultsProviderRequired {
-  kind: "provider_required";
-}
-
-export type ResolvedCreateThreadExecutionDefaults =
-  | CreateThreadExecutionDefaultsResolved
-  | CreateThreadExecutionDefaultsProviderRequired;
 
 export interface IsManagedChildThreadArgs {
   parentThread?: ManagerParentThread | null;
@@ -148,13 +139,13 @@ function resolveSupportedPermissionMode(
 function buildManagerThreadExecutionDefaults(
   providerId: string,
 ): ProjectExecutionDefaults | null {
-  if (providerId !== MANAGER_DEFAULT_PROVIDER_ID) {
+  if (providerId !== PRODUCT_DEFAULT_PROVIDER_ID) {
     return null;
   }
 
   return {
     providerId,
-    model: MANAGER_DEFAULT_MODEL,
+    model: PRODUCT_DEFAULT_MODEL,
     reasoningLevel: MANAGER_DEFAULT_REASONING_LEVEL,
     permissionMode: resolveSupportedPermissionMode({
       providerId,
@@ -164,33 +155,36 @@ function buildManagerThreadExecutionDefaults(
   };
 }
 
+function buildProductThreadExecutionDefaults(
+  threadType: ThreadType,
+  providerId: string,
+): ProjectExecutionDefaults | null {
+  const defaults = buildInitialProjectExecutionDefaults(threadType);
+  return defaults.providerId === providerId ? defaults : null;
+}
+
 export function resolveCreateThreadExecutionDefaults(
   args: ResolveCreateThreadExecutionDefaultsArgs,
-): ResolvedCreateThreadExecutionDefaults {
+): CreateThreadExecutionDefaultsResolved {
   const providerId =
     args.requestedProviderId ??
     args.storedDefaults?.providerId ??
-    (args.threadType === "manager" ? MANAGER_DEFAULT_PROVIDER_ID : undefined);
-  if (!providerId) {
-    return { kind: "provider_required" };
-  }
+    PRODUCT_DEFAULT_PROVIDER_ID;
 
   const storedDefaults =
     args.storedDefaults?.providerId === providerId ? args.storedDefaults : null;
   if (storedDefaults) {
     return {
-      kind: "resolved",
       executionDefaults: storedDefaults,
       providerId,
     };
   }
 
   return {
-    kind: "resolved",
-    executionDefaults:
-      args.threadType === "manager"
-        ? buildManagerThreadExecutionDefaults(providerId)
-        : null,
+    executionDefaults: buildProductThreadExecutionDefaults(
+      args.threadType,
+      providerId,
+    ),
     providerId,
   };
 }
@@ -200,7 +194,7 @@ export function buildInitialProjectExecutionDefaults(
 ): ProjectExecutionDefaults {
   if (threadType === "manager") {
     const managerDefaults = buildManagerThreadExecutionDefaults(
-      MANAGER_DEFAULT_PROVIDER_ID,
+      PRODUCT_DEFAULT_PROVIDER_ID,
     );
     if (!managerDefaults) {
       throw new Error("Manager defaults were not configured");
@@ -209,11 +203,11 @@ export function buildInitialProjectExecutionDefaults(
   }
 
   return {
-    providerId: MANAGER_DEFAULT_PROVIDER_ID,
-    model: MANAGER_DEFAULT_MODEL,
+    providerId: PRODUCT_DEFAULT_PROVIDER_ID,
+    model: PRODUCT_DEFAULT_MODEL,
     reasoningLevel: DEFAULT_REASONING_LEVEL,
     permissionMode: resolveSupportedPermissionMode({
-      providerId: MANAGER_DEFAULT_PROVIDER_ID,
+      providerId: PRODUCT_DEFAULT_PROVIDER_ID,
       preferredPermissionMode: DEFAULT_PERMISSION_MODE,
     }),
     serviceTier: DEFAULT_SERVICE_TIER,

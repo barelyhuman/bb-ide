@@ -258,8 +258,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   const voice = usePromptVoice(promptBoxRef);
   const isProjectlessPrompt =
     project?.value === null ||
-    (modeConfig.mode === "thread" &&
-      modeConfig.projectlessHost !== undefined);
+    (modeConfig.mode === "thread" && modeConfig.projectlessHost !== undefined);
   const placeholder = getNewThreadPromptPlaceholder({
     mode: modeConfig.mode,
     isProjectless: isProjectlessPrompt,

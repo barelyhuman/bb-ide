@@ -5,7 +5,10 @@ import type {
   ServiceTier,
   ThreadRuntimeDisplayStatus,
 } from "@bb/domain";
-import type { CreateQueuedMessageRequest } from "@bb/server-contract";
+import type {
+  CreateQueuedMessageRequest,
+  ExistingThreadExecutionInputSources,
+} from "@bb/server-contract";
 import type { FollowUpSubmitMode } from "@/components/promptbox/FollowUpPromptBox";
 import type { SendMessageMutationRequest } from "./threadDetailMutationTypes";
 
@@ -25,6 +28,7 @@ export interface ThreadExecutionSelection {
   reasoningLevel: ReasoningLevel;
   serviceTier: ServiceTier | undefined;
   supportsServiceTier: boolean;
+  executionInputSources: ExistingThreadExecutionInputSources;
 }
 
 export type FollowUpExecutionSelection = ThreadExecutionSelection | null;
@@ -34,6 +38,7 @@ interface SharedThreadExecutionRequestFields {
   permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
   serviceTier?: ServiceTier;
+  executionInputSources?: ExistingThreadExecutionInputSources;
 }
 
 interface BaseFollowUpRequestArgs {
@@ -226,5 +231,6 @@ function buildSharedThreadExecutionRequestFields(
       : {}),
     reasoningLevel: execution.reasoningLevel,
     permissionMode: execution.permissionMode,
+    executionInputSources: execution.executionInputSources,
   };
 }

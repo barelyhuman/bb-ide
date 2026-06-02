@@ -2,6 +2,7 @@ import { Command } from "commander";
 import {
   type PermissionMode,
   type ReasoningLevel,
+  type ServiceTier,
   type Thread,
 } from "@bb/domain";
 import { action } from "../../action.js";
@@ -14,7 +15,11 @@ import {
   requireThreadIdOrSelf,
 } from "../helpers.js";
 import { resolveThreadId } from "../../context-env.js";
-import { parsePermissionMode, PERMISSION_MODE_HELP } from "./helpers.js";
+import {
+  parsePermissionMode,
+  parseServiceTier,
+  PERMISSION_MODE_HELP,
+} from "./helpers.js";
 
 interface ThreadUpdateCommandOptions {
   self?: boolean;
@@ -52,6 +57,7 @@ interface ThreadTellCommandOptions {
   model?: string;
   permissionMode?: string;
   reasoningLevel?: string;
+  serviceTier?: string;
   mode?: string;
 }
 
@@ -68,6 +74,7 @@ interface PostThreadMessageArgs {
   model?: string;
   permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
+  serviceTier?: ServiceTier;
   senderThreadId?: string;
 }
 
@@ -301,6 +308,7 @@ export function registerActionsCommands(
     .description("Send a follow-up message to a thread")
     .option("--json", "Print machine-readable JSON output")
     .option("--model <model>", "Model ID for this message")
+    .option("--service-tier <tier>", "Service tier: fast or default")
     .option(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh, max (provider-dependent)",
@@ -318,6 +326,7 @@ export function registerActionsCommands(
             model: opts.model,
             permissionMode: parsePermissionMode(opts.permissionMode),
             reasoningLevel: parseReasoningLevel(opts.reasoningLevel),
+            serviceTier: parseServiceTier(opts.serviceTier),
             senderThreadId: resolveSenderThreadId(id),
           });
           if (outputJson(opts, { threadId: id, ...response })) return;
@@ -361,6 +370,7 @@ async function postThreadMessage(
         ...(args.model ? { model: args.model } : {}),
         ...(args.permissionMode ? { permissionMode: args.permissionMode } : {}),
         ...(args.reasoningLevel ? { reasoningLevel: args.reasoningLevel } : {}),
+        ...(args.serviceTier ? { serviceTier: args.serviceTier } : {}),
         ...(args.senderThreadId ? { senderThreadId: args.senderThreadId } : {}),
       },
     }),

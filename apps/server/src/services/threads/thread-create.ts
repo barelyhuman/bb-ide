@@ -338,6 +338,7 @@ export async function createThreadFromRequest(
     : null;
   const { executionDefaults, providerId } =
     resolveProjectExecutionDefaultsForCreate(deps, {
+      executionInputSources: requestInput.executionInputSources,
       model: requestInput.model,
       projectId: requestInput.projectId,
       providerId: requestInput.providerId,

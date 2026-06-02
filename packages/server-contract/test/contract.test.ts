@@ -80,6 +80,16 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Queued messages may inherit the thread's default permission mode.",
   "createQueuedMessageRequestSchema.serviceTier":
     "Queued messages may inherit the thread's default service tier.",
+  "createQueuedMessageRequestSchema.executionInputSources":
+    "Queued message callers may omit source metadata; legacy callers treat supplied execution fields as explicit.",
+  "createQueuedMessageRequestSchema.executionInputSources.model":
+    "Queued message source metadata omits model when no caller-owned model value is being supplied.",
+  "createQueuedMessageRequestSchema.executionInputSources.permissionMode":
+    "Queued message source metadata omits permissionMode when no caller-owned permission value is being supplied.",
+  "createQueuedMessageRequestSchema.executionInputSources.reasoningLevel":
+    "Queued message source metadata omits reasoningLevel when no caller-owned reasoning value is being supplied.",
+  "createQueuedMessageRequestSchema.executionInputSources.serviceTier":
+    "Queued message source metadata omits serviceTier when no caller-owned tier value is being supplied.",
   "updateAutomationRequestSchema.action":
     "Automation PATCH requests omit action when leaving it unchanged.",
   "updateAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
@@ -110,12 +120,20 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Manager creation may omit providerId and use remembered manager defaults or the server manager default.",
   "createManagerThreadRequestSchema.templateName":
     "Manager creation omits templateName to use the active manager template pointer or default fallback.",
-  "createManagerThreadRequestSchema.permissionMode":
-    "Manager creation may omit permission mode and use the server default.",
   "createManagerThreadRequestSchema.reasoningLevel":
     "Manager creation may omit reasoning level and use the server default.",
   "createManagerThreadRequestSchema.serviceTier":
     "Manager creation may omit service tier and use the server default.",
+  "createManagerThreadRequestSchema.executionInputSources":
+    "Manager creation may omit source metadata; legacy callers treat supplied execution fields as explicit.",
+  "createManagerThreadRequestSchema.executionInputSources.model":
+    "Manager creation source metadata omits model when the client is only displaying the server default.",
+  "createManagerThreadRequestSchema.executionInputSources.providerId":
+    "Manager creation source metadata omits providerId when the client is only displaying the server default.",
+  "createManagerThreadRequestSchema.executionInputSources.reasoningLevel":
+    "Manager creation source metadata omits reasoningLevel when the client is only displaying the server default.",
+  "createManagerThreadRequestSchema.executionInputSources.serviceTier":
+    "Manager creation source metadata omits serviceTier when the client is only displaying the server default.",
   "createManagerThreadRequestSchema.input":
     "Manager creation may omit initial input and use the server welcome-message template.",
   "createThreadRequestSchema.environment.workspace.branch":
@@ -134,6 +152,18 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Thread creation may omit reasoning level and use the server default.",
   "createThreadRequestSchema.serviceTier":
     "Thread creation may omit service tier and use the server default.",
+  "createThreadRequestSchema.executionInputSources":
+    "Thread creation may omit source metadata; legacy callers treat supplied execution fields as explicit.",
+  "createThreadRequestSchema.executionInputSources.model":
+    "Thread creation source metadata omits model when the client is only displaying the server default.",
+  "createThreadRequestSchema.executionInputSources.permissionMode":
+    "Thread creation source metadata omits permissionMode when the client is only displaying the server default.",
+  "createThreadRequestSchema.executionInputSources.providerId":
+    "Thread creation source metadata omits providerId when the client is only displaying the server default.",
+  "createThreadRequestSchema.executionInputSources.reasoningLevel":
+    "Thread creation source metadata omits reasoningLevel when the client is only displaying the server default.",
+  "createThreadRequestSchema.executionInputSources.serviceTier":
+    "Thread creation source metadata omits serviceTier when the client is only displaying the server default.",
   "createThreadRequestSchema.title":
     "Thread creation may omit a custom title and use the generated title flow.",
   "environmentActionApiErrorSchema.details":
@@ -158,6 +188,16 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Immediate agent-to-agent CLI sends include the current thread; user-originated sends and queued messages omit live sender context.",
   "sendMessageRequestSchema.serviceTier":
     "Follow-up sends may inherit the thread's default service tier.",
+  "sendMessageRequestSchema.executionInputSources":
+    "Follow-up sends may omit source metadata; legacy callers treat supplied execution fields as explicit.",
+  "sendMessageRequestSchema.executionInputSources.model":
+    "Follow-up source metadata omits model when no caller-owned model value is being supplied.",
+  "sendMessageRequestSchema.executionInputSources.permissionMode":
+    "Follow-up source metadata omits permissionMode when no caller-owned permission value is being supplied.",
+  "sendMessageRequestSchema.executionInputSources.reasoningLevel":
+    "Follow-up source metadata omits reasoningLevel when no caller-owned reasoning value is being supplied.",
+  "sendMessageRequestSchema.executionInputSources.serviceTier":
+    "Follow-up source metadata omits serviceTier when no caller-owned tier value is being supplied.",
   "systemExecutionOptionsQuerySchema.environmentId":
     "System execution option lookup may target a host indirectly through an environment id.",
   "systemExecutionOptionsQuerySchema.hostId":
@@ -983,6 +1023,28 @@ describe("server-contract canonical schemas", () => {
       providerId: "codex",
       environment: { type: "host", hostId: "host_123" },
     });
+
+    expect(() =>
+      createManagerThreadRequestSchema.parse({
+        model: "claude-opus-4-7",
+        providerId: "codex",
+        origin: "app",
+        permissionMode: "full",
+        environment: { type: "host", hostId: "host_123" },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      createManagerThreadRequestSchema.parse({
+        model: "claude-opus-4-7",
+        providerId: "codex",
+        origin: "app",
+        executionInputSources: {
+          permissionMode: "explicit",
+        },
+        environment: { type: "host", hostId: "host_123" },
+      }),
+    ).toThrow();
 
     expect(
       createProjectSourceRequestSchema.parse({

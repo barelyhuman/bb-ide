@@ -8,6 +8,7 @@ import type {
 export interface ThreadCreateServiceRequestInput {
   automationId: string | null;
   environment: EnvironmentArgs;
+  executionInputSources?: CreateThreadRequest["executionInputSources"];
   input: PromptInput[];
   managerTemplateName: ManagerTemplateName | null;
   model?: CreateThreadRequest["model"];

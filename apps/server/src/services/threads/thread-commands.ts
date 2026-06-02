@@ -29,7 +29,6 @@ import type {
   ManagerTemplateName,
   WorkspaceProvisionType,
 } from "@bb/domain";
-import type { CreateThreadRequest } from "@bb/server-contract";
 import type {
   HostDaemonCommand,
   TurnSubmitTarget,
@@ -40,19 +39,18 @@ import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 import {
-  resolveExecutionOptions,
   resolveThreadRuntimeCommandConfig,
   type ResolvedThreadRuntimeCommandConfig,
   type ThreadRuntimeCommandEnvironment,
 } from "./thread-runtime-config.js";
 import { appendManagerToolReminder } from "./manager-tool-reminder.js";
+import {
+  buildExistingThreadExecutionInput,
+  resolveExistingThreadExecutionPlan,
+  type ExistingThreadExecutionInputRequest,
+} from "./thread-execution-plan.js";
 
-export interface ExecutionOptionsRequest {
-  model?: CreateThreadRequest["model"];
-  permissionMode?: CreateThreadRequest["permissionMode"];
-  reasoningLevel?: CreateThreadRequest["reasoningLevel"];
-  serviceTier?: CreateThreadRequest["serviceTier"];
-}
+export type ExecutionOptionsRequest = ExistingThreadExecutionInputRequest;
 
 export interface QueueThreadStopCommandArgs {
   environmentId: string;
@@ -251,21 +249,15 @@ export async function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
   source: BuildExecutionOptionsSource,
 ): Promise<ResolvedThreadExecutionOptions> {
-  return resolveExecutionOptions(deps, {
-    ...(args.projectDefaults ? { projectDefaults: args.projectDefaults } : {}),
-    requestedExecution: {
-      ...(request.model ? { model: request.model } : {}),
-      ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),
-      ...(request.reasoningLevel
-        ? { reasoningLevel: request.reasoningLevel }
-        : {}),
-      ...(request.permissionMode
-        ? { permissionMode: request.permissionMode }
-        : {}),
-      source,
-    },
+  const plan = await resolveExistingThreadExecutionPlan(deps, {
+    ...(args.projectDefaults !== undefined
+      ? { projectDefaults: args.projectDefaults }
+      : {}),
+    executionSource: source,
+    input: buildExistingThreadExecutionInput(request),
     threadId: args.threadId,
   });
+  return plan.resolvedExecution;
 }
 
 export async function buildThreadStartCommand(

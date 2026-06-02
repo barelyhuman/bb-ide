@@ -288,7 +288,6 @@ export function RootComposeView() {
   const managerCreationOptions = useThreadCreationOptions({
     enabled: mode === "manager",
     initialModel: managerDefaultExecutionOptions?.model,
-    initialPermissionMode: managerDefaultExecutionOptions?.permissionMode,
     initialProviderId: managerDefaultExecutionOptions?.providerId,
     initialReasoningLevel: managerDefaultExecutionOptions?.reasoningLevel,
     initialServiceTier: managerDefaultExecutionOptions?.serviceTier,
@@ -323,6 +322,10 @@ export function RootComposeView() {
     supportsServiceTier,
     serviceTierSupportByProvider,
   } = creationOptions;
+  const standardExecutionInputSources =
+    standardCreationOptions.executionInputSources;
+  const managerExecutionInputSources =
+    managerCreationOptions.executionInputSources;
 
   // Seed transient picker state from navigation state:
   // `reuseEnvironmentId` (the "+" affordance on a worktree) seeds the env
@@ -677,6 +680,7 @@ export function RootComposeView() {
           model: selectedThreadModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           reasoningLevel,
+          executionInputSources: managerExecutionInputSources,
           environment: { type: "host", hostId: effectiveManagerHostId },
           ...(effectiveManagerTemplateName
             ? { templateName: effectiveManagerTemplateName }
@@ -713,6 +717,7 @@ export function RootComposeView() {
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
         permissionMode,
+        executionInputSources: standardExecutionInputSources,
         environment: selectedEnvironment,
       });
       promptDraft.clearIfCurrentMatches(submittedDraft);
@@ -730,6 +735,7 @@ export function RootComposeView() {
     effectiveManagerHostId,
     effectiveManagerTemplateName,
     hireProjectManager,
+    managerExecutionInputSources,
     managerDefaultExecutionOptionsQuery.isLoading,
     mode,
     navigate,
@@ -741,6 +747,7 @@ export function RootComposeView() {
     selectedProviderId,
     selectedThreadModel,
     serviceTier,
+    standardExecutionInputSources,
     supportsServiceTier,
   ]);
 

@@ -993,6 +993,50 @@ describe("public thread interaction routes", () => {
     });
   });
 
+  it("rejects explicit send permission modes unsupported by the provider", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-public-thread-unsupported-permission-mode",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/unsupported-permission-mode-project",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "pi",
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "auto",
+            input: [{ type: "text", text: "Run the command" }],
+            model: "openai/codex-mini",
+            permissionMode: "workspace-write",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Provider pi only supports full permission mode.",
+      });
+    });
+  });
+
   it("resolves file-change interactions through thread routes", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {

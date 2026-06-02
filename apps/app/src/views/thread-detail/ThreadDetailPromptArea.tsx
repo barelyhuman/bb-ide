@@ -239,6 +239,7 @@ export function ThreadDetailPromptArea({
     supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,
+    executionInputSources,
   } = useThreadCreationOptions({
     enabled: composerQueriesEnabled,
     environmentId: thread.environmentId ?? undefined,
@@ -346,9 +347,11 @@ export function ThreadDetailPromptArea({
       serviceTier,
       reasoningLevel,
       permissionMode,
+      executionInputSources,
     };
   }, [
     activeModel?.model,
+    executionInputSources,
     hasConcreteDefaultExecutionOptions,
     permissionMode,
     reasoningLevel,

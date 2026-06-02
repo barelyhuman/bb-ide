@@ -6,8 +6,8 @@ import type {
   ProjectExecutionDefaults,
   ResolvedThreadExecutionOptions,
 } from "@bb/domain";
-import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
+import { ApiError } from "../../errors.js";
 import type {
   ThreadCreateServiceRequest,
   ThreadCreateServiceRequestInput,
@@ -20,6 +20,7 @@ export interface RememberProjectExecutionDefaultsForCreateArgs {
 }
 
 export interface ResolveProjectExecutionDefaultsForCreateArgs {
+  executionInputSources?: ThreadCreateServiceRequestInput["executionInputSources"];
   model?: ThreadCreateServiceRequestInput["model"];
   projectId: string;
   providerId?: ThreadCreateServiceRequestInput["providerId"];
@@ -29,6 +30,16 @@ export interface ResolveProjectExecutionDefaultsForCreateArgs {
 export interface ResolvedProjectExecutionDefaultsForCreate {
   executionDefaults: ProjectExecutionDefaults | null;
   providerId: string;
+}
+
+type CreateExecutionInputSources =
+  ThreadCreateServiceRequestInput["executionInputSources"];
+type CreateExecutionInputField = keyof NonNullable<CreateExecutionInputSources>;
+
+interface ResolveRequestedCreateExecutionValueArgs<TValue> {
+  field: CreateExecutionInputField;
+  sources: CreateExecutionInputSources;
+  value: TValue | undefined;
 }
 
 function shouldRememberProjectExecutionDefaults(args: {
@@ -43,6 +54,20 @@ function shouldRememberProjectExecutionDefaults(args: {
   return args.origin === "app" && args.automationId === null;
 }
 
+function resolveRequestedCreateExecutionValue<TValue>({
+  field,
+  sources,
+  value,
+}: ResolveRequestedCreateExecutionValueArgs<TValue>): TValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (sources === undefined) {
+    return value;
+  }
+  return sources[field] === undefined ? undefined : value;
+}
+
 export function resolveProjectExecutionDefaultsForCreate(
   deps: Pick<AppDeps, "db">,
   args: ResolveProjectExecutionDefaultsForCreateArgs,
@@ -51,21 +76,24 @@ export function resolveProjectExecutionDefaultsForCreate(
     projectId: args.projectId,
     threadType: args.threadType,
   });
+  const requestedProviderId = resolveRequestedCreateExecutionValue({
+    field: "providerId",
+    sources: args.executionInputSources,
+    value: args.providerId,
+  });
+  const requestedModel = resolveRequestedCreateExecutionValue({
+    field: "model",
+    sources: args.executionInputSources,
+    value: args.model,
+  });
   const resolution = resolveCreateThreadExecutionDefaults({
-    requestedProviderId: args.providerId,
+    requestedProviderId,
     storedDefaults,
     threadType: args.threadType,
   });
-  if (resolution.kind === "provider_required") {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Provider is required when project ${args.projectId} has no stored execution defaults for thread type ${args.threadType}`,
-    );
-  }
   const { executionDefaults, providerId } = resolution;
 
-  if (!args.model && !executionDefaults) {
+  if (!requestedModel && !executionDefaults) {
     throw new ApiError(
       400,
       "invalid_request",

@@ -663,14 +663,14 @@ describe("public project and host routes", () => {
     });
   });
 
-  it("returns null when a project has no stored default execution options for a provider", async () => {
+  it("returns the server standard defaults when a project has no remembered standard defaults", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-project-defaults-none",
+        id: "host-project-standard-defaults-none",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/project-defaults-none",
+        path: "/tmp/project-standard-defaults-none",
       });
 
       const response = await harness.app.request(
@@ -678,7 +678,13 @@ describe("public project and host routes", () => {
       );
 
       expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toBeNull();
+      await expect(readJson(response)).resolves.toEqual({
+        providerId: "codex",
+        model: "gpt-5.5",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        serviceTier: "default",
+      });
     });
   });
 

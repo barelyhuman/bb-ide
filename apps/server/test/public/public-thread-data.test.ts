@@ -12,6 +12,8 @@ import {
   listQueuedThreadMessages,
   getThread,
   queuedThreadMessages,
+  setThreadExecutionOverride,
+  upsertProjectExecutionDefaults,
 } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,
@@ -701,6 +703,121 @@ describe("public thread data routes", () => {
         serviceTier: "fast",
         source: "client/turn/requested",
       });
+    });
+  });
+
+  it("returns sticky execution overrides in thread default execution options", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "claude-code",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        scope: threadScope(),
+        data: {
+          direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 203 }),
+          input: [{ type: "text", text: "Initial request" }],
+          target: { kind: "new-turn" },
+          execution: {
+            model: "claude-sonnet-4-6",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            serviceTier: "default",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          senderThreadId: null,
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      setThreadExecutionOverride(harness.db, {
+        threadId: thread.id,
+        modelOverride: "claude-opus-4-8",
+        reasoningLevelOverride: "high",
+      });
+
+      const defaultsResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/default-execution-options`,
+      );
+
+      expect(defaultsResponse.status).toBe(200);
+      await expect(readJson(defaultsResponse)).resolves.toEqual({
+        model: "claude-opus-4-8",
+        reasoningLevel: "high",
+        permissionMode: "full",
+        serviceTier: "default",
+        source: "client/turn/requested",
+      });
+    });
+  });
+
+  it("returns null default execution options for stale stored provider capabilities", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "pi",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        scope: threadScope(),
+        data: {
+          direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 204 }),
+          input: [{ type: "text", text: "Prior request" }],
+          target: { kind: "new-turn" },
+          execution: {
+            model: "openai/codex-mini",
+            reasoningLevel: "medium",
+            permissionMode: "workspace-write",
+            serviceTier: "default",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          senderThreadId: null,
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/default-execution-options`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toBeNull();
     });
   });
 
@@ -1439,6 +1556,41 @@ describe("public thread data routes", () => {
           [{ type: "text", text: "Queued message" }],
         ]),
       );
+    });
+  });
+
+  it("returns null composer defaults for stale project execution defaults", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-composer-stale-project-defaults",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      upsertProjectExecutionDefaults(harness.deps.db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "standard",
+        model: "gpt-5.5",
+        reasoningLevel: "max",
+        permissionMode: "full",
+        serviceTier: "default",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: null,
+        providerId: "codex",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/composer-bootstrap`,
+      );
+
+      expect(response.status).toBe(200);
+      const bootstrap = threadComposerBootstrapResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(bootstrap.defaultExecutionOptions).toBeNull();
     });
   });
 
