@@ -855,7 +855,8 @@ describe("host-daemon command schemas", () => {
         contract.hostDaemonInteractiveRequestSchema,
       hostDaemonInteractiveRequestResponseSchema:
         contract.hostDaemonInteractiveRequestResponseSchema,
-      hostDaemonOnlineRpcCommandSchema: contract.hostDaemonOnlineRpcCommandSchema,
+      hostDaemonOnlineRpcCommandSchema:
+        contract.hostDaemonOnlineRpcCommandSchema,
       workspaceCommitResultSchema:
         contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
       workspaceSquashMergeResultSchema:
@@ -1967,6 +1968,66 @@ describe("host-daemon session schemas", () => {
       commandType: "provider.list",
       ok: true,
       result: { providers: [] },
+    });
+
+    expect(
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "host-rpc.response",
+        requestId: "rpc-1",
+        commandType: "host.read_file",
+        ok: true,
+        result: {
+          path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+          content: "# Preferences",
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          modifiedAtMs: 1234.5,
+          sizeBytes: 13,
+        },
+      }),
+    ).toEqual({
+      type: "host-rpc.response",
+      requestId: "rpc-1",
+      commandType: "host.read_file",
+      ok: true,
+      result: {
+        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        content: "# Preferences",
+        contentEncoding: "utf8",
+        mimeType: "text/markdown",
+        modifiedAtMs: 1234.5,
+        sizeBytes: 13,
+      },
+    });
+
+    expect(
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "host-rpc.response",
+        requestId: "rpc-1",
+        commandType: "host.read_file_relative",
+        ok: true,
+        result: {
+          path: "assets/logo.png",
+          content: "iVBORw0KGgo=",
+          contentEncoding: "base64",
+          mimeType: "image/png",
+          modifiedAtMs: 1234.5,
+          sizeBytes: 8,
+        },
+      }),
+    ).toEqual({
+      type: "host-rpc.response",
+      requestId: "rpc-1",
+      commandType: "host.read_file_relative",
+      ok: true,
+      result: {
+        path: "assets/logo.png",
+        content: "iVBORw0KGgo=",
+        contentEncoding: "base64",
+        mimeType: "image/png",
+        modifiedAtMs: 1234.5,
+        sizeBytes: 8,
+      },
     });
 
     expect(

@@ -12,6 +12,7 @@ import type {
 import { performance } from "node:perf_hooks";
 import {
   hostDaemonCommandResultReportSchema,
+  hostDaemonOnlineRpcResponseMessageSchema,
   parseHostDaemonOnlineRpcResultForCommand,
   shouldFlushEventsBeforeReportingCommandResult,
 } from "@bb/host-daemon-contract";
@@ -179,13 +180,13 @@ export class CommandRouter {
         handlerMs: elapsedMs(handlerStartedAtMs),
         ok: true,
       });
-      return {
+      return hostDaemonOnlineRpcResponseMessageSchema.parse({
         type: "host-rpc.response",
         requestId: message.requestId,
         commandType: message.command.type,
         ok: true,
         result,
-      };
+      });
     } catch (error) {
       const errorCode = getErrorCode(error);
       if (!isExpectedCommandDispatchError(error)) {
@@ -223,7 +224,8 @@ export class CommandRouter {
         ? this.runInEnvironmentLane(
             command.environmentId,
             environmentLaneMode,
-            () => dispatchOnlineRpcCommand(command, this.createDispatchOptions()),
+            () =>
+              dispatchOnlineRpcCommand(command, this.createDispatchOptions()),
           )
         : dispatchOnlineRpcCommand(command, this.createDispatchOptions());
     return result.then((value) =>

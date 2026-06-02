@@ -11,6 +11,7 @@ import {
   hostDaemonCommandResultSchemaByType,
   hostDaemonCommandSchema,
   hostDaemonOnlineRpcCommandSchema,
+  hostDaemonOnlineRpcResponseMessageSchema,
   hostDaemonOnlineRpcResultSchemaByType,
   hostDaemonServerWsMessageSchema,
 } from "@bb/host-daemon-contract";
@@ -397,17 +398,18 @@ export async function reportQueuedCommandSuccess<
     if (!sessionId) {
       throw new Error("Queued host RPC is missing sessionId");
     }
-    const parsedResult = hostDaemonOnlineRpcResultSchemaByType[
-      queued.rpcRequest.command.type
-    ].parse(result);
+    const parsedResult =
+      hostDaemonOnlineRpcResultSchemaByType[
+        queued.rpcRequest.command.type
+      ].parse(result);
     harness.hub.recordHostOnlineRpcResponse({
-      message: {
+      message: hostDaemonOnlineRpcResponseMessageSchema.parse({
         type: "host-rpc.response",
         requestId: queued.rpcRequest.requestId,
         commandType: queued.rpcRequest.command.type,
         ok: true,
         result: parsedResult,
-      },
+      }),
       sessionId,
     });
     removePendingHostRpcRequest(queued.rpcRequest.requestId);
@@ -431,9 +433,8 @@ export async function reportQueuedCommandSuccess<
       completedAt: Date.now(),
       type: durableCommand.type,
       ok: true,
-      result: hostDaemonCommandResultSchemaByType[durableCommand.type].parse(
-        result,
-      ),
+      result:
+        hostDaemonCommandResultSchemaByType[durableCommand.type].parse(result),
     }),
   });
 }

@@ -1,4 +1,5 @@
 import {
+  hostDaemonOnlineRpcResponseMessageSchema,
   hostDaemonServerWsMessageSchema,
   type HostDaemonOnlineRpcRequestMessage,
   type HostDaemonOnlineRpcResult,
@@ -42,13 +43,13 @@ function registerDropThenReplaceSocket(args: DropThenReplaceSocketArgs): void {
       args.requests.push(request);
       args.hub.recordHostOnlineRpcResponse({
         sessionId: args.sessionId,
-        message: {
+        message: hostDaemonOnlineRpcResponseMessageSchema.parse({
           type: "host-rpc.response",
           requestId: request.requestId,
           commandType: request.command.type,
           ok: true,
           result: args.successResult,
-        },
+        }),
       });
     },
   };

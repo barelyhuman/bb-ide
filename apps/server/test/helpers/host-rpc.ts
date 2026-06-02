@@ -1,4 +1,5 @@
 import {
+  hostDaemonOnlineRpcResponseMessageSchema,
   hostDaemonServerWsMessageSchema,
   type HostDaemonOnlineRpcRequestMessage,
   type HostDaemonOnlineRpcResponseMessage,
@@ -123,13 +124,13 @@ function buildHostRpcResponse(
   result: HostRpcHandlerResult,
 ): HostDaemonOnlineRpcResponseMessage {
   if (result.ok) {
-    return {
+    return hostDaemonOnlineRpcResponseMessageSchema.parse({
       type: "host-rpc.response",
       requestId: request.requestId,
       commandType: request.command.type,
       ok: true,
       result: result.result,
-    };
+    });
   }
   return {
     type: "host-rpc.response",

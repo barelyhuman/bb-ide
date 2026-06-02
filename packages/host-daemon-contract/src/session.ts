@@ -18,7 +18,10 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 import type { Endpoint } from "./common.js";
-import type { HostDaemonCommandResultReport } from "./commands.js";
+import type {
+  HostDaemonCommandResultReport,
+  HostDaemonOnlineRpcCommandType,
+} from "./commands.js";
 import {
   hostDaemonOnlineRpcCommandSchema,
   hostDaemonOnlineRpcCommandTypeSchema,
@@ -319,43 +322,87 @@ const hostDaemonOnlineRpcRequestMessageSchema = z
   })
   .strict();
 
-const hostDaemonOnlineRpcResultSchema = z.union([
-  hostDaemonOnlineRpcResultSchemaByType["development.replay"],
-  hostDaemonOnlineRpcResultSchemaByType["host.list_files"],
-  hostDaemonOnlineRpcResultSchemaByType["host.list_paths"],
-  hostDaemonOnlineRpcResultSchemaByType["host.file_metadata"],
-  hostDaemonOnlineRpcResultSchemaByType["host.list_branches"],
-  hostDaemonOnlineRpcResultSchemaByType["host.list_manager_templates"],
-  hostDaemonOnlineRpcResultSchemaByType["host.read_file"],
-  hostDaemonOnlineRpcResultSchemaByType["host.read_file_relative"],
-  hostDaemonOnlineRpcResultSchemaByType["provider.list"],
-  hostDaemonOnlineRpcResultSchemaByType["provider.list_models"],
-  hostDaemonOnlineRpcResultSchemaByType["workspace.status"],
-  hostDaemonOnlineRpcResultSchemaByType["workspace.diff"],
-]);
-
-const hostDaemonOnlineRpcResponseSuccessSchema = z
+const hostDaemonOnlineRpcResponseSuccessBaseSchema = z
   .object({
     type: z.literal("host-rpc.response"),
     requestId: hostDaemonOnlineRpcRequestIdSchema,
-    commandType: hostDaemonOnlineRpcCommandTypeSchema,
     ok: z.literal(true),
-    result: hostDaemonOnlineRpcResultSchema,
   })
-  .strict()
-  .superRefine((message, context) => {
-    const parseResult = hostDaemonOnlineRpcResultSchemaByType[
-      message.commandType
-    ].safeParse(message.result);
-    if (parseResult.success) {
-      return;
-    }
-    context.addIssue({
-      code: "custom",
-      path: ["result"],
-      message: `Invalid ${message.commandType} RPC result`,
-    });
-  });
+  .strict();
+
+const hostDaemonOnlineRpcResponseSuccessSchemaByType = {
+  "development.replay": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("development.replay"),
+    result: hostDaemonOnlineRpcResultSchemaByType["development.replay"],
+  }),
+  "host.list_files": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("host.list_files"),
+    result: hostDaemonOnlineRpcResultSchemaByType["host.list_files"],
+  }),
+  "host.list_paths": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("host.list_paths"),
+    result: hostDaemonOnlineRpcResultSchemaByType["host.list_paths"],
+  }),
+  "host.file_metadata": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("host.file_metadata"),
+    result: hostDaemonOnlineRpcResultSchemaByType["host.file_metadata"],
+  }),
+  "host.list_branches": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("host.list_branches"),
+    result: hostDaemonOnlineRpcResultSchemaByType["host.list_branches"],
+  }),
+  "host.list_manager_templates":
+    hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+      commandType: z.literal("host.list_manager_templates"),
+      result:
+        hostDaemonOnlineRpcResultSchemaByType["host.list_manager_templates"],
+    }),
+  "host.read_file": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("host.read_file"),
+    result: hostDaemonOnlineRpcResultSchemaByType["host.read_file"],
+  }),
+  "host.read_file_relative":
+    hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+      commandType: z.literal("host.read_file_relative"),
+      result: hostDaemonOnlineRpcResultSchemaByType["host.read_file_relative"],
+    }),
+  "provider.list": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("provider.list"),
+    result: hostDaemonOnlineRpcResultSchemaByType["provider.list"],
+  }),
+  "provider.list_models": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("provider.list_models"),
+    result: hostDaemonOnlineRpcResultSchemaByType["provider.list_models"],
+  }),
+  "workspace.status": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("workspace.status"),
+    result: hostDaemonOnlineRpcResultSchemaByType["workspace.status"],
+  }),
+  "workspace.diff": hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal("workspace.diff"),
+    result: hostDaemonOnlineRpcResultSchemaByType["workspace.diff"],
+  }),
+} as const satisfies Record<HostDaemonOnlineRpcCommandType, z.ZodTypeAny>;
+
+const hostDaemonOnlineRpcResponseSuccessSchema = z.discriminatedUnion(
+  "commandType",
+  [
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["development.replay"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["host.list_files"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["host.list_paths"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["host.file_metadata"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["host.list_branches"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType[
+      "host.list_manager_templates"
+    ],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["host.read_file"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["host.read_file_relative"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["provider.list"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["provider.list_models"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["workspace.status"],
+    hostDaemonOnlineRpcResponseSuccessSchemaByType["workspace.diff"],
+  ],
+);
 
 const hostDaemonOnlineRpcResponseFailureSchema = z
   .object({
