@@ -1,6 +1,7 @@
 import type {
   EventProjectionCommandMessage,
   EventProjectionDelegationMessage,
+  EventProjectionImageViewMessage,
   EventProjectionMessage,
   EventProjectionToolCallMessage,
   EventProjectionWebFetchMessage,
@@ -13,7 +14,8 @@ export type ViewProviderExecutionMessage =
   | EventProjectionDelegationMessage;
 export type ViewWebActivityMessage =
   | EventProjectionWebSearchMessage
-  | EventProjectionWebFetchMessage;
+  | EventProjectionWebFetchMessage
+  | EventProjectionImageViewMessage;
 export type ToolActivityCell =
   | ViewProviderExecutionMessage
   | ViewWebActivityMessage;
@@ -60,7 +62,11 @@ export function isProviderExecutionMessage(
 export function isWebActivityMessage(
   cell: MaybeToolActivityCell,
 ): cell is ViewWebActivityMessage {
-  return cell?.kind === "web-search" || cell?.kind === "web-fetch";
+  return (
+    cell?.kind === "web-search" ||
+    cell?.kind === "web-fetch" ||
+    cell?.kind === "image-view"
+  );
 }
 
 export function findExecMessageInActiveCell(
@@ -123,9 +129,7 @@ export function interruptWebActivityMessage(
   }
 }
 
-export function flushActiveToolCell(
-  state: ToolActivityCellStateOwner,
-): void {
+export function flushActiveToolCell(state: ToolActivityCellStateOwner): void {
   const active = state.toolActivity.activeCell;
   if (!active) return;
 

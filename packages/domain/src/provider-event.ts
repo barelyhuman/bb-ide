@@ -126,6 +126,16 @@ export type ThreadEventWebFetchItem = z.infer<
   typeof threadEventWebFetchItemSchema
 >;
 
+export const threadEventImageViewItemSchema = z.object({
+  type: z.literal("imageView"),
+  id: z.string(),
+  path: z.string(),
+  parentToolCallId: z.string().optional(),
+});
+export type ThreadEventImageViewItem = z.infer<
+  typeof threadEventImageViewItemSchema
+>;
+
 export const threadEventTextTruncationSchema = z.object({
   originalLength: z.number(),
   retainedHeadLength: z.number(),
@@ -255,6 +265,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
   }),
   threadEventWebSearchItemSchema,
   threadEventWebFetchItemSchema,
+  threadEventImageViewItemSchema,
   z.object({
     type: z.literal("toolCall"),
     id: z.string(),

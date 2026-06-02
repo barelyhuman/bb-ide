@@ -35,6 +35,7 @@ import { isRunningThreadRuntimeDisplayStatus } from "./thread-runtime-status.js"
 import type {
   ThreadTimelineLinkHandler,
   ThreadTimelineLocalFileLinkHandler,
+  ThreadTimelineImageViewSrcResolver,
   ThreadTimelineTheme,
   ThreadTimelineUnreadDividerPlacement,
   UserAttachmentImageSrcResolver,
@@ -78,6 +79,7 @@ export interface ThreadTimelineRowsProps {
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
   projectId?: string;
+  resolveImageViewSrc?: ThreadTimelineImageViewSrcResolver;
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType?: ThreadTimelineTheme;
   timelineRows: TimelineRow[];
@@ -108,6 +110,7 @@ interface TimelineRendererStaticContextValue {
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
   onTitleAction: TimelineTitleActionResolver | undefined;
   projectId: string | undefined;
+  resolveImageViewSrc: ThreadTimelineImageViewSrcResolver | undefined;
   resolveSegmentLinkHref: TimelineTitleLinkResolver | undefined;
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
@@ -642,6 +645,7 @@ function TimelineExpandableBody({
     resolveUserAttachmentImageSrc,
     themeType,
     workspaceRootPath,
+    resolveImageViewSrc,
   } = useTimelineRendererStaticContext();
 
   switch (row.kind) {
@@ -732,6 +736,7 @@ function TimelineExpandableBody({
       return (
         <WorkRowBody
           row={row}
+          resolveImageViewSrc={resolveImageViewSrc}
           themeType={themeType}
           workspaceRootPath={workspaceRootPath}
         />
@@ -1129,6 +1134,7 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
       projectId,
+      resolveImageViewSrc: props.resolveImageViewSrc,
       resolveSegmentLinkHref,
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
       themeType,
@@ -1142,6 +1148,7 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       props.onOpenLocalFileLink,
       props.onTitleAction,
       projectId,
+      props.resolveImageViewSrc,
       resolveSegmentLinkHref,
       props.resolveUserAttachmentImageSrc,
       props.threadId,

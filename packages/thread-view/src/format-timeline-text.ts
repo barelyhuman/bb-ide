@@ -313,6 +313,8 @@ function formatWorkBody(
       return lines;
     case "web-fetch":
       return lines;
+    case "image-view":
+      return lines;
     case "approval":
     case "question":
       return lines;
@@ -391,7 +393,11 @@ function formatWorkSummaryDetails(
       );
       continue;
     }
-    if (child.workKind === "web-search" || child.workKind === "web-fetch") {
+    if (
+      child.workKind === "web-search" ||
+      child.workKind === "web-fetch" ||
+      child.workKind === "image-view"
+    ) {
       lines.push(rowHeader(formatWorkTitle(child, childContext), childContext));
       continue;
     }

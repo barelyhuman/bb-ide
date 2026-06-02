@@ -17,6 +17,8 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
     case "web-fetch":
     case "approval":
       return false;
+    case "image-view":
+      return true;
     case "question":
       // Resolving and answered rows both carry a recorded answer in their
       // body. Pending/interrupted/expired stay title-only. Matches the
@@ -78,7 +80,7 @@ function shouldAutoExpandFrontierRow(row: ThreadTimelineViewRow): boolean {
     case "bundle-summary":
       return true;
     case "work":
-      return row.workKind === "delegation";
+      return row.workKind === "delegation" || row.workKind === "image-view";
     case "conversation":
     case "step-summary":
     case "turn":

@@ -19,9 +19,18 @@ export interface WebFetchLifecycleEvent {
   parentToolCallId?: string;
 }
 
+export interface ImageViewLifecycleEvent {
+  kind: "begin" | "end";
+  itemKind: "image-view";
+  callId: string;
+  path: string;
+  parentToolCallId?: string;
+}
+
 export type WebActivityLifecycleEvent =
   | WebSearchLifecycleEvent
-  | WebFetchLifecycleEvent;
+  | WebFetchLifecycleEvent
+  | ImageViewLifecycleEvent;
 
 export function parseWebActivityLifecycleEvent(
   decoded: ThreadEvent,
@@ -59,6 +68,22 @@ export function parseWebActivityLifecycleEvent(
       url: decoded.item.url,
       prompt: decoded.item.prompt,
       pattern: decoded.item.pattern,
+      ...(parentToolCallId ? { parentToolCallId } : {}),
+    };
+  }
+
+  if (
+    (decoded.type === "item/started" || decoded.type === "item/completed") &&
+    decoded.item.type === "imageView"
+  ) {
+    const callId = decoded.item.id;
+    if (!callId) return null;
+
+    return {
+      kind: decoded.type === "item/started" ? "begin" : "end",
+      itemKind: "image-view",
+      callId,
+      path: decoded.item.path,
       ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }

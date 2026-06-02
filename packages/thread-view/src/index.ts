@@ -59,6 +59,7 @@ export type {
   BuildTimelineViewRowsOptions,
   ThreadTimelineViewRow,
   TimelineBundleSummaryRow,
+  TimelineImageViewViewWorkRow,
   TimelineStepSummaryRow,
   TimelineQuestionViewWorkRow,
   TimelineViewDelegationWorkRow,

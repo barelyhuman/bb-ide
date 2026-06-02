@@ -193,6 +193,17 @@ export interface EventProjectionWebFetchMessage extends EventProjectionMessageBa
   >;
 }
 
+export interface EventProjectionImageViewMessage extends EventProjectionMessageBase {
+  kind: "image-view";
+  callId: string;
+  path: string;
+  completedAt: number | null;
+  status: Extract<
+    EventProjectionMessageStatus,
+    "pending" | "completed" | "interrupted"
+  >;
+}
+
 export interface EventProjectionFileEditChange {
   path: string;
   kind?: string;
@@ -368,6 +379,7 @@ export type EventProjectionMessage =
   | EventProjectionToolCallMessage
   | EventProjectionWebSearchMessage
   | EventProjectionWebFetchMessage
+  | EventProjectionImageViewMessage
   | EventProjectionFileEditMessage
   | EventProjectionOperationMessage
   | EventProjectionPermissionGrantLifecycleMessage

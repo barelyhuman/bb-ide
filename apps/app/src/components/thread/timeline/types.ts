@@ -26,3 +26,12 @@ export type UserAttachmentImageSrcResolver = (
   pathOrUrl: string,
   projectId?: string,
 ) => string;
+
+export interface ThreadTimelineImageViewSrcTarget {
+  path: string;
+  threadId: string;
+}
+
+export type ThreadTimelineImageViewSrcResolver = (
+  target: ThreadTimelineImageViewSrcTarget,
+) => string;

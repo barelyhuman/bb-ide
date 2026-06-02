@@ -10,6 +10,7 @@ import type {
   TimelineDiffStats,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
+  TimelineImageViewWorkRow,
   TimelineManagerAssignment,
   TimelinePermissionGrantApprovalGrantScope,
   TimelineQuestionWorkRow,
@@ -121,6 +122,18 @@ export interface WebFetchRowArgs {
   status?: TimelineRowStatus;
   turnId?: string | null;
   url?: string;
+}
+
+export interface ImageViewRowArgs {
+  callId?: string;
+  durationMs?: number | null;
+  id?: string;
+  path?: string;
+  seq?: number;
+  sourceSeqEnd?: number;
+  sourceSeqStart?: number;
+  status?: TimelineRowStatus;
+  turnId?: string | null;
 }
 
 export interface ApprovalRowArgs {
@@ -249,6 +262,7 @@ const DEFAULT_TOOL_ID = "tool-1";
 const DEFAULT_TURN_ROW_ID = "turn-summary-1";
 const DEFAULT_WEB_FETCH_ID = "web-fetch-1";
 const DEFAULT_WEB_SEARCH_ID = "web-search-1";
+const DEFAULT_IMAGE_VIEW_ID = "image-view-1";
 
 function rowSequence({ seq, sourceSeqStart }: RowSequenceArgs): number {
   return seq ?? sourceSeqStart ?? 1;
@@ -587,6 +601,29 @@ export function webFetchRow({
     url,
     prompt,
     pattern,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
+  };
+}
+
+export function imageViewRow({
+  callId,
+  durationMs = null,
+  id = DEFAULT_IMAGE_VIEW_ID,
+  path = "/tmp/dashboard-main.png",
+  seq,
+  sourceSeqEnd,
+  sourceSeqStart,
+  status = "completed",
+  turnId,
+}: ImageViewRowArgs = {}): TimelineImageViewWorkRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  return {
+    ...base,
+    kind: "work",
+    workKind: "image-view",
+    status,
+    callId: callId ?? id,
+    path,
     completedAt: completedAtFromDuration(base.startedAt, durationMs),
   };
 }

@@ -23,6 +23,8 @@ export { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 export { ToolCallDetailBlock } from "./ToolCallDetailBlock.js";
 export type {
   ThreadTimelineLinkHandler,
+  ThreadTimelineImageViewSrcResolver,
+  ThreadTimelineImageViewSrcTarget,
   ThreadTimelineLocalFileLink,
   ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineUnreadDividerPlacement,

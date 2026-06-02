@@ -21,6 +21,7 @@ export type {
   EventProjectionErrorMessage,
   EventProjectionFileEditChange,
   EventProjectionFileEditMessage,
+  EventProjectionImageViewMessage,
   EventProjectionMessage,
   EventProjectionMessageBase,
   EventProjectionMessageStatus,

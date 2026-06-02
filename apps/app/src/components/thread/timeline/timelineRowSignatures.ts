@@ -144,6 +144,13 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         row.pattern,
         row.completedAt,
       ]);
+    case "image-view":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.path,
+        row.completedAt,
+      ]);
     case "delegation":
       return joinSignatureParts([
         ...baseParts,

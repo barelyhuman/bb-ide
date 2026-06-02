@@ -13,6 +13,7 @@ import type {
   TimelineApprovalWorkRow,
   ThreadContextWindowUsage,
   TimelineFileChangeWorkRow,
+  TimelineImageViewWorkRow,
   TimelineManagerAssignment,
   TimelineQuestionWorkRow,
   TimelineRow,
@@ -56,8 +57,21 @@ interface ToolCallItemEventArgs {
   type: "item/completed" | "item/started";
 }
 
+interface ImageViewItemEventArgs {
+  itemId?: string;
+  path?: string;
+  seq: number;
+  type: "item/completed" | "item/started";
+}
+
 interface TurnStartedEventArgs {
   seq: number;
+}
+
+interface TurnCompletedEventArgs {
+  errorMessage?: string;
+  seq: number;
+  status?: "completed" | "failed" | "interrupted";
 }
 
 interface SystemOperationEventArgs {
@@ -245,6 +259,32 @@ function toolCallItemEvent({
   };
 }
 
+function imageViewItemEvent({
+  itemId = "image-view-1",
+  path = "/tmp/sightglass-quote-merge-check/dashboard-main.png",
+  seq,
+  type,
+}: ImageViewItemEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type,
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      item: {
+        type: "imageView",
+        id: itemId,
+        path,
+      },
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
 function turnStartedEvent({ seq }: TurnStartedEventArgs): ThreadEventWithMeta {
   return {
     event: {
@@ -252,6 +292,28 @@ function turnStartedEvent({ seq }: TurnStartedEventArgs): ThreadEventWithMeta {
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
+function turnCompletedEvent({
+  errorMessage,
+  seq,
+  status = "completed",
+}: TurnCompletedEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "turn/completed",
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      status,
+      ...(errorMessage ? { error: { message: errorMessage } } : {}),
     },
     meta: {
       id: `event-${seq}`,
@@ -630,6 +692,26 @@ function collectQuestionRows(
   return questionRows;
 }
 
+function collectImageViewRows(
+  rows: readonly TimelineRow[],
+): TimelineImageViewWorkRow[] {
+  const imageViewRows: TimelineImageViewWorkRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "work" && row.workKind === "image-view") {
+      imageViewRows.push(row);
+      continue;
+    }
+    if (row.kind === "turn" && row.children) {
+      imageViewRows.push(...collectImageViewRows(row.children));
+      continue;
+    }
+    if (row.kind === "work" && row.workKind === "delegation") {
+      imageViewRows.push(...collectImageViewRows(row.childRows));
+    }
+  }
+  return imageViewRows;
+}
+
 function collectSystemRows(rows: readonly TimelineRow[]): TimelineSystemRow[] {
   const systemRows: TimelineSystemRow[] = [];
   for (const row of rows) {
@@ -694,6 +776,167 @@ describe("buildThreadTimelineFromEvents", () => {
     );
     expect(row.detail).not.toContain("44%");
     expect(row.detail).not.toContain("\r");
+  });
+
+  it("projects image view item events as timeline work rows", () => {
+    const completedRows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      imageViewItemEvent({
+        seq: 2,
+        type: "item/started",
+      }),
+      imageViewItemEvent({
+        seq: 3,
+        type: "item/completed",
+      }),
+    ]);
+    const [completedRow] = collectImageViewRows(completedRows);
+    if (!completedRow) {
+      throw new Error("Expected an image view row");
+    }
+
+    expect(completedRow).toMatchObject({
+      workKind: "image-view",
+      callId: "image-view-1",
+      path: "/tmp/sightglass-quote-merge-check/dashboard-main.png",
+      status: "completed",
+      completedAt: 3,
+    });
+
+    const pendingRows = buildTimelineRows(
+      [
+        turnStartedEvent({ seq: 4 }),
+        imageViewItemEvent({
+          seq: 5,
+          type: "item/started",
+        }),
+      ],
+      "active",
+    );
+    const [pendingRow] = collectImageViewRows(pendingRows);
+    if (!pendingRow) {
+      throw new Error("Expected an image view row");
+    }
+
+    expect(pendingRow).toMatchObject({
+      workKind: "image-view",
+      status: "pending",
+      completedAt: null,
+    });
+  });
+
+  it("interrupts a pending image view row when its turn is interrupted", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      imageViewItemEvent({
+        seq: 2,
+        type: "item/started",
+      }),
+      turnCompletedEvent({
+        seq: 3,
+        status: "interrupted",
+      }),
+    ]);
+
+    const imageViewRows = collectImageViewRows(rows);
+    expect(imageViewRows).toEqual([
+      expect.objectContaining({
+        callId: "image-view-1",
+        status: "interrupted",
+        startedAt: 2,
+        completedAt: 3,
+      }),
+    ]);
+  });
+
+  it("completes an image view row after its start has flushed to history", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      imageViewItemEvent({
+        seq: 2,
+        type: "item/started",
+      }),
+      toolCallItemEvent({
+        itemId: "tool-call-1",
+        seq: 3,
+        tool: "Read",
+        toolArgs: { file_path: "apps/app/src/main.tsx" },
+        type: "item/started",
+      }),
+      imageViewItemEvent({
+        seq: 4,
+        type: "item/completed",
+      }),
+    ]);
+
+    const imageViewRows = collectImageViewRows(rows);
+    expect(imageViewRows).toEqual([
+      expect.objectContaining({
+        callId: "image-view-1",
+        status: "completed",
+        startedAt: 2,
+        completedAt: 4,
+        sourceSeqEnd: 4,
+      }),
+    ]);
+  });
+
+  it("keeps an out-of-order image view completion finalized when its start replays later", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      imageViewItemEvent({
+        seq: 2,
+        type: "item/completed",
+      }),
+      imageViewItemEvent({
+        seq: 3,
+        type: "item/started",
+      }),
+    ]);
+
+    const imageViewRows = collectImageViewRows(rows);
+    expect(imageViewRows).toEqual([
+      expect.objectContaining({
+        callId: "image-view-1",
+        status: "completed",
+        startedAt: 2,
+        completedAt: 2,
+        sourceSeqEnd: 2,
+      }),
+    ]);
+  });
+
+  it("ignores duplicate image view lifecycle replays after finalization", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 1 }),
+      imageViewItemEvent({
+        seq: 2,
+        type: "item/started",
+      }),
+      imageViewItemEvent({
+        seq: 3,
+        type: "item/completed",
+      }),
+      imageViewItemEvent({
+        seq: 4,
+        type: "item/started",
+      }),
+      imageViewItemEvent({
+        seq: 5,
+        type: "item/completed",
+      }),
+    ]);
+
+    const imageViewRows = collectImageViewRows(rows);
+    expect(imageViewRows).toEqual([
+      expect.objectContaining({
+        callId: "image-view-1",
+        status: "completed",
+        startedAt: 2,
+        completedAt: 3,
+        sourceSeqEnd: 3,
+      }),
+    ]);
   });
 
   it("uses accepted context to suppress pending steers without rendering future accepted rows", () => {

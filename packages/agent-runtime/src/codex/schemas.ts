@@ -405,6 +405,13 @@ export const codexHandledThreadItemSchema = z.discriminatedUnion("type", [
     .passthrough(),
   z
     .object({
+      type: z.literal("imageView"),
+      id: z.string(),
+      path: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
       type: z.literal("reasoning"),
       id: z.string(),
       summary: codexStringArraySchema,

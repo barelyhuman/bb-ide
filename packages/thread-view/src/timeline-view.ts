@@ -56,6 +56,10 @@ export type TimelineQuestionViewWorkRow = Extract<
   TimelineViewWorkRow,
   { workKind: "question" }
 >;
+export type TimelineImageViewViewWorkRow = Extract<
+  TimelineViewWorkRow,
+  { workKind: "image-view" }
+>;
 
 export type TimelineViewSourceRow =
   | TimelineConversationRow
@@ -105,6 +109,7 @@ export interface TimelineWorkSummaryCounts {
   tools: number;
   webFetches: number;
   webSearches: number;
+  imageViews: number;
   /** First-seen order of exploration kinds across the bundle's children. */
   explorationKindOrder: readonly TimelineExplorationKind[];
 }
@@ -114,6 +119,7 @@ type TimelineWorkSummaryCategory =
   | "delegations"
   | "exploration"
   | "fileChanges"
+  | "imageViews"
   | "tools"
   | "webResearch";
 
@@ -206,6 +212,7 @@ export function summarizeTimelineWork(
     tools: 0,
     webFetches: 0,
     webSearches: 0,
+    imageViews: 0,
     explorationKindOrder,
   };
   const exploredFileIdentities = new Set<string>();
@@ -262,6 +269,9 @@ export function summarizeTimelineWork(
       case "web-search":
         counts.webSearches += Math.max(1, row.queries.length);
         break;
+      case "image-view":
+        counts.imageViews += 1;
+        break;
       case "delegation":
         counts.delegations += 1;
         break;
@@ -286,9 +296,7 @@ export function summarizeTimelineWork(
   return counts;
 }
 
-function explorationDetail(
-  counts: TimelineWorkSummaryCounts,
-): string | null {
+function explorationDetail(counts: TimelineWorkSummaryCounts): string | null {
   const parts = counts.explorationKindOrder
     .map((kind): string | null => {
       switch (kind) {
@@ -343,6 +351,7 @@ function approvalStatusSummaryLabel(
       case "approval":
       case "question":
       case "delegation":
+      case "image-view":
       case "web-fetch":
       case "web-search":
         return null;
@@ -386,6 +395,8 @@ function getTimelineWorkSummaryCategory(
     case "web-fetch":
     case "web-search":
       return "webResearch";
+    case "image-view":
+      return "imageViews";
     case "delegation":
       return "delegations";
     case "approval":
@@ -473,6 +484,8 @@ function completedSummaryPhrase(
       return fileChangeSummaryPhrase(counts, false);
     case "webResearch":
       return webResearchSummaryPhrase(counts, false);
+    case "imageViews":
+      return imageViewSummaryPhrase(counts, false);
     case "delegations":
       return counts.delegations > 0
         ? `Ran ${plural(counts.delegations, "subagent")}`
@@ -500,6 +513,8 @@ function activeSummaryPhrase(
       return fileChangeSummaryPhrase(counts, true);
     case "webResearch":
       return webResearchSummaryPhrase(counts, true);
+    case "imageViews":
+      return imageViewSummaryPhrase(counts, true);
     case "delegations":
       return counts.delegations > 0
         ? `Running ${plural(counts.delegations, "subagent")}`
@@ -513,9 +528,7 @@ function activeSummaryPhrase(
   }
 }
 
-function joinSummaryPhrases(
-  phrases: TimelineWorkSummaryPhraseList,
-): string {
+function joinSummaryPhrases(phrases: TimelineWorkSummaryPhraseList): string {
   return phrases
     .map((phrase, index) => (index === 0 ? phrase : lowerFirst(phrase)))
     .join(", ");
@@ -527,9 +540,7 @@ function webResearchSummaryPhrase(
 ): string | null {
   const parts: string[] = [];
   if (counts.webSearches > 0) {
-    parts.push(
-      plural(counts.webSearches, "search query", "search queries"),
-    );
+    parts.push(plural(counts.webSearches, "search query", "search queries"));
   }
   if (counts.webFetches > 0) {
     parts.push(plural(counts.webFetches, "web page"));
@@ -537,6 +548,15 @@ function webResearchSummaryPhrase(
   if (parts.length === 0) return null;
   const verb = active ? "Researching" : "Researched";
   return `${verb} ${parts.join(", ")}`;
+}
+
+function imageViewSummaryPhrase(
+  counts: TimelineWorkSummaryCounts,
+  active: boolean,
+): string | null {
+  if (counts.imageViews === 0) return null;
+  const verb = active ? "Viewing" : "Viewed";
+  return `${verb} ${plural(counts.imageViews, "image")}`;
 }
 
 /**
@@ -639,12 +659,9 @@ function summarizeRange(
   }
 
   return {
-    id: [
-      first.threadId,
-      turnId ?? "thread",
-      "work-summary",
-      first.id,
-    ].join(":"),
+    id: [first.threadId, turnId ?? "thread", "work-summary", first.id].join(
+      ":",
+    ),
     threadId: first.threadId,
     turnId,
     sourceSeqStart,
@@ -678,7 +695,6 @@ export function isTimelineStepBoundary(row: ThreadTimelineViewRow): boolean {
   return true;
 }
 
-
 /**
  * Concept identifier used for bundling. Same-concept consecutive leaves in an
  * open step form a bundle. The step-summary phrase aggregates these concepts.
@@ -699,6 +715,8 @@ function rowConcept(row: TimelineViewWorkRow): TimelineWorkSummaryCategory {
     case "web-search":
     case "web-fetch":
       return "webResearch";
+    case "image-view":
+      return "imageViews";
     case "approval":
     case "question":
       // Approval and question rows aren't summarizable; these branches are unreachable in
@@ -755,7 +773,10 @@ function dedupeBundleChildIntents(
       out.push(child);
       continue;
     }
-    if (wasExploration && !filtered.some((intent) => intent.type !== "unknown")) {
+    if (
+      wasExploration &&
+      !filtered.some((intent) => intent.type !== "unknown")
+    ) {
       // Every visible intent was a duplicate of a sibling's; the row would
       // render as a bare command/tool, which is misleading. Drop it.
       continue;

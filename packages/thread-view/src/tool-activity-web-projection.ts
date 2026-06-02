@@ -49,6 +49,28 @@ function createWebActivityMessage(
     };
   }
 
+  if (payload.itemKind === "image-view") {
+    return {
+      kind: "image-view",
+      id: messageId(threadId, "image-view", payload.callId),
+      threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      ...(turnId
+        ? eventProjectionMessageTurnScopeFields(turnId)
+        : eventProjectionMessageThreadScopeFields()),
+      ...(payload.parentToolCallId
+        ? { parentToolCallId: payload.parentToolCallId }
+        : {}),
+      callId: payload.callId,
+      path: payload.path,
+      completedAt: status === "pending" ? null : meta.createdAt,
+      status,
+    };
+  }
+
   return {
     kind: "web-fetch",
     id: messageId(threadId, "web-fetch", payload.callId),
@@ -101,6 +123,11 @@ function mergeWebActivityMessage(
     target.url = payload.url;
     target.prompt = payload.prompt;
     target.pattern = payload.pattern;
+    return;
+  }
+
+  if (target.kind === "image-view" && payload.itemKind === "image-view") {
+    target.path = payload.path;
   }
 }
 

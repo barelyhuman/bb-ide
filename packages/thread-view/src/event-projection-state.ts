@@ -198,6 +198,7 @@ function finalizePendingMessageForInterruptedTurn(
     case "tool-call":
     case "web-search":
     case "web-fetch":
+    case "image-view":
       return;
     case "file-edit":
       if (message.status === "pending") {

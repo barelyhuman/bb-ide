@@ -4,6 +4,7 @@ import type {
   TimelineApprovalWorkRow,
   TimelineCommandWorkRow,
   TimelineFileChangeWorkRow,
+  TimelineImageViewWorkRow,
   TimelineManagerAssignment,
   TimelineRowBase,
   TimelineRowStatus,
@@ -210,6 +211,18 @@ function webFetchRow(): TimelineWebFetchWorkRow {
     url: "https://example.com/thread-view",
     prompt: null,
     pattern: null,
+    completedAt: null,
+  };
+}
+
+function imageViewRow(): TimelineImageViewWorkRow {
+  return {
+    ...baseRow("image-view-1"),
+    kind: "work",
+    workKind: "image-view",
+    status: "completed",
+    callId: "image-view-call-1",
+    path: "/tmp/sightglass-quote-merge-check/dashboard-main.png",
     completedAt: null,
   };
 }
@@ -1136,6 +1149,15 @@ describe("buildTimelineRowTitle", () => {
       expectedPlain:
         "Interrupted fetch: https://example.com/thread-view (3s, interrupted)",
     },
+    {
+      row: {
+        ...imageViewRow(),
+        status: "interrupted",
+        completedAt: 3_001,
+      } satisfies TimelineImageViewWorkRow,
+      expectedPlain:
+        "Interrupted image view: /tmp/sightglass-quote-merge-check/dashboard-main.png (3s, interrupted)",
+    },
   ])(
     "renders interrupted $row.workKind titles with elapsed duration",
     ({ row, expectedPlain }) => {
@@ -1147,6 +1169,38 @@ describe("buildTimelineRowTitle", () => {
       ]);
     },
   );
+
+  it("renders image view rows with a compact visible file name and full plain path", () => {
+    const title = buildTimelineRowTitle(imageViewRow(), DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe(
+      "Viewed image: /tmp/sightglass-quote-merge-check/dashboard-main.png",
+    );
+    expect(title.segments[1]).toMatchObject({
+      text: "dashboard-main.png",
+      plainText: "/tmp/sightglass-quote-merge-check/dashboard-main.png",
+      truncate: true,
+    });
+  });
+
+  it("renders pending image view rows with active viewing title text", () => {
+    const title = buildTimelineRowTitle(
+      {
+        ...imageViewRow(),
+        completedAt: null,
+        status: "pending",
+      },
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe(
+      "Viewing image: /tmp/sightglass-quote-merge-check/dashboard-main.png",
+    );
+    expect(title.segments[0]).toMatchObject({
+      text: "Viewing image:",
+      shimmer: true,
+    });
+  });
 
   it("can render step summaries as bundle titles or muted background summaries", () => {
     const row = workSummaryRow([webSearchRow(), webFetchRow()]);
@@ -1174,6 +1228,14 @@ describe("buildTimelineRowTitle", () => {
       },
     ]);
     expect(backgroundTitle.tone).toBe("summary");
+  });
+
+  it("summarizes bundled image view rows", () => {
+    const row = workSummaryRow([imageViewRow(), imageViewRow()]);
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Viewed 2 images");
   });
 
   it("summarizes file changes by action", () => {

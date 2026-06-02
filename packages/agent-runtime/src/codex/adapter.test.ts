@@ -2183,7 +2183,7 @@ describe("codex provider adapter", () => {
     expect(events).toMatchObject([]);
   });
 
-  it("translateEvent item/started with unsupported item type falls back to provider/unhandled", () => {
+  it("translateEvent item/started with imageView maps to imageView", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
       codexEvent("item/started", {
@@ -2200,19 +2200,44 @@ describe("codex provider adapter", () => {
 
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "provider/unhandled",
-        providerId: "codex",
-        rawType: "item/started",
+        type: "item/started",
         threadId: "t1",
         scope: turnScope("turn-1"),
-        rawEvent: expect.objectContaining({
-          method: "item/started",
-          params: expect.objectContaining({
-            item: expect.objectContaining({
-              type: "imageView",
-            }),
-          }),
-        }),
+        item: {
+          type: "imageView",
+          id: "image-1",
+          path: "/tmp/image.png",
+        },
+      }),
+    );
+  });
+
+  it("translateEvent item/completed with imageView maps to imageView", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        completedAtMs: 0,
+        item: {
+          type: "imageView",
+          id: "image-1",
+          path: "/tmp/image.png",
+        },
+      }),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "imageView",
+          id: "image-1",
+          path: "/tmp/image.png",
+        },
       }),
     );
   });

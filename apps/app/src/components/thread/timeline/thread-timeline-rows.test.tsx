@@ -16,6 +16,7 @@ import {
   conversationRow,
   delegationRow,
   fileChangeRow,
+  imageViewRow,
   systemRow,
   turnRow,
 } from "@/test/fixtures/thread-timeline-rows";
@@ -209,6 +210,113 @@ describe("ThreadTimelineRows", () => {
     );
 
     expect(view.container.textContent ?? "").toContain("rg timeline apps/app");
+  });
+
+  it("renders image view rows with an expandable image preview", () => {
+    const path = "/tmp/sightglass-quote-merge-check/dashboard-main.png";
+    renderTimelineRows({
+      timelineRows: [
+        imageViewRow({
+          path,
+        }),
+      ],
+    });
+
+    expect(screen.getByText("Viewed image:")).toBeTruthy();
+    expect(screen.getByText("dashboard-main.png")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Viewed image:/u }));
+
+    const previewButton = screen.getByRole("button", {
+      name: "Open image preview: dashboard-main.png",
+    });
+    const image = previewButton.querySelector("img");
+    if (!image) {
+      throw new Error("Expected an image preview thumbnail.");
+    }
+    const imageSrc = image.getAttribute("src");
+    expect(imageSrc).not.toBeNull();
+    const imageUrl = new URL(imageSrc ?? "", "http://localhost");
+    expect(imageUrl.pathname).toBe(
+      "/api/v1/threads/thread-1/host-files/content",
+    );
+    expect(imageUrl.searchParams.get("path")).toBe(path);
+  });
+
+  it("shows an image view preview fallback when the image cannot load", () => {
+    renderTimelineRows({
+      timelineRows: [
+        imageViewRow({
+          path: "/tmp/sightglass-quote-merge-check/dashboard-main.png",
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Viewed image:/u }));
+    const previewButton = screen.getByRole("button", {
+      name: "Open image preview: dashboard-main.png",
+    });
+    const image = previewButton.querySelector("img");
+    if (!image) {
+      throw new Error("Expected an image preview thumbnail.");
+    }
+    fireEvent.error(image);
+
+    expect(screen.getByText("Image preview unavailable.")).toBeTruthy();
+  });
+
+  it("retries an image view preview after a pending row completes with the same path", async () => {
+    const path = "/tmp/sightglass-quote-merge-check/dashboard-main.png";
+    const view = renderTimelineRows({
+      overrides: {
+        threadRuntimeDisplayStatus: "active",
+      },
+      timelineRows: [
+        imageViewRow({
+          durationMs: null,
+          id: "image-view-1",
+          path,
+          sourceSeqEnd: 1,
+          sourceSeqStart: 1,
+          status: "pending",
+        }),
+      ],
+    });
+
+    const previewButton = screen.getByRole("button", {
+      name: "Open image preview: dashboard-main.png",
+    });
+    const image = previewButton.querySelector("img");
+    if (!image) {
+      throw new Error("Expected an image preview thumbnail.");
+    }
+    fireEvent.error(image);
+    expect(screen.getByText("Image preview unavailable.")).toBeTruthy();
+
+    rerenderTimelineRows({
+      overrides: {
+        threadRuntimeDisplayStatus: "active",
+      },
+      view,
+      timelineRows: [
+        imageViewRow({
+          durationMs: 1_000,
+          id: "image-view-1",
+          path,
+          sourceSeqEnd: 2,
+          sourceSeqStart: 1,
+          status: "completed",
+        }),
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Image preview unavailable.")).toBeNull();
+      const completedPreviewButton = screen.getByRole("button", {
+        name: "Open image preview: dashboard-main.png",
+      });
+      expect(completedPreviewButton.querySelector("img")).toBeTruthy();
+    });
   });
 
   it("preserves completed activity summary identity when work appends", () => {

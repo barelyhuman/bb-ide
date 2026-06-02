@@ -4,6 +4,7 @@ import type {
   TimelineCommandWorkRow,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
+  TimelineImageViewWorkRow,
   TimelineManagerAssignmentSystemRow,
   TimelineRowStatus,
   TimelineToolWorkRow,
@@ -29,6 +30,7 @@ import {
   hasTimelineExplorationIntent,
   type TimelineExplorationWorkRow,
 } from "./timeline-activity-intents.js";
+import { fileNameFromPath } from "./timeline-path-display.js";
 import {
   buildTimelineWorkSummaryLabelParts,
   type ThreadTimelineViewRow,
@@ -703,6 +705,49 @@ function mapWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
   }
 }
 
+function mapImageViewTitle(row: TimelineImageViewWorkRow): TimelineTitle {
+  const pathSegment = segment(fileNameFromPath(row.path), {
+    em: false,
+    plainText: row.path,
+    truncate: true,
+  });
+  switch (row.status) {
+    case "pending":
+      return makeTitle({
+        segments: [segment("Viewing image:", { shimmer: true }), pathSegment],
+      });
+    case "completed":
+      return makeTitle({
+        segments: [segment("Viewed image:"), pathSegment],
+        decorations: filterNull([
+          durationDecoration(row.startedAt, row.completedAt),
+        ]),
+      });
+    case "error":
+      return makeTitle({
+        segments: [segment("Viewed image:"), pathSegment],
+        decorations: [
+          statusDecoration(
+            "error",
+            row.completedAt !== null ? row.completedAt - row.startedAt : null,
+          ),
+        ],
+      });
+    case "interrupted":
+      return makeTitle({
+        segments: [segment("Interrupted image view:"), pathSegment],
+        decorations: [
+          statusDecoration(
+            "interrupted",
+            row.completedAt !== null ? row.completedAt - row.startedAt : null,
+          ),
+        ],
+      });
+    default:
+      return assertNever(row.status);
+  }
+}
+
 function delegationVerbForStatus(status: TimelineRowStatus): {
   text: string;
   shimmer: boolean;
@@ -986,6 +1031,8 @@ function mapWorkTitle(
         return mapWebSearchTitle(row);
       case "web-fetch":
         return mapWebFetchTitle(row);
+      case "image-view":
+        return mapImageViewTitle(row);
       case "delegation":
         return mapDelegationTitle(row);
       case "approval":

@@ -713,6 +713,7 @@ function interruptPendingToolMessage(
       return;
     case "web-search":
     case "web-fetch":
+    case "image-view":
       if (message.status === "pending") {
         message.status = "interrupted";
         message.completedAt = completedAt;
@@ -727,7 +728,8 @@ function isInterruptibleToolMessage(
   return (
     isProviderExecutionMessage(message) ||
     message.kind === "web-search" ||
-    message.kind === "web-fetch"
+    message.kind === "web-fetch" ||
+    message.kind === "image-view"
   );
 }
 

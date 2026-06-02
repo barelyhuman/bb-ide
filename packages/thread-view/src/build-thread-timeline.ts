@@ -633,6 +633,18 @@ function convertMessage(
           completedAt: message.completedAt,
         },
       ];
+    case "image-view":
+      return [
+        {
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
+          kind: "work",
+          workKind: "image-view",
+          status: message.status,
+          callId: message.callId,
+          path: message.path,
+          completedAt: message.completedAt,
+        },
+      ];
     case "delegation": {
       const base = buildTimelineRowBase(message, options.rowIdPrefix);
       return [

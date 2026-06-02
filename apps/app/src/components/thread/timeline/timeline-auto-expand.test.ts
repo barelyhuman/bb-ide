@@ -4,6 +4,7 @@ import {
   commandRow,
   conversationRow,
   delegationRow,
+  imageViewRow,
   systemRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import { collectTimelineAutoExpandedRowIds } from "./timeline-auto-expand";
@@ -99,6 +100,41 @@ describe("collectTimelineAutoExpandedRowIds", () => {
     });
 
     expect(Array.from(ids)).toEqual([]);
+  });
+
+  it("auto-expands a trailing image view row in an active scope", () => {
+    const rows = buildTimelineViewRows([
+      imageViewRow({
+        id: "image-view-1",
+        sourceSeqStart: 1,
+        status: "pending",
+      }),
+    ]);
+
+    const ids = collectTimelineAutoExpandedRowIds({
+      rows,
+      scopeActive: true,
+    });
+
+    expect(Array.from(ids)).toEqual(["image-view-1"]);
+  });
+
+  it("auto-expands a trailing completed image view row in an active scope", () => {
+    const rows = buildTimelineViewRows([
+      imageViewRow({
+        durationMs: 500,
+        id: "image-view-1",
+        sourceSeqStart: 1,
+        status: "completed",
+      }),
+    ]);
+
+    const ids = collectTimelineAutoExpandedRowIds({
+      rows,
+      scopeActive: true,
+    });
+
+    expect(Array.from(ids)).toEqual(["image-view-1"]);
   });
 
   it("does not auto-expand a displaced completed bundle in an active scope", () => {

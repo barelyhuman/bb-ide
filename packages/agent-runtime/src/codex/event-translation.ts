@@ -530,6 +530,15 @@ function translateCodexItem(
         ? { kind: "translated", item: normalized }
         : { kind: "unhandled" };
     }
+    case "imageView":
+      return {
+        kind: "translated",
+        item: {
+          type: "imageView",
+          id: parsedItem.id,
+          path: parsedItem.path,
+        },
+      };
     case "reasoning":
       return {
         kind: "translated",

@@ -307,6 +307,16 @@ export type TimelineWebFetchWorkRow = z.infer<
   typeof timelineWebFetchWorkRowSchema
 >;
 
+export const timelineImageViewWorkRowSchema = timelineWorkRowBaseSchema.extend({
+  workKind: z.literal("image-view"),
+  callId: z.string(),
+  path: z.string(),
+  completedAt: z.number().nullable(),
+});
+export type TimelineImageViewWorkRow = z.infer<
+  typeof timelineImageViewWorkRowSchema
+>;
+
 export const timelineFileEditApprovalLifecycleValues = [
   "waiting",
   "denied",
@@ -414,6 +424,7 @@ export type TimelineWorkRow =
   | TimelineFileChangeWorkRow
   | TimelineWebSearchWorkRow
   | TimelineWebFetchWorkRow
+  | TimelineImageViewWorkRow
   | TimelineApprovalWorkRow
   | TimelineQuestionWorkRow
   | TimelineDelegationWorkRow;
@@ -424,6 +435,7 @@ export const timelineWorkRowSchema: z.ZodType<TimelineWorkRow> = z.union([
   timelineFileChangeWorkRowSchema,
   timelineWebSearchWorkRowSchema,
   timelineWebFetchWorkRowSchema,
+  timelineImageViewWorkRowSchema,
   timelineApprovalWorkRowSchema,
   timelineQuestionWorkRowSchema,
   timelineDelegationWorkRowSchema,
