@@ -36,6 +36,10 @@ import {
   type RuntimeProviderProcess,
 } from "./runtime-provider-process.js";
 import {
+  filterSkillRootsForProvider,
+  normalizeSkillRoots,
+} from "./runtime-skill-roots.js";
+import {
   RuntimeThreadIdentityRegistry,
   stampThreadEventScope,
 } from "./runtime-thread-identity.js";
@@ -45,6 +49,7 @@ import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
+  AgentRuntimeSkillRoot,
 } from "./types.js";
 import { buildThreadShellEnvironment } from "./thread-shell-environment.js";
 import {
@@ -86,6 +91,7 @@ interface ThreadRuntimeConfig {
   options: AgentRuntimeExecutionOptions;
   projectId?: string;
   providerId: string;
+  skillRoots: readonly AgentRuntimeSkillRoot[];
   workspacePath: string;
 }
 
@@ -165,6 +171,9 @@ function createAgentRuntimeInternal(
 ): AgentRuntime {
   const additionalWorkspaceWriteRoots =
     options.additionalWorkspaceWriteRoots ?? [];
+  const skillRoots = normalizeSkillRoots({
+    skillRoots: options.skillRoots,
+  });
   let nextRequestId = 1;
   let nextCaptureId = 1;
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
@@ -205,6 +214,7 @@ function createAgentRuntimeInternal(
       turnReplayFilter.clearThread(threadId);
     },
     onStderr: options.onStderr,
+    skillRoots,
     workspacePath: options.workspacePath,
   });
   function requireProviderProcess(providerId: string): ProviderProcess {
@@ -213,6 +223,15 @@ function createAgentRuntimeInternal(
 
   function resolveProviderForThread(threadId: string): string {
     return threadIdentityRegistry.resolveProviderForThread(threadId);
+  }
+
+  function skillRootsForProvider(
+    providerId: string,
+  ): readonly AgentRuntimeSkillRoot[] {
+    return filterSkillRootsForProvider({
+      providerId,
+      skillRoots,
+    });
   }
 
   function resolveBbThreadIdForProcess(
@@ -345,6 +364,7 @@ function createAgentRuntimeInternal(
     }
 
     const proc = requireProviderProcess(currentConfig.providerId);
+    const providerSkillRoots = currentConfig.skillRoots;
     const envVars = buildThreadShellEnvironment({
       baseShellEnv: options.shellEnv,
       environmentId: currentConfig.environmentId,
@@ -365,6 +385,7 @@ function createAgentRuntimeInternal(
         envVars,
         execOpts: nextOptions,
         instructions: nextInstructions,
+        skillRoots: providerSkillRoots,
       }),
       dynamicTools: currentConfig.dynamicTools,
       disallowedTools: currentConfig.disallowedTools,
@@ -632,6 +653,7 @@ function createAgentRuntimeInternal(
       await runtime.ensureProvider({ providerId });
 
       const proc = requireProviderProcess(providerId);
+      const providerSkillRoots = skillRootsForProvider(providerId);
       assertProviderSupportsExecutionOptions({
         adapter: proc.adapter,
         options: execOpts,
@@ -652,6 +674,7 @@ function createAgentRuntimeInternal(
         options: execOpts,
         projectId,
         providerId,
+        skillRoots: providerSkillRoots,
         workspacePath: options.workspacePath,
       });
 
@@ -674,6 +697,7 @@ function createAgentRuntimeInternal(
           envVars,
           execOpts,
           instructions,
+          skillRoots: providerSkillRoots,
         }),
         dynamicTools,
         disallowedTools,
@@ -752,6 +776,7 @@ function createAgentRuntimeInternal(
       await runtime.ensureProvider({ providerId });
 
       const proc = requireProviderProcess(providerId);
+      const providerSkillRoots = skillRootsForProvider(providerId);
       assertProviderSupportsExecutionOptions({
         adapter: proc.adapter,
         options: execOpts,
@@ -772,6 +797,7 @@ function createAgentRuntimeInternal(
         options: execOpts,
         projectId,
         providerId,
+        skillRoots: providerSkillRoots,
         workspacePath: options.workspacePath,
       });
 
@@ -799,6 +825,7 @@ function createAgentRuntimeInternal(
           envVars,
           execOpts,
           instructions,
+          skillRoots: providerSkillRoots,
         }),
         dynamicTools,
         disallowedTools,

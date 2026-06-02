@@ -11,13 +11,14 @@ import type {
   ProviderAdapterFactory,
 } from "./provider-adapter.js";
 import { createProviderForId } from "./provider-registry.js";
+import { filterSkillRootsForProvider } from "./runtime-skill-roots.js";
 import {
   ignoredJsonRpcResultSchema,
   type PendingJsonRpcRequest,
   sendJsonRpcRequest,
 } from "./runtime-json-rpc.js";
 import type { RuntimeProviderIdentityState } from "./runtime-thread-identity.js";
-import type { AgentRuntimeOptions } from "./types.js";
+import type { AgentRuntimeOptions, AgentRuntimeSkillRoot } from "./types.js";
 
 export interface RuntimeProviderProcess {
   adapter: ProviderAdapter;
@@ -51,6 +52,7 @@ export interface RuntimeProviderProcessManagerArgs {
   ) => void;
   onProviderThreadDetached: (threadId: string) => void;
   onStderr: AgentRuntimeOptions["onStderr"];
+  skillRoots: readonly AgentRuntimeSkillRoot[];
   workspacePath: string;
 }
 
@@ -60,6 +62,17 @@ export interface EnsureRuntimeProviderArgs {
 
 export interface ShutdownRuntimeProviderArgs {
   providerId: string;
+  timeoutMs?: number;
+}
+
+interface CleanupFailedStartupArgs {
+  providerId: string;
+  providerProcess: RuntimeProviderProcess;
+  startupError: Error;
+}
+
+interface TerminateProviderProcessArgs {
+  providerProcess: RuntimeProviderProcess;
   timeoutMs?: number;
 }
 
@@ -91,24 +104,55 @@ export class RuntimeProviderProcessManager {
       const adapter = this.getAdapter(args.providerId);
       const providerProcess = this.spawnProvider(args.providerId, adapter);
 
-      if (providerProcess.child.exitCode !== null) {
-        this.processes.delete(args.providerId);
-        const stderr = providerProcess.stderrChunks.join("\n").slice(0, 500);
-        throw new Error(
-          `Provider "${args.providerId}" exited during startup with code ${providerProcess.child.exitCode}` +
-            (stderr ? `\nstderr: ${stderr}` : ""),
-        );
-      }
+      try {
+        if (providerProcess.child.exitCode !== null) {
+          const stderr = providerProcess.stderrChunks.join("\n").slice(0, 500);
+          throw new Error(
+            `Provider "${args.providerId}" exited during startup with code ${providerProcess.child.exitCode}` +
+              (stderr ? `\nstderr: ${stderr}` : ""),
+          );
+        }
 
-      const initCmd = adapter.buildCommandPlan({ type: "initialize" });
-      if (initCmd.kind === "request") {
-        await sendJsonRpcRequest({
-          child: providerProcess.child,
-          message: initCmd,
-          pending: providerProcess.pending,
-          getNextId: this.args.getNextRequestId,
-          resultSchema: ignoredJsonRpcResultSchema,
+        const initCmd = adapter.buildCommandPlan({ type: "initialize" });
+        if (initCmd.kind === "request") {
+          await sendJsonRpcRequest({
+            child: providerProcess.child,
+            message: initCmd,
+            pending: providerProcess.pending,
+            getNextId: this.args.getNextRequestId,
+            resultSchema: ignoredJsonRpcResultSchema,
+          });
+        }
+
+        const providerSkillRoots = filterSkillRootsForProvider({
+          providerId: args.providerId,
+          skillRoots: this.args.skillRoots,
         });
+        if (providerSkillRoots.length > 0) {
+          const skillRootsCmd = adapter.buildCommandPlan({
+            type: "skills/configure",
+            skillRoots: providerSkillRoots,
+          });
+          if (skillRootsCmd.kind === "request") {
+            await sendJsonRpcRequest({
+              child: providerProcess.child,
+              message: skillRootsCmd,
+              pending: providerProcess.pending,
+              getNextId: this.args.getNextRequestId,
+              resultSchema: ignoredJsonRpcResultSchema,
+            });
+          }
+        }
+      } catch (startupError) {
+        await this.cleanupFailedStartup({
+          providerId: args.providerId,
+          providerProcess,
+          startupError:
+            startupError instanceof Error
+              ? startupError
+              : new Error(String(startupError)),
+        });
+        throw startupError;
       }
     })();
 
@@ -145,21 +189,9 @@ export class RuntimeProviderProcessManager {
     }
 
     providerProcess.expectedShutdown = true;
-    await new Promise<void>((resolve) => {
-      const softTimer = setTimeout(() => {
-        if (providerProcess.child.exitCode === null) {
-          providerProcess.child.kill("SIGKILL");
-        }
-      }, args.timeoutMs ?? 5000);
-      const hardTimer = setTimeout(resolve, (args.timeoutMs ?? 5000) + 1000);
-
-      providerProcess.child.once("exit", () => {
-        clearTimeout(softTimer);
-        clearTimeout(hardTimer);
-        resolve();
-      });
-
-      providerProcess.child.kill("SIGTERM");
+    await this.terminateProviderProcess({
+      providerProcess,
+      timeoutMs: args.timeoutMs,
     });
   }
 
@@ -282,6 +314,52 @@ export class RuntimeProviderProcessManager {
 
     this.processes.set(providerId, providerProcess);
     return providerProcess;
+  }
+
+  private async cleanupFailedStartup(
+    args: CleanupFailedStartupArgs,
+  ): Promise<void> {
+    if (this.processes.get(args.providerId) !== args.providerProcess) {
+      return;
+    }
+
+    this.processes.delete(args.providerId);
+    args.providerProcess.expectedShutdown = true;
+    for (const [, pending] of args.providerProcess.pending) {
+      pending.reject(args.startupError);
+    }
+    args.providerProcess.pending.clear();
+    this.args.onProviderIdentityWaitersInterrupted(args.providerProcess);
+
+    await this.terminateProviderProcess({
+      providerProcess: args.providerProcess,
+    });
+  }
+
+  private async terminateProviderProcess(
+    args: TerminateProviderProcessArgs,
+  ): Promise<void> {
+    if (args.providerProcess.child.exitCode !== null) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      const timeoutMs = args.timeoutMs ?? 5000;
+      const softTimer = setTimeout(() => {
+        if (args.providerProcess.child.exitCode === null) {
+          args.providerProcess.child.kill("SIGKILL");
+        }
+      }, timeoutMs);
+      const hardTimer = setTimeout(resolve, timeoutMs + 1000);
+
+      args.providerProcess.child.once("exit", () => {
+        clearTimeout(softTimer);
+        clearTimeout(hardTimer);
+        resolve();
+      });
+
+      args.providerProcess.child.kill("SIGTERM");
+    });
   }
 
   private handleProviderProcessError(args: ProviderProcessErrorArgs): void {

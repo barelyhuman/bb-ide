@@ -308,6 +308,39 @@ describe("pi provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/start maps skill roots to Pi additional skill paths", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "t1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        ...fullProviderExecutionContext,
+        skillRoots: [
+          {
+            id: "bb-cli",
+            providerId: "pi",
+            skillDirectoryRootPath: "/tmp/bb-skills",
+          },
+          {
+            id: "repo-tools",
+            providerId: "pi",
+            skillDirectoryRootPath: "/tmp/repo-skills",
+          },
+        ],
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        additionalSkillPaths: ["/tmp/bb-skills", "/tmp/repo-skills"],
+      },
+    });
+  });
+
   it("buildCommand thread/start passes through model, env vars, append instructions, reasoning level, and dynamic tools", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommandPlan({

@@ -58,6 +58,7 @@ import type {
   ProviderInboundRequest,
   ProviderRuntimeEvent,
 } from "../runtime-json-rpc.js";
+import type { AgentRuntimeSkillRoot } from "../types.js";
 import { translateCodexEvent } from "./event-translation.js";
 import {
   buildCodexInteractiveResponse,
@@ -91,6 +92,14 @@ interface BuildCodexConfigArgs {
   gitWritableRoots: readonly string[];
   options?: ProviderExecutionContext;
   threadId: string;
+}
+
+interface CodexSkillsExtraRootsSetParams {
+  extraRoots: string[];
+}
+
+interface CodexSkillRootPathArgs {
+  skillRoot: AgentRuntimeSkillRoot;
 }
 
 interface RealpathContainedDirectoryArgs {
@@ -195,6 +204,15 @@ function resolveCodexInstructionOverrides(
     return { baseInstructions: instructions };
   }
   return { developerInstructions: instructions };
+}
+
+function codexSkillRootPath(args: CodexSkillRootPathArgs): string {
+  if (args.skillRoot.providerId !== "codex") {
+    throw new Error(
+      `Codex cannot configure ${args.skillRoot.providerId} skill root "${args.skillRoot.id}".`,
+    );
+  }
+  return args.skillRoot.skillDirectoryRootPath;
 }
 
 function toWorkspaceWriteCodexSandboxPolicy(
@@ -1338,6 +1356,18 @@ export function createCodexProviderAdapter(
             method: "model/list",
             params: {},
           };
+        case "skills/configure": {
+          const params: CodexSkillsExtraRootsSetParams = {
+            extraRoots: command.skillRoots.map((skillRoot) =>
+              codexSkillRootPath({ skillRoot }),
+            ),
+          };
+          return {
+            kind: "request",
+            method: "skills/extraRoots/set",
+            params,
+          };
+        }
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
           const preparedGitRoots = prepareWorkspaceWriteGitRoots({ command });

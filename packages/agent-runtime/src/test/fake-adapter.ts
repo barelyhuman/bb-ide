@@ -85,6 +85,12 @@ function buildCommandPlan(command: AdapterCommand): ProviderCommandPlan {
       return { kind: "request", method: "initialize", params: {} };
     case "model/list":
       return { kind: "request", method: "model/list", params: {} };
+    case "skills/configure":
+      return {
+        kind: "request",
+        method: "skills/configure",
+        params: { skillRoots: command.skillRoots },
+      };
     case "thread/start":
       return {
         kind: "request",

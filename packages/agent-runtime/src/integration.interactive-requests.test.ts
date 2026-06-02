@@ -25,7 +25,6 @@ import {
   createToken,
   expectWriteApprovalRequest,
   getAgentText,
-  getFirstNonEmptyLine,
   getStreamedText,
   getThreadText,
   hasDeniedCommandExecution,
@@ -123,8 +122,13 @@ describe("interactive request scenarios", () => {
   it.concurrent(
     "routes Claude Read prompts as semantic permission-grant approvals",
     async () => {
-      const hostsPath = "/etc/hosts";
-      const expectedLine = getFirstNonEmptyLine(hostsPath);
+      const outsideDir = mkdtempSync(join(tmpdir(), "bb-claude-read-"));
+      const filePath = join(
+        outsideDir,
+        createTempFileName("claude-read-approval"),
+      );
+      const firstLineToken = createToken("CLAUDE_READ_APPROVED");
+      writeFileSync(filePath, `${firstLineToken}\nsecond line\n`);
       const ctx = createTestRuntime("claude-code", {
         onInteractiveRequest: async (request) => {
           if (
@@ -166,7 +170,9 @@ describe("interactive request scenarios", () => {
           input: [
             {
               type: "text",
-              text: "Use the Read tool to read /etc/hosts, then reply with exactly the first non-empty line from the file and nothing else.",
+              text:
+                `Use the Read tool to read ${filePath}, ` +
+                "then reply with exactly the first line from the file and nothing else.",
             },
           ],
           options,
@@ -196,10 +202,11 @@ describe("interactive request scenarios", () => {
         });
 
         const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-        expect(text).toContain(expectedLine);
+        expect(text).toContain(firstLineToken);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
+        rmSync(outsideDir, { recursive: true, force: true });
       }
     },
     60_000,

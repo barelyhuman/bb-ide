@@ -17,6 +17,30 @@ export type AgentRuntimeShellEnvironment = Record<string, string>;
 
 export type AgentRuntimeExecutionOptions = RuntimeThreadExecutionOptions;
 
+export interface AgentRuntimeCodexSkillRoot {
+  id: string;
+  providerId: "codex";
+  skillDirectoryRootPath: string;
+}
+
+export interface AgentRuntimeClaudeCodeSkillRoot {
+  id: string;
+  providerId: "claude-code";
+  localPluginPath: string;
+  skillNames?: readonly string[];
+}
+
+export interface AgentRuntimePiSkillRoot {
+  id: string;
+  providerId: "pi";
+  skillDirectoryRootPath: string;
+}
+
+export type AgentRuntimeSkillRoot =
+  | AgentRuntimeClaudeCodeSkillRoot
+  | AgentRuntimeCodexSkillRoot
+  | AgentRuntimePiSkillRoot;
+
 export interface AgentRuntimeProcessExitInfo {
   providerId: string;
   threadIds: string[];
@@ -48,6 +72,9 @@ export interface AgentRuntimeOptions {
 
   /** Optional directory containing bundled provider bridges. */
   bridgeBundleDir?: string;
+
+  /** Optional caller-provided skill roots to expose to provider sessions. */
+  skillRoots?: readonly AgentRuntimeSkillRoot[];
 
   /** Called when a provider emits a translated event.
    *  Every event has `threadId` (bb ID) and `providerThreadId` (provider's internal ID). */

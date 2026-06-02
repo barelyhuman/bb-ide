@@ -19,7 +19,9 @@ export interface BuildSessionOptionsArgs {
   model?: string;
   permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
+  plugins?: Options["plugins"];
   reasoningLevel?: ReasoningLevel;
+  skills?: Options["skills"];
 }
 
 interface ResolveExecutableOnPathArgs {
@@ -216,6 +218,8 @@ export function buildSessionOptions(
     ...(pathToClaudeCodeExecutable
       ? { pathToClaudeCodeExecutable }
       : {}),
+    ...(params.plugins ? { plugins: params.plugins } : {}),
+    ...(params.skills ? { skills: params.skills } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(hooks ? { hooks } : {}),
     ...(additionalDirectories.length > 0

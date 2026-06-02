@@ -73,6 +73,7 @@ import type {
   DecodedInteractiveRequest,
   DecodedToolCallRequest,
   ProviderCommandPlan,
+  ProviderExecutionContext,
   ProviderTranslationContext,
   ProviderAdapter,
   ProviderAdapterFactoryOptions,
@@ -84,6 +85,7 @@ import {
   type ProviderRuntimeEvent,
   ProviderResponseEncodeError,
 } from "../runtime-json-rpc.js";
+import type { AgentRuntimeSkillRoot } from "../types.js";
 import {
   buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
@@ -139,12 +141,63 @@ interface AdditionalWorkspaceWriteRootsParams {
   additionalWorkspaceWriteRoots: string[];
 }
 
+interface ClaudeLocalPluginConfig {
+  type: "local";
+  path: string;
+}
+
+interface ClaudeSkillConfigParams {
+  plugins: ClaudeLocalPluginConfig[];
+  skills?: string[];
+}
+
+interface ClaudeSkillConfigEntryArgs {
+  skillRoot: AgentRuntimeSkillRoot;
+}
+
 function buildAdditionalWorkspaceWriteRootsParams(
   roots: readonly string[],
 ): AdditionalWorkspaceWriteRootsParams | undefined {
   return roots.length > 0
     ? { additionalWorkspaceWriteRoots: [...roots] }
     : undefined;
+}
+
+function buildClaudeSkillConfigEntry(
+  args: ClaudeSkillConfigEntryArgs,
+): ClaudeLocalPluginConfig {
+  if (args.skillRoot.providerId !== "claude-code") {
+    throw new Error(
+      `Claude Code cannot configure ${args.skillRoot.providerId} skill root "${args.skillRoot.id}".`,
+    );
+  }
+  return {
+    type: "local",
+    path: args.skillRoot.localPluginPath,
+  };
+}
+
+function buildClaudeSkillConfigParams(
+  skillRoots: ProviderExecutionContext["skillRoots"],
+): ClaudeSkillConfigParams | undefined {
+  if (!skillRoots || skillRoots.length === 0) {
+    return undefined;
+  }
+
+  const plugins: ClaudeLocalPluginConfig[] = [];
+  const skillNames: string[] = [];
+  for (const skillRoot of skillRoots) {
+    plugins.push(buildClaudeSkillConfigEntry({ skillRoot }));
+    if (skillRoot.providerId === "claude-code" && skillRoot.skillNames) {
+      skillNames.push(...skillRoot.skillNames);
+    }
+  }
+  const distinctSkillNames = [...new Set(skillNames)];
+
+  return {
+    plugins,
+    ...(distinctSkillNames.length > 0 ? { skills: distinctSkillNames } : {}),
+  };
 }
 
 function parseClaudeBashCommand(input: unknown): ClaudeBashCommand | null {
@@ -981,6 +1034,11 @@ export function createClaudeCodeProviderAdapter(
             method: "model/list",
             params: {},
           };
+        case "skills/configure":
+          return {
+            kind: "noop",
+            reason: "Claude Code skill roots are configured per session",
+          };
         case "thread/start": {
           finishOpenProviderTurn({
             registry: turnState,
@@ -1008,6 +1066,9 @@ export function createClaudeCodeProviderAdapter(
                   additionalWorkspaceWriteRoots,
                 )
               : undefined;
+          const skillConfig = buildClaudeSkillConfigParams(
+            command.options.skillRoots,
+          );
           return {
             kind: "request",
             method: "thread/start",
@@ -1021,6 +1082,7 @@ export function createClaudeCodeProviderAdapter(
               ...(additionalWorkspaceWriteRootsParams
                 ? additionalWorkspaceWriteRootsParams
                 : {}),
+              ...(skillConfig ? skillConfig : {}),
               ...(config ? { config } : {}),
               ...(command.options?.model
                 ? { model: command.options.model }
@@ -1064,6 +1126,9 @@ export function createClaudeCodeProviderAdapter(
                   additionalWorkspaceWriteRoots,
                 )
               : undefined;
+          const skillConfig = buildClaudeSkillConfigParams(
+            command.options.skillRoots,
+          );
           return {
             kind: "request",
             method: "thread/resume",
@@ -1078,6 +1143,7 @@ export function createClaudeCodeProviderAdapter(
               ...(additionalWorkspaceWriteRootsParams
                 ? additionalWorkspaceWriteRootsParams
                 : {}),
+              ...(skillConfig ? skillConfig : {}),
               ...(resumeConfig ? { config: resumeConfig } : {}),
               ...(command.options?.model
                 ? { model: command.options.model }

@@ -263,6 +263,25 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("buildCommand skills/configure is handled through thread options", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(
+      adapter.buildCommandPlan({
+        type: "skills/configure",
+        skillRoots: [
+          {
+            id: "bb-cli",
+            providerId: "claude-code",
+            localPluginPath: "/tmp/bb-skills",
+          },
+        ],
+      }),
+    ).toEqual({
+      kind: "noop",
+      reason: "Claude Code skill roots are configured per session",
+    });
+  });
+
   it("buildCommand thread/start routes threadId from command", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommandPlan({
@@ -278,6 +297,41 @@ describe("claude-code provider adapter", () => {
       permissionMode: "bypassPermissions",
       permissionEscalation: null,
       cwd: "/tmp/worktree",
+    });
+  });
+
+  it("buildCommand thread/start maps skill roots to Claude local plugins and skills", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        ...fullProviderExecutionContext,
+        skillRoots: [
+          {
+            id: "bb-cli",
+            providerId: "claude-code",
+            localPluginPath: "/tmp/bb-skills",
+            skillNames: ["bb-cli"],
+          },
+          {
+            id: "repo-tools",
+            providerId: "claude-code",
+            localPluginPath: "/tmp/repo-skills",
+          },
+        ],
+      },
+    });
+
+    expect(cmd?.params).toMatchObject({
+      plugins: [
+        { type: "local", path: "/tmp/bb-skills" },
+        { type: "local", path: "/tmp/repo-skills" },
+      ],
+      skills: ["bb-cli"],
     });
   });
 

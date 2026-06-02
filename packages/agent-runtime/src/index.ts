@@ -6,9 +6,13 @@ export {
 } from "./provider-registry.js";
 export type {
   AgentRuntime,
+  AgentRuntimeClaudeCodeSkillRoot,
+  AgentRuntimeCodexSkillRoot,
   AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
+  AgentRuntimePiSkillRoot,
   AgentRuntimeProcessExitInfo,
+  AgentRuntimeSkillRoot,
   EnsureProviderArgs,
   ListModelsArgs,
   RenameThreadArgs,

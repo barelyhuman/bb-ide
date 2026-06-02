@@ -23,6 +23,7 @@ export interface PiSdkSessionOptions {
   cwd: string;
   model?: string;
   thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+  additionalSkillPaths?: readonly string[];
   shellEnvOverrides?: ShellEnvOverrides;
   customTools?: ToolDefinition[];
   sessionFilePath?: string;
@@ -212,20 +213,28 @@ export class PiSdkSession {
     };
 
     const appendSystemPrompt = this.options.appendSystemPrompt?.trim();
+    const additionalSkillPaths = this.options.additionalSkillPaths ?? [];
 
     // Pass custom prompt overrides through ResourceLoader. systemPrompt is the
     // replacement path; appendSystemPrompt layers BB instructions on top of Pi's
     // normal discovered APPEND_SYSTEM.md prompt. The two are mutually exclusive
     // in BB's bridge contract and asserted here for direct SDK-session callers.
-    if (this.options.systemPrompt || appendSystemPrompt) {
+    if (
+      this.options.systemPrompt ||
+      appendSystemPrompt ||
+      additionalSkillPaths.length > 0
+    ) {
       const resourceLoader = new DefaultResourceLoader({
         cwd: this.options.cwd,
         agentDir: getAgentDir(),
+        ...(additionalSkillPaths.length > 0
+          ? { additionalSkillPaths: [...additionalSkillPaths] }
+          : {}),
         ...(this.options.systemPrompt
           ? {
               systemPrompt: this.options.systemPrompt,
               noExtensions: true,
-              noSkills: true,
+              ...(additionalSkillPaths.length === 0 ? { noSkills: true } : {}),
               noPromptTemplates: true,
               noThemes: true,
             }

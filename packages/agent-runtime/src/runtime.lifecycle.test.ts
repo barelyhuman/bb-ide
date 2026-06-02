@@ -231,6 +231,123 @@ rl.on("line", (line) => {
       await runtime.shutdown();
     });
 
+    it("does not configure provider skills unless skill roots are supplied", async () => {
+      const recordedCommands: AdapterCommand[] = [];
+      const runtime = createAgentRuntimeWithAdapters({
+        workspacePath: tmpDir,
+        onEvent: () => undefined,
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        }),
+        adapterFactory: () =>
+          createRecordingAdapter({ recordedCommands, scriptPath }),
+      });
+
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t1",
+        projectId: "p1",
+        providerId: "fake",
+        options: fullRuntimeOptions,
+      });
+
+      expect(
+        recordedCommands.some((command) => command.type === "skills/configure"),
+      ).toBe(false);
+
+      await runtime.shutdown();
+    });
+
+    it("configures provider skills from runtime skill roots before thread start", async () => {
+      const recordedCommands: AdapterCommand[] = [];
+      const skillRootPath = join(tmpDir, "skill-root");
+      const runtime = createAgentRuntimeWithAdapters({
+        workspacePath: tmpDir,
+        skillRoots: [
+          {
+            id: "bb-cli",
+            providerId: "codex",
+            skillDirectoryRootPath: skillRootPath,
+          },
+        ],
+        onEvent: () => undefined,
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        }),
+        adapterFactory: () =>
+          createRecordingAdapter({ recordedCommands, scriptPath }),
+      });
+
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t1",
+        projectId: "p1",
+        providerId: "codex",
+        options: fullRuntimeOptions,
+      });
+
+      const configureCommand = recordedCommands.find(
+        (command) => command.type === "skills/configure",
+      );
+      expect(configureCommand?.type).toBe("skills/configure");
+      if (!configureCommand || configureCommand.type !== "skills/configure") {
+        throw new Error("Expected skills/configure command");
+      }
+      expect(configureCommand.skillRoots).toEqual([
+        {
+          id: "bb-cli",
+          providerId: "codex",
+          skillDirectoryRootPath: skillRootPath,
+        },
+      ]);
+      expect(
+        recordedCommands.findIndex(
+          (command) => command.type === "skills/configure",
+        ),
+      ).toBeLessThan(
+        recordedCommands.findIndex((command) => command.type === "thread/start"),
+      );
+
+      await runtime.shutdown();
+    });
+
+    it("does not configure skill roots filtered out for the provider", async () => {
+      const recordedCommands: AdapterCommand[] = [];
+      const runtime = createAgentRuntimeWithAdapters({
+        workspacePath: tmpDir,
+        skillRoots: [
+          {
+            id: "bb-cli",
+            providerId: "pi",
+            skillDirectoryRootPath: join(tmpDir, "skill-root"),
+          },
+        ],
+        onEvent: () => undefined,
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        }),
+        adapterFactory: () =>
+          createRecordingAdapter({ recordedCommands, scriptPath }),
+      });
+
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t1",
+        projectId: "p1",
+        providerId: "codex",
+        options: fullRuntimeOptions,
+      });
+
+      expect(
+        recordedCommands.some((command) => command.type === "skills/configure"),
+      ).toBe(false);
+
+      await runtime.shutdown();
+    });
+
     it("preserves merged shell env when reconfiguring a thread", async () => {
       const recordedCommands: AdapterCommand[] = [];
       const runtime = createAgentRuntimeWithAdapters({

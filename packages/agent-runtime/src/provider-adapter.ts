@@ -16,6 +16,7 @@ import type {
   ProviderInboundRequest,
   ProviderRuntimeEvent,
 } from "./runtime-json-rpc.js";
+import type { AgentRuntimeSkillRoot } from "./types.js";
 
 export interface ProviderTranslationContext {
   threadId?: string;
@@ -105,10 +106,15 @@ export type ProviderExecutionContext = {
   reasoningLevel?: ReasoningLevel;
   instructions?: string;
   envVars?: Record<string, string>;
+  skillRoots?: readonly AgentRuntimeSkillRoot[];
 } & RuntimePermissionPolicy;
 
 export type AdapterCommand =
   | { type: "initialize" }
+  | {
+      type: "skills/configure";
+      skillRoots: readonly AgentRuntimeSkillRoot[];
+    }
   | { type: "model/list" }
   | {
       type: "thread/start";

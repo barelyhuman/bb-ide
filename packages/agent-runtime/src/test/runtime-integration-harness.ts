@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -29,7 +28,11 @@ import { resolvePreferredTestModel } from "@bb/test-helpers";
 import type { AgentRuntimeCaptureEntry } from "../capture-types.js";
 import { createAgentRuntime } from "../runtime.js";
 import { PI_BRIDGE_SESSION_DIR_ENV } from "../pi/bridge/session-paths.js";
-import type { AgentRuntime, AgentRuntimeExecutionOptions } from "../types.js";
+import type {
+  AgentRuntime,
+  AgentRuntimeExecutionOptions,
+  AgentRuntimeSkillRoot,
+} from "../types.js";
 import {
   waitForRuntimeConditionUnsafe,
   waitForThreadTurnCompleted as waitForSharedThreadTurnCompleted,
@@ -786,6 +789,7 @@ export type TestInteractiveRequestHandler = (
 export interface CreateTestRuntimeOptions {
   onInteractiveRequest?: TestInteractiveRequestHandler;
   onToolCall?: TestToolCallHandler;
+  skillRoots?: readonly AgentRuntimeSkillRoot[];
   workspacePath?: string;
 }
 
@@ -866,6 +870,7 @@ export function createTestRuntime(
 
   const runtime = createAgentRuntime({
     env: createRuntimeProcessEnv({ providerId, tmpDir }),
+    skillRoots: opts?.skillRoots,
     workspacePath: tmpDir,
     onEvent: (e) => events.push(e),
     onCapture: (entry) => captures.push(entry),
@@ -949,14 +954,4 @@ export function expectWriteApprovalRequest(
       requests.map((request) => request.payload),
     )}`,
   ).toBe(true);
-}
-
-export function getFirstNonEmptyLine(path: string): string {
-  const line = readFileSync(path, "utf8")
-    .split(/\r?\n/u)
-    .find((value) => value.trim().length > 0);
-  if (!line) {
-    throw new Error(`Expected a non-empty line in ${path}`);
-  }
-  return line;
 }

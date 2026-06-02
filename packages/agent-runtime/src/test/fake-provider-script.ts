@@ -517,6 +517,15 @@ function handleMessage(message: JsonRecord): void {
     return;
   }
 
+  if (method === "skills/configure") {
+    send({
+      jsonrpc: "2.0",
+      id: getJsonRpcId(message.id) ?? 0,
+      result: { ok: true },
+    });
+    return;
+  }
+
   if (method === "thread/start") {
     startOrResumeThread(message, "start");
     return;

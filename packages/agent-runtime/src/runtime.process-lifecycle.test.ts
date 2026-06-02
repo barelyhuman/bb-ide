@@ -1,4 +1,4 @@
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +58,7 @@ describe("createAgentRuntime process lifecycle", () => {
       onProviderThreadDetached: (threadId) =>
         identityRegistry.clearThread(threadId),
       onStderr: args.onStderr,
+      skillRoots: [],
       workspacePath: args.workspacePath,
     });
   }
@@ -413,6 +414,118 @@ describe("createAgentRuntime process lifecycle", () => {
       runtime.ensureProvider({ providerId: "fake" }),
     ).rejects.toThrow(/exited/i);
     await runtime.shutdown();
+  });
+
+  it("removes the cached provider and retries when startup skill configuration fails", async () => {
+    const attemptsPath = join(tmpDir, "startup-config-attempts.txt");
+    const logPath = join(tmpDir, "startup-config-log.txt");
+    const startupConfigScript = join(tmpDir, "startup-config-failure.cjs");
+    writeFileSync(
+      startupConfigScript,
+      `const fs = require("fs");
+      const readline = require("readline");
+      const attemptsPath = process.argv[2];
+      const logPath = process.argv[3];
+      const previousAttempts = fs.existsSync(attemptsPath)
+        ? Number(fs.readFileSync(attemptsPath, "utf8"))
+        : 0;
+      const attempt = previousAttempts + 1;
+      fs.writeFileSync(attemptsPath, String(attempt));
+      fs.appendFileSync(logPath, "spawn:" + attempt + "\\n");
+      setInterval(() => {}, 1000);
+      const rl = readline.createInterface({ input: process.stdin });
+      rl.on("line", (line) => {
+        const msg = JSON.parse(line);
+        if (msg.method === "initialize") {
+          process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n");
+          return;
+        }
+        if (msg.method === "skills/configure") {
+          fs.appendFileSync(logPath, "configure:" + attempt + "\\n");
+          if (attempt === 1) {
+            process.stdout.write(JSON.stringify({
+              jsonrpc: "2.0",
+              id: msg.id,
+              error: { code: -32000, message: "configure failed" }
+            }) + "\\n");
+            return;
+          }
+          process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n");
+          return;
+        }
+        if (msg.method === "thread/start") {
+          const threadId = msg.params?.threadId ?? "";
+          const providerThreadId = "provider-thread-" + attempt;
+          fs.appendFileSync(logPath, "thread-start:" + attempt + ":" + threadId + "\\n");
+          process.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            id: msg.id,
+            result: { providerThreadId }
+          }) + "\\n");
+          process.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            method: "thread/identity",
+            params: { threadId, providerThreadId }
+          }) + "\\n");
+        }
+      });`,
+    );
+    const baseAdapter = createFakeAdapter(scriptPath);
+    const adapter: ProviderAdapter = {
+      ...baseAdapter,
+      process: {
+        command: "node",
+        args: [startupConfigScript, attemptsPath, logPath],
+      },
+    };
+    const runtime = createAgentRuntimeWithAdapters({
+      workspacePath: tmpDir,
+      skillRoots: [
+        {
+          id: "bb-cli",
+          providerId: "codex",
+          skillDirectoryRootPath: join(tmpDir, "skill-root"),
+        },
+      ],
+      onEvent: () => {},
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => adapter,
+    });
+
+    try {
+      await expect(
+        runtime.startThread({
+          environmentId: "env-1",
+          threadId: "t1",
+          projectId: "p1",
+          providerId: "codex",
+          options: fullRuntimeOptions,
+        }),
+      ).rejects.toThrow("configure failed");
+      expect(runtime.listRunningProviders()).not.toContain("codex");
+
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t2",
+        projectId: "p1",
+        providerId: "codex",
+        options: fullRuntimeOptions,
+      });
+
+      expect(runtime.listRunningProviders()).toContain("codex");
+      expect(readFileSync(logPath, "utf8").trim().split("\n")).toEqual([
+        "spawn:1",
+        "configure:1",
+        "spawn:2",
+        "configure:2",
+        "thread-start:2:t2",
+      ]);
+    } finally {
+      await runtime.shutdown();
+    }
   });
 
   it("fails fast on runTurn after provider has crashed", async () => {

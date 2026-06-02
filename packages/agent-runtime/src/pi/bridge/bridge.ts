@@ -41,6 +41,7 @@ interface PiInstructionOverrideParams {
 }
 
 interface BuildPiSessionOptionsParams extends PiInstructionOverrideParams {
+  additionalSkillPaths?: readonly string[];
   cwd: string;
   model?: string;
   sessionPath?: string;
@@ -70,11 +71,13 @@ const piInstructionOverrideSchemaOptions = {
 const piReasoningLevelValues = ["low", "medium", "high", "xhigh"] as const;
 const piReasoningLevelSchema = z.enum(piReasoningLevelValues);
 type PiReasoningLevel = z.infer<typeof piReasoningLevelSchema>;
+const piAdditionalSkillPathsSchema = z.array(z.string()).optional();
 
 const piThreadStartParamsSchema = z
   .object({
     threadId: z.string().optional(),
     cwd: z.string(),
+    additionalSkillPaths: piAdditionalSkillPathsSchema,
     baseInstructions: z.string().optional(),
     appendSystemPrompt: z.string().optional(),
     config: z.record(z.string(), z.unknown()).optional(),
@@ -101,6 +104,7 @@ const piThreadResumeParamsSchema = z
     threadId: z.string(),
     cwd: z.string(),
     sessionPath: z.string().optional(),
+    additionalSkillPaths: piAdditionalSkillPathsSchema,
     baseInstructions: z.string().optional(),
     appendSystemPrompt: z.string().optional(),
     config: z.record(z.string(), z.unknown()).optional(),
@@ -487,6 +491,9 @@ function buildSessionOptions(
     sessionFilePath,
     systemPrompt: args.params.baseInstructions,
     appendSystemPrompt: args.params.appendSystemPrompt,
+    ...(args.params.additionalSkillPaths
+      ? { additionalSkillPaths: args.params.additionalSkillPaths }
+      : {}),
     ...(shellEnvOverrides ? { shellEnvOverrides } : {}),
     ...(args.params.thinkingLevel
       ? { thinkingLevel: args.params.thinkingLevel }
@@ -552,6 +559,9 @@ function buildPiSessionParams(
   params: PiSessionParams,
 ): BuildPiSessionOptionsParams {
   return {
+    ...(params.additionalSkillPaths && params.additionalSkillPaths.length > 0
+      ? { additionalSkillPaths: [...params.additionalSkillPaths] }
+      : {}),
     cwd: params.cwd,
     ...(params.model ? { model: params.model } : {}),
     ...("sessionPath" in params && params.sessionPath

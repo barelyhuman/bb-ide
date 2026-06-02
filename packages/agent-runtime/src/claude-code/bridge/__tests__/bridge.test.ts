@@ -544,6 +544,26 @@ describe("bridge", () => {
     });
   });
 
+  it("passes Claude local plugins and skills through to the session", () => {
+    const options = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+        plugins: [{ type: "local", path: "/tmp/bb-skills" }],
+        skills: ["bb-cli"],
+      },
+      {},
+    );
+
+    expect(options.plugins).toEqual([
+      { type: "local", path: "/tmp/bb-skills" },
+    ]);
+    expect(options.skills).toEqual(["bb-cli"]);
+  });
+
   it("passes the resolved Claude permission mode through to the session", () => {
     const options = buildSessionOptions(
       {

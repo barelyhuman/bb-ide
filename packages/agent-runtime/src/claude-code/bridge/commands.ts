@@ -18,6 +18,15 @@ const bridgeAdditionalWorkspaceWriteRootsSchema = z
   .array(z.string())
   .optional();
 
+const bridgeClaudeLocalPluginSchema = z.object({
+  type: z.literal("local"),
+  path: z.string(),
+});
+const bridgeClaudePluginsSchema = z
+  .array(bridgeClaudeLocalPluginSchema)
+  .optional();
+const bridgeClaudeSkillsSchema = z.array(z.string()).optional();
+
 const dynamicToolSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -42,6 +51,8 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       cwd: z.string(),
       baseInstructions: z.string(),
       additionalWorkspaceWriteRoots: bridgeAdditionalWorkspaceWriteRootsSchema,
+      plugins: bridgeClaudePluginsSchema,
+      skills: bridgeClaudeSkillsSchema,
       permissionMode: claudePermissionModeSchema,
       permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),
@@ -60,6 +71,8 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
       additionalWorkspaceWriteRoots: bridgeAdditionalWorkspaceWriteRootsSchema,
+      plugins: bridgeClaudePluginsSchema,
+      skills: bridgeClaudeSkillsSchema,
       permissionMode: claudePermissionModeSchema,
       permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),

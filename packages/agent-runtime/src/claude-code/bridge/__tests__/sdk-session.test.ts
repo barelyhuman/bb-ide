@@ -170,6 +170,31 @@ describe("SdkSession", () => {
     );
   });
 
+  it("forwards local plugins and enabled skills to the SDK when configured", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        plugins: [{ type: "local", path: "/tmp/bb-skills" }],
+        skills: ["bb-cli"],
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          plugins: [{ type: "local", path: "/tmp/bb-skills" }],
+          skills: ["bb-cli"],
+        }),
+      }),
+    );
+  });
+
   it("mirrors the Claude CLI settings cascade so user, project, and local settings all load", () => {
     const onMessage = vi.fn();
     const onDone = vi.fn();

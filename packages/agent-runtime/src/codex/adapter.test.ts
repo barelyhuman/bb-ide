@@ -493,6 +493,33 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand skills/configure maps roots to the codex extra roots protocol", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "skills/configure",
+      skillRoots: [
+        {
+          id: "bb-cli",
+          providerId: "codex",
+          skillDirectoryRootPath: "/tmp/bb-skills",
+        },
+        {
+          id: "repo-tools",
+          providerId: "codex",
+          skillDirectoryRootPath: "/tmp/repo-skills",
+        },
+      ],
+    });
+
+    expect(cmd).toEqual({
+      kind: "request",
+      method: "skills/extraRoots/set",
+      params: {
+        extraRoots: ["/tmp/bb-skills", "/tmp/repo-skills"],
+      },
+    });
+  });
+
   it("buildCommand thread/start defaults to full permissions", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({

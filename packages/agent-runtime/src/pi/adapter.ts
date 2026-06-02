@@ -76,6 +76,7 @@ import type {
   ProviderInboundRequest,
   ProviderRuntimeEvent,
 } from "../runtime-json-rpc.js";
+import type { AgentRuntimeSkillRoot } from "../types.js";
 import { toCanonicalPiModelId } from "./model-list.js";
 import { piVisibilityMetadata } from "./visibility.js";
 
@@ -559,6 +560,35 @@ function translatePiToolResultItem(
         input.parentToolCallId,
       );
   }
+}
+
+interface PiAdditionalSkillPathsParams {
+  additionalSkillPaths: string[];
+}
+
+interface PiSkillRootPathArgs {
+  skillRoot: AgentRuntimeSkillRoot;
+}
+
+function piSkillRootPath(args: PiSkillRootPathArgs): string {
+  if (args.skillRoot.providerId !== "pi") {
+    throw new Error(
+      `Pi cannot configure ${args.skillRoot.providerId} skill root "${args.skillRoot.id}".`,
+    );
+  }
+  return args.skillRoot.skillDirectoryRootPath;
+}
+
+function buildPiAdditionalSkillPathsParams(
+  skillRoots: ProviderExecutionContext["skillRoots"],
+): PiAdditionalSkillPathsParams | undefined {
+  return skillRoots && skillRoots.length > 0
+    ? {
+        additionalSkillPaths: skillRoots.map((skillRoot) =>
+          piSkillRootPath({ skillRoot }),
+        ),
+      }
+    : undefined;
 }
 
 function buildPiConfig(
@@ -1227,6 +1257,11 @@ export function createPiProviderAdapter(
             method: "model/list",
             params: {},
           };
+        case "skills/configure":
+          return {
+            kind: "noop",
+            reason: "Pi skill paths are configured per session",
+          };
         case "thread/start": {
           finishOpenProviderTurn({
             registry: turnState,
@@ -1241,6 +1276,9 @@ export function createPiProviderAdapter(
             description: t.description,
             inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
           }));
+          const additionalSkillPathsParams = buildPiAdditionalSkillPathsParams(
+            command.options.skillRoots,
+          );
           return {
             kind: "request",
             method: "thread/start",
@@ -1248,6 +1286,7 @@ export function createPiProviderAdapter(
               threadId: command.threadId,
               cwd: command.cwd,
               ...resolvePiInstructionOverrides(command),
+              ...(additionalSkillPathsParams ? additionalSkillPathsParams : {}),
               ...(config ? { config } : {}),
               ...(command.options?.model
                 ? { model: command.options.model }
@@ -1276,6 +1315,9 @@ export function createPiProviderAdapter(
             description: t.description,
             inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
           }));
+          const additionalSkillPathsParams = buildPiAdditionalSkillPathsParams(
+            command.options.skillRoots,
+          );
           return {
             kind: "request",
             method: "thread/resume",
@@ -1283,6 +1325,7 @@ export function createPiProviderAdapter(
               threadId,
               cwd: command.cwd,
               ...resolvePiInstructionOverrides(command),
+              ...(additionalSkillPathsParams ? additionalSkillPathsParams : {}),
               ...(config ? { config } : {}),
               ...(command.options?.model
                 ? { model: command.options.model }

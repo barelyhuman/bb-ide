@@ -5,6 +5,7 @@ import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 type ControlledPiAgentSessionListener = (event: AgentSessionEvent) => void;
 
 interface MockPiResourceLoaderOptions {
+  additionalSkillPaths?: readonly string[];
   cwd?: string;
   agentDir?: string;
   systemPrompt?: string;
@@ -184,6 +185,32 @@ describe("pi bridge", () => {
           "Project append instructions",
         ]),
       ).toEqual(["Project append instructions", "BB append instructions"]);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("passes additional skill paths through Pi's resource loader path", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+
+    try {
+      bridge.sendRequest(5, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-skills",
+        additionalSkillPaths: ["/tmp/bb-skills", "/tmp/repo-skills"],
+      });
+      await bridge.waitForResponse(5);
+
+      expect(mockResourceLoaders).toHaveLength(1);
+      expect(mockResourceLoaders[0]?.options).toMatchObject({
+        cwd: "/tmp/worktree",
+        agentDir: "/tmp/pi-agent",
+        additionalSkillPaths: ["/tmp/bb-skills", "/tmp/repo-skills"],
+      });
+      expect(mockResourceLoaders[0]?.options.noSkills).toBeUndefined();
     } finally {
       bridge.restore();
     }
