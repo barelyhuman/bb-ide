@@ -3028,6 +3028,68 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.error))).toEqual([]);
   });
 
+  it("bb thread show --work-status prints non-git environment message", async () => {
+    const thread: Thread = makeThread({
+      id: "thread-show-work-status",
+      projectId: "proj-1",
+      providerId: "codex",
+      environmentId: "env-work-status",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const environment = makeEnvironment({
+      id: "env-work-status",
+      projectId: "proj-1",
+      hostId: "host-1",
+      isGitRepo: false,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const get = vi.fn(async () => thread);
+    const environmentGet = vi.fn(async () => environment);
+    const statusGet = vi.fn(async () => ({
+      outcome: "not_applicable",
+      reason: "non_git_environment",
+      message: "Workspace is not a Git repository.",
+    }));
+    const timelineGet = makeEmptyTimelineGetMock();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $get: environmentGet,
+                status: { $get: statusGet },
+              },
+            },
+            threads: {
+              ":id": {
+                $get: get,
+                timeline: { $get: timelineGet },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "show", "thread-show-work-status", "--work-status"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(statusGet).toHaveBeenCalledWith({
+      param: { id: "env-work-status" },
+      query: { mergeBaseBranch: "main" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Work status: Workspace is not a Git repository.",
+    );
+  });
+
   it("bb thread show rejects combining a thread id with --self", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-show-self");
 

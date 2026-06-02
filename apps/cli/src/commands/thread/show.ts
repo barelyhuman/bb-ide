@@ -68,7 +68,7 @@ interface ThreadShowJsonPayload extends ThreadStatusPayload {
 
 type FetchedWorkStatus =
   | { available: true; status: WorkspaceStatus }
-  | { available: false };
+  | { available: false; message: string };
 
 async function fetchWorkStatus(args: {
   client: Client;
@@ -81,10 +81,13 @@ async function fetchWorkStatus(args: {
       query: { mergeBaseBranch: args.mergeBaseBranch },
     }),
   );
-  if (environmentStatus.workspace === null) {
-    return { available: false };
+  if (environmentStatus.outcome === "available") {
+    return { available: true, status: environmentStatus.workspace };
   }
-  return { available: true, status: environmentStatus.workspace };
+  if (environmentStatus.outcome === "not_applicable") {
+    return { available: false, message: environmentStatus.message };
+  }
+  return { available: false, message: environmentStatus.failure.message };
 }
 
 export function registerShowCommand(
@@ -277,7 +280,7 @@ export function registerShowCommand(
             }
           } else {
             console.log("");
-            console.log("Work status: unavailable");
+            console.log(`Work status: ${fetchedWorkStatus.message}`);
           }
         }
 
