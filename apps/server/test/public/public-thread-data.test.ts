@@ -1578,10 +1578,11 @@ describe("public thread data routes", () => {
         await readJson(response),
       );
       expect(bootstrap.defaultExecutionOptions).toBeNull();
+      expect(bootstrap.executionOptions).toBeNull();
     });
   });
 
-  it("returns empty composer execution options for archived threads on offline hosts", async () => {
+  it("returns null composer execution options for archived threads on offline hosts", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-composer-archived-offline",
@@ -1607,12 +1608,7 @@ describe("public thread data routes", () => {
       const bootstrap = threadComposerBootstrapResponseSchema.parse(
         await readJson(response),
       );
-      expect(bootstrap.executionOptions).toEqual({
-        providers: [],
-        models: [],
-        selectedOnlyModels: [],
-        modelLoadError: null,
-      });
+      expect(bootstrap.executionOptions).toBeNull();
     });
   });
 
