@@ -998,7 +998,15 @@ export type SystemExecutionOptionsResponse = z.infer<
 export const threadComposerBootstrapResponseSchema = z.object({
   defaultExecutionOptions: resolvedThreadExecutionOptionsSchema.nullable(),
   queuedMessages: threadQueuedMessageListResponseSchema,
-  executionOptions: systemExecutionOptionsResponseSchema,
+  /**
+   * Provider/model options for the thread's composer picker. Null when the
+   * server deliberately skips resolving them — for archived or environment-less
+   * threads, whose follow-up composer locks the provider and needs no list.
+   * Null means "not resolved", distinct from a resolved-but-empty list, so
+   * callers must not treat it as a system-wide answer (e.g. don't seed the
+   * shared system-execution-options cache with it).
+   */
+  executionOptions: systemExecutionOptionsResponseSchema.nullable(),
   pendingInteractions: threadPendingInteractionsResponseSchema,
   promptHistory: promptHistoryResponseSchema,
 });

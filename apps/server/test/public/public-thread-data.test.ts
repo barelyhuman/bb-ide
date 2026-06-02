@@ -1516,12 +1516,17 @@ describe("public thread data routes", () => {
         permissionMode: "workspace-write",
       });
       expect(bootstrap.queuedMessages).toHaveLength(1);
-      expect(bootstrap.executionOptions.providers).toHaveLength(1);
+      const { executionOptions } = bootstrap;
+      if (executionOptions === null) {
+        throw new Error(
+          "expected resolved executionOptions for an environment-backed thread",
+        );
+      }
+      expect(executionOptions.providers).toHaveLength(1);
       expect(
-        bootstrap.executionOptions.providers[0]?.capabilities
-          .supportsUserQuestion,
+        executionOptions.providers[0]?.capabilities.supportsUserQuestion,
       ).toBe(true);
-      expect(bootstrap.executionOptions.models[0]?.model).toBe("gpt-5.5");
+      expect(executionOptions.models[0]?.model).toBe("gpt-5.5");
       expect(bootstrap.queuedMessages[0]?.content).toEqual([
         { type: "text", text: "Queued message" },
       ]);
