@@ -359,6 +359,31 @@ describe("provider registry", () => {
     });
   });
 
+  it("classifies Claude thinking token system events as noise", () => {
+    const claude = getProviderVisibilityMetadata("claude-code");
+
+    expect(
+      claude.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          threadId: "thread-1",
+          message: {
+            type: "system",
+            subtype: "thinking_tokens",
+            estimated_tokens: 24,
+            estimated_tokens_delta: 23,
+            uuid: "message-1",
+            session_id: "session-1",
+          },
+        },
+      } satisfies JsonRpcMessage),
+    ).toEqual({
+      kind: "sdk/system:thinking_tokens",
+      coverage: "noise",
+    });
+  });
+
   it("classifies Codex MCP startup status updates as noise", () => {
     const codex = getProviderVisibilityMetadata("codex");
 

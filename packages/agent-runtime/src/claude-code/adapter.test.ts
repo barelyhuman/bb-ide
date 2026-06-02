@@ -2109,6 +2109,28 @@ describe("claude-code provider adapter", () => {
     expect(events).toMatchObject([]);
   });
 
+  it("translateEvent ignores thinking-token system events from the SDK envelope", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "system",
+          subtype: "thinking_tokens",
+          estimated_tokens: 24,
+          estimated_tokens_delta: 23,
+          uuid: "message-1",
+          session_id: "session-1",
+        },
+      },
+    });
+
+    expect(events).toMatchObject([]);
+  });
+
   it("translateEvent maps thread identity envelopes", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
