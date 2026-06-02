@@ -209,7 +209,7 @@ export async function requireExistingEnvironment(
 
 export async function requireWorkspaceEnvironment(
   args: {
-    dataDir: string;
+    dataDir?: string;
     environmentId: string;
     workspaceContext: WorkspaceContext;
   },
@@ -217,12 +217,21 @@ export async function requireWorkspaceEnvironment(
 ): Promise<RuntimeEntry> {
   const existing = await runtimeManager.getOrAwait(args.environmentId);
   if (existing) {
+    if (existing.path !== args.workspaceContext.workspacePath) {
+      await runtimeManager.forgetEnvironment(args.environmentId);
+      throw new ExpectedCommandDispatchError(
+        "workspace_type_mismatch",
+        `Loaded environment ${args.environmentId} is bound to ${existing.path}, not ${args.workspaceContext.workspacePath}`,
+      );
+    }
     return existing;
   }
 
   return runtimeManager.ensureEnvironment({
     environmentId: args.environmentId,
-    personalWorkspaceRoot: getPersonalWorkspaceRoot(args.dataDir),
+    ...(args.dataDir
+      ? { personalWorkspaceRoot: getPersonalWorkspaceRoot(args.dataDir) }
+      : {}),
     workspacePath: args.workspaceContext.workspacePath,
     workspaceProvisionType: args.workspaceContext.workspaceProvisionType,
   });

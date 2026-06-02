@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import {
   encodeClientTurnRequestIdNumber,
   turnScope,
@@ -37,6 +38,105 @@ function nextClientRequestId(): ClientTurnRequestId {
 }
 
 describe("thread command dispatch", () => {
+  it("evicts stale runtime and rejects thread.start when the loaded runtime path differs from workspaceContext", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/env-loaded" });
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-loaded",
+      workspacePath: "/tmp/env-loaded",
+    });
+
+    const command: Extract<HostDaemonCommand, { type: "thread.start" }> = {
+      type: "thread.start",
+      environmentId: "env-loaded",
+      threadId: "thread-stale-start",
+      workspaceContext: {
+        workspacePath: "/tmp/env-stale",
+        workspaceProvisionType: "unmanaged",
+      },
+      projectId: "project-stale-start",
+      providerId: "fake",
+      requestId: nextClientRequestId(),
+      input: [{ type: "text", text: "start" }],
+      options: {
+        model: "gpt-5",
+        serviceTier: "default",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        permissionEscalation: null,
+      },
+      instructions: "Be a helpful coding agent.",
+      dynamicTools: [],
+      instructionMode: "append",
+    };
+
+    await expect(
+      dispatchCommand(command, harness.dispatchOptions()),
+    ).rejects.toMatchObject({
+      code: "workspace_type_mismatch",
+    });
+    expect(harness.runtimeState.startedThreadId).toBeUndefined();
+    expect(harness.runtimeState.shutdownCount).toBe(1);
+    expect(harness.workspaceState.destroyed).toBe(false);
+
+    await expect(
+      dispatchCommand(
+        {
+          ...command,
+          requestId: nextClientRequestId(),
+        },
+        harness.dispatchOptions(),
+      ),
+    ).resolves.toMatchObject({
+      providerThreadId: "provider-thread-stale-start",
+    });
+    expect(harness.runtimeState.startedThreadId).toBe("thread-stale-start");
+  });
+
+  it("rejects turn.submit when the loaded runtime path differs from resume workspaceContext", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/env-loaded" });
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-loaded",
+      workspacePath: "/tmp/env-loaded",
+    });
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "turn.submit",
+          environmentId: "env-loaded",
+          threadId: "thread-stale-turn",
+          requestId: nextClientRequestId(),
+          input: [{ type: "text", text: "continue" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          target: { mode: "start" },
+          resumeContext: {
+            workspaceContext: {
+              workspacePath: "/tmp/env-stale",
+              workspaceProvisionType: "unmanaged",
+            },
+            projectId: "project-stale-turn",
+            providerId: "fake",
+            providerThreadId: "provider-thread-stale-turn",
+            instructions: "Be a helpful coding agent.",
+            dynamicTools: [],
+            instructionMode: "append",
+          },
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "workspace_type_mismatch",
+    });
+    expect(harness.runtimeState.ranTurnClientRequestId).toBeUndefined();
+    expect(harness.runtimeState.resumedThreadId).toBeUndefined();
+  });
+
   it("stages uploaded thread.start attachments before runtime input", async () => {
     const threadStorageRootPath = await makeTempDir(
       "bb-thread-start-attachments-",

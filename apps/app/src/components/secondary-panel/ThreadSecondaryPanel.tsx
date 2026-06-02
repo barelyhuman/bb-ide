@@ -194,6 +194,7 @@ export function ThreadSecondaryPanel({
   const {
     currentGitDiff,
     gitDiffError,
+    gitDiffUnavailableMessage,
     gitDiffSelectOptions,
     gitDiffSelectValue,
     gitDiffStats,
@@ -408,6 +409,7 @@ export function ThreadSecondaryPanel({
                   ? new Error("Failed to load git diff")
                   : null
             }
+            gitDiffUnavailableMessage={gitDiffUnavailableMessage}
             gitDiffViewOptions={gitDiffViewOptions}
             isParsingGitDiffFiles={isParsingGitDiffFiles}
             isPreparingGitDiff={isPreparingGitDiff}

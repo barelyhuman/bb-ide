@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEnvironment, hostDaemonCommands, updateHost } from "@bb/db";
 import type { ProviderCapabilities, ProviderInfo } from "@bb/domain";
+import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
 import type { SystemExecutionOptionsModelLoadErrorCode } from "@bb/server-contract";
 import {
   makeWorkspaceMergeBase,
@@ -177,6 +178,7 @@ describe("public environment and system routes", () => {
       );
       expect(statusCommand.command).not.toHaveProperty("mergeBaseBranch");
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: false,
@@ -195,6 +197,7 @@ describe("public environment and system routes", () => {
       const statusResponse = await statusPromise;
       expect(statusResponse.status).toBe(200);
       await expect(readJson(statusResponse)).resolves.toMatchObject({
+        outcome: "available",
         workspace: {
           mergeBase: null,
         },
@@ -241,13 +244,95 @@ describe("public environment and system routes", () => {
       );
 
       expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({ workspace: null });
+      await expect(readJson(response)).resolves.toEqual({
+        outcome: "not_applicable",
+        reason: "non_git_environment",
+        message: "Workspace status is not available for non-git environments",
+      });
 
       const commandCountAfter = harness.db
         .select({ id: hostDaemonCommands.id })
         .from(hostDaemonCommands)
         .all().length;
       expect(commandCountAfter).toBe(commandCountBefore);
+    });
+  });
+
+  it("surfaces unavailable workspace status and diff results", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-drift",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/environment-drift/worktree",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/drift",
+      });
+
+      const statusPromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/status?mergeBaseBranch=main`,
+      );
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "unavailable",
+        failure: {
+          code: "path_not_found",
+          workspacePath: "/tmp/environment-drift/worktree",
+          message:
+            "Managed workspace path does not exist: /tmp/environment-drift/worktree",
+        },
+      });
+
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
+      await expect(readJson(statusResponse)).resolves.toEqual({
+        outcome: "unavailable",
+        failure: {
+          code: "path_not_found",
+          workspacePath: "/tmp/environment-drift/worktree",
+          message:
+            "Managed workspace path does not exist: /tmp/environment-drift/worktree",
+        },
+      });
+
+      const diffPromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/diff?target=all&mergeBaseBranch=main`,
+      );
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "unavailable",
+        failure: {
+          code: "not_worktree",
+          workspacePath: "/tmp/environment-drift/worktree",
+          message: "Path is not a git worktree: /tmp/environment-drift/worktree",
+        },
+      });
+
+      const diffResponse = await diffPromise;
+      expect(diffResponse.status).toBe(200);
+      await expect(readJson(diffResponse)).resolves.toEqual({
+        outcome: "unavailable",
+        failure: {
+          code: "not_worktree",
+          workspacePath: "/tmp/environment-drift/worktree",
+          message: "Path is not a git worktree: /tmp/environment-drift/worktree",
+        },
+      });
     });
   });
 
@@ -294,6 +379,7 @@ describe("public environment and system routes", () => {
         mergeBaseBranch: "main",
       });
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: makeWorkspaceStatus({
           workingTree: makeWorkspaceWorkingTree({
             hasUncommittedChanges: true,
@@ -312,6 +398,7 @@ describe("public environment and system routes", () => {
       const statusResponse = await statusPromise;
       expect(statusResponse.status).toBe(200);
       await expect(readJson(statusResponse)).resolves.toEqual({
+        outcome: "available",
         workspace: expect.objectContaining({
           workingTree: expect.objectContaining({
             state: "dirty_uncommitted",
@@ -341,6 +428,7 @@ describe("public environment and system routes", () => {
         target: { type: "all", mergeBaseBranch: "main" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: "diff --git a/file.ts b/file.ts",
           truncated: false,
@@ -352,11 +440,14 @@ describe("public environment and system routes", () => {
       const diffResponse = await diffPromise;
       expect(diffResponse.status).toBe(200);
       await expect(readJson(diffResponse)).resolves.toEqual({
-        diff: "diff --git a/file.ts b/file.ts",
-        truncated: false,
-        shortstat: " 1 file changed, 1 insertion(+)\n",
-        files: "M\tfile.ts\n",
-        mergeBaseRef: "abc1234",
+        outcome: "available",
+        diff: {
+          diff: "diff --git a/file.ts b/file.ts",
+          truncated: false,
+          shortstat: " 1 file changed, 1 insertion(+)\n",
+          files: "M\tfile.ts\n",
+          mergeBaseRef: "abc1234",
+        },
       });
 
       const branchesPromise = harness.app.request(
@@ -462,6 +553,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: true,
@@ -491,6 +583,7 @@ describe("public environment and system routes", () => {
         target: { type: "uncommitted" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: "diff --git a/file.ts b/file.ts",
           truncated: false,
@@ -567,6 +660,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: false,
@@ -595,6 +689,7 @@ describe("public environment and system routes", () => {
         target: { type: "branch_committed", mergeBaseBranch: "main" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: "diff --git a/file.ts b/file.ts",
           truncated: false,
@@ -637,6 +732,128 @@ describe("public environment and system routes", () => {
     });
   });
 
+  it("returns typed workspace unavailable details when commit action cannot resolve workspace status", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "commit" }),
+        },
+      );
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      const failure: WorkspaceResolutionFailure = {
+        code: "path_not_found",
+        workspacePath: "/tmp/test-environment",
+        message: "Managed workspace path does not exist: /tmp/test-environment",
+      };
+      await Promise.all([
+        reportQueuedCommandSuccess(harness, statusCommand, {
+          outcome: "unavailable",
+          failure,
+        }),
+        reportQueuedCommandSuccess(harness, diffCommand, {
+          outcome: "available",
+          diff: {
+            diff: "",
+            truncated: false,
+            shortstat: "",
+            files: "",
+            mergeBaseRef: null,
+          },
+        }),
+      ]);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "workspace_unavailable",
+        message: failure.message,
+        details: {
+          kind: "workspace_unavailable",
+          failure,
+        },
+      });
+    });
+  });
+
+  it("returns typed workspace unavailable details when squash merge cannot resolve workspace status", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "squash_merge",
+            options: { mergeBaseBranch: "main" },
+          }),
+        },
+      );
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      const failure: WorkspaceResolutionFailure = {
+        code: "workspace_type_mismatch",
+        workspacePath: "/tmp/test-environment",
+        message:
+          "Loaded environment env_test is bound to /tmp/old, not /tmp/test-environment",
+      };
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "unavailable",
+        failure,
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "workspace_unavailable",
+        message: failure.message,
+        details: {
+          kind: "workspace_unavailable",
+          failure,
+        },
+      });
+    });
+  });
+
   it("uses fallback squash commit message when Codex inference fails", async () => {
     await withTestHarness({
       inferenceModel: "codex/gpt-5.4-mini",
@@ -675,6 +892,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: false,
@@ -699,6 +917,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: "diff --git a/file.ts b/file.ts",
           truncated: false,
@@ -777,6 +996,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: false,
@@ -833,6 +1053,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: true,
@@ -916,6 +1137,7 @@ describe("public environment and system routes", () => {
       );
       await Promise.all([
         reportQueuedCommandSuccess(harness, statusCommand, {
+          outcome: "available",
           workspaceStatus: {
             workingTree: {
               hasUncommittedChanges: false,
@@ -932,6 +1154,7 @@ describe("public environment and system routes", () => {
           },
         }),
         reportQueuedCommandSuccess(harness, diffCommand, {
+          outcome: "available",
           diff: {
             diff: "",
             truncated: false,
@@ -983,6 +1206,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           workingTree: {
             hasUncommittedChanges: true,
@@ -1026,6 +1250,7 @@ describe("public environment and system routes", () => {
         target: { type: "branch_committed", mergeBaseBranch: "main" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: "diff --git a/file.ts b/file.ts",
           truncated: false,

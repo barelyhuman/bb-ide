@@ -1,4 +1,5 @@
-import { collectOptionalFieldPaths } from "@bb/test-helpers";
+import { collectOptionalFieldPaths, makeWorkspaceStatus } from "@bb/test-helpers";
+import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import publicApiSource from "../src/public-api.ts?raw";
 import * as contract from "../src/index.js";
@@ -265,6 +266,89 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
 function terminalDataBase64(byteLength: number): string {
   return Buffer.alloc(byteLength, "a").toString("base64");
 }
+
+const WORKSPACE_RESOLUTION_FAILURE: WorkspaceResolutionFailure = {
+  code: "path_not_found",
+  workspacePath: "/tmp/missing-workspace",
+  message: "Managed workspace path does not exist: /tmp/missing-workspace",
+};
+
+describe("environment workspace response contract", () => {
+  it("uses explicit status outcomes instead of nullable parallel fields", () => {
+    expect(
+      contract.environmentStatusResponseSchema.safeParse({
+        outcome: "available",
+        workspace: makeWorkspaceStatus(),
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentStatusResponseSchema.safeParse({
+        outcome: "not_applicable",
+        reason: "non_git_environment",
+        message: "Workspace status is not available for non-git environments",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentStatusResponseSchema.safeParse({
+        outcome: "unavailable",
+        failure: WORKSPACE_RESOLUTION_FAILURE,
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentStatusResponseSchema.safeParse({
+        workspace: null,
+        workspaceUnavailable: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("uses explicit diff outcomes instead of nullable parallel fields", () => {
+    expect(
+      contract.environmentDiffResponseSchema.safeParse({
+        outcome: "available",
+        diff: {
+          diff: "",
+          files: "",
+          mergeBaseRef: null,
+          shortstat: "",
+          truncated: false,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentDiffResponseSchema.safeParse({
+        outcome: "not_applicable",
+        reason: "non_git_environment",
+        message: "Workspace diff is not available for non-git environments",
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentDiffResponseSchema.safeParse({
+        outcome: "unavailable",
+        failure: WORKSPACE_RESOLUTION_FAILURE,
+      }).success,
+    ).toBe(true);
+    expect(
+      contract.environmentDiffResponseSchema.safeParse({
+        diff: null,
+        workspaceUnavailable: WORKSPACE_RESOLUTION_FAILURE,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("types workspace unavailable environment action errors", () => {
+    expect(
+      contract.environmentActionApiErrorSchema.safeParse({
+        code: "workspace_unavailable",
+        message: WORKSPACE_RESOLUTION_FAILURE.message,
+        details: {
+          kind: "workspace_unavailable",
+          failure: WORKSPACE_RESOLUTION_FAILURE,
+        },
+      }).success,
+    ).toBe(true);
+  });
+});
 
 describe("git branch name contract", () => {
   it("accepts valid branch names", () => {

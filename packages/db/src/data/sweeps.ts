@@ -77,6 +77,7 @@ const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_POLICY =
 
 type CompletedCommandState = "success" | "error";
 export const READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
+  "environment.cleanup_preflight",
   "host.file_metadata",
   "host.list_branches",
   "host.list_files",

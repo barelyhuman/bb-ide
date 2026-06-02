@@ -27,6 +27,7 @@ import {
   terminalDataBase64Schema,
   terminalRowsSchema,
   threadListEntrySchema,
+  threadGitDiffResponseSchema,
   threadTimelinePendingTodosSchema,
   threadTypeSchema,
   threadWithRuntimeSchema,
@@ -38,6 +39,7 @@ import {
   appIdSchema,
   callerExecutionInputSourceSchema,
 } from "@bb/domain";
+import { workspaceResolutionFailureSchema } from "@bb/host-daemon-contract";
 import type {
   AppDataPath,
   AppId,
@@ -1644,6 +1646,10 @@ export const environmentActionFailureDetailsSchema = z.discriminatedUnion(
       stage: z.enum(["prep_commit", "squash_commit"]),
       errorMessage: z.string(),
     }),
+    z.object({
+      kind: z.literal("workspace_unavailable"),
+      failure: workspaceResolutionFailureSchema,
+    }),
   ],
 );
 export type EnvironmentActionFailureDetails = z.infer<
@@ -1974,9 +1980,55 @@ export type ManagerTemplatesResponse = z.infer<
   typeof managerTemplatesResponseSchema
 >;
 
-export const environmentStatusResponseSchema = z.object({
-  workspace: workspaceStatusSchema.nullable(), // null for non-git environments
-});
+export const environmentWorkspaceNotApplicableReasonSchema = z.enum([
+  "non_git_environment",
+]);
+export type EnvironmentWorkspaceNotApplicableReason = z.infer<
+  typeof environmentWorkspaceNotApplicableReasonSchema
+>;
+
+const environmentWorkspaceNotApplicableOutcomeSchema = z
+  .object({
+    outcome: z.literal("not_applicable"),
+    reason: environmentWorkspaceNotApplicableReasonSchema,
+    message: z.string().min(1),
+  })
+  .strict();
+
+export const environmentStatusResponseSchema = z.discriminatedUnion("outcome", [
+  z
+    .object({
+      outcome: z.literal("available"),
+      workspace: workspaceStatusSchema,
+    })
+    .strict(),
+  environmentWorkspaceNotApplicableOutcomeSchema,
+  z
+    .object({
+      outcome: z.literal("unavailable"),
+      failure: workspaceResolutionFailureSchema,
+    })
+    .strict(),
+]);
+
+export const environmentDiffResponseSchema = z.discriminatedUnion("outcome", [
+  z
+    .object({
+      outcome: z.literal("available"),
+      diff: threadGitDiffResponseSchema,
+    })
+    .strict(),
+  environmentWorkspaceNotApplicableOutcomeSchema,
+  z
+    .object({
+      outcome: z.literal("unavailable"),
+      failure: workspaceResolutionFailureSchema,
+    })
+    .strict(),
+]);
+export type EnvironmentDiffResponse = z.infer<
+  typeof environmentDiffResponseSchema
+>;
 
 export const uploadedPromptAttachmentSchema = z.object({
   type: z.enum(["localImage", "localFile"]),

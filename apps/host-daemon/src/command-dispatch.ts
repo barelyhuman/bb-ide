@@ -2,8 +2,10 @@ import type {
   HostDaemonCommand,
   HostDaemonCommandResult,
   HostDaemonCommandType,
+  WorkspaceResolutionFailure,
 } from "@bb/host-daemon-contract";
 import type {
+  WorkspaceStatus,
   ResolvedThreadExecutionOptions,
   RuntimeThreadExecutionOptions,
 } from "@bb/domain";
@@ -12,7 +14,6 @@ import {
   defaultListProviders,
   ExpectedCommandDispatchError,
   requireExistingEnvironment,
-  requireWorkspaceEnvironment,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
@@ -47,6 +48,11 @@ import {
 } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/host-workspace";
 import { squashMerge } from "./command-handlers/workspace.js";
+import {
+  requireResolvedWorkspaceForCommand,
+  resolveWorkspaceForCommand,
+  workspaceResolutionFailureFromError,
+} from "./workspace-resolution.js";
 
 export {
   CommandDispatchError,
@@ -132,11 +138,96 @@ type CommandHandlerMap = {
   ) => Promise<HostDaemonCommandResult<TType>>;
 };
 
+type EnvironmentCleanupPreflightCommand = Extract<
+  HostDaemonCommand,
+  { type: "environment.cleanup_preflight" }
+>;
+type EnvironmentCleanupPreflightResult =
+  HostDaemonCommandResult<"environment.cleanup_preflight">;
+
 function throwExpectedWorkspacePathNotFoundOrRethrow(error: unknown): never {
   if (error instanceof WorkspaceError && error.code === "path_not_found") {
     throw new ExpectedCommandDispatchError(error.code, error.message);
   }
   throw error;
+}
+
+function workspaceHasCleanupRisk(workspaceStatus: WorkspaceStatus): boolean {
+  return (
+    workspaceStatus.workingTree.hasUncommittedChanges ||
+    workspaceStatus.mergeBase?.hasCommittedUnmergedChanges === true
+  );
+}
+
+function cleanupPreflightFailureResult(
+  failure: WorkspaceResolutionFailure,
+): EnvironmentCleanupPreflightResult {
+  if (failure.code === "path_not_found") {
+    return { outcome: "already_missing", failure };
+  }
+  if (failure.code === "not_git_repo") {
+    return { outcome: "not_inspectable", failure };
+  }
+  return { outcome: "probe_failed", failure };
+}
+
+function throwWorkspaceResolutionFailure(
+  failure: WorkspaceResolutionFailure,
+): never {
+  throw new ExpectedCommandDispatchError(failure.code, failure.message);
+}
+
+async function environmentCleanupPreflight(
+  command: EnvironmentCleanupPreflightCommand,
+  options: CommandDispatchOptions,
+): Promise<EnvironmentCleanupPreflightResult> {
+  const resolution = await resolveWorkspaceForCommand({
+    dataDir: options.dataDir,
+    environmentId: command.environmentId,
+    runtimeManager: options.runtimeManager,
+    workspaceContext: command.workspaceContext,
+  });
+  if (!resolution.ok) {
+    return cleanupPreflightFailureResult(resolution.failure);
+  }
+
+  const { entry } = resolution;
+  if (!entry.workspace.isGitRepo) {
+    return cleanupPreflightFailureResult({
+      code: "not_git_repo",
+      message: `Path is not a git repository: ${entry.workspace.path}`,
+      workspacePath: entry.workspace.path,
+    });
+  }
+  if (
+    command.workspaceContext.workspaceProvisionType === "managed-worktree" &&
+    !entry.workspace.isWorktree
+  ) {
+    return cleanupPreflightFailureResult({
+      code: "not_worktree",
+      message: `Path is not a git worktree: ${entry.workspace.path}`,
+      workspacePath: entry.workspace.path,
+    });
+  }
+
+  try {
+    const workspaceStatus = await entry.workspace.getStatus({
+      mergeBaseBranch: command.mergeBaseBranch,
+    });
+    if (workspaceHasCleanupRisk(workspaceStatus)) {
+      return {
+        outcome: "blocked_by_changes",
+        message: "Workspace has uncommitted or unmerged changes",
+      };
+    }
+    return { outcome: "safe_to_destroy" };
+  } catch (error) {
+    const failure = workspaceResolutionFailureFromError({
+      error,
+      workspacePath: command.workspaceContext.workspacePath,
+    });
+    return cleanupPreflightFailureResult(failure);
+  }
 }
 
 const commandHandlers: CommandHandlerMap = {
@@ -200,14 +291,12 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "thread.archive" }>,
     options: CommandDispatchOptions,
   ) => {
-    const entry = await requireWorkspaceEnvironment(
-      {
-        dataDir: options.dataDir,
-        environmentId: command.environmentId,
-        workspaceContext: command.workspaceContext,
-      },
-      options.runtimeManager,
-    );
+    const entry = await requireResolvedWorkspaceForCommand({
+      dataDir: options.dataDir,
+      environmentId: command.environmentId,
+      runtimeManager: options.runtimeManager,
+      workspaceContext: command.workspaceContext,
+    });
     await entry.runtime.archiveThread({
       threadId: command.threadId,
       providerId: command.providerId,
@@ -326,67 +415,112 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "environment.provision" }>,
     options: CommandDispatchOptions,
   ) => provisionEnvironment(command, options),
+  "environment.cleanup_preflight": async (
+    command: EnvironmentCleanupPreflightCommand,
+    options: CommandDispatchOptions,
+  ) => environmentCleanupPreflight(command, options),
   "environment.destroy": async (
     command: Extract<HostDaemonCommand, { type: "environment.destroy" }>,
     options: CommandDispatchOptions,
   ) => {
-    try {
-      await requireWorkspaceEnvironment(
-        { ...command, dataDir: options.dataDir },
-        options.runtimeManager,
-      );
-      options.terminalManager?.closeEnvironmentTerminals(
-        command.environmentId,
-        "environment-destroyed",
-      );
-      await options.runtimeManager.destroyEnvironment(command.environmentId);
-    } catch (error) {
+    const resolution = await resolveWorkspaceForCommand({
+      dataDir: options.dataDir,
+      environmentId: command.environmentId,
+      runtimeManager: options.runtimeManager,
+      workspaceContext: command.workspaceContext,
+    });
+    if (!resolution.ok) {
       // Treat already-missing workspaces as successful destroy (idempotent retry).
-      if (error instanceof WorkspaceError && error.code === "path_not_found") {
+      if (resolution.failure.code === "path_not_found") {
         return {};
       }
-      throw error;
+      throwWorkspaceResolutionFailure(resolution.failure);
     }
+    options.terminalManager?.closeEnvironmentTerminals(
+      command.environmentId,
+      "environment-destroyed",
+    );
+    await options.runtimeManager.destroyEnvironment(command.environmentId);
     return {};
   },
   "workspace.status": async (
     command: Extract<HostDaemonCommand, { type: "workspace.status" }>,
     options: CommandDispatchOptions,
   ) => {
-    const entry = await requireWorkspaceEnvironment(
-      { ...command, dataDir: options.dataDir },
-      options.runtimeManager,
-    );
-    return {
-      workspaceStatus: await entry.workspace.getStatus({
-        mergeBaseBranch: command.mergeBaseBranch,
-      }),
-    };
+    const resolution = await resolveWorkspaceForCommand({
+      dataDir: options.dataDir,
+      environmentId: command.environmentId,
+      requireGit: true,
+      requireManagedWorktree: true,
+      runtimeManager: options.runtimeManager,
+      workspaceContext: command.workspaceContext,
+    });
+    if (!resolution.ok) {
+      return { outcome: "unavailable", failure: resolution.failure };
+    }
+    try {
+      return {
+        outcome: "available",
+        workspaceStatus: await resolution.entry.workspace.getStatus({
+          mergeBaseBranch: command.mergeBaseBranch,
+        }),
+      };
+    } catch (error) {
+      return {
+        outcome: "unavailable",
+        failure: workspaceResolutionFailureFromError({
+          error,
+          workspacePath: command.workspaceContext.workspacePath,
+        }),
+      };
+    }
   },
   "workspace.diff": async (
     command: Extract<HostDaemonCommand, { type: "workspace.diff" }>,
     options: CommandDispatchOptions,
   ) => {
-    const entry = await requireWorkspaceEnvironment(
-      { ...command, dataDir: options.dataDir },
-      options.runtimeManager,
-    );
-    return {
-      diff: await entry.workspace.getDiff({
-        target: command.target,
-        maxDiffBytes: command.maxDiffBytes,
-        maxFileListBytes: command.maxFileListBytes,
-      }),
-    };
+    const resolution = await resolveWorkspaceForCommand({
+      dataDir: options.dataDir,
+      environmentId: command.environmentId,
+      requireGit: true,
+      requireManagedWorktree: true,
+      runtimeManager: options.runtimeManager,
+      workspaceContext: command.workspaceContext,
+    });
+    if (!resolution.ok) {
+      return { outcome: "unavailable", failure: resolution.failure };
+    }
+    try {
+      return {
+        outcome: "available",
+        diff: await resolution.entry.workspace.getDiff({
+          target: command.target,
+          maxDiffBytes: command.maxDiffBytes,
+          maxFileListBytes: command.maxFileListBytes,
+        }),
+      };
+    } catch (error) {
+      return {
+        outcome: "unavailable",
+        failure: workspaceResolutionFailureFromError({
+          error,
+          workspacePath: command.workspaceContext.workspacePath,
+        }),
+      };
+    }
   },
   "workspace.commit": async (
     command: Extract<HostDaemonCommand, { type: "workspace.commit" }>,
     options: CommandDispatchOptions,
   ) => {
-    const entry = await requireWorkspaceEnvironment(
-      { ...command, dataDir: options.dataDir },
-      options.runtimeManager,
-    );
+    const entry = await requireResolvedWorkspaceForCommand({
+      dataDir: options.dataDir,
+      environmentId: command.environmentId,
+      requireGit: true,
+      requireManagedWorktree: true,
+      runtimeManager: options.runtimeManager,
+      workspaceContext: command.workspaceContext,
+    });
     return entry.workspace.commit({
       message: command.message,
       noVerify: true,

@@ -1,11 +1,9 @@
 import type { QueryKey } from "@tanstack/react-query";
-import type {
-  ThreadWithRuntime,
-  ThreadGitDiffResponse,
-  WorkspaceStatus,
-} from "@bb/domain";
+import type { ThreadWithRuntime } from "@bb/domain";
 import type {
   EnvironmentDiffBranchesResponse,
+  EnvironmentDiffResponse,
+  EnvironmentStatusResponse,
   ManagerTimelineView,
   ProjectBranchesResponse,
   ThreadTimelineResponse,
@@ -74,10 +72,10 @@ function resolveThreadScopedPlaceholder<TData>(
 }
 
 export function resolveEnvironmentWorkStatusPlaceholder(
-  previousData: WorkspaceStatus | null | undefined,
+  previousData: EnvironmentStatusResponse | undefined,
   previousQueryKey: QueryKey | undefined,
   nextEnvironmentId: string,
-): WorkspaceStatus | null | undefined {
+): EnvironmentStatusResponse | undefined {
   return resolveThreadScopedPlaceholder(
     previousData,
     previousQueryKey,
@@ -87,10 +85,10 @@ export function resolveEnvironmentWorkStatusPlaceholder(
 }
 
 export function resolveEnvironmentGitDiffPlaceholder(
-  previousData: ThreadGitDiffResponse | undefined,
+  previousData: EnvironmentDiffResponse | undefined,
   previousQueryKey: QueryKey | undefined,
   nextEnvironmentId: string,
-): ThreadGitDiffResponse | undefined {
+): EnvironmentDiffResponse | undefined {
   return resolveThreadScopedPlaceholder(
     previousData,
     previousQueryKey,

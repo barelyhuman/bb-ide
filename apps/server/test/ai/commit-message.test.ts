@@ -274,6 +274,7 @@ describe("commit message generation", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           branch: {
             currentBranch: "feature",
@@ -297,6 +298,7 @@ describe("commit message generation", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: commitMessageArgs.patch,
           files: commitMessageArgs.files,
@@ -364,6 +366,7 @@ describe("commit message generation", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
+        outcome: "available",
         workspaceStatus: {
           branch: {
             currentBranch: "feature",
@@ -387,6 +390,7 @@ describe("commit message generation", () => {
           command.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, diffCommand, {
+        outcome: "available",
         diff: {
           diff: commitMessageArgs.patch,
           files: commitMessageArgs.files,

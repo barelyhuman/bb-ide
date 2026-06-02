@@ -7,7 +7,6 @@ import type {
   ProjectExecutionDefaults,
   ResolvedThreadExecutionOptions,
   ThreadEventRow,
-  ThreadGitDiffResponse,
   ProjectSource,
   ThreadQueuedMessage,
 } from "@bb/domain";
@@ -44,6 +43,7 @@ import type {
   CloseThreadTerminalRequest,
   DeleteThreadRequest,
   EnvironmentDiffBranchesQuery,
+  EnvironmentDiffResponse,
   EnvironmentDiffQuery,
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
@@ -340,7 +340,7 @@ export type PublicApiSchema = {
     /** Get git diff for an environment's workspace. Proxies to `workspace.diff`. */
     $get: Endpoint<
       PathId & { query: EnvironmentDiffQuery },
-      ThreadGitDiffResponse
+      EnvironmentDiffResponse
     >;
   };
   "/environments/:id/diff/file": {

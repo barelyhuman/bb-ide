@@ -245,6 +245,21 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
+        type: "environment.cleanup_preflight",
+        environmentId: "env_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "managed-worktree",
+        },
+        mergeBaseBranch: "main",
+      }),
+    ).toMatchObject({
+      type: "environment.cleanup_preflight",
+      mergeBaseBranch: "main",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
         initiator: {
@@ -1294,6 +1309,79 @@ describe("host-daemon command schemas", () => {
     ).toEqual({
       path: "demo",
       deleted: true,
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType[
+        "environment.cleanup_preflight"
+      ].parse({
+        outcome: "safe_to_destroy",
+      }),
+    ).toEqual({
+      outcome: "safe_to_destroy",
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType[
+        "environment.cleanup_preflight"
+      ].parse({
+        outcome: "already_missing",
+        failure: {
+          code: "path_not_found",
+          workspacePath: "/tmp/missing",
+          message: "Managed workspace path does not exist: /tmp/missing",
+        },
+      }),
+    ).toEqual({
+      outcome: "already_missing",
+      failure: {
+        code: "path_not_found",
+        workspacePath: "/tmp/missing",
+        message: "Managed workspace path does not exist: /tmp/missing",
+      },
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["workspace.status"].parse({
+        outcome: "available",
+        workspaceStatus: {
+          workingTree: {
+            insertions: 0,
+            deletions: 0,
+            files: [],
+            hasUncommittedChanges: false,
+            state: "clean",
+          },
+          branch: {
+            currentBranch: "bb/env-123",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      }),
+    ).toMatchObject({
+      outcome: "available",
+      workspaceStatus: {
+        workingTree: {
+          state: "clean",
+        },
+      },
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["workspace.diff"].parse({
+        outcome: "unavailable",
+        failure: {
+          code: "not_git_repo",
+          workspacePath: "/tmp/workspace",
+          message: "Path is not a git repository: /tmp/workspace",
+        },
+      }),
+    ).toMatchObject({
+      outcome: "unavailable",
+      failure: {
+        code: "not_git_repo",
+      },
     });
 
     expect(() =>

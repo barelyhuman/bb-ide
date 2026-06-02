@@ -49,6 +49,7 @@ import {
   resolveExistingThreadExecutionPlan,
   type ExistingThreadExecutionInputRequest,
 } from "./thread-execution-plan.js";
+import { workspaceContextFromPath } from "../environments/workspace-command-target.js";
 
 export type ExecutionOptionsRequest = ExistingThreadExecutionInputRequest;
 
@@ -272,10 +273,10 @@ export async function buildThreadStartCommand(
     type: "thread.start",
     environmentId: args.environment.id,
     threadId: args.thread.id,
-    workspaceContext: {
-      workspacePath: runtimeContext.workspacePath,
+    workspaceContext: workspaceContextFromPath({
+      path: runtimeContext.workspacePath,
       workspaceProvisionType: runtimeContext.workspaceProvisionType,
-    },
+    }),
     projectId: args.projectId,
     providerId: args.providerId,
     requestId: args.requestId,
@@ -302,10 +303,10 @@ function buildPreparedTurnSubmitCommandPayload(
     options: toRuntimeExecutionOptions(args),
     target: args.target,
     resumeContext: {
-      workspaceContext: {
-        workspacePath: args.runtimeContext.workspacePath,
+      workspaceContext: workspaceContextFromPath({
+        path: args.runtimeContext.workspacePath,
         workspaceProvisionType: args.runtimeContext.workspaceProvisionType,
-      },
+      }),
       projectId: args.runtimeContext.projectId,
       providerId: args.runtimeContext.providerId,
       providerThreadId: args.providerThreadId,
@@ -476,10 +477,10 @@ function buildThreadWorkspaceContext(
     return null;
   }
 
-  return {
-    workspacePath: environment.path,
+  return workspaceContextFromPath({
+    path: environment.path,
     workspaceProvisionType: environment.workspaceProvisionType,
-  };
+  });
 }
 
 export function queueThreadRenameCommand(

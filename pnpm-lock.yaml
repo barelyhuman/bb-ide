@@ -1103,6 +1103,9 @@ importers:
       '@bb/hono-typed-routes':
         specifier: workspace:*
         version: link:../hono-typed-routes
+      '@bb/host-daemon-contract':
+        specifier: workspace:*
+        version: link:../host-daemon-contract
       '@bb/replay-capture':
         specifier: workspace:*
         version: link:../replay-capture

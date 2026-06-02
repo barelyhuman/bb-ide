@@ -797,6 +797,7 @@ function handleWorkspaceMutationResult(
 }
 
 const commandResultOwners: CommandResultOwnerRegistry = {
+  "environment.cleanup_preflight": null,
   "environment.destroy": defineCommandResultOwner({
     applySideEffects: handleEnvironmentDestroyResult,
   }),

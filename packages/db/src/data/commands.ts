@@ -30,7 +30,10 @@ export interface HasExistingThreadArchiveCommandArgs {
 
 export interface GetPendingEnvironmentCommandArgs {
   environmentId: string;
-  type: "environment.destroy" | "workspace.status";
+  type:
+    | "environment.cleanup_preflight"
+    | "environment.destroy"
+    | "workspace.status";
 }
 
 export interface DeleteQueuedCommandInTransactionArgs {

@@ -35,6 +35,9 @@ type ManagedWorktreeEnvironmentProvisionCommand = Extract<
 export type ManagedWorktreeEnvironmentProvisionQueuedCommand =
   QueuedCommand<ManagedWorktreeEnvironmentProvisionCommand>;
 
+type ReportQueuedCommandSuccessResult<TType extends HostDaemonCommand["type"]> =
+  HostDaemonCommandResultByType[TType];
+
 export function isManagedWorktreeEnvironmentProvisionQueuedCommand(
   queued: QueuedCommand,
 ): queued is ManagedWorktreeEnvironmentProvisionQueuedCommand {
@@ -212,7 +215,7 @@ export async function reportQueuedCommandSuccess<
 >(
   harness: TestAppHarness,
   queued: QueuedCommand<TCommand>,
-  result: HostDaemonCommandResultByType[TCommand["type"]],
+  result: ReportQueuedCommandSuccessResult<TCommand["type"]>,
   args: { hostId?: string; hostType?: HostType } = {},
 ): Promise<Response> {
   const sessionId = queued.row.sessionId;

@@ -169,7 +169,11 @@ function recordWorkspaceStatusSuccess({
   commandId,
   harness,
 }: RecordWorkspaceStatusSuccessArgs) {
-  const result = { workspaceStatus: makeWorkspaceStatus() };
+  const outcome: "available" = "available";
+  const result = {
+    outcome,
+    workspaceStatus: makeWorkspaceStatus(),
+  };
   harness.hub.recordCommandResult(commandId, {
     commandId,
     ok: true,
@@ -520,7 +524,11 @@ describe("daemon command wait context", () => {
         throw new Error("Expected one queued workspace status command");
       }
 
-      const result = { workspaceStatus: makeWorkspaceStatus() };
+      const outcome: "available" = "available";
+      const result = {
+        outcome,
+        workspaceStatus: makeWorkspaceStatus(),
+      };
       harness.hub.recordCommandResult(queuedCommand.id, {
         commandId: queuedCommand.id,
         ok: true,

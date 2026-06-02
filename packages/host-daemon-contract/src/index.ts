@@ -84,6 +84,7 @@ export {
   FILE_LIST_QUERY_MAX_LENGTH,
   HOST_DAEMON_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
+  environmentCleanupPreflightCommandSchema,
   environmentDestroyCommandSchema,
   environmentProvisionCommandSchema,
   hostDaemonCommandEnvelopeSchema,
@@ -123,6 +124,8 @@ export {
   workspaceDiffCommandSchema,
   workspaceSquashMergeCommandSchema,
   workspaceContextSchema,
+  workspaceResolutionFailureCodeSchema,
+  workspaceResolutionFailureSchema,
   workspaceStatusCommandSchema,
 } from "./commands.js";
 export type {
@@ -140,6 +143,8 @@ export type {
   ManagerTemplateSummary,
   TurnSubmitTarget,
   WorkspaceContext,
+  WorkspaceResolutionFailure,
+  WorkspaceResolutionFailureCode,
 } from "./commands.js";
 
 export {

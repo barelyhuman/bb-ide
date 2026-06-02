@@ -4,7 +4,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Environment, Thread } from "@bb/domain";
 import { makeWorkspaceStatus } from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MergeBaseRow, WorkspacePathRow } from "./ThreadMetadataContent";
+import {
+  GitStatusRow,
+  MergeBaseRow,
+  WorkspacePathRow,
+} from "./ThreadMetadataContent";
 
 type ThreadOverrides = Partial<Thread>;
 type EnvironmentOverrides = Partial<Environment>;
@@ -136,5 +140,33 @@ describe("MergeBaseRow", () => {
 
     expect(handleOpenChange).toHaveBeenCalledWith(true);
     expect(screen.getByText("Branches")).not.toBeNull();
+  });
+});
+
+describe("GitStatusRow", () => {
+  it("renders typed workspace unavailable state without a query error", () => {
+    render(
+      <GitStatusRow
+        thread={makeThread()}
+        environment={makeEnvironment()}
+        workspaceStatus={undefined}
+        workspaceStatusError={null}
+        workspaceUnavailable={{
+          code: "workspace_type_mismatch",
+          workspacePath: "/tmp/current",
+          message:
+            "Loaded environment env_test is bound to /tmp/old, not /tmp/current",
+        }}
+        selectedMergeBaseBranch={undefined}
+      />,
+    );
+
+    expect(screen.getByText("Git status")).not.toBeNull();
+    expect(screen.getByText("Unknown")).not.toBeNull();
+    expect(
+      screen.getByText(
+        "Loaded environment env_test is bound to /tmp/old, not /tmp/current",
+      ),
+    ).not.toBeNull();
   });
 });

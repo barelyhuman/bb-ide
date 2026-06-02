@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  ThreadGitDiffResponse,
   ThreadListEntry,
   ThreadWithRuntime,
   WorkspaceStatus,
@@ -12,6 +11,8 @@ import {
 } from "@bb/test-helpers";
 import type {
   EnvironmentDiffBranchesResponse,
+  EnvironmentDiffResponse,
+  EnvironmentStatusResponse,
   ProjectBranchesResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
@@ -36,23 +37,29 @@ import {
 } from "./query-placeholders";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 
-function makeStatus(
+function makeStatusResponse(
   state: WorkspaceStatus["workingTree"]["state"],
-): WorkspaceStatus {
-  return makeWorkspaceStatus({
-    workingTree: makeWorkspaceWorkingTree({ state }),
-    branch: { currentBranch: "feature", defaultBranch: "main" },
-    mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
-  });
+): EnvironmentStatusResponse {
+  return {
+    outcome: "available",
+    workspace: makeWorkspaceStatus({
+      workingTree: makeWorkspaceWorkingTree({ state }),
+      branch: { currentBranch: "feature", defaultBranch: "main" },
+      mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+    }),
+  };
 }
 
-function makeGitDiffResponse(): ThreadGitDiffResponse {
+function makeGitDiffResponse(): EnvironmentDiffResponse {
   return {
-    diff: "diff --git a/file b/file",
-    truncated: false,
-    shortstat: " 1 file changed, 1 insertion(+)\n",
-    files: "M\tfile\n",
-    mergeBaseRef: null,
+    outcome: "available",
+    diff: {
+      diff: "diff --git a/file b/file",
+      truncated: false,
+      shortstat: " 1 file changed, 1 insertion(+)\n",
+      files: "M\tfile\n",
+      mergeBaseRef: null,
+    },
   };
 }
 
@@ -133,7 +140,12 @@ function makeThreadTimelineResponse(
 
 describe("resolveEnvironmentWorkStatusPlaceholder", () => {
   it("reuses previous work status only for the same thread query", () => {
-    const previousStatus = makeStatus("clean");
+    const previousStatus = makeStatusResponse("clean");
+    const previousNotApplicableStatus: EnvironmentStatusResponse = {
+      outcome: "not_applicable",
+      reason: "non_git_environment",
+      message: "Workspace status is not available for non-git environments",
+    };
 
     expect(
       resolveEnvironmentWorkStatusPlaceholder(
@@ -153,15 +165,15 @@ describe("resolveEnvironmentWorkStatusPlaceholder", () => {
 
     expect(
       resolveEnvironmentWorkStatusPlaceholder(
-        null,
+        previousNotApplicableStatus,
         ["environmentWorkStatus", "thread-1", null],
         "thread-1",
       ),
-    ).toBeNull();
+    ).toBe(previousNotApplicableStatus);
 
     expect(
       resolveEnvironmentWorkStatusPlaceholder(
-        null,
+        previousNotApplicableStatus,
         ["environmentWorkStatus", "thread-1", null],
         "thread-2",
       ),

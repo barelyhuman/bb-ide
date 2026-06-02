@@ -21,7 +21,6 @@ import {
   threadListEntrySchema,
   threadSchema,
 } from "@bb/domain";
-import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -89,35 +88,32 @@ const hostStatusListResponseSchema = z.array(
   }),
 );
 
-interface ReportCleanWorkspaceStatusForEnvironmentArgs {
+interface ReportCleanCleanupPreflightForEnvironmentArgs {
   afterCursor?: number;
   environmentId: string;
 }
 
-async function reportCleanWorkspaceStatusForEnvironment(
+async function reportCleanCleanupPreflightForEnvironment(
   harness: TestAppHarness,
-  args: ReportCleanWorkspaceStatusForEnvironmentArgs,
+  args: ReportCleanCleanupPreflightForEnvironmentArgs,
 ) {
   const command =
     args.afterCursor === undefined
       ? await waitForQueuedCommand(
           harness,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === args.environmentId,
         )
       : await waitForQueuedCommandAfter(
           harness,
           args.afterCursor,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === args.environmentId,
         );
   await reportQueuedCommandSuccess(harness, command, {
-    workspaceStatus: makeWorkspaceStatus({
-      branch: { currentBranch: "bb/thread", defaultBranch: "main" },
-      mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
-    }),
+    outcome: "safe_to_destroy",
   });
   return command;
 }
@@ -1843,14 +1839,11 @@ describe("public project and host routes", () => {
       const statusCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.status" &&
+          command.type === "environment.cleanup_preflight" &&
           command.environmentId === managed.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
-        workspaceStatus: makeWorkspaceStatus({
-          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
-          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
-        }),
+        outcome: "safe_to_destroy",
       });
 
       const commands = harness.db
@@ -2067,11 +2060,11 @@ describe("public project and host routes", () => {
         `/api/v1/projects/${project.id}`,
         { method: "DELETE" },
       );
-      const firstStatus = await reportCleanWorkspaceStatusForEnvironment(
+      const firstStatus = await reportCleanCleanupPreflightForEnvironment(
         harness,
         { environmentId: firstEnvironment.id },
       );
-      await reportCleanWorkspaceStatusForEnvironment(harness, {
+      await reportCleanCleanupPreflightForEnvironment(harness, {
         afterCursor: firstStatus.row.cursor,
         environmentId: secondEnvironment.id,
       });
@@ -2101,11 +2094,19 @@ describe("public project and host routes", () => {
 
       expect(getProject(harness.db, project.id)).not.toBeNull();
 
-      await runProjectDeletionSweep(harness.deps);
+      const retrySweepPromise = runProjectDeletionSweep(harness.deps);
 
+      const retriedPreflight = await reportCleanCleanupPreflightForEnvironment(
+        harness,
+        {
+          afterCursor: secondDestroy.row.cursor,
+          environmentId: secondEnvironment.id,
+        },
+      );
+      await retrySweepPromise;
       const retriedDestroy = await waitForQueuedCommandAfter(
         harness,
-        secondDestroy.row.cursor,
+        retriedPreflight.row.cursor,
         ({ command }) =>
           command.type === "environment.destroy" &&
           command.environmentId === secondEnvironment.id,

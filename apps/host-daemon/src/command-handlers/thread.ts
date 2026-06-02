@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
-import { getPersonalWorkspaceRoot } from "@bb/host-workspace";
 import { resolveContainedPath } from "@bb/process-utils";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import {
@@ -10,6 +9,7 @@ import {
   type CommandOf,
 } from "../command-dispatch-support.js";
 import { stagePromptAttachments } from "./prompt-attachments.js";
+import { requireResolvedWorkspaceForCommand } from "../workspace-resolution.js";
 
 type TurnSubmitCommand = CommandOf<"turn.submit">;
 
@@ -67,11 +67,11 @@ export async function startThread(
     threadId: command.threadId,
   });
   try {
-    const entry = await options.runtimeManager.ensureEnvironment({
+    const entry = await requireResolvedWorkspaceForCommand({
+      dataDir: options.dataDir,
       environmentId: command.environmentId,
-      personalWorkspaceRoot: getPersonalWorkspaceRoot(options.dataDir),
-      workspacePath: command.workspaceContext.workspacePath,
-      workspaceProvisionType: command.workspaceContext.workspaceProvisionType,
+      runtimeManager: options.runtimeManager,
+      workspaceContext: command.workspaceContext,
     });
     const result = await entry.runtime.startThread({
       environmentId: command.environmentId,
@@ -104,16 +104,12 @@ export async function ensureThreadRuntime(
 ): Promise<RuntimeEntry> {
   const { resumeContext } = command;
   let providerThreadId = resumeContext.providerThreadId;
-  let entry = options.runtimeManager.get(command.environmentId);
-  if (!entry) {
-    entry = await options.runtimeManager.ensureEnvironment({
-      environmentId: command.environmentId,
-      personalWorkspaceRoot: getPersonalWorkspaceRoot(options.dataDir),
-      workspacePath: resumeContext.workspaceContext.workspacePath,
-      workspaceProvisionType:
-        resumeContext.workspaceContext.workspaceProvisionType,
-    });
-  }
+  const entry = await requireResolvedWorkspaceForCommand({
+    dataDir: options.dataDir,
+    environmentId: command.environmentId,
+    runtimeManager: options.runtimeManager,
+    workspaceContext: resumeContext.workspaceContext,
+  });
 
   if (
     !options.runtimeManager.hasThread(command.environmentId, command.threadId)

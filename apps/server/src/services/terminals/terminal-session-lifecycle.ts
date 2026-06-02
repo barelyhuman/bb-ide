@@ -41,6 +41,7 @@ import {
   threadEnvironmentUnavailableDetails,
   throwThreadEnvironmentUnavailable,
 } from "../lib/lifecycle-api-errors.js";
+import { requireWorkspaceCommandTarget } from "../environments/workspace-command-target.js";
 
 const DEFAULT_TERMINAL_OPEN_TIMEOUT_MS = 10_000;
 
@@ -343,6 +344,7 @@ export class TerminalSessionLifecycle {
       this.options,
       environment.hostId,
     );
+    const target = requireWorkspaceCommandTarget(environment);
     const existingSessions = listTerminalSessionsByThread(
       this.options.db,
       thread.id,
@@ -366,11 +368,8 @@ export class TerminalSessionLifecycle {
       requestId,
       terminalId: startingSession.id,
       threadId: thread.id,
-      environmentId: environment.id,
-      workspaceContext: {
-        workspacePath: environment.path,
-        workspaceProvisionType: environment.workspaceProvisionType,
-      },
+      environmentId: target.environmentId,
+      workspaceContext: target.workspaceContext,
       cols: args.payload.cols,
       rows: args.payload.rows,
     };

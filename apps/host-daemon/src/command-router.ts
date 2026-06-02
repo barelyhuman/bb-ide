@@ -522,6 +522,7 @@ export class CommandRouter {
     // `shouldFlushEventsBeforeReportingCommandResult` is a separate
     // event-before-result ordering policy in the host-daemon contract.
     switch (command.type) {
+      case "environment.cleanup_preflight":
       case "workspace.status":
       case "workspace.diff":
         return "read";

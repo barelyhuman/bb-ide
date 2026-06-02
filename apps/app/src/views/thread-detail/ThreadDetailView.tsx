@@ -694,11 +694,18 @@ export function ThreadDetailView() {
       enabled: canUseGitUi && environment !== undefined,
     },
   );
-  const workStatus = workStatusQuery.data;
   const workspaceStatusError = workStatusQuery.error;
-  const workspaceStatus = workspaceStatusError
+  const workStatusResponse = workspaceStatusError
     ? undefined
-    : (workStatus ?? undefined);
+    : workStatusQuery.data;
+  const workspaceStatus =
+    workStatusResponse?.outcome === "available"
+      ? workStatusResponse.workspace
+      : undefined;
+  const workspaceUnavailable =
+    workStatusResponse?.outcome === "unavailable"
+      ? workStatusResponse.failure
+      : undefined;
   const workspaceBranch = workspaceStatus?.branch;
   const workspaceChangedFilesSection = useMemo(
     () => selectWorkspaceChangedFilesSection(workspaceStatus),
@@ -1048,6 +1055,7 @@ export function ThreadDetailView() {
     mergeBaseBranch,
     showBranchComparison: showBranchComparisonUi,
     error: workspaceStatusError,
+    workspaceUnavailable,
     workspaceDeleted: isWorkspaceDeleted,
   });
   const threadTitle = getThreadDisplayTitle(thread);
@@ -1277,6 +1285,7 @@ export function ThreadDetailView() {
           environment: environment ?? null,
           workspaceStatus,
           workspaceStatusError: workspaceStatusError ?? null,
+          workspaceUnavailable,
           selectedMergeBaseBranch,
           mergeBaseBranchRef: selectedMergeBaseBranchRef,
           mergeBaseBranchOptions,

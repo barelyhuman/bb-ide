@@ -25,7 +25,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 26 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 27 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -56,6 +56,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "provider.list",
   "provider.list_models",
   "environment.provision",
+  "environment.cleanup_preflight",
   "environment.destroy",
   "workspace.status",
   "workspace.diff",
@@ -85,6 +86,29 @@ export const workspaceContextSchema = z.object({
   workspaceProvisionType: workspaceProvisionTypeSchema,
 });
 export type WorkspaceContext = z.infer<typeof workspaceContextSchema>;
+
+export const workspaceResolutionFailureCodeSchema = z.enum([
+  "path_not_found",
+  "not_git_repo",
+  "not_worktree",
+  "workspace_type_mismatch",
+  "permission_denied",
+  "unknown_environment",
+  "unknown",
+]);
+export const workspaceResolutionFailureSchema = z
+  .object({
+    code: workspaceResolutionFailureCodeSchema,
+    workspacePath: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .strict();
+export type WorkspaceResolutionFailureCode = z.infer<
+  typeof workspaceResolutionFailureCodeSchema
+>;
+export type WorkspaceResolutionFailure = z.infer<
+  typeof workspaceResolutionFailureSchema
+>;
 
 const hostDaemonThreadTargetSchema = z.object({
   environmentId: z.string().min(1),
@@ -523,6 +547,12 @@ export const environmentDestroyCommandSchema =
     type: z.literal("environment.destroy"),
   });
 
+export const environmentCleanupPreflightCommandSchema =
+  hostDaemonWorkspaceTargetSchema.extend({
+    type: z.literal("environment.cleanup_preflight"),
+    mergeBaseBranch: gitBranchNameSchema,
+  });
+
 export const workspaceStatusCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("workspace.status"),
@@ -577,6 +607,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostDeletePathRelativeCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
+  environmentCleanupPreflightCommandSchema,
   environmentDestroyCommandSchema,
   workspaceStatusCommandSchema,
   workspaceDiffCommandSchema,
@@ -600,6 +631,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
       return true;
     case "environment.provision":
       return command.initiator !== null;
+    case "environment.cleanup_preflight":
     case "environment.destroy":
     case "host.list_branches":
     case "host.file_metadata":
@@ -663,6 +695,67 @@ const pathDeleteResultSchema = z.object({
   path: z.string(),
   deleted: z.boolean(),
 });
+
+const environmentCleanupPreflightResultSchema = z.discriminatedUnion(
+  "outcome",
+  [
+    z.object({ outcome: z.literal("safe_to_destroy") }).strict(),
+    z
+      .object({
+        outcome: z.literal("blocked_by_changes"),
+        message: z.string().min(1),
+      })
+      .strict(),
+    z
+      .object({
+        outcome: z.literal("already_missing"),
+        failure: workspaceResolutionFailureSchema,
+      })
+      .strict(),
+    z
+      .object({
+        outcome: z.literal("not_inspectable"),
+        failure: workspaceResolutionFailureSchema,
+      })
+      .strict(),
+    z
+      .object({
+        outcome: z.literal("probe_failed"),
+        failure: workspaceResolutionFailureSchema,
+      })
+      .strict(),
+  ],
+);
+
+const workspaceStatusResultSchema = z.discriminatedUnion("outcome", [
+  z
+    .object({
+      outcome: z.literal("available"),
+      workspaceStatus: workspaceStatusSchema,
+    })
+    .strict(),
+  z
+    .object({
+      outcome: z.literal("unavailable"),
+      failure: workspaceResolutionFailureSchema,
+    })
+    .strict(),
+]);
+
+const workspaceDiffResultSchema = z.discriminatedUnion("outcome", [
+  z
+    .object({
+      outcome: z.literal("available"),
+      diff: threadGitDiffResponseSchema,
+    })
+    .strict(),
+  z
+    .object({
+      outcome: z.literal("unavailable"),
+      failure: workspaceResolutionFailureSchema,
+    })
+    .strict(),
+]);
 
 const fileListResultSchema = z.object({
   files: z.array(z.object({ path: z.string(), name: z.string() })),
@@ -728,13 +821,10 @@ export const hostDaemonCommandResultSchemaByType = {
   "environment.provision": discoveredWorkspacePropertiesSchema.extend({
     transcript: z.array(provisioningTranscriptEntrySchema),
   }),
+  "environment.cleanup_preflight": environmentCleanupPreflightResultSchema,
   "environment.destroy": z.object({}),
-  "workspace.status": z.object({
-    workspaceStatus: workspaceStatusSchema,
-  }),
-  "workspace.diff": z.object({
-    diff: threadGitDiffResponseSchema,
-  }),
+  "workspace.status": workspaceStatusResultSchema,
+  "workspace.diff": workspaceDiffResultSchema,
   "workspace.commit": z.object({
     commitSha: z.string().min(1),
     commitSubject: z.string().min(1),

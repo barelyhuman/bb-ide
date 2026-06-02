@@ -497,9 +497,15 @@ describe("CommandRouter", () => {
     expect(reportResult).toHaveBeenCalledWith(
       expect.objectContaining({
         commandId: "status-missing-workspace",
-        errorCode: "path_not_found",
-        errorMessage: `Managed workspace path does not exist: ${missingPath}`,
-        ok: false,
+        ok: true,
+        result: {
+          outcome: "unavailable",
+          failure: {
+            code: "path_not_found",
+            workspacePath: missingPath,
+            message: `Managed workspace path does not exist: ${missingPath}`,
+          },
+        },
         type: "workspace.status",
       }),
     );
@@ -549,9 +555,15 @@ describe("CommandRouter", () => {
     expect(reportResult).toHaveBeenCalledWith(
       expect.objectContaining({
         commandId: "diff-missing-workspace",
-        errorCode: "path_not_found",
-        errorMessage: `Managed workspace path does not exist: ${missingPath}`,
-        ok: false,
+        ok: true,
+        result: {
+          outcome: "unavailable",
+          failure: {
+            code: "path_not_found",
+            workspacePath: missingPath,
+            message: `Managed workspace path does not exist: ${missingPath}`,
+          },
+        },
         type: "workspace.diff",
       }),
     );

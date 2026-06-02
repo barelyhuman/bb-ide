@@ -1,5 +1,4 @@
 import {
-  cleanWorkspaceStatus,
   provisionHostMock,
   resumeHostMock,
 } from "./public-thread-test-harness.js";
@@ -34,7 +33,6 @@ import {
 import {
   listQueuedEnvironmentCommands,
   listQueuedThreadCommands,
-  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -82,7 +80,7 @@ interface QueueExistingNativeArchiveCommandArgs {
   thread: Thread;
 }
 
-interface ReportCleanWorkspaceStatusForEnvironmentArgs {
+interface ReportCleanCleanupPreflightForEnvironmentArgs {
   afterCursor?: number;
   environmentId: string;
 }
@@ -153,27 +151,27 @@ function queueExistingNativeArchiveCommand(
   }
 }
 
-async function reportCleanWorkspaceStatusForEnvironment(
+async function reportCleanCleanupPreflightForEnvironment(
   harness: TestAppHarness,
-  args: ReportCleanWorkspaceStatusForEnvironmentArgs,
+  args: ReportCleanCleanupPreflightForEnvironmentArgs,
 ) {
   const command =
     args.afterCursor === undefined
       ? await waitForQueuedCommand(
           harness,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === args.environmentId,
         )
       : await waitForQueuedCommandAfter(
           harness,
           args.afterCursor,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === args.environmentId,
         );
   await reportQueuedCommandSuccess(harness, command, {
-    workspaceStatus: cleanWorkspaceStatus(),
+    outcome: "safe_to_destroy",
   });
   return command;
 }
@@ -1100,7 +1098,7 @@ describe("public thread archive delete cleanup routes", () => {
           command.type === "thread.archive" && command.threadId === thread.id,
       );
       await reportQueuedCommandSuccess(harness, nativeArchiveCommand, {});
-      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+      const statusCommand = await reportCleanCleanupPreflightForEnvironment(
         harness,
         {
           environmentId: environment.id,
@@ -1185,7 +1183,7 @@ describe("public thread archive delete cleanup routes", () => {
         },
       );
       expect(archiveResponse.status).toBe(200);
-      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+      const statusCommand = await reportCleanCleanupPreflightForEnvironment(
         harness,
         {
           environmentId: environment.id,
@@ -1332,18 +1330,12 @@ describe("public thread archive delete cleanup routes", () => {
       const dirtyStatusCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.status" &&
+          command.type === "environment.cleanup_preflight" &&
           command.environmentId === isolatedManagedEnvironment.id,
       );
       await reportQueuedCommandSuccess(harness, dirtyStatusCommand, {
-        workspaceStatus: {
-          ...cleanWorkspaceStatus(),
-          workingTree: {
-            ...cleanWorkspaceStatus().workingTree,
-            state: "dirty_uncommitted",
-            hasUncommittedChanges: true,
-          },
-        },
+        outcome: "blocked_by_changes",
+        message: "Workspace has uncommitted or unmerged changes",
       });
       const dirtyArchiveResponse = await dirtyArchivePromise;
       expect(dirtyArchiveResponse.status).toBe(200);
@@ -1378,7 +1370,7 @@ describe("public thread archive delete cleanup routes", () => {
           harness,
           dirtyStatusCommand.row.cursor,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === environment.id,
           100,
         ),
@@ -1977,7 +1969,7 @@ describe("public thread archive delete cleanup routes", () => {
         waitForQueuedCommand(
           harness,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === environment.id,
           100,
         ),
@@ -2095,7 +2087,7 @@ describe("public thread archive delete cleanup routes", () => {
       );
       expect(stopResultResponse.status).toBe(200);
 
-      await reportCleanWorkspaceStatusForEnvironment(harness, {
+      await reportCleanCleanupPreflightForEnvironment(harness, {
         afterCursor: stopCommand.row.cursor,
         environmentId: environment.id,
       });
@@ -2167,7 +2159,7 @@ describe("public thread archive delete cleanup routes", () => {
       const stopResultResponse = await stopResultPromise;
       expect(stopResultResponse.status).toBe(200);
 
-      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+      const statusCommand = await reportCleanCleanupPreflightForEnvironment(
         harness,
         {
           afterCursor: stopCommand.row.cursor,
@@ -2189,7 +2181,7 @@ describe("public thread archive delete cleanup routes", () => {
           harness,
           statusCommand.row.cursor,
           ({ command }) =>
-            command.type === "workspace.status" &&
+            command.type === "environment.cleanup_preflight" &&
             command.environmentId === environment.id,
           100,
         ),
@@ -2227,7 +2219,7 @@ describe("public thread archive delete cleanup routes", () => {
       );
       expect(response.status).toBe(200);
 
-      const statusCommand = await reportCleanWorkspaceStatusForEnvironment(
+      const statusCommand = await reportCleanCleanupPreflightForEnvironment(
         harness,
         { environmentId: environment.id },
       );
@@ -2341,14 +2333,14 @@ describe("public thread archive delete cleanup routes", () => {
       expect(
         listQueuedEnvironmentCommands(
           harness,
-          "workspace.status",
+          "environment.cleanup_preflight",
           environment.id,
         ),
       ).toHaveLength(0);
     });
   });
 
-  it("continues managed cleanup when workspace status reports not_git_repo", async () => {
+  it("continues managed cleanup when cleanup preflight reports not inspectable", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -2381,19 +2373,23 @@ describe("public thread archive delete cleanup routes", () => {
       const statusCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.status" &&
+          command.type === "environment.cleanup_preflight" &&
           command.environmentId === environment.id,
       );
-      const statusErrorResponse = await reportQueuedCommandError(
+      const statusResponse = await reportQueuedCommandSuccess(
         harness,
         statusCommand,
         {
-          errorCode: "not_git_repo",
-          errorMessage:
-            "Path is not a git repository: /tmp/managed-cleanup-not-git",
+          outcome: "not_inspectable",
+          failure: {
+            code: "not_git_repo",
+            message:
+              "Path is not a git repository: /tmp/managed-cleanup-not-git",
+            workspacePath: "/tmp/managed-cleanup-not-git",
+          },
         },
       );
-      expect(statusErrorResponse.status).toBe(200);
+      expect(statusResponse.status).toBe(200);
 
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,

@@ -10,6 +10,7 @@ import type {
   ThreadListEntry,
   WorkspaceStatus,
 } from "@bb/domain";
+import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
@@ -452,6 +453,7 @@ export interface GitStatusRowProps {
   environment: Environment | null;
   workspaceStatus: WorkspaceStatus | undefined;
   workspaceStatusError: Error | null;
+  workspaceUnavailable?: WorkspaceResolutionFailure;
   selectedMergeBaseBranch: string | undefined;
 }
 
@@ -460,6 +462,7 @@ export function GitStatusRow({
   environment,
   workspaceStatus,
   workspaceStatusError,
+  workspaceUnavailable,
   selectedMergeBaseBranch,
 }: GitStatusRowProps) {
   const isManagerThread = thread.type === "manager";
@@ -469,6 +472,7 @@ export function GitStatusRow({
     canUseGitUi &&
     (Boolean(workspaceStatus) ||
       Boolean(workspaceStatusError) ||
+      Boolean(workspaceUnavailable) ||
       isWorkspaceDeleted) &&
     !(thread.archivedAt != null && environment?.managed !== true);
   if (!showWorkspaceStatus) return null;
@@ -484,6 +488,7 @@ export function GitStatusRow({
     mergeBaseBranch: effectiveMergeBaseBranch,
     showBranchComparison: showBranchComparisonUi,
     error: workspaceStatusError,
+    workspaceUnavailable,
     workspaceDeleted: isWorkspaceDeleted,
   });
   const labelClass =
@@ -615,6 +620,7 @@ export interface ThreadMetadataContentProps {
   environment: Environment | null;
   workspaceStatus: WorkspaceStatus | undefined;
   workspaceStatusError: Error | null;
+  workspaceUnavailable?: WorkspaceResolutionFailure;
   selectedMergeBaseBranch: string | undefined;
   mergeBaseBranchRef?: GitBranchRefClassification | null;
   mergeBaseBranchOptions: readonly string[] | undefined;
@@ -641,6 +647,7 @@ export function hasAnyThreadMetadata({
   environment,
   workspaceStatus,
   workspaceStatusError,
+  workspaceUnavailable,
 }: Pick<
   ThreadMetadataContentProps,
   | "thread"
@@ -648,6 +655,7 @@ export function hasAnyThreadMetadata({
   | "environment"
   | "workspaceStatus"
   | "workspaceStatusError"
+  | "workspaceUnavailable"
 >): boolean {
   const isManagerThread = thread.type === "manager";
   const parentThreadId = thread.parentThreadId ?? undefined;
@@ -657,6 +665,7 @@ export function hasAnyThreadMetadata({
     canUseGitUi &&
     (Boolean(workspaceStatus) ||
       Boolean(workspaceStatusError) ||
+      Boolean(workspaceUnavailable) ||
       isWorkspaceDeleted) &&
     !(thread.archivedAt != null && environment?.managed !== true);
   const branchName = workspaceStatus?.branch.currentBranch ?? null;
@@ -717,6 +726,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     environment,
     workspaceStatus,
     workspaceStatusError,
+    workspaceUnavailable,
     selectedMergeBaseBranch,
     mergeBaseBranchRef,
     mergeBaseBranchOptions,
@@ -781,6 +791,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         environment={environment}
         workspaceStatus={workspaceStatus}
         workspaceStatusError={workspaceStatusError}
+        workspaceUnavailable={workspaceUnavailable}
         selectedMergeBaseBranch={selectedMergeBaseBranch}
       />
       <ArchivedRow thread={thread} />

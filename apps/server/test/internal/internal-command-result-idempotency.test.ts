@@ -17,7 +17,6 @@ import {
 } from "@bb/db";
 import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
 import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
-import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
 import { handleCommandResult } from "../../src/internal/command-results.js";
 import {
@@ -554,14 +553,11 @@ describe("internal command result idempotency", () => {
         harness,
         queuedStop.row.cursor,
         ({ command: queuedCommand }) =>
-          queuedCommand.type === "workspace.status" &&
+          queuedCommand.type === "environment.cleanup_preflight" &&
           queuedCommand.environmentId === environment.id,
       );
       await reportQueuedCommandSuccess(harness, statusCommand, {
-        workspaceStatus: makeWorkspaceStatus({
-          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
-          mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
-        }),
+        outcome: "safe_to_destroy",
       });
       await cleanupSweepPromise;
 

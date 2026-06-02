@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import type { Environment, WorkspaceDiffTarget } from "@bb/domain";
 import type {
-  Environment,
-  ThreadGitDiffResponse,
-  WorkspaceDiffTarget,
-  WorkspaceStatus,
-} from "@bb/domain";
-import type { EnvironmentDiffBranchesResponse } from "@bb/server-contract";
+  EnvironmentDiffBranchesResponse,
+  EnvironmentDiffResponse,
+  EnvironmentStatusResponse,
+} from "@bb/server-contract";
 import type { FilePreview } from "@/lib/api";
 import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
 import * as api from "@/lib/api";
@@ -109,7 +108,7 @@ export function useEnvironmentWorkStatus(
 ) {
   const normalizedMergeBaseBranch = mergeBaseBranch ?? null;
 
-  return useQuery<WorkspaceStatus | null>({
+  return useQuery<EnvironmentStatusResponse>({
     queryKey: environmentWorkStatusQueryKey(
       environmentId,
       normalizedMergeBaseBranch,
@@ -205,7 +204,7 @@ export function useEnvironmentGitDiff(
         ? target.mergeBaseBranch
         : null;
 
-  return useQuery<ThreadGitDiffResponse>({
+  return useQuery<EnvironmentDiffResponse>({
     queryKey: environmentGitDiffQueryKey(
       environmentId,
       target?.type ?? null,

@@ -5,12 +5,13 @@ import path from "node:path";
 import { spawn as spawnPty } from "node-pty";
 import type { TerminalSessionCloseReason } from "@bb/domain";
 import type { HostDaemonDaemonWsMessage } from "@bb/host-daemon-contract";
-import { getPersonalWorkspaceRoot } from "@bb/host-workspace";
 import { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 import type { HostDaemonServerTerminalMessage } from "../server-connection-support.js";
 import type { HostDaemonLogger } from "../logger.js";
 import { RuntimeManager } from "../runtime-manager.js";
 import { runtimeErrorLogFields } from "../error-utils.js";
+import { requireResolvedWorkspaceForCommand } from "../workspace-resolution.js";
+import { ExpectedCommandDispatchError } from "../command-dispatch-support.js";
 
 const DEFAULT_SCROLLBACK_MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_SCROLLBACK_MAX_CHUNKS = 10_000;
@@ -394,17 +395,11 @@ export class TerminalManager {
     }
 
     try {
-      const entry = await this.options.runtimeManager.ensureEnvironment({
+      const entry = await requireResolvedWorkspaceForCommand({
+        dataDir: this.options.dataDir,
         environmentId: message.environmentId,
-        ...(this.options.dataDir
-          ? {
-              personalWorkspaceRoot: getPersonalWorkspaceRoot(
-                this.options.dataDir,
-              ),
-            }
-          : {}),
-        workspacePath: message.workspaceContext.workspacePath,
-        workspaceProvisionType: message.workspaceContext.workspaceProvisionType,
+        runtimeManager: this.options.runtimeManager,
+        workspaceContext: message.workspaceContext,
       });
       const shell = await this.resolveShell();
       const pty = this.ptyAdapter.spawn({
@@ -457,8 +452,13 @@ export class TerminalManager {
         rows: message.rows,
       });
     } catch (error) {
+      const code =
+        error instanceof ExpectedCommandDispatchError &&
+        error.code === "workspace_type_mismatch"
+          ? error.code
+          : "terminal_open_failed";
       this.sendTerminalError({
-        code: "terminal_open_failed",
+        code,
         message: error instanceof Error ? error.message : String(error),
         requestId: message.requestId,
         terminalId: message.terminalId,

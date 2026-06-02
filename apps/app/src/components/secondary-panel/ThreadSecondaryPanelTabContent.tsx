@@ -58,6 +58,7 @@ export interface GitDiffTabContentProps {
   collapsedGitDiffFileKeys: ReadonlySet<string>;
   currentGitDiff: string;
   gitDiffError: Error | null;
+  gitDiffUnavailableMessage: string | null;
   gitDiffViewOptions: Record<string, string | boolean | number>;
   isParsingGitDiffFiles: boolean;
   isPreparingGitDiff: boolean;
@@ -178,6 +179,7 @@ export function GitDiffTabContent({
   collapsedGitDiffFileKeys,
   currentGitDiff,
   gitDiffError,
+  gitDiffUnavailableMessage,
   gitDiffViewOptions,
   isParsingGitDiffFiles,
   isPreparingGitDiff,
@@ -226,6 +228,11 @@ export function GitDiffTabContent({
           >
             {gitDiffErrorMessage}
           </p>
+        </div>
+      ) : gitDiffUnavailableMessage ? (
+        <div className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">Workspace unavailable</p>
+          <p className="mt-1 leading-5">{gitDiffUnavailableMessage}</p>
         </div>
       ) : threadGitDiff && hasCurrentGitDiff ? (
         <>

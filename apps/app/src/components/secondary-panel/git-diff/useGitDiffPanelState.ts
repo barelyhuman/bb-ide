@@ -154,7 +154,7 @@ export function useGitDiffPanelState({
     },
   );
   const {
-    data: fetchedThreadGitDiff,
+    data: fetchedGitDiffResponse,
     isLoading: isGitDiffLoading,
     isPlaceholderData: isGitDiffPlaceholderData,
     error: gitDiffError,
@@ -165,6 +165,20 @@ export function useGitDiffPanelState({
       gitDiffTarget !== undefined,
     target: gitDiffTarget,
   });
+  const fetchedThreadGitDiff =
+    fetchedGitDiffResponse?.outcome === "available"
+      ? fetchedGitDiffResponse.diff
+      : undefined;
+  const gitDiffUnavailableMessage =
+    fetchedGitDiffResponse?.outcome === "unavailable"
+      ? fetchedGitDiffResponse.failure.message
+      : fetchedGitDiffResponse?.outcome === "not_applicable"
+        ? fetchedGitDiffResponse.message
+        : null;
+  const workspaceStatus =
+    gitDiffWorkspaceStatus?.outcome === "available"
+      ? gitDiffWorkspaceStatus.workspace
+      : undefined;
   useEffect(() => {
     if (fetchedThreadGitDiff && !isGitDiffPlaceholderData) {
       setDisplayedGitDiffState((currentState) => {
@@ -382,22 +396,22 @@ export function useGitDiffPanelState({
   }, [pendingGitDiffScrollPath]);
 
   const hasUncommittedChanges =
-    (gitDiffWorkspaceStatus?.workingTree.files.length ?? 0) > 0;
+    (workspaceStatus?.workingTree.files.length ?? 0) > 0;
 
   useEffect(() => {
     if (
       shouldResetSelectedGitDiffCommit(
         selectedGitDiffCommitSha,
-        gitDiffWorkspaceStatus?.mergeBase?.commits ?? [],
+        workspaceStatus?.mergeBase?.commits ?? [],
         { hasUncommittedChanges },
       )
     ) {
       setSelectedGitDiffCommitSha(null);
     }
   }, [
-    gitDiffWorkspaceStatus?.mergeBase?.commits,
     hasUncommittedChanges,
     selectedGitDiffCommitSha,
+    workspaceStatus?.mergeBase?.commits,
   ]);
 
   // --- Scroll-to-file effect ---
@@ -472,8 +486,8 @@ export function useGitDiffPanelState({
   // --- Derived values ---
 
   const diffCommits = useMemo(
-    () => gitDiffWorkspaceStatus?.mergeBase?.commits ?? [],
-    [gitDiffWorkspaceStatus?.mergeBase?.commits],
+    () => workspaceStatus?.mergeBase?.commits ?? [],
+    [workspaceStatus?.mergeBase?.commits],
   );
   const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
   const gitDiffSelectOptions: GitDiffSelectionOption[] = useMemo(
@@ -526,6 +540,7 @@ export function useGitDiffPanelState({
   return {
     currentGitDiff,
     gitDiffError,
+    gitDiffUnavailableMessage,
     gitDiffSelectOptions,
     gitDiffSelectValue,
     gitDiffStats,

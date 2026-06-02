@@ -336,6 +336,40 @@ describe("TerminalManager", () => {
     );
   });
 
+  it("rejects terminal opens when the loaded runtime path differs from workspaceContext", async () => {
+    const harness = createHarness();
+    await harness.runtimeManager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/terminal-workspace",
+    });
+
+    await harness.manager.handleMessage({
+      type: "terminal.open",
+      requestId: "open-stale",
+      terminalId: "term-stale",
+      threadId: "thr-1",
+      environmentId: "env-1",
+      workspaceContext: {
+        workspacePath: "/tmp/stale-terminal-workspace",
+        workspaceProvisionType: "unmanaged",
+      },
+      cols: 100,
+      rows: 30,
+    });
+
+    expect(harness.adapter.spawned).toHaveLength(0);
+    expect(harness.messages).toEqual([
+      {
+        type: "terminal.error",
+        requestId: "open-stale",
+        terminalId: "term-stale",
+        code: "workspace_type_mismatch",
+        message:
+          "Loaded environment env-1 is bound to /tmp/terminal-workspace, not /tmp/stale-terminal-workspace",
+      },
+    ]);
+  });
+
   it("scrubs inherited bb runtime env vars before spawning a terminal", async () => {
     vi.stubEnv("BB_DATA_DIR", "/tmp/leaked-bb-data");
     vi.stubEnv("BB_HOST_DAEMON_PORT", "38887");

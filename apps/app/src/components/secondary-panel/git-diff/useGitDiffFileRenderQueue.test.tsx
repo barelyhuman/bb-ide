@@ -28,11 +28,25 @@ interface MockThreadGitDiffResponse {
 }
 
 interface MockGitDiffQuery {
-  data: MockThreadGitDiffResponse | undefined;
+  data: MockEnvironmentDiffResponse | undefined;
   error: Error | null;
   isLoading: boolean;
   isPlaceholderData: boolean;
 }
+
+type MockEnvironmentDiffResponse =
+  | {
+      outcome: "available";
+      diff: MockThreadGitDiffResponse;
+    }
+  | {
+      outcome: "unavailable";
+      failure: {
+        code: "path_not_found" | "workspace_type_mismatch";
+        message: string;
+        workspacePath: string;
+      };
+    };
 
 interface MockWorkspaceStatus {
   mergeBase: {
@@ -44,7 +58,10 @@ interface MockWorkspaceStatus {
 }
 
 interface MockWorkStatusQuery {
-  data: MockWorkspaceStatus;
+  data: {
+    outcome: "available";
+    workspace: MockWorkspaceStatus;
+  };
 }
 
 interface MockEnvironmentQueries {
@@ -61,11 +78,14 @@ const mockEnvironmentQueries = vi.hoisted<MockEnvironmentQueries>(() => ({
   },
   workStatus: {
     data: {
-      mergeBase: {
-        commits: [],
-      },
-      workingTree: {
-        files: [],
+      outcome: "available",
+      workspace: {
+        mergeBase: {
+          commits: [],
+        },
+        workingTree: {
+          files: [],
+        },
       },
     },
   },
@@ -110,13 +130,16 @@ function buildEntries(paths: readonly string[]): ParsedGitDiffFileEntry[] {
   return buildParsedGitDiffFileEntries(parseGitDiffFiles(buildPatchDiff(paths)));
 }
 
-function makeThreadGitDiffResponse(diff: string): MockThreadGitDiffResponse {
+function makeThreadGitDiffResponse(diff: string): MockEnvironmentDiffResponse {
   return {
-    diff,
-    files: "",
-    mergeBaseRef: "merge-base",
-    shortstat: "",
-    truncated: false,
+    outcome: "available",
+    diff: {
+      diff,
+      files: "",
+      mergeBaseRef: "merge-base",
+      shortstat: "",
+      truncated: false,
+    },
   };
 }
 
@@ -138,11 +161,14 @@ function resetEnvironmentQueryMocks(): void {
   mockEnvironmentQueries.gitDiff.isLoading = false;
   mockEnvironmentQueries.gitDiff.isPlaceholderData = false;
   mockEnvironmentQueries.workStatus.data = {
-    mergeBase: {
-      commits: [],
-    },
-    workingTree: {
-      files: [],
+    outcome: "available",
+    workspace: {
+      mergeBase: {
+        commits: [],
+      },
+      workingTree: {
+        files: [],
+      },
     },
   };
 }
@@ -471,6 +497,26 @@ describe("useGitDiffFileRenderQueue", () => {
 });
 
 describe("useGitDiffPanelState pending scroll", () => {
+  it("exposes unavailable workspace diff as a typed data state", () => {
+    mockEnvironmentQueries.gitDiff.data = {
+      outcome: "unavailable",
+      failure: {
+        code: "path_not_found",
+        message: "Managed workspace path does not exist: /tmp/missing",
+        workspacePath: "/tmp/missing",
+      },
+    };
+    const store = createStore();
+    const { result } = renderPanelStateHook(store);
+
+    expect(result.current.gitDiffError).toBeNull();
+    expect(result.current.gitDiffUnavailableMessage).toBe(
+      "Managed workspace path does not exist: /tmp/missing",
+    );
+    expect(result.current.threadGitDiff).toBeUndefined();
+    expect(result.current.currentGitDiff).toBe("");
+  });
+
   it("keeps the displayed diff while the same request temporarily reloads", async () => {
     const diff = buildPatchDiff(["src/a.ts"]);
     mockEnvironmentQueries.gitDiff.data = makeThreadGitDiffResponse(diff);

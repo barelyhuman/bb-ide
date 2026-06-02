@@ -3,7 +3,9 @@ import { updateEnvironmentMetadata } from "@bb/db";
 import {
   type GitBranchRefClassification,
   resolveEnvironmentWorkspaceDisplayKind,
+  type ThreadGitDiffResponse,
   type Environment,
+  type WorkspaceStatus,
 } from "@bb/domain";
 import {
   environmentActionRequestSchema,
@@ -17,6 +19,10 @@ import {
   type EnvironmentDiffQuery,
   type PublicApiSchema,
 } from "@bb/server-contract";
+import type {
+  HostDaemonCommandResult,
+  WorkspaceResolutionFailure,
+} from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import {
@@ -36,6 +42,7 @@ import {
   normalizeBranchQuery,
   parseBranchListLimit,
 } from "./branch-list-query.js";
+import { requireWorkspaceCommandTarget } from "../services/environments/workspace-command-target.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
@@ -49,6 +56,9 @@ interface AssertSquashMergeTargetIsLocalArgs {
   selectedBranch: GitBranchRefClassification | null;
   targetBranch: string;
 }
+
+type WorkspaceStatusCommandResult = HostDaemonCommandResult<"workspace.status">;
+type WorkspaceDiffCommandResult = HostDaemonCommandResult<"workspace.diff">;
 
 function assertSquashMergeTargetIsLocal({
   selectedBranch,
@@ -101,6 +111,30 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
 
 function isWorktreeEnvironment(environment: Environment): boolean {
   return resolveEnvironmentWorkspaceDisplayKind({ environment }) !== "other";
+}
+
+function throwWorkspaceUnavailable(failure: WorkspaceResolutionFailure): never {
+  throw new ApiError(409, "workspace_unavailable", failure.message, {
+    details: { kind: "workspace_unavailable", failure },
+  });
+}
+
+function requireAvailableWorkspaceStatus(
+  result: WorkspaceStatusCommandResult,
+): WorkspaceStatus {
+  if (result.outcome === "available") {
+    return result.workspaceStatus;
+  }
+  throwWorkspaceUnavailable(result.failure);
+}
+
+function requireAvailableWorkspaceDiff(
+  result: WorkspaceDiffCommandResult,
+): ThreadGitDiffResponse {
+  if (result.outcome === "available") {
+    return result.diff;
+  }
+  throwWorkspaceUnavailable(result.failure);
 }
 
 /**
@@ -194,24 +228,35 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         context.req.param("id"),
       );
       if (!environment.isGitRepo) {
-        return context.json({ workspace: null });
+        return context.json({
+          outcome: "not_applicable",
+          reason: "non_git_environment",
+          message: "Workspace status is not available for non-git environments",
+        });
       }
+      const target = requireWorkspaceCommandTarget(environment);
       const result = await queueCommandAndWait(deps, {
-        hostId: environment.hostId,
+        hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "workspace.status",
-          environmentId: environment.id,
-          workspaceContext: {
-            workspacePath: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          },
+          environmentId: target.environmentId,
+          workspaceContext: target.workspaceContext,
           ...(query.mergeBaseBranch
             ? { mergeBaseBranch: query.mergeBaseBranch }
             : {}),
         },
       });
-      return context.json({ workspace: result.workspaceStatus });
+      if (result.outcome === "unavailable") {
+        return context.json({
+          outcome: "unavailable",
+          failure: result.failure,
+        });
+      }
+      return context.json({
+        outcome: "available",
+        workspace: result.workspaceStatus,
+      });
     },
   );
 
@@ -223,22 +268,36 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         deps.db,
         context.req.param("id"),
       );
+      if (!environment.isGitRepo) {
+        return context.json({
+          outcome: "not_applicable",
+          reason: "non_git_environment",
+          message: "Workspace diff is not available for non-git environments",
+        });
+      }
+      const target = requireWorkspaceCommandTarget(environment);
       const result = await queueCommandAndWait(deps, {
-        hostId: environment.hostId,
+        hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "workspace.diff",
-          environmentId: environment.id,
-          workspaceContext: {
-            workspacePath: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          },
+          environmentId: target.environmentId,
+          workspaceContext: target.workspaceContext,
           target: toWorkspaceDiffTarget(query),
           maxDiffBytes: WORKSPACE_DIFF_MAX_DIFF_BYTES,
           maxFileListBytes: WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
         },
       });
-      return context.json(result.diff);
+      if (result.outcome === "unavailable") {
+        return context.json({
+          outcome: "unavailable",
+          failure: result.failure,
+        });
+      }
+      return context.json({
+        outcome: "available",
+        diff: result.diff,
+      });
     },
   );
 
@@ -321,27 +380,25 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
       switch (payload.action) {
         case "commit": {
-          const workspaceContext = {
-            workspacePath: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          };
+          const target = requireWorkspaceCommandTarget(environment);
+          const { workspaceContext } = target;
 
           const [statusResult, diffResult] = await Promise.all([
             queueCommandAndWait(deps, {
-              hostId: environment.hostId,
+              hostId: target.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
               command: {
                 type: "workspace.status",
-                environmentId: environment.id,
+                environmentId: target.environmentId,
                 workspaceContext,
               },
             }),
             queueCommandAndWait(deps, {
-              hostId: environment.hostId,
+              hostId: target.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
               command: {
                 type: "workspace.diff",
-                environmentId: environment.id,
+                environmentId: target.environmentId,
                 workspaceContext,
                 target: { type: "uncommitted" },
                 maxDiffBytes: AI_MAX_DIFF_BYTES,
@@ -349,7 +406,9 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               },
             }),
           ]);
-          if (!statusResult.workspaceStatus.workingTree.hasUncommittedChanges) {
+          const workspaceStatus = requireAvailableWorkspaceStatus(statusResult);
+          const workspaceDiff = requireAvailableWorkspaceDiff(diffResult);
+          if (!workspaceStatus.workingTree.hasUncommittedChanges) {
             throw new ApiError(
               409,
               "no_changes",
@@ -359,18 +418,18 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
           const aiMessage = await generateCommitMessage(deps, {
             diffDescription: "uncommitted changes",
-            shortstat: diffResult.diff.shortstat,
-            files: diffResult.diff.files,
-            patch: diffResult.diff.diff,
+            shortstat: workspaceDiff.shortstat,
+            files: workspaceDiff.files,
+            patch: workspaceDiff.diff,
           });
           const commitMessage = aiMessage ?? COMMIT_FALLBACK_MESSAGE;
 
           const result = await queueCommandAndWait(deps, {
-            hostId: environment.hostId,
+            hostId: target.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
               type: "workspace.commit",
-              environmentId: environment.id,
+              environmentId: target.environmentId,
               workspaceContext,
               message: commitMessage,
             },
@@ -384,24 +443,22 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           });
         }
         case "squash_merge": {
-          const workspaceContext = {
-            workspacePath: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          };
+          const target = requireWorkspaceCommandTarget(environment);
+          const { workspaceContext } = target;
           const targetBranch = payload.options.mergeBaseBranch;
 
           const statusResult = await queueCommandAndWait(deps, {
-            hostId: environment.hostId,
+            hostId: target.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
               type: "workspace.status",
-              environmentId: environment.id,
+              environmentId: target.environmentId,
               workspaceContext,
             },
           });
+          const workspaceStatus = requireAvailableWorkspaceStatus(statusResult);
 
-          const currentBranch =
-            statusResult.workspaceStatus.branch.currentBranch;
+          const currentBranch = workspaceStatus.branch.currentBranch;
           if (!currentBranch) {
             throw new ApiError(
               409,
@@ -425,13 +482,13 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             targetBranch,
           });
 
-          if (statusResult.workspaceStatus.workingTree.hasUncommittedChanges) {
+          if (workspaceStatus.workingTree.hasUncommittedChanges) {
             await queueCommandAndWait(deps, {
-              hostId: environment.hostId,
+              hostId: target.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
               command: {
                 type: "workspace.commit",
-                environmentId: environment.id,
+                environmentId: target.environmentId,
                 workspaceContext,
                 message: PRE_MERGE_COMMIT_MESSAGE,
               },
@@ -439,11 +496,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           }
 
           const diffResult = await queueCommandAndWait(deps, {
-            hostId: environment.hostId,
+            hostId: target.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
               type: "workspace.diff",
-              environmentId: environment.id,
+              environmentId: target.environmentId,
               workspaceContext,
               target: {
                 type: "branch_committed",
@@ -453,21 +510,22 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               maxFileListBytes: AI_MAX_FILE_LIST_BYTES,
             },
           });
+          const workspaceDiff = requireAvailableWorkspaceDiff(diffResult);
 
           const aiMessage = await generateCommitMessage(deps, {
             diffDescription: `squash merge of ${currentBranch} into ${targetBranch}`,
-            shortstat: diffResult.diff.shortstat,
-            files: diffResult.diff.files,
-            patch: diffResult.diff.diff,
+            shortstat: workspaceDiff.shortstat,
+            files: workspaceDiff.files,
+            patch: workspaceDiff.diff,
           });
           const commitMessage = aiMessage ?? SQUASH_MERGE_FALLBACK_MESSAGE;
 
           const result = await queueCommandAndWait(deps, {
-            hostId: environment.hostId,
+            hostId: target.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
               type: "workspace.squash_merge",
-              environmentId: environment.id,
+              environmentId: target.environmentId,
               workspaceContext,
               targetBranch,
               commitMessage,

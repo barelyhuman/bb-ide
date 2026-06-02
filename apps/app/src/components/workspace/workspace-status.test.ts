@@ -144,6 +144,22 @@ describe("workspace-status", () => {
     });
   });
 
+  it("reports typed unavailable workspace failures explicitly", () => {
+    expect(
+      getGitStatusDisplay(undefined, {
+        workspaceUnavailable: {
+          code: "workspace_type_mismatch",
+          workspacePath: "/tmp/current",
+          message:
+            "Loaded environment env_1 is bound to /tmp/old, not /tmp/current",
+        },
+      }),
+    ).toMatchObject({
+      label: "Unknown",
+      summary: "Loaded environment env_1 is bound to /tmp/old, not /tmp/current",
+    });
+  });
+
   it("reports a missing workspace when the path is gone", () => {
     const error = new HttpError({
       status: 502,

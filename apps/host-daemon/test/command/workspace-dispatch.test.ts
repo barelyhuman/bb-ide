@@ -69,7 +69,15 @@ describe("workspace command dispatch", () => {
       },
       harness.dispatchOptions(),
     );
-    expect(statusResult.workspaceStatus?.workingTree.state).toBe("clean");
+    expect(statusResult.outcome).toBe("available");
+    expect(diffResult.outcome).toBe("available");
+    if (statusResult.outcome !== "available") {
+      throw new Error("Expected workspace status to be available");
+    }
+    if (diffResult.outcome !== "available") {
+      throw new Error("Expected workspace diff to be available");
+    }
+    expect(statusResult.workspaceStatus.workingTree.state).toBe("clean");
     expect(diffResult.diff.diff).toBe("");
     expect(commitResult).toEqual({
       commitSha: "commit-1",
@@ -99,13 +107,64 @@ describe("workspace command dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(result.workspaceStatus?.workingTree.state).toBe("clean");
+    expect(result.outcome).toBe("available");
+    if (result.outcome !== "available") {
+      throw new Error("Expected workspace status to be available");
+    }
+    expect(result.workspaceStatus.workingTree.state).toBe("clean");
     expect(harness.provisions).toEqual([
       {
         workspaceProvisionType: "unmanaged",
         path: "/tmp/env-rehydrate",
       },
     ]);
+  });
+
+  it("returns unavailable workspace reads for non-git workspaces", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/non-git-env" });
+    harness.workspace.isGitRepo = false;
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-non-git",
+      workspacePath: "/tmp/non-git-env",
+    });
+
+    const statusResult = await dispatchCommand(
+      {
+        type: "workspace.status",
+        environmentId: "env-non-git",
+        workspaceContext: {
+          workspacePath: "/tmp/non-git-env",
+          workspaceProvisionType: "unmanaged",
+        },
+      },
+      harness.dispatchOptions(),
+    );
+    const diffResult = await dispatchCommand(
+      {
+        type: "workspace.diff",
+        environmentId: "env-non-git",
+        workspaceContext: {
+          workspacePath: "/tmp/non-git-env",
+          workspaceProvisionType: "unmanaged",
+        },
+        target: { type: "uncommitted" },
+        maxDiffBytes: 2 * 1024 * 1024,
+        maxFileListBytes: 256 * 1024,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(statusResult).toEqual({
+      outcome: "unavailable",
+      failure: {
+        code: "not_git_repo",
+        workspacePath: "/tmp/non-git-env",
+        message: "Path is not a git repository: /tmp/non-git-env",
+      },
+    });
+    expect(diffResult).toEqual(statusResult);
+    expect(harness.workspaceState.statusReads).toBe(0);
+    expect(harness.workspaceState.lastDiffTarget).toBeUndefined();
   });
 
   it("covers host.list_files", async () => {

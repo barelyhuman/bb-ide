@@ -31,14 +31,11 @@ import {
   setEnvironmentStatus,
   upsertEnvironmentOperationRecord,
 } from "@bb/db/internal-lifecycle";
-import {
-  hostDaemonCommandResultSchemaByType,
-  type HostDaemonCommandResult,
-} from "@bb/host-daemon-contract";
-import { ApiError } from "../../errors.js";
+import { type HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
+import { workspaceContextFromPath } from "./workspace-command-target.js";
 
 export interface EnvironmentDestroyTarget {
   hostId: string;
@@ -94,6 +91,8 @@ interface EnvironmentCleanupWriteDeps extends EnvironmentCleanupReadDeps {
 }
 
 type EnvironmentCleanupDecisionDeps = Pick<AppDeps, "db">;
+type EnvironmentCleanupPreflightResult =
+  HostDaemonCommandResult<"environment.cleanup_preflight">;
 
 function hasConnectedHostSession(
   deps: Pick<AppDeps, "db">,
@@ -103,23 +102,18 @@ function hasConnectedHostSession(
   return session !== null && session.leaseExpiresAt > Date.now();
 }
 
-function workspaceHasRiskyChanges(
-  workspaceStatus: ReturnType<
-    (typeof hostDaemonCommandResultSchemaByType)["workspace.status"]["parse"]
-  >["workspaceStatus"],
+function cleanupPreflightAllowsDestroy(
+  result: EnvironmentCleanupPreflightResult,
 ): boolean {
-  return (
-    workspaceStatus.workingTree.hasUncommittedChanges ||
-    workspaceStatus.mergeBase?.hasCommittedUnmergedChanges === true
-  );
-}
-
-function isUninspectableWorkspaceError(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    (error.body.code === "path_not_found" ||
-      error.body.code === "not_git_repo")
-  );
+  switch (result.outcome) {
+    case "safe_to_destroy":
+    case "already_missing":
+    case "not_inspectable":
+      return true;
+    case "blocked_by_changes":
+    case "probe_failed":
+      return false;
+  }
 }
 
 async function workspaceCanBeSafelyCleaned(
@@ -130,7 +124,6 @@ async function workspaceCanBeSafelyCleaned(
   if (
     !environment ||
     !environment.managed ||
-    environment.status === "destroyed" ||
     environment.status !== "ready" ||
     !environment.path
   ) {
@@ -148,7 +141,7 @@ async function workspaceCanBeSafelyCleaned(
   if (
     getPendingEnvironmentCommand(deps.db, {
       environmentId: environment.id,
-      type: "workspace.status",
+      type: "environment.cleanup_preflight",
     })
   ) {
     return false;
@@ -159,30 +152,20 @@ async function workspaceCanBeSafelyCleaned(
     return false;
   }
 
-  let result: HostDaemonCommandResult<"workspace.status">;
-  try {
-    result = await queueCommandAndWait(deps, {
-      hostId: environment.hostId,
-      timeoutMs: 30_000,
-      command: {
-        type: "workspace.status",
-        environmentId: environment.id,
-        workspaceContext: {
-          workspacePath: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
-        },
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      },
-    });
-  } catch (error) {
-    // Workspace path is gone or no longer git-backed out-of-band. Nothing can
-    // be inspected as a git workspace, so let managed cleanup proceed.
-    if (isUninspectableWorkspaceError(error)) {
-      return true;
-    }
-    throw error;
-  }
-  return !workspaceHasRiskyChanges(result.workspaceStatus);
+  const result = await queueCommandAndWait(deps, {
+    hostId: environment.hostId,
+    timeoutMs: 30_000,
+    command: {
+      type: "environment.cleanup_preflight",
+      environmentId: environment.id,
+      workspaceContext: workspaceContextFromPath({
+        path: environment.path,
+        workspaceProvisionType: environment.workspaceProvisionType,
+      }),
+      mergeBaseBranch,
+    },
+  });
+  return cleanupPreflightAllowsDestroy(result);
 }
 
 function canRequestCleanup(
@@ -399,10 +382,7 @@ function queueEnvironmentDestroyCommand(
     payload: JSON.stringify({
       type: "environment.destroy",
       environmentId: environment.id,
-      workspaceContext: {
-        workspacePath: environment.path,
-        workspaceProvisionType: environment.workspaceProvisionType,
-      },
+      workspaceContext: workspaceContextFromPath(environment),
     }),
   });
 
@@ -547,7 +527,6 @@ export async function advanceEnvironmentCleanup(
   const refreshedEnvironment = getEnvironment(deps.db, environment.id);
   if (
     !refreshedEnvironment ||
-    refreshedEnvironment.status === "destroyed" ||
     refreshedEnvironment.status !== "ready" ||
     !refreshedEnvironment.path
   ) {

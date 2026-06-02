@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
+import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
 import { HttpError } from "@/lib/api";
 import { describeLifecycleError } from "@/lib/lifecycle-errors";
 
@@ -22,6 +23,7 @@ export interface GetGitStatusDisplayOptions {
   error?: unknown;
   mergeBaseBranch?: string;
   showBranchComparison?: boolean;
+  workspaceUnavailable?: WorkspaceResolutionFailure;
   workspaceDeleted?: boolean;
 }
 
@@ -81,6 +83,13 @@ export function getGitStatusDisplay(
           });
     if (lifecycleErrorDescription) {
       return plainDisplay("Unknown", lifecycleErrorDescription.body);
+    }
+
+    if (options?.workspaceUnavailable) {
+      if (options.workspaceUnavailable.code === "path_not_found") {
+        return plainDisplay("Unknown", "Workspace not found.");
+      }
+      return plainDisplay("Unknown", options.workspaceUnavailable.message);
     }
 
     const isPathNotFound =

@@ -8,10 +8,8 @@ import type {
   ProjectSource,
   ResolvedThreadExecutionOptions,
   ThreadType,
-  ThreadGitDiffResponse,
   ThreadQueuedMessage,
   WorkspaceDiffTarget,
-  WorkspaceStatus,
 } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
@@ -25,6 +23,7 @@ import type {
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentDiffBranchesResponse,
+  EnvironmentDiffResponse,
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
   EnvironmentStatusResponse,
@@ -1197,8 +1196,8 @@ export async function getEnvironmentWorkStatus(
   environmentId: string,
   mergeBaseBranch?: string,
   signal?: AbortSignal,
-): Promise<WorkspaceStatus | null> {
-  const res = await request<EnvironmentStatusResponse>(
+): Promise<EnvironmentStatusResponse> {
+  return request<EnvironmentStatusResponse>(
     apiClient.environments[":id"].status.$get(
       {
         param: { id: environmentId },
@@ -1207,7 +1206,6 @@ export async function getEnvironmentWorkStatus(
       requestOptions(signal),
     ),
   );
-  return res.workspace;
 }
 
 export async function getEnvironmentDiffBranches(
@@ -1348,7 +1346,7 @@ export async function getEnvironmentDiffFile(
 export async function getEnvironmentDiff(
   id: string,
   target: WorkspaceDiffTarget,
-): Promise<ThreadGitDiffResponse> {
+): Promise<EnvironmentDiffResponse> {
   const query = (() => {
     switch (target.type) {
       case "uncommitted":
@@ -1375,7 +1373,7 @@ export async function getEnvironmentDiff(
     }
   })();
 
-  return request<ThreadGitDiffResponse>(
+  return request<EnvironmentDiffResponse>(
     apiClient.environments[":id"].diff.$get({
       param: { id },
       query,
