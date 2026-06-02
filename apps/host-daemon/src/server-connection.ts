@@ -46,6 +46,17 @@ interface ServerMessagePayloadSummary {
 
 const SERVER_MESSAGE_PAYLOAD_PREVIEW_CHARS = 512;
 
+type HostDaemonEnvironmentChangeMessage = Extract<
+  HostDaemonDaemonWsMessage,
+  { type: "environment-change" }
+>;
+
+function environmentChangeMessageKey(
+  message: HostDaemonEnvironmentChangeMessage,
+): string {
+  return `${message.environmentId}\u0000${message.change}`;
+}
+
 function summarizeServerMessagePayload(
   data: unknown,
 ): ServerMessagePayloadSummary {
@@ -81,6 +92,10 @@ export class ServerConnection {
   private stopped = false;
   private sessionCloseHandler: ServerConnectionOptions["onSessionClose"];
   private fatalConnectError: ServerResponseError | null = null;
+  private readonly pendingEnvironmentChanges = new Map<
+    string,
+    HostDaemonEnvironmentChangeMessage
+  >();
 
   constructor(private readonly options: ServerConnectionOptions) {
     this.sessionCloseHandler = options.onSessionClose;
@@ -117,6 +132,7 @@ export class ServerConnection {
 
   async shutdown(): Promise<void> {
     this.stopped = true;
+    this.pendingEnvironmentChanges.clear();
     this.stopPollingFallback();
     this.clearHeartbeat();
     this.clearSession();
@@ -132,11 +148,15 @@ export class ServerConnection {
   }
 
   sendMessage(message: HostDaemonDaemonWsMessage): boolean {
+    const payload = hostDaemonDaemonWsMessageSchema.parse(message);
     if (!this.websocket || this.websocket.readyState !== OPEN_READY_STATE) {
+      this.bufferMessageIfRecoverable(payload);
       return false;
     }
-    const payload = hostDaemonDaemonWsMessageSchema.parse(message);
     this.websocket.send(JSON.stringify(payload));
+    if (payload.type === "environment-change") {
+      this.pendingEnvironmentChanges.delete(environmentChangeMessageKey(payload));
+    }
     return true;
   }
 
@@ -261,6 +281,7 @@ export class ServerConnection {
             "Connected to server",
           );
           await this.options.onSessionOpened?.(session);
+          this.flushPendingEnvironmentChanges();
           if (!settled) {
             settled = true;
             resolve(session);
@@ -320,6 +341,26 @@ export class ServerConnection {
     });
   }
 
+  private bufferMessageIfRecoverable(
+    message: HostDaemonDaemonWsMessage,
+  ): void {
+    if (message.type !== "environment-change") {
+      return;
+    }
+    this.pendingEnvironmentChanges.set(
+      environmentChangeMessageKey(message),
+      message,
+    );
+  }
+
+  private flushPendingEnvironmentChanges(): void {
+    for (const message of Array.from(this.pendingEnvironmentChanges.values())) {
+      if (!this.sendMessage(message)) {
+        return;
+      }
+    }
+  }
+
   private handleWebSocketMessage(data: unknown): void {
     const text = decodeWebSocketMessageData(data);
     let decoded: unknown;
@@ -348,6 +389,22 @@ export class ServerConnection {
 
     if (message.data.type === "session-close") {
       this.handleSessionCloseMessage(message.data.reason);
+      return;
+    }
+
+    if (message.data.type === "host-rpc.request") {
+      const rpcRequest = message.data;
+      void Promise.resolve(this.options.onHostRpcRequest?.(rpcRequest)).catch(
+        (error) => {
+          this.options.logger.warn(
+            {
+              commandType: rpcRequest.command.type,
+              ...runtimeErrorLogFields(error),
+            },
+            "Online host RPC handler failed",
+          );
+        },
+      );
       return;
     }
 

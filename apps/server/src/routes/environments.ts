@@ -20,7 +20,7 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type {
-  HostDaemonCommandResult,
+  HostDaemonOnlineRpcResult,
   WorkspaceResolutionFailure,
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
@@ -36,6 +36,7 @@ import {
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
 import { archiveEnvironmentThreads } from "../services/threads/thread-archive.js";
 import {
@@ -57,8 +58,8 @@ interface AssertSquashMergeTargetIsLocalArgs {
   targetBranch: string;
 }
 
-type WorkspaceStatusCommandResult = HostDaemonCommandResult<"workspace.status">;
-type WorkspaceDiffCommandResult = HostDaemonCommandResult<"workspace.diff">;
+type WorkspaceStatusCommandResult = HostDaemonOnlineRpcResult<"workspace.status">;
+type WorkspaceDiffCommandResult = HostDaemonOnlineRpcResult<"workspace.diff">;
 
 function assertSquashMergeTargetIsLocal({
   selectedBranch,
@@ -235,7 +236,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       const target = requireWorkspaceCommandTarget(environment);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -276,7 +277,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       const target = requireWorkspaceCommandTarget(environment);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -318,7 +319,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       }
       const absolutePath = path.join(environment.path, repoRelativePath);
       const ref = resolveDiffFileRef(query);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: environment.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -348,7 +349,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       );
       const branchQuery = normalizeBranchQuery(query.query);
       const selectedBranch = normalizeBranchQuery(query.selectedBranch);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: environment.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -384,7 +385,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           const { workspaceContext } = target;
 
           const [statusResult, diffResult] = await Promise.all([
-            queueCommandAndWait(deps, {
+            callHostRetryableOnlineRpc(deps, {
               hostId: target.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
               command: {
@@ -393,7 +394,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
                 workspaceContext,
               },
             }),
-            queueCommandAndWait(deps, {
+            callHostRetryableOnlineRpc(deps, {
               hostId: target.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
               command: {
@@ -447,7 +448,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           const { workspaceContext } = target;
           const targetBranch = payload.options.mergeBaseBranch;
 
-          const statusResult = await queueCommandAndWait(deps, {
+          const statusResult = await callHostRetryableOnlineRpc(deps, {
             hostId: target.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
@@ -467,7 +468,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             );
           }
 
-          const targetBranchResult = await queueCommandAndWait(deps, {
+          const targetBranchResult = await callHostRetryableOnlineRpc(deps, {
             hostId: environment.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
@@ -495,7 +496,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             });
           }
 
-          const diffResult = await queueCommandAndWait(deps, {
+          const diffResult = await callHostRetryableOnlineRpc(deps, {
             hostId: target.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {

@@ -3,6 +3,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonActiveThread,
   type HostDaemonLoadedEnvironment,
+  type HostDaemonOnlineRpcRequestMessage,
   type HostDaemonServerWsMessage,
   type HostDaemonSessionCloseReason,
   type HostDaemonSessionOpenRequest,
@@ -43,7 +44,9 @@ export type CreateReconnectingWebSocket = (
 
 export type HostDaemonServerTerminalMessage = Exclude<
   HostDaemonServerWsMessage,
-  { type: "commands-available" } | { type: "session-close" }
+  | { type: "commands-available" }
+  | { type: "session-close" }
+  | HostDaemonOnlineRpcRequestMessage
 >;
 
 export interface ServerConnectionOptions {
@@ -66,6 +69,9 @@ export interface ServerConnectionOptions {
   onCommandsAvailable?: () => void | Promise<void>;
   onTerminalMessage?: (
     message: HostDaemonServerTerminalMessage,
+  ) => void | Promise<void>;
+  onHostRpcRequest?: (
+    message: HostDaemonOnlineRpcRequestMessage,
   ) => void | Promise<void>;
   onSessionClose?: (
     reason: HostDaemonSessionCloseReason,

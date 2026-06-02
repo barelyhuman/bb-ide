@@ -9,7 +9,7 @@ import {
   listRemoteBranches,
   readDefaultBranch,
 } from "@bb/host-workspace";
-import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 
@@ -70,7 +70,7 @@ function classifySelectedBranch({
 
 export async function listHostBranches(
   command: CommandOf<"host.list_branches">,
-): Promise<HostDaemonCommandResult<"host.list_branches">> {
+): Promise<HostDaemonOnlineRpcResult<"host.list_branches">> {
   if (!path.isAbsolute(command.path)) {
     throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }

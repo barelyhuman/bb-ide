@@ -95,12 +95,43 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-1",
         providerRequestId: "request-1",
-        sessionId: "session-1",
       })?.id,
     ).toBe(created.id);
     expect(getActivePendingInteractionForThread(db, thread.id)?.id).toBe(
       created.id,
     );
+  });
+
+  it("rejects duplicate provider request identities across sessions", () => {
+    const { db, siblingThread, thread } = setup();
+    const created = createPendingInteraction(db, {
+      threadId: thread.id,
+      turnId: "turn-1",
+      providerId: "codex",
+      providerThreadId: "provider-thread-1",
+      providerRequestId: "request-1",
+      sessionId: "session-1",
+      payload: commandApprovalPayload("git push", "item-1"),
+    });
+
+    expect(() =>
+      createPendingInteraction(db, {
+        threadId: siblingThread.id,
+        turnId: "turn-2",
+        providerId: "codex",
+        providerThreadId: "provider-thread-1",
+        providerRequestId: "request-1",
+        sessionId: "session-2",
+        payload: commandApprovalPayload("git status", "item-2"),
+      }),
+    ).toThrow();
+    expect(
+      getPendingInteractionByProviderRequest(db, {
+        providerId: "codex",
+        providerThreadId: "provider-thread-1",
+        providerRequestId: "request-1",
+      })?.id,
+    ).toBe(created.id);
   });
 
   it("lists pending interactions newest first and transitions them to resolved", () => {

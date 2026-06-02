@@ -30,8 +30,7 @@ import { ApiError } from "../../errors.js";
 import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
 import {
   cancelPendingEnvironmentCleanup,
-  requestEnvironmentCleanup,
-  requestEnvironmentCleanupAdvance,
+  requestEnvironmentCleanupAndAdvance,
 } from "../../services/environments/environment-cleanup.js";
 import { requirePublicThread } from "../../services/lib/entity-lookup.js";
 import {
@@ -310,10 +309,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(404, "thread_not_found", "Thread not found");
     }
     if (shouldRequestCleanup) {
-      requestEnvironmentCleanup(deps, {
-        environmentId: thread.environmentId,
-      });
-      requestEnvironmentCleanupAdvance(deps, {
+      requestEnvironmentCleanupAndAdvance(deps, {
         environmentId: thread.environmentId,
       });
     }

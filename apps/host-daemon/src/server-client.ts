@@ -1,6 +1,6 @@
 import pRetry, { AbortError } from "p-retry";
 import {
-  HOST_DAEMON_COMMAND_TYPES,
+  HOST_DAEMON_DURABLE_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultResponseSchema,
@@ -8,7 +8,6 @@ import {
   hostDaemonCommandsQuerySchema,
   hostDaemonAppDataChangeRequestSchema,
   hostDaemonAppDataResyncRequestSchema,
-  hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
   hostDaemonProjectAttachmentContentQuerySchema,
@@ -29,7 +28,6 @@ import {
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReportWithoutSession,
   type HostDaemonEventEnvelope,
-  type HostDaemonEnvironmentChangePayload,
   type HostDaemonLoadedEnvironment,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
@@ -44,7 +42,7 @@ import type {
   FetchProjectAttachmentArgs,
 } from "./project-attachments.js";
 
-const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
+const knownCommandTypes = new Set<string>(HOST_DAEMON_DURABLE_COMMAND_TYPES);
 const DEFAULT_COMMAND_FETCH_LIMIT = 100;
 const DEFAULT_COMMAND_FETCH_WAIT_MS = 0;
 
@@ -59,6 +57,7 @@ interface ApiErrorResponseBody {
 }
 
 interface RawCommandHeader {
+  attemptId?: string;
   commandId?: string;
   type?: string;
 }
@@ -73,6 +72,7 @@ interface ServerResponseErrorArgs {
 }
 
 interface ReportCommandErrorArgs {
+  attemptId: string;
   commandId: string;
   errorCode: string;
   errorMessage: string;
@@ -125,6 +125,8 @@ function readRawCommandHeader(rawCommand: unknown): RawCommandHeader {
   }
   const command = toJsonRecord(record.command);
   return {
+    attemptId:
+      typeof record.attemptId === "string" ? record.attemptId : undefined,
     commandId: typeof record.id === "string" ? record.id : undefined,
     type:
       command && typeof command.type === "string" ? command.type : undefined,
@@ -229,9 +231,6 @@ export interface ServerClient {
   reportCommandResult(
     report: HostDaemonCommandResultReportWithoutSession,
   ): Promise<HostDaemonCommandResultResponse>;
-  postEnvironmentChange(
-    args: HostDaemonEnvironmentChangePayload,
-  ): Promise<void>;
   postAppDataChange(args: HostDaemonAppDataChangePayload): Promise<void>;
   postAppDataResync(args: HostDaemonAppDataResyncPayload): Promise<void>;
   postEvents(events: HostDaemonEventEnvelope[]): Promise<EventPostResult>;
@@ -413,6 +412,7 @@ export function createServerClient(
           headers: headers(),
           body: JSON.stringify({
             sessionId: requireSessionId(),
+            attemptId: args.attemptId,
             commandId: args.commandId,
             type: args.type,
             completedAt: Date.now(),
@@ -505,9 +505,10 @@ export function createServerClient(
               { type: rawType, error: parsed.error.message },
               "failed to parse command envelope, skipping",
             );
-            if (header.commandId) {
+            if (header.commandId && header.attemptId) {
               reportPromises.push(
                 reportCommandError({
+                  attemptId: header.attemptId,
                   commandId: header.commandId,
                   type: rawType,
                   errorCode: "invalid_command",
@@ -517,7 +518,7 @@ export function createServerClient(
             } else {
               options.logger.warn(
                 { rawCommand },
-                "cannot report invalid command: missing id",
+                "cannot report invalid command: missing id or attempt id",
               );
             }
           }
@@ -526,10 +527,11 @@ export function createServerClient(
             { type: rawType ?? "missing" },
             "unknown command type in batch, reporting error to server",
           );
-          if (header.commandId) {
+          if (header.commandId && header.attemptId) {
             const type = rawType ?? "unknown";
             reportPromises.push(
               reportCommandError({
+                attemptId: header.attemptId,
                 commandId: header.commandId,
                 type,
                 errorCode: "unknown_command",
@@ -539,7 +541,7 @@ export function createServerClient(
           } else {
             options.logger.warn(
               { rawCommand },
-              "cannot report unknown command: missing id",
+              "cannot report unknown command: missing id or attempt id",
             );
           }
         }
@@ -637,26 +639,6 @@ export function createServerClient(
           },
         },
       );
-    },
-
-    async postEnvironmentChange(args): Promise<void> {
-      const payload = hostDaemonEnvironmentChangeRequestSchema.parse({
-        sessionId: requireSessionId(),
-        environmentId: args.environmentId,
-        change: args.change,
-      });
-      const response = await fetchFn(
-        buildInternalUrl("/session/environment-change"),
-        {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify(payload),
-        },
-      );
-
-      if (!response.ok) {
-        throw await createResponseError("post environment change", response);
-      }
     },
 
     async postAppDataChange(args): Promise<void> {

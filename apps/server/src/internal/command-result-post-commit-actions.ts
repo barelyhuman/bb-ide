@@ -2,8 +2,8 @@ import type { HostDaemonCommandRow } from "@bb/db";
 import type {
   CommandResultPostCommitAction,
   CommandResultSideEffectsDeps,
-} from "./command-result-owners.js";
-import { scheduleAfterDaemonIngressResponse } from "../services/hosts/command-wait-context.js";
+} from "./command-result-side-effects.js";
+import { scheduleAfterDaemonIngressResponse } from "../services/hosts/daemon-ingress-scheduler.js";
 
 type CommandResultPostCommitDispatchMode =
   | "inline"

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CommandDispatchError,
   dispatchCommand,
+  dispatchOnlineRpcCommand,
 } from "../../src/command-dispatch.js";
 import type { FetchProjectAttachment } from "../../src/project-attachments.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -1424,7 +1425,7 @@ describe("thread command dispatch", () => {
   it("covers provider.list", async () => {
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "provider.list",
       },
@@ -1468,7 +1469,7 @@ describe("thread command dispatch", () => {
   it("covers provider.list_models", async () => {
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "provider.list_models",
         providerId: "fake",

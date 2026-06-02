@@ -19,6 +19,7 @@ import {
   reportCommandResult,
 } from "@bb/db";
 import {
+  systemErrorEventDataSchema,
   systemOperationEventDataSchema,
   threadSchema,
   turnScope,
@@ -1196,7 +1197,10 @@ describe("public thread archive delete cleanup routes", () => {
           command.type === "environment.destroy" &&
           command.environmentId === environment.id,
       );
-      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+      fetchCommands(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: null,
+      });
 
       const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/unarchive`,
@@ -1224,7 +1228,7 @@ describe("public thread archive delete cleanup routes", () => {
     });
   });
 
-  it("ignores stale destroy results when an environment has live threads", async () => {
+  it("settles destroy success safely when live threads reappear", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1238,7 +1242,7 @@ describe("public thread archive delete cleanup routes", () => {
         status: "destroying",
         workspaceProvisionType: "managed-worktree",
       });
-      seedThread(harness.deps, {
+      const liveThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
         status: "idle",
@@ -1268,13 +1272,33 @@ describe("public thread archive delete cleanup routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroyed",
+      );
       expect(
         getEnvironmentOperation(harness.db, {
           environmentId: environment.id,
           kind: "destroy",
         }),
-      ).toMatchObject({ state: "cancelled" });
+      ).toMatchObject({ state: "completed" });
+      expect(getThread(harness.db, liveThread.id)).toMatchObject({
+        status: "error",
+      });
+      const latestEvent = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, liveThread.id))
+        .orderBy(events.sequence)
+        .all()
+        .at(-1);
+      expect(latestEvent?.type).toBe("system/error");
+      const eventData = systemErrorEventDataSchema.parse(
+        latestEvent ? JSON.parse(latestEvent.data) : null,
+      );
+      expect(eventData).toMatchObject({
+        code: "environment_workspace_destroyed",
+        message: expect.stringContaining("destroyed"),
+      });
     });
   });
 

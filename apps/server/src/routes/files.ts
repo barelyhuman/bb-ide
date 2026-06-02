@@ -1,11 +1,11 @@
 import path from "node:path";
-import type { HostDaemonCommand } from "@bb/host-daemon-contract";
+import type { HostDaemonOnlineRpcCommand } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import mimeTypes from "mime-types";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../types.js";
-import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
 import {
   createDaemonFileContentResponse,
   type DaemonFileReadResult,
@@ -14,7 +14,7 @@ import {
 import { requirePublicThreadEnvironment } from "../services/lib/entity-lookup.js";
 
 type HostReadFileCommand = Extract<
-  HostDaemonCommand,
+  HostDaemonOnlineRpcCommand,
   { type: "host.read_file" }
 >;
 
@@ -111,7 +111,7 @@ async function serveRawFilesystemHtmlFile(
   };
 
   try {
-    const result = await queueCommandAndWait(deps, {
+    const result = await callHostRetryableOnlineRpc(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command,

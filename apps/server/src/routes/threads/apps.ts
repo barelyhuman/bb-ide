@@ -8,6 +8,11 @@ import {
   FILE_LIST_LIMIT_MAX,
   type HostDaemonCommand,
   type HostDaemonCommandResult,
+  type HostDaemonDurableCommandType,
+  type HostDaemonOnlineRpcResult,
+  type HostDaemonRetryableOnlineRpcCommand,
+  type HostDaemonRetryableOnlineRpcCommandType,
+  type HostDaemonRetryableOnlineRpcResult,
 } from "@bb/host-daemon-contract";
 import {
   appDataPathSchema,
@@ -37,6 +42,7 @@ import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { queueCommandAndWait } from "../../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../../services/hosts/online-rpc.js";
 import {
   createDaemonFileContentResponse,
   decodeDaemonFileContent,
@@ -159,18 +165,17 @@ interface ScaffoldAppArgs {
   threadId: string;
 }
 
-type HostCommandType =
-  | "host.file_metadata"
-  | "host.list_paths"
-  | "host.read_file_relative"
-  | "host.write_file_relative"
-  | "host.delete_file_relative"
-  | "host.delete_path_relative";
-
 type AppManifestValidationIssues = readonly ZodIssue[];
 type AppManifestValidationLoggerDeps = Pick<AppDeps, "logger">;
 
-interface QueueHostCommandArgs<TType extends HostCommandType> {
+interface ReadHostCommandArgs<
+  TType extends HostDaemonRetryableOnlineRpcCommandType,
+> {
+  command: Extract<HostDaemonRetryableOnlineRpcCommand, { type: TType }>;
+  hostId: string;
+}
+
+interface QueueHostCommandArgs<TType extends HostDaemonDurableCommandType> {
   command: Extract<HostDaemonCommand, { type: TType }>;
   hostId: string;
 }
@@ -342,7 +347,24 @@ function remapAppCommandError(error: unknown): never {
   throw error;
 }
 
-async function queueHostCommand<TType extends HostCommandType>(
+async function readHostCommand<
+  TType extends HostDaemonRetryableOnlineRpcCommandType,
+>(
+  deps: AppDeps,
+  args: ReadHostCommandArgs<TType>,
+): Promise<HostDaemonRetryableOnlineRpcResult<TType>> {
+  try {
+    return await callHostRetryableOnlineRpc(deps, {
+      hostId: args.hostId,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      command: args.command,
+    });
+  } catch (error) {
+    remapAppCommandError(error);
+  }
+}
+
+async function queueHostCommand<TType extends HostDaemonDurableCommandType>(
   deps: AppDeps,
   args: QueueHostCommandArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>> {
@@ -372,7 +394,7 @@ async function readAppRelativeFile(
   deps: AppDeps,
   args: ReadAppRelativeFileArgs,
 ): Promise<DaemonFileReadResult> {
-  return queueHostCommand(deps, {
+  return readHostCommand(deps, {
     hostId: args.target.hostId,
     command: {
       type: "host.read_file_relative",
@@ -386,8 +408,8 @@ async function readAppRelativeFile(
 async function readAppFileMetadata(
   deps: AppDeps,
   args: ReadAppFileMetadataArgs,
-): Promise<HostDaemonCommandResult<"host.file_metadata">> {
-  return queueHostCommand(deps, {
+): Promise<HostDaemonOnlineRpcResult<"host.file_metadata">> {
+  return readHostCommand(deps, {
     hostId: args.target.hostId,
     command: {
       type: "host.file_metadata",
@@ -506,9 +528,9 @@ async function tryResolveLogo(
   deps: AppDeps,
   args: AppManifestReadArgs,
 ): Promise<LogoResolution | null> {
-  let listResult: HostDaemonCommandResult<"host.list_paths">;
+  let listResult: HostDaemonOnlineRpcResult<"host.list_paths">;
   try {
-    listResult = await queueHostCommand(deps, {
+    listResult = await readHostCommand(deps, {
       hostId: args.target.hostId,
       command: {
         type: "host.list_paths",
@@ -620,9 +642,9 @@ async function listThreadApps(
   threadId: string,
 ): Promise<AppSummary[]> {
   const target = await requireThreadAppsTarget(deps, threadId);
-  let listResult: HostDaemonCommandResult<"host.list_paths">;
+  let listResult: HostDaemonOnlineRpcResult<"host.list_paths">;
   try {
-    listResult = await queueHostCommand(deps, {
+    listResult = await readHostCommand(deps, {
       hostId: target.hostId,
       command: {
         type: "host.list_paths",
@@ -925,9 +947,9 @@ async function listAppDataEntries(
   const listRoot = args.dataPath
     ? path.join(appDataRootPath(args), args.dataPath)
     : appDataRootPath(args);
-  let listResult: HostDaemonCommandResult<"host.list_paths">;
+  let listResult: HostDaemonOnlineRpcResult<"host.list_paths">;
   try {
-    listResult = await queueHostCommand(deps, {
+    listResult = await readHostCommand(deps, {
       hostId: args.target.hostId,
       command: {
         type: "host.list_paths",

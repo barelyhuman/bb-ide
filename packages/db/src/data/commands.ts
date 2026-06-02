@@ -1,19 +1,40 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
+import type { HostDaemonDurableCommandType } from "@bb/host-daemon-contract";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { hostDaemonCommands, hosts } from "../schema.js";
-import { createHostDaemonCommandId } from "../ids.js";
+import {
+  hostDaemonCommandAttempts,
+  hostDaemonCommands,
+  hosts,
+} from "../schema.js";
+import {
+  createHostDaemonCommandAttemptId,
+  createHostDaemonCommandId,
+} from "../ids.js";
 
 export interface QueueCommandInput {
   hostId: string;
-  sessionId?: string | null;
-  type: string;
+  sessionId: string | null;
+  type: HostDaemonDurableCommandType;
   payload: string;
 }
 
 type CommandWriteConnection = DbConnection | DbTransaction;
 type CommandReadConnection = DbConnection | DbTransaction;
+export type HostDaemonCommandAttemptRow =
+  typeof hostDaemonCommandAttempts.$inferSelect;
 export type HostDaemonCommandRow = typeof hostDaemonCommands.$inferSelect;
+export type FetchedHostDaemonCommandRow = HostDaemonCommandRow & {
+  attemptId: string;
+  deliveredAt: number;
+  leaseExpiresAt: number;
+};
+
+/** Standard command lease: 60 seconds */
+const STANDARD_COMMAND_LEASE_MS = 60_000;
+
+/** Provision command lease: 20 minutes */
+const PROVISION_COMMAND_LEASE_MS = 20 * 60_000;
 
 export interface HasPendingHostCommandForThreadArgs {
   hostId: string;
@@ -30,14 +51,29 @@ export interface HasExistingThreadArchiveCommandArgs {
 
 export interface GetPendingEnvironmentCommandArgs {
   environmentId: string;
-  type:
-    | "environment.cleanup_preflight"
-    | "environment.destroy"
-    | "workspace.status";
+  type: "environment.cleanup_preflight" | "environment.destroy";
 }
 
 export interface DeleteQueuedCommandInTransactionArgs {
   commandId: string;
+}
+
+export interface GetActiveCommandAttemptArgs {
+  attemptId: string;
+  commandId: string;
+}
+
+export interface GetCommandAttemptArgs extends GetActiveCommandAttemptArgs {}
+
+export interface SettleCommandAttemptInTransactionArgs
+  extends GetActiveCommandAttemptArgs {
+  settledAt: number;
+}
+
+export function getHostDaemonCommandLeaseMs(type: string): number {
+  return type === "environment.provision"
+    ? PROVISION_COMMAND_LEASE_MS
+    : STANDARD_COMMAND_LEASE_MS;
 }
 
 export function getCommand(db: CommandReadConnection, id: string) {
@@ -46,6 +82,61 @@ export function getCommand(db: CommandReadConnection, id: string) {
       .select()
       .from(hostDaemonCommands)
       .where(eq(hostDaemonCommands.id, id))
+      .get() ?? null
+  );
+}
+
+export function getActiveCommandAttempt(
+  db: CommandReadConnection,
+  args: GetActiveCommandAttemptArgs,
+): HostDaemonCommandAttemptRow | null {
+  return (
+    db
+      .select()
+      .from(hostDaemonCommandAttempts)
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.id, args.attemptId),
+          eq(hostDaemonCommandAttempts.commandId, args.commandId),
+          eq(hostDaemonCommandAttempts.status, "active"),
+        ),
+      )
+      .get() ?? null
+  );
+}
+
+export function getCommandAttempt(
+  db: CommandReadConnection,
+  args: GetCommandAttemptArgs,
+): HostDaemonCommandAttemptRow | null {
+  return (
+    db
+      .select()
+      .from(hostDaemonCommandAttempts)
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.id, args.attemptId),
+          eq(hostDaemonCommandAttempts.commandId, args.commandId),
+        ),
+      )
+      .get() ?? null
+  );
+}
+
+export function getActiveCommandAttemptForCommand(
+  db: CommandReadConnection,
+  commandId: string,
+): HostDaemonCommandAttemptRow | null {
+  return (
+    db
+      .select()
+      .from(hostDaemonCommandAttempts)
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.commandId, commandId),
+          eq(hostDaemonCommandAttempts.status, "active"),
+        ),
+      )
       .get() ?? null
   );
 }
@@ -76,7 +167,7 @@ function queueCommandRecord(
     .values({
       id,
       hostId: input.hostId,
-      sessionId: input.sessionId ?? null,
+      sessionId: input.sessionId,
       cursor,
       type: input.type,
       payload: input.payload,
@@ -195,6 +286,7 @@ export function getPendingEnvironmentCommand(
 export interface FetchCommandsOptions {
   hostId: string;
   limit?: number;
+  sessionId: string | null;
 }
 
 /**
@@ -223,11 +315,38 @@ export function fetchCommands(
       .limit(limit)
       .all();
 
-    if (commands.length === 0) return commands;
+    if (commands.length === 0) return [];
 
-    // Batch update: mark all fetched commands in one query
+    const attempts = new Map<
+      string,
+      {
+        attemptId: string;
+        deliveredAt: number;
+        leaseExpiresAt: number;
+      }
+    >();
+    for (const command of commands) {
+      const leaseExpiresAt = now + getHostDaemonCommandLeaseMs(command.type);
+      const attemptId = createHostDaemonCommandAttemptId();
+      tx.insert(hostDaemonCommandAttempts)
+        .values({
+          id: attemptId,
+          commandId: command.id,
+          sessionId: options.sessionId,
+          status: "active",
+          deliveredAt: now,
+          leaseExpiresAt,
+        })
+        .run();
+      attempts.set(command.id, {
+        attemptId,
+        deliveredAt: now,
+        leaseExpiresAt,
+      });
+    }
+
     tx.update(hostDaemonCommands)
-      .set({ state: "fetched", fetchedAt: now })
+      .set({ state: "fetched", fetchedAt: now, sessionId: options.sessionId })
       .where(
         inArray(
           hostDaemonCommands.id,
@@ -236,11 +355,19 @@ export function fetchCommands(
       )
       .run();
 
-    return commands.map((cmd) => ({
-      ...cmd,
-      state: "fetched" as const,
-      fetchedAt: now,
-    }));
+    return commands.map((cmd): FetchedHostDaemonCommandRow => {
+      const attempt = attempts.get(cmd.id);
+      if (!attempt) {
+        throw new Error(`Missing delivery attempt for command ${cmd.id}`);
+      }
+      return {
+        ...cmd,
+        ...attempt,
+        sessionId: options.sessionId,
+        state: "fetched",
+        fetchedAt: now,
+      };
+    });
   });
 }
 
@@ -255,6 +382,29 @@ export interface CancelCommandArgs {
   commandId: string;
   completedAt?: number;
   resultPayload?: string | null;
+}
+
+export function settleCommandAttemptInTransaction(
+  db: DbTransaction,
+  args: SettleCommandAttemptInTransactionArgs,
+): HostDaemonCommandAttemptRow | null {
+  return (
+    db
+      .update(hostDaemonCommandAttempts)
+      .set({
+        status: "settled",
+        settledAt: args.settledAt,
+      })
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.id, args.attemptId),
+          eq(hostDaemonCommandAttempts.commandId, args.commandId),
+          eq(hostDaemonCommandAttempts.status, "active"),
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 /**
@@ -279,16 +429,35 @@ export function reportCommandResult(
   );
 }
 
+function isDbConnection(db: CommandWriteConnection): db is DbConnection {
+  return "$client" in db;
+}
+
 export function cancelCommand(
   db: CommandWriteConnection,
   args: CancelCommandArgs,
 ) {
-  return (
+  if (!isDbConnection(db)) {
+    return cancelCommandInTransaction(db, args);
+  }
+
+  return db.transaction(
+    (tx) => cancelCommandInTransaction(tx, args),
+    { behavior: "immediate" },
+  );
+}
+
+export function cancelCommandInTransaction(
+  db: DbTransaction,
+  args: CancelCommandArgs,
+) {
+  const completedAt = args.completedAt ?? Date.now();
+  const command =
     db
       .update(hostDaemonCommands)
       .set({
         state: "error",
-        completedAt: args.completedAt ?? Date.now(),
+        completedAt,
         resultPayload: args.resultPayload ?? null,
       })
       .where(
@@ -298,6 +467,19 @@ export function cancelCommand(
         ),
       )
       .returning()
-      .get() ?? null
-  );
+      .get() ?? null;
+
+  if (command) {
+    db.update(hostDaemonCommandAttempts)
+      .set({ status: "settled", settledAt: completedAt })
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.commandId, args.commandId),
+          eq(hostDaemonCommandAttempts.status, "active"),
+        ),
+      )
+      .run();
+  }
+
+  return command;
 }

@@ -8,7 +8,7 @@ import type { Hono } from "hono";
 import type { ServerAppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
 import {
   resolveVoiceTranscriptionEnabled,
   transcribeVoiceInput,
@@ -47,7 +47,7 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
     systemProvidersQuerySchema,
     async (context, query) => {
       const hostId = resolveSystemLookupHostId(deps, query);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "provider.list" },

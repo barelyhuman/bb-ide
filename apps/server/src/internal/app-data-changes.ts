@@ -11,7 +11,6 @@ import {
   requireEnvironment,
   requirePublicThread,
 } from "../services/lib/entity-lookup.js";
-import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import {
   requireAuthenticatedDaemonSession,
   type RequireAuthenticatedDaemonSessionArgs,
@@ -59,52 +58,44 @@ export function registerInternalAppDataChangeRoutes(
   post(
     "/session/app-data-change",
     hostDaemonAppDataChangeRequestSchema,
-    (context, payload) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/app-data-change",
-        work: async () => {
-          requireSessionOwnedThread({
-            context,
-            deps,
-            sessionId: payload.sessionId,
-            threadId: payload.threadId,
-          });
+    async (context, payload) => {
+      requireSessionOwnedThread({
+        context,
+        deps,
+        sessionId: payload.sessionId,
+        threadId: payload.threadId,
+      });
 
-          deps.hub.notifyThreadAppData({
-            type: "app-data.changed",
-            threadId: payload.threadId,
-            appId: payload.appId,
-            path: payload.path,
-            value: payload.value,
-            deleted: payload.deleted,
-            version: payload.version,
-          });
-          return context.json({ ok: true });
-        },
-      }),
+      deps.hub.notifyThreadAppData({
+        type: "app-data.changed",
+        threadId: payload.threadId,
+        appId: payload.appId,
+        path: payload.path,
+        value: payload.value,
+        deleted: payload.deleted,
+        version: payload.version,
+      });
+      return context.json({ ok: true });
+    },
   );
 
   post(
     "/session/app-data-resync",
     hostDaemonAppDataResyncRequestSchema,
-    (context, payload) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/app-data-resync",
-        work: async () => {
-          requireSessionOwnedThread({
-            context,
-            deps,
-            sessionId: payload.sessionId,
-            threadId: payload.threadId,
-          });
+    async (context, payload) => {
+      requireSessionOwnedThread({
+        context,
+        deps,
+        sessionId: payload.sessionId,
+        threadId: payload.threadId,
+      });
 
-          deps.hub.notifyThreadAppData({
-            type: "app-data.resync",
-            threadId: payload.threadId,
-            appId: payload.appId,
-          });
-          return context.json({ ok: true });
-        },
-      }),
+      deps.hub.notifyThreadAppData({
+        type: "app-data.resync",
+        threadId: payload.threadId,
+        appId: payload.appId,
+      });
+      return context.json({ ok: true });
+    },
   );
 }

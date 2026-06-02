@@ -159,7 +159,7 @@ export const replayRunRequestSchema = z
 export type ReplayRunRequest = z.infer<typeof replayRunRequestSchema>;
 
 export const replayRunResponseSchema = z.object({
-  commandId: z.string(),
+  runId: z.string(),
   replayThreadId: z.string(),
   projectId: z.string(),
 });

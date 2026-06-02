@@ -84,7 +84,7 @@ function printCaptureTable(captures: ReplayCaptureHostSummary[]): void {
 function printReplayRun(result: ReplayRunResponse): void {
   console.log(`Replay thread: ${result.replayThreadId}`);
   console.log(`Project: ${result.projectId}`);
-  console.log(`Command: ${result.commandId}`);
+  console.log(`Run: ${result.runId}`);
 }
 
 export function registerReplayCommands(

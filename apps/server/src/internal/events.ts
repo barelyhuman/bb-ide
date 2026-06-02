@@ -51,10 +51,7 @@ import { syncManagerThreadSchedules } from "../services/scheduling/manager-sched
 import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
 import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
 import { queueSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
-import {
-  runWithDaemonCommandWaitForbidden,
-  scheduleAfterDaemonIngressResponse,
-} from "../services/hosts/command-wait-context.js";
+import { scheduleAfterDaemonIngressResponse } from "../services/hosts/daemon-ingress-scheduler.js";
 import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
@@ -425,7 +422,15 @@ async function applyEventEffects(
         event.code === "provider_process_exited"
       ) {
         const thread = getThread(deps.db, entry.threadId);
-        if (!thread || thread.stopRequestedAt !== null) {
+        if (!thread) {
+          continue;
+        }
+        deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+          threadIds: [entry.threadId],
+          reason:
+            "Provider process exited while awaiting user interaction; retry the thread to continue",
+        });
+        if (thread.stopRequestedAt !== null) {
           continue;
         }
         tryTransition(deps.db, deps.hub, entry.threadId, "error");
@@ -767,104 +772,99 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
     "/session/events",
     hostDaemonEventBatchRequestSchema,
     async (context, payload) => {
-      const result = await runWithDaemonCommandWaitForbidden({
-        reason: "/session/events",
-        work: async () => {
-          const session = requireAuthenticatedDaemonSession({
-            context,
-            db: deps.db,
-            sessionId: payload.sessionId,
-          });
-          const { entries, rejectedEvents } = resolvePostableEventBatchEntries(
-            deps,
-            {
-              hostId: session.hostId,
-              events: payload.events,
-            },
-          );
-          if (rejectedEvents.length > 0) {
-            deps.logger.warn(
-              {
-                hostId: session.hostId,
-                rejectedEvents: summarizeRejectedDaemonEvents(rejectedEvents),
-                sessionId: session.id,
-              },
-              "Rejected daemon events for threads outside the session host",
-            );
-          }
-          const eventInputs = entries.map((entry) => {
-            return toStoredEvent({
-              envelope: entry.envelope,
-              environmentId: entry.environmentId,
-            });
-          });
-          const postableEvents = entries.map((entry) => entry.envelope);
-          let appendResult: AppendDaemonEventsResult;
-          try {
-            appendResult = appendDaemonEventInputsAtomically(deps, {
-              eventInputs,
-            });
-          } catch (error) {
-            if (error instanceof ProducerEventPayloadMismatchError) {
-              deps.logger.error(
-                {
-                  existingHash: error.details.existingHash,
-                  hostId: session.hostId,
-                  producerEventId: error.details.producerEventId,
-                  receivedHash: error.details.receivedHash,
-                  sessionId: session.id,
-                },
-                "Producer event id payload mismatch",
-              );
-              throw new ApiError(
-                409,
-                "producer_event_payload_mismatch",
-                "Producer event id was reused with a different payload",
-              );
-            }
-            if (error instanceof MissingStoredTurnStartedError) {
-              deps.logger.warn(
-                {
-                  ...error.details,
-                  sessionId: session.id,
-                  ...runtimeErrorLogFields(deps.config, error),
-                },
-                "Rejected daemon event before turn/started",
-              );
-              throw new ApiError(409, "invalid_request", error.message);
-            }
-            throw error;
-          }
-          notifyInsertedEventThreads(deps, {
-            eventInputs,
-            insertedInputIndexes: appendResult.insertedInputIndexes,
-          });
-
-          const eventEffectResult = await applyEventEffects(
-            deps,
-            resolveEventsToApply({
-              db: deps.db,
-              events: postableEvents,
-              insertedEventIndexes: appendResult.insertedInputIndexes,
-            }),
-          );
-          for (const candidate of resolveActivePruneCandidates({
-            acceptedEvents: appendResult.acceptedEvents,
-            events: postableEvents,
-            insertedEventIndexes: appendResult.insertedInputIndexes,
-          })) {
-            maybePruneActiveThreadEventHistory(deps, candidate);
-          }
-
-          return {
-            followUps: eventEffectResult.followUps,
-            response: context.json({
-              acceptedEvents: appendResult.acceptedEvents,
-              rejectedEvents,
-            }),
-          };
-        },
+      const session = requireAuthenticatedDaemonSession({
+        context,
+        db: deps.db,
+        sessionId: payload.sessionId,
       });
+      const { entries, rejectedEvents } = resolvePostableEventBatchEntries(
+        deps,
+        {
+          hostId: session.hostId,
+          events: payload.events,
+        },
+      );
+      if (rejectedEvents.length > 0) {
+        deps.logger.warn(
+          {
+            hostId: session.hostId,
+            rejectedEvents: summarizeRejectedDaemonEvents(rejectedEvents),
+            sessionId: session.id,
+          },
+          "Rejected daemon events for threads outside the session host",
+        );
+      }
+      const eventInputs = entries.map((entry) => {
+        return toStoredEvent({
+          envelope: entry.envelope,
+          environmentId: entry.environmentId,
+        });
+      });
+      const postableEvents = entries.map((entry) => entry.envelope);
+      let appendResult: AppendDaemonEventsResult;
+      try {
+        appendResult = appendDaemonEventInputsAtomically(deps, {
+          eventInputs,
+        });
+      } catch (error) {
+        if (error instanceof ProducerEventPayloadMismatchError) {
+          deps.logger.error(
+            {
+              existingHash: error.details.existingHash,
+              hostId: session.hostId,
+              producerEventId: error.details.producerEventId,
+              receivedHash: error.details.receivedHash,
+              sessionId: session.id,
+            },
+            "Producer event id payload mismatch",
+          );
+          throw new ApiError(
+            409,
+            "producer_event_payload_mismatch",
+            "Producer event id was reused with a different payload",
+          );
+        }
+        if (error instanceof MissingStoredTurnStartedError) {
+          deps.logger.warn(
+            {
+              ...error.details,
+              sessionId: session.id,
+              ...runtimeErrorLogFields(deps.config, error),
+            },
+            "Rejected daemon event before turn/started",
+          );
+          throw new ApiError(409, "invalid_request", error.message);
+        }
+        throw error;
+      }
+      notifyInsertedEventThreads(deps, {
+        eventInputs,
+        insertedInputIndexes: appendResult.insertedInputIndexes,
+      });
+
+      const eventEffectResult = await applyEventEffects(
+        deps,
+        resolveEventsToApply({
+          db: deps.db,
+          events: postableEvents,
+          insertedEventIndexes: appendResult.insertedInputIndexes,
+        }),
+      );
+      for (const candidate of resolveActivePruneCandidates({
+        acceptedEvents: appendResult.acceptedEvents,
+        events: postableEvents,
+        insertedEventIndexes: appendResult.insertedInputIndexes,
+      })) {
+        maybePruneActiveThreadEventHistory(deps, candidate);
+      }
+
+      const result = {
+        followUps: eventEffectResult.followUps,
+        response: context.json({
+          acceptedEvents: appendResult.acceptedEvents,
+          rejectedEvents,
+        }),
+      };
       deferEventFollowUpBatch(deps, result.followUps);
       return result.response;
     },

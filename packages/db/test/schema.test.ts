@@ -229,7 +229,7 @@ describe("db rebuild schema", () => {
         hostId,
         sessionId,
         cursor: 1,
-        type: "workspace.status",
+        type: "workspace.commit",
         payload: "{}",
         state: "queued",
         createdAt: now,
@@ -300,7 +300,7 @@ describe("db rebuild schema", () => {
     );
     expect(db.select().from(hostDaemonCommands).get()).toMatchObject({
       sessionId,
-      type: "workspace.status",
+      type: "workspace.commit",
     });
     expect(db.select().from(promptHistoryEntries).get()).toMatchObject({
       projectId,
@@ -634,7 +634,7 @@ describe("db rebuild schema", () => {
         hostId,
         sessionId,
         cursor: 1,
-        type: "workspace.status",
+        type: "workspace.commit",
         payload: "{}",
         state: "queued",
         createdAt: now,
@@ -694,7 +694,7 @@ describe("db rebuild schema", () => {
         hostId,
         sessionId,
         cursor: 1,
-        type: "workspace.status",
+        type: "workspace.commit",
         payload: "{}",
         state: "queued",
         createdAt: now,

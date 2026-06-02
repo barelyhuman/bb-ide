@@ -1,0 +1,199 @@
+import {
+  hostDaemonServerWsMessageSchema,
+  type HostDaemonOnlineRpcRequestMessage,
+  type HostDaemonOnlineRpcResponseMessage,
+  type HostDaemonOnlineRpcResult,
+} from "@bb/host-daemon-contract";
+import type { AvailableModel, ProviderInfo } from "@bb/domain";
+import type { TestAppHarness } from "./test-app.js";
+
+interface TestHostRpcSocket {
+  close(code?: number, reason?: string): void;
+  send(data: string): void;
+}
+
+interface ProviderModelResponse {
+  models: AvailableModel[];
+  selectedOnlyModels: AvailableModel[];
+}
+
+interface ProviderModelError {
+  errorCode: string;
+  errorMessage: string;
+}
+
+export interface RegisterProviderHostRpcArgs {
+  hostId: string;
+  modelErrorsByProviderId?: Record<string, ProviderModelError>;
+  modelsByProviderId?: Record<string, ProviderModelResponse>;
+  providers: ProviderInfo[];
+  sessionId: string;
+}
+
+export interface ProviderHostRpcResponder {
+  requests: HostDaemonOnlineRpcRequestMessage[];
+  unregister(): void;
+}
+
+export type HostRpcHandlerResult =
+  | {
+      ok: true;
+      result: HostDaemonOnlineRpcResult;
+    }
+  | {
+      ok: false;
+      errorCode: string;
+      errorMessage: string;
+    };
+
+export interface RegisterHostRpcResponderArgs {
+  handle: (request: HostDaemonOnlineRpcRequestMessage) => HostRpcHandlerResult;
+  hostId: string;
+  sessionId: string;
+}
+
+export interface HostRpcResponder {
+  requests: HostDaemonOnlineRpcRequestMessage[];
+  unregister(): void;
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function buildTestFailureResponse(
+  request: HostDaemonOnlineRpcRequestMessage,
+  error: unknown,
+): HostDaemonOnlineRpcResponseMessage {
+  return {
+    type: "host-rpc.response",
+    requestId: request.requestId,
+    commandType: request.command.type,
+    ok: false,
+    errorCode: "test_rpc_error",
+    errorMessage: toErrorMessage(error),
+  };
+}
+
+function buildProviderRpcResponse(
+  args: RegisterProviderHostRpcArgs,
+  request: HostDaemonOnlineRpcRequestMessage,
+): HostDaemonOnlineRpcResponseMessage {
+  if (request.command.type === "provider.list") {
+    return {
+      type: "host-rpc.response",
+      requestId: request.requestId,
+      commandType: request.command.type,
+      ok: true,
+      result: { providers: args.providers },
+    };
+  }
+  if (request.command.type !== "provider.list_models") {
+    throw new Error(`Unexpected provider RPC command ${request.command.type}`);
+  }
+
+  const providerId = request.command.providerId;
+  const error = args.modelErrorsByProviderId?.[providerId];
+  if (error) {
+    return {
+      type: "host-rpc.response",
+      requestId: request.requestId,
+      commandType: request.command.type,
+      ok: false,
+      errorCode: error.errorCode,
+      errorMessage: error.errorMessage,
+    };
+  }
+
+  const result = args.modelsByProviderId?.[providerId] ?? {
+    models: [],
+    selectedOnlyModels: [],
+  };
+  return {
+    type: "host-rpc.response",
+    requestId: request.requestId,
+    commandType: request.command.type,
+    ok: true,
+    result,
+  };
+}
+
+function buildHostRpcResponse(
+  request: HostDaemonOnlineRpcRequestMessage,
+  result: HostRpcHandlerResult,
+): HostDaemonOnlineRpcResponseMessage {
+  if (result.ok) {
+    return {
+      type: "host-rpc.response",
+      requestId: request.requestId,
+      commandType: request.command.type,
+      ok: true,
+      result: result.result,
+    };
+  }
+  return {
+    type: "host-rpc.response",
+    requestId: request.requestId,
+    commandType: request.command.type,
+    ok: false,
+    errorCode: result.errorCode,
+    errorMessage: result.errorMessage,
+  };
+}
+
+export function registerHostRpcResponder(
+  harness: TestAppHarness,
+  args: RegisterHostRpcResponderArgs,
+): HostRpcResponder {
+  const requests: HostDaemonOnlineRpcRequestMessage[] = [];
+  const socket: TestHostRpcSocket = {
+    close() {},
+    send(data) {
+      const message = hostDaemonServerWsMessageSchema.parse(JSON.parse(data));
+      if (message.type !== "host-rpc.request") {
+        throw new Error(`Unexpected daemon websocket message ${message.type}`);
+      }
+      requests.push(message);
+      const response = (() => {
+        try {
+          return buildHostRpcResponse(message, args.handle(message));
+        } catch (error) {
+          return buildTestFailureResponse(message, error);
+        }
+      })();
+      harness.hub.recordHostOnlineRpcResponse({
+        message: response,
+        sessionId: args.sessionId,
+      });
+    },
+  };
+  harness.hub.registerDaemon(args.sessionId, args.hostId, socket);
+
+  return {
+    requests,
+    unregister() {
+      harness.hub.unregisterDaemon(args.sessionId);
+    },
+  };
+}
+
+export function registerProviderHostRpcResponder(
+  harness: TestAppHarness,
+  args: RegisterProviderHostRpcArgs,
+): ProviderHostRpcResponder {
+  return registerHostRpcResponder(harness, {
+    hostId: args.hostId,
+    sessionId: args.sessionId,
+    handle: (request) => {
+      const response = buildProviderRpcResponse(args, request);
+      if (response.ok) {
+        return { ok: true, result: response.result };
+      }
+      return {
+        ok: false,
+        errorCode: response.errorCode,
+        errorMessage: response.errorMessage,
+      };
+    },
+  });
+}

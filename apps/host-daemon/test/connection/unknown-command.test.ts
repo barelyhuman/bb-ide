@@ -53,6 +53,7 @@ describe("fetchCommands with unknown command types", () => {
     // Queue an unknown command type as raw JSON
     testServer.queueRawCommand({
       id: "command-unknown-1",
+      attemptId: "attempt-command-unknown-1",
       cursor: 99,
       command: {
         type: "thread.quantum_teleport",
@@ -79,6 +80,7 @@ describe("fetchCommands with unknown command types", () => {
       (r: any) => r.commandId === "command-unknown-1",
     );
     expect(errorReport).toBeDefined();
+    expect((errorReport as any).attemptId).toBe("attempt-command-unknown-1");
     expect((errorReport as any).ok).toBe(false);
     expect((errorReport as any).errorCode).toBe("unknown_command");
   });
@@ -107,6 +109,7 @@ describe("fetchCommands with unknown command types", () => {
 
     testServer.queueRawCommand({
       id: "cmd-unk-1",
+      attemptId: "attempt-cmd-unk-1",
       cursor: 50,
       command: { type: "future.command" },
     });
@@ -121,6 +124,7 @@ describe("fetchCommands with unknown command types", () => {
       (r: any) => r.commandId === "cmd-unk-1",
     );
     expect(errorReport).toBeDefined();
+    expect((errorReport as any).attemptId).toBe("attempt-cmd-unk-1");
     expect((errorReport as any).ok).toBe(false);
     expect((errorReport as any).errorCode).toBe("unknown_command");
   });
@@ -149,6 +153,7 @@ describe("fetchCommands with unknown command types", () => {
 
     // Queue a raw command without id
     testServer.queueRawCommand({
+      attemptId: "attempt-missing-id",
       cursor: 77,
       command: { type: "future.missing_fields" },
     });
@@ -160,7 +165,8 @@ describe("fetchCommands with unknown command types", () => {
     // Should warn about the unknown type AND about missing id
     const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls;
     const missingFieldsWarning = warnCalls.find(
-      ([, msg]: any) => msg === "cannot report unknown command: missing id",
+      ([, msg]: any) =>
+        msg === "cannot report unknown command: missing id or attempt id",
     );
     expect(missingFieldsWarning).toBeDefined();
   });
@@ -189,6 +195,7 @@ describe("fetchCommands with unknown command types", () => {
 
     testServer.queueRawCommand({
       id: "cmd-invalid-1",
+      attemptId: "attempt-cmd-invalid-1",
       cursor: 80,
       command: {
         type: "thread.stop",
@@ -207,6 +214,7 @@ describe("fetchCommands with unknown command types", () => {
       (r: any) => r.commandId === "cmd-invalid-1",
     );
     expect(errorReport).toBeDefined();
+    expect((errorReport as any).attemptId).toBe("attempt-cmd-invalid-1");
     expect((errorReport as any).ok).toBe(false);
     expect((errorReport as any).errorCode).toBe("invalid_command");
   });

@@ -9,6 +9,7 @@ import type { AppDeps } from "../types.js";
 import { runtimeErrorLogFields } from "../services/lib/error-log-fields.js";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { handleDaemonSocketClosed } from "../internal/session-owner-side-effects.js";
+import { notifyDaemonEnvironmentChange } from "../internal/environment-changes.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
 interface DaemonSocket {
@@ -76,7 +77,7 @@ export function onDaemonSocketOpen(
 }
 
 export function onDaemonSocketMessage(
-  deps: Pick<AppDeps, "config" | "db" | "logger" | "terminalSessions">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "terminalSessions">,
   args: DaemonSocketMessageArgs,
 ): void {
   let decoded: unknown;
@@ -99,6 +100,41 @@ export function onDaemonSocketMessage(
       sessionId: args.sessionId,
     });
     heartbeatSession(deps.db, session.id, Date.now() + session.leaseTimeoutMs);
+    if (result.data.type === "environment-change") {
+      notifyDaemonEnvironmentChange(deps, {
+        hostId: args.hostId,
+        environmentId: result.data.environmentId,
+        change: result.data.change,
+      });
+      return;
+    }
+    if (result.data.type === "host-rpc.response") {
+      const disposition = deps.hub.recordHostOnlineRpcResponse({
+        message: result.data,
+        sessionId: args.sessionId,
+      });
+      if (!disposition.handled && disposition.reason === "session_mismatch") {
+        deps.logger.warn(
+          {
+            commandType: result.data.commandType,
+            expectedSessionId: disposition.expectedSessionId,
+            requestId: result.data.requestId,
+            sessionId: args.sessionId,
+          },
+          "Ignoring host RPC response from mismatched daemon session",
+        );
+      } else if (!disposition.handled) {
+        deps.logger.debug(
+          {
+            commandType: result.data.commandType,
+            requestId: result.data.requestId,
+            sessionId: args.sessionId,
+          },
+          "Ignoring stale host RPC response",
+        );
+      }
+      return;
+    }
     if (
       result.data.type !== "heartbeat" &&
       deps.config.featureFlags.terminals

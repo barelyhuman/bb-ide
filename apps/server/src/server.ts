@@ -22,7 +22,6 @@ import { registerThreadRoutes } from "./routes/threads/index.js";
 import { registerInternalCommandRoutes } from "./internal/commands.js";
 import { registerInternalCommandResultRoutes } from "./internal/command-result-route.js";
 import { registerInternalAppDataChangeRoutes } from "./internal/app-data-changes.js";
-import { registerInternalEnvironmentChangeRoutes } from "./internal/environment-changes.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalHostRoutes } from "./internal/hosts.js";
 import { registerInternalInteractiveRequestRoutes } from "./internal/interactive-requests.js";
@@ -264,7 +263,6 @@ export function createApp(
   registerInternalSessionRoutes(internalApi, deps);
   registerInternalCommandRoutes(internalApi, deps);
   registerInternalCommandResultRoutes(internalApi, deps);
-  registerInternalEnvironmentChangeRoutes(internalApi, deps);
   registerInternalAppDataChangeRoutes(internalApi, deps);
   registerInternalEventRoutes(internalApi, deps);
   registerInternalToolCallRoutes(internalApi, deps);

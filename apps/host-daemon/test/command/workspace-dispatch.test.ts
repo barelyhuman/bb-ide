@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { dispatchCommand } from "../../src/command-dispatch.js";
+import {
+  dispatchCommand,
+  dispatchOnlineRpcCommand,
+} from "../../src/command-dispatch.js";
 import {
   cleanupTempDirs,
   createHarness,
@@ -18,7 +21,7 @@ describe("workspace command dispatch", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    const statusResult = await dispatchCommand(
+    const statusResult = await dispatchOnlineRpcCommand(
       {
         type: "workspace.status",
         environmentId: "env-1",
@@ -30,7 +33,7 @@ describe("workspace command dispatch", () => {
       },
       harness.dispatchOptions(),
     );
-    const diffResult = await dispatchCommand(
+    const diffResult = await dispatchOnlineRpcCommand(
       {
         type: "workspace.diff",
         environmentId: "env-1",
@@ -95,7 +98,7 @@ describe("workspace command dispatch", () => {
   it("rehydrates a missing workspace runtime from workspaceContext", async () => {
     const harness = createHarness({ workspacePath: "/tmp/env-rehydrate" });
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "workspace.status",
         environmentId: "env-rehydrate",
@@ -128,7 +131,7 @@ describe("workspace command dispatch", () => {
       workspacePath: "/tmp/non-git-env",
     });
 
-    const statusResult = await dispatchCommand(
+    const statusResult = await dispatchOnlineRpcCommand(
       {
         type: "workspace.status",
         environmentId: "env-non-git",
@@ -139,7 +142,7 @@ describe("workspace command dispatch", () => {
       },
       harness.dispatchOptions(),
     );
-    const diffResult = await dispatchCommand(
+    const diffResult = await dispatchOnlineRpcCommand(
       {
         type: "workspace.diff",
         environmentId: "env-non-git",
@@ -174,7 +177,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(path.join(tempDir, "notes", "todo.md"), "world");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_files",
         path: tempDir,
@@ -194,7 +197,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(path.join(tempDir, "notes", "todo.md"), "world");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_paths",
         path: tempDir,
@@ -225,7 +228,7 @@ describe("workspace command dispatch", () => {
     const missingPath = path.join(tempDir, "does-not-exist");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_files",
         path: missingPath,
@@ -243,7 +246,7 @@ describe("workspace command dispatch", () => {
     const missingPath = path.join(tempDir, "does-not-exist");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_paths",
         path: missingPath,
@@ -269,7 +272,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.list_files",
           path: symlinkRoot,
@@ -289,7 +292,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(filePath, "durable manager notes");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file",
         path: filePath,
@@ -310,7 +313,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(filePath, "explicit host notes");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file",
         path: filePath,
@@ -330,7 +333,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(filePath, "durable manager notes");
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.file_metadata",
         path: filePath,
@@ -351,7 +354,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(imagePath, imageBytes);
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file",
         path: imagePath,
@@ -376,7 +379,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(assetPath, imageBytes);
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file_relative",
         rootPath: tempDir,
@@ -400,7 +403,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(imagePath, imageBytes);
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file_relative",
         rootPath: tempDir,
@@ -420,7 +423,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file_relative",
           rootPath: tempDir,
@@ -441,7 +444,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file_relative",
           rootPath: tempDir,
@@ -466,7 +469,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file_relative",
           rootPath: tempDir,
@@ -494,7 +497,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file_relative",
           rootPath: symlinkRoot,
@@ -513,7 +516,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: "PREFERENCES.md",
@@ -529,7 +532,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: path.join(tempDir, "missing.md"),
@@ -550,7 +553,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: path.join(tempDir, "missing.md"),
@@ -568,7 +571,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: tempDir,
@@ -593,7 +596,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: symlinkPath,
@@ -619,7 +622,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: filePath,
@@ -641,7 +644,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: imagePath,
@@ -663,7 +666,7 @@ describe("workspace command dispatch", () => {
     const harness = createHarness();
 
     await expect(
-      dispatchCommand(
+      dispatchOnlineRpcCommand(
         {
           type: "host.read_file",
           path: filePath,
@@ -684,7 +687,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(filePath, svg);
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file",
         path: filePath,
@@ -705,7 +708,7 @@ describe("workspace command dispatch", () => {
     await fs.writeFile(filePath, bytes);
 
     const harness = createHarness();
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.read_file",
         path: filePath,

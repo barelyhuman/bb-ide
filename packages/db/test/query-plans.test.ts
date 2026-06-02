@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { threadScope, turnScope } from "@bb/domain";
 import {
   createConnection,
@@ -18,13 +18,17 @@ import {
   reportCommandResult,
 } from "../src/data/commands.js";
 import {
+  createPendingInteraction,
+  getPendingInteractionByProviderRequest,
+} from "../src/data/pending-interactions.js";
+import {
   insertEvents,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
 } from "../src/data/events.js";
 import {
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
-  READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+  COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES,
   pruneCompletedReadOnlyCommandRows,
   pruneCompletedCommandPayloads,
   pruneClosedSessions,
@@ -36,7 +40,7 @@ import { openSession } from "../src/data/sessions.js";
 import { upsertHost } from "../src/data/hosts.js";
 import { createProject } from "../src/data/projects.js";
 import { createThread } from "../src/data/threads.js";
-import { hostDaemonCommands } from "../src/schema.js";
+import { hostDaemonCommandAttempts } from "../src/schema.js";
 
 type SqliteParameter = string | number | bigint | Buffer | null;
 type LoggedSqlPredicate = (fields: SlowDbQueryLogFields) => boolean;
@@ -128,6 +132,22 @@ function setup(): TestDb {
   return { db, host, logger, thread };
 }
 
+function expireActiveCommandAttempt(
+  db: DbConnection,
+  commandId: string,
+  now: number,
+): void {
+  db.update(hostDaemonCommandAttempts)
+    .set({ leaseExpiresAt: now - 1 })
+    .where(
+      and(
+        eq(hostDaemonCommandAttempts.commandId, commandId),
+        eq(hostDaemonCommandAttempts.status, "active"),
+      ),
+    )
+    .run();
+}
+
 function closeSessionAt(args: CloseSessionAtArgs): void {
   args.db.$client
     .prepare<CloseSessionAtParameters>(
@@ -181,8 +201,9 @@ describe("slow query index plans", () => {
     const completedBefore = now - 5_000;
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: JSON.stringify({ stale: true }),
-      type: "workspace.status",
+      type: "workspace.commit",
     });
     reportCommandResult(db, noopNotifier, {
       commandId: command.id,
@@ -216,8 +237,9 @@ describe("slow query index plans", () => {
     const completedBefore = now - 5_000;
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: "{}",
-      type: "workspace.status",
+      type: "environment.cleanup_preflight",
     });
     reportCommandResult(db, noopNotifier, {
       commandId: command.id,
@@ -242,7 +264,7 @@ describe("slow query index plans", () => {
       params: [
         "success",
         "error",
-        ...READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+        ...COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES,
         completedBefore,
         100,
       ],
@@ -302,56 +324,63 @@ describe("slow query index plans", () => {
     const now = Date.now();
     const firstAttemptCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: JSON.stringify({ threadId: "thr_expired_query_plan" }),
-      type: "workspace.status",
+      type: "workspace.commit",
     });
     const retriedCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: JSON.stringify({ threadId: "thr_retried_expired_query_plan" }),
-      type: "workspace.status",
+      type: "workspace.commit",
     });
-    fetchCommands(db, noopNotifier, { hostId: host.id });
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: now - 70_000 })
-      .where(eq(hostDaemonCommands.id, firstAttemptCommand.id))
-      .run();
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: now - 70_000, retryCount: 1 })
-      .where(eq(hostDaemonCommands.id, retriedCommand.id))
-      .run();
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    expireActiveCommandAttempt(db, retriedCommand.id, now);
+    sweepExpiredCommands(db, noopNotifier, now);
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    expireActiveCommandAttempt(db, firstAttemptCommand.id, now);
+    expireActiveCommandAttempt(db, retriedCommand.id, now);
     logger.clear();
 
     sweepExpiredCommands(db, noopNotifier, now);
 
-    const requeueLog = findOnlyDebugLog({
+    const firstExpiredAttemptsLog = findOnlyDebugLog({
       logger,
-      predicate: (fields) =>
-        fields.operation === "run" &&
-        fields.sql.startsWith('update "host_daemon_commands"') &&
-        fields.sql.includes('"state" = ?') &&
-        fields.sql.includes('"retry_count" = ?') &&
-        fields.sql.match(/"retry_count"/g)?.length === 2,
+      predicate: (fields) => {
+        const statement = fields.sql.toLowerCase();
+        return (
+          fields.operation === "all" &&
+          statement.includes('from "host_daemon_command_attempts"') &&
+          statement.includes('"lease_expires_at" <= ?') &&
+          statement.includes("not exists")
+        );
+      },
     });
     assertEmittedQueryPlanUsesIndex({
       db,
-      debugLog: requeueLog,
-      indexName: "host_daemon_commands_state_fetched_at_idx",
-      params: ["pending", null, 1, "fetched", now, 20 * 60_000, 60_000, 0],
+      debugLog: firstExpiredAttemptsLog,
+      indexName: "host_daemon_command_attempts_active_expiry_idx",
+      params: ["active", now],
     });
 
     const expiredIdsLog = findOnlyDebugLog({
       logger,
-      predicate: (fields) =>
-        fields.operation === "all" &&
-        fields.sql.startsWith('select "id" from "host_daemon_commands"') &&
-        fields.sql.includes('"fetched_at" is not null') &&
-        fields.sql.includes('"retry_count" >= 1'),
+      predicate: (fields) => {
+        const statement = fields.sql.toLowerCase();
+        return (
+          fields.operation === "all" &&
+          statement.includes('from "host_daemon_command_attempts"') &&
+          statement.includes('"lease_expires_at" <= ?') &&
+          statement.includes("exists") &&
+          !statement.includes("not exists")
+        );
+      },
     });
     assertEmittedQueryPlanUsesIndex({
       db,
       debugLog: expiredIdsLog,
-      indexName: "host_daemon_commands_state_fetched_at_idx",
-      params: ["fetched", now, 20 * 60_000, 60_000],
+      indexName: "host_daemon_command_attempts_active_expiry_idx",
+      params: ["active", now],
     });
 
     db.$client.close();
@@ -361,12 +390,13 @@ describe("slow query index plans", () => {
     const { db, host, logger } = setup();
     queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: "{}",
-      type: "workspace.status",
+      type: "workspace.commit",
     });
     logger.clear();
 
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
 
     const debugLog = findOnlyDebugLog({
       logger,
@@ -385,10 +415,51 @@ describe("slow query index plans", () => {
     db.$client.close();
   });
 
+  it("uses the provider request index for pending interaction lookups", () => {
+    const { db, logger, thread } = setup();
+    createPendingInteraction(db, {
+      threadId: thread.id,
+      turnId: "turn-provider-request-query-plan",
+      providerId: "codex",
+      providerThreadId: "provider-thread-query-plan",
+      providerRequestId: "request-query-plan",
+      sessionId: "session-query-plan",
+      payload: "{}",
+    });
+    logger.clear();
+
+    expect(
+      getPendingInteractionByProviderRequest(db, {
+        providerId: "codex",
+        providerThreadId: "provider-thread-query-plan",
+        providerRequestId: "request-query-plan",
+      }),
+    ).toMatchObject({
+      threadId: thread.id,
+    });
+
+    const debugLog = findOnlyDebugLog({
+      logger,
+      predicate: (fields) =>
+        fields.operation === "get" &&
+        fields.sql.includes('from "pending_interactions"') &&
+        fields.sql.includes('"provider_request_id" = ?'),
+    });
+    assertEmittedQueryPlanUsesIndex({
+      db,
+      debugLog,
+      indexName: "pending_interactions_provider_request_idx",
+      params: ["codex", "provider-thread-query-plan", "request-query-plan"],
+    });
+
+    db.$client.close();
+  });
+
   it("uses the host/type/state index for host command lookups", () => {
     const { db, host, logger } = setup();
     queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: JSON.stringify({ threadId: "thr_target" }),
       type: "turn.submit",
     });
@@ -423,6 +494,7 @@ describe("slow query index plans", () => {
     const { db, host, logger } = setup();
     queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: JSON.stringify({
         threadId: "thr_target",
         providerId: "codex",
@@ -489,6 +561,7 @@ describe("slow query index plans", () => {
     const { db, host, logger } = setup();
     queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       payload: JSON.stringify({ environmentId: "env_target" }),
       type: "environment.destroy",
     });

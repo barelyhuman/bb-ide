@@ -9,7 +9,7 @@ import {
 import {
   hostDaemonCommandSchema,
   type HostDaemonCommand,
-  type HostDaemonCommandType,
+  type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 
 export interface QueuedCommand {
@@ -107,7 +107,7 @@ export function listPendingHostCommands(
 
 export function countQueuedCommandsByType(
   db: DbConnection,
-  type: HostDaemonCommandType,
+  type: HostDaemonDurableCommandType,
 ): number {
   return (
     db

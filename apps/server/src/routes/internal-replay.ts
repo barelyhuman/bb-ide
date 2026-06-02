@@ -5,9 +5,7 @@ import {
   getProject,
   getThread,
   listConnectedHostIds,
-  queueCommand,
 } from "@bb/db";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   replayRunRequestSchema,
   typedRoutes,
@@ -24,8 +22,7 @@ import type { Hono } from "hono";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
-import { queueCommandAndWait } from "../services/hosts/command-wait.js";
-import { ensureHostSessionReadyForWork } from "../services/hosts/host-lifecycle.js";
+import { callHostOnlineRpc } from "../services/hosts/online-rpc.js";
 import { appendClientTurnEvent } from "../services/threads/thread-events.js";
 
 interface ResolvedReplayCapture {
@@ -95,16 +92,6 @@ function resolveManifestReplayTarget(
   };
 }
 
-function parseReplayCaptureListResult(value: unknown) {
-  return hostDaemonCommandResultSchemaByType["replay.capture_list"].parse(
-    value,
-  );
-}
-
-function parseReplayCaptureGetResult(value: unknown): ReplayCaptureManifest {
-  return hostDaemonCommandResultSchemaByType["replay.capture_get"].parse(value);
-}
-
 function isReplayCaptureNotFound(error: unknown): boolean {
   return (
     error instanceof ApiError && error.body.code === "replay_capture_not_found"
@@ -115,15 +102,14 @@ async function listHostCaptures(
   deps: AppDeps,
   hostId: string,
 ): Promise<ReplayCaptureHostSummary[]> {
-  const result = parseReplayCaptureListResult(
-    await queueCommandAndWait(deps, {
-      hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "replay.capture_list",
-      },
-    }),
-  );
+  const result = await callHostOnlineRpc(deps, {
+    hostId,
+    timeoutMs: COMMAND_TIMEOUT_MS,
+    command: {
+      type: "development.replay",
+      operation: "capture-list",
+    },
+  });
   return result.captures.map((capture): ReplayCaptureHostSummary => {
     const enrichment = loadCaptureEnrichment(deps, {
       projectId: capture.projectId,
@@ -166,16 +152,15 @@ async function getHostCapture(
   hostId: string,
   captureId: string,
 ): Promise<ReplayCaptureDetail> {
-  const manifest = parseReplayCaptureGetResult(
-    await queueCommandAndWait(deps, {
-      hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "replay.capture_get",
-        captureId,
-      },
-    }),
-  );
+  const manifest = await callHostOnlineRpc(deps, {
+    hostId,
+    timeoutMs: COMMAND_TIMEOUT_MS,
+    command: {
+      type: "development.replay",
+      operation: "capture-get",
+      captureId,
+    },
+  });
   const enrichment = loadCaptureEnrichment(deps, {
     projectId: manifest.projectId,
     threadId: manifest.threadId,
@@ -227,11 +212,12 @@ async function deleteCapture(deps: AppDeps, captureId: string): Promise<void> {
   let deleted = false;
   for (const hostId of new Set(listConnectedHostIds(deps.db))) {
     try {
-      await queueCommandAndWait(deps, {
+      await callHostOnlineRpc(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
-          type: "replay.capture_delete",
+          type: "development.replay",
+          operation: "capture-delete",
           captureId,
         },
       });
@@ -312,9 +298,6 @@ export function registerDevelopmentOnlyReplayRoutes(
           "Replay capture belongs to a different project than its environment",
         );
       }
-      const session = await ensureHostSessionReadyForWork(deps, {
-        hostId: resolved.hostId,
-      });
       const replayThread = createThread(deps.db, deps.hub, {
         projectId: resolved.projectId,
         environmentId: resolved.environmentId,
@@ -338,22 +321,22 @@ export function registerDevelopmentOnlyReplayRoutes(
           source: "tell",
           target: { kind: "new-turn" },
         });
-        const command = queueCommand(deps.db, deps.hub, {
+        await callHostOnlineRpc(deps, {
           hostId: resolved.hostId,
-          sessionId: session.id,
-          type: "replay.run",
-          payload: JSON.stringify({
-            type: "replay.run",
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "development.replay",
+            operation: "run",
             captureId: manifest.captureId,
             environmentId: resolved.environmentId,
             threadId: replayThread.id,
             requestId: request.requestId,
             speed: payload.speed,
-          }),
+          },
         });
         return context.json(
           {
-            commandId: command.id,
+            runId: request.requestId,
             replayThreadId: replayThread.id,
             projectId: replayThread.projectId,
           },

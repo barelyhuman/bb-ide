@@ -68,7 +68,7 @@ import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
 } from "../services/threads/thread-runtime-display.js";
-import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
 import { parseOptionalInteger } from "../services/lib/validation.js";
 import {
   beginProjectDeletion,
@@ -590,7 +590,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
               environmentId: query.environmentId,
             })
           : resolveProjectSourcePath(deps, { projectId, hostId: null });
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -634,7 +634,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         includeFiles: query.includeFiles,
         includeDirectories: query.includeDirectories,
       });
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -663,7 +663,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       });
       const branchQuery = normalizeBranchQuery(query.query);
       const selectedBranch = normalizeBranchQuery(query.selectedBranch);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId: source.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -751,7 +751,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       }
 
       if (payload.templateName !== undefined) {
-        const templatesResult = await queueCommandAndWait(deps, {
+        const templatesResult = await callHostRetryableOnlineRpc(deps, {
           hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: { type: "host.list_manager_templates" },

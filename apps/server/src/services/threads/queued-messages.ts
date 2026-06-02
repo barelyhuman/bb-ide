@@ -21,7 +21,7 @@ import type {
   LoggedPendingInteractionWorkSessionDeps,
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
+import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   isCommandTimeoutError,

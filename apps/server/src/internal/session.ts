@@ -21,7 +21,6 @@ import {
   assertAuthenticatedHostMatches,
   getAuthenticatedDaemon,
 } from "./auth.js";
-import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { requireAuthenticatedDaemonSession } from "./session-state.js";
 import { readAttachment } from "../services/projects/attachments.js";
 import { handleHostSessionOpened } from "./session-owner-side-effects.js";
@@ -34,133 +33,121 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   post(
     "/session/open",
     hostDaemonSessionOpenRequestSchema,
-    (context, payload) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/open",
-        work: async () => {
-          const daemon = getAuthenticatedDaemon(context);
-          assertAuthenticatedHostMatches(daemon, {
-            hostId: payload.hostId,
-            hostType: payload.hostType,
-          });
+    async (context, payload) => {
+      const daemon = getAuthenticatedDaemon(context);
+      assertAuthenticatedHostMatches(daemon, {
+        hostId: payload.hostId,
+        hostType: payload.hostType,
+      });
 
-          if (payload.protocolVersion !== HOST_DAEMON_PROTOCOL_VERSION) {
-            deps.logger.error(
-              {
-                hostId: daemon.hostId,
-                daemonProtocolVersion: payload.protocolVersion,
-                serverProtocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-              },
-              "Rejecting daemon session: protocol version mismatch. The server is likely running stale code — restart it (e.g. `pnpm dev:restart`).",
-            );
-            throw new ApiError(
-              400,
-              "protocol_version_mismatch",
-              `Daemon protocol version ${payload.protocolVersion} does not match server protocol version ${HOST_DAEMON_PROTOCOL_VERSION}`,
-            );
-          }
-
-          const existingSession = getActiveSession(deps.db, daemon.hostId);
-          upsertHost(deps.db, deps.hub, {
-            id: daemon.hostId,
-            name: payload.hostName,
-            type: daemon.hostType,
-          });
-          const session = openSession(deps.db, deps.hub, {
+      if (payload.protocolVersion !== HOST_DAEMON_PROTOCOL_VERSION) {
+        deps.logger.error(
+          {
             hostId: daemon.hostId,
-            instanceId: payload.instanceId,
-            hostName: payload.hostName,
-            hostType: daemon.hostType,
-            dataDir: payload.dataDir,
-            protocolVersion: payload.protocolVersion,
-            heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
-            leaseTimeoutMs: LEASE_TIMEOUT_MS,
-          });
+            daemonProtocolVersion: payload.protocolVersion,
+            serverProtocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          },
+          "Rejecting daemon session: protocol version mismatch. The server is likely running stale code — restart it (e.g. `pnpm dev:restart`).",
+        );
+        throw new ApiError(
+          400,
+          "protocol_version_mismatch",
+          `Daemon protocol version ${payload.protocolVersion} does not match server protocol version ${HOST_DAEMON_PROTOCOL_VERSION}`,
+        );
+      }
 
-          await handleHostSessionOpened(deps, {
-            activeThreads: payload.activeThreads,
-            hostId: daemon.hostId,
-            openedSession: session,
-            previousSession: existingSession,
-          });
+      const existingSession = getActiveSession(deps.db, daemon.hostId);
+      upsertHost(deps.db, deps.hub, {
+        id: daemon.hostId,
+        name: payload.hostName,
+        type: daemon.hostType,
+      });
+      const session = openSession(deps.db, deps.hub, {
+        hostId: daemon.hostId,
+        instanceId: payload.instanceId,
+        hostName: payload.hostName,
+        hostType: daemon.hostType,
+        dataDir: payload.dataDir,
+        protocolVersion: payload.protocolVersion,
+        heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+        leaseTimeoutMs: LEASE_TIMEOUT_MS,
+      });
 
-          const trackedThreadTargets = listTrackedThreadStorageTargetsOnHost(
-            deps.db,
-            { hostId: daemon.hostId },
-          ).map((target) => ({
-            environmentId: target.environmentId,
-            threadId: target.threadId,
-          }));
-          const retiredEnvironmentIds = listRetiredLoadedEnvironmentIdsOnHost(
-            deps.db,
-            {
-              hostId: daemon.hostId,
-              environmentIds: (payload.loadedEnvironments ?? []).map(
-                (environment) => environment.environmentId,
-              ),
-            },
-          );
+      await handleHostSessionOpened(deps, {
+        activeThreads: payload.activeThreads,
+        hostId: daemon.hostId,
+        openedSession: session,
+        previousSession: existingSession,
+      });
 
-          return context.json(
-            {
-              sessionId: session.id,
-              heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
-              leaseTimeoutMs: LEASE_TIMEOUT_MS,
-              trackedThreadTargets,
-              retiredEnvironmentIds,
-            },
-            201,
-          );
+      const trackedThreadTargets = listTrackedThreadStorageTargetsOnHost(
+        deps.db,
+        { hostId: daemon.hostId },
+      ).map((target) => ({
+        environmentId: target.environmentId,
+        threadId: target.threadId,
+      }));
+      const retiredEnvironmentIds = listRetiredLoadedEnvironmentIdsOnHost(
+        deps.db,
+        {
+          hostId: daemon.hostId,
+          environmentIds: (payload.loadedEnvironments ?? []).map(
+            (environment) => environment.environmentId,
+          ),
         },
-      }),
+      );
+
+      return context.json(
+        {
+          sessionId: session.id,
+          heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
+          leaseTimeoutMs: LEASE_TIMEOUT_MS,
+          trackedThreadTargets,
+          retiredEnvironmentIds,
+        },
+        201,
+      );
+    },
   );
 
   get(
     "/session/project-attachment-content",
     hostDaemonProjectAttachmentContentQuerySchema,
-    (context, query) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/project-attachment-content",
-        work: async () => {
-          const session = requireAuthenticatedDaemonSession({
-            context,
-            db: deps.db,
-            sessionId: query.sessionId,
-          });
+    async (context, query) => {
+      const session = requireAuthenticatedDaemonSession({
+        context,
+        db: deps.db,
+        sessionId: query.sessionId,
+      });
 
-          const { environment, thread } = requirePublicThreadEnvironment(
-            deps.db,
-            query.threadId,
-          );
-          // Attachment paths are project-scoped upload tokens, so cross-check
-          // projectId before reading bytes even though threadId identifies a thread.
-          if (thread.projectId !== query.projectId) {
-            throw new ApiError(
-              403,
-              "forbidden",
-              "Thread does not belong to project",
-            );
-          }
-          if (environment.hostId !== session.hostId) {
-            throw new ApiError(
-              403,
-              "forbidden",
-              "Host is not assigned to thread environment",
-            );
-          }
+      const { environment, thread } = requirePublicThreadEnvironment(
+        deps.db,
+        query.threadId,
+      );
+      // Attachment paths are project-scoped upload tokens, so cross-check
+      // projectId before reading bytes even though threadId identifies a thread.
+      if (thread.projectId !== query.projectId) {
+        throw new ApiError(403, "forbidden", "Thread does not belong to project");
+      }
+      if (environment.hostId !== session.hostId) {
+        throw new ApiError(
+          403,
+          "forbidden",
+          "Host is not assigned to thread environment",
+        );
+      }
 
-          const attachment = await readAttachment(
-            deps.config.dataDir,
-            query.projectId,
-            query.path,
-          );
-          return new Response(new Uint8Array(attachment.content), {
-            status: 200,
-            headers: {
-              "content-type": attachment.mimeType ?? "application/octet-stream",
-            },
-          });
+      const attachment = await readAttachment(
+        deps.config.dataDir,
+        query.projectId,
+        query.path,
+      );
+      return new Response(new Uint8Array(attachment.content), {
+        status: 200,
+        headers: {
+          "content-type": attachment.mimeType ?? "application/octet-stream",
         },
-      }),
+      });
+    },
   );
 }

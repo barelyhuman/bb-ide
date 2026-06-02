@@ -1,5 +1,8 @@
 import path from "node:path";
-import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonCommandResult,
+  HostDaemonOnlineRpcResult,
+} from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
@@ -60,7 +63,7 @@ function assertAbsoluteHostDiskPathCommand(command: HostDiskPathCommand): void {
 
 export async function listHostFiles(
   command: CommandOf<"host.list_files">,
-): Promise<HostDaemonCommandResult<"host.list_files">> {
+): Promise<HostDaemonOnlineRpcResult<"host.list_files">> {
   if (!path.isAbsolute(command.path)) {
     throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }
@@ -86,7 +89,7 @@ export async function listHostFiles(
 
 export async function listHostPaths(
   command: CommandOf<"host.list_paths">,
-): Promise<HostDaemonCommandResult<"host.list_paths">> {
+): Promise<HostDaemonOnlineRpcResult<"host.list_paths">> {
   if (!path.isAbsolute(command.path)) {
     throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }
@@ -119,7 +122,7 @@ export async function listHostPaths(
 
 export async function readHostFile(
   command: CommandOf<"host.read_file">,
-): Promise<HostDaemonCommandResult<"host.read_file">> {
+): Promise<HostDaemonOnlineRpcResult<"host.read_file">> {
   assertAbsoluteHostDiskPathCommand(command);
 
   if (command.ref !== undefined) {
@@ -147,7 +150,7 @@ export async function readHostFile(
 
 export async function readHostFileMetadata(
   command: CommandOf<"host.file_metadata">,
-): Promise<HostDaemonCommandResult<"host.file_metadata">> {
+): Promise<HostDaemonOnlineRpcResult<"host.file_metadata">> {
   assertAbsoluteHostDiskPathCommand(command);
   return readFileMetadataForTransport({
     resolvedPath: command.path,
@@ -158,7 +161,7 @@ export async function readHostFileMetadata(
 
 export async function readHostRelativeFile(
   command: CommandOf<"host.read_file_relative">,
-): Promise<HostDaemonCommandResult<"host.read_file_relative">> {
+): Promise<HostDaemonOnlineRpcResult<"host.read_file_relative">> {
   return readRootRelativeFileForTransport({
     rootPath: command.rootPath,
     relativePath: command.path,

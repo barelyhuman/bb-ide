@@ -1,7 +1,6 @@
 import { getEnvironment } from "@bb/db";
 import { describe, expect, it, vi } from "vitest";
-import { internalAuthHeaders } from "../helpers/commands.js";
-import { readJson } from "../helpers/json.js";
+import { onDaemonSocketMessage } from "../../src/ws/daemon-protocol.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -9,118 +8,129 @@ import {
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-describe("internal environment change route", () => {
-  it("notifies clients for valid session-owned environment change hints without mutating the environment row", async () => {
+interface TestDaemonSocket {
+  close: (code?: number, reason?: string) => void;
+  send: (data: string) => void;
+}
+
+function createTestDaemonSocket(): TestDaemonSocket {
+  return {
+    close: vi.fn(),
+    send: vi.fn(),
+  };
+}
+
+describe("internal environment change websocket hints", () => {
+  it("does not resolve host RPC waiters from a different daemon session", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-env-change",
+      const hostA = seedHostSession(harness.deps, {
+        id: "host-rpc-response-a",
       });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
+      const hostB = seedHostSession(harness.deps, {
+        id: "host-rpc-response-b",
       });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/env-change",
-        status: "ready",
-      });
-      const before = getEnvironment(harness.db, environment.id);
-      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
-
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            environmentId: environment.id,
-            change: "work-status-changed",
-          }),
+      const wait = harness.hub.requestHostOnlineRpc({
+        hostId: hostA.host.id,
+        timeoutMs: 1_000,
+        message: {
+          type: "host-rpc.request",
+          requestId: "rpc-protocol-session-scoped",
+          command: { type: "provider.list" },
         },
-      );
+      });
+      let resolved = false;
+      const observed = wait.then((response) => {
+        resolved = true;
+        return response;
+      });
+      const socket = createTestDaemonSocket();
 
-      expect(response.status).toBe(200);
-      expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
-        "work-status-changed",
-      ]);
-      expect(getEnvironment(harness.db, environment.id)).toEqual(before);
+      onDaemonSocketMessage(harness.deps, {
+        hostId: hostB.host.id,
+        sessionId: hostB.session.id,
+        socket,
+        raw: JSON.stringify({
+          type: "host-rpc.response",
+          requestId: "rpc-protocol-session-scoped",
+          commandType: "provider.list",
+          ok: true,
+          result: { providers: [] },
+        }),
+      });
+
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+      expect(socket.close).not.toHaveBeenCalled();
+
+      onDaemonSocketMessage(harness.deps, {
+        hostId: hostA.host.id,
+        sessionId: hostA.session.id,
+        socket,
+        raw: JSON.stringify({
+          type: "host-rpc.response",
+          requestId: "rpc-protocol-session-scoped",
+          commandType: "provider.list",
+          ok: true,
+          result: { providers: [] },
+        }),
+      });
+
+      await expect(observed).resolves.toEqual({
+        type: "host-rpc.response",
+        requestId: "rpc-protocol-session-scoped",
+        commandType: "provider.list",
+        ok: true,
+        result: { providers: [] },
+      });
+      expect(socket.close).not.toHaveBeenCalled();
     });
   });
 
-  it("accepts thread storage change hints for session-owned environments", async () => {
-    await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-env-thread-storage-change",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/env-thread-storage-change",
-        status: "ready",
-      });
-      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+  it.each([
+    "work-status-changed",
+    "thread-storage-changed",
+    "git-refs-changed",
+  ] as const)(
+    "notifies clients for %s hints without mutating rows",
+    async (change) => {
+      await withTestHarness(async (harness) => {
+        const { host, session } = seedHostSession(harness.deps, {
+          id: `host-env-change-${change}`,
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+          path: `/tmp/env-change-${change}`,
+          status: "ready",
+        });
+        const before = getEnvironment(harness.db, environment.id);
+        const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+        const socket = createTestDaemonSocket();
 
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
+        onDaemonSocketMessage(harness.deps, {
+          hostId: host.id,
+          sessionId: session.id,
+          socket,
+          raw: JSON.stringify({
+            type: "environment-change",
             environmentId: environment.id,
-            change: "thread-storage-changed",
+            change,
           }),
-        },
-      );
+        });
 
-      expect(response.status).toBe(200);
-      expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
-        "thread-storage-changed",
-      ]);
-    });
-  });
-
-  it("accepts shared git ref change hints for session-owned environments", async () => {
-    await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-env-git-refs-change",
+        expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
+          change,
+        ]);
+        expect(getEnvironment(harness.db, environment.id)).toEqual(before);
+        expect(socket.close).not.toHaveBeenCalled();
       });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/env-git-refs-change",
-        status: "ready",
-      });
-      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+    },
+  );
 
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            environmentId: environment.id,
-            change: "git-refs-changed",
-          }),
-        },
-      );
-
-      expect(response.status).toBe(200);
-      expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
-        "git-refs-changed",
-      ]);
-    });
-  });
-
-  it("rejects environment change hints for environments owned by a different host", async () => {
+  it("ignores hints for environments owned by a different host", async () => {
     await withTestHarness(async (harness) => {
       const hostA = seedHostSession(harness.deps, { id: "host-env-change-a" });
       const hostB = seedHostSession(harness.deps, { id: "host-env-change-b" });
@@ -134,158 +144,79 @@ describe("internal environment change route", () => {
         status: "ready",
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+      const socket = createTestDaemonSocket();
 
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: hostA.session.id,
-            environmentId: environment.id,
-            change: "work-status-changed",
-          }),
-        },
-      );
-
-      expect(response.status).toBe(403);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
+      onDaemonSocketMessage(harness.deps, {
+        hostId: hostA.host.id,
+        sessionId: hostA.session.id,
+        socket,
+        raw: JSON.stringify({
+          type: "environment-change",
+          environmentId: environment.id,
+          change: "work-status-changed",
+        }),
       });
+
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
+      expect(socket.close).not.toHaveBeenCalled();
     });
   });
 
-  it("returns 404 for unknown environments", async () => {
-    await withTestHarness(async (harness) => {
-      const { session } = seedHostSession(harness.deps, {
-        id: "host-env-change-missing",
-      });
-      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
-
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            environmentId: "env-missing",
-            change: "work-status-changed",
-          }),
-        },
-      );
-
-      expect(response.status).toBe(404);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "environment_not_found",
-      });
-      expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  it("rejects change hints for destroyed environments without notifying clients", async () => {
+  it("ignores hints for unknown or destroyed environments", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
-        id: "host-env-change-destroyed",
+        id: "host-env-change-ignored",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
-      const environment = seedEnvironment(harness.deps, {
+      const destroyedEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
         path: "/tmp/env-change-destroyed",
         status: "destroyed",
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+      const socket = createTestDaemonSocket();
 
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            environmentId: environment.id,
+      for (const environmentId of ["env-missing", destroyedEnvironment.id]) {
+        onDaemonSocketMessage(harness.deps, {
+          hostId: host.id,
+          sessionId: session.id,
+          socket,
+          raw: JSON.stringify({
+            type: "environment-change",
+            environmentId,
             change: "work-status-changed",
           }),
-        },
-      );
+        });
+      }
 
-      expect(response.status).toBe(410);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "environment_destroyed",
-        retryable: false,
-      });
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
+      expect(socket.close).not.toHaveBeenCalled();
     });
   });
 
-  it("checks host ownership before returning destroyed-environment hints", async () => {
+  it("closes the daemon websocket for invalid environment change kinds", async () => {
     await withTestHarness(async (harness) => {
-      const hostA = seedHostSession(harness.deps, {
-        id: "host-env-change-destroyed-a",
-      });
-      const hostB = seedHostSession(harness.deps, {
-        id: "host-env-change-destroyed-b",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: hostB.host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: hostB.host.id,
-        projectId: project.id,
-        path: "/tmp/env-change-destroyed-other-host",
-        status: "destroyed",
-      });
-      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
-
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: hostA.session.id,
-            environmentId: environment.id,
-            change: "work-status-changed",
-          }),
-        },
-      );
-
-      expect(response.status).toBe(403);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
-      });
-      expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  it("returns 400 for invalid environment change kinds", async () => {
-    await withTestHarness(async (harness) => {
-      const { session } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-env-change-invalid",
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+      const socket = createTestDaemonSocket();
 
-      const response = await harness.app.request(
-        "/internal/session/environment-change",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            environmentId: "env-1",
-            change: "status-changed",
-          }),
-        },
-      );
-
-      expect(response.status).toBe(400);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
+      onDaemonSocketMessage(harness.deps, {
+        hostId: host.id,
+        sessionId: session.id,
+        socket,
+        raw: JSON.stringify({
+          type: "environment-change",
+          environmentId: "env-1",
+          change: "status-changed",
+        }),
       });
+
+      expect(socket.close).toHaveBeenCalledWith(1008, "invalid-message");
       expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
     });
   });

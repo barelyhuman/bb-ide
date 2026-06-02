@@ -7,7 +7,6 @@ import type { Hono } from "hono";
 import { messageUserToolArgumentsSchema, turnScope } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { parseValue } from "../services/lib/validation.js";
 import { appendThreadEvent } from "../services/threads/thread-events.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
@@ -21,57 +20,50 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
   post(
     "/session/tool-call",
     hostDaemonToolCallRequestSchema,
-    (context, payload) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/tool-call",
-        work: async () => {
-          const session = requireAuthenticatedDaemonSession({
-            context,
-            db: deps.db,
-            sessionId: payload.sessionId,
-          });
-          const { environment } = requireThreadEnvironment(
-            deps.db,
-            payload.threadId,
-          );
-          if (environment.hostId !== session.hostId) {
-            throw new ApiError(
-              403,
-              "invalid_request",
-              "Thread does not belong to the session host",
-            );
-          }
+    async (context, payload) => {
+      const session = requireAuthenticatedDaemonSession({
+        context,
+        db: deps.db,
+        sessionId: payload.sessionId,
+      });
+      const { environment } = requireThreadEnvironment(deps.db, payload.threadId);
+      if (environment.hostId !== session.hostId) {
+        throw new ApiError(
+          403,
+          "invalid_request",
+          "Thread does not belong to the session host",
+        );
+      }
 
-          if (payload.tool === "message_user") {
-            const args = parseValue(
-              payload.arguments ?? {},
-              messageUserToolArgumentsSchema,
-            );
+      if (payload.tool === "message_user") {
+        const args = parseValue(
+          payload.arguments ?? {},
+          messageUserToolArgumentsSchema,
+        );
 
-            appendThreadEvent(deps, {
-              threadId: payload.threadId,
-              scope: turnScope(payload.turnId),
-              type: "system/manager/user_message",
-              data: {
-                text: args.text,
-                toolCallId: payload.callId,
-                turnId: payload.turnId,
-              },
-            });
+        appendThreadEvent(deps, {
+          threadId: payload.threadId,
+          scope: turnScope(payload.turnId),
+          type: "system/manager/user_message",
+          data: {
+            text: args.text,
+            toolCallId: payload.callId,
+            turnId: payload.turnId,
+          },
+        });
 
-            return context.json({
-              success: true,
-              contentItems: [{ type: "inputText", text: "Message delivered" }],
-            });
-          }
+        return context.json({
+          success: true,
+          contentItems: [{ type: "inputText", text: "Message delivered" }],
+        });
+      }
 
-          return context.json({
-            success: false,
-            contentItems: [
-              { type: "inputText", text: `Unsupported tool: ${payload.tool}` },
-            ],
-          });
-        },
-      }),
+      return context.json({
+        success: false,
+        contentItems: [
+          { type: "inputText", text: `Unsupported tool: ${payload.tool}` },
+        ],
+      });
+    },
   );
 }

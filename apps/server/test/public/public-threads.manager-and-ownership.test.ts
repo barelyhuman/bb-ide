@@ -137,7 +137,7 @@ async function respondToNextManagerPreferencesRead(
         })
       : await reportQueuedCommandSuccess(
           args.harness,
-          { command: queued.command, row: queued.row },
+          queued,
           {
             path: queued.command.path,
             content: args.content,
@@ -1241,10 +1241,7 @@ describe("public thread manager and ownership routes", () => {
       const preferencesContent = "ownership assignment updated prefs\n";
       const readResponse = await reportQueuedCommandSuccess(
         harness,
-        {
-          command: preferencesReadCommand.command,
-          row: preferencesReadCommand.row,
-        },
+        preferencesReadCommand,
         {
           path: managerPreferencesPath,
           content: preferencesContent,
@@ -1696,10 +1693,7 @@ describe("public thread manager and ownership routes", () => {
       const preferencesContent = "ownership removal updated prefs\n";
       const readResponse = await reportQueuedCommandSuccess(
         harness,
-        {
-          command: preferencesReadCommand.command,
-          row: preferencesReadCommand.row,
-        },
+        preferencesReadCommand,
         {
           path: managerPreferencesPath,
           content: preferencesContent,

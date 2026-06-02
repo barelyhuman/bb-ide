@@ -2,7 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { managerTemplateNameSchema } from "@bb/domain";
 import type {
-  HostDaemonCommandResult,
+  HostDaemonOnlineRpcResult,
   ManagerTemplateSummary,
 } from "@bb/host-daemon-contract";
 import type { CommandOf } from "../command-dispatch-support.js";
@@ -72,7 +72,7 @@ async function listTemplateDirectoryNames(rootPath: string): Promise<string[]> {
 
 export async function listManagerTemplates(
   args: ListManagerTemplatesArgs,
-): Promise<HostDaemonCommandResult<"host.list_manager_templates">> {
+): Promise<HostDaemonOnlineRpcResult<"host.list_manager_templates">> {
   const rootPath = path.join(args.dataDir, MANAGER_TEMPLATE_DIR_NAME);
   const [names, rawActiveName] = await Promise.all([
     listTemplateDirectoryNames(rootPath),
@@ -91,6 +91,6 @@ export async function listManagerTemplates(
 export async function listManagerTemplatesCommand(
   _command: CommandOf<"host.list_manager_templates">,
   options: { dataDir: string },
-): Promise<HostDaemonCommandResult<"host.list_manager_templates">> {
+): Promise<HostDaemonOnlineRpcResult<"host.list_manager_templates">> {
   return listManagerTemplates({ dataDir: options.dataDir });
 }

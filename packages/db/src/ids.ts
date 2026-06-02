@@ -88,6 +88,10 @@ export function createHostDaemonCommandId(): string {
   return createId("hcmd");
 }
 
+export function createHostDaemonCommandAttemptId(): string {
+  return createId("hcat");
+}
+
 export function createTerminalSessionId(): string {
   return createId("term");
 }

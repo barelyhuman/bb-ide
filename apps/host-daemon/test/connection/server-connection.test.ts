@@ -431,6 +431,7 @@ describe("ServerConnection", () => {
 
     await connection.start();
     const result = await serverClient.reportCommandResult({
+      attemptId: "attempt-cmd-1",
       commandId: "cmd-1",
       completedAt: 1,
       type: "turn.submit",
@@ -443,6 +444,7 @@ describe("ServerConnection", () => {
     expect(testServer.commandResultReports).toEqual([
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",
+        attemptId: "attempt-cmd-1",
         commandId: "cmd-1",
         completedAt: 1,
         type: "turn.submit",
@@ -451,6 +453,7 @@ describe("ServerConnection", () => {
       }),
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",
+        attemptId: "attempt-cmd-1",
         commandId: "cmd-1",
         completedAt: 1,
         type: "turn.submit",
@@ -480,6 +483,7 @@ describe("ServerConnection", () => {
 
     await expect(
       serverClient.reportCommandResult({
+        attemptId: "attempt-cmd-1",
         commandId: "cmd-1",
         completedAt: 1,
         type: "turn.submit",
@@ -504,6 +508,7 @@ describe("ServerConnection", () => {
 
     await expect(
       serverClient.reportCommandResult({
+        attemptId: "attempt-cmd-1",
         commandId: "cmd-1",
         completedAt: 1,
         type: "turn.submit",
@@ -546,21 +551,92 @@ describe("ServerConnection", () => {
     await connection.shutdown();
   });
 
-  it("posts environment change hints through the session API", async () => {
+  it("sends environment change hints over the daemon websocket", async () => {
     testServer = await createTestServer();
-    const { connection, serverClient } = createConnection(testServer);
+    const server = testServer;
+    const { connection } = createConnection(server);
 
     await connection.start();
-    await serverClient.postEnvironmentChange({
-      environmentId: "env-1",
-      change: "work-status-changed",
-    });
-
-    expect(testServer.environmentChanges).toEqual([
-      {
-        sessionId: "session-1",
+    expect(
+      connection.sendMessage({
+        type: "environment-change",
         environmentId: "env-1",
         change: "work-status-changed",
+      }),
+    ).toBe(true);
+
+    await waitFor(() =>
+      server.heartbeats.some(
+        (entry) => entry.message.type === "environment-change",
+      ),
+    );
+    expect(server.heartbeats).toContainEqual({
+      sessionId: "session-1",
+      message: {
+        type: "environment-change",
+        environmentId: "env-1",
+        change: "work-status-changed",
+      },
+    });
+
+    await connection.shutdown();
+  });
+
+  it("buffers deduplicated environment change hints while disconnected and flushes after reconnect", async () => {
+    testServer = await createTestServer();
+    const server = testServer;
+    const { connection } = createConnection(server);
+
+    expect(
+      connection.sendMessage({
+        type: "environment-change",
+        environmentId: "env-1",
+        change: "work-status-changed",
+      }),
+    ).toBe(false);
+    expect(
+      connection.sendMessage({
+        type: "environment-change",
+        environmentId: "env-1",
+        change: "work-status-changed",
+      }),
+    ).toBe(false);
+    expect(
+      connection.sendMessage({
+        type: "environment-change",
+        environmentId: "env-1",
+        change: "thread-storage-changed",
+      }),
+    ).toBe(false);
+    expect(server.heartbeats).toEqual([]);
+
+    await connection.start();
+    await waitFor(
+      () =>
+        server.heartbeats.filter(
+          (entry) => entry.message.type === "environment-change",
+        ).length === 2,
+    );
+    expect(
+      server.heartbeats.filter(
+        (entry) => entry.message.type === "environment-change",
+      ),
+    ).toEqual([
+      {
+        sessionId: "session-1",
+        message: {
+          type: "environment-change",
+          environmentId: "env-1",
+          change: "work-status-changed",
+        },
+      },
+      {
+        sessionId: "session-1",
+        message: {
+          type: "environment-change",
+          environmentId: "env-1",
+          change: "thread-storage-changed",
+        },
       },
     ]);
 

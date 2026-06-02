@@ -98,6 +98,13 @@ interface AppliedMigrationIdentityRow {
   hash: string;
 }
 
+interface PendingInteractionProviderRequestDuplicateRow {
+  duplicateCount: number;
+  providerId: string;
+  providerRequestId: string;
+  providerThreadId: string;
+}
+
 type AppliedMigrationHistoryViolationReason =
   | "hash-mismatch"
   | "missing-created-at";
@@ -169,7 +176,6 @@ const pendingInteractionIndexes: ExpectedIndex[] = [
   {
     name: "pending_interactions_provider_request_idx",
     columns: [
-      "session_id",
       "provider_id",
       "provider_thread_id",
       "provider_request_id",
@@ -569,6 +575,54 @@ function validatePendingInteractionsSchema(db: DbConnection): void {
   }
 }
 
+function assertNoDuplicatePendingInteractionProviderRequests(
+  db: DbConnection,
+): void {
+  const columnNames = getTableInfo(db, "pending_interactions").map(
+    (column) => column.name,
+  );
+  if (
+    !columnNames.includes("provider_id") ||
+    !columnNames.includes("provider_thread_id") ||
+    !columnNames.includes("provider_request_id")
+  ) {
+    return;
+  }
+
+  const duplicates = db.$client
+    .prepare<[], PendingInteractionProviderRequestDuplicateRow>(
+      `
+        SELECT
+          provider_id AS providerId,
+          provider_thread_id AS providerThreadId,
+          provider_request_id AS providerRequestId,
+          COUNT(*) AS duplicateCount
+        FROM pending_interactions
+        GROUP BY provider_id, provider_thread_id, provider_request_id
+        HAVING COUNT(*) > 1
+        ORDER BY duplicateCount DESC, provider_id, provider_thread_id, provider_request_id
+        LIMIT 10
+      `,
+    )
+    .all();
+  if (duplicates.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "Cannot migrate pending_interactions provider request uniqueness because duplicate provider requests already exist.",
+      "Provider request identity is now provider_id/provider_thread_id/provider_request_id independent of session_id.",
+      `Resolve duplicate pending_interactions rows before restarting. Duplicates: ${duplicates
+        .map(
+          (row) =>
+            `${row.providerId}/${row.providerThreadId}/${row.providerRequestId} count=${row.duplicateCount}`,
+        )
+        .join("; ")}.`,
+    ].join(" "),
+  );
+}
+
 function warnAboutFutureAppliedMigrations(
   db: DbConnection,
   options: MigrateOptions,
@@ -683,6 +737,7 @@ export function migrate(db: DbConnection, options: MigrateOptions = {}): void {
 
   sqlite.pragma("foreign_keys = OFF");
   try {
+    assertNoDuplicatePendingInteractionProviderRequests(db);
     drizzleMigrate(db, { migrationsFolder });
   } finally {
     sqlite.pragma("foreign_keys = ON");

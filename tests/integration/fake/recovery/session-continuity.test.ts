@@ -130,6 +130,7 @@ describe.sequential("fake provider session continuity integration", () => {
         "command-result"
       ].$post({
         json: {
+          attemptId: "attempt_stale",
           commandId: "cmd_stale",
           completedAt: Date.now(),
           ok: true,

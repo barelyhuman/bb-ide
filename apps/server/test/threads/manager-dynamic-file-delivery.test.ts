@@ -177,7 +177,7 @@ async function respondToPreferencesReadSuccess(
   expect(queued.command.rootPath).toBe(args.threadStoragePath);
   const response = await reportQueuedCommandSuccess(
     args.harness,
-    { command: queued.command, row: queued.row },
+    queued,
     {
       path: args.preferencesPath,
       content: args.content,
@@ -205,7 +205,7 @@ async function respondToPreferencesMetadataSuccess(
   expect(queued.command.rootPath).toBe(args.threadStoragePath);
   const response = await reportQueuedCommandSuccess(
     args.harness,
-    { command: queued.command, row: queued.row },
+    queued,
     {
       path: args.preferencesPath,
       modifiedAtMs: args.modifiedAtMs,
@@ -576,18 +576,18 @@ describe("manager dynamic file delivery", () => {
           return originalTransaction(callback);
         });
         const preferencesContent = "# Preferences\n\n- retry me\n";
-        setup.harness.hub.recordCommandResult(preferencesReadCommand.row.id, {
-          commandId: preferencesReadCommand.row.id,
-          ok: true,
-          result: {
+        const response = await reportQueuedCommandSuccess(
+          setup.harness,
+          preferencesReadCommand,
+          {
             path: setup.preferencesPath,
             content: preferencesContent,
             contentEncoding: "utf8",
             mimeType: "text/markdown",
             sizeBytes: Buffer.byteLength(preferencesContent),
           },
-          type: "host.read_file",
-        });
+        );
+        expect(response.status).toBe(200);
 
         await expect(sendPromise).rejects.toThrow("queued turn insert failed");
         expect(transactionCountAfterPreferences).toBe(2);

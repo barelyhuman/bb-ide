@@ -7,7 +7,7 @@ import {
   encodeClientTurnRequestIdNumber,
   requireThreadEventScopeTurnId,
 } from "@bb/domain";
-import type { HostDaemonCommand } from "@bb/host-daemon-contract";
+import type { HostDaemonOnlineRpcCommand } from "@bb/host-daemon-contract";
 import {
   createReplayCaptureId,
   createReplayCapturePlaceholderTurnId,
@@ -32,6 +32,11 @@ function threadStorageRoot(dataDir: string): string {
 function replayRequestId(value: number) {
   return encodeClientTurnRequestIdNumber({ value });
 }
+
+type ReplayRunCommand = Extract<
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "run" }
+>;
 
 function baseManifest(captureId: string): ReplayCaptureManifest {
   return {
@@ -296,7 +301,8 @@ describe("replay capture commands", () => {
 
     const result = await getReplayCapture(
       {
-        type: "replay.capture_get",
+        type: "development.replay",
+        operation: "capture-get",
         captureId,
       },
       {
@@ -324,7 +330,8 @@ describe("replay capture commands", () => {
     await expect(
       getReplayCapture(
         {
-          type: "replay.capture_get",
+          type: "development.replay",
+          operation: "capture-get",
           captureId,
         },
         {
@@ -370,8 +377,9 @@ describe("runReplay", () => {
     });
 
     const emitted: BufferedEventInput[] = [];
-    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
-      type: "replay.run",
+    const command: ReplayRunCommand = {
+      type: "development.replay",
+      operation: "run",
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
@@ -440,8 +448,9 @@ describe("runReplay", () => {
 
     const emitted: BufferedEventInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
-    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
-      type: "replay.run",
+    const command: ReplayRunCommand = {
+      type: "development.replay",
+      operation: "run",
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
@@ -492,8 +501,9 @@ describe("runReplay", () => {
 
     const emitted: BufferedEventInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
-    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
-      type: "replay.run",
+    const command: ReplayRunCommand = {
+      type: "development.replay",
+      operation: "run",
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
@@ -564,8 +574,9 @@ describe("runReplay", () => {
 
     const emitted: BufferedEventInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
-    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
-      type: "replay.run",
+    const command: ReplayRunCommand = {
+      type: "development.replay",
+      operation: "run",
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
@@ -655,8 +666,9 @@ describe("runReplay", () => {
 
     const emitted: BufferedEventInput[] = [];
     const replayTasks: ReplayTaskRegistry = new Map();
-    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
-      type: "replay.run",
+    const command: ReplayRunCommand = {
+      type: "development.replay",
+      operation: "run",
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
@@ -731,8 +743,9 @@ describe("runReplay", () => {
       ],
     });
 
-    const command: Extract<HostDaemonCommand, { type: "replay.run" }> = {
-      type: "replay.run",
+    const command: ReplayRunCommand = {
+      type: "development.replay",
+      operation: "run",
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",

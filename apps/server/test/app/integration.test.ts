@@ -78,7 +78,9 @@ async function waitForThreadSubscription(
     id?: string;
   }>(
     socket,
-    (message): message is { changes: string[]; entity: string; id?: string } => {
+    (
+      message,
+    ): message is { changes: string[]; entity: string; id?: string } => {
       if (message == null || typeof message !== "object") {
         return false;
       }
@@ -215,6 +217,7 @@ describe("server integration", () => {
         {
           json: {
             sessionId: session.sessionId,
+            attemptId: provisionCommand.attemptId,
             commandId: provisionCommand.id,
             completedAt: Date.now(),
             type: "environment.provision",
@@ -320,6 +323,7 @@ describe("server integration", () => {
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
+          attemptId: provisionCommand.attemptId,
           commandId: provisionCommand.id,
           completedAt: Date.now(),
           type: "environment.provision",
@@ -343,6 +347,7 @@ describe("server integration", () => {
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
+          attemptId: threadStartCommand.attemptId,
           commandId: threadStartCommand.id,
           completedAt: Date.now(),
           type: "thread.start",
@@ -466,6 +471,7 @@ describe("server integration", () => {
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
+          attemptId: provisionCommand.attemptId,
           commandId: provisionCommand.id,
           completedAt: Date.now(),
           type: "environment.provision",
@@ -491,6 +497,7 @@ describe("server integration", () => {
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
+          attemptId: initialThreadStartCommand.attemptId,
           commandId: initialThreadStartCommand.id,
           completedAt: Date.now(),
           type: "thread.start",
@@ -553,6 +560,7 @@ describe("server integration", () => {
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
+          attemptId: turnSubmitCommand.attemptId,
           commandId: turnSubmitCommand.id,
           completedAt: Date.now(),
           type: "turn.submit",

@@ -9,6 +9,8 @@ import type {
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
 import type {
+  HostDaemonOnlineRpcRequestMessage,
+  HostDaemonOnlineRpcResponseMessage,
   HostDaemonServerWsMessage,
   HostDaemonSessionCloseReason,
 } from "@bb/host-daemon-contract";
@@ -50,6 +52,41 @@ interface CommandResultWaiter {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+interface HostOnlineRpcWaiter {
+  reject: (reason?: Error) => void;
+  resolve: (message: HostDaemonOnlineRpcResponseMessage) => void;
+  sessionId: string;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
+export interface RecordHostOnlineRpcResponseArgs {
+  message: HostDaemonOnlineRpcResponseMessage;
+  sessionId: string;
+}
+
+export type HostOnlineRpcResponseDisposition =
+  | { handled: true }
+  | { handled: false; reason: "stale" }
+  | {
+      expectedSessionId: string;
+      handled: false;
+      reason: "session_mismatch";
+    };
+
+export class HostOnlineRpcTimeoutError extends Error {
+  constructor() {
+    super("Timed out waiting for host RPC response");
+    this.name = "HostOnlineRpcTimeoutError";
+  }
+}
+
+export class HostOnlineRpcUnavailableError extends Error {
+  constructor() {
+    super("Host daemon is not connected");
+    this.name = "HostOnlineRpcUnavailableError";
+  }
+}
+
 function subKey(entity: string, id?: string): string {
   return id ? `${entity}:${id}` : entity;
 }
@@ -72,6 +109,10 @@ export class NotificationHub implements DbNotifier {
   >();
   private readonly daemonSessionIdsByHost = new Map<string, string>();
   private readonly hostEventWaiters = new Map<string, Set<HostEventWaiter>>();
+  private readonly hostOnlineRpcWaiters = new Map<
+    string,
+    HostOnlineRpcWaiter
+  >();
   private readonly pendingDaemonDisconnects = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -230,6 +271,7 @@ export class NotificationHub implements DbNotifier {
       return;
     }
     this.daemonSessions.delete(sessionId);
+    this.rejectHostOnlineRpcWaitersForSession(sessionId);
     if (this.daemonSessionIdsByHost.get(entry.hostId) === sessionId) {
       this.daemonSessionIdsByHost.delete(entry.hostId);
     }
@@ -337,6 +379,61 @@ export class NotificationHub implements DbNotifier {
       waiters.add(waiter);
       this.hostEventWaiters.set(hostId, waiters);
     });
+  }
+
+  requestHostOnlineRpc(args: {
+    hostId: string;
+    message: HostDaemonOnlineRpcRequestMessage;
+    timeoutMs: number;
+  }): Promise<HostDaemonOnlineRpcResponseMessage> {
+    const sessionId = this.daemonSessionIdsByHost.get(args.hostId);
+    if (!sessionId) {
+      return Promise.reject(new HostOnlineRpcUnavailableError());
+    }
+    const session = this.daemonSessions.get(sessionId);
+    if (!session) {
+      return Promise.reject(new HostOnlineRpcUnavailableError());
+    }
+
+    return new Promise<HostDaemonOnlineRpcResponseMessage>(
+      (resolve, reject) => {
+        const waiter: HostOnlineRpcWaiter = {
+          reject,
+          resolve,
+          sessionId,
+          timeout: setTimeout(() => {
+            this.deleteHostOnlineRpcWaiter(args.message.requestId, waiter);
+            reject(new HostOnlineRpcTimeoutError());
+          }, args.timeoutMs),
+        };
+        this.hostOnlineRpcWaiters.set(args.message.requestId, waiter);
+        try {
+          session.socket.send(JSON.stringify(args.message));
+        } catch (error) {
+          this.deleteHostOnlineRpcWaiter(args.message.requestId, waiter);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+    );
+  }
+
+  recordHostOnlineRpcResponse(
+    args: RecordHostOnlineRpcResponseArgs,
+  ): HostOnlineRpcResponseDisposition {
+    const waiter = this.hostOnlineRpcWaiters.get(args.message.requestId);
+    if (!waiter) {
+      return { handled: false, reason: "stale" };
+    }
+    if (waiter.sessionId !== args.sessionId) {
+      return {
+        expectedSessionId: waiter.sessionId,
+        handled: false,
+        reason: "session_mismatch",
+      };
+    }
+    this.deleteHostOnlineRpcWaiter(args.message.requestId, waiter);
+    waiter.resolve(args.message);
+    return { handled: true };
   }
 
   registerThreadEventWaiter(
@@ -518,6 +615,26 @@ export class NotificationHub implements DbNotifier {
     waiters.delete(waiter);
     if (waiters.size === 0) {
       this.hostEventWaiters.delete(hostId);
+    }
+  }
+
+  private deleteHostOnlineRpcWaiter(
+    requestId: string,
+    waiter: HostOnlineRpcWaiter,
+  ): void {
+    clearTimeout(waiter.timeout);
+    if (this.hostOnlineRpcWaiters.get(requestId) === waiter) {
+      this.hostOnlineRpcWaiters.delete(requestId);
+    }
+  }
+
+  private rejectHostOnlineRpcWaitersForSession(sessionId: string): void {
+    for (const [requestId, waiter] of this.hostOnlineRpcWaiters) {
+      if (waiter.sessionId !== sessionId) {
+        continue;
+      }
+      this.deleteHostOnlineRpcWaiter(requestId, waiter);
+      waiter.reject(new HostOnlineRpcUnavailableError());
     }
   }
 

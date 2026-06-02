@@ -1830,21 +1830,21 @@ describe("public project and host routes", () => {
         workspaceProvisionType: "unmanaged",
       });
 
-      const deleteResponse = await harness.app.request(
+      const deletePromise = harness.app.request(
         `/api/v1/projects/${project.id}`,
         { method: "DELETE" },
       );
+      await reportCleanCleanupPreflightForEnvironment(harness, {
+        environmentId: managed.id,
+      });
+      const deleteResponse = await deletePromise;
       expect(deleteResponse.status).toBe(200);
-
-      const statusCommand = await waitForQueuedCommand(
+      await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.cleanup_preflight" &&
+          command.type === "environment.destroy" &&
           command.environmentId === managed.id,
       );
-      await reportQueuedCommandSuccess(harness, statusCommand, {
-        outcome: "safe_to_destroy",
-      });
 
       const commands = harness.db
         .select()
@@ -2095,7 +2095,6 @@ describe("public project and host routes", () => {
       expect(getProject(harness.db, project.id)).not.toBeNull();
 
       const retrySweepPromise = runProjectDeletionSweep(harness.deps);
-
       const retriedPreflight = await reportCleanCleanupPreflightForEnvironment(
         harness,
         {

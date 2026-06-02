@@ -15,12 +15,11 @@ import {
   WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
 } from "../../src/constants.js";
 import {
-  internalAuthHeaders,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
-  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
+import { registerProviderHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -1383,134 +1382,101 @@ describe("public environment and system routes", () => {
     });
   });
 
-  it("queues provider list and provider list_models commands for system routes", async () => {
+  it("uses host RPC, not durable commands, for system provider reads", async () => {
     await withTestHarness({
       featureFlags: {
         askUserQuestion: false,
       },
     }, async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-system-routes",
       });
-
-      const providersPromise = harness.app.request(
-        `/api/v1/system/providers?hostId=${host.id}`,
-      );
-      const providersCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "provider.list",
-      );
-      await reportQueuedCommandSuccess(harness, providersCommand, {
-        providers: [
-          {
-            id: "codex",
-            displayName: "Codex",
-            capabilities: {
-              supportsArchive: true,
-              supportsRename: true,
-              supportsServiceTier: true,
-              supportsUserQuestion: false,
-              supportedPermissionModes: ["full", "workspace-write", "readonly"],
-            },
-            available: true,
-          },
-        ],
-      });
-      const providersResponse = await providersPromise;
-      expect(providersResponse.status).toBe(200);
-      await expect(readJson(providersResponse)).resolves.toEqual([
-        {
+      const providers = [
+        makeSystemProvider({
           id: "codex",
           displayName: "Codex",
           capabilities: {
             supportsArchive: true,
             supportsRename: true,
             supportsServiceTier: true,
-            supportsUserQuestion: false,
-            supportedPermissionModes: ["full", "workspace-write", "readonly"],
           },
-          available: true,
+        }),
+        makeSystemProvider({
+          id: "claude-code",
+          displayName: "Claude Code",
+          capabilities: {
+            supportsArchive: true,
+            supportsRename: true,
+            supportsUserQuestion: true,
+            supportedPermissionModes: ["full"],
+          },
+        }),
+      ];
+      const responder = registerProviderHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        providers,
+        modelsByProviderId: {
+          codex: {
+            models: [
+              {
+                id: "codex-mini",
+                model: "gpt-4o-mini",
+                displayName: "Codex Mini",
+                description: "Fast codex model",
+                supportedReasoningEfforts: [
+                  {
+                    reasoningEffort: "medium",
+                    description: "Balanced",
+                  },
+                ],
+                defaultReasoningEffort: "medium",
+                isDefault: true,
+              },
+            ],
+            selectedOnlyModels: [
+              {
+                id: "gpt-4o-mini-legacy",
+                model: "gpt-4o-mini-legacy",
+                displayName: "Legacy Mini",
+                description:
+                  "Retired mini model retained for existing selections",
+                supportedReasoningEfforts: [
+                  {
+                    reasoningEffort: "medium",
+                    description: "Balanced",
+                  },
+                ],
+                defaultReasoningEffort: "medium",
+                isDefault: false,
+              },
+            ],
+          },
         },
+      });
+
+      const providersResponse = await harness.app.request(
+        `/api/v1/system/providers?hostId=${host.id}`,
+      );
+      expect(providersResponse.status).toBe(200);
+      await expect(readJson(providersResponse)).resolves.toEqual([
+        expect.objectContaining({
+          id: "codex",
+          capabilities: expect.objectContaining({
+            supportsUserQuestion: false,
+          }),
+        }),
+        expect.objectContaining({
+          id: "claude-code",
+          capabilities: expect.objectContaining({
+            supportsUserQuestion: false,
+          }),
+        }),
       ]);
 
-      const executionOptionsPromise = harness.app.request(
+      const executionOptionsResponse = await harness.app.request(
         `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex`,
       );
-      const executionProvidersCommand = await waitForQueuedCommandAfter(
-        harness,
-        providersCommand.row.cursor,
-        ({ command }) => command.type === "provider.list",
-      );
-      await reportQueuedCommandSuccess(harness, executionProvidersCommand, {
-        providers: [
-          {
-            id: "codex",
-            displayName: "Codex",
-            capabilities: {
-              supportsArchive: true,
-              supportsRename: true,
-              supportsServiceTier: true,
-              supportsUserQuestion: false,
-              supportedPermissionModes: ["full", "workspace-write", "readonly"],
-            },
-            available: true,
-          },
-          {
-            id: "claude-code",
-            displayName: "Claude Code",
-            capabilities: {
-              supportsArchive: true,
-              supportsRename: true,
-              supportsServiceTier: false,
-              supportsUserQuestion: true,
-              supportedPermissionModes: ["full"],
-            },
-            available: true,
-          },
-        ],
-      });
-      const executionModelsCommand = await waitForQueuedCommandAfter(
-        harness,
-        executionProvidersCommand.row.cursor,
-        ({ command }) =>
-          command.type === "provider.list_models" &&
-          command.providerId === "codex",
-      );
-      await reportQueuedCommandSuccess(harness, executionModelsCommand, {
-        models: [
-          {
-            id: "codex-mini",
-            model: "gpt-4o-mini",
-            displayName: "Codex Mini",
-            description: "Fast codex model",
-            supportedReasoningEfforts: [
-              {
-                reasoningEffort: "medium",
-                description: "Balanced",
-              },
-            ],
-            defaultReasoningEffort: "medium",
-            isDefault: true,
-          },
-        ],
-        selectedOnlyModels: [
-          {
-            id: "gpt-4o-mini-legacy",
-            model: "gpt-4o-mini-legacy",
-            displayName: "Legacy Mini",
-            description: "Retired mini model retained for existing selections",
-            supportedReasoningEfforts: [
-              {
-                reasoningEffort: "medium",
-                description: "Balanced",
-              },
-            ],
-            defaultReasoningEffort: "medium",
-            isDefault: false,
-          },
-        ],
-      });
-      const executionOptionsResponse = await executionOptionsPromise;
       expect(executionOptionsResponse.status).toBe(200);
       await expect(readJson(executionOptionsResponse)).resolves.toEqual({
         providers: [
@@ -1540,57 +1506,39 @@ describe("public environment and system routes", () => {
       // A stale providerId falls back to the first provider in the list and
       // fetches that provider's models — the response still contains the full
       // providers list so the client can recover.
-      const missingProviderOptionsPromise = harness.app.request(
+      const missingProviderOptionsResponse = await harness.app.request(
         `/api/v1/system/execution-options?hostId=${host.id}&providerId=missing-provider`,
       );
-      const missingProviderCommand = await waitForQueuedCommandAfter(
-        harness,
-        executionModelsCommand.row.cursor,
-        ({ command }) => command.type === "provider.list",
-      );
-      await reportQueuedCommandSuccess(harness, missingProviderCommand, {
-        providers: [
-          {
-            id: "claude-code",
-            displayName: "Claude Code",
-            capabilities: {
-              supportsArchive: true,
-              supportsRename: true,
-              supportsServiceTier: false,
-              supportsUserQuestion: true,
-              supportedPermissionModes: ["full"],
-            },
-            available: true,
-          },
-        ],
-      });
-      const missingProviderModelsCommand = await waitForQueuedCommandAfter(
-        harness,
-        missingProviderCommand.row.cursor,
-        ({ command }) =>
-          command.type === "provider.list_models" &&
-          command.providerId === "claude-code",
-      );
-      await reportQueuedCommandSuccess(harness, missingProviderModelsCommand, {
-        models: [],
-        selectedOnlyModels: [],
-      });
-      const missingProviderOptionsResponse =
-        await missingProviderOptionsPromise;
       expect(missingProviderOptionsResponse.status).toBe(200);
       await expect(readJson(missingProviderOptionsResponse)).resolves.toEqual({
         providers: [
           expect.objectContaining({
+            id: "codex",
+          }),
+          expect.objectContaining({
             id: "claude-code",
-            capabilities: expect.objectContaining({
-              supportsUserQuestion: false,
-            }),
           }),
         ],
-        models: [],
-        selectedOnlyModels: [],
+        models: [
+          expect.objectContaining({
+            id: "codex-mini",
+          }),
+        ],
+        selectedOnlyModels: [
+          expect.objectContaining({
+            id: "gpt-4o-mini-legacy",
+          }),
+        ],
         modelLoadError: null,
       });
+      expect(responder.requests.map((request) => request.command)).toEqual([
+        { type: "provider.list" },
+        { type: "provider.list" },
+        { type: "provider.list_models", providerId: "codex" },
+        { type: "provider.list" },
+        { type: "provider.list_models", providerId: "codex" },
+      ]);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
     });
   });
 
@@ -1598,18 +1546,12 @@ describe("public environment and system routes", () => {
     "returns provider choices with a provider-specific error when model lookup fails: $name",
     async ({ errorCode, providerId, errorMessage, expectedCode }) => {
       await withTestHarness(async (harness) => {
-        const { host } = seedHostSession(harness.deps, {
+        const { host, session } = seedHostSession(harness.deps, {
           id: `host-system-${providerId}-models-fail`,
         });
-
-        const executionOptionsPromise = harness.app.request(
-          `/api/v1/system/execution-options?hostId=${host.id}&providerId=${providerId}`,
-        );
-        const providersCommand = await waitForQueuedCommand(
-          harness,
-          ({ command }) => command.type === "provider.list",
-        );
-        await reportQueuedCommandSuccess(harness, providersCommand, {
+        registerProviderHostRpcResponder(harness, {
+          hostId: host.id,
+          sessionId: session.id,
           providers: [
             makeSystemProvider({
               id: "codex",
@@ -1635,20 +1577,18 @@ describe("public environment and system routes", () => {
               },
             }),
           ],
-        });
-        const modelsCommand = await waitForQueuedCommandAfter(
-          harness,
-          providersCommand.row.cursor,
-          ({ command }) =>
-            command.type === "provider.list_models" &&
-            command.providerId === providerId,
-        );
-        await reportQueuedCommandError(harness, modelsCommand, {
-          errorCode,
-          errorMessage,
+          modelErrorsByProviderId: {
+            [providerId]: {
+              errorCode,
+              errorMessage,
+            },
+          },
         });
 
-        const response = await executionOptionsPromise;
+        const response = await harness.app.request(
+          `/api/v1/system/execution-options?hostId=${host.id}&providerId=${providerId}`,
+        );
+
         expect(response.status).toBe(200);
         await expect(readJson(response)).resolves.toEqual({
           providers: [
@@ -1669,24 +1609,19 @@ describe("public environment and system routes", () => {
             code: expectedCode,
           },
         });
+        expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
       });
     },
   );
 
   it("does not degrade non-502/504 model lookup failures into modelLoadError", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-system-models-type-mismatch",
       });
-
-      const executionOptionsPromise = harness.app.request(
-        `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex`,
-      );
-      const providersCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "provider.list",
-      );
-      await reportQueuedCommandSuccess(harness, providersCommand, {
+      const responder = registerProviderHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
         providers: [
           makeSystemProvider({
             id: "codex",
@@ -1694,38 +1629,44 @@ describe("public environment and system routes", () => {
           }),
         ],
       });
-      const modelsCommand = await waitForQueuedCommandAfter(
-        harness,
-        providersCommand.row.cursor,
-        ({ command }) =>
-          command.type === "provider.list_models" &&
-          command.providerId === "codex",
-      );
-
-      const commandResultResponse = await harness.app.request(
-        "/internal/session/command-result",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: modelsCommand.row.sessionId,
-            commandId: modelsCommand.row.id,
-            completedAt: Date.now(),
-            type: "provider.list",
-            ok: true,
-            result: {
-              providers: [],
+      const originalRecordResponse =
+        harness.hub.recordHostOnlineRpcResponse.bind(harness.hub);
+      let rewroteModelResponse = false;
+      harness.hub.recordHostOnlineRpcResponse = (args) => {
+        if (
+          !rewroteModelResponse &&
+          args.message.type === "host-rpc.response" &&
+          args.message.commandType === "provider.list_models"
+        ) {
+          rewroteModelResponse = true;
+          return originalRecordResponse({
+            message: {
+              type: "host-rpc.response",
+              requestId: args.message.requestId,
+              commandType: "provider.list",
+              ok: true,
+              result: {
+                providers: [],
+              },
             },
-          }),
-        },
-      );
-      expect(commandResultResponse.status).toBe(200);
+            sessionId: args.sessionId,
+          });
+        }
+        return originalRecordResponse(args);
+      };
 
-      const response = await executionOptionsPromise;
+      const response = await harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex`,
+      );
+
       expect(response.status).toBe(500);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "command_result_type_mismatch",
       });
+      expect(responder.requests.map((request) => request.command.type)).toEqual(
+        ["provider.list", "provider.list_models"],
+      );
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
     });
   });
 
@@ -1746,18 +1687,12 @@ describe("public environment and system routes", () => {
         askUserQuestion,
       },
     }, async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: `host-system-provider-question-${askUserQuestion ? "enabled" : "disabled"}`,
       });
-
-      const providersPromise = harness.app.request(
-        `/api/v1/system/providers?hostId=${host.id}`,
-      );
-      const providersCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "provider.list",
-      );
-      await reportQueuedCommandSuccess(harness, providersCommand, {
+      registerProviderHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
         providers: [
           {
             id: "claude-code",
@@ -1774,7 +1709,9 @@ describe("public environment and system routes", () => {
         ],
       });
 
-      const providersResponse = await providersPromise;
+      const providersResponse = await harness.app.request(
+        `/api/v1/system/providers?hostId=${host.id}`,
+      );
       expect(providersResponse.status).toBe(200);
       await expect(readJson(providersResponse)).resolves.toEqual([
         {
@@ -1790,49 +1727,44 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
     });
   });
 
   it("uses a persistent host for default system provider lookups", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-system-default-persistent",
       });
-
-      const providersPromise = harness.app.request("/api/v1/system/providers");
-      const providersCommand = await waitForQueuedCommand(
-        harness,
-        (queued) =>
-          queued.command.type === "provider.list" &&
-          queued.row.hostId === host.id,
-      );
-      await reportQueuedCommandSuccess(
-        harness,
-        providersCommand,
-        {
-          providers: [
-            {
-              id: "codex",
-              displayName: "Codex",
-              capabilities: {
-                supportsArchive: true,
-                supportsRename: true,
-                supportsServiceTier: true,
-                supportsUserQuestion: false,
-                supportedPermissionModes: [
-                  "full",
-                  "workspace-write",
-                  "readonly",
-                ],
-              },
-              available: true,
+      registerProviderHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        providers: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportsUserQuestion: false,
+              supportedPermissionModes: [
+                "full",
+                "workspace-write",
+                "readonly",
+              ],
             },
-          ],
-        },
-        { hostId: host.id },
+            available: true,
+          },
+        ],
+      });
+
+      const providersResponse = await harness.app.request(
+        "/api/v1/system/providers",
       );
 
-      expect((await providersPromise).status).toBe(200);
+      expect(providersResponse.status).toBe(200);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
     });
   });
 

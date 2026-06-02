@@ -7,6 +7,7 @@ import {
   getPendingInteraction,
   getThread,
   getThreadOperation,
+  hostDaemonCommandAttempts,
   hostDaemonCommands,
   queueCommand,
   setPendingInteractionResolving,
@@ -18,10 +19,7 @@ import {
   settleLegacyTerminalizedExpiredLifecycleCommands,
 } from "../../src/services/hosts/expired-commands.js";
 import { runPeriodicSweeps } from "../../src/services/system/periodic-sweeps.js";
-import {
-  type TestAppHarness,
-  withTestHarness,
-} from "../helpers/test-app.js";
+import { type TestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
   seedHost,
@@ -35,11 +33,40 @@ import {
   queueThreadStartLifecycleCommand,
   queueThreadStopLifecycleCommand,
 } from "../helpers/lifecycle-commands.js";
+import { ensureCommandDelivered } from "../helpers/commands.js";
 
 const EXPIRED_RESULT_PAYLOAD = JSON.stringify({
   errorCode: "command_expired",
   errorMessage: "Command expired after retry",
 });
+
+interface DeliverExpiredCommandArgs {
+  commandId: string;
+  hostId: string;
+}
+
+function deliverExpiredCommand(
+  harness: TestAppHarness,
+  args: DeliverExpiredCommandArgs,
+): { commandId: string; attemptId: string } {
+  const attemptId = ensureCommandDelivered(harness, {
+    commandId: args.commandId,
+    hostId: args.hostId,
+    sessionId: null,
+  });
+  harness.db
+    .update(hostDaemonCommandAttempts)
+    .set({
+      status: "expired",
+      settledAt: Date.now(),
+    })
+    .where(eq(hostDaemonCommandAttempts.id, attemptId))
+    .run();
+  return {
+    commandId: args.commandId,
+    attemptId,
+  };
+}
 
 function markCommandTerminalizedBeforeSettlement(
   harness: TestAppHarness,
@@ -154,6 +181,7 @@ describe("expired commands", () => {
         });
         const command = queueCommand(harness.db, harness.hub, {
           hostId: host.id,
+          sessionId: null,
           type,
           payload: JSON.stringify(
             buildPayload({
@@ -164,13 +192,17 @@ describe("expired commands", () => {
             }),
           ),
         });
+        const expired = deliverExpiredCommand(harness, {
+          commandId: command.id,
+          hostId: host.id,
+        });
 
         const resultPromise = harness.hub.waitForCommandResult(
           command.id,
           1_000,
         );
         await handleExpiredCommands(harness.deps, {
-          commandIds: [command.id],
+          commands: [expired],
         });
 
         await expect(resultPromise).resolves.toMatchObject({
@@ -191,13 +223,18 @@ describe("expired commands", () => {
       });
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
-        type: "workspace.status",
+        sessionId: null,
+        type: "host.write_file_relative",
         payload: "{",
+      });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
       });
 
       const resultPromise = harness.hub.waitForCommandResult(command.id, 1_000);
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       await expect(resultPromise).resolves.toMatchObject({
@@ -205,7 +242,7 @@ describe("expired commands", () => {
         errorCode: "command_expired",
         errorMessage: "Command expired after retry",
         ok: false,
-        type: "workspace.status",
+        type: "host.write_file_relative",
       });
       expect(
         harness.db
@@ -220,7 +257,7 @@ describe("expired commands", () => {
     });
   });
 
-  it("settles expired environment.destroy through the command-result owner", async () => {
+  it("settles expired environment.destroy through environment cleanup settlement", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-destroy" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -249,9 +286,13 @@ describe("expired commands", () => {
       setEnvironmentStatus(harness.db, harness.hub, environment.id, {
         status: "destroying",
       });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
+      });
 
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       expect(
@@ -277,7 +318,7 @@ describe("expired commands", () => {
     });
   });
 
-  it("settles expired environment.provision through the command-result owner", async () => {
+  it("settles expired environment.provision through environment provisioning settlement", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-provision" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -305,9 +346,13 @@ describe("expired commands", () => {
           path: environment.path ?? "/tmp/expired-provision",
         },
       });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
+      });
 
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       expect(
@@ -324,7 +369,7 @@ describe("expired commands", () => {
     });
   });
 
-  it("settles expired thread.start through the command-result owner", async () => {
+  it("settles expired thread.start through thread lifecycle settlement", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-thread-start" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -367,9 +412,13 @@ describe("expired commands", () => {
           instructionMode: "append",
         },
       });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
+      });
 
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       expect(
@@ -385,7 +434,7 @@ describe("expired commands", () => {
     });
   });
 
-  it("settles expired thread.stop through the command-result owner", async () => {
+  it("settles expired thread.stop through thread lifecycle settlement", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-thread-stop" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -410,9 +459,13 @@ describe("expired commands", () => {
           threadId: thread.id,
         },
       });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
+      });
 
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       expect(
@@ -427,7 +480,7 @@ describe("expired commands", () => {
     });
   });
 
-  it("settles expired interactive.resolve through the command-result owner", async () => {
+  it("settles expired interactive.resolve through pending interaction settlement", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, {
         id: "host-expired-interactive-resolve",
@@ -473,6 +526,7 @@ describe("expired commands", () => {
       const resolution = { decision: "deny" };
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
+        sessionId: null,
         type: "interactive.resolve",
         payload: JSON.stringify({
           type: "interactive.resolve",
@@ -490,9 +544,13 @@ describe("expired commands", () => {
         id: interaction.id,
         resolution: JSON.stringify(resolution),
       });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
+      });
 
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       expect(getPendingInteraction(harness.db, interaction.id)).toMatchObject({
@@ -502,7 +560,7 @@ describe("expired commands", () => {
     });
   });
 
-  it("settles expired turn.submit through the command-result owner", async () => {
+  it("settles expired turn.submit through thread lifecycle settlement", async () => {
     await withTestHarness(async (harness) => {
       const host = seedHost(harness.deps, { id: "host-expired-turn-submit" });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -519,6 +577,7 @@ describe("expired commands", () => {
       });
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
+        sessionId: null,
         type: "turn.submit",
         payload: JSON.stringify({
           type: "turn.submit",
@@ -548,9 +607,13 @@ describe("expired commands", () => {
           },
         }),
       });
+      const expired = deliverExpiredCommand(harness, {
+        commandId: command.id,
+        hostId: host.id,
+      });
 
       await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
+        commands: [expired],
       });
 
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
@@ -680,6 +743,7 @@ describe("expired commands", () => {
       const resolution = { decision: "deny" };
       const interactionCommand = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
+        sessionId: null,
         type: "interactive.resolve",
         payload: JSON.stringify({
           type: "interactive.resolve",

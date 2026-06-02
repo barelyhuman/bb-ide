@@ -1,21 +1,23 @@
 import {
+  getCommandAttempt,
   getCommand,
   listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement,
+  reportCommandResult,
+  type ExpiredCommandAttempt,
   type HostDaemonCommandRow,
 } from "@bb/db";
-import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
 import {
   buildCommandResultSettlementDeps,
-  handleCommandResultSideEffects,
-} from "../../internal/command-result-owners.js";
+  type CommandResultSideEffectReport,
+} from "../../internal/command-result-side-effects.js";
+import { handleCommandResultSideEffects } from "../../internal/command-result-owners.js";
 import { dispatchCommandResultPostCommitActions } from "../../internal/command-result-post-commit-actions.js";
-import { handleCommandResult } from "../../internal/command-results.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 
 const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
 const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
-const EXPIRED_COMMAND_SESSION_ID = "expired";
+const LEGACY_EXPIRED_COMMAND_ATTEMPT_ID = "legacy-expired";
 const LEGACY_TERMINALIZED_EXPIRED_LIFECYCLE_SETTLEMENT_BATCH_SIZE = 100;
 
 type ExpiredCommandDeps = Pick<
@@ -37,20 +39,21 @@ export interface LegacyTerminalizedExpiredLifecycleSettlementResult {
 }
 
 interface BuildExpiredCommandFailureReportArgs {
+  attemptId: string;
   command: Pick<HostDaemonCommandRow, "id" | "type">;
   completedAt: number;
 }
 
 function buildExpiredCommandFailureReport(
   args: BuildExpiredCommandFailureReportArgs,
-): HostDaemonCommandResultReport {
+): CommandResultSideEffectReport {
   return {
+    attemptId: args.attemptId,
     commandId: args.command.id,
     completedAt: args.completedAt,
     errorCode: EXPIRED_COMMAND_ERROR_CODE,
     errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
     ok: false,
-    sessionId: EXPIRED_COMMAND_SESSION_ID,
     type: args.command.type,
   };
 }
@@ -61,6 +64,7 @@ async function settleLegacyTerminalizedExpiredLifecycleCommand(
 ): Promise<void> {
   const notificationBuffer = new NotificationBuffer();
   const failureReport = buildExpiredCommandFailureReport({
+    attemptId: LEGACY_EXPIRED_COMMAND_ATTEMPT_ID,
     command: commandRow,
     completedAt: commandRow.completedAt ?? Date.now(),
   });
@@ -96,24 +100,94 @@ async function settleLegacyTerminalizedExpiredLifecycleCommand(
 export async function handleExpiredCommands(
   deps: ExpiredCommandDeps,
   args: {
-    commandIds: string[];
+    commands: ExpiredCommandAttempt[];
   },
 ): Promise<void> {
-  for (const commandId of args.commandIds) {
-    const commandRow = getCommand(deps.db, commandId);
-    if (!commandRow) {
-      continue;
-    }
+  for (const expired of args.commands) {
+    await settleExpiredCommandAttempt(deps, expired);
+  }
+}
 
-    const completedAt = commandRow.completedAt ?? Date.now();
-    await handleCommandResult(
-      deps,
-      buildExpiredCommandFailureReport({
+async function settleExpiredCommandAttempt(
+  deps: ExpiredCommandDeps,
+  args: ExpiredCommandAttempt,
+): Promise<void> {
+  const notificationBuffer = new NotificationBuffer();
+  const settlement = deps.db.transaction(
+    (tx) => {
+      const commandRow = getCommand(tx, args.commandId);
+      if (
+        !commandRow ||
+        commandRow.state === "success" ||
+        commandRow.state === "error"
+      ) {
+        return null;
+      }
+
+      const expiredAttempt = getCommandAttempt(tx, {
+        attemptId: args.attemptId,
+        commandId: args.commandId,
+      });
+      if (!expiredAttempt || expiredAttempt.status !== "expired") {
+        return null;
+      }
+
+      const completedAt = expiredAttempt.settledAt ?? Date.now();
+      const failureReport = buildExpiredCommandFailureReport({
+        attemptId: expiredAttempt.id,
         command: commandRow,
         completedAt,
-      }),
-    );
+      });
+      const sideEffects = handleCommandResultSideEffects(
+        buildCommandResultSettlementDeps({
+          db: tx,
+          deps,
+          hub: notificationBuffer,
+        }),
+        failureReport,
+        commandRow,
+      );
+      const updated = reportCommandResult(tx, notificationBuffer, {
+        commandId: commandRow.id,
+        state: "error",
+        completedAt,
+        resultPayload: JSON.stringify({
+          errorCode: EXPIRED_COMMAND_ERROR_CODE,
+          errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
+        }),
+      });
+      if (!updated) {
+        throw new Error(
+          `Command ${commandRow.id} disappeared during expired attempt settlement`,
+        );
+      }
+
+      return {
+        command: commandRow,
+        postCommitActions: sideEffects.postCommitActions,
+      };
+    },
+    { behavior: "immediate" },
+  );
+
+  if (!settlement) {
+    return;
   }
+
+  notificationBuffer.flushInto(deps.hub);
+  deps.hub.recordCommandResult(settlement.command.id, {
+    commandId: settlement.command.id,
+    errorCode: EXPIRED_COMMAND_ERROR_CODE,
+    errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
+    ok: false,
+    type: settlement.command.type,
+  });
+  await dispatchCommandResultPostCommitActions({
+    actions: settlement.postCommitActions,
+    command: settlement.command,
+    deps,
+    mode: "schedule-after-daemon-ingress",
+  });
 }
 
 /**

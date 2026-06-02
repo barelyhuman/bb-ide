@@ -20,6 +20,9 @@ import { z } from "zod";
 import type { Endpoint } from "./common.js";
 import type { HostDaemonCommandResultReport } from "./commands.js";
 import {
+  hostDaemonOnlineRpcCommandSchema,
+  hostDaemonOnlineRpcCommandTypeSchema,
+  hostDaemonOnlineRpcResultSchemaByType,
   hostDaemonCommandEnvelopeSchema,
   workspaceContextSchema,
 } from "./commands.js";
@@ -205,14 +208,6 @@ export type HostDaemonEnvironmentChangePayload = z.infer<
   typeof hostDaemonEnvironmentChangePayloadSchema
 >;
 
-export const hostDaemonEnvironmentChangeRequestSchema = z.object({
-  sessionId: z.string().min(1),
-  ...hostDaemonEnvironmentChangePayloadSchema.shape,
-});
-export type HostDaemonEnvironmentChangeRequest = z.infer<
-  typeof hostDaemonEnvironmentChangeRequestSchema
->;
-
 const hostDaemonAppDataChangePayloadBaseSchema = z
   .object({
     threadId: z.string().min(1),
@@ -314,6 +309,76 @@ const terminalCloseReasonSchema = z.enum([
   "thread-deleted",
   "open-timeout",
 ]);
+const hostDaemonOnlineRpcRequestIdSchema = z.string().min(1);
+
+const hostDaemonOnlineRpcRequestMessageSchema = z
+  .object({
+    type: z.literal("host-rpc.request"),
+    requestId: hostDaemonOnlineRpcRequestIdSchema,
+    command: hostDaemonOnlineRpcCommandSchema,
+  })
+  .strict();
+
+const hostDaemonOnlineRpcResultSchema = z.union([
+  hostDaemonOnlineRpcResultSchemaByType["development.replay"],
+  hostDaemonOnlineRpcResultSchemaByType["host.list_files"],
+  hostDaemonOnlineRpcResultSchemaByType["host.list_paths"],
+  hostDaemonOnlineRpcResultSchemaByType["host.file_metadata"],
+  hostDaemonOnlineRpcResultSchemaByType["host.list_branches"],
+  hostDaemonOnlineRpcResultSchemaByType["host.list_manager_templates"],
+  hostDaemonOnlineRpcResultSchemaByType["host.read_file"],
+  hostDaemonOnlineRpcResultSchemaByType["host.read_file_relative"],
+  hostDaemonOnlineRpcResultSchemaByType["provider.list"],
+  hostDaemonOnlineRpcResultSchemaByType["provider.list_models"],
+  hostDaemonOnlineRpcResultSchemaByType["workspace.status"],
+  hostDaemonOnlineRpcResultSchemaByType["workspace.diff"],
+]);
+
+const hostDaemonOnlineRpcResponseSuccessSchema = z
+  .object({
+    type: z.literal("host-rpc.response"),
+    requestId: hostDaemonOnlineRpcRequestIdSchema,
+    commandType: hostDaemonOnlineRpcCommandTypeSchema,
+    ok: z.literal(true),
+    result: hostDaemonOnlineRpcResultSchema,
+  })
+  .strict()
+  .superRefine((message, context) => {
+    const parseResult = hostDaemonOnlineRpcResultSchemaByType[
+      message.commandType
+    ].safeParse(message.result);
+    if (parseResult.success) {
+      return;
+    }
+    context.addIssue({
+      code: "custom",
+      path: ["result"],
+      message: `Invalid ${message.commandType} RPC result`,
+    });
+  });
+
+const hostDaemonOnlineRpcResponseFailureSchema = z
+  .object({
+    type: z.literal("host-rpc.response"),
+    requestId: hostDaemonOnlineRpcRequestIdSchema,
+    commandType: hostDaemonOnlineRpcCommandTypeSchema,
+    ok: z.literal(false),
+    errorCode: z.string().min(1),
+    errorMessage: z.string().min(1),
+  })
+  .strict();
+
+export const hostDaemonOnlineRpcResponseMessageSchema = z.union([
+  hostDaemonOnlineRpcResponseSuccessSchema,
+  hostDaemonOnlineRpcResponseFailureSchema,
+]);
+export type HostDaemonOnlineRpcResponseMessage = z.infer<
+  typeof hostDaemonOnlineRpcResponseMessageSchema
+>;
+
+export type HostDaemonOnlineRpcRequestMessage = z.infer<
+  typeof hostDaemonOnlineRpcRequestMessageSchema
+>;
 
 export const hostDaemonTerminalOutputChunkSchema = z
   .object({
@@ -381,6 +446,7 @@ export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
       reason: hostDaemonSessionCloseReasonSchema,
     })
     .strict(),
+  hostDaemonOnlineRpcRequestMessageSchema,
   hostDaemonTerminalOpenMessageSchema,
   hostDaemonTerminalAttachMessageSchema,
   hostDaemonTerminalInputMessageSchema,
@@ -396,6 +462,13 @@ const hostDaemonHeartbeatMessageSchema = z
     type: z.literal("heartbeat"),
   })
   .strict();
+
+const hostDaemonEnvironmentChangeMessageSchema =
+  hostDaemonEnvironmentChangePayloadSchema
+    .extend({
+      type: z.literal("environment-change"),
+    })
+    .strict();
 
 const hostDaemonTerminalOpenedMessageSchema = z
   .object({
@@ -448,13 +521,15 @@ const hostDaemonTerminalErrorMessageSchema = z
   })
   .strict();
 
-export const hostDaemonDaemonWsMessageSchema = z.discriminatedUnion("type", [
+export const hostDaemonDaemonWsMessageSchema = z.union([
   hostDaemonHeartbeatMessageSchema,
+  hostDaemonEnvironmentChangeMessageSchema,
   hostDaemonTerminalOpenedMessageSchema,
   hostDaemonTerminalOutputMessageSchema,
   hostDaemonTerminalReplayMessageSchema,
   hostDaemonTerminalExitedMessageSchema,
   hostDaemonTerminalErrorMessageSchema,
+  hostDaemonOnlineRpcResponseMessageSchema,
 ]);
 export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema
@@ -579,10 +654,6 @@ export type HostDaemonInternalSchema = {
       { json: HostDaemonEventBatchRequest },
       HostDaemonEventBatchResponse
     >;
-  };
-  "/session/environment-change": {
-    /** Used by the daemon to report raw environment workspace change hints for server-side validation and fan-out. */
-    $post: Endpoint<{ json: HostDaemonEnvironmentChangeRequest }, { ok: true }>;
   };
   "/session/app-data-change": {
     /** Used by the daemon to report host-local app data file changes for server websocket fan-out. */

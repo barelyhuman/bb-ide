@@ -414,6 +414,127 @@ describe("pending interaction lifecycle", () => {
     });
   });
 
+  it("deduplicates active provider requests across daemon sessions when payloads match", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-reconnect-dedupe",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const interaction: PendingInteractionCreate = {
+        threadId: thread.id,
+        turnId: "turn-reconnect-dedupe",
+        providerId: "codex",
+        providerThreadId: "provider-thread-reconnect-dedupe",
+        providerRequestId: "request-reconnect-dedupe",
+        payload: createCommandApprovalPayload({
+          itemId: "item-reconnect-dedupe",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+        }),
+      };
+
+      const created = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        interaction,
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
+      }
+
+      const duplicate = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        interaction,
+        "session-after-reconnect",
+      );
+
+      expect(duplicate).toEqual({
+        outcome: "existing",
+        interaction: created.interaction,
+      });
+    });
+  });
+
+  it("rejects active provider request reuse with a different payload", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-reconnect-payload-mismatch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const baseInteraction: PendingInteractionCreate = {
+        threadId: thread.id,
+        turnId: "turn-reconnect-payload-mismatch",
+        providerId: "codex",
+        providerThreadId: "provider-thread-reconnect-payload-mismatch",
+        providerRequestId: "request-reconnect-payload-mismatch",
+        payload: createCommandApprovalPayload({
+          itemId: "item-reconnect-payload-mismatch",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+        }),
+      };
+
+      const created = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        baseInteraction,
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
+      }
+
+      expect(
+        registerPendingInteraction(
+          harness.deps,
+          harness.deps.pendingInteractions,
+          {
+            ...baseInteraction,
+            payload: createCommandApprovalPayload({
+              itemId: "item-reconnect-payload-mismatch",
+              reason: "Different approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          "session-after-reconnect",
+        ),
+      ).toEqual({
+        outcome: "rejected",
+        reason:
+          "Provider request request-reconnect-payload-mismatch is already awaiting a different interaction payload",
+      });
+    });
+  });
+
   it("rejects interactions from providers that do not own the thread", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {

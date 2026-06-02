@@ -35,6 +35,8 @@ import type {
   ProjectKind,
 } from "@bb/domain";
 
+export type HostDaemonCommandAttemptStatus = "active" | "expired" | "settled";
+
 export const authUsers = sqliteTable(
   "user",
   {
@@ -309,12 +311,7 @@ export const threads = sqliteTable(
       table.id,
     ),
     index("threads_pin_sort_idx")
-      .on(
-        table.archivedAt,
-        table.deletedAt,
-        table.pinSortKey,
-        table.id,
-      )
+      .on(table.archivedAt, table.deletedAt, table.pinSortKey, table.id)
       .where(sql`${table.pinnedAt} IS NOT NULL`),
     index("threads_environment_idx").on(table.environmentId),
     index("threads_automation_runtime_idx").on(
@@ -635,6 +632,36 @@ export const hostDaemonCommands = sqliteTable(
   ],
 );
 
+export const hostDaemonCommandAttempts = sqliteTable(
+  "host_daemon_command_attempts",
+  {
+    id: text("id").primaryKey(),
+    commandId: text("command_id")
+      .notNull()
+      .references(() => hostDaemonCommands.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").references(() => hostDaemonSessions.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").$type<HostDaemonCommandAttemptStatus>().notNull(),
+    deliveredAt: integer("delivered_at").notNull(),
+    leaseExpiresAt: integer("lease_expires_at").notNull(),
+    settledAt: integer("settled_at"),
+  },
+  (table) => [
+    index("host_daemon_command_attempts_command_status_idx").on(
+      table.commandId,
+      table.status,
+    ),
+    uniqueIndex("host_daemon_command_attempts_active_command_idx")
+      .on(table.commandId)
+      .where(sql`${table.status} = 'active'`),
+    index("host_daemon_command_attempts_active_expiry_idx")
+      .on(table.status, table.leaseExpiresAt)
+      .where(sql`${table.status} = 'active'`),
+    index("host_daemon_command_attempts_session_idx").on(table.sessionId),
+  ],
+);
+
 export const terminalSessions = sqliteTable(
   "terminal_sessions",
   {
@@ -707,7 +734,6 @@ export const pendingInteractions = sqliteTable(
   },
   (table) => [
     uniqueIndex("pending_interactions_provider_request_idx").on(
-      table.sessionId,
       table.providerId,
       table.providerThreadId,
       table.providerRequestId,

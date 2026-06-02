@@ -11,7 +11,6 @@ import {
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonDaemonWsMessageSchema,
-  hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonInteractiveRequestSchema,
   hostDaemonServerWsMessageSchema,
@@ -21,7 +20,6 @@ import {
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonDaemonWsMessage,
-  type HostDaemonEnvironmentChangeRequest,
   type HostDaemonEventEnvelope,
   type HostDaemonInteractiveRequest,
   type HostDaemonServerWsMessage,
@@ -127,7 +125,6 @@ export interface TestServer {
     events: HostDaemonEventEnvelope[];
     sessionId: string;
   }>;
-  environmentChanges: HostDaemonEnvironmentChangeRequest[];
   eventPostAttemptCount: number;
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
@@ -167,7 +164,6 @@ export async function createTestServer(
   const commandFetches: Array<{ sessionId: string }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
   const eventBatchRequests: TestServer["eventBatchRequests"] = [];
-  const environmentChanges: TestServer["environmentChanges"] = [];
   const toolCalls: Array<{ sessionId: string; tool: string }> = [];
   const interactiveRequests: HostDaemonInteractiveRequest[] = [];
   const rejectedSessionRequests: TestServer["rejectedSessionRequests"] = [];
@@ -395,20 +391,6 @@ export async function createTestServer(
     }));
     return context.json({ acceptedEvents, rejectedEvents: [] });
   });
-  app.post("/internal/session/environment-change", async (context) => {
-    const payload = hostDaemonEnvironmentChangeRequestSchema.parse(
-      await context.req.json(),
-    );
-    const rejectedResponse = rejectInactiveSession(
-      "/internal/session/environment-change",
-      payload.sessionId,
-    );
-    if (rejectedResponse) {
-      return rejectedResponse;
-    }
-    environmentChanges.push(payload);
-    return context.json({ ok: true });
-  });
   app.post("/internal/session/tool-call", async (context) => {
     const payload = hostDaemonToolCallRequestSchema.parse(
       await context.req.json(),
@@ -574,7 +556,6 @@ export async function createTestServer(
       return commandResultReports;
     },
     eventBatchRequests,
-    environmentChanges,
     get eventPostAttemptCount() {
       return eventPostAttemptCount;
     },
@@ -592,6 +573,7 @@ export async function createTestServer(
     queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope {
       const envelope = {
         id: `command-${nextCursor}`,
+        attemptId: `attempt-${nextCursor}`,
         cursor: nextCursor,
         command,
       };

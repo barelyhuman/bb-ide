@@ -5,7 +5,6 @@ import {
   getEnvironment,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
-  interruptPendingInteractionsForSessionIds,
   getThread,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
@@ -25,7 +24,10 @@ import {
   type PendingInteractionResolution,
   type ThreadChangeMetadata,
 } from "@bb/domain";
-import type { HostDaemonCommand } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonCommand,
+  HostDaemonCommandResult,
+} from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { productionErrorLogFields } from "../lib/error-log-fields.js";
@@ -94,6 +96,38 @@ interface InterruptPendingInteractionArgs {
   reason: string;
 }
 
+type InteractiveResolveCommand = Extract<
+  HostDaemonCommand,
+  { type: "interactive.resolve" }
+>;
+
+interface InteractiveResolveCommandFailureReport {
+  commandId: string;
+  completedAt: number;
+  errorCode: string;
+  errorMessage: string;
+  ok: false;
+  type: "interactive.resolve";
+}
+
+interface InteractiveResolveCommandSuccessReport {
+  commandId: string;
+  completedAt: number;
+  ok: true;
+  result: HostDaemonCommandResult<"interactive.resolve">;
+  type: "interactive.resolve";
+}
+
+type InteractiveResolveCommandResultReport =
+  | InteractiveResolveCommandFailureReport
+  | InteractiveResolveCommandSuccessReport;
+
+interface SettleInteractiveResolveCommandResultArgs {
+  command: InteractiveResolveCommand;
+  deps: PendingInteractionTransactionDeps;
+  report: InteractiveResolveCommandResultReport;
+}
+
 interface PendingInteractionTransactionDeps {
   db: DbTransaction;
   hub: DbNotifier;
@@ -125,11 +159,6 @@ interface InterruptPendingInteractionsForThreadsLifecycleArgs {
 interface InterruptPendingInteractionsForThreadIdsLifecycleArgs {
   reason: string;
   threadIds: readonly string[];
-}
-
-interface InterruptPendingInteractionsForSessionIdsLifecycleArgs {
-  reason: string;
-  sessionIds: readonly string[];
 }
 
 interface CreateLifecycleDeps {
@@ -289,18 +318,24 @@ export class PendingInteractionLifecycle {
       };
     }
 
+    const payload = JSON.stringify(interaction.payload);
     const registered = this.deps.db.transaction((tx) => {
       const existing = getPendingInteractionByProviderRequest(tx, {
         providerId: interaction.providerId,
         providerThreadId: interaction.providerThreadId,
         providerRequestId: interaction.providerRequestId,
-        sessionId: args.sessionId,
       });
       if (existing) {
         if (existing.status !== "pending" && existing.status !== "resolving") {
           return {
             outcome: "rejected" as const,
             reason: `Provider request ${interaction.providerRequestId} was already handled and cannot be reused`,
+          };
+        }
+        if (existing.payload !== payload) {
+          return {
+            outcome: "rejected" as const,
+            reason: `Provider request ${interaction.providerRequestId} is already awaiting a different interaction payload`,
           };
         }
 
@@ -330,7 +365,7 @@ export class PendingInteractionLifecycle {
           providerThreadId: interaction.providerThreadId,
           providerRequestId: interaction.providerRequestId,
           sessionId: args.sessionId,
-          payload: JSON.stringify(interaction.payload),
+          payload,
         }),
       };
     });
@@ -471,6 +506,35 @@ export class PendingInteractionLifecycle {
     return interaction;
   }
 
+  settleInteractiveResolveCommandResultInTransaction(
+    args: SettleInteractiveResolveCommandResultArgs,
+  ): void {
+    if (!args.report.ok) {
+      this.interruptPendingInteractionInTransaction(args.deps, {
+        interactionId: args.command.interactionId,
+        reason: args.report.errorMessage,
+      });
+      return;
+    }
+
+    const completed = this.completeResolvingInteractionInTransaction(
+      args.deps,
+      {
+        interactionId: args.command.interactionId,
+        resolution: args.command.resolution,
+      },
+    );
+    if (!completed) {
+      this.deps.logger.info(
+        {
+          commandId: args.report.commandId,
+          interactionId: args.command.interactionId,
+        },
+        "Interactive resolve command result did not advance pending interaction",
+      );
+    }
+  }
+
   interruptPendingInteractionsForThreads(
     args: InterruptPendingInteractionsForThreadsLifecycleArgs,
   ): PendingInteraction[] {
@@ -502,17 +566,6 @@ export class PendingInteractionLifecycle {
       deps,
       interruptPendingInteractionsForThreadIds(deps.db, {
         threadIds: args.threadIds,
-        statusReason: args.reason,
-      }),
-    );
-  }
-
-  interruptPendingInteractionsForSessionIds(
-    args: InterruptPendingInteractionsForSessionIdsLifecycleArgs,
-  ): PendingInteraction[] {
-    return this.settleInterruptedRows(
-      interruptPendingInteractionsForSessionIds(this.deps.db, {
-        sessionIds: args.sessionIds,
         statusReason: args.reason,
       }),
     );

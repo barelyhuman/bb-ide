@@ -79,6 +79,7 @@ describe("internal authorization regressions", () => {
           method: "POST",
           headers: internalAuthHeaders(harness, { hostId: hostA.host.id }),
           body: JSON.stringify({
+            attemptId: "attempt-cross-host-command",
             sessionId: hostA.session.id,
             commandId: command.id,
             completedAt: Date.now(),

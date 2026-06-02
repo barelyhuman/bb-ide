@@ -10,7 +10,9 @@ import {
   getEnvironmentOperation,
   getThread,
   getThreadOperation,
+  hostDaemonCommandAttempts,
   hostDaemonCommands,
+  markThreadDeleted,
   pruneCompletedCommandPayloads,
   reportCommandResult,
   sweepExpiredCommands,
@@ -41,19 +43,23 @@ import {
 import { buildEnvironmentProvisionCommand } from "../../src/services/threads/thread-create-helpers.js";
 import type { QueueThreadStartCommandArgs } from "../../src/services/threads/thread-commands.js";
 import {
+  internalAuthHeaders,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
-import { queueEnvironmentProvisionLifecycleCommand } from "../helpers/lifecycle-commands.js";
+import {
+  queueEnvironmentProvisionLifecycleCommand,
+  queueThreadStartLifecycleCommand,
+} from "../helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
-import { withTestHarness } from "../helpers/test-app.js";
+import { type TestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 interface ReuseThreadProvisionOperationArgs {
   clientRequestId: string;
@@ -62,6 +68,33 @@ interface ReuseThreadProvisionOperationArgs {
   provisionEventSequence: number;
   provisioningId: string;
   titleProvided: boolean;
+}
+
+interface ExpireActiveCommandAttemptArgs {
+  commandId: string;
+  now: number;
+}
+
+function expireActiveCommandAttempt(
+  harness: TestAppHarness,
+  args: ExpireActiveCommandAttemptArgs,
+): string {
+  const expired =
+    harness.db
+      .update(hostDaemonCommandAttempts)
+      .set({ leaseExpiresAt: args.now - 1 })
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.commandId, args.commandId),
+          eq(hostDaemonCommandAttempts.status, "active"),
+        ),
+      )
+      .returning({ id: hostDaemonCommandAttempts.id })
+      .get() ?? null;
+  if (!expired) {
+    throw new Error(`Command ${args.commandId} is missing an active attempt`);
+  }
+  return expired.id;
 }
 
 function buildReuseThreadProvisionOperation(
@@ -218,6 +251,168 @@ describe("internal command result idempotency", () => {
     });
   });
 
+  it("finalizes deleted threads after a deferred environment provision start operation completes", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-deferred-finalize-after-provision",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        path: "/tmp/deferred-finalize-after-provision",
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const provisionRequest = appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Start then delete" }],
+        target: { kind: "thread-start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+        senderThreadId: null,
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-deferred-finalize-after-provision",
+          },
+          workspaceProvisionType: "managed-worktree",
+          sourcePath: "/tmp/deferred-finalize-source",
+          targetPath: "/tmp/deferred-finalize-after-provision",
+          branchName: "bb/deferred-finalize",
+          baseBranch: null,
+          setupTimeoutMs: 30_000,
+        },
+      });
+      const startCommand = queueThreadStartLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        threadId: thread.id,
+        command: {
+          type: "thread.start",
+          environmentId: environment.id,
+          threadId: thread.id,
+          workspaceContext: {
+            workspacePath: "/tmp/deferred-finalize-after-provision",
+            workspaceProvisionType: "managed-worktree",
+          },
+          projectId: project.id,
+          providerId: thread.providerId,
+          requestId: provisionRequest.requestId,
+          input: [{ type: "text", text: "Start then delete" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: thread.id,
+      });
+      const queuedProvision = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === provisionCommand.id,
+      );
+
+      const provisionResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedProvision,
+        {
+          path: "/tmp/deferred-finalize-after-provision",
+          branchName: "bb/deferred-finalize",
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: true,
+          transcript: [],
+        },
+      );
+
+      expect(provisionResponse.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.deletedAt).toBeTypeOf("number");
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: thread.id,
+          kind: "start",
+        }),
+      ).toMatchObject({
+        state: "queued",
+        commandId: startCommand.id,
+      });
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: null,
+        status: "ready",
+      });
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === startCommand.id,
+      );
+      const startResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedStart,
+        {
+          providerThreadId: "provider-deferred-finalize-after-provision",
+        },
+      );
+
+      expect(startResponse.status).toBe(200);
+      expect(getThread(harness.db, thread.id)).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: expect.any(Number),
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({
+        state: "requested",
+      });
+      const deletedCommand = await waitForQueuedCommandAfter(
+        harness,
+        startCommand.cursor,
+        ({ command }) =>
+          command.type === "thread.deleted" && command.threadId === thread.id,
+      );
+      expect(deletedCommand.command).toMatchObject({
+        type: "thread.deleted",
+        environmentId: environment.id,
+        threadId: thread.id,
+      });
+    });
+  });
+
   it("rolls back owner side effects when command result settlement fails", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
@@ -303,7 +498,7 @@ describe("internal command result idempotency", () => {
       }
 
       const storedCommand = getCommand(harness.db, command.id);
-      expect(storedCommand?.state).toBe("pending");
+      expect(storedCommand?.state).toBe("fetched");
       expect(storedCommand?.completedAt).toBeNull();
       expect(storedCommand?.resultPayload).toBeNull();
 
@@ -408,10 +603,19 @@ describe("internal command result idempotency", () => {
         harness,
         ({ row }) => row.id === command.id,
       );
-      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+      const fetchedCommands = fetchCommands(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+      });
+      const fetchedCommand = fetchedCommands.find(
+        (fetched) => fetched.id === queued.row.id,
+      );
+      if (!fetchedCommand) {
+        throw new Error("Expected fetched provision command");
+      }
 
       await handleCommandResult(harness.deps, {
-        sessionId: session.id,
+        attemptId: fetchedCommand.attemptId,
         commandId: queued.row.id,
         completedAt: Date.now(),
         type: "environment.provision",
@@ -506,14 +710,18 @@ describe("internal command result idempotency", () => {
       );
       const fetchedStopCommands = fetchCommands(harness.db, harness.hub, {
         hostId: host.id,
+        sessionId: session.id,
       });
-      expect(fetchedStopCommands.map((command) => command.id)).toContain(
-        queuedStop.row.id,
+      const fetchedStopCommand = fetchedStopCommands.find(
+        (fetched) => fetched.id === queuedStop.row.id,
       );
+      if (!fetchedStopCommand) {
+        throw new Error("Expected fetched stop command");
+      }
       expect(getCommand(harness.db, queuedStop.row.id)?.state).toBe("fetched");
 
       await handleCommandResult(harness.deps, {
-        sessionId: session.id,
+        attemptId: fetchedStopCommand.attemptId,
         commandId: queuedStop.row.id,
         completedAt: Date.now(),
         type: "thread.stop",
@@ -920,7 +1128,7 @@ describe("internal command result idempotency", () => {
 
   it("keeps the canonical expired error cached when a late daemon result arrives after sweep expiry", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-expired-late-result",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -950,18 +1158,57 @@ describe("internal command result idempotency", () => {
         ({ command }) =>
           command.type === "thread.stop" && command.threadId === thread.id,
       );
-      fetchCommands(harness.db, harness.hub, { hostId: host.id });
       const now = Date.now();
-      harness.db
-        .update(hostDaemonCommands)
-        .set({ fetchedAt: now - 70_000, retryCount: 1 })
-        .where(eq(hostDaemonCommands.id, queuedStop.row.id))
-        .run();
+      fetchCommands(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: null,
+      });
+      expireActiveCommandAttempt(harness, {
+        commandId: queuedStop.row.id,
+        now,
+      });
+      expect(sweepExpiredCommands(harness.db, harness.hub, now)).toEqual({
+        expiredCommands: [],
+        requeued: 1,
+      });
+
+      fetchCommands(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: null,
+      });
+      const retriedAttemptId = expireActiveCommandAttempt(harness, {
+        commandId: queuedStop.row.id,
+        now,
+      });
 
       const expired = sweepExpiredCommands(harness.db, harness.hub, now);
-      expect(expired.expiredCommandIds).toEqual([queuedStop.row.id]);
+      expect(expired.expiredCommands).toEqual([
+        { commandId: queuedStop.row.id, attemptId: retriedAttemptId },
+      ]);
+      const lateResponseBeforeSettlement = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
+          body: JSON.stringify({
+            sessionId: session.id,
+            attemptId: retriedAttemptId,
+            commandId: queuedStop.row.id,
+            completedAt: Date.now(),
+            type: "thread.stop",
+            ok: true,
+            result: {},
+          }),
+        },
+      );
+      expect(lateResponseBeforeSettlement.status).toBe(200);
+      expect(getCommand(harness.db, queuedStop.row.id)).toMatchObject({
+        state: "fetched",
+        resultPayload: null,
+      });
+
       await handleExpiredCommands(harness.deps, {
-        commandIds: expired.expiredCommandIds,
+        commands: expired.expiredCommands,
       });
       expect(getCommand(harness.db, queuedStop.row.id)).toMatchObject({
         state: "error",
@@ -971,10 +1218,21 @@ describe("internal command result idempotency", () => {
         }),
       });
 
-      const lateResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedStop,
-        {},
+      const lateResponse = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
+          body: JSON.stringify({
+            sessionId: session.id,
+            attemptId: retriedAttemptId,
+            commandId: queuedStop.row.id,
+            completedAt: Date.now(),
+            type: "thread.stop",
+            ok: true,
+            result: {},
+          }),
+        },
       );
       expect(lateResponse.status).toBe(200);
 

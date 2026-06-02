@@ -392,9 +392,9 @@ export async function runPeriodicSweeps(
 
     await deps.machineAuth.pruneExpiredKeys();
     const expired = sweepExpiredCommands(deps.db, deps.hub);
-    if (expired.expiredCommandIds.length > 0) {
+    if (expired.expiredCommands.length > 0) {
       await handleExpiredCommands(deps, {
-        commandIds: expired.expiredCommandIds,
+        commands: expired.expiredCommands,
       });
     }
     const legacyExpired =

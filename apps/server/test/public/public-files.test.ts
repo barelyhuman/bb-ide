@@ -1,9 +1,7 @@
 import { Buffer } from "node:buffer";
+import { hostDaemonCommands } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import {
-  reportQueuedCommandSuccess,
-  waitForQueuedCommand,
-} from "../helpers/commands.js";
+import { registerHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -21,7 +19,7 @@ describe("public file routes", () => {
   it("serves arbitrary absolute HTML files as sandboxed raw preview content", async () => {
     await withTestHarness(async (harness) => {
       seedHostSession(harness.deps, { id: "default-host" });
-      const { host: threadHost } = seedHostSession(harness.deps, {
+      const { host: threadHost, session } = seedHostSession(harness.deps, {
         id: "thread-host",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -37,33 +35,32 @@ describe("public file routes", () => {
       });
       const filePath = "/Users/me/Downloads/report.html";
       const html = "<!doctype html><h1>Report</h1>";
-
-      const filePromise = harness.app.request(rawFileUrl(thread.id, filePath));
-      const fileCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "host.read_file" && command.path === filePath,
-      );
-      expect(fileCommand.row.hostId).toBe(threadHost.id);
-      expect(fileCommand.command).toEqual({
-        type: "host.read_file",
-        path: filePath,
-      });
-      await reportQueuedCommandSuccess(
-        harness,
-        fileCommand,
-        {
-          path: filePath,
-          content: html,
-          contentEncoding: "utf8",
-          mimeType: "text/html",
-          sizeBytes: Buffer.byteLength(html),
+      const rpc = registerHostRpcResponder(harness, {
+        hostId: threadHost.id,
+        sessionId: session.id,
+        handle: (request) => {
+          expect(request.command).toEqual({
+            type: "host.read_file",
+            path: filePath,
+          });
+          return {
+            ok: true,
+            result: {
+              path: filePath,
+              content: html,
+              contentEncoding: "utf8",
+              mimeType: "text/html",
+              sizeBytes: Buffer.byteLength(html),
+            },
+          };
         },
-        { hostId: threadHost.id },
-      );
+      });
 
-      const fileResponse = await filePromise;
+      const fileResponse = await harness.app.request(
+        rawFileUrl(thread.id, filePath),
+      );
       expect(fileResponse.status).toBe(200);
+      expect(rpc.requests).toHaveLength(1);
       expect(fileResponse.headers.get("content-type")).toBe(
         "text/html; charset=utf-8",
       );
@@ -103,21 +100,13 @@ describe("public file routes", () => {
         message: "HTML preview only supports text/html files",
         retryable: false,
       });
-      await expect(
-        waitForQueuedCommand(
-          harness,
-          ({ command }) => {
-            return command.type === "host.read_file";
-          },
-          25,
-        ),
-      ).rejects.toThrow("Timed out waiting for queued command");
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
     });
   });
 
   it("caps arbitrary raw HTML preview responses at 5 MB", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
+      const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
@@ -130,22 +119,30 @@ describe("public file routes", () => {
         projectId: project.id,
       });
       const filePath = "/Users/me/Downloads/large.html";
-
-      const filePromise = harness.app.request(rawFileUrl(thread.id, filePath));
-      const fileCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "host.read_file" && command.path === filePath,
-      );
-      await reportQueuedCommandSuccess(harness, fileCommand, {
-        path: filePath,
-        content: "",
-        contentEncoding: "utf8",
-        mimeType: "text/html",
-        sizeBytes: 5 * 1024 * 1024 + 1,
+      registerHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        handle: (request) => {
+          expect(request.command).toEqual({
+            type: "host.read_file",
+            path: filePath,
+          });
+          return {
+            ok: true,
+            result: {
+              path: filePath,
+              content: "",
+              contentEncoding: "utf8",
+              mimeType: "text/html",
+              sizeBytes: 5 * 1024 * 1024 + 1,
+            },
+          };
+        },
       });
 
-      const fileResponse = await filePromise;
+      const fileResponse = await harness.app.request(
+        rawFileUrl(thread.id, filePath),
+      );
       expect(fileResponse.status).toBe(413);
       await expect(readJson(fileResponse)).resolves.toEqual({
         code: "file_too_large",

@@ -1,12 +1,12 @@
 import { Buffer } from "node:buffer";
-import type { HostDaemonCommandResultByType } from "@bb/host-daemon-contract";
+import type { HostDaemonOnlineRpcResultByType } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 
 const OCTET_STREAM_MIME_TYPE = "application/octet-stream";
 
 export type DaemonFileReadResult =
-  | HostDaemonCommandResultByType["host.read_file"]
-  | HostDaemonCommandResultByType["host.read_file_relative"];
+  | HostDaemonOnlineRpcResultByType["host.read_file"]
+  | HostDaemonOnlineRpcResultByType["host.read_file_relative"];
 
 interface CreateDaemonFileContentResponseOptions {
   headers?: HeadersInit;

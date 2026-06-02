@@ -20,9 +20,9 @@ import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
 } from "../environments/environment-cleanup.js";
-import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
+import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import {
-  finalizeStoppedThreadAndAdvanceCleanup,
+  requestThreadStopAndFinalize,
   requestThreadStopIfNeeded,
 } from "../threads/thread-lifecycle.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
@@ -147,12 +147,10 @@ async function advanceProjectThreadsForDeletion(
       markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     }
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
-    if (environment) {
-      requestThreadStopIfNeeded(deps, thread, environment);
-    }
-    await finalizeStoppedThreadAndAdvanceCleanup(deps, {
+    requestThreadStopAndFinalize(deps, {
       cancelPendingCommand: false,
-      threadId: thread.id,
+      environment,
+      thread,
     });
   }
 }

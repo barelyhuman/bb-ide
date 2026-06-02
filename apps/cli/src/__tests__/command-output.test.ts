@@ -11,6 +11,7 @@ import {
   type ThreadGitDiffResponse,
 } from "@bb/domain";
 import type {
+  EnvironmentDiffResponse,
   ThreadTimelineResponse,
   TimelineRow,
   TimelineRowBase,
@@ -3135,7 +3136,11 @@ describe("CLI command output contracts", () => {
     };
     const get = vi.fn(async () => thread);
     const environmentGet = vi.fn(async () => environment);
-    const diffGet = vi.fn(async () => gitDiff);
+    const diffResponse: EnvironmentDiffResponse = {
+      outcome: "available",
+      diff: gitDiff,
+    };
+    const diffGet = vi.fn(async () => diffResponse);
     const timelineGet = makeEmptyTimelineGetMock();
     createClientMock.mockReturnValue(
       asServerClient({
@@ -3170,6 +3175,84 @@ describe("CLI command output contracts", () => {
         target: "all",
       },
     });
+  });
+
+  it("bb thread show --git-diff renders an available uncommitted diff response", async () => {
+    const thread: Thread = makeThread({
+      id: "thread-show-uncommitted-diff",
+      projectId: "proj-1",
+      providerId: "codex",
+      environmentId: "env-uncommitted-diff",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const environment = makeEnvironment({
+      id: "env-uncommitted-diff",
+      projectId: "proj-1",
+      hostId: "host-1",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const diffResponse: EnvironmentDiffResponse = {
+      outcome: "available",
+      diff: {
+        diff: "diff --git a/smoke.txt b/smoke.txt\nnew file mode 100644\n",
+        files: "A\tsmoke.txt\n",
+        mergeBaseRef: null,
+        shortstat: "1 file changed\n",
+        truncated: false,
+      },
+    };
+    const get = vi.fn(async () => thread);
+    const environmentGet = vi.fn(async () => environment);
+    const diffGet = vi.fn(async () => diffResponse);
+    const timelineGet = makeEmptyTimelineGetMock();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $get: environmentGet,
+                diff: { $get: diffGet },
+              },
+            },
+            threads: {
+              ":id": {
+                $get: get,
+                timeline: { $get: timelineGet },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "show",
+        "thread-show-uncommitted-diff",
+        "--git-diff",
+        "--diff-target",
+        "uncommitted",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(diffGet).toHaveBeenCalledWith({
+      param: { id: "env-uncommitted-diff" },
+      query: {
+        target: "uncommitted",
+      },
+    });
+    const output = collectLogLines(vi.mocked(console.log)).join("\n");
+    expect(output).toContain("Git diff:");
+    expect(output).toContain("A\tsmoke.txt");
+    expect(output).toContain("Summary: 1 file changed");
+    expect(output).toContain("diff --git a/smoke.txt b/smoke.txt");
   });
 });
 

@@ -71,6 +71,20 @@
       "when": 1780022553737,
       "tag": "0009_famous_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1780353769697,
+      "tag": "0010_brief_james_howlett",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1780372340947,
+      "tag": "0011_round_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

@@ -3,9 +3,11 @@ import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
+  cancelCommand,
   getPendingEnvironmentCommand,
   hasPendingHostCommandForThread,
   fetchCommands,
+  getActiveCommandAttemptForCommand,
   queueCommand,
   reportCommandResult,
 } from "../../src/data/commands.js";
@@ -31,17 +33,20 @@ describe("commands", () => {
 
     const cmd1 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: "{}",
     });
     const cmd2 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.diff",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
     const cmd3 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.commit",
+      sessionId: null,
+      type: "workspace.squash_merge",
       payload: "{}",
     });
 
@@ -59,12 +64,14 @@ describe("commands", () => {
 
     const cmd1 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
     const cmd2 = queueCommand(db, noopNotifier, {
       hostId: host2.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
 
@@ -81,17 +88,20 @@ describe("commands", () => {
 
     const cmd1 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: "{}",
     });
     const cmd2 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.diff",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
     const cmd3 = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.commit",
+      sessionId: null,
+      type: "workspace.squash_merge",
       payload: "{}",
     });
 
@@ -113,7 +123,8 @@ describe("commands", () => {
 
     const next = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
 
@@ -125,22 +136,30 @@ describe("commands", () => {
 
     queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
     queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.diff",
+      sessionId: null,
+      type: "workspace.squash_merge",
       payload: "{}",
     });
 
-    const fetched = fetchCommands(db, noopNotifier, { hostId: host.id });
+    const fetched = fetchCommands(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+    });
     expect(fetched).toHaveLength(2);
     expect(fetched[0]!.state).toBe("fetched");
     expect(fetched[0]!.fetchedAt).toBeTypeOf("number");
 
     // Re-fetch should return empty (already fetched)
-    const fetched2 = fetchCommands(db, noopNotifier, { hostId: host.id });
+    const fetched2 = fetchCommands(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+    });
     expect(fetched2).toHaveLength(0);
   });
 
@@ -149,27 +168,60 @@ describe("commands", () => {
 
     queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
-      payload: "{}",
-    });
-    queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      type: "workspace.diff",
-      payload: "{}",
-    });
-    queueCommand(db, noopNotifier, {
-      hostId: host.id,
+      sessionId: null,
       type: "workspace.commit",
+      payload: "{}",
+    });
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "workspace.squash_merge",
+      payload: "{}",
+    });
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "thread.stop",
       payload: "{}",
     });
 
     const fetched = fetchCommands(db, noopNotifier, {
       hostId: host.id,
       limit: 2,
+      sessionId: null,
     });
     expect(fetched).toHaveLength(2);
     expect(fetched[0]!.cursor).toBe(1);
     expect(fetched[1]!.cursor).toBe(2);
+  });
+
+  it("settles the active delivery attempt when canceling a fetched command", () => {
+    const { db, host } = setup();
+    const completedAt = 1_700_000_000_456;
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "thread.stop",
+      payload: "{}",
+    });
+
+    fetchCommands(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+    });
+    expect(getActiveCommandAttemptForCommand(db, command.id)).not.toBeNull();
+
+    const canceled = cancelCommand(db, {
+      commandId: command.id,
+      completedAt,
+    });
+
+    expect(canceled).toMatchObject({
+      completedAt,
+      id: command.id,
+      state: "error",
+    });
+    expect(getActiveCommandAttemptForCommand(db, command.id)).toBeNull();
   });
 
   it("finds pending commands for a specific thread and command type", () => {
@@ -177,6 +229,7 @@ describe("commands", () => {
 
     queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "turn.submit",
       payload: JSON.stringify({
         type: "turn.submit",
@@ -185,6 +238,7 @@ describe("commands", () => {
     });
     queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "thread.stop",
       payload: JSON.stringify({
         type: "thread.stop",
@@ -220,25 +274,27 @@ describe("commands", () => {
 
     const matching = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: JSON.stringify({
         environmentId: "env_target",
       }),
     });
     queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: JSON.stringify({
         environmentId: "env_other",
       }),
     });
 
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
 
     expect(
       getPendingEnvironmentCommand(db, {
         environmentId: "env_target",
-        type: "workspace.status",
+        type: "environment.cleanup_preflight",
       })?.id,
     ).toBe(matching.id);
 
@@ -252,7 +308,7 @@ describe("commands", () => {
     expect(
       getPendingEnvironmentCommand(db, {
         environmentId: "env_target",
-        type: "workspace.status",
+        type: "environment.cleanup_preflight",
       }),
     ).toBeNull();
   });
@@ -263,12 +319,13 @@ describe("commands", () => {
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
 
     // Fetch first
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
 
     const result = reportCommandResult(db, noopNotifier, {
       commandId: cmd.id,
@@ -288,11 +345,12 @@ describe("commands", () => {
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
 
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
 
     const result = reportCommandResult(db, noopNotifier, {
       commandId: cmd.id,

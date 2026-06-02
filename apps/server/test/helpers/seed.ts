@@ -28,6 +28,7 @@ import type {
   WorkspaceProvisionType,
 } from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
+import { registerTestHostRpcCapture } from "./commands.js";
 
 export interface SeedEventArgs<TType extends ThreadEventType> {
   createdAt?: number;
@@ -82,7 +83,7 @@ export function seedHostSession(
 }
 
 export function seedSession(deps: Pick<AppDeps, "db" | "hub">, hostId: string) {
-  return openSession(deps.db, deps.hub, {
+  const session = openSession(deps.db, deps.hub, {
     hostId,
     instanceId: "instance-1",
     hostName: "Test Host",
@@ -92,6 +93,8 @@ export function seedSession(deps: Pick<AppDeps, "db" | "hub">, hostId: string) {
     heartbeatIntervalMs: 5_000,
     leaseTimeoutMs: 30_000,
   });
+  registerTestHostRpcCapture(deps, { hostId, sessionId: session.id });
+  return session;
 }
 
 export function seedProjectWithSource(

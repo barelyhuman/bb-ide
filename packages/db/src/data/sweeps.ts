@@ -17,6 +17,7 @@ import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
   environmentOperations,
+  hostDaemonCommandAttempts,
   hostDaemonCommands,
   hostDaemonSessions,
   environments,
@@ -24,12 +25,6 @@ import {
   pendingInteractions,
   threadOperations,
 } from "../schema.js";
-
-/** Standard command TTL: 60 seconds */
-const STANDARD_COMMAND_TTL_MS = 60_000;
-
-/** Provision command TTL: 20 minutes */
-const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
 
 const LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD = JSON.stringify({
   errorCode: "command_expired",
@@ -78,6 +73,8 @@ const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_POLICY =
 type CompletedCommandState = "success" | "error";
 export const READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
   "environment.cleanup_preflight",
+] as const;
+const LEGACY_READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
   "host.file_metadata",
   "host.list_branches",
   "host.list_files",
@@ -87,13 +84,19 @@ export const READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
   "host.read_file_relative",
   "provider.list",
   "provider.list_models",
-  "replay.capture_get",
-  "replay.capture_list",
   "workspace.diff",
   "workspace.status",
 ] as const;
+export const COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES = [
+  ...READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+  // Historical rows for command types that now run only through online RPC.
+  ...LEGACY_READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+  // Historical replay capture rows from the removed durable replay protocol.
+  "replay.capture_get",
+  "replay.capture_list",
+] as const;
 type ReadOnlyHostDaemonCommandType =
-  (typeof READ_ONLY_HOST_DAEMON_COMMAND_TYPES)[number];
+  (typeof COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES)[number];
 type CompletedCommandRowDeleteParameters = [
   CompletedCommandState,
   CompletedCommandState,
@@ -195,8 +198,13 @@ export interface SweepExpiredLeasesResult {
 }
 
 export interface SweepExpiredCommandsResult {
-  expiredCommandIds: string[];
+  expiredCommands: ExpiredCommandAttempt[];
   requeued: number;
+}
+
+export interface ExpiredCommandAttempt {
+  attemptId: string;
+  commandId: string;
 }
 
 export interface ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs {
@@ -205,28 +213,46 @@ export interface ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement
 
 type SqlPredicate = ReturnType<typeof and>;
 
-function isExpiredFetchedCommandPredicate(currentTime: number): SqlPredicate {
+function isExpiredActiveCommandAttemptPredicate(
+  currentTime: number,
+): SqlPredicate {
   return and(
-    eq(hostDaemonCommands.state, "fetched"),
-    isNotNull(hostDaemonCommands.fetchedAt),
-    sql`(${currentTime} - ${hostDaemonCommands.fetchedAt}) >= CASE
-      WHEN ${hostDaemonCommands.type} = 'environment.provision' THEN ${PROVISION_COMMAND_TTL_MS}
-      ELSE ${STANDARD_COMMAND_TTL_MS}
-    END`,
+    eq(hostDaemonCommandAttempts.status, "active"),
+    sql`${hostDaemonCommandAttempts.leaseExpiresAt} <= ${currentTime}`,
   );
 }
 
-function isFirstExpiredCommandAttemptPredicate(currentTime: number): SqlPredicate {
+function hasNoExpiredCommandAttemptPredicate(): SqlPredicate {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM host_daemon_command_attempts AS previous_attempt
+    WHERE previous_attempt.command_id = ${hostDaemonCommandAttempts.commandId}
+      AND previous_attempt.status = 'expired'
+  )`;
+}
+
+function hasExpiredCommandAttemptPredicate(): SqlPredicate {
+  return sql`EXISTS (
+    SELECT 1
+    FROM host_daemon_command_attempts AS previous_attempt
+    WHERE previous_attempt.command_id = ${hostDaemonCommandAttempts.commandId}
+      AND previous_attempt.status = 'expired'
+  )`;
+}
+
+function isFirstExpiredCommandAttemptPredicate(
+  currentTime: number,
+): SqlPredicate {
   return and(
-    isExpiredFetchedCommandPredicate(currentTime),
-    eq(hostDaemonCommands.retryCount, 0),
+    isExpiredActiveCommandAttemptPredicate(currentTime),
+    hasNoExpiredCommandAttemptPredicate(),
   );
 }
 
 function isRetriedExpiredCommandPredicate(currentTime: number): SqlPredicate {
   return and(
-    isExpiredFetchedCommandPredicate(currentTime),
-    sql`${hostDaemonCommands.retryCount} >= 1`,
+    isExpiredActiveCommandAttemptPredicate(currentTime),
+    hasExpiredCommandAttemptPredicate(),
   );
 }
 
@@ -260,7 +286,7 @@ function deleteCompletedCommandRowsByCohort(
   db: DbConnection,
   args: PruneCompletedCommandRowsArgs & { includeReadOnlyTypes: boolean },
 ): PruneCompletedCommandsResult {
-  const readOnlyCommandPlaceholders = READ_ONLY_HOST_DAEMON_COMMAND_TYPES.map(
+  const readOnlyCommandPlaceholders = COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES.map(
     () => "?",
   ).join(", ");
   const typePredicate = args.includeReadOnlyTypes
@@ -285,7 +311,7 @@ function deleteCompletedCommandRowsByCohort(
     .run(
       "success",
       "error",
-      ...READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
+      ...COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES,
       args.completedBefore,
       args.limit,
     );
@@ -542,13 +568,15 @@ export function truncateCompletedEventItemOutputs(
 }
 
 /**
- * Sweep expired commands (fetched but not completed past TTL).
+ * Sweep expired command delivery attempts.
  *
- * - retryCount 0: re-queue (set state="pending", fetchedAt=null, retryCount=1)
- * - retryCount >= 1: return command ids for command-result settlement
+ * - first expired attempt: mark attempt expired and make the command fetchable
+ *   again;
+ * - later expired attempt: mark the exact attempt expired and return it for
+ *   command-result settlement.
  *
- * Retried expirations are terminalized by the server's normal command-result
- * settlement path so owner side effects and command completion remain atomic.
+ * Retried expirations are terminalized by the server with command-result owner
+ * side effects and command completion in one transaction.
  */
 export function sweepExpiredCommands(
   db: DbConnection,
@@ -556,27 +584,73 @@ export function sweepExpiredCommands(
   now?: number,
 ): SweepExpiredCommandsResult {
   const currentTime = now ?? Date.now();
-  const requeuedResult = db
-    .update(hostDaemonCommands)
-    .set({
-      state: "pending",
-      fetchedAt: null,
-      retryCount: 1,
-    })
-    .where(isFirstExpiredCommandAttemptPredicate(currentTime))
-    .run();
+  return db.transaction((tx) => {
+    const firstExpiredAttempts = tx
+      .select({
+        attemptId: hostDaemonCommandAttempts.id,
+        commandId: hostDaemonCommandAttempts.commandId,
+      })
+      .from(hostDaemonCommandAttempts)
+      .where(isFirstExpiredCommandAttemptPredicate(currentTime))
+      .all();
 
-  const expiredCommandIds = db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .where(isRetriedExpiredCommandPredicate(currentTime))
-    .all()
-    .map((row) => row.id);
+    if (firstExpiredAttempts.length > 0) {
+      tx.update(hostDaemonCommandAttempts)
+        .set({
+          status: "expired",
+          settledAt: currentTime,
+        })
+        .where(
+          inArray(
+            hostDaemonCommandAttempts.id,
+            firstExpiredAttempts.map((attempt) => attempt.attemptId),
+          ),
+        )
+        .run();
+      tx.update(hostDaemonCommands)
+        .set({
+          state: "pending",
+          fetchedAt: null,
+          sessionId: null,
+        })
+        .where(
+          inArray(
+            hostDaemonCommands.id,
+            firstExpiredAttempts.map((attempt) => attempt.commandId),
+          ),
+        )
+        .run();
+    }
 
-  return {
-    requeued: requeuedResult.changes,
-    expiredCommandIds,
-  };
+    const expiredCommands = tx
+      .select({
+        attemptId: hostDaemonCommandAttempts.id,
+        commandId: hostDaemonCommandAttempts.commandId,
+      })
+      .from(hostDaemonCommandAttempts)
+      .where(isRetriedExpiredCommandPredicate(currentTime))
+      .all();
+
+    if (expiredCommands.length > 0) {
+      tx.update(hostDaemonCommandAttempts)
+        .set({
+          status: "expired",
+          settledAt: currentTime,
+        })
+        .where(
+          inArray(
+            hostDaemonCommandAttempts.id,
+            expiredCommands.map((attempt) => attempt.attemptId),
+          ),
+        )
+        .run();
+    }
+
+    return {
+      requeued: firstExpiredAttempts.length,
+      expiredCommands,
+    };
+  });
 }
 
 /**

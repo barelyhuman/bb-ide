@@ -89,7 +89,8 @@ describe("database maintenance", () => {
 
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: "{}",
     });
     const commandActivity = getDatabaseMaintenanceActivity(db);

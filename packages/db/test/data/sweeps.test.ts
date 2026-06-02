@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createConnection } from "../../src/connection.js";
 import type { DbConnection } from "../../src/connection.js";
 import { createEventId } from "../../src/ids.js";
@@ -47,6 +47,7 @@ import {
   upsertThreadOperationRecord,
 } from "../../src/data/thread-operations.js";
 import {
+  cancelCommand,
   queueCommand,
   fetchCommands,
   reportCommandResult,
@@ -54,6 +55,7 @@ import {
 import {
   environments,
   events,
+  hostDaemonCommandAttempts,
   hostDaemonCommands,
   hostDaemonSessions,
   threads,
@@ -97,6 +99,28 @@ function markCommandLegacyExpired(args: MarkCommandLegacyExpiredArgs): void {
     .run();
 }
 
+function expireActiveCommandAttempt(
+  db: DbConnection,
+  commandId: string,
+  now = Date.now(),
+): string {
+  const expired = db
+    .update(hostDaemonCommandAttempts)
+    .set({ leaseExpiresAt: now - 1 })
+    .where(
+      and(
+        eq(hostDaemonCommandAttempts.commandId, commandId),
+        eq(hostDaemonCommandAttempts.status, "active"),
+      ),
+    )
+    .returning({ id: hostDaemonCommandAttempts.id })
+    .get();
+  if (!expired) {
+    throw new Error(`Command ${commandId} is missing an active attempt`);
+  }
+  return expired.id;
+}
+
 interface InsertCompletedItemEventArgs {
   createdAt: number;
   db: DbConnection;
@@ -134,41 +158,80 @@ function insertCompletedItemEvent(args: InsertCompletedItemEventArgs): string {
 }
 
 describe("sweepExpiredCommands", () => {
-  it("re-queues commands with retryCount 0", () => {
+  it("re-queues commands after the first expired delivery attempt", () => {
     const { db, host } = setup();
+    const now = Date.now();
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: JSON.stringify({ threadId: "thr_test" }),
     });
 
     // Fetch to mark as fetched
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    expireActiveCommandAttempt(db, cmd.id, now);
 
-    // Set fetchedAt to the past (more than 60s ago)
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 70_000 })
-      .where(eq(hostDaemonCommands.id, cmd.id))
-      .run();
-
-    const result = sweepExpiredCommands(db, noopNotifier);
+    const result = sweepExpiredCommands(db, noopNotifier, now);
     expect(result.requeued).toBe(1);
-    expect(result.expiredCommandIds).toEqual([]);
+    expect(result.expiredCommands).toEqual([]);
 
-    // Verify command is back to pending with retryCount=1
     const updated = db
       .select()
       .from(hostDaemonCommands)
       .where(eq(hostDaemonCommands.id, cmd.id))
       .get();
     expect(updated?.state).toBe("pending");
-    expect(updated?.retryCount).toBe(1);
     expect(updated?.fetchedAt).toBeNull();
   });
 
-  it("returns retried expired command ids without terminalizing them", () => {
+  it("does not expire attempts for canceled fetched commands", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "workspace.commit",
+      payload: JSON.stringify({ threadId: "thr_cancelled_sweep" }),
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+
+    const cancelled = cancelCommand(db, {
+      commandId: command.id,
+      completedAt: now,
+    });
+    expect(cancelled).toMatchObject({
+      id: command.id,
+      state: "error",
+    });
+    expect(
+      db
+        .select({ status: hostDaemonCommandAttempts.status })
+        .from(hostDaemonCommandAttempts)
+        .where(eq(hostDaemonCommandAttempts.commandId, command.id))
+        .all(),
+    ).toEqual([{ status: "settled" }]);
+
+    expect(sweepExpiredCommands(db, noopNotifier, now + 120_000)).toEqual({
+      requeued: 0,
+      expiredCommands: [],
+    });
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, command.id))
+        .get(),
+    ).toMatchObject({
+      id: command.id,
+      state: "error",
+    });
+  });
+
+  it("returns retried expired command attempts without terminalizing them", () => {
     const { db, host, project } = setup();
+    const now = Date.now();
     const thread = createThread(db, noopNotifier, {
       projectId: project.id,
       providerId: "codex",
@@ -177,20 +240,25 @@ describe("sweepExpiredCommands", () => {
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: JSON.stringify({ threadId: thread.id }),
     });
 
-    // Fetch, then manually set retryCount=1 and old fetchedAt
-    fetchCommands(db, noopNotifier, { hostId: host.id });
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
-      .where(eq(hostDaemonCommands.id, cmd.id))
-      .run();
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    expireActiveCommandAttempt(db, cmd.id, now);
+    expect(sweepExpiredCommands(db, noopNotifier, now)).toMatchObject({
+      requeued: 1,
+      expiredCommands: [],
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    const retriedAttemptId = expireActiveCommandAttempt(db, cmd.id, now);
 
-    const result = sweepExpiredCommands(db, noopNotifier);
+    const result = sweepExpiredCommands(db, noopNotifier, now);
     expect(result.requeued).toBe(0);
-    expect(result.expiredCommandIds).toEqual([cmd.id]);
+    expect(result.expiredCommands).toEqual([
+      { commandId: cmd.id, attemptId: retriedAttemptId },
+    ]);
 
     const updated = db
       .select()
@@ -201,6 +269,13 @@ describe("sweepExpiredCommands", () => {
       state: "fetched",
       resultPayload: null,
     });
+    expect(
+      db
+        .select({ status: hostDaemonCommandAttempts.status })
+        .from(hostDaemonCommandAttempts)
+        .where(eq(hostDaemonCommandAttempts.id, retriedAttemptId))
+        .get(),
+    ).toEqual({ status: "expired" });
 
     const updatedThread = db
       .select()
@@ -212,37 +287,36 @@ describe("sweepExpiredCommands", () => {
 
   it("uses 20-minute TTL for environment.provision commands", () => {
     const { db, host } = setup();
+    const now = Date.now();
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.provision",
       payload: "{}",
     });
 
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    const fetched = fetchCommands(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+    });
+    expect(fetched[0]?.leaseExpiresAt).toBe(
+      (fetched[0]?.deliveredAt ?? 0) + 20 * 60_000,
+    );
 
-    // 70 seconds ago (past standard TTL but within provision TTL)
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 70_000 })
-      .where(eq(hostDaemonCommands.id, cmd.id))
-      .run();
-
-    const result1 = sweepExpiredCommands(db, noopNotifier);
+    const result1 = sweepExpiredCommands(db, noopNotifier, now);
     expect(result1.requeued).toBe(0); // Not expired yet
-    expect(result1.expiredCommandIds).toEqual([]);
+    expect(result1.expiredCommands).toEqual([]);
 
-    // 21 minutes ago (past provision TTL)
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 21 * 60_000 })
-      .where(eq(hostDaemonCommands.id, cmd.id))
-      .run();
+    expireActiveCommandAttempt(db, cmd.id, now);
 
-    const result2 = sweepExpiredCommands(db, noopNotifier);
+    const result2 = sweepExpiredCommands(db, noopNotifier, now);
     expect(result2.requeued).toBe(1); // Now expired and re-queued
   });
 
   it("returns retried deleted or stop-pending thread command ids without thread side effects", () => {
     const { db, host, project } = setup();
+    const now = Date.now();
     const deletedThread = createThread(db, noopNotifier, {
       projectId: project.id,
       providerId: "codex",
@@ -261,29 +335,43 @@ describe("sweepExpiredCommands", () => {
 
     const deletedCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: JSON.stringify({ threadId: deletedThread.id }),
     });
     const stopPendingCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: JSON.stringify({ threadId: stopPendingThread.id }),
     });
 
-    fetchCommands(db, noopNotifier, { hostId: host.id });
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
-      .where(eq(hostDaemonCommands.id, deletedCommand.id))
-      .run();
-    db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
-      .where(eq(hostDaemonCommands.id, stopPendingCommand.id))
-      .run();
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    expireActiveCommandAttempt(db, deletedCommand.id, now);
+    expireActiveCommandAttempt(db, stopPendingCommand.id, now);
+    expect(sweepExpiredCommands(db, noopNotifier, now)).toMatchObject({
+      requeued: 2,
+      expiredCommands: [],
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
+    const deletedAttemptId = expireActiveCommandAttempt(
+      db,
+      deletedCommand.id,
+      now,
+    );
+    const stopPendingAttemptId = expireActiveCommandAttempt(
+      db,
+      stopPendingCommand.id,
+      now,
+    );
 
-    const result = sweepExpiredCommands(db, noopNotifier);
-    expect(result.expiredCommandIds).toHaveLength(2);
-    expect(result.expiredCommandIds).toEqual(
-      expect.arrayContaining([deletedCommand.id, stopPendingCommand.id]),
+    const result = sweepExpiredCommands(db, noopNotifier, now);
+    expect(result.expiredCommands).toHaveLength(2);
+    expect(result.expiredCommands).toEqual(
+      expect.arrayContaining([
+        { commandId: deletedCommand.id, attemptId: deletedAttemptId },
+        { commandId: stopPendingCommand.id, attemptId: stopPendingAttemptId },
+      ]),
     );
 
     expect(
@@ -318,6 +406,7 @@ describe("listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement", () =
 
     const environmentCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.destroy",
       payload: JSON.stringify({
         type: "environment.destroy",
@@ -346,6 +435,7 @@ describe("listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement", () =
 
     const threadCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "thread.stop",
       payload: JSON.stringify({
         type: "thread.stop",
@@ -380,6 +470,7 @@ describe("listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement", () =
     });
     const interactionCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "interactive.resolve",
       payload: JSON.stringify({
         type: "interactive.resolve",
@@ -405,6 +496,7 @@ describe("listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement", () =
 
     const wrongPayloadCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.destroy",
       payload: "{}",
     });
@@ -435,6 +527,7 @@ describe("listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement", () =
 
     const ownerlessCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "thread.stop",
       payload: "{}",
     });
@@ -472,22 +565,26 @@ describe("pruneCompletedCommandPayloads", () => {
 
     const staleSuccess = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: JSON.stringify({ stale: "success" }),
     });
     const staleError = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.diff",
+      sessionId: null,
+      type: "workspace.squash_merge",
       payload: JSON.stringify({ stale: "error" }),
     });
     const freshSuccess = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "host.list_files",
+      sessionId: null,
+      type: "thread.rename",
       payload: JSON.stringify({ fresh: true }),
     });
     const fetchedCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "host.read_file",
+      sessionId: null,
+      type: "thread.stop",
       payload: JSON.stringify({ fetched: true }),
     });
 
@@ -512,10 +609,11 @@ describe("pruneCompletedCommandPayloads", () => {
       completedAt: freshCompletedAt,
       resultPayload: JSON.stringify({ ok: true }),
     });
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
     const pendingCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "provider.list",
+      sessionId: null,
+      type: "thread.archive",
       payload: JSON.stringify({ pending: true }),
     });
 
@@ -589,7 +687,8 @@ describe("pruneCompletedCommandPayloads", () => {
     const completedBefore = Date.now();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "workspace.commit",
       payload: JSON.stringify({ prunable: true }),
     });
 
@@ -619,22 +718,26 @@ describe("pruneCompletedCommandRows", () => {
 
     const staleSuccess = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: "{}",
     });
     const staleError = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.diff",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: "{}",
     });
     const freshSuccess = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "workspace.commit",
       payload: "{}",
     });
     const fetchedCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "host.read_file",
+      sessionId: null,
+      type: "thread.stop",
       payload: "{}",
     });
 
@@ -656,7 +759,7 @@ describe("pruneCompletedCommandRows", () => {
       completedAt: freshCompletedAt,
       resultPayload: JSON.stringify({ ok: true }),
     });
-    fetchCommands(db, noopNotifier, { hostId: host.id });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
 
     expect(
       pruneCompletedReadOnlyCommandRows(db, {
@@ -688,11 +791,13 @@ describe("pruneCompletedCommandRows", () => {
 
     const readOnly = queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "workspace.status",
+      sessionId: null,
+      type: "environment.cleanup_preflight",
       payload: "{}",
     });
     const durable = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "workspace.commit",
       payload: "{}",
     });
@@ -727,12 +832,13 @@ describe("pruneCompletedCommandRows", () => {
     const completedBefore = now - 5_000;
 
     for (const type of [
-      "workspace.status",
-      "workspace.diff",
+      "environment.cleanup_preflight",
+      "environment.cleanup_preflight",
       "workspace.commit",
-    ]) {
+    ] as const) {
       const command = queueCommand(db, noopNotifier, {
         hostId: host.id,
+        sessionId: null,
         type,
         payload: "{}",
       });
@@ -764,7 +870,8 @@ describe("pruneCompletedCommandRows", () => {
     for (let index = 0; index < backlog; index += 1) {
       const command = queueCommand(db, noopNotifier, {
         hostId: host.id,
-        type: "workspace.status",
+        sessionId: null,
+        type: "environment.cleanup_preflight",
         payload: "{}",
       });
       reportCommandResult(db, noopNotifier, {

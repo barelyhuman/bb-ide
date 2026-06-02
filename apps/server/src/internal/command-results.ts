@@ -1,25 +1,26 @@
 import {
+  getActiveCommandAttempt,
   getCommand,
   reportCommandResult,
+  settleCommandAttemptInTransaction,
   type HostDaemonCommandRow,
 } from "@bb/db";
 import {
-  hostDaemonCommandTypeSchema,
-  type HostDaemonCommandResultReport,
-  type HostDaemonCommandType,
+  hostDaemonDurableCommandTypeSchema,
+  type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import {
   buildCommandResultSettlementDeps,
-  handleCommandResultSideEffects,
+  type CommandResultSideEffectReport,
   type CommandResultPostCommitAction,
   type CommandResultSideEffectsDeps,
-} from "./command-result-owners.js";
+} from "./command-result-side-effects.js";
+import { handleCommandResultSideEffects } from "./command-result-owners.js";
 import type { CommandResultWaiterResponse } from "./command-result-response.js";
-import {
-  dispatchCommandResultPostCommitActions,
-} from "./command-result-post-commit-actions.js";
+import { dispatchCommandResultPostCommitActions } from "./command-result-post-commit-actions.js";
 import { NotificationBuffer } from "../services/lib/notification-buffer.js";
+import { ApiError } from "../errors.js";
 
 interface MissingCommandResultSettlement {
   outcome: "missing";
@@ -29,6 +30,11 @@ interface StoredCommandResultSettlement {
   command: HostDaemonCommandRow;
   outcome: "stored";
   response: CommandResultWaiterResponse | null;
+}
+
+interface StaleCommandResultSettlement {
+  command: HostDaemonCommandRow;
+  outcome: "stale";
 }
 
 interface UpdatedCommandResultSettlement {
@@ -42,11 +48,12 @@ interface UpdatedCommandResultSettlement {
 type CommandResultSettlement =
   | MissingCommandResultSettlement
   | StoredCommandResultSettlement
+  | StaleCommandResultSettlement
   | UpdatedCommandResultSettlement;
 
 function buildCommandResultResponse(
   commandId: string,
-  report: HostDaemonCommandResultReport,
+  report: CommandResultSideEffectReport,
 ): CommandResultWaiterResponse {
   if (report.ok) {
     return {
@@ -67,7 +74,7 @@ function buildCommandResultResponse(
 }
 
 function buildCommandResultPayload(
-  report: HostDaemonCommandResultReport,
+  report: CommandResultSideEffectReport,
 ): string {
   return report.ok
     ? JSON.stringify(report.result)
@@ -84,8 +91,8 @@ const storedCommandErrorPayloadSchema = z.object({
 
 function parseStoredCommandType(
   commandRow: HostDaemonCommandRow,
-): HostDaemonCommandType {
-  return hostDaemonCommandTypeSchema.parse(commandRow.type);
+): HostDaemonDurableCommandType {
+  return hostDaemonDurableCommandTypeSchema.parse(commandRow.type);
 }
 
 function buildStoredCommandResultResponse(
@@ -123,7 +130,7 @@ function buildStoredCommandResultResponse(
 
 export async function handleCommandResult(
   deps: CommandResultSideEffectsDeps,
-  report: HostDaemonCommandResultReport,
+  report: CommandResultSideEffectReport,
 ): Promise<HostDaemonCommandRow | null> {
   let settlement: CommandResultSettlement;
   const notificationBuffer = new NotificationBuffer();
@@ -134,12 +141,30 @@ export async function handleCommandResult(
         if (!command) {
           return { outcome: "missing" };
         }
+        if (report.type !== command.type) {
+          throw new ApiError(
+            400,
+            "command_result_type_mismatch",
+            `Command ${command.id} is ${command.type}, not ${report.type}`,
+          );
+        }
 
         if (command.state === "success" || command.state === "error") {
           return {
             command,
             outcome: "stored",
             response: buildStoredCommandResultResponse(command),
+          };
+        }
+
+        const activeAttempt = getActiveCommandAttempt(tx, {
+          attemptId: report.attemptId,
+          commandId: command.id,
+        });
+        if (!activeAttempt) {
+          return {
+            command,
+            outcome: "stale",
           };
         }
 
@@ -162,6 +187,16 @@ export async function handleCommandResult(
         if (!updated) {
           throw new Error(
             `Command ${command.id} disappeared during result settlement`,
+          );
+        }
+        const settledAttempt = settleCommandAttemptInTransaction(tx, {
+          attemptId: report.attemptId,
+          commandId: command.id,
+          settledAt: report.completedAt,
+        });
+        if (!settledAttempt) {
+          throw new Error(
+            `Command ${command.id} active attempt disappeared during result settlement`,
           );
         }
         return {
@@ -193,6 +228,9 @@ export async function handleCommandResult(
 
   if (settlement.outcome === "updated") {
     notificationBuffer.flushInto(deps.hub);
+  }
+  if (settlement.outcome === "stale") {
+    return settlement.command;
   }
   if (settlement.response) {
     deps.hub.recordCommandResult(settlement.command.id, settlement.response);

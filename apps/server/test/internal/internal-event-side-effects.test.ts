@@ -494,6 +494,88 @@ describe("internal event side effects", () => {
     });
   });
 
+  it("interrupts pending interactions when a provider process exit error is reported", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-provider-process-exit-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-provider-process-exit-interaction",
+        providerThreadId: "provider-process-exit-interaction",
+      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-provider-process-exit-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-process-exit-interaction",
+            providerRequestId: "request-provider-process-exit-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-provider-process-exit-interaction",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
+      if (registered.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
+      }
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
+              event: {
+                type: "system/error",
+                threadId: thread.id,
+                scope: threadScope(),
+                code: "provider_process_exited",
+                message: 'Provider "codex" exited unexpectedly with code 1',
+                detail: "stderr:\nUsage limit reached. Please upgrade.",
+              },
+            }),
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        }),
+      ).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Provider process exited while awaiting user interaction; retry the thread to continue",
+      });
+    });
+  });
+
   it("does not error a stop-requested thread from provider process exit failure events", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
@@ -761,10 +843,7 @@ describe("internal event side effects", () => {
       const preferencesContent = "child completion updated prefs\n";
       const readResponse = await reportQueuedCommandSuccess(
         harness,
-        {
-          command: preferencesReadCommand.command,
-          row: preferencesReadCommand.row,
-        },
+        preferencesReadCommand,
         {
           path: managerPreferencesPath,
           content: preferencesContent,
@@ -1221,18 +1300,6 @@ describe("internal event side effects", () => {
 
       expect(
         listQueuedThreadCommands(harness, "turn.submit", managerThread.id),
-      ).toHaveLength(1);
-      expect(
-        harness.db
-          .select({ id: hostDaemonCommands.id })
-          .from(hostDaemonCommands)
-          .where(
-            and(
-              eq(hostDaemonCommands.type, "host.read_file"),
-              sql`json_extract(${hostDaemonCommands.payload}, '$.path') = ${managerPreferencesPath}`,
-            ),
-          )
-          .all(),
       ).toHaveLength(1);
       expect(
         harness.db

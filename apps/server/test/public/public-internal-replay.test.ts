@@ -2,10 +2,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { events, hostDaemonCommands, threads } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
-import {
-  hostDaemonCommandSchema,
-  type HostDaemonCommand,
-} from "@bb/host-daemon-contract";
+import type { HostDaemonOnlineRpcCommand } from "@bb/host-daemon-contract";
 import {
   createReplayCaptureId,
   type ReplayCaptureManifest,
@@ -35,7 +32,7 @@ const replayListResponseSchema = z.object({
 });
 
 const replayRunResponseSchema = z.object({
-  commandId: z.string(),
+  runId: z.string(),
   projectId: z.string(),
   replayThreadId: z.string(),
 });
@@ -43,18 +40,21 @@ const replayRunResponseSchema = z.object({
 const REPLAY_CAPTURE_ROUTE = "/api/v1/development-only/replay/captures";
 
 type ReplayCaptureGetCommand = Extract<
-  HostDaemonCommand,
-  { type: "replay.capture_get" }
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "capture-get" }
 >;
 type ReplayCaptureListCommand = Extract<
-  HostDaemonCommand,
-  { type: "replay.capture_list" }
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "capture-list" }
 >;
 type ReplayCaptureDeleteCommand = Extract<
-  HostDaemonCommand,
-  { type: "replay.capture_delete" }
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "capture-delete" }
 >;
-type ReplayRunCommand = Extract<HostDaemonCommand, { type: "replay.run" }>;
+type ReplayRunCommand = Extract<
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "run" }
+>;
 
 function captureManifest(args: {
   captureId: string;
@@ -123,12 +123,21 @@ async function waitForReplayCaptureListCommand(
   const queued = await waitForQueuedCommand(
     harness,
     ({ command, row }) =>
-      row.hostId === hostId && command.type === "replay.capture_list",
+      row.hostId === hostId &&
+      command.type === "development.replay" &&
+      command.operation === "capture-list",
   );
-  if (queued.command.type !== "replay.capture_list") {
-    throw new Error("Expected replay.capture_list command");
+  if (
+    queued.command.type !== "development.replay" ||
+    queued.command.operation !== "capture-list"
+  ) {
+    throw new Error("Expected development replay capture-list RPC");
   }
-  return { command: queued.command, row: queued.row };
+  return {
+    command: queued.command,
+    row: queued.row,
+    rpcRequest: queued.rpcRequest,
+  };
 }
 
 async function waitForReplayCaptureGetCommand(
@@ -138,12 +147,21 @@ async function waitForReplayCaptureGetCommand(
   const queued = await waitForQueuedCommand(
     harness,
     ({ command, row }) =>
-      row.hostId === hostId && command.type === "replay.capture_get",
+      row.hostId === hostId &&
+      command.type === "development.replay" &&
+      command.operation === "capture-get",
   );
-  if (queued.command.type !== "replay.capture_get") {
-    throw new Error("Expected replay.capture_get command");
+  if (
+    queued.command.type !== "development.replay" ||
+    queued.command.operation !== "capture-get"
+  ) {
+    throw new Error("Expected development replay capture-get RPC");
   }
-  return { command: queued.command, row: queued.row };
+  return {
+    command: queued.command,
+    row: queued.row,
+    rpcRequest: queued.rpcRequest,
+  };
 }
 
 async function waitForReplayCaptureDeleteCommand(
@@ -153,12 +171,21 @@ async function waitForReplayCaptureDeleteCommand(
   const queued = await waitForQueuedCommand(
     harness,
     ({ command, row }) =>
-      row.hostId === hostId && command.type === "replay.capture_delete",
+      row.hostId === hostId &&
+      command.type === "development.replay" &&
+      command.operation === "capture-delete",
   );
-  if (queued.command.type !== "replay.capture_delete") {
-    throw new Error("Expected replay.capture_delete command");
+  if (
+    queued.command.type !== "development.replay" ||
+    queued.command.operation !== "capture-delete"
+  ) {
+    throw new Error("Expected development replay capture-delete RPC");
   }
-  return { command: queued.command, row: queued.row };
+  return {
+    command: queued.command,
+    row: queued.row,
+    rpcRequest: queued.rpcRequest,
+  };
 }
 
 async function waitForReplayRunCommand(
@@ -168,12 +195,21 @@ async function waitForReplayRunCommand(
   const queued = await waitForQueuedCommand(
     harness,
     ({ command, row }) =>
-      row.hostId === hostId && command.type === "replay.run",
+      row.hostId === hostId &&
+      command.type === "development.replay" &&
+      command.operation === "run",
   );
-  if (queued.command.type !== "replay.run") {
-    throw new Error("Expected replay.run command");
+  if (
+    queued.command.type !== "development.replay" ||
+    queued.command.operation !== "run"
+  ) {
+    throw new Error("Expected development replay run RPC");
   }
-  return { command: queued.command, row: queued.row };
+  return {
+    command: queued.command,
+    row: queued.row,
+    rpcRequest: queued.rpcRequest,
+  };
 }
 
 describe("public development-only replay routes", () => {
@@ -324,7 +360,8 @@ describe("public development-only replay routes", () => {
       );
       const queued = await waitForReplayCaptureDeleteCommand(harness, host.id);
       expect(queued.command).toEqual({
-        type: "replay.capture_delete",
+        type: "development.replay",
+        operation: "capture-delete",
         captureId,
       });
       const reportResponse = await reportQueuedCommandSuccess(
@@ -421,14 +458,14 @@ describe("public development-only replay routes", () => {
           .select()
           .from(hostDaemonCommands)
           .all()
-          .filter((row) => row.type === "replay.run"),
+          .filter((row) => row.type === "development.replay"),
       ).toHaveLength(0);
     });
   });
 
-  it("creates a replay thread and queues a replay command from capture metadata", async () => {
+  it("creates a replay thread and starts replay from capture metadata", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host } = seedHostSession(harness.deps, {
         id: "host-replay-run",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -474,15 +511,18 @@ describe("public development-only replay routes", () => {
       );
       expect(reportResponse.status).toBe(200);
 
-      const response = await responsePromise;
-
-      expect(response.status).toBe(201);
-      const body = replayRunResponseSchema.parse(await readJson(response));
-      expect(body.projectId).toBe(project.id);
+      const replayCommand = await waitForReplayRunCommand(harness, host.id);
+      expect(replayCommand.command).toMatchObject({
+        type: "development.replay",
+        operation: "run",
+        captureId,
+        environmentId: environment.id,
+        speed: 10,
+      });
       const replayThread = harness.db
         .select()
         .from(threads)
-        .where(eq(threads.id, body.replayThreadId))
+        .where(eq(threads.id, replayCommand.command.threadId))
         .get();
       expect(replayThread).toMatchObject({
         projectId: project.id,
@@ -496,7 +536,7 @@ describe("public development-only replay routes", () => {
         .from(events)
         .where(
           and(
-            eq(events.threadId, body.replayThreadId),
+            eq(events.threadId, replayCommand.command.threadId),
             eq(events.type, "client/turn/requested"),
           ),
         )
@@ -510,22 +550,35 @@ describe("public development-only replay routes", () => {
       expect(replayRequestData.input).toEqual([
         { type: "text", text: "Original prompt" },
       ]);
-      const replayCommand = await waitForReplayRunCommand(harness, host.id);
-      expect(replayCommand.row.id).toBe(body.commandId);
-      const queuedRow = replayCommand.row;
-      expect(queuedRow?.hostId).toBe(host.id);
-      expect(queuedRow?.sessionId).toBe(session.id);
-      const command = hostDaemonCommandSchema.parse(
-        JSON.parse(queuedRow?.payload ?? "{}"),
+      expect(replayCommand.command.requestId).toBe(
+        replayRequestData.requestId,
       );
-      expect(command).toEqual({
-        type: "replay.run",
-        captureId,
-        environmentId: environment.id,
-        threadId: body.replayThreadId,
-        requestId: replayRequestData.requestId,
-        speed: 10,
+      const runReportResponse = await reportQueuedCommandSuccess(
+        harness,
+        replayCommand,
+        {},
+        {
+          hostId: host.id,
+        },
+      );
+      expect(runReportResponse.status).toBe(200);
+
+      const response = await responsePromise;
+
+      expect(response.status).toBe(201);
+      const body = replayRunResponseSchema.parse(await readJson(response));
+      expect(body).toEqual({
+        runId: replayRequestData.requestId,
+        replayThreadId: replayCommand.command.threadId,
+        projectId: project.id,
       });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all()
+          .filter((row) => row.type === "development.replay"),
+      ).toHaveLength(0);
     });
   });
 
@@ -584,7 +637,7 @@ describe("public development-only replay routes", () => {
           .select()
           .from(hostDaemonCommands)
           .all()
-          .filter((row) => row.type === "replay.run"),
+          .filter((row) => row.type === "development.replay"),
       ).toHaveLength(0);
     });
   });
@@ -653,7 +706,7 @@ describe("public development-only replay routes", () => {
           .select()
           .from(hostDaemonCommands)
           .all()
-          .filter((row) => row.type === "replay.run"),
+          .filter((row) => row.type === "development.replay"),
       ).toHaveLength(0);
     });
   });

@@ -34,7 +34,7 @@ import {
   threadEnvironmentUnavailableDetails,
   throwThreadEnvironmentUnavailable,
 } from "../../services/lib/lifecycle-api-errors.js";
-import { queueCommandAndWait } from "../../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../../services/hosts/online-rpc.js";
 import {
   createDaemonFileContentResponse,
   type DaemonFileReadResult,
@@ -310,7 +310,7 @@ async function serveThreadStorageRawFile(
   const target = await requireThreadStorageTarget(deps, { threadId });
 
   try {
-    const result = await queueCommandAndWait(deps, {
+    const result = await callHostRetryableOnlineRpc(deps, {
       hostId: target.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
@@ -338,7 +338,7 @@ async function serveThreadWorktreeRawFile(
   const environment = requireReadyEnvironment(deps.db, thread.environmentId);
 
   try {
-    const result = await queueCommandAndWait(deps, {
+    const result = await callHostRetryableOnlineRpc(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
@@ -535,7 +535,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       const limit = parseThreadStorageFileListLimit(query.limit);
 
       try {
-        const result = await queueCommandAndWait(deps, {
+        const result = await callHostRetryableOnlineRpc(deps, {
           hostId: target.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
@@ -588,7 +588,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       });
 
       try {
-        const result = await queueCommandAndWait(deps, {
+        const result = await callHostRetryableOnlineRpc(deps, {
           hostId: target.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
@@ -628,7 +628,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       });
 
       try {
-        const result = await queueCommandAndWait(deps, {
+        const result = await callHostRetryableOnlineRpc(deps, {
           hostId: target.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
@@ -657,7 +657,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       const environment = requireEnvironment(deps.db, thread.environmentId);
 
       try {
-        const result = await queueCommandAndWait(deps, {
+        const result = await callHostRetryableOnlineRpc(deps, {
           hostId: environment.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {

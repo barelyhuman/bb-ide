@@ -14,7 +14,7 @@ import {
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
-import { queueCommandAndWait } from "../hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../hosts/online-rpc.js";
 import {
   computeNextScheduledTime,
   ScheduleValidationError,
@@ -235,7 +235,7 @@ export async function syncManagerThreadSchedules(
   let content: string;
   let sizeBytes: number;
   try {
-    const result = await queueCommandAndWait(deps, {
+    const result = await callHostRetryableOnlineRpc(deps, {
       hostId: environment.hostId,
       timeoutMs: 10_000,
       command: {

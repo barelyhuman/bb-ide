@@ -15,7 +15,7 @@ import { renderTemplate } from "@bb/templates";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import type { LoggedWorkSessionDeps } from "../../types.js";
-import { queueCommandAndWait } from "../hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../hosts/online-rpc.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
 
 export const MANAGER_PREFERENCES_FILE_KEY = "manager-preferences";
@@ -131,7 +131,7 @@ async function readHostFileMetadata(
   deps: LoggedWorkSessionDeps,
   args: ReadManagerPreferencesFileArgs & { filePath: string },
 ): Promise<LocalFileMetadata> {
-  const result = await queueCommandAndWait(deps, {
+  const result = await callHostRetryableOnlineRpc(deps, {
     hostId: args.hostId,
     timeoutMs: COMMAND_TIMEOUT_MS,
     command: {
@@ -155,7 +155,7 @@ async function readManagerPreferencesFile(
     MANAGER_PREFERENCES_FILE_NAME,
   );
   try {
-    const result = await queueCommandAndWait(deps, {
+    const result = await callHostRetryableOnlineRpc(deps, {
       hostId: args.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {

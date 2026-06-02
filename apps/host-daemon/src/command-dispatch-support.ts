@@ -8,6 +8,7 @@ import type { AvailableModel, ProviderInfo } from "@bb/domain";
 import type { BufferedEventInput } from "./event-buffer.js";
 import type {
   HostDaemonCommand,
+  HostDaemonOnlineRpcCommand,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import type {
@@ -20,8 +21,10 @@ import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 import type { TerminalManager } from "./terminals/terminal-manager.js";
 import type { FetchProjectAttachment } from "./project-attachments.js";
 
-export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
-  HostDaemonCommand,
+type DispatchCommand = HostDaemonCommand | HostDaemonOnlineRpcCommand;
+
+export type CommandOf<TType extends DispatchCommand["type"]> = Extract<
+  DispatchCommand,
   { type: TType }
 >;
 

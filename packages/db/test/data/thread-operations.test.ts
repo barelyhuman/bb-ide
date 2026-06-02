@@ -75,6 +75,7 @@ describe("thread operations", () => {
     const { db, environment, host, thread } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.provision",
       payload: JSON.stringify({
         type: "environment.provision",
@@ -150,6 +151,7 @@ describe("thread operations", () => {
     const { db, host, thread } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "thread.stop",
       payload: JSON.stringify({
         type: "thread.stop",
@@ -200,6 +202,7 @@ describe("thread operations", () => {
     const { db, host, thread } = setup();
     const firstCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "thread.stop",
       payload: JSON.stringify({
         type: "thread.stop",
@@ -209,6 +212,7 @@ describe("thread operations", () => {
     });
     const secondCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "thread.stop",
       payload: JSON.stringify({
         type: "thread.stop",

@@ -1,13 +1,23 @@
 import type {
   HostDaemonCommand,
   HostDaemonCommandEnvelope,
+  HostDaemonOnlineRpcRequestMessage,
+  HostDaemonOnlineRpcResponseMessage,
+  HostDaemonOnlineRpcResultForCommand,
+  HostDaemonOnlineRpcCommand,
   HostDaemonCommandResult,
+  HostDaemonCommandResultReport,
   HostDaemonCommandResultReportWithoutSession,
 } from "@bb/host-daemon-contract";
 import { performance } from "node:perf_hooks";
-import { shouldFlushEventsBeforeReportingCommandResult } from "@bb/host-daemon-contract";
+import {
+  hostDaemonCommandResultReportSchema,
+  parseHostDaemonOnlineRpcResultForCommand,
+  shouldFlushEventsBeforeReportingCommandResult,
+} from "@bb/host-daemon-contract";
 import {
   dispatchCommand,
+  dispatchOnlineRpcCommand,
   getErrorCode,
   type CommandDispatchOptions,
 } from "./command-dispatch.js";
@@ -56,6 +66,7 @@ interface ExecutedCommandResult {
 }
 
 interface CommandResultBaseReport {
+  attemptId: string;
   commandId: string;
   type: HostDaemonCommand["type"];
 }
@@ -111,6 +122,13 @@ function roundDurationMs(durationMs: number): number {
   return Math.round(durationMs * 10) / 10;
 }
 
+function removeReportSession(
+  report: HostDaemonCommandResultReport,
+): HostDaemonCommandResultReportWithoutSession {
+  const { sessionId: _sessionId, ...withoutSession } = report;
+  return withoutSession;
+}
+
 function elapsedMs(startedAtMs: number): number {
   return performance.now() - startedAtMs;
 }
@@ -148,6 +166,69 @@ export class CommandRouter {
     const tasks = commands.map((command) => this.dispatchEnvelope(command));
     await Promise.all(tasks);
     await this.reportingPromise;
+  }
+
+  async handleOnlineRpcRequest(
+    message: HostDaemonOnlineRpcRequestMessage,
+  ): Promise<HostDaemonOnlineRpcResponseMessage> {
+    const handlerStartedAtMs = performance.now();
+    try {
+      const result = await this.executeOnlineRpcCommand(message.command);
+      this.logOnlineRpc({
+        commandType: message.command.type,
+        handlerMs: elapsedMs(handlerStartedAtMs),
+        ok: true,
+      });
+      return {
+        type: "host-rpc.response",
+        requestId: message.requestId,
+        commandType: message.command.type,
+        ok: true,
+        result,
+      };
+    } catch (error) {
+      const errorCode = getErrorCode(error);
+      if (!isExpectedCommandDispatchError(error)) {
+        this.logger.warn(
+          {
+            type: message.command.type,
+            err: error,
+          },
+          "online host RPC failed",
+        );
+      }
+      this.logOnlineRpc({
+        commandType: message.command.type,
+        errorCode,
+        handlerMs: elapsedMs(handlerStartedAtMs),
+        ok: false,
+      });
+      return {
+        type: "host-rpc.response",
+        requestId: message.requestId,
+        commandType: message.command.type,
+        ok: false,
+        errorCode,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private executeOnlineRpcCommand<TCommand extends HostDaemonOnlineRpcCommand>(
+    command: TCommand,
+  ): Promise<HostDaemonOnlineRpcResultForCommand<TCommand>> {
+    const environmentLaneMode = this.getEnvironmentLaneMode(command);
+    const result =
+      environmentLaneMode && "environmentId" in command
+        ? this.runInEnvironmentLane(
+            command.environmentId,
+            environmentLaneMode,
+            () => dispatchOnlineRpcCommand(command, this.createDispatchOptions()),
+          )
+        : dispatchOnlineRpcCommand(command, this.createDispatchOptions());
+    return result.then((value) =>
+      parseHostDaemonOnlineRpcResultForCommand(command, value),
+    );
   }
 
   private async dispatchEnvelope(
@@ -296,24 +377,11 @@ export class CommandRouter {
     const handlerStartedAtMs = performance.now();
     const command = envelope.command;
     const baseReport = {
+      attemptId: envelope.attemptId,
       commandId: envelope.id,
       type: command.type,
     };
-    const dispatchOptions: CommandDispatchOptions = {
-      fetchProjectAttachment: this.options.fetchProjectAttachment,
-      runtimeManager: this.options.runtimeManager,
-      terminalManager: this.options.terminalManager,
-      dataDir: this.options.dataDir,
-      eventSink: this.options.eventSink,
-      listModels: this.options.listModels,
-      resolveInteractiveRequest: this.options.resolveInteractiveRequest,
-      recordReplayCaptureThreadMetadata:
-        this.options.recordReplayCaptureThreadMetadata,
-      recordReplayCaptureTurnRequest:
-        this.options.recordReplayCaptureTurnRequest,
-      replayTasks: this.options.replayTasks,
-      threadStorageRootPath: this.options.threadStorageRootPath,
-    };
+    const dispatchOptions = this.createDispatchOptions();
 
     try {
       const result = await dispatchCommand(command, dispatchOptions);
@@ -347,17 +415,37 @@ export class CommandRouter {
     }
   }
 
+  private createDispatchOptions(): CommandDispatchOptions {
+    return {
+      fetchProjectAttachment: this.options.fetchProjectAttachment,
+      runtimeManager: this.options.runtimeManager,
+      terminalManager: this.options.terminalManager,
+      dataDir: this.options.dataDir,
+      eventSink: this.options.eventSink,
+      listModels: this.options.listModels,
+      resolveInteractiveRequest: this.options.resolveInteractiveRequest,
+      recordReplayCaptureThreadMetadata:
+        this.options.recordReplayCaptureThreadMetadata,
+      recordReplayCaptureTurnRequest:
+        this.options.recordReplayCaptureTurnRequest,
+      replayTasks: this.options.replayTasks,
+      threadStorageRootPath: this.options.threadStorageRootPath,
+    };
+  }
+
   private createSuccessfulCommandResult(
     args: CreateSuccessfulCommandResultArgs,
   ): ExecutedCommandResult {
+    const result = hostDaemonCommandResultReportSchema.parse({
+      ...args.baseReport,
+      sessionId: "local-result-validation",
+      completedAt: this.now(),
+      ok: true,
+      result: args.result,
+    });
     return {
       handlerMs: elapsedMs(args.handlerStartedAtMs),
-      result: {
-        ...args.baseReport,
-        completedAt: this.now(),
-        ok: true,
-        result: args.result,
-      },
+      result: removeReportSession(result),
     };
   }
 
@@ -401,6 +489,29 @@ export class CommandRouter {
         totalMs: roundDurationMs(timing.totalMs),
       },
       "Host command lifecycle",
+    );
+  }
+
+  private logOnlineRpc(args: {
+    commandType: HostDaemonOnlineRpcCommand["type"];
+    errorCode?: string;
+    handlerMs: number;
+    ok: boolean;
+  }): void {
+    const shouldLog =
+      args.handlerMs >= HOST_COMMAND_LIFECYCLE_LOG_THRESHOLD_MS || !args.ok;
+    if (!shouldLog) {
+      return;
+    }
+
+    this.logger.debug?.(
+      {
+        commandType: args.commandType,
+        ...(args.errorCode ? { errorCode: args.errorCode } : {}),
+        handlerMs: roundDurationMs(args.handlerMs),
+        ok: args.ok,
+      },
+      "Online host RPC",
     );
   }
 
@@ -516,7 +627,7 @@ export class CommandRouter {
   }
 
   private getEnvironmentLaneMode(
-    command: HostDaemonCommandEnvelope["command"],
+    command: HostDaemonCommand | HostDaemonOnlineRpcCommand,
   ): EnvironmentLaneMode | null {
     // Execution lanes protect per-environment workspace mutation ordering.
     // `shouldFlushEventsBeforeReportingCommandResult` is a separate

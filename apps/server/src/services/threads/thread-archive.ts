@@ -5,8 +5,7 @@ import {
 import type { Environment, Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import {
-  requestEnvironmentCleanup,
-  requestEnvironmentCleanupAdvance,
+  requestEnvironmentCleanupAndAdvance,
   wouldCleanupEnvironment,
   wouldCleanupEnvironmentWithNoLiveThreads,
 } from "../environments/environment-cleanup.js";
@@ -132,10 +131,7 @@ export function archiveEnvironmentThreads(
       environmentId: args.environment.id,
     })
   ) {
-    requestEnvironmentCleanup(deps, {
-      environmentId: args.environment.id,
-    });
-    requestEnvironmentCleanupAdvance(deps, {
+    requestEnvironmentCleanupAndAdvance(deps, {
       environmentId: args.environment.id,
     });
   }
@@ -202,8 +198,7 @@ export function archiveManagerThreads(
         environmentId,
       })
     ) {
-      requestEnvironmentCleanup(deps, { environmentId });
-      requestEnvironmentCleanupAdvance(deps, { environmentId });
+      requestEnvironmentCleanupAndAdvance(deps, { environmentId });
     }
   }
 

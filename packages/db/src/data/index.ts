@@ -315,8 +315,13 @@ export type {
 
 export {
   cancelCommand,
+  cancelCommandInTransaction,
   deleteQueuedCommandInTransaction,
+  getActiveCommandAttempt,
+  getActiveCommandAttemptForCommand,
+  getCommandAttempt,
   getCommand,
+  getHostDaemonCommandLeaseMs,
   getPendingEnvironmentCommand,
   hasExistingThreadArchiveCommand,
   hasPendingHostCommandForThread,
@@ -324,15 +329,21 @@ export {
   queueCommandInTransaction,
   fetchCommands,
   reportCommandResult,
+  settleCommandAttemptInTransaction,
 } from "./commands.js";
 export type {
   DeleteQueuedCommandInTransactionArgs,
   FetchCommandsOptions,
+  FetchedHostDaemonCommandRow,
+  GetActiveCommandAttemptArgs,
+  GetCommandAttemptArgs,
   HasExistingThreadArchiveCommandArgs,
   HasPendingHostCommandForThreadArgs,
+  HostDaemonCommandAttemptRow,
   QueueCommandInput,
   HostDaemonCommandRow,
   ReportCommandResultInput,
+  SettleCommandAttemptInTransactionArgs,
 } from "./commands.js";
 
 export {
@@ -373,7 +384,6 @@ export {
   getActivePendingInteractionForThread,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
-  interruptPendingInteractionsForSessionIds,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
@@ -383,7 +393,6 @@ export {
 } from "./pending-interactions.js";
 export type {
   CreatePendingInteractionInput,
-  InterruptPendingInteractionsForSessionIdsArgs,
   InterruptPendingInteractionsForThreadIdsArgs,
   InterruptPendingInteractionsForThreadsArgs,
   ListPendingInteractionsArgs,
@@ -464,6 +473,7 @@ export type {
   PruneCompletedCommandsResult,
   PruneCompletedCommandPayloadsArgs,
   PruneCompletedCommandPayloadsResult,
+  ExpiredCommandAttempt,
   ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs,
   SweepExpiredCommandsResult,
   SweepExpiredLeasesResult,

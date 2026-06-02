@@ -280,7 +280,7 @@ describe("CommandRouter", () => {
     );
   });
 
-  it("does not flush unrelated buffered events before reporting read-only workspace command results", async () => {
+  it("does not flush unrelated buffered events before returning read-only workspace RPC results", async () => {
     const calls: string[] = [];
     const flushDeferred = createDeferred<void>();
     const eventSink = {
@@ -311,22 +311,28 @@ describe("CommandRouter", () => {
       logger: createLogger(),
     });
 
-    await router.handleCommands([
-      {
-        id: "provider-list",
-        cursor: 1,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-status",
+      command: {
+        type: "workspace.status",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
         },
       },
-    ]);
+    });
 
-    expect(calls).toEqual(["report"]);
+    expect(response).toEqual(
+      expect.objectContaining({
+        commandType: "workspace.status",
+        ok: true,
+        requestId: "rpc-status",
+        type: "host-rpc.response",
+      }),
+    );
+    expect(calls).toEqual([]);
     expect(eventSink.flush).not.toHaveBeenCalled();
     flushDeferred.resolve(undefined);
   });
@@ -348,27 +354,27 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "read-missing-file",
-        cursor: 1,
-        command: {
-          type: "host.read_file",
-          path: missingPath,
-          rootPath,
-        },
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-read-missing-file",
+      command: {
+        type: "host.read_file",
+        path: missingPath,
+        rootPath,
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "read-missing-file",
+        commandType: "host.read_file",
         errorCode: "ENOENT",
         errorMessage: `Path does not exist: ${missingPath}`,
         ok: false,
-        type: "host.read_file",
+        requestId: "rpc-read-missing-file",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -390,27 +396,27 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "read-missing-root-file",
-        cursor: 1,
-        command: {
-          type: "host.read_file",
-          path: missingPath,
-          rootPath,
-        },
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-read-missing-root-file",
+      command: {
+        type: "host.read_file",
+        path: missingPath,
+        rootPath,
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "read-missing-root-file",
+        commandType: "host.read_file",
         errorCode: "ENOENT",
         errorMessage: `Path does not exist: ${missingPath}`,
         ok: false,
-        type: "host.read_file",
+        requestId: "rpc-read-missing-root-file",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -431,28 +437,28 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "read-missing-relative-index",
-        cursor: 1,
-        command: {
-          type: "host.read_file_relative",
-          rootPath,
-          path: "index.html",
-          dotfiles: "deny",
-        },
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-read-missing-relative-index",
+      command: {
+        type: "host.read_file_relative",
+        rootPath,
+        path: "index.html",
+        dotfiles: "deny",
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "read-missing-relative-index",
+        commandType: "host.read_file_relative",
         errorCode: "ENOENT",
         errorMessage: "Path does not exist: index.html",
         ok: false,
-        type: "host.read_file_relative",
+        requestId: "rpc-read-missing-relative-index",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -478,26 +484,25 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "status-missing-workspace",
-        cursor: 1,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-missing",
-          workspaceContext: {
-            workspacePath: missingPath,
-            workspaceProvisionType: "managed-worktree",
-          },
-          mergeBaseBranch: "main",
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-status-missing-workspace",
+      command: {
+        type: "workspace.status",
+        environmentId: "env-missing",
+        workspaceContext: {
+          workspacePath: missingPath,
+          workspaceProvisionType: "managed-worktree",
         },
+        mergeBaseBranch: "main",
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "status-missing-workspace",
+        commandType: "workspace.status",
         ok: true,
+        requestId: "rpc-status-missing-workspace",
         result: {
           outcome: "unavailable",
           failure: {
@@ -506,9 +511,10 @@ describe("CommandRouter", () => {
             message: `Managed workspace path does not exist: ${missingPath}`,
           },
         },
-        type: "workspace.status",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -534,28 +540,27 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "diff-missing-workspace",
-        cursor: 1,
-        command: {
-          type: "workspace.diff",
-          environmentId: "env-missing",
-          workspaceContext: {
-            workspacePath: missingPath,
-            workspaceProvisionType: "managed-worktree",
-          },
-          target: { type: "all", mergeBaseBranch: "main" },
-          maxDiffBytes: 2 * 1024 * 1024,
-          maxFileListBytes: 256 * 1024,
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-diff-missing-workspace",
+      command: {
+        type: "workspace.diff",
+        environmentId: "env-missing",
+        workspaceContext: {
+          workspacePath: missingPath,
+          workspaceProvisionType: "managed-worktree",
         },
+        target: { type: "all", mergeBaseBranch: "main" },
+        maxDiffBytes: 2 * 1024 * 1024,
+        maxFileListBytes: 256 * 1024,
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "diff-missing-workspace",
+        commandType: "workspace.diff",
         ok: true,
+        requestId: "rpc-diff-missing-workspace",
         result: {
           outcome: "unavailable",
           failure: {
@@ -564,9 +569,10 @@ describe("CommandRouter", () => {
             message: `Managed workspace path does not exist: ${missingPath}`,
           },
         },
-        type: "workspace.diff",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -595,6 +601,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "provision-missing-workspace",
+        attemptId: "attempt-provision-missing-workspace",
         cursor: 1,
         command: {
           type: "environment.provision",
@@ -638,33 +645,32 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "provider-models-missing-executable",
-        cursor: 1,
-        command: {
-          type: "provider.list_models",
-          providerId: "codex",
-        },
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-provider-models-missing-executable",
+      command: {
+        type: "provider.list_models",
+        providerId: "codex",
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "provider-models-missing-executable",
+        commandType: "provider.list_models",
         errorCode: "missing_executable",
         errorMessage,
         ok: false,
-        type: "provider.list_models",
+        requestId: "rpc-provider-models-missing-executable",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
-        commandId: "provider-models-missing-executable",
         err: expect.any(Error),
         type: "provider.list_models",
       }),
-      "command execution failed",
+      "online host RPC failed",
     );
   });
 
@@ -692,26 +698,89 @@ describe("CommandRouter", () => {
       logger,
     });
 
-    await router.handleCommands([
-      {
-        id: "provider-models-structured-error",
-        cursor: 1,
-        command: {
-          type: "provider.list_models",
-          providerId: "codex",
-        },
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-provider-models-structured-error",
+      command: {
+        type: "provider.list_models",
+        providerId: "codex",
       },
-    ]);
+    });
 
-    expect(reportResult).toHaveBeenCalledWith(
+    expect(response).toEqual(
       expect.objectContaining({
-        commandId: "provider-models-structured-error",
+        commandType: "provider.list_models",
         errorCode: "permission_denied",
         errorMessage,
         ok: false,
-        type: "provider.list_models",
+        requestId: "rpc-provider-models-structured-error",
+        type: "host-rpc.response",
       }),
     );
+    expect(reportResult).not.toHaveBeenCalled();
+  });
+
+  it("handles provider model online RPC without durable result reporting", async () => {
+    const reportResult = vi.fn(async () => undefined);
+    const listModels = vi.fn<
+      (args: ListModelsArgs) => Promise<ListModelsResult>
+    >(async () => ({
+      models: [
+        {
+          id: "codex-mini",
+          model: "gpt-4o-mini",
+          displayName: "Codex Mini",
+          description: "Fast codex model",
+          supportedReasoningEfforts: [
+            {
+              reasoningEffort: "medium",
+              description: "Balanced",
+            },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+      ],
+      selectedOnlyModels: [],
+    }));
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      reportResult,
+      runtimeManager: new RuntimeManager({
+        provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      }),
+      eventSink: noopEventSink,
+      listModels,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-provider-models",
+      command: {
+        type: "provider.list_models",
+        providerId: "codex",
+      },
+    });
+
+    expect(response).toEqual({
+      type: "host-rpc.response",
+      requestId: "rpc-provider-models",
+      commandType: "provider.list_models",
+      ok: true,
+      result: {
+        models: [
+          expect.objectContaining({
+            id: "codex-mini",
+          }),
+        ],
+        selectedOnlyModels: [],
+      },
+    });
+    expect(listModels).toHaveBeenCalledWith({ providerId: "codex" });
+    expect(reportResult).not.toHaveBeenCalled();
   });
 
   it("serializes relative host file writes with last-write-wins behavior", async () => {
@@ -736,6 +805,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "write-a",
+        attemptId: "attempt-write-a",
         cursor: 1,
         command: {
           type: "host.write_file_relative",
@@ -748,6 +818,7 @@ describe("CommandRouter", () => {
       },
       {
         id: "write-b",
+        attemptId: "attempt-write-b",
         cursor: 2,
         command: {
           type: "host.write_file_relative",
@@ -795,6 +866,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "thread-start",
+        attemptId: "attempt-thread-start",
         cursor: 1,
         command: {
           type: "thread.start",
@@ -841,6 +913,7 @@ describe("CommandRouter", () => {
     const handling = router.handleCommands([
       {
         id: "commit",
+        attemptId: "attempt-commit",
         cursor: 1,
         command: {
           type: "workspace.commit",
@@ -852,23 +925,24 @@ describe("CommandRouter", () => {
           message: "Commit",
         },
       },
-      {
-        id: "status",
-        cursor: 2,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
-          mergeBaseBranch: "main",
-        },
-      },
     ]);
 
     await vi.waitFor(() => {
       expect(workspace.commit).toHaveBeenCalledTimes(1);
+    });
+
+    const statusHandling = router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-status-after-write",
+      command: {
+        type: "workspace.status",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
+        mergeBaseBranch: "main",
+      },
     });
     expect(workspace.getStatus).not.toHaveBeenCalled();
 
@@ -876,8 +950,16 @@ describe("CommandRouter", () => {
       commitSha: "commit-1",
       commitSubject: "subject",
     });
+    const response = await statusHandling;
     await handling;
 
+    expect(response).toEqual(
+      expect.objectContaining({
+        commandType: "workspace.status",
+        ok: true,
+        requestId: "rpc-status-after-write",
+      }),
+    );
     expect(workspace.getStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -903,36 +985,34 @@ describe("CommandRouter", () => {
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
-    const handling = router.handleCommands([
-      {
-        id: "diff",
-        cursor: 1,
-        command: {
-          type: "workspace.diff",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
-          target: { type: "uncommitted" },
-          maxDiffBytes: 100_000,
-          maxFileListBytes: 100_000,
+    const diffHandling = router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-diff-concurrent-read",
+      command: {
+        type: "workspace.diff",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
         },
+        target: { type: "uncommitted" },
+        maxDiffBytes: 100_000,
+        maxFileListBytes: 100_000,
       },
-      {
-        id: "status",
-        cursor: 2,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
-          mergeBaseBranch: "main",
+    });
+    const statusHandling = router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-status-concurrent-read",
+      command: {
+        type: "workspace.status",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
         },
+        mergeBaseBranch: "main",
       },
-    ]);
+    });
 
     await vi.waitFor(() => {
       expect(workspace.getDiff).toHaveBeenCalledTimes(1);
@@ -946,7 +1026,24 @@ describe("CommandRouter", () => {
       files: "",
       mergeBaseRef: null,
     });
-    await handling;
+    const [diffResponse, statusResponse] = await Promise.all([
+      diffHandling,
+      statusHandling,
+    ]);
+    expect(diffResponse).toEqual(
+      expect.objectContaining({
+        commandType: "workspace.diff",
+        ok: true,
+        requestId: "rpc-diff-concurrent-read",
+      }),
+    );
+    expect(statusResponse).toEqual(
+      expect.objectContaining({
+        commandType: "workspace.status",
+        ok: true,
+        requestId: "rpc-status-concurrent-read",
+      }),
+    );
   });
 
   it("waits for an in-flight read before starting a write for the same environment", async () => {
@@ -990,24 +1087,30 @@ describe("CommandRouter", () => {
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
+    const diffHandling = router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-diff-before-write",
+      command: {
+        type: "workspace.diff",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
+        target: { type: "uncommitted" },
+        maxDiffBytes: 100_000,
+        maxFileListBytes: 100_000,
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
+    });
+
     const handling = router.handleCommands([
       {
-        id: "diff",
-        cursor: 1,
-        command: {
-          type: "workspace.diff",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
-          target: { type: "uncommitted" },
-          maxDiffBytes: 100_000,
-          maxFileListBytes: 100_000,
-        },
-      },
-      {
         id: "commit",
+        attemptId: "attempt-commit",
         cursor: 2,
         command: {
           type: "workspace.commit",
@@ -1021,9 +1124,6 @@ describe("CommandRouter", () => {
       },
     ]);
 
-    await vi.waitFor(() => {
-      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
-    });
     expect(workspace.commit).not.toHaveBeenCalled();
 
     diffDeferred.resolve(undefined);
@@ -1031,7 +1131,7 @@ describe("CommandRouter", () => {
       expect(workspace.commit).toHaveBeenCalledTimes(1);
     });
 
-    await handling;
+    await Promise.all([diffHandling, handling]);
     expect(calls).toEqual(["read:start", "read:done", "write"]);
   });
 
@@ -1096,24 +1196,30 @@ describe("CommandRouter", () => {
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
+    const diffHandling = router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-diff-before-write-read",
+      command: {
+        type: "workspace.diff",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
+        target: { type: "uncommitted" },
+        maxDiffBytes: 100_000,
+        maxFileListBytes: 100_000,
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
+    });
+
     const handling = router.handleCommands([
       {
-        id: "diff",
-        cursor: 1,
-        command: {
-          type: "workspace.diff",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
-          target: { type: "uncommitted" },
-          maxDiffBytes: 100_000,
-          maxFileListBytes: 100_000,
-        },
-      },
-      {
         id: "commit",
+        attemptId: "attempt-commit",
         cursor: 2,
         command: {
           type: "workspace.commit",
@@ -1125,24 +1231,21 @@ describe("CommandRouter", () => {
           message: "Commit",
         },
       },
-      {
-        id: "status",
-        cursor: 3,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged",
-          },
-          mergeBaseBranch: "main",
-        },
-      },
     ]);
-
-    await vi.waitFor(() => {
-      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
+    const statusHandling = router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-status-after-write-read",
+      command: {
+        type: "workspace.status",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
+        mergeBaseBranch: "main",
+      },
     });
+
     expect(workspace.commit).not.toHaveBeenCalled();
     expect(workspace.getStatus).not.toHaveBeenCalled();
 
@@ -1156,7 +1259,7 @@ describe("CommandRouter", () => {
       commitSha: "commit-1",
       commitSubject: "subject",
     });
-    await handling;
+    await Promise.all([diffHandling, handling, statusHandling]);
 
     expect(workspace.getStatus).toHaveBeenCalledTimes(1);
     expect(calls).toEqual([
@@ -1215,6 +1318,7 @@ describe("CommandRouter", () => {
     const handling = router.handleCommands([
       {
         id: "archive",
+        attemptId: "attempt-archive",
         cursor: 1,
         command: {
           type: "thread.archive",
@@ -1227,6 +1331,7 @@ describe("CommandRouter", () => {
       },
       {
         id: "destroy",
+        attemptId: "attempt-destroy",
         cursor: 2,
         command: {
           type: "environment.destroy",
@@ -1287,6 +1392,7 @@ describe("CommandRouter", () => {
     const handling = router.handleCommands([
       {
         id: "run-a",
+        attemptId: "attempt-run-a",
         cursor: 1,
         command: {
           type: "turn.submit",
@@ -1318,6 +1424,7 @@ describe("CommandRouter", () => {
       },
       {
         id: "run-b",
+        attemptId: "attempt-run-b",
         cursor: 2,
         command: {
           type: "turn.submit",
@@ -1388,6 +1495,7 @@ describe("CommandRouter", () => {
     const handling = router.handleCommands([
       {
         id: "cmd-5",
+        attemptId: "attempt-cmd-5",
         cursor: 5,
         command: {
           type: "thread.start",
@@ -1402,6 +1510,7 @@ describe("CommandRouter", () => {
       },
       {
         id: "cmd-6",
+        attemptId: "attempt-cmd-6",
         cursor: 6,
         command: {
           type: "thread.start",
@@ -1416,6 +1525,7 @@ describe("CommandRouter", () => {
       },
       {
         id: "cmd-7",
+        attemptId: "attempt-cmd-7",
         cursor: 7,
         command: {
           type: "thread.start",
@@ -1486,6 +1596,7 @@ describe("CommandRouter", () => {
     const handling = router.handleCommands([
       {
         id: "success",
+        attemptId: "attempt-success",
         cursor: 1,
         command: {
           type: "thread.start",
@@ -1500,6 +1611,7 @@ describe("CommandRouter", () => {
       },
       {
         id: "failure",
+        attemptId: "attempt-failure",
         cursor: 2,
         command: {
           type: "thread.start",
@@ -1559,6 +1671,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "destroy",
+        attemptId: "attempt-destroy",
         cursor: 1,
         command: {
           type: "environment.destroy",
@@ -1577,22 +1690,27 @@ describe("CommandRouter", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    await router.handleCommands([
-      {
-        id: "status",
-        cursor: 2,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-1",
-          workspaceContext: {
-            workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged" as const,
-          },
-          mergeBaseBranch: "main",
+    const response = await router.handleOnlineRpcRequest({
+      type: "host-rpc.request",
+      requestId: "rpc-status-after-destroy-recreate",
+      command: {
+        type: "workspace.status",
+        environmentId: "env-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
         },
+        mergeBaseBranch: "main",
       },
-    ]);
+    });
 
+    expect(response).toEqual(
+      expect.objectContaining({
+        commandType: "workspace.status",
+        ok: true,
+        requestId: "rpc-status-after-destroy-recreate",
+      }),
+    );
     expect(recreatedWorkspace.getStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -1623,6 +1741,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "cmd-1",
+        attemptId: "attempt-cmd-1",
         cursor: 1,
         command: {
           type: "thread.start",
@@ -1642,6 +1761,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "cmd-2",
+        attemptId: "attempt-cmd-2",
         cursor: 2,
         command: {
           type: "thread.start",
@@ -1692,6 +1812,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "cmd-1",
+        attemptId: "attempt-cmd-1",
         cursor: 1,
         command: {
           type: "thread.start",
@@ -1711,6 +1832,7 @@ describe("CommandRouter", () => {
     await router.handleCommands([
       {
         id: "cmd-2",
+        attemptId: "attempt-cmd-2",
         cursor: 2,
         command: {
           type: "thread.start",

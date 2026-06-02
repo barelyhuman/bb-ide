@@ -7,7 +7,6 @@ import {
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { handleCommandResult } from "./command-results.js";
 import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
@@ -22,45 +21,41 @@ export function registerInternalCommandResultRoutes(
   post(
     "/session/command-result",
     hostDaemonCommandResultReportSchema,
-    (context, payload) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/command-result",
-        work: async () => {
-          const session = requireAuthenticatedDaemonSession({
-            context,
-            db: deps.db,
-            sessionId: payload.sessionId,
-          });
-          const command = getCommand(deps.db, payload.commandId);
-          if (!command || command.hostId !== session.hostId) {
-            throw new ApiError(404, "command_not_found", "Command not found");
-          }
+    async (context, payload) => {
+      const session = requireAuthenticatedDaemonSession({
+        context,
+        db: deps.db,
+        sessionId: payload.sessionId,
+      });
+      const command = getCommand(deps.db, payload.commandId);
+      if (!command || command.hostId !== session.hostId) {
+        throw new ApiError(404, "command_not_found", "Command not found");
+      }
 
-          let updatedCommand: HostDaemonCommandRow | null;
-          try {
-            updatedCommand = await handleCommandResult(deps, payload);
-          } catch (error) {
-            deps.logger.error(
-              {
-                commandId: payload.commandId,
-                commandState: command.state,
-                err: error,
-                reportOk: payload.ok,
-                reportType: payload.type,
-              },
-              "Command result handling failed",
-            );
-            throw error;
-          }
+      let updatedCommand: HostDaemonCommandRow | null;
+      try {
+        updatedCommand = await handleCommandResult(deps, payload);
+      } catch (error) {
+        deps.logger.error(
+          {
+            commandId: payload.commandId,
+            commandState: command.state,
+            err: error,
+            reportOk: payload.ok,
+            reportType: payload.type,
+          },
+          "Command result handling failed",
+        );
+        throw error;
+      }
 
-          if (!updatedCommand) {
-            throw new ApiError(404, "command_not_found", "Command not found");
-          }
+      if (!updatedCommand) {
+        throw new ApiError(404, "command_not_found", "Command not found");
+      }
 
-          return context.json({
-            ok: true,
-          });
-        },
-      }),
+      return context.json({
+        ok: true,
+      });
+    },
   );
 }

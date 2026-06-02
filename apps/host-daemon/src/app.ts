@@ -6,7 +6,6 @@ import {
   EventBufferDisposedError,
   type EventBuffer,
 } from "./event-buffer.js";
-import { createEnvironmentChangeReporter } from "./environment-change-reporter.js";
 import {
   InteractiveRequestRegistry,
   InteractiveRequestRegistryError,
@@ -20,7 +19,10 @@ import {
 import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import type { HostDaemonLogger } from "./logger.js";
-import type { HostDaemonCommandEnvelope } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonCommandEnvelope,
+  HostDaemonDaemonWsMessage,
+} from "@bb/host-daemon-contract";
 import {
   RuntimeManager,
   type RuntimeManagerOptions,
@@ -30,7 +32,7 @@ import {
   type TerminalManagerOptions,
 } from "./terminals/terminal-manager.js";
 import { createReplayCaptureService } from "@bb/replay-capture/writer";
-import { createServerClient, ServerResponseError } from "./server-client.js";
+import { createServerClient } from "./server-client.js";
 import { AppDataChangeReporter } from "./app-data-change-reporter.js";
 import {
   ServerConnection,
@@ -54,7 +56,6 @@ interface SessionState {
 const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
 const COMMAND_FETCH_RETRY_MAX_DELAY_MS = 30_000;
 const COMMAND_FETCH_RETRY_JITTER_RATIO = 0.25;
-const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
 const INTERACTIVE_INTERRUPT_RETRY_DELAY_MS = 1_000;
 // Keeps unrelated thread/provider work moving while bounding memory and provider
 // pressure when the server has a large backlog.
@@ -315,14 +316,6 @@ interface PendingInteractiveInterruptRequest {
   threadIds: readonly string[];
 }
 
-function isRetiredEnvironmentResponse(error: unknown): boolean {
-  return (
-    error instanceof ServerResponseError &&
-    ((error.status === 404 && error.code === "environment_not_found") ||
-      (error.status === 410 && error.code === "environment_destroyed"))
-  );
-}
-
 export async function createHostDaemonApp(
   options: CreateHostDaemonAppOptions,
 ): Promise<HostDaemonApp> {
@@ -372,21 +365,6 @@ export async function createHostDaemonApp(
     fetchFn: options.fetchFn,
   });
 
-  const environmentChangeReporter = createEnvironmentChangeReporter({
-    debounceMs: ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
-    logger: options.logger,
-    reportEnvironmentChange: async (change) => {
-      try {
-        await serverClient.postEnvironmentChange(change);
-      } catch (error) {
-        if (isRetiredEnvironmentResponse(error)) {
-          await runtimeManager.forgetEnvironment(change.environmentId);
-          return;
-        }
-        throw error;
-      }
-    },
-  });
   const appDataChangeReporter = new AppDataChangeReporter({
     logger: options.logger,
     postAppDataChange: (payload) => serverClient.postAppDataChange(payload),
@@ -511,6 +489,7 @@ export async function createHostDaemonApp(
     },
   });
 
+  let sendServerMessage = (_message: HostDaemonDaemonWsMessage) => false;
   runtimeManager = new RuntimeManager({
     bridgeBundleDir: options.bridgeBundleDir,
     createRuntime: options.createRuntime,
@@ -546,7 +525,8 @@ export async function createHostDaemonApp(
       });
     },
     onThreadStorageChanged: ({ environmentId }) => {
-      environmentChangeReporter.queue({
+      sendServerMessage({
+        type: "environment-change",
         environmentId,
         change: "thread-storage-changed",
       });
@@ -568,7 +548,8 @@ export async function createHostDaemonApp(
     },
     onWorkspaceStatusChanged: ({ environmentId, changeKinds }) => {
       for (const change of changeKinds) {
-        environmentChangeReporter.queue({
+        sendServerMessage({
+          type: "environment-change",
           environmentId,
           change,
         });
@@ -672,7 +653,8 @@ export async function createHostDaemonApp(
     },
     threadStorageRootPath,
   });
-  let sendTerminalMessage: TerminalManagerOptions["sendMessage"] = () => false;
+  let sendTerminalMessage: TerminalManagerOptions["sendMessage"] = (message) =>
+    sendServerMessage(message);
   const terminalManager = new TerminalManager({
     dataDir: options.dataDir,
     logger: options.logger,
@@ -736,6 +718,10 @@ export async function createHostDaemonApp(
     getActiveThreads: () => runtimeManager.listActiveThreads(),
     getLoadedEnvironments: () => runtimeManager.listLoadedEnvironments(),
     onCommandsAvailable: () => commandFetchLoop.request(),
+    onHostRpcRequest: async (message) => {
+      const response = await router.handleOnlineRpcRequest(message);
+      sendServerMessage(response);
+    },
     onTerminalMessage: (message) => terminalManager.handleMessage(message),
     onSessionOpened: async (session) => {
       sessionState.value = session.sessionId;
@@ -781,7 +767,7 @@ export async function createHostDaemonApp(
       }
     },
   });
-  sendTerminalMessage = (message) => connection.sendMessage(message);
+  sendServerMessage = (message) => connection.sendMessage(message);
 
   const localApi = options.localApiConfig
     ? await startLocalApiServer({
@@ -814,7 +800,6 @@ export async function createHostDaemonApp(
     },
     shutdownRuntimes: async () => {
       eventLoopStallMonitor.stop();
-      environmentChangeReporter.dispose();
       await localApi?.close();
       await terminalManager.shutdownAll();
       await runtimeManager.shutdownAll();

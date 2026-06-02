@@ -1,12 +1,21 @@
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { and, eq } from "drizzle-orm";
-import { events, getThread, hostDaemonCommands, queueCommand } from "@bb/db";
+import {
+  events,
+  getActiveCommandAttemptForCommand,
+  getCommand,
+  getThread,
+  hostDaemonCommands,
+  markThreadStopRequested,
+  queueCommand,
+} from "@bb/db";
 import { turnScope } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import { describe, expect, it } from "vitest";
 import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import {
   createTestDaemonEventEnvelope,
+  ensureCommandDelivered,
   internalAuthHeaders,
   listQueuedThreadCommands,
   reportQueuedCommandError,
@@ -14,6 +23,7 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
+import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -22,10 +32,7 @@ import {
   seedThreadRuntimeState,
   seedTurnStarted,
 } from "../helpers/seed.js";
-import {
-  type TestAppHarness,
-  withTestHarness,
-} from "../helpers/test-app.js";
+import { type TestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 interface ExpectFailedManagerNotificationArgs {
   afterCursor: number;
@@ -290,6 +297,105 @@ describe("thread command failure side effects", () => {
     });
   });
 
+  it("rejects mismatched command result types before terminalizing command rows", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-start-result-type-mismatch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const command = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "thread.start",
+        payload: JSON.stringify({
+          type: "thread.start",
+          environmentId: environment.id,
+          threadId: thread.id,
+          workspaceContext: {
+            workspacePath: "/tmp/test",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: project.id,
+          providerId: "codex",
+          requestId: "creq_23456789ab",
+          input: [{ type: "text", text: "Hello" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          instructions: "You are a helpful assistant.",
+          dynamicTools: [],
+          instructionMode: "append",
+        }),
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: queued.row.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
+          body: JSON.stringify({
+            sessionId: session.id,
+            attemptId,
+            commandId: queued.row.id,
+            completedAt: Date.now(),
+            type: "thread.stop",
+            ok: true,
+            result: {},
+          }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "command_result_type_mismatch",
+      });
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+      expect(getCommand(harness.db, queued.row.id)).toMatchObject({
+        state: "fetched",
+        resultPayload: null,
+      });
+      expect(
+        getActiveCommandAttemptForCommand(harness.db, queued.row.id),
+      ).toMatchObject({
+        id: attemptId,
+        status: "active",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, thread.id))
+          .all()
+          .filter((event) => event.type === "system/error"),
+      ).toHaveLength(0);
+    });
+  });
+
   it("queues a manager follow-up turn when a managed thread.start fails", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
@@ -483,6 +589,107 @@ describe("thread command failure side effects", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         1,
       );
+    });
+  });
+
+  it("records turn.submit failure when a user stop was requested after fetch", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-turn-fail-after-stop-request",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-stop-race",
+        providerThreadId: "provider-thread-stop-race",
+      });
+      const command = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "turn.submit",
+        payload: JSON.stringify({
+          type: "turn.submit",
+          environmentId: environment.id,
+          threadId: thread.id,
+          requestId: "creq_23456789ab",
+          input: [{ type: "text", text: "Continue" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          resumeContext: {
+            workspaceContext: {
+              workspacePath: "/tmp/test",
+              workspaceProvisionType: "unmanaged",
+            },
+            projectId: project.id,
+            providerId: "codex",
+            providerThreadId: "provider-thread-stop-race",
+            instructions: "You are a helpful assistant.",
+            dynamicTools: [],
+            instructionMode: "append",
+          },
+          target: { mode: "steer", expectedTurnId: "turn-stop-race" },
+        }),
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: queued.row.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
+      markThreadStopRequested(harness.db, harness.hub, {
+        threadId: thread.id,
+        requestedAt: 123,
+      });
+
+      const response = await reportQueuedCommandError(harness, queued, {
+        errorCode: "provider_error",
+        errorMessage: "Provider process crashed during stop race",
+      });
+
+      expect(response.status).toBe(200);
+      expect(getCommand(harness.db, queued.row.id)).toMatchObject({
+        state: "error",
+      });
+      expect(
+        getActiveCommandAttemptForCommand(harness.db, queued.row.id),
+      ).toBeNull();
+      expect(attemptId).toBeTypeOf("string");
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "error",
+        stopRequestedAt: 123,
+      });
+      const errorEvents = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((event) => event.type === "system/error");
+      expect(errorEvents).toHaveLength(1);
+      expect(JSON.parse(errorEvents[0]!.data)).toMatchObject({
+        code: "thread_command_failed",
+        message: "Command turn.submit failed",
+        detail: "Provider process crashed during stop race",
+      });
     });
   });
 
@@ -897,6 +1104,11 @@ describe("thread command failure side effects", () => {
         harness,
         ({ row }) => row.id === command.id,
       );
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: queued.row.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
 
       // Report success — thread.start result is empty
       const response = await harness.app.request(
@@ -906,6 +1118,7 @@ describe("thread command failure side effects", () => {
           headers: internalAuthHeaders(harness, { hostId: host.id }),
           body: JSON.stringify({
             sessionId: session.id,
+            attemptId,
             commandId: queued.row.id,
             completedAt: Date.now(),
             type: "thread.start",

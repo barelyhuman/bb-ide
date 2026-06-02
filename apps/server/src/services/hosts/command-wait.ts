@@ -4,57 +4,28 @@ import {
   hostDaemonCommandResultSchemaByType,
   type HostDaemonCommand,
   type HostDaemonCommandResult,
-  type HostDaemonCommandType,
+  type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 import type { CommandResultWaiterResponse } from "../../internal/command-result-response.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { roundDurationMs } from "../lib/duration.js";
 import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
-import { assertDaemonCommandWaitAllowed } from "./command-wait-context.js";
 
-export interface QueueCommandAndWaitArgs<TType extends HostDaemonCommandType> {
+export interface QueueCommandAndWaitArgs<
+  TType extends HostDaemonDurableCommandType,
+> {
   command: Extract<HostDaemonCommand, { type: TType }>;
   hostId: string;
   timeoutMs: number;
 }
 
 export interface WaitForQueuedCommandResultArgs<
-  TType extends HostDaemonCommandType,
+  TType extends HostDaemonDurableCommandType,
 > {
   commandId: string;
   timeoutMs: number;
   type: TType;
-}
-
-type WorkspaceStatusCommand = Extract<
-  HostDaemonCommand,
-  { type: "workspace.status" }
->;
-type WorkspaceStatusCommandWorkspaceContext =
-  WorkspaceStatusCommand["workspaceContext"];
-
-interface WorkspaceStatusCommandCacheScope {
-  environmentId: string;
-  hostId: string;
-  workspaceContext: WorkspaceStatusCommandWorkspaceContext;
-}
-
-interface WorkspaceStatusCommandCacheScopeArgs {
-  command: WorkspaceStatusCommand;
-  hostId: string;
-}
-
-interface QueueWorkspaceStatusCommandAndWaitArgs {
-  command: WorkspaceStatusCommand;
-  hostId: string;
-  timeoutMs: number;
-}
-
-interface WorkspaceStatusCommandCacheEntry {
-  expiresAt: number;
-  promise: Promise<HostDaemonCommandResult<"workspace.status">>;
-  scope: WorkspaceStatusCommandCacheScope;
 }
 
 type SlowCommandWaitOutcome =
@@ -67,7 +38,7 @@ type SlowCommandWaitOutcome =
 
 interface LogSlowCommandWaitArgs {
   commandId: string;
-  commandType: HostDaemonCommandType;
+  commandType: HostDaemonDurableCommandType;
   completed: boolean;
   durationMs: number;
   errorCode?: string;
@@ -85,18 +56,7 @@ interface SlowCommandWaitFailureLogFields {
   status?: number;
 }
 
-const WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS = 1_000;
 const SLOW_HOST_COMMAND_WAIT_LOG_THRESHOLD_MS = 1_000;
-/**
- * Coalesces bursty workspace.status reads during thread-detail initial load.
- * In-flight commands share one daemon round trip, and successful results stay
- * reusable for a short freshness window. Failures/timeouts are evicted so the
- * next caller can queue a real retry.
- */
-const workspaceStatusCommandCache = new Map<
-  string,
-  WorkspaceStatusCommandCacheEntry
->();
 
 function logSlowCommandWait(
   deps: LoggedWorkSessionDeps,
@@ -167,160 +127,13 @@ function classifySlowCommandWaitFailure(
   };
 }
 
-function assertQueueCommandAndWaitAllowed(
-  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
-): void {
-  assertDaemonCommandWaitAllowed({
-    commandId: null,
-    commandType: args.command.type,
-    operation: "queue-and-wait",
-  });
-}
-
-function buildWorkspaceStatusCommandCacheScope({
-  command,
-  hostId,
-}: WorkspaceStatusCommandCacheScopeArgs): WorkspaceStatusCommandCacheScope {
-  return {
-    environmentId: command.environmentId,
-    hostId,
-    workspaceContext: command.workspaceContext,
-  };
-}
-
-function buildWorkspaceStatusCommandCacheKey({
-  command,
-  hostId,
-}: QueueWorkspaceStatusCommandAndWaitArgs): string {
-  const scope = buildWorkspaceStatusCommandCacheScope({ command, hostId });
-  return JSON.stringify([
-    scope.hostId,
-    scope.environmentId,
-    scope.workspaceContext.workspacePath,
-    scope.workspaceContext.workspaceProvisionType,
-    command.mergeBaseBranch ?? "",
-  ]);
-}
-
-function workspaceStatusCacheScopeMatches(
-  first: WorkspaceStatusCommandCacheScope,
-  second: WorkspaceStatusCommandCacheScope,
-): boolean {
-  return (
-    first.hostId === second.hostId &&
-    first.environmentId === second.environmentId &&
-    first.workspaceContext.workspacePath ===
-      second.workspaceContext.workspacePath &&
-    first.workspaceContext.workspaceProvisionType ===
-      second.workspaceContext.workspaceProvisionType
-  );
-}
-
-function invalidateWorkspaceStatusCommandCache(
-  scope: WorkspaceStatusCommandCacheScope,
-): void {
-  for (const [key, entry] of workspaceStatusCommandCache) {
-    if (workspaceStatusCacheScopeMatches(entry.scope, scope)) {
-      workspaceStatusCommandCache.delete(key);
-    }
-  }
-}
-
-function invalidateWorkspaceStatusCacheForMutation(
-  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
-): void {
-  switch (args.command.type) {
-    case "workspace.commit":
-    case "workspace.squash_merge":
-      invalidateWorkspaceStatusCommandCache({
-        environmentId: args.command.environmentId,
-        hostId: args.hostId,
-        workspaceContext: args.command.workspaceContext,
-      });
-      return;
-    default:
-      return;
-  }
-}
-
-function scheduleWorkspaceStatusCacheCleanup(
-  key: string,
-  entry: WorkspaceStatusCommandCacheEntry,
-): void {
-  void entry.promise.then(
-    () => {
-      setTimeout(() => {
-        const currentEntry = workspaceStatusCommandCache.get(key);
-        if (currentEntry === entry && currentEntry.expiresAt <= Date.now()) {
-          workspaceStatusCommandCache.delete(key);
-        }
-      }, WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS);
-    },
-    () => undefined,
-  );
-}
-
-function queueWorkspaceStatusCommandAndWait(
-  deps: LoggedWorkSessionDeps,
-  args: QueueWorkspaceStatusCommandAndWaitArgs,
-): Promise<HostDaemonCommandResult<"workspace.status">> {
-  const now = Date.now();
-  const key = buildWorkspaceStatusCommandCacheKey(args);
-  const cached = workspaceStatusCommandCache.get(key);
-  if (cached && cached.expiresAt > now) {
-    return cached.promise;
-  }
-
-  const entry: WorkspaceStatusCommandCacheEntry = {
-    expiresAt: Number.POSITIVE_INFINITY,
-    promise: queueCommandAndWaitUncached(deps, args)
-      .then((result) => {
-        entry.expiresAt = Date.now() + WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS;
-        return result;
-      })
-      .catch((error) => {
-        // Do not cache daemon failures or waiter timeouts; callers need the
-        // next identical status read to enqueue a fresh command.
-        if (workspaceStatusCommandCache.get(key) === entry) {
-          workspaceStatusCommandCache.delete(key);
-        }
-        throw error;
-      }),
-    scope: buildWorkspaceStatusCommandCacheScope(args),
-  };
-  workspaceStatusCommandCache.set(key, entry);
-  scheduleWorkspaceStatusCacheCleanup(key, entry);
-  return entry.promise;
-}
-
-export function queueCommandAndWait<TType extends HostDaemonCommandType>(
+export function queueCommandAndWait<TType extends HostDaemonDurableCommandType>(
   deps: LoggedWorkSessionDeps,
   args: QueueCommandAndWaitArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;
 export async function queueCommandAndWait(
   deps: LoggedWorkSessionDeps,
-  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
-): Promise<HostDaemonCommandResult> {
-  assertQueueCommandAndWaitAllowed(args);
-  if (args.command.type === "workspace.status") {
-    return queueWorkspaceStatusCommandAndWait(deps, {
-      command: args.command,
-      hostId: args.hostId,
-      timeoutMs: args.timeoutMs,
-    });
-  }
-  const result = await queueCommandAndWaitUncached(deps, args);
-  invalidateWorkspaceStatusCacheForMutation(args);
-  return result;
-}
-
-function queueCommandAndWaitUncached<TType extends HostDaemonCommandType>(
-  deps: LoggedWorkSessionDeps,
-  args: QueueCommandAndWaitArgs<TType>,
-): Promise<HostDaemonCommandResult<TType>>;
-async function queueCommandAndWaitUncached(
-  deps: LoggedWorkSessionDeps,
-  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
+  args: QueueCommandAndWaitArgs<HostDaemonDurableCommandType>,
 ): Promise<HostDaemonCommandResult> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.hostId,
@@ -369,19 +182,16 @@ async function queueCommandAndWaitUncached(
   }
 }
 
-export function waitForQueuedCommandResult<TType extends HostDaemonCommandType>(
+export function waitForQueuedCommandResult<
+  TType extends HostDaemonDurableCommandType,
+>(
   deps: Pick<AppDeps, "hub">,
   args: WaitForQueuedCommandResultArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;
 export async function waitForQueuedCommandResult(
   deps: Pick<AppDeps, "hub">,
-  args: WaitForQueuedCommandResultArgs<HostDaemonCommandType>,
+  args: WaitForQueuedCommandResultArgs<HostDaemonDurableCommandType>,
 ): Promise<HostDaemonCommandResult> {
-  assertDaemonCommandWaitAllowed({
-    commandId: args.commandId,
-    commandType: args.type,
-    operation: "wait",
-  });
   let completed: CommandResultWaiterResponse;
   try {
     completed = await deps.hub.waitForCommandResult(

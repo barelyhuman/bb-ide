@@ -1,10 +1,4 @@
-import {
-  getThread,
-  getThreadOperation,
-  type DbNotifier,
-  type DbQueryConnection,
-  type DbTransaction,
-} from "@bb/db";
+import { getThread, type DbNotifier, type DbTransaction } from "@bb/db";
 import { markThreadOperationRecordFailed } from "@bb/db/internal-lifecycle";
 import {
   type ManagerTemplateName,
@@ -23,12 +17,10 @@ import {
 } from "./thread-events.js";
 import { requestThreadStart } from "./thread-lifecycle.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
-import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import {
   attachedEnvironmentIdForContext,
   createMetadataPendingContext,
   createReprovisioningContext,
-  threadProvisionCommonPayloadSchema,
   type ThreadProvisionEnvironmentIntent,
   type ThreadProvisionProvisionableContext,
 } from "./thread-provisioning-context.js";
@@ -76,10 +68,6 @@ export interface RecordThreadProvisionWorkspaceReadyArgs {
 export interface ThreadProvisionWorkspaceReadyTransactionDeps {
   db: DbTransaction;
   hub: DbNotifier;
-}
-
-interface ThreadProvisionReadDeps {
-  db: DbQueryConnection;
 }
 
 interface EnvironmentPayloadThreadArgs {
@@ -238,24 +226,6 @@ export function requestThreadReprovision(
     threadId: args.thread.id,
     context,
   });
-}
-
-export function shouldSyncGeneratedThreadTitle(
-  deps: ThreadProvisionReadDeps,
-  threadId: string,
-): boolean {
-  const operation = getThreadOperation(deps.db, {
-    threadId,
-    kind: "provision",
-  });
-  if (!operation) {
-    return false;
-  }
-  const request = parseJsonWithSchema(
-    operation.payload,
-    threadProvisionCommonPayloadSchema,
-  );
-  return !request.titleProvided;
 }
 
 export function recordThreadProvisionWorkspaceReady(

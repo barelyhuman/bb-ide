@@ -1,7 +1,10 @@
 import { getEnvironment, queueCommand } from "@bb/db";
 import type { HostDaemonCommandResultByType } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  ensureCommandDelivered,
+  internalAuthHeaders,
+} from "../helpers/commands.js";
 import { queueEnvironmentProvisionLifecycleCommand } from "../helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
@@ -92,11 +95,17 @@ describe("internal command result environment notifications", () => {
           sessionId: session.id,
           type: commandType,
         });
+        const attemptId = ensureCommandDelivered(harness, {
+          commandId: command.id,
+          hostId: host.id,
+          sessionId: session.id,
+        });
 
         const response = await harness.app.request(
           "/internal/session/command-result",
           {
             body: JSON.stringify({
+              attemptId,
               commandId: command.id,
               completedAt: Date.now(),
               cursor: command.cursor,
@@ -153,11 +162,17 @@ describe("internal command result environment notifications", () => {
         path: "/tmp/provision-notify",
         transcript: [],
       };
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: command.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
 
       const response = await harness.app.request(
         "/internal/session/command-result",
         {
           body: JSON.stringify({
+            attemptId,
             commandId: command.id,
             completedAt: Date.now(),
             cursor: command.cursor,
@@ -223,11 +238,17 @@ describe("internal command result environment notifications", () => {
         path: "/tmp/provision-base",
         transcript: [],
       };
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: command.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
 
       const response = await harness.app.request(
         "/internal/session/command-result",
         {
           body: JSON.stringify({
+            attemptId,
             commandId: command.id,
             completedAt: Date.now(),
             cursor: command.cursor,
@@ -288,11 +309,17 @@ describe("internal command result environment notifications", () => {
         path: "/tmp/personal-provision-metadata",
         transcript: [],
       };
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: command.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
 
       const response = await harness.app.request(
         "/internal/session/command-result",
         {
           body: JSON.stringify({
+            attemptId,
             commandId: command.id,
             completedAt: Date.now(),
             cursor: command.cursor,
@@ -359,11 +386,17 @@ describe("internal command result environment notifications", () => {
         path: "/tmp/managed-reprovision-metadata",
         transcript: [],
       };
+      const attemptId = ensureCommandDelivered(harness, {
+        commandId: command.id,
+        hostId: host.id,
+        sessionId: session.id,
+      });
 
       const response = await harness.app.request(
         "/internal/session/command-result",
         {
           body: JSON.stringify({
+            attemptId,
             commandId: command.id,
             completedAt: Date.now(),
             cursor: command.cursor,

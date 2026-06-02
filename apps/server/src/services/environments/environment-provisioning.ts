@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
+  type HostDaemonCommandRow,
   type DbNotifier,
   type DbQueryConnection,
   type DbTransaction,
@@ -9,11 +10,14 @@ import {
   getEnvironment,
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
+  getThreadOperation,
+  listStoredThreadProvisioningRowsByProvisioningId,
   queueCommand,
   threadOperations,
   threads,
 } from "@bb/db";
 import {
+  applyProvisionedEnvironmentRecord,
   markEnvironmentOperationRecordCompleted,
   markEnvironmentOperationRecordFailed,
   markEnvironmentOperationRecordQueued,
@@ -30,9 +34,9 @@ import type {
 import {
   activeLifecycleOperationStates,
   isActiveLifecycleOperationState,
+  systemThreadProvisioningEventDataSchema,
   threadScope,
 } from "@bb/domain";
-import { type HostDaemonCommand } from "@bb/host-daemon-contract";
 import type {
   AppDeps,
   LoggedWorkSessionDeps,
@@ -42,6 +46,7 @@ import { ApiError } from "../../errors.js";
 import {
   appendSystemErrorEventInTransaction,
   appendThreadProvisioningEventInTransaction,
+  buildCwdBranchEntries,
 } from "../threads/thread-events.js";
 import {
   buildEnvironmentProvisionCommand,
@@ -63,16 +68,32 @@ import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { tryTransitionInTransaction } from "../threads/thread-transitions.js";
 import { readThreadProvisioningIdFromRecord } from "../threads/thread-provisioning-state.js";
+import {
+  advanceThreadProvisioning,
+  recordThreadProvisionWorkspaceReadyInTransaction,
+} from "../threads/thread-provisioning.js";
+import {
+  finalizeStoppedThreadAndRequestCleanupAdvance,
+  finalizeStoppedThreadInTransaction,
+} from "../threads/thread-lifecycle.js";
+import { runEnvironmentCleanupAdvance } from "./environment-cleanup.js";
+import {
+  emptyCommandResultSideEffects,
+  type CommandResultPostCommitAction,
+  type CommandResultReportForType,
+  type CommandResultSideEffectsResult,
+  type HostDaemonCommandForType,
+} from "../../internal/command-result-side-effects.js";
 
 type EnvironmentProvisionOperationKind = Extract<
   EnvironmentOperationKind,
   "provision" | "reprovision"
 >;
 
-type EnvironmentProvisionCommand = Extract<
-  HostDaemonCommand,
-  { type: "environment.provision" }
->;
+type EnvironmentProvisionCommand =
+  HostDaemonCommandForType<"environment.provision">;
+type EnvironmentProvisionCommandResultReport =
+  CommandResultReportForType<"environment.provision">;
 
 interface EnvironmentProvisionReadDeps {
   db: DbQueryConnection;
@@ -84,6 +105,7 @@ interface EnvironmentProvisionWriteDeps extends EnvironmentProvisionReadDeps {
 
 interface EnvironmentProvisionTransactionDeps extends EnvironmentProvisionWriteDeps {
   db: DbTransaction;
+  pendingInteractions: AppDeps["pendingInteractions"];
 }
 
 export interface RequestEnvironmentProvisionArgs {
@@ -102,6 +124,13 @@ export interface EnvironmentProvisioningCommandMutationArgs {
 
 export interface EnvironmentProvisioningCommandLookupArgs {
   commandId: string;
+}
+
+export interface SettleEnvironmentProvisionCommandResultArgs {
+  command: EnvironmentProvisionCommand;
+  commandRow: HostDaemonCommandRow;
+  deps: EnvironmentProvisionTransactionDeps;
+  report: EnvironmentProvisionCommandResultReport;
 }
 
 export interface FailEnvironmentProvisioningForCommandArgs extends EnvironmentProvisioningCommandMutationArgs {
@@ -298,6 +327,93 @@ export function getEnvironmentProvisioningIdForCommand(
   return readEnvironmentProvisioningIdFromOperation(operation);
 }
 
+function isWorkspaceProvisioningTranscriptEntry(
+  entry: ProvisioningTranscriptEntry,
+): boolean {
+  return WORKSPACE_PROVISIONING_TRANSCRIPT_KEYS.has(entry.key);
+}
+
+const WORKSPACE_PROVISIONING_TRANSCRIPT_KEYS = new Set([
+  "git-checkout-completed",
+  "git-checkout-failed",
+  "git-checkout-started",
+  "git-clone-completed",
+  "git-clone-failed",
+  "git-clone-started",
+  "git-worktree-command",
+  "git-worktree-completed",
+  "git-worktree-failed",
+  "git-worktree-started",
+  "setup-completed",
+  "setup-failed",
+  "setup-started",
+  "workspace-branch",
+  "workspace-path",
+  "workspace-source",
+  "workspace-target",
+]);
+
+function hasStreamedProvisioningTranscript(
+  deps: EnvironmentProvisionReadDeps,
+  threadId: string,
+  provisioningId: string,
+): boolean {
+  const rows = listStoredThreadProvisioningRowsByProvisioningId(deps.db, {
+    threadId,
+    provisioningId,
+  });
+
+  return rows.some((row) => {
+    const eventData = systemThreadProvisioningEventDataSchema.parse(
+      JSON.parse(row.data),
+    );
+    return (
+      eventData.provisioningId === provisioningId &&
+      eventData.entries.some(isWorkspaceProvisioningTranscriptEntry)
+    );
+  });
+}
+
+function hasActiveThreadProvisionOperation(
+  deps: EnvironmentProvisionReadDeps,
+  threadId: string,
+): boolean {
+  const operation = getThreadOperation(deps.db, {
+    threadId,
+    kind: "provision",
+  });
+  return Boolean(operation && isActiveLifecycleOperationState(operation.state));
+}
+
+interface ProvisionedEnvironmentBranchMetadata {
+  baseBranch?: string | null;
+  mergeBaseBranch?: string | null;
+}
+
+function resolveProvisionedEnvironmentBranchMetadata(
+  command: EnvironmentProvisionCommand,
+): ProvisionedEnvironmentBranchMetadata {
+  if (command.workspaceProvisionType !== "unmanaged") {
+    return {};
+  }
+
+  if (!command.checkout) {
+    return {};
+  }
+
+  if (command.checkout.kind === "new") {
+    return {
+      baseBranch: null,
+      mergeBaseBranch: command.checkout.baseBranch,
+    };
+  }
+
+  return {
+    baseBranch: null,
+    mergeBaseBranch: null,
+  };
+}
+
 function hasQueuedProvisionCommand(
   deps: EnvironmentProvisionReadDeps,
   commandId: string | null,
@@ -466,6 +582,187 @@ export function recordEnvironmentProvisioningFailureInTransaction(
   }
 
   return true;
+}
+
+export function settleEnvironmentProvisionCommandResult(
+  args: SettleEnvironmentProvisionCommandResultArgs,
+): CommandResultSideEffectsResult {
+  const postCommitActions: CommandResultPostCommitAction[] = [];
+  if (
+    !hasActiveEnvironmentProvisionOperationForCommand(args.deps, {
+      commandId: args.commandRow.id,
+    })
+  ) {
+    return emptyCommandResultSideEffects();
+  }
+
+  const environmentProvisioningId = getEnvironmentProvisioningIdForCommand(
+    args.deps,
+    {
+      commandId: args.commandRow.id,
+    },
+  );
+  if (environmentProvisioningId === null) {
+    return emptyCommandResultSideEffects();
+  }
+
+  const boundThreads = args.deps.db
+    .select()
+    .from(threads)
+    .where(eq(threads.environmentId, args.command.environmentId))
+    .all();
+
+  if (args.report.ok) {
+    applyProvisionedEnvironmentRecord(
+      args.deps.db,
+      args.deps.hub,
+      args.command.environmentId,
+      {
+        path: args.report.result.path,
+        status: "ready",
+        isGitRepo: args.report.result.isGitRepo,
+        isWorktree: args.report.result.isWorktree,
+        branchName: args.report.result.branchName,
+        defaultBranch: args.report.result.defaultBranch,
+        ...resolveProvisionedEnvironmentBranchMetadata(args.command),
+      },
+    );
+    args.deps.hub.notifyEnvironment(args.command.environmentId, [
+      "work-status-changed",
+    ]);
+
+    const cwdBranchEntries = buildCwdBranchEntries({
+      path: args.report.result.path,
+      branchName: args.report.result.branchName,
+    });
+
+    for (const thread of boundThreads) {
+      if (thread.deletedAt !== null) {
+        const finalized = finalizeStoppedThreadInTransaction(args.deps, {
+          threadId: thread.id,
+        });
+        if (finalized) {
+          postCommitActions.push({
+            name: "Environment cleanup advance after deleted thread finalize",
+            context: {
+              environmentId: args.command.environmentId,
+              threadId: thread.id,
+            },
+            run: (deps) =>
+              runEnvironmentCleanupAdvance(deps, {
+                environmentId: args.command.environmentId,
+              }),
+          });
+        } else {
+          postCommitActions.push({
+            name: "Deleted thread finalization retry after environment provision",
+            context: {
+              environmentId: args.command.environmentId,
+              threadId: thread.id,
+            },
+            run: (deps) => {
+              finalizeStoppedThreadAndRequestCleanupAdvance(deps, {
+                threadId: thread.id,
+              });
+            },
+          });
+        }
+        continue;
+      }
+      if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
+        continue;
+      }
+
+      const isInitiator = thread.id === args.command.initiator?.threadId;
+      const hasStreamedTranscript =
+        isInitiator && args.command.initiator
+          ? hasStreamedProvisioningTranscript(
+              args.deps,
+              thread.id,
+              args.command.initiator.provisioningId,
+            )
+          : false;
+      const entries = hasStreamedTranscript
+        ? []
+        : isInitiator && args.report.result.transcript.length > 0
+          ? args.report.result.transcript
+          : cwdBranchEntries;
+
+      if (!hasActiveThreadProvisionOperation(args.deps, thread.id)) {
+        appendThreadProvisioningEventInTransaction(args.deps.db, {
+          threadId: thread.id,
+          environmentId: args.command.environmentId,
+          provisioningId: environmentProvisioningId,
+          status: thread.status === "provisioning" ? "active" : "completed",
+          entries,
+        });
+        args.deps.hub.notifyThread(thread.id, ["events-appended"], {
+          eventTypes: ["system/thread-provisioning"],
+        });
+        continue;
+      }
+
+      recordThreadProvisionWorkspaceReadyInTransaction(args.deps, {
+        threadId: thread.id,
+        environmentId: args.command.environmentId,
+        entries,
+      });
+      postCommitActions.push({
+        name: "Thread provisioning advance after workspace ready",
+        context: {
+          environmentId: args.command.environmentId,
+          threadId: thread.id,
+        },
+        run: (deps) => advanceThreadProvisioning(deps, { threadId: thread.id }),
+      });
+    }
+
+    completeEnvironmentProvisioningForCommand(args.deps, {
+      commandId: args.commandRow.id,
+    });
+
+    postCommitActions.push({
+      name: "Environment cleanup advance after provision result",
+      context: {
+        environmentId: args.command.environmentId,
+      },
+      run: (deps) =>
+        runEnvironmentCleanupAdvance(deps, {
+          environmentId: args.command.environmentId,
+        }),
+    });
+    return { postCommitActions };
+  }
+
+  const failureRecorded = recordEnvironmentProvisioningFailureInTransaction(
+    args.deps,
+    {
+      commandId: args.commandRow.id,
+      environmentId: args.command.environmentId,
+      failureReason: args.report.errorMessage,
+      failureEntry: {
+        type: "step",
+        key: "workspace-failed",
+        text: "Workspace setup failed",
+        status: "failed",
+        startedAt: args.commandRow.createdAt,
+        metadata: { durationMs: Date.now() - args.commandRow.createdAt },
+      },
+    },
+  );
+  if (failureRecorded) {
+    postCommitActions.push({
+      name: "Environment cleanup advance after provision failure",
+      context: {
+        environmentId: args.command.environmentId,
+      },
+      run: (deps) =>
+        runEnvironmentCleanupAdvance(deps, {
+          environmentId: args.command.environmentId,
+        }),
+    });
+  }
+  return { postCommitActions };
 }
 
 export function requestEnvironmentProvision(

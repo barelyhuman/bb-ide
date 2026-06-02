@@ -298,6 +298,127 @@ describe("NotificationHub", () => {
     );
   });
 
+  it("sends host RPC requests to the active daemon and resolves responses", async () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+    hub.registerDaemon("session-1", "host-1", socket);
+
+    const wait = hub.requestHostOnlineRpc({
+      hostId: "host-1",
+      timeoutMs: 1_000,
+      message: {
+        type: "host-rpc.request",
+        requestId: "rpc-1",
+        command: { type: "provider.list" },
+      },
+    });
+
+    expect(socket.messages.map((message) => JSON.parse(message))).toEqual([
+      {
+        type: "host-rpc.request",
+        requestId: "rpc-1",
+        command: { type: "provider.list" },
+      },
+    ]);
+    const disposition = hub.recordHostOnlineRpcResponse({
+      message: {
+        type: "host-rpc.response",
+        requestId: "rpc-1",
+        commandType: "provider.list",
+        ok: true,
+        result: { providers: [] },
+      },
+      sessionId: "session-1",
+    });
+    expect(disposition).toEqual({ handled: true });
+
+    await expect(wait).resolves.toEqual({
+      type: "host-rpc.response",
+      requestId: "rpc-1",
+      commandType: "provider.list",
+      ok: true,
+      result: { providers: [] },
+    });
+  });
+
+  it("does not resolve host RPC waiters from mismatched daemon sessions", async () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+    hub.registerDaemon("session-1", "host-1", socket);
+    hub.registerDaemon("session-2", "host-2", createMockSocket());
+
+    const wait = hub.requestHostOnlineRpc({
+      hostId: "host-1",
+      timeoutMs: 1_000,
+      message: {
+        type: "host-rpc.request",
+        requestId: "rpc-session-scoped",
+        command: { type: "provider.list" },
+      },
+    });
+    let resolved = false;
+    const observed = wait.then((response) => {
+      resolved = true;
+      return response;
+    });
+
+    const mismatch = hub.recordHostOnlineRpcResponse({
+      message: {
+        type: "host-rpc.response",
+        requestId: "rpc-session-scoped",
+        commandType: "provider.list",
+        ok: true,
+        result: { providers: [] },
+      },
+      sessionId: "session-2",
+    });
+    expect(mismatch).toEqual({
+      expectedSessionId: "session-1",
+      handled: false,
+      reason: "session_mismatch",
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    const handled = hub.recordHostOnlineRpcResponse({
+      message: {
+        type: "host-rpc.response",
+        requestId: "rpc-session-scoped",
+        commandType: "provider.list",
+        ok: true,
+        result: { providers: [] },
+      },
+      sessionId: "session-1",
+    });
+    expect(handled).toEqual({ handled: true });
+    await expect(observed).resolves.toEqual({
+      type: "host-rpc.response",
+      requestId: "rpc-session-scoped",
+      commandType: "provider.list",
+      ok: true,
+      result: { providers: [] },
+    });
+  });
+
+  it("rejects in-flight host RPC requests when the daemon unregisters", async () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+    hub.registerDaemon("session-1", "host-1", socket);
+
+    const wait = hub.requestHostOnlineRpc({
+      hostId: "host-1",
+      timeoutMs: 1_000,
+      message: {
+        type: "host-rpc.request",
+        requestId: "rpc-1",
+        command: { type: "provider.list" },
+      },
+    });
+    hub.unregisterDaemon("session-1");
+
+    await expect(wait).rejects.toThrow("Host daemon is not connected");
+  });
+
   it("keeps subscription bookkeeping consistent across repeated changes", () => {
     const hub = new NotificationHub();
     const socket = createMockSocket();

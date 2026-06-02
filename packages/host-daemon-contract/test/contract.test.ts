@@ -17,13 +17,14 @@ import {
   hostDaemonCommandsQuerySchema,
   hostDaemonCommandSchema,
   hostDaemonDaemonWsMessageSchema,
-  hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
   hostDaemonInteractiveRequestSchema,
+  hostDaemonOnlineRpcCommandSchema,
+  hostDaemonOnlineRpcResultSchemaByType,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
@@ -40,15 +41,15 @@ function terminalDataBase64(byteLength: number): string {
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.checkout":
     "environment.provision only includes checkout instructions for unmanaged workspaces that requested a branch mutation.",
-  "hostDaemonCommandSchema.mergeBaseBranch":
+  "hostDaemonOnlineRpcCommandSchema.mergeBaseBranch":
     "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
-  "hostDaemonCommandSchema.query":
+  "hostDaemonOnlineRpcCommandSchema.query":
     "host.list_files may omit a search string to list files without filtering.",
-  "hostDaemonCommandSchema.ref":
+  "hostDaemonOnlineRpcCommandSchema.ref":
     "host.read_file may omit ref to read from disk; setting ref switches to git history at that ref.",
-  "hostDaemonCommandSchema.rootPath":
+  "hostDaemonOnlineRpcCommandSchema.rootPath":
     "host.read_file and host.file_metadata may omit rootPath only for explicit absolute disk reads; ref-based reads still require it.",
-  "hostDaemonCommandSchema.selectedBranch":
+  "hostDaemonOnlineRpcCommandSchema.selectedBranch":
     "host.list_branches may omit exact selected-branch classification when the caller only needs a branch option page.",
   "hostDaemonCommandSchema.threadStoragePath":
     "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
@@ -337,6 +338,7 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonCommandEnvelopeSchema.parse({
         id: "hcmd_123",
+        attemptId: "hcat_123",
         cursor: 7,
         command: {
           type: "workspace.commit",
@@ -352,11 +354,12 @@ describe("host-daemon command schemas", () => {
       }),
     ).toMatchObject({
       id: "hcmd_123",
+      attemptId: "hcat_123",
       cursor: 7,
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/workspace",
         limit: 1000,
@@ -368,7 +371,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_paths",
         path: "/tmp/workspace",
         limit: 1000,
@@ -384,7 +387,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_branches",
         path: "/tmp/workspace",
         query: "release",
@@ -400,7 +403,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.file_metadata",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
@@ -412,7 +415,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
@@ -424,7 +427,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
       }),
@@ -434,7 +437,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
@@ -448,7 +451,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file_relative",
         rootPath: "/tmp/bb-data/thread-storage/thread-123/apps/status/assets",
         path: "logo.png",
@@ -500,7 +503,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/bb-data/thread-storage/thread-123",
         limit: 100,
@@ -594,6 +597,69 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
   });
 
+  it("rejects online-RPC-only read commands from the durable command schema", () => {
+    const onlineReadCommands = [
+      { type: "host.list_files", path: "/tmp/workspace", limit: 100 },
+      {
+        type: "host.list_paths",
+        path: "/tmp/workspace",
+        limit: 100,
+        includeFiles: true,
+        includeDirectories: true,
+      },
+      {
+        type: "host.list_branches",
+        path: "/tmp/workspace",
+        limit: 50,
+      },
+      { type: "host.list_manager_templates" },
+      {
+        type: "host.file_metadata",
+        path: "/tmp/workspace/README.md",
+        rootPath: "/tmp/workspace",
+      },
+      {
+        type: "host.read_file",
+        path: "/tmp/workspace/README.md",
+        rootPath: "/tmp/workspace",
+      },
+      {
+        type: "host.read_file_relative",
+        rootPath: "/tmp/workspace",
+        path: "README.md",
+        dotfiles: "deny",
+      },
+      { type: "provider.list" },
+      { type: "provider.list_models", providerId: "codex" },
+      {
+        type: "workspace.status",
+        environmentId: "env_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "managed-worktree",
+        },
+      },
+      {
+        type: "workspace.diff",
+        environmentId: "env_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "managed-worktree",
+        },
+        target: { type: "uncommitted" },
+        maxDiffBytes: 1000,
+        maxFileListBytes: 1000,
+      },
+    ];
+
+    for (const command of onlineReadCommands) {
+      expect(() => hostDaemonCommandSchema.parse(command)).toThrow();
+      expect(hostDaemonOnlineRpcCommandSchema.parse(command)).toMatchObject({
+        type: command.type,
+      });
+    }
+  });
+
   it("requires Codex inference schemas and results to be JSON objects", () => {
     for (const outputSchema of [null, "object", ["object"]]) {
       expect(() =>
@@ -669,7 +735,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         ref: "HEAD",
@@ -677,7 +743,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.read_file_relative",
         rootPath: "/tmp/bb-data/thread-storage/thread-123/apps/status/assets",
         path: "logo.png",
@@ -789,6 +855,7 @@ describe("host-daemon command schemas", () => {
         contract.hostDaemonInteractiveRequestSchema,
       hostDaemonInteractiveRequestResponseSchema:
         contract.hostDaemonInteractiveRequestResponseSchema,
+      hostDaemonOnlineRpcCommandSchema: contract.hostDaemonOnlineRpcCommandSchema,
       workspaceCommitResultSchema:
         contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
       workspaceSquashMergeResultSchema:
@@ -1102,37 +1169,11 @@ describe("host-daemon command schemas", () => {
     ).toBe(false);
   });
 
-  it("requires replay.run request correlation", () => {
-    expect(
-      hostDaemonCommandSchema.parse({
-        type: "replay.run",
-        captureId: "cap_123",
-        environmentId: "env_123",
-        threadId: "thr_123",
-        requestId: CLIENT_REQUEST_ID,
-        speed: 10,
-      }),
-    ).toMatchObject({
-      type: "replay.run",
-      requestId: CLIENT_REQUEST_ID,
-    });
-
-    expect(() =>
-      hostDaemonCommandSchema.parse({
-        type: "replay.run",
-        captureId: "cap_123",
-        environmentId: "env_123",
-        threadId: "thr_123",
-        speed: 10,
-      }),
-    ).toThrow();
-  });
-
   it("bounds file list command queries and limits", () => {
     const longQuery = "a".repeat(contract.FILE_LIST_QUERY_MAX_LENGTH + 1);
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/bb-data/thread-storage/thread-123",
         query: longQuery,
@@ -1141,7 +1182,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/bb-data/thread-storage/thread-123",
         limit: contract.FILE_LIST_LIMIT_MAX + 1,
@@ -1149,7 +1190,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/workspace",
         query: longQuery,
@@ -1158,7 +1199,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/workspace",
         limit: contract.FILE_LIST_LIMIT_MAX + 1,
@@ -1166,7 +1207,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_paths",
         path: "/tmp/workspace",
         query: longQuery,
@@ -1177,7 +1218,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_paths",
         path: "/tmp/workspace",
         limit: contract.FILE_LIST_LIMIT_MAX + 1,
@@ -1187,7 +1228,7 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
+      hostDaemonOnlineRpcCommandSchema.parse({
         type: "host.list_paths",
         path: "/tmp/workspace",
         limit: 100,
@@ -1199,7 +1240,7 @@ describe("host-daemon command schemas", () => {
 
   it("keeps typed per-command result schemas", () => {
     expect(
-      hostDaemonCommandResultSchemaByType["host.list_files"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["host.list_files"].parse({
         files: [{ path: "notes/today.md", name: "today.md" }],
         truncated: false,
       }),
@@ -1209,7 +1250,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["host.list_paths"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["host.list_paths"].parse({
         paths: [
           {
             kind: "directory",
@@ -1237,7 +1278,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["host.list_branches"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["host.list_branches"].parse({
         branches: ["main", "feature/test"],
         branchesTruncated: false,
         checkout: {
@@ -1262,7 +1303,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["host.read_file"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["host.read_file"].parse({
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         content: "# Preferences",
         contentEncoding: "utf8",
@@ -1276,7 +1317,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["host.read_file_relative"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["host.read_file_relative"].parse({
         path: "assets/logo.png",
         content: "iVBORw0KGgo=",
         contentEncoding: "base64",
@@ -1290,7 +1331,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["host.file_metadata"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["host.file_metadata"].parse({
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         modifiedAtMs: 1234.5,
         sizeBytes: 26_214_401,
@@ -1342,7 +1383,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["workspace.status"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["workspace.status"].parse({
         outcome: "available",
         workspaceStatus: {
           workingTree: {
@@ -1369,7 +1410,7 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandResultSchemaByType["workspace.diff"].parse({
+      hostDaemonOnlineRpcResultSchemaByType["workspace.diff"].parse({
         outcome: "unavailable",
         failure: {
           code: "not_git_repo",
@@ -1678,37 +1719,37 @@ describe("host-daemon session schemas", () => {
     ).toThrow();
 
     expect(
-      hostDaemonEnvironmentChangeRequestSchema.parse({
-        sessionId: "session_123",
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "environment-change",
         environmentId: "env_123",
         change: "work-status-changed",
       }),
     ).toEqual({
-      sessionId: "session_123",
+      type: "environment-change",
       environmentId: "env_123",
       change: "work-status-changed",
     });
 
     expect(
-      hostDaemonEnvironmentChangeRequestSchema.parse({
-        sessionId: "session_123",
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "environment-change",
         environmentId: "env_123",
         change: "git-refs-changed",
       }),
     ).toEqual({
-      sessionId: "session_123",
+      type: "environment-change",
       environmentId: "env_123",
       change: "git-refs-changed",
     });
 
     expect(
-      hostDaemonEnvironmentChangeRequestSchema.parse({
-        sessionId: "session_123",
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "environment-change",
         environmentId: "env_123",
         change: "thread-storage-changed",
       }),
     ).toEqual({
-      sessionId: "session_123",
+      type: "environment-change",
       environmentId: "env_123",
       change: "thread-storage-changed",
     });
@@ -1851,7 +1892,7 @@ describe("host-daemon session schemas", () => {
     });
   });
 
-  it("restricts websocket messages to notifications and heartbeats", () => {
+  it("restricts daemon websocket control and RPC messages", () => {
     expect(
       hostDaemonServerWsMessageSchema.parse({
         type: "commands-available",
@@ -1899,6 +1940,44 @@ describe("host-daemon session schemas", () => {
         bufferDepth: 0,
       }),
     ).toThrow();
+
+    expect(
+      hostDaemonServerWsMessageSchema.parse({
+        type: "host-rpc.request",
+        requestId: "rpc-1",
+        command: { type: "provider.list" },
+      }),
+    ).toEqual({
+      type: "host-rpc.request",
+      requestId: "rpc-1",
+      command: { type: "provider.list" },
+    });
+
+    expect(
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "host-rpc.response",
+        requestId: "rpc-1",
+        commandType: "provider.list",
+        ok: true,
+        result: { providers: [] },
+      }),
+    ).toEqual({
+      type: "host-rpc.response",
+      requestId: "rpc-1",
+      commandType: "provider.list",
+      ok: true,
+      result: { providers: [] },
+    });
+
+    expect(
+      hostDaemonDaemonWsMessageSchema.safeParse({
+        type: "host-rpc.response",
+        requestId: "rpc-1",
+        commandType: "provider.list",
+        ok: true,
+        result: { models: [], selectedOnlyModels: [] },
+      }).success,
+    ).toBe(false);
   });
 
   it("bounds terminal dimensions in daemon websocket messages", () => {
@@ -2000,9 +2079,6 @@ describe("host-daemon session schemas", () => {
     );
     expect(client.session["command-result"].$url().pathname).toBe(
       "/internal/session/command-result",
-    );
-    expect(client.session["environment-change"].$url().pathname).toBe(
-      "/internal/session/environment-change",
     );
     expect(client.session["app-data-change"].$url().pathname).toBe(
       "/internal/session/app-data-change",

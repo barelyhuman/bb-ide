@@ -547,6 +547,10 @@ Exit criteria:
 
 ### Phase 8: Move Development Replay Out Of Production Commands
 
+Status: transport/command-union cleanup complete in commit `97c31c5c8`.
+Replay list/get/delete/run now use the development websocket RPC path, and
+`replay.*` is no longer part of `HostDaemonCommand`.
+
 Replay capture commands are development tooling. They should not bloat the
 production daemon command protocol.
 
@@ -558,7 +562,7 @@ Changes:
   from `HostDaemonCommand`.
 - Do not include replay command result schemas in production command result
   owner logic.
-- Phase 9 owns only the server/daemon transport boundary for development
+- This phase owns only the server/daemon transport boundary for development
   replay. `plans/replay-fixture-format-unification.md` owns the on-disk
   manifest/event format and the `@bb/agent-fixtures` fixture schema; do not move
   fixture manifest schemas into the production host-daemon contract. Replay

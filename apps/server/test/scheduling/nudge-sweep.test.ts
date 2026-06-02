@@ -204,7 +204,7 @@ describe("nudge sweep", () => {
       }
       const preferencesResponse = await reportQueuedCommandSuccess(
         harness,
-        { command: readPreferences.command, row: readPreferences.row },
+        readPreferences,
         {
           path: preferencesPath,
           content: "# Preferences\n\n- updated by nudge\n",

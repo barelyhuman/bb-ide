@@ -13,6 +13,8 @@ import {
   type WorkspaceStatus,
 } from "@bb/domain";
 import type {
+  EnvironmentDiffQuery,
+  EnvironmentDiffResponse,
   EnvironmentStatusResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
@@ -62,12 +64,16 @@ interface ThreadShowJsonPayload extends ThreadStatusPayload {
   environment: Environment | null;
   pendingTodos: ThreadTimelinePendingTodos | null;
   workStatus?: WorkspaceStatus | null;
-  gitDiff?: ThreadGitDiffResponse;
+  gitDiff?: ThreadGitDiffResponse | null;
   mergeBaseBranches?: string[];
 }
 
 type FetchedWorkStatus =
   | { available: true; status: WorkspaceStatus }
+  | { available: false; message: string };
+
+type FetchedGitDiff =
+  | { available: true; diff: ThreadGitDiffResponse }
   | { available: false; message: string };
 
 async function fetchWorkStatus(args: {
@@ -88,6 +94,26 @@ async function fetchWorkStatus(args: {
     return { available: false, message: environmentStatus.message };
   }
   return { available: false, message: environmentStatus.failure.message };
+}
+
+async function fetchGitDiff(args: {
+  client: Client;
+  environmentId: string;
+  query: EnvironmentDiffQuery;
+}): Promise<FetchedGitDiff> {
+  const environmentDiff = await unwrap<EnvironmentDiffResponse>(
+    args.client.api.v1.environments[":id"].diff.$get({
+      param: { id: args.environmentId },
+      query: args.query,
+    }),
+  );
+  if (environmentDiff.outcome === "available") {
+    return { available: true, diff: environmentDiff.diff };
+  }
+  if (environmentDiff.outcome === "not_applicable") {
+    return { available: false, message: environmentDiff.message };
+  }
+  return { available: false, message: environmentDiff.failure.message };
 }
 
 export function registerShowCommand(
@@ -163,7 +189,7 @@ export function registerShowCommand(
           });
         }
 
-        let gitDiff: ThreadGitDiffResponse | undefined;
+        let fetchedGitDiff: FetchedGitDiff | undefined;
         if (opts.gitDiff && thread.environmentId) {
           const diffTarget = (opts.diffTarget ?? "all").trim();
           const query = (() => {
@@ -205,12 +231,11 @@ export function registerShowCommand(
                   ),
                 }
               : query;
-          gitDiff = await unwrap<ThreadGitDiffResponse>(
-            client.api.v1.environments[":id"].diff.$get({
-              param: { id: thread.environmentId },
-              query: resolvedQuery,
-            }),
-          );
+          fetchedGitDiff = await fetchGitDiff({
+            client,
+            environmentId: thread.environmentId,
+            query: resolvedQuery,
+          });
         }
 
         let mergeBaseBranches: string[] | undefined;
@@ -246,8 +271,10 @@ export function registerShowCommand(
               ? fetchedWorkStatus.status
               : null;
           }
-          if (gitDiff !== undefined) {
-            jsonPayload.gitDiff = gitDiff;
+          if (fetchedGitDiff !== undefined) {
+            jsonPayload.gitDiff = fetchedGitDiff.available
+              ? fetchedGitDiff.diff
+              : null;
           }
           if (mergeBaseBranches !== undefined) {
             jsonPayload.mergeBaseBranches = mergeBaseBranches;
@@ -284,21 +311,26 @@ export function registerShowCommand(
           }
         }
 
-        if (gitDiff) {
+        if (fetchedGitDiff) {
           console.log("");
-          console.log("Git diff:");
-          if (gitDiff.files.trim().length > 0) {
-            console.log(`  Files:\n${gitDiff.files.trimEnd()}`);
-          }
-          if (gitDiff.shortstat.trim().length > 0) {
-            console.log(`  Summary: ${gitDiff.shortstat.trim()}`);
-          }
-          if (gitDiff.diff) {
-            console.log("");
-            console.log(gitDiff.diff);
-          }
-          if (gitDiff.truncated) {
-            console.log("  (diff truncated)");
+          if (fetchedGitDiff.available) {
+            const gitDiff = fetchedGitDiff.diff;
+            console.log("Git diff:");
+            if (gitDiff.files.trim().length > 0) {
+              console.log(`  Files:\n${gitDiff.files.trimEnd()}`);
+            }
+            if (gitDiff.shortstat.trim().length > 0) {
+              console.log(`  Summary: ${gitDiff.shortstat.trim()}`);
+            }
+            if (gitDiff.diff) {
+              console.log("");
+              console.log(gitDiff.diff);
+            }
+            if (gitDiff.truncated) {
+              console.log("  (diff truncated)");
+            }
+          } else {
+            console.log(`Git diff: ${fetchedGitDiff.message}`);
           }
         }
 

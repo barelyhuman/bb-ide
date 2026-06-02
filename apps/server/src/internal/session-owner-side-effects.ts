@@ -13,16 +13,14 @@ import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
 } from "../types.js";
-import { reconcileSessionThreads } from "./reconciliation.js";
+import { reconcileDaemonReportedThreads } from "../services/threads/thread-lifecycle.js";
 
-const DAEMON_DISCONNECT_PENDING_INTERACTION_REASON =
-  "Host daemon disconnected while awaiting user interaction; retry the thread to continue";
-const DAEMON_EXPIRED_PENDING_INTERACTION_REASON =
-  "Host daemon connection expired while awaiting user interaction; retry the thread to continue";
 const DAEMON_RESTARTED_PENDING_INTERACTION_REASON =
   "Host daemon restarted while awaiting user interaction; retry the thread to continue";
-const DAEMON_REPLACED_PENDING_INTERACTION_REASON =
-  "Host daemon session was replaced while awaiting user interaction; retry the thread to continue";
+const DAEMON_DISCONNECTED_PENDING_INTERACTION_REASON =
+  "Host daemon disconnected while awaiting user interaction; retry the thread to continue";
+const DAEMON_SESSION_EXPIRED_PENDING_INTERACTION_REASON =
+  "Host daemon session expired while awaiting user interaction; retry the thread to continue";
 
 type HostSessionOpenedDeps = LoggedPendingInteractionWorkSessionDeps;
 type DaemonSocketClosedDeps = Pick<
@@ -41,11 +39,6 @@ export interface HandleHostSessionOpenedArgs {
   previousSession: HostDaemonSessionRow | null;
 }
 
-interface InterruptPendingInteractionsForSessionIdsArgs {
-  reason: string;
-  sessionIds: string[];
-}
-
 export interface HandleDaemonSocketClosedArgs {
   sessionId: string;
 }
@@ -57,11 +50,6 @@ interface CompleteDaemonDisconnectGraceArgs {
 
 export interface HandleExpiredHostSessionLeasesArgs {
   expiredLeases: SweepExpiredLeasesResult;
-}
-
-interface ReplacedSessionPendingInteractionReasonArgs {
-  openedSession: HostDaemonSessionRow;
-  previousSession: HostDaemonSessionRow;
 }
 
 export async function handleHostSessionOpened(
@@ -83,19 +71,18 @@ export async function handleHostSessionOpened(
   ) {
     deps.hub.closeDaemonSession(args.previousSession.id, "replaced");
 
-    // Pending interactions are bound to the daemon session that registered
-    // them. A new session id is a new in-memory provider-request registry,
-    // even if the daemon instance id is unchanged and reports active threads.
-    interruptPendingInteractionsForSessionIds(deps, {
-      sessionIds: [args.previousSession.id],
-      reason: getReplacedSessionPendingInteractionReason({
-        openedSession: args.openedSession,
-        previousSession: args.previousSession,
-      }),
-    });
+    if (args.previousSession.instanceId !== args.openedSession.instanceId) {
+      interruptPendingInteractionsForHostThreads(deps, {
+        hostId: args.hostId,
+        reason: DAEMON_RESTARTED_PENDING_INTERACTION_REASON,
+      });
+    }
   }
 
-  await reconcileSessionThreads(deps, args.hostId, args.activeThreads);
+  await reconcileDaemonReportedThreads(deps, {
+    activeThreadIds: args.activeThreads.map((thread) => thread.threadId),
+    hostId: args.hostId,
+  });
 }
 
 export function handleDaemonSocketClosed(
@@ -145,11 +132,13 @@ export function handleExpiredHostSessionLeases(
   for (const sessionId of args.expiredLeases.expiredSessionIds) {
     deps.hub.closeDaemonSession(sessionId, "expired");
   }
-  interruptPendingInteractionsForSessionIds(deps, {
-    sessionIds: args.expiredLeases.expiredSessionIds,
-    reason: DAEMON_EXPIRED_PENDING_INTERACTION_REASON,
-  });
   for (const hostId of args.expiredLeases.expiredHostIds) {
+    if (!getActiveSession(deps.db, hostId)) {
+      interruptPendingInteractionsForHostThreads(deps, {
+        hostId,
+        reason: DAEMON_SESSION_EXPIRED_PENDING_INTERACTION_REASON,
+      });
+    }
     notifyHostThreadRuntimeStatusChanged(deps, hostId);
   }
 }
@@ -158,15 +147,14 @@ function completeDaemonDisconnectGrace(
   deps: ExpiredHostSessionLeaseDeps,
   args: CompleteDaemonDisconnectGraceArgs,
 ): void {
-  interruptPendingInteractionsForSessionIds(deps, {
-    sessionIds: [args.sessionId],
-    reason: DAEMON_DISCONNECT_PENDING_INTERACTION_REASON,
-  });
-
   if (getActiveSession(deps.db, args.hostId)) {
     return;
   }
 
+  interruptPendingInteractionsForHostThreads(deps, {
+    hostId: args.hostId,
+    reason: DAEMON_DISCONNECTED_PENDING_INTERACTION_REASON,
+  });
   notifyHostThreadRuntimeStatusChanged(deps, args.hostId);
 }
 
@@ -179,21 +167,12 @@ function notifyHostThreadRuntimeStatusChanged(
   }
 }
 
-function interruptPendingInteractionsForSessionIds(
-  deps: Pick<AppDeps, "pendingInteractions">,
-  args: InterruptPendingInteractionsForSessionIdsArgs,
+function interruptPendingInteractionsForHostThreads(
+  deps: Pick<AppDeps, "db" | "pendingInteractions">,
+  args: { hostId: string; reason: string },
 ): void {
-  deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
-    sessionIds: args.sessionIds,
+  deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+    threadIds: listHostThreadIds(deps.db, { hostId: args.hostId }),
     reason: args.reason,
   });
-}
-
-function getReplacedSessionPendingInteractionReason(
-  args: ReplacedSessionPendingInteractionReasonArgs,
-): string {
-  if (args.previousSession.instanceId !== args.openedSession.instanceId) {
-    return DAEMON_RESTARTED_PENDING_INTERACTION_REASON;
-  }
-  return DAEMON_REPLACED_PENDING_INTERACTION_REASON;
 }

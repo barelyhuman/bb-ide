@@ -7,7 +7,7 @@ import {
   type ThreadEvent,
   type ThreadEventTurnStatus,
 } from "@bb/domain";
-import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import type { HostDaemonOnlineRpcCommand } from "@bb/host-daemon-contract";
 import { replayRawProviderEventsPath } from "@bb/replay-capture";
 import {
   deleteReplayCapture,
@@ -17,6 +17,10 @@ import {
   streamRawProviderRecords,
   type ReplayCaptureReadArgs,
 } from "@bb/replay-capture/reader";
+import type {
+  ReplayCaptureDaemonListResponse,
+  ReplayCaptureManifest,
+} from "@bb/replay-capture/schema";
 import {
   ReplayPlaybackAbortError,
   remapReplayThreadEvent,
@@ -28,7 +32,6 @@ import {
   type ReplayTimingState,
 } from "@bb/replay-capture/playback";
 import type {
-  CommandOf,
   EventSink,
   ReplayTaskHandle,
 } from "../command-dispatch-support.js";
@@ -42,7 +45,7 @@ export interface ReplayCommandOptions {
 }
 
 interface ReplayTranslatedEventsArgs {
-  command: CommandOf<"replay.run">;
+  command: ReplayRunCommand;
   events: AsyncIterable<ReplayEventRecord>;
   eventSink: EventSink;
   terminal: ReplayTerminalIdentifiers;
@@ -55,18 +58,32 @@ interface ReplayPlan {
   terminal: ReplayTerminalIdentifiers;
 }
 
+type ReplayCaptureGetCommand = Extract<
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "capture-get" }
+>;
+type ReplayCaptureDeleteCommand = Extract<
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "capture-delete" }
+>;
+type ReplayRunCommand = Extract<
+  HostDaemonOnlineRpcCommand,
+  { type: "development.replay"; operation: "run" }
+>;
+type EmptyReplayResult = Record<string, never>;
+
 export async function listReplayCaptures(
   options: ReplayCommandOptions,
-): Promise<HostDaemonCommandResult<"replay.capture_list">> {
+): Promise<ReplayCaptureDaemonListResponse> {
   return {
     captures: await listReplayCaptureSummaries(options.dataDir),
   };
 }
 
 export async function getReplayCapture(
-  command: CommandOf<"replay.capture_get">,
+  command: ReplayCaptureGetCommand,
   options: ReplayCommandOptions,
-): Promise<HostDaemonCommandResult<"replay.capture_get">> {
+): Promise<ReplayCaptureManifest> {
   return readReplayCaptureManifest({
     captureId: command.captureId,
     dataDir: options.dataDir,
@@ -74,9 +91,9 @@ export async function getReplayCapture(
 }
 
 export async function removeReplayCapture(
-  command: CommandOf<"replay.capture_delete">,
+  command: ReplayCaptureDeleteCommand,
   options: ReplayCommandOptions,
-): Promise<HostDaemonCommandResult<"replay.capture_delete">> {
+): Promise<EmptyReplayResult> {
   await deleteReplayCapture({
     captureId: command.captureId,
     dataDir: options.dataDir,
@@ -85,7 +102,7 @@ export async function removeReplayCapture(
 }
 
 function terminalEvent(args: {
-  command: CommandOf<"replay.run">;
+  command: ReplayRunCommand;
   terminal: ReplayTerminalIdentifiers;
   status: ThreadEventTurnStatus;
   errorMessage?: string;
@@ -101,7 +118,7 @@ function terminalEvent(args: {
 }
 
 function emitReplaySystemError(args: {
-  command: CommandOf<"replay.run">;
+  command: ReplayRunCommand;
   error: Error;
   eventSink: EventSink;
 }): void {
@@ -118,7 +135,7 @@ function emitReplaySystemError(args: {
 }
 
 function emitReplayTerminal(args: {
-  command: CommandOf<"replay.run">;
+  command: ReplayRunCommand;
   eventSink: EventSink;
   status: ThreadEventTurnStatus;
   terminal: ReplayTerminalIdentifiers;
@@ -189,9 +206,9 @@ async function replayTranslatedEvents(
 }
 
 export async function runReplay(
-  command: CommandOf<"replay.run">,
+  command: ReplayRunCommand,
   options: ReplayCommandOptions,
-): Promise<HostDaemonCommandResult<"replay.run">> {
+): Promise<EmptyReplayResult> {
   const eventSink = options.eventSink;
   if (!eventSink) {
     throw new CommandDispatchError(
@@ -253,7 +270,7 @@ export async function runReplay(
 }
 
 async function buildReplayPlan(
-  command: CommandOf<"replay.run">,
+  command: ReplayRunCommand,
   readArgs: ReplayCaptureReadArgs,
 ): Promise<ReplayPlan> {
   const manifest = await readReplayCaptureManifest(readArgs);
@@ -277,7 +294,7 @@ async function buildReplayPlan(
 }
 
 async function runReplayTask(args: {
-  command: CommandOf<"replay.run">;
+  command: ReplayRunCommand;
   eventSink: EventSink;
   plan: ReplayPlan;
   signal: AbortSignal;
@@ -319,7 +336,7 @@ async function runReplayTask(args: {
 }
 
 async function emitReplayFailure(args: {
-  command: CommandOf<"replay.run">;
+  command: ReplayRunCommand;
   error: Error;
   eventSink: EventSink;
   terminal: ReplayTerminalIdentifiers;

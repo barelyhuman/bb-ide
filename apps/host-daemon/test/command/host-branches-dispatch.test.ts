@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { dispatchCommand } from "../../src/command-dispatch.js";
+import { dispatchOnlineRpcCommand } from "../../src/command-dispatch.js";
 import {
   cleanupTempDirs,
   createHarness,
@@ -31,7 +31,7 @@ describe("host.list_branches dispatch", () => {
     const repoPath = await initBranchRepo();
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
@@ -67,7 +67,7 @@ describe("host.list_branches dispatch", () => {
     await runGitCommand(["fetch", "upstream"], { cwd: repoPath });
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
@@ -92,7 +92,7 @@ describe("host.list_branches dispatch", () => {
     await runGitCommand(["fetch", "upstream"], { cwd: repoPath });
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_branches",
         path: repoPath,
@@ -110,7 +110,7 @@ describe("host.list_branches dispatch", () => {
       kind: "remote",
     });
 
-    const missingResult = await dispatchCommand(
+    const missingResult = await dispatchOnlineRpcCommand(
       {
         type: "host.list_branches",
         path: repoPath,
@@ -131,7 +131,7 @@ describe("host.list_branches dispatch", () => {
     const repoPath = await initBranchRepo();
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_branches",
         path: repoPath,
@@ -150,7 +150,7 @@ describe("host.list_branches dispatch", () => {
     await runGitCommand(["switch", "--detach", "HEAD"], { cwd: repoPath });
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
@@ -166,7 +166,7 @@ describe("host.list_branches dispatch", () => {
     await fs.writeFile(path.join(repoPath, "draft.txt"), "dirty\n", "utf8");
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       { type: "host.list_branches", path: repoPath, limit: 50 },
       harness.dispatchOptions(),
     );
@@ -179,7 +179,7 @@ describe("host.list_branches dispatch", () => {
     const dirPath = await makeTempDir("bb-host-branches-nongit-");
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       { type: "host.list_branches", path: dirPath, limit: 50 },
       harness.dispatchOptions(),
     );
@@ -201,7 +201,7 @@ describe("host.list_branches dispatch", () => {
     const parentPath = await makeTempDir("bb-host-branches-missing-parent-");
     const harness = createHarness();
 
-    const result = await dispatchCommand(
+    const result = await dispatchOnlineRpcCommand(
       {
         type: "host.list_branches",
         path: path.join(parentPath, "missing"),

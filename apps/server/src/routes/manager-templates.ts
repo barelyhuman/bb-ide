@@ -7,7 +7,7 @@ import type { Hono } from "hono";
 import type { ServerAppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
 import { resolveSystemLookupHostId } from "../services/system/host-lookup.js";
 
 export function registerManagerTemplateRoutes(
@@ -23,7 +23,7 @@ export function registerManagerTemplateRoutes(
     managerTemplatesQuerySchema,
     async (context, query) => {
       const hostId = resolveSystemLookupHostId(deps, query);
-      const result = await queueCommandAndWait(deps, {
+      const result = await callHostRetryableOnlineRpc(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "host.list_manager_templates" },

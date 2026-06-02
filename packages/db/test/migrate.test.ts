@@ -306,6 +306,7 @@ describe("migrate", () => {
       db.$client
         .prepare("ALTER TABLE threads DROP COLUMN reasoning_level_override")
         .run();
+      db.$client.prepare("DROP TABLE host_daemon_command_attempts").run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -393,6 +394,36 @@ describe("migrate", () => {
       });
 
       expect(() => migrate(db)).not.toThrow();
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("fails clearly before provider-request uniqueness migration when pending interaction duplicates exist", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      db.$client.exec(`
+        CREATE TABLE pending_interactions (
+          provider_id text NOT NULL,
+          provider_thread_id text NOT NULL,
+          provider_request_id text NOT NULL,
+          session_id text NOT NULL
+        );
+        INSERT INTO pending_interactions (
+          provider_id,
+          provider_thread_id,
+          provider_request_id,
+          session_id
+        )
+        VALUES
+          ('codex', 'provider-thread-1', 'request-1', 'session-1'),
+          ('codex', 'provider-thread-1', 'request-1', 'session-2');
+      `);
+
+      expect(() => migrate(db)).toThrow(
+        /duplicate provider requests already exist/,
+      );
     } finally {
       closeConnection(db);
     }

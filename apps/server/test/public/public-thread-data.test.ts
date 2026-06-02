@@ -36,8 +36,8 @@ import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
-  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
+import { registerProviderHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedQueuedMessage,
@@ -1406,8 +1406,47 @@ describe("public thread data routes", () => {
       seedHostSession(harness.deps, {
         id: "host-composer-default",
       });
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-composer-thread",
+      });
+      const providerResponder = registerProviderHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        providers: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportsUserQuestion: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+            available: true,
+          },
+        ],
+        modelsByProviderId: {
+          codex: {
+            models: [
+              {
+                id: "gpt-5.5",
+                model: "gpt-5.5",
+                displayName: "GPT-5.5",
+                description: "Frontier model",
+                supportedReasoningEfforts: [
+                  {
+                    reasoningEffort: "xhigh",
+                    description: "Extra high",
+                  },
+                ],
+                defaultReasoningEffort: "xhigh",
+                isDefault: true,
+              },
+            ],
+            selectedOnlyModels: [],
+          },
+        },
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -1463,72 +1502,9 @@ describe("public thread data routes", () => {
         serviceTier: "default",
       });
 
-      const responsePromise = harness.app.request(
+      const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/composer-bootstrap`,
       );
-      const providersCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "provider.list",
-      );
-      expect(providersCommand.row.hostId).toBe(host.id);
-      await reportQueuedCommandSuccess(
-        harness,
-        providersCommand,
-        {
-          providers: [
-            {
-              id: "codex",
-              displayName: "Codex",
-              capabilities: {
-                supportsArchive: true,
-                supportsRename: true,
-                supportsServiceTier: true,
-                supportsUserQuestion: true,
-                supportedPermissionModes: [
-                  "full",
-                  "workspace-write",
-                  "readonly",
-                ],
-              },
-              available: true,
-            },
-          ],
-        },
-        { hostId: host.id },
-      );
-      const modelsCommand = await waitForQueuedCommandAfter(
-        harness,
-        providersCommand.row.cursor,
-        ({ command }) =>
-          command.type === "provider.list_models" &&
-          command.providerId === "codex",
-      );
-      expect(modelsCommand.row.hostId).toBe(host.id);
-      await reportQueuedCommandSuccess(
-        harness,
-        modelsCommand,
-        {
-          models: [
-            {
-              id: "gpt-5.5",
-              model: "gpt-5.5",
-              displayName: "GPT-5.5",
-              description: "Frontier model",
-              supportedReasoningEfforts: [
-                {
-                  reasoningEffort: "xhigh",
-                  description: "Extra high",
-                },
-              ],
-              defaultReasoningEffort: "xhigh",
-              isDefault: true,
-            },
-          ],
-          selectedOnlyModels: [],
-        },
-        { hostId: host.id },
-      );
-      const response = await responsePromise;
 
       expect(response.status).toBe(200);
       const bootstrap = threadComposerBootstrapResponseSchema.parse(
@@ -1556,6 +1532,12 @@ describe("public thread data routes", () => {
           [{ type: "text", text: "Queued message" }],
         ]),
       );
+      expect(
+        providerResponder.requests.map((request) => request.command),
+      ).toEqual([
+        { type: "provider.list" },
+        { type: "provider.list_models", providerId: "codex" },
+      ]);
     });
   });
 

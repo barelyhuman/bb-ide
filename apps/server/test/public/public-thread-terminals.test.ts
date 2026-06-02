@@ -1,5 +1,6 @@
 import {
   createTerminalSession,
+  getThread,
   getTerminalSessionForThread,
   listTerminalSessionsByEnvironment,
   listTerminalSessionsByThread,
@@ -7,7 +8,6 @@ import {
   markEnvironmentTerminalSessionsExited,
   markTerminalSessionExited,
   markTerminalSessionUserInput,
-  markThreadDeleted,
   markThreadTerminalSessionsExited,
 } from "@bb/db";
 import type { EnvironmentStatus } from "@bb/domain";
@@ -24,7 +24,10 @@ import {
 } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readJson } from "../helpers/json.js";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  reportQueuedCommandSuccess,
+  waitForQueuedCommand,
+} from "../helpers/commands.js";
 import { queueEnvironmentDestroyLifecycleCommand } from "../helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
@@ -732,9 +735,6 @@ describe("public thread terminal routes", () => {
     });
     const browserSocket = createFakeBrowserSocket();
     fixture.harness.hub.registerTerminalClient(stored.id, browserSocket);
-    markThreadDeleted(fixture.harness.db, fixture.harness.hub, {
-      threadId: fixture.thread.id,
-    });
     const destroyCommand = queueEnvironmentDestroyLifecycleCommand(
       fixture.harness,
       {
@@ -752,23 +752,20 @@ describe("public thread terminal routes", () => {
       },
     );
 
-    const response = await fixture.harness.app.request(
-      "/internal/session/command-result",
-      {
-        method: "POST",
-        headers: internalAuthHeaders(fixture.harness),
-        body: JSON.stringify({
-          sessionId: fixture.session.id,
-          commandId: destroyCommand.id,
-          completedAt: Date.now(),
-          type: "environment.destroy",
-          ok: true,
-          result: {},
-        }),
-      },
+    const queuedDestroy = await waitForQueuedCommand(
+      fixture.harness,
+      ({ row }) => row.id === destroyCommand.id,
+    );
+    const response = await reportQueuedCommandSuccess(
+      fixture.harness,
+      queuedDestroy,
+      {},
     );
 
     expect(response.status).toBe(200);
+    expect(getThread(fixture.harness.db, fixture.thread.id)).toMatchObject({
+      status: "error",
+    });
     await vi.waitFor(() => {
       expect(
         listTerminalSessionsByEnvironment(

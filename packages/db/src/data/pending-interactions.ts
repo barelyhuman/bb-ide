@@ -23,7 +23,6 @@ export interface PendingInteractionProviderRequestIdentity {
   providerId: string;
   providerRequestId: string;
   providerThreadId: string;
-  sessionId: string;
 }
 
 export interface ListPendingInteractionsArgs {
@@ -58,12 +57,6 @@ export interface InterruptPendingInteractionsForThreadIdsArgs {
   resolvedAt?: number;
   statusReason: string;
   threadIds: readonly string[];
-}
-
-export interface InterruptPendingInteractionsForSessionIdsArgs {
-  resolvedAt?: number;
-  sessionIds: readonly string[];
-  statusReason: string;
 }
 
 const SQLITE_IN_CLAUSE_BATCH_SIZE = 900;
@@ -176,7 +169,6 @@ export function getPendingInteractionByProviderRequest(
           eq(pendingInteractions.providerId, args.providerId),
           eq(pendingInteractions.providerThreadId, args.providerThreadId),
           eq(pendingInteractions.providerRequestId, args.providerRequestId),
-          eq(pendingInteractions.sessionId, args.sessionId),
         ),
       )
       .get() ?? null
@@ -343,42 +335,6 @@ export function interruptPendingInteractionsForThreadIds(
         .where(
           and(
             inArray(pendingInteractions.threadId, threadIdsBatch),
-            inArray(pendingInteractions.status, ["pending", "resolving"]),
-          ),
-        )
-        .returning()
-        .all(),
-    );
-  }
-
-  return interruptedRows;
-}
-
-export function interruptPendingInteractionsForSessionIds(
-  db: PendingInteractionWriteConnection,
-  args: InterruptPendingInteractionsForSessionIdsArgs,
-): PendingInteractionRow[] {
-  if (args.sessionIds.length === 0) {
-    return [];
-  }
-
-  const now = Date.now();
-  const interruptedRows: PendingInteractionRow[] = [];
-
-  for (const sessionIdsBatch of sliceInClauseBatches(args.sessionIds)) {
-    interruptedRows.push(
-      ...db
-        .update(pendingInteractions)
-        .set({
-          resolvingCommandId: null,
-          status: "interrupted",
-          statusReason: args.statusReason,
-          resolvedAt: args.resolvedAt ?? now,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            inArray(pendingInteractions.sessionId, sessionIdsBatch),
             inArray(pendingInteractions.status, ["pending", "resolving"]),
           ),
         )

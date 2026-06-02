@@ -73,6 +73,7 @@ describe("environment operations", () => {
     const { db, environment, host } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.provision",
       payload: JSON.stringify({
         type: "environment.provision",
@@ -153,6 +154,7 @@ describe("environment operations", () => {
     const { db, environment, host } = setup();
     const firstCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.provision",
       payload: JSON.stringify({
         type: "environment.provision",
@@ -167,6 +169,7 @@ describe("environment operations", () => {
     });
     const secondCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.provision",
       payload: JSON.stringify({
         type: "environment.provision",

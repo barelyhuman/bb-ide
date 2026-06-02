@@ -1,58 +1,42 @@
-import {
-  hostDaemonEnvironmentChangeRequestSchema,
-  typedRoutes,
-  type HostDaemonInternalSchema,
-} from "@bb/host-daemon-contract";
-import type { Hono } from "hono";
+import type { HostDaemonEnvironmentChangePayload } from "@bb/host-daemon-contract";
+import { getEnvironment, type DbNotifier } from "@bb/db";
 import type { AppDeps } from "../types.js";
-import { ApiError } from "../errors.js";
-import { requireEnvironment } from "../services/lib/entity-lookup.js";
-import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
-import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
-export function registerInternalEnvironmentChangeRoutes(
-  app: Hono,
-  deps: AppDeps,
+interface EnvironmentChangeNotificationDeps {
+  hub: Pick<DbNotifier, "notifyEnvironment">;
+}
+
+interface NotifyDaemonEnvironmentChangeArgs extends HostDaemonEnvironmentChangePayload {
+  hostId: string;
+}
+
+export interface NotifyWorkspaceMutationResultArgs {
+  environmentId: string;
+  ok: boolean;
+}
+
+export function notifyWorkspaceMutationResult(
+  deps: EnvironmentChangeNotificationDeps,
+  args: NotifyWorkspaceMutationResultArgs,
 ): void {
-  const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
-    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
-  });
+  if (!args.ok) {
+    return;
+  }
+  deps.hub.notifyEnvironment(args.environmentId, ["work-status-changed"]);
+}
 
-  post(
-    "/session/environment-change",
-    hostDaemonEnvironmentChangeRequestSchema,
-    (context, payload) =>
-      runWithDaemonCommandWaitForbidden({
-        reason: "/session/environment-change",
-        work: async () => {
-          const session = requireAuthenticatedDaemonSession({
-            context,
-            db: deps.db,
-            sessionId: payload.sessionId,
-          });
-          const environment = requireEnvironment(
-            deps.db,
-            payload.environmentId,
-          );
-          if (environment.hostId !== session.hostId) {
-            throw new ApiError(
-              403,
-              "invalid_request",
-              "Environment does not belong to the session host",
-            );
-          }
-          if (environment.status === "destroyed") {
-            throw new ApiError(
-              410,
-              "environment_destroyed",
-              "Environment has been destroyed",
-              { retryable: false },
-            );
-          }
+export function notifyDaemonEnvironmentChange(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: NotifyDaemonEnvironmentChangeArgs,
+): void {
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (
+    !environment ||
+    environment.hostId !== args.hostId ||
+    environment.status === "destroyed"
+  ) {
+    return;
+  }
 
-          deps.hub.notifyEnvironment(environment.id, [payload.change]);
-          return context.json({ ok: true });
-        },
-      }),
-  );
+  deps.hub.notifyEnvironment(environment.id, [args.change]);
 }

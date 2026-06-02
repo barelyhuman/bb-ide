@@ -17,6 +17,7 @@ export {
   createEnvironmentId,
   createEventId,
   createEnvironmentProvisioningId,
+  createHostDaemonCommandAttemptId,
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,

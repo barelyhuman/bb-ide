@@ -63,6 +63,7 @@ describe("project operations", () => {
     const { db, host, project } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.destroy",
       payload: JSON.stringify({
         type: "environment.destroy",
@@ -140,6 +141,7 @@ describe("project operations", () => {
     const { db, host, project } = setup();
     const firstCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.destroy",
       payload: JSON.stringify({
         type: "environment.destroy",
@@ -152,6 +154,7 @@ describe("project operations", () => {
     });
     const secondCommand = queueCommand(db, noopNotifier, {
       hostId: host.id,
+      sessionId: null,
       type: "environment.destroy",
       payload: JSON.stringify({
         type: "environment.destroy",

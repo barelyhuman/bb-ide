@@ -3,9 +3,12 @@ import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
 import {
   getActiveSession,
+  getEnvironment,
   getThread,
+  hostDaemonCommands,
   hostDaemonSessions,
   listEvents,
+  markThreadDeleted,
 } from "@bb/db";
 import { threadResponseSchema } from "@bb/server-contract";
 import {
@@ -23,7 +26,13 @@ import {
   onDaemonSocketMessage,
   validateDaemonWebSocket,
 } from "../../src/ws/daemon-protocol.js";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  internalAuthHeaders,
+  listQueuedEnvironmentCommands,
+  reportQueuedCommandSuccess,
+  waitForQueuedCommand,
+  waitForQueuedCommandAfter,
+} from "../helpers/commands.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -51,6 +60,12 @@ async function waitForClose(socket: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
     socket.once("close", () => resolve());
     socket.once("error", reject);
+  });
+}
+
+async function waitForImmediate(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
   });
 }
 
@@ -531,6 +546,7 @@ describe("internal session correctness", () => {
         {
           config: harness.config,
           db: harness.db,
+          hub: harness.hub,
           logger,
           terminalSessions: harness.deps.terminalSessions,
         },
@@ -572,6 +588,7 @@ describe("internal session correctness", () => {
         {
           config: harness.config,
           db: harness.db,
+          hub: harness.hub,
           logger,
           terminalSessions: harness.deps.terminalSessions,
         },
@@ -756,7 +773,7 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("closes expired lease sockets and interrupts their pending interactions during sweeps", async () => {
+  it("closes expired lease sockets and interrupts pending interactions during sweeps", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-daemon-expired-lease-interaction",
@@ -837,7 +854,7 @@ describe("internal session correctness", () => {
       expect(interrupted).toMatchObject({
         status: "interrupted",
         statusReason:
-          "Host daemon connection expired while awaiting user interaction; retry the thread to continue",
+          "Host daemon session expired while awaiting user interaction; retry the thread to continue",
       });
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
 
@@ -854,7 +871,7 @@ describe("internal session correctness", () => {
     });
   });
 
-  it("interrupts old-session pending interactions but keeps runtime connected when a replacement session opens during grace", async () => {
+  it("keeps pending interactions and runtime connected when a replacement session opens during grace", async () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
@@ -912,7 +929,7 @@ describe("internal session correctness", () => {
         }),
         body: JSON.stringify({
           hostId: host.id,
-          instanceId: "instance-2",
+          instanceId: "instance-1",
           hostName: host.name,
           hostType: host.type,
           dataDir: "/tmp/host-daemon-reconnect-data",
@@ -941,9 +958,8 @@ describe("internal session correctness", () => {
         },
       );
       expect(interrupted).toMatchObject({
-        status: "interrupted",
-        statusReason:
-          "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
+        status: "pending",
+        statusReason: null,
       });
       const threadResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}`,
@@ -964,6 +980,193 @@ describe("internal session correctness", () => {
       vi.useRealTimers();
       await harness.cleanup();
     }
+  });
+
+  it("interrupts pending interactions when a same-instance reconnect no longer reports an active thread", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-same-instance-disowns-thread",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-same-instance-disowned-interaction",
+        providerThreadId: "provider-thread-same-instance-disowned",
+      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-same-instance-disowned-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-thread-same-instance-disowned",
+            providerRequestId: "request-same-instance-disowned",
+            payload: createCommandApprovalPayload({
+              itemId: "item-same-instance-disowned",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
+      if (registered.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
+      }
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: host.type,
+        }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-1",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/host-daemon-same-instance-disowns-thread",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction({
+        threadId: thread.id,
+        interactionId: registered.interaction.id,
+      });
+      expect(interrupted).toMatchObject({
+        status: "interrupted",
+        statusReason: "Host daemon restarted while awaiting user interaction",
+      });
+
+      const originalSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(originalSession?.closeReason).toBe("replaced");
+    });
+  });
+
+  it("defers cleanup preflight when reconnect finalizes a deleted thread during session open", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-session-open-deferred-cleanup",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/session-open-deferred-cleanup",
+        status: "ready",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        isGitRepo: true,
+        mergeBaseBranch: "main",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: thread.id,
+        deletedAt: 1_700_000_000_000,
+      });
+
+      const sessionOpen = harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: host.type,
+        }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-session-open-deferred-cleanup",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/session-open-deferred-cleanup-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+      const response = await Promise.race([
+        sessionOpen,
+        sleep(50).then(() => null),
+      ]);
+
+      if (response === null) {
+        throw new Error(
+          "Session open waited for environment cleanup preflight instead of returning",
+        );
+      }
+      expect(response.status).toBe(201);
+      expect(getThread(harness.db, thread.id)).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: "safe",
+        cleanupRequestedAt: expect.any(Number),
+      });
+      expect(
+        listQueuedEnvironmentCommands(
+          harness,
+          "environment.cleanup_preflight",
+          environment.id,
+        ),
+      ).toEqual([]);
+
+      await waitForImmediate();
+
+      const preflightCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.cleanup_preflight" &&
+          command.environmentId === environment.id,
+      );
+      const preflightResponse = await reportQueuedCommandSuccess(
+        harness,
+        preflightCommand,
+        { outcome: "safe_to_destroy" },
+        { hostId: host.id, hostType: host.type },
+      );
+      expect(preflightResponse.status).toBe(200);
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        preflightCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      expect(destroyCommand.command).toMatchObject({
+        environmentId: environment.id,
+      });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "environment.cleanup_preflight"))
+          .all(),
+      ).toHaveLength(1);
+    });
   });
 
   it("interrupts pending interactions when a replacement daemon session has a new instance id", async () => {
