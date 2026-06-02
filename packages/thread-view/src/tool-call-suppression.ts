@@ -1,6 +1,8 @@
+import { claudeTaskToolNameValues } from "@bb/domain";
 import type { ThreadEvent } from "@bb/domain";
 
 const SUPPRESSED_TIMELINE_TOOL_NAMES = new Set([
+  ...claudeTaskToolNameValues,
   "TodoRead",
   "TodoWrite",
   "ToolSearch",

@@ -1,3 +1,4 @@
+import { claudeTaskToolNameValues } from "@bb/domain";
 import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import {
   createProviderVisibilityMetadata,
@@ -22,6 +23,7 @@ const CLAUDE_WELL_KNOWN_TOOL_NAMES = [
   "Glob",
   "Grep",
   "Read",
+  ...claudeTaskToolNameValues,
   "TodoWrite",
   "ToolSearch",
   "WebFetch",

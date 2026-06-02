@@ -3040,6 +3040,312 @@ describe("claude-code provider adapter", () => {
     );
   });
 
+  it("translateEvent preserves structured TaskCreate tool results", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "task-create-1",
+            name: "TaskCreate",
+            input: {
+              subject: "Add task support",
+              description: "Track Claude Task tools",
+              activeForm: "Adding task support",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "task-create-1",
+            tool_name: "TaskCreate",
+            content: {
+              task: {
+                id: "task-1",
+                subject: "Add task support",
+              },
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "task-create-1",
+          tool: "TaskCreate",
+          result: {
+            task: {
+              id: "task-1",
+              subject: "Add task support",
+            },
+          },
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves structured TaskUpdate tool results", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "task-update-1",
+            name: "TaskUpdate",
+            input: {
+              taskId: "task-1",
+              status: "in_progress",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "task-update-1",
+            tool_name: "TaskUpdate",
+            content: {
+              success: true,
+              taskId: "task-1",
+              updatedFields: ["status"],
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "task-update-1",
+          tool: "TaskUpdate",
+          result: {
+            success: true,
+            taskId: "task-1",
+            updatedFields: ["status"],
+          },
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves structured TaskList tool results", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "task-list-1",
+            name: "TaskList",
+            input: {},
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "task-list-1",
+            tool_name: "TaskList",
+            content: {
+              tasks: [
+                {
+                  id: "task-1",
+                  subject: "Add task support",
+                  status: "pending",
+                  blockedBy: [],
+                },
+              ],
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "task-list-1",
+          tool: "TaskList",
+          result: {
+            tasks: [
+              {
+                id: "task-1",
+                subject: "Add task support",
+                status: "pending",
+                blockedBy: [],
+              },
+            ],
+          },
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves structured TaskGet tool results", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "task-get-1",
+            name: "TaskGet",
+            input: {
+              taskId: "task-1",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "task-get-1",
+            tool_name: "TaskGet",
+            content: {
+              task: {
+                id: "task-1",
+                subject: "Add task support",
+                description: "Track Claude Task tools",
+                status: "completed",
+                blocks: [],
+                blockedBy: [],
+              },
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "task-get-1",
+          tool: "TaskGet",
+          result: {
+            task: {
+              id: "task-1",
+              subject: "Add task support",
+              description: "Track Claude Task tools",
+              status: "completed",
+              blocks: [],
+              blockedBy: [],
+            },
+          },
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves structured Task results without a matching started item", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "x" }] },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "task-update-late",
+            tool_name: "TaskUpdate",
+            content: JSON.stringify({
+              success: true,
+              taskId: "task-1",
+              updatedFields: ["status"],
+            }),
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "task-update-late",
+          tool: "TaskUpdate",
+          result: {
+            success: true,
+            taskId: "task-1",
+            updatedFields: ["status"],
+          },
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
   it("translateEvent marks Bash tool results with is_error as failed", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

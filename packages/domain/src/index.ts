@@ -442,6 +442,43 @@ export { jsonObjectSchema, jsonValueSchema } from "./json-value.js";
 export type { JsonObject, JsonValue } from "./json-value.js";
 
 export {
+  claudeTaskCreateArgsSchema,
+  claudeTaskCreateOutputSchema,
+  claudeTaskGetArgsSchema,
+  claudeTaskGetOutputSchema,
+  claudeTaskGetOutputTaskSchema,
+  claudeTaskListItemSchema,
+  claudeTaskListOutputSchema,
+  claudeTaskListStatusSchema,
+  claudeTaskListStatusValues,
+  claudeTaskStatusSchema,
+  claudeTaskStatusValues,
+  claudeTaskToolNameSchema,
+  claudeTaskToolNameValues,
+  claudeTaskToolOutputSchema,
+  claudeTaskUpdateArgsSchema,
+  claudeTaskUpdateOutputSchema,
+  claudeTaskUpdateStatusSchema,
+  claudeTaskUpdateStatusValues,
+} from "./claude-task-tools.js";
+export type {
+  ClaudeTaskCreateArgs,
+  ClaudeTaskCreateOutput,
+  ClaudeTaskGetArgs,
+  ClaudeTaskGetOutput,
+  ClaudeTaskGetOutputTask,
+  ClaudeTaskListItem,
+  ClaudeTaskListOutput,
+  ClaudeTaskListStatus,
+  ClaudeTaskStatus,
+  ClaudeTaskToolName,
+  ClaudeTaskToolOutput,
+  ClaudeTaskUpdateArgs,
+  ClaudeTaskUpdateOutput,
+  ClaudeTaskUpdateStatus,
+} from "./claude-task-tools.js";
+
+export {
   assertThreadEventScope,
   getThreadEventScopeTurnId,
   requireThreadEventScopeTurnId,

@@ -1431,6 +1431,55 @@ describe("buildThreadTimelineFromEvents", () => {
     expect(JSON.stringify(rows)).not.toContain("Matched tools: TodoWrite");
   });
 
+  it.each(["TaskCreate", "TaskGet", "TaskList", "TaskUpdate"])(
+    "suppresses pending and completed %s rows",
+    (tool) => {
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        toolCallItemEvent({
+          seq: 1,
+          tool,
+          toolArgs: { subject: "Hidden task tool" },
+          type: "item/started",
+        }),
+        toolCallItemEvent({
+          result: "ok",
+          seq: 2,
+          tool,
+          toolArgs: { subject: "Hidden task tool" },
+          type: "item/completed",
+        }),
+      ]);
+
+      expect(collectToolRows(rows)).toEqual([]);
+    },
+  );
+
+  it.each(["TaskCreate", "TaskGet", "TaskList", "TaskUpdate"])(
+    "keeps failed %s rows visible",
+    (tool) => {
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        toolCallItemEvent({
+          result: "Task tool failed",
+          seq: 1,
+          status: "failed",
+          tool,
+          toolArgs: { subject: "Failed task tool" },
+          type: "item/completed",
+        }),
+      ]);
+
+      expect(collectToolRows(rows)).toEqual([
+        expect.objectContaining({
+          output: "Task tool failed",
+          status: "error",
+          toolName: tool,
+        }),
+      ]);
+    },
+  );
+
   it("suppresses the generic AskUserQuestion tool row in favor of the question row", () => {
     const rows = buildTimelineRows([
       turnStartedEvent({ seq: 0 }),

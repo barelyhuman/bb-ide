@@ -58,7 +58,7 @@ interface StandaloneMessageEntryDraft {
 type ProjectionEntryDraft = TurnEntryDraft | StandaloneMessageEntryDraft;
 
 export function getOrderedThreadEvents(
-  events: ThreadEventWithMeta[],
+  events: readonly ThreadEventWithMeta[],
 ): ThreadEventWithMeta[] {
   let areEventsOrdered = true;
   for (let index = 1; index < events.length; index += 1) {
@@ -69,8 +69,8 @@ export function getOrderedThreadEvents(
   }
 
   return areEventsOrdered
-    ? events
-    : [...events].sort((a, b) => a.meta.seq - b.meta.seq);
+    ? Array.from(events)
+    : Array.from(events).sort((a, b) => a.meta.seq - b.meta.seq);
 }
 
 function toEventProjectionTurnStatus(

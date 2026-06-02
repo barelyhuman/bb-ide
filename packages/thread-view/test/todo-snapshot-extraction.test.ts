@@ -1,6 +1,6 @@
-import { turnScope } from "@bb/domain";
+import { jsonObjectSchema, turnScope } from "@bb/domain";
 import type {
-  JsonObject,
+  ClaudeTaskToolName,
   Thread,
   ThreadEventItemStatus,
   ThreadEventPlanStep,
@@ -27,6 +27,15 @@ interface TurnPlanEventArgs {
   seq: number;
 }
 
+interface TaskToolEventArgs {
+  args?: Record<string, unknown>;
+  itemId?: string;
+  result?: unknown;
+  seq: number;
+  status?: ThreadEventItemStatus;
+  tool: ClaudeTaskToolName;
+}
+
 function todoWriteEvent({
   itemId = "tool-call-1",
   seq,
@@ -44,8 +53,39 @@ function todoWriteEvent({
         type: "toolCall",
         id: itemId,
         tool: "TodoWrite",
-        arguments: { todos } as JsonObject,
+        arguments: jsonObjectSchema.parse({ todos }),
         status: status ?? (type === "item/completed" ? "completed" : "pending"),
+      },
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
+function taskToolEvent({
+  args = {},
+  itemId = "task-tool-call-1",
+  result,
+  seq,
+  status = "completed",
+  tool,
+}: TaskToolEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "item/completed",
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      item: {
+        type: "toolCall",
+        id: itemId,
+        tool,
+        arguments: jsonObjectSchema.parse(args),
+        status,
+        ...(result !== undefined ? { result } : {}),
       },
     },
     meta: {
@@ -123,6 +163,367 @@ describe("extractThreadTimelinePendingTodos", () => {
       items: [
         { id: "seq:20:0", text: "New doing", status: "in_progress" },
         { id: "seq:20:1", text: "New pending", status: "pending" },
+      ],
+    });
+  });
+
+  it("uses TodoWrite activeForm for in-progress items", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      todoWriteEvent({
+        seq: 10,
+        todos: [
+          {
+            content: "Run the test suite",
+            status: "in_progress",
+            activeForm: "Running the test suite",
+          },
+          {
+            content: "Update docs",
+            status: "pending",
+            activeForm: "Updating docs",
+          },
+          {
+            content: "Ship fix",
+            status: "completed",
+            activeForm: "Shipping fix",
+          },
+        ],
+      }),
+    ]);
+    expect(result).toMatchObject({
+      sourceSeq: 10,
+      items: [
+        { text: "Running the test suite", status: "in_progress" },
+        { text: "Update docs", status: "pending" },
+        { text: "Ship fix", status: "completed" },
+      ],
+    });
+  });
+
+  it("reduces Claude TaskCreate and TaskUpdate events into pending todos", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 10,
+        tool: "TaskCreate",
+        args: {
+          subject: "Add parser",
+          activeForm: "Adding parser",
+        },
+        result: { task: { id: "task-1", subject: "Add parser" } },
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskCreate",
+        args: {
+          subject: "Add tests",
+          activeForm: "Adding tests",
+        },
+        result: { task: { id: "task-2", subject: "Add tests" } },
+      }),
+      taskToolEvent({
+        seq: 30,
+        tool: "TaskUpdate",
+        args: {
+          taskId: "task-1",
+          status: "in_progress",
+        },
+        result: { success: true, taskId: "task-1", updatedFields: ["status"] },
+      }),
+      taskToolEvent({
+        seq: 40,
+        tool: "TaskUpdate",
+        args: {
+          taskId: "task-2",
+          status: "completed",
+        },
+        result: { success: true, taskId: "task-2", updatedFields: ["status"] },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 40,
+      updatedAt: 40,
+      items: [
+        { id: "task:task-1", text: "Adding parser", status: "in_progress" },
+        { id: "task:task-2", text: "Add tests", status: "completed" },
+      ],
+    });
+  });
+
+  it("deletes Claude Task items when TaskUpdate status is deleted", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 10,
+        tool: "TaskCreate",
+        args: {
+          subject: "Keep",
+        },
+        result: { task: { id: "task-keep", subject: "Keep" } },
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskCreate",
+        args: {
+          subject: "Remove",
+        },
+        result: { task: { id: "task-remove", subject: "Remove" } },
+      }),
+      taskToolEvent({
+        seq: 30,
+        tool: "TaskUpdate",
+        args: {
+          taskId: "task-remove",
+          status: "deleted",
+        },
+        result: { success: true, taskId: "task-remove" },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 30,
+      updatedAt: 30,
+      items: [{ id: "task:task-keep", text: "Keep", status: "pending" }],
+    });
+  });
+
+  it("replaces Claude Task state from a TaskList result", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 10,
+        tool: "TaskCreate",
+        args: {
+          subject: "Stale task",
+        },
+        result: { task: { id: "task-stale", subject: "Stale task" } },
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskList",
+        result: {
+          tasks: [
+            {
+              id: "task-current",
+              subject: "Current task",
+              status: "in_progress",
+              blockedBy: [],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 20,
+      updatedAt: 20,
+      items: [
+        {
+          id: "task:task-current",
+          text: "Current task",
+          status: "in_progress",
+        },
+      ],
+    });
+  });
+
+  it("filters invalid and deleted TaskList items without dropping valid siblings", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskList",
+        result: {
+          tasks: [
+            {
+              id: "task-valid",
+              subject: "Valid task",
+              status: "pending",
+              blockedBy: [],
+            },
+            {
+              id: "task-unknown-status",
+              subject: "Unknown status",
+              status: "blocked",
+              blockedBy: [],
+            },
+            {
+              id: "task-deleted",
+              subject: "Deleted task",
+              status: "deleted",
+              blockedBy: [],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 20,
+      updatedAt: 20,
+      items: [{ id: "task:task-valid", text: "Valid task", status: "pending" }],
+    });
+  });
+
+  it("uses TaskGet to upsert, refresh, and remove known task state", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 10,
+        tool: "TaskGet",
+        args: { taskId: "task-1" },
+        result: {
+          task: {
+            id: "task-1",
+            subject: "Loaded task",
+            status: "pending",
+          },
+        },
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskGet",
+        args: { taskId: "task-1" },
+        result: {
+          task: {
+            id: "task-1",
+            subject: "Loaded task updated",
+            status: "in_progress",
+          },
+        },
+      }),
+      taskToolEvent({
+        seq: 30,
+        tool: "TaskGet",
+        args: { taskId: "task-1" },
+        result: { task: null },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 30,
+      updatedAt: 30,
+      items: [],
+    });
+  });
+
+  it("ignores TaskGet null results for unknown ids", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      todoWriteEvent({
+        seq: 10,
+        todos: [{ content: "Keep todo", status: "pending" }],
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskGet",
+        args: { taskId: "unknown-task" },
+        result: { task: null },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 10,
+      updatedAt: 10,
+      items: [{ id: "seq:10:0", text: "Keep todo", status: "pending" }],
+    });
+  });
+
+  it("does not let unknown TaskUpdate deletes displace earlier snapshots", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      todoWriteEvent({
+        seq: 10,
+        todos: [{ content: "Keep todo", status: "pending" }],
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskUpdate",
+        args: {
+          taskId: "missing-task",
+          status: "deleted",
+        },
+        result: { success: true, taskId: "missing-task" },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 10,
+      updatedAt: 10,
+      items: [{ id: "seq:10:0", text: "Keep todo", status: "pending" }],
+    });
+  });
+
+  it("does not synthesize unknown TaskUpdate ids into tasks", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      todoWriteEvent({
+        seq: 10,
+        todos: [{ content: "Keep todo", status: "pending" }],
+      }),
+      taskToolEvent({
+        seq: 20,
+        tool: "TaskUpdate",
+        args: {
+          taskId: "missing-task",
+          subject: "Phantom task",
+          activeForm: "Creating phantom task",
+          status: "in_progress",
+        },
+        result: { success: true, taskId: "missing-task" },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 10,
+      updatedAt: 10,
+      items: [{ id: "seq:10:0", text: "Keep todo", status: "pending" }],
+    });
+  });
+
+  it("reduces Task tool events in sequence order even when input is unordered", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 30,
+        tool: "TaskUpdate",
+        args: {
+          taskId: "task-1",
+          status: "in_progress",
+        },
+        result: { success: true, taskId: "task-1" },
+      }),
+      taskToolEvent({
+        seq: 10,
+        tool: "TaskCreate",
+        args: {
+          subject: "Ordered task",
+          activeForm: "Ordering task",
+        },
+        result: { task: { id: "task-1", subject: "Ordered task" } },
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 30,
+      updatedAt: 30,
+      items: [
+        { id: "task:task-1", text: "Ordering task", status: "in_progress" },
+      ],
+    });
+  });
+
+  it("parses stringified Claude Task tool results from older persisted events", () => {
+    const result = extractThreadTimelinePendingTodos(ACTIVE, [
+      taskToolEvent({
+        seq: 10,
+        tool: "TaskCreate",
+        args: {
+          subject: "Persisted task",
+        },
+        result: JSON.stringify({
+          task: { id: "task-string", subject: "Persisted task" },
+        }),
+      }),
+    ]);
+
+    expect(result).toEqual({
+      sourceSeq: 10,
+      updatedAt: 10,
+      items: [
+        { id: "task:task-string", text: "Persisted task", status: "pending" },
       ],
     });
   });
@@ -380,7 +781,7 @@ describe("parseTodoWriteTodos", () => {
     expect(parsed?.todos[0]?.content.length).toBe(240);
   });
 
-  it("ignores extra fields like activeForm without affecting the parsed output", () => {
+  it("keeps activeForm when present", () => {
     const result = parseTodoWriteTodos({
       todos: [
         {
@@ -391,7 +792,13 @@ describe("parseTodoWriteTodos", () => {
       ],
     });
     expect(result).toEqual({
-      todos: [{ content: "Update docs", status: "in_progress" }],
+      todos: [
+        {
+          activeForm: "Updating docs",
+          content: "Update docs",
+          status: "in_progress",
+        },
+      ],
     });
   });
 });

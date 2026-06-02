@@ -19,8 +19,14 @@ import type {
   ThreadEventItem,
   UserQuestionPendingInteractionPayload,
   UserQuestionPendingInteractionResolution,
+  ClaudeTaskToolOutput,
 } from "@bb/domain";
-import { jsonValueSchema, threadScope } from "@bb/domain";
+import {
+  claudeTaskToolNameSchema,
+  claudeTaskToolOutputSchema,
+  jsonValueSchema,
+  threadScope,
+} from "@bb/domain";
 import {
   isApprovalPendingInteractionPayload,
   isApprovalPendingInteractionResolution,
@@ -95,6 +101,7 @@ import {
   claudeFileEditArgsSchema,
   claudeWebFetchArgsSchema,
   claudeWebSearchArgsSchema,
+  type ClaudeToolUseResult,
   type ClaudeFileEditArgs,
   type ClaudeWebFetchArgs,
   type ClaudeWebSearchArgs,
@@ -539,6 +546,31 @@ function translateClaudeToolUseItem(
   }
 }
 
+function parseClaudeTaskToolOutputValue(
+  value: unknown,
+): ClaudeTaskToolOutput | null {
+  const parsed = claudeTaskToolOutputSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  if (typeof value !== "string") return null;
+  try {
+    const json: unknown = JSON.parse(value);
+    const parsedJson = claudeTaskToolOutputSchema.safeParse(json);
+    return parsedJson.success ? parsedJson.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseClaudeTaskToolOutput(
+  args: ParseClaudeTaskToolOutputArgs,
+): ClaudeTaskToolOutput | null {
+  return (
+    parseClaudeTaskToolOutputValue(args.content) ??
+    parseClaudeTaskToolOutputValue(args.toolUseResult) ??
+    parseClaudeTaskToolOutputValue(args.outputText)
+  );
+}
+
 function translateClaudeToolResultItem(
   input: ClaudeToolResultTranslationInput,
 ): ThreadEventItem {
@@ -604,7 +636,16 @@ function translateClaudeToolResultItem(
           },
           input.parentToolCallId ?? startedItem.parentToolCallId,
         );
-      case "toolCall":
+      case "toolCall": {
+        const taskToolResult = claudeTaskToolNameSchema.safeParse(
+          startedItem.tool,
+        ).success
+          ? parseClaudeTaskToolOutput({
+              content: input.content,
+              outputText,
+              toolUseResult: input.toolUseResult,
+            })
+          : null;
         return withParentToolCallId(
           {
             type: "toolCall",
@@ -612,22 +653,31 @@ function translateClaudeToolResultItem(
             tool: startedItem.tool,
             arguments: startedItem.arguments,
             status: itemStatus,
-            result: outputText,
+            result: taskToolResult ?? outputText,
           },
           input.parentToolCallId ?? startedItem.parentToolCallId,
         );
+      }
       default:
         break;
     }
   }
 
+  const fallbackTaskToolResult =
+    input.toolName && claudeTaskToolNameSchema.safeParse(input.toolName).success
+      ? parseClaudeTaskToolOutput({
+          content: input.content,
+          outputText,
+          toolUseResult: input.toolUseResult,
+        })
+      : null;
   const fallbackToolCall = withParentToolCallId(
     {
       type: "toolCall",
       id: input.callId,
       tool: input.toolName ?? "unknown",
       status: itemStatus,
-      result: outputText,
+      result: fallbackTaskToolResult ?? outputText,
     },
     input.parentToolCallId,
   );
@@ -697,6 +747,12 @@ export interface CreateClaudeCodeProviderAdapterOptions extends ProviderAdapterF
 interface TranslateClaudeErrorEnvelopeArgs {
   context?: ProviderTranslationContext;
   detail: string;
+}
+
+interface ParseClaudeTaskToolOutputArgs {
+  content: unknown;
+  outputText: string | undefined;
+  toolUseResult: ClaudeToolUseResult | null;
 }
 
 interface ResolveClaudeInteractiveRequestTurnIdArgs {
