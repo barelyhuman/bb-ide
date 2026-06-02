@@ -46,7 +46,13 @@ describe("real provider workspace integration", () => {
             harness.api,
             environment.id,
           );
-          expect(initialStatus.workspace?.branch.currentBranch).toBeTruthy();
+          expect(initialStatus.outcome).toBe("available");
+          if (initialStatus.outcome !== "available") {
+            throw new Error(
+              `Expected initial workspace status, received ${initialStatus.outcome}`,
+            );
+          }
+          expect(initialStatus.workspace.branch.currentBranch).toBeTruthy();
           expect(branches.branches.length).toBeGreaterThan(0);
 
           await sendTextMessage(harness.api, thread.id, {
@@ -69,7 +75,13 @@ describe("real provider workspace integration", () => {
             environment.id,
           );
           const diff = await getEnvironmentDiff(harness.api, environment.id);
-          expect(refreshedStatus.workspace?.branch.currentBranch).toBeTruthy();
+          expect(refreshedStatus.outcome).toBe("available");
+          if (refreshedStatus.outcome !== "available") {
+            throw new Error(
+              `Expected refreshed workspace status, received ${refreshedStatus.outcome}`,
+            );
+          }
+          expect(refreshedStatus.workspace.branch.currentBranch).toBeTruthy();
           expectNonEmptyOutput(
             await getThreadOutput(harness.api, thread.id),
             `${providerId} workspace output`,

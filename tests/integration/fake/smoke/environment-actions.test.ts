@@ -51,8 +51,12 @@ describe.sequential("fake provider smoke environment integration", () => {
         environment.id,
       );
 
-      expect(status.workspace?.workingTree.state).toBe("clean");
-      expect(status.workspace?.workingTree.hasUncommittedChanges).toBe(false);
+      expect(status.outcome).toBe("available");
+      if (status.outcome !== "available") {
+        throw new Error(`Expected workspace status, received ${status.outcome}`);
+      }
+      expect(status.workspace.workingTree.state).toBe("clean");
+      expect(status.workspace.workingTree.hasUncommittedChanges).toBe(false);
       expect(typeof diff.diff).toBe("string");
       expect(branches.branches).toContain("main");
     }));
@@ -85,7 +89,13 @@ describe.sequential("fake provider smoke environment integration", () => {
         harness.api,
         environment.id,
       );
-      expect(dirtyStatus.workspace?.workingTree.hasUncommittedChanges).toBe(
+      expect(dirtyStatus.outcome).toBe("available");
+      if (dirtyStatus.outcome !== "available") {
+        throw new Error(
+          `Expected dirty workspace status, received ${dirtyStatus.outcome}`,
+        );
+      }
+      expect(dirtyStatus.workspace.workingTree.hasUncommittedChanges).toBe(
         true,
       );
 
@@ -104,7 +114,13 @@ describe.sequential("fake provider smoke environment integration", () => {
         harness.api,
         environment.id,
       );
-      expect(cleanStatus.workspace?.workingTree.state).toBe("clean");
+      expect(cleanStatus.outcome).toBe("available");
+      if (cleanStatus.outcome !== "available") {
+        throw new Error(
+          `Expected clean workspace status, received ${cleanStatus.outcome}`,
+        );
+      }
+      expect(cleanStatus.workspace.workingTree.state).toBe("clean");
 
       const subject = await runGit({
         args: ["log", "-1", "--format=%s"],
