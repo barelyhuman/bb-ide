@@ -1,4 +1,5 @@
 import type { ThreadListEntry } from "@bb/domain";
+import { compareCodepoint } from "@/lib/codepoint-compare";
 import { getCollapsedChildActivity } from "@/lib/thread-activity";
 import {
   buildProjectThreadGroups,
@@ -37,7 +38,7 @@ function compareByPinnedFallback(
     return createdAtDelta;
   }
 
-  return left.id.localeCompare(right.id);
+  return compareCodepoint(left.id, right.id);
 }
 
 function comparePinnedRoots(
@@ -45,7 +46,7 @@ function comparePinnedRoots(
   right: ThreadListEntry,
 ): number {
   if (left.pinSortKey !== null && right.pinSortKey !== null) {
-    const pinSortKeyDelta = left.pinSortKey.localeCompare(right.pinSortKey);
+    const pinSortKeyDelta = compareCodepoint(left.pinSortKey, right.pinSortKey);
     if (pinSortKeyDelta !== 0) {
       return pinSortKeyDelta;
     }

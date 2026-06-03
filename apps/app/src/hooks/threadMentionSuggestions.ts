@@ -4,6 +4,7 @@ import type {
   PromptMentionSuggestion,
   ThreadMentionSectionMode,
 } from "@/components/promptbox/mentions/types";
+import { compareCodepoint } from "@/lib/codepoint-compare";
 
 export type ThreadSuggestionMode = "none" | "managers" | "all";
 export type ThreadMentionSuggestion = Extract<
@@ -80,7 +81,7 @@ function compareRankedThreadMentionSuggestions(
   const rightTitle = right.suggestion.title ?? "";
   return (
     leftTitle.localeCompare(rightTitle) ||
-    left.suggestion.threadId.localeCompare(right.suggestion.threadId)
+    compareCodepoint(left.suggestion.threadId, right.suggestion.threadId)
   );
 }
 

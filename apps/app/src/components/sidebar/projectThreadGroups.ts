@@ -2,6 +2,7 @@ import type {
   EnvironmentWorkspaceDisplayKind,
   ThreadListEntry,
 } from "@bb/domain";
+import { compareCodepoint } from "@/lib/codepoint-compare";
 import {
   getCollapsedChildActivity,
   type CollapsedChildActivity,
@@ -57,7 +58,7 @@ function compareByCreatedAtDescending(
     return createdAtDelta;
   }
 
-  return left.id.localeCompare(right.id);
+  return compareCodepoint(left.id, right.id);
 }
 
 function compareByLatestAttentionAtDescending(

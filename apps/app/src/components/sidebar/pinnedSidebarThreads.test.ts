@@ -71,6 +71,32 @@ describe("buildPinnedSidebarState", () => {
     ]);
   });
 
+  it("orders pin sort keys by codepoint, not locale", () => {
+    // The fractional-index keys are collated by codepoint on the server and by
+    // the key generator. `localeCompare` would order "a" before "Z"; codepoint
+    // (matching the server) orders "Z" (0x5A) before "a" (0x61).
+    const state = buildPinnedSidebarState({
+      threads: [
+        createThread({
+          id: "pinned-lower",
+          pinnedAt: 1_000,
+          pinSortKey: "a",
+        }),
+        createThread({
+          id: "pinned-upper",
+          pinnedAt: 2_000,
+          pinSortKey: "Z",
+        }),
+      ],
+    });
+
+    expect(
+      state.rootItems.map((item) =>
+        item.kind === "thread" ? item.thread.id : item.group.managerThread.id,
+      ),
+    ).toEqual(["pinned-upper", "pinned-lower"]);
+  });
+
   it("moves manager children with a pinned manager", () => {
     const state = buildPinnedSidebarState({
       threads: [
