@@ -10,7 +10,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
@@ -27,13 +26,13 @@ import { useSetRootComposeMode } from "@/lib/root-compose-selection";
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   isResizing: boolean;
-  showInlineTrigger: boolean;
+  showTopReserve: boolean;
 }
 
 export function AppSidebar({
   onResizeMouseDown,
   isResizing,
-  showInlineTrigger,
+  showTopReserve,
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const navigate = useNavigate();
@@ -70,27 +69,23 @@ export function AppSidebar({
   return (
     <>
       <Sidebar>
-        {showInlineTrigger ? (
+        {showTopReserve ? (
           /* Top reserve that keeps the sidebar's content (New Thread / New
-             Manager / Projects) anchored below the title-bar chrome. Matches
-             the page-header height so the sidebar's top region mirrors the
-             chrome on the content side. In desktop chrome the visible toggle is
-             pinned at the window root (see AppLayout's
-             DesktopSidebarTriggerOverlay), so this row is just the window-drag
-             strip — and it stays mounted in every sidebar state, including
-             while the panel collapses off-canvas, so the content holds its
-             vertical position instead of riding up under the pinned trigger
-             during the animation. In browser chrome it hosts the inline
-             trigger. */
+             Manager / Projects) anchored below the title-bar chrome, mirroring
+             the page-header height on the content side. The sidebar toggle is
+             pinned at the app's top-left for every chrome (see AppLayout's
+             SidebarTriggerOverlay), so this row hosts no trigger of its own — it
+             stays mounted in every sidebar state, including while the panel
+             collapses off-canvas, so the content holds its vertical position
+             instead of riding up under the pinned toggle during the animation.
+             On desktop it doubles as the window-drag strip. */
           <div
-            data-testid="app-sidebar-inline-trigger-row"
+            data-testid="app-sidebar-top-reserve-row"
             className={cn(
               "flex h-12 shrink-0 items-center",
               usesDesktopChrome ? MACOS_WINDOW_DRAG_CLASS : "px-2",
             )}
-          >
-            {usesDesktopChrome ? null : <SidebarTrigger />}
-          </div>
+          />
         ) : null}
         <div
           data-testid="app-sidebar-primary-actions"

@@ -64,9 +64,6 @@ describe.sequential("fake provider user-question integration", () => {
             id: providerId,
             supportsUserQuestion: true,
           }),
-        featureFlags: {
-          askUserQuestion: true,
-        },
       },
       async (harness) => {
         const project = await createProjectFixture(

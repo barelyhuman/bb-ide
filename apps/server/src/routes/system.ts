@@ -1,4 +1,5 @@
 import {
+  buildFeatureFlags,
   systemExecutionOptionsQuerySchema,
   systemProvidersQuerySchema,
   typedRoutes,
@@ -13,10 +14,7 @@ import {
   resolveVoiceTranscriptionEnabled,
   transcribeVoiceInput,
 } from "../services/ai/voice-transcription.js";
-import {
-  applyProviderFeatureFlags,
-  resolveSystemExecutionOptions,
-} from "../services/system/execution-options.js";
+import { resolveSystemExecutionOptions } from "../services/system/execution-options.js";
 import { resolveSystemLookupHostId } from "../services/system/host-lookup.js";
 
 export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
@@ -26,7 +24,7 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
 
   get("/system/config", (context) =>
     context.json({
-      featureFlags: deps.config.featureFlags,
+      featureFlags: buildFeatureFlags({ placeholder: false }),
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: resolveVoiceTranscriptionEnabled(deps),
     }),
@@ -52,12 +50,7 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "provider.list" },
       });
-      return context.json(
-        applyProviderFeatureFlags({
-          featureFlags: deps.config.featureFlags,
-          providers: result.providers,
-        }),
-      );
+      return context.json(result.providers);
     },
   );
 

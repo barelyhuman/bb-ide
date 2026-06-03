@@ -232,60 +232,8 @@ describe("internal interactive request lifecycle", () => {
     });
   });
 
-  it("rejects user-question interactive requests when the feature flag is disabled", async () => {
-    await withTestHarness({
-      featureFlags: {
-        askUserQuestion: false,
-      },
-    }, async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-user-question-disabled",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        providerId: "claude-code",
-      });
-
-      const response = await registerInteractiveRequest({
-        harness,
-        body: {
-          sessionId: session.id,
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-user-question-disabled",
-            providerId: "claude-code",
-            providerThreadId: "provider-thread-user-question-disabled",
-            providerRequestId: "request-user-question-disabled",
-            payload: createUserQuestionPayload(),
-          },
-        },
-      });
-
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        outcome: "rejected",
-        reason: "Ask User Question feature is disabled",
-      });
-      expect(
-        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
-      ).toEqual([]);
-    });
-  });
-
-  it("persists user-question interactive requests when the feature flag is enabled", async () => {
-    await withTestHarness({
-      featureFlags: {
-        askUserQuestion: true,
-      },
-    }, async (harness) => {
+  it("persists user-question interactive requests", async () => {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-user-question-enabled",
       });

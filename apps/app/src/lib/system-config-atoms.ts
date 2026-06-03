@@ -1,6 +1,5 @@
 import { atom } from "jotai";
 import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
-import type { FeatureFlags } from "@bb/domain";
 import type { HostDaemonStatusSnapshot } from "./api-host-daemon";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
@@ -8,13 +7,8 @@ import { fetchHostStatus, fetchWorkspaceOpenTargets } from "./api-host-daemon";
 import { wsManager } from "./ws";
 
 // Offline/unavailable app behavior should fail closed independently of server defaults.
-const unavailableFeatureFlags: FeatureFlags = {
-  askUserQuestion: false,
-  terminals: false,
-};
-
 const unavailableSystemConfig: SystemConfigResponse = {
-  featureFlags: unavailableFeatureFlags,
+  featureFlags: {},
   hostDaemonPort: null,
   voiceTranscriptionEnabled: false,
 };
@@ -209,10 +203,4 @@ export const localWorkspaceOpenTargetsAtom = atom<
 export const hostDaemonPortAtom = atom<Promise<number | null>>(async (get) => {
   const config = await get(systemConfigAtom);
   return config.hostDaemonPort;
-});
-
-/** Whether thread terminal sessions are enabled by the server. */
-export const terminalsEnabledAtom = atom<Promise<boolean>>(async (get) => {
-  const config = await get(systemConfigAtom);
-  return config.featureFlags.terminals;
 });

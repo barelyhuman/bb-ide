@@ -31,7 +31,6 @@ function renderHeader(overrides: RenderHeaderOverrides = {}) {
     onOpenThreadGitAction: noop,
     onToggleSecondaryPanel: overrides.onToggleSecondaryPanel ?? noop,
     onToggleTerminalPanel: noop,
-    showTerminalPanelToggle: false,
     threadHeaderGitActions: [],
     threadTitle: "Test thread",
   };

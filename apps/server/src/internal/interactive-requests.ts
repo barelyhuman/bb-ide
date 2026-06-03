@@ -5,7 +5,6 @@ import {
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
 import { getThread, hasStoredTurnStarted } from "@bb/db";
-import { isUserQuestionPendingInteractionPayload } from "@bb/domain";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
@@ -75,16 +74,6 @@ export function registerInternalInteractiveRequestRoutes(
           "invalid_request",
           "Thread does not belong to the session host",
         );
-      }
-
-      if (
-        isUserQuestionPendingInteractionPayload(payload.interaction.payload) &&
-        !deps.config.featureFlags.askUserQuestion
-      ) {
-        return context.json({
-          outcome: "rejected",
-          reason: "Ask User Question feature is disabled",
-        });
       }
 
       // Daemons must flush provider turn events before every interactive

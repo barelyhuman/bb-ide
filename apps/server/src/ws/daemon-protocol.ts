@@ -61,7 +61,7 @@ export async function validateDaemonWebSocket(
 }
 
 export function onDaemonSocketOpen(
-  deps: Pick<AppDeps, "config" | "hub" | "logger" | "terminalSessions">,
+  deps: Pick<AppDeps, "hub" | "logger" | "terminalSessions">,
   args: { hostId: string; sessionId: string; socket: DaemonSocket },
 ): void {
   deps.logger.info(
@@ -69,12 +69,10 @@ export function onDaemonSocketOpen(
     "Daemon WebSocket opened",
   );
   deps.hub.registerDaemon(args.sessionId, args.hostId, args.socket);
-  if (deps.config.featureFlags.terminals) {
-    deps.terminalSessions.expireDisconnectedHostTerminals({
-      daemonSessionId: args.sessionId,
-      hostId: args.hostId,
-    });
-  }
+  deps.terminalSessions.expireDisconnectedHostTerminals({
+    daemonSessionId: args.sessionId,
+    hostId: args.hostId,
+  });
 }
 
 export function onDaemonSocketMessage(
@@ -151,10 +149,7 @@ export function onDaemonSocketMessage(
       }
       return;
     }
-    if (
-      result.data.type !== "heartbeat" &&
-      deps.config.featureFlags.terminals
-    ) {
+    if (result.data.type !== "heartbeat") {
       deps.terminalSessions.handleDaemonTerminalMessage({
         hostId: args.hostId,
         message: result.data,

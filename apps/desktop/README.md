@@ -19,6 +19,21 @@ desktop dev run launched from an existing bb session still targets the current
 checkout. Set `BB_DESKTOP_USER_DATA_DIR` to override only Electron's user-data
 directory.
 
+The launcher probes the checkout's Vite app port at startup and adapts:
+
+- **`pnpm dev` is already running** (Vite reachable): the shell loads the Vite
+  dev URL, so you get live source and HMR for `@bb/app` changes — no rebuild
+  needed. It still attaches to the same running server/daemon for all API/WS
+  traffic. The launcher prints `app <url> (Vite dev server — live reload)`. This
+  is the fast loop for iterating on the desktop UI.
+- **`pnpm dev` is not running**: the shell starts its own `bb-app` runtime and
+  loads the built UI it serves, so you must rebuild (re-run this task) to pick up
+  source changes. The launcher prints `app (own bb-app runtime — …)`.
+
+The override is plumbed via `BB_DESKTOP_APP_URL`, which the launcher only sets
+when Vite is confirmed reachable; it is never set in packaged builds, so
+production always loads the server's own built UI.
+
 To run the slower unpacked Electron Builder app, which more closely matches the
 packaged runtime and keeps native dependencies rebuilt for Electron's bundled
 Node runtime:

@@ -1290,9 +1290,6 @@ describe("public environment and system routes", () => {
 
   it("returns runtime config from GET /system/config", async () => {
     await withTestHarness({
-      featureFlags: {
-        askUserQuestion: true,
-      },
       hostDaemonPort: 4010,
       openAiApiKey: "",
       transcriptionModel: "codex/gpt-4o-mini-transcribe",
@@ -1300,10 +1297,7 @@ describe("public environment and system routes", () => {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
-        featureFlags: {
-          askUserQuestion: true,
-          terminals: true,
-        },
+        featureFlags: { placeholder: false },
         hostDaemonPort: 4010,
         voiceTranscriptionEnabled: false,
       });
@@ -1383,11 +1377,7 @@ describe("public environment and system routes", () => {
   });
 
   it("uses host RPC, not durable commands, for system provider reads", async () => {
-    await withTestHarness({
-      featureFlags: {
-        askUserQuestion: false,
-      },
-    }, async (harness) => {
+    await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-system-routes",
       });
@@ -1469,7 +1459,7 @@ describe("public environment and system routes", () => {
         expect.objectContaining({
           id: "claude-code",
           capabilities: expect.objectContaining({
-            supportsUserQuestion: false,
+            supportsUserQuestion: true,
           }),
         }),
       ]);
@@ -1486,7 +1476,7 @@ describe("public environment and system routes", () => {
           expect.objectContaining({
             id: "claude-code",
             capabilities: expect.objectContaining({
-              supportsUserQuestion: false,
+              supportsUserQuestion: true,
             }),
           }),
         ],
@@ -1666,67 +1656,6 @@ describe("public environment and system routes", () => {
       expect(responder.requests.map((request) => request.command.type)).toEqual(
         ["provider.list", "provider.list_models"],
       );
-      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
-    });
-  });
-
-  it.each([
-    {
-      askUserQuestion: false,
-      expectedCapability: false,
-      name: "masks user-question provider capability when the flag is disabled",
-    },
-    {
-      askUserQuestion: true,
-      expectedCapability: true,
-      name: "preserves user-question provider capability when the flag is enabled",
-    },
-  ])("$name", async ({ askUserQuestion, expectedCapability }) => {
-    await withTestHarness({
-      featureFlags: {
-        askUserQuestion,
-      },
-    }, async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: `host-system-provider-question-${askUserQuestion ? "enabled" : "disabled"}`,
-      });
-      registerProviderHostRpcResponder(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        providers: [
-          {
-            id: "claude-code",
-            displayName: "Claude Code",
-            capabilities: {
-              supportsArchive: false,
-              supportsRename: false,
-              supportsServiceTier: false,
-              supportsUserQuestion: true,
-              supportedPermissionModes: ["full", "workspace-write", "readonly"],
-            },
-            available: true,
-          },
-        ],
-      });
-
-      const providersResponse = await harness.app.request(
-        `/api/v1/system/providers?hostId=${host.id}`,
-      );
-      expect(providersResponse.status).toBe(200);
-      await expect(readJson(providersResponse)).resolves.toEqual([
-        {
-          id: "claude-code",
-          displayName: "Claude Code",
-          capabilities: {
-            supportsArchive: false,
-            supportsRename: false,
-            supportsServiceTier: false,
-            supportsUserQuestion: expectedCapability,
-            supportedPermissionModes: ["full", "workspace-write", "readonly"],
-          },
-          available: true,
-        },
-      ]);
       expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
     });
   });

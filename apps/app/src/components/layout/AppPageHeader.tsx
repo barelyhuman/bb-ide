@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from "react";
-import {
-  SidebarTrigger,
-  useIsSidebarShowing,
-} from "@/components/ui/sidebar.js";
+import { useIsSidebarShowing } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import {
+  BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
   getBbDesktopInfo,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -36,7 +34,6 @@ export function AppPageHeader({
   const isSidebarShowing = useIsSidebarShowing();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  const showSidebarTrigger = !isSidebarShowing;
   return (
     <header
       className={cn(
@@ -50,26 +47,20 @@ export function AppPageHeader({
         data-testid="app-page-header-content-row"
         className={cn(
           "flex h-full items-center gap-1 md:gap-2",
-          usesDesktopChrome &&
-            !isSidebarShowing &&
-            MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
+          // The sidebar toggle is pinned at the app's top-left (see AppLayout's
+          // SidebarTriggerOverlay), so when the sidebar is collapsed the header
+          // content shares the row with that fixed button and reserves its
+          // footprint as left padding. Transition the padding on the same 200ms
+          // linear curve as the sidebar panel/inset slide so the two compose into
+          // one smooth motion; without it the reserve snaps on/off instantly
+          // while the inset animates and the content jumps left/right.
+          "transition-[padding] duration-200 ease-linear",
+          !isSidebarShowing &&
+            (usesDesktopChrome
+              ? MACOS_COLLAPSED_HEADER_RESERVE_CLASS
+              : BROWSER_COLLAPSED_HEADER_RESERVE_CLASS),
         )}
       >
-        {showSidebarTrigger ? (
-          usesDesktopChrome ? (
-            // The visible toggle is pinned at the window root (see AppLayout's
-            // DesktopSidebarTriggerOverlay). Reserve its footprint here so the
-            // header content lines up identically whether the sidebar is open
-            // or collapsed.
-            <div
-              aria-hidden
-              data-testid="app-page-header-trigger-spacer"
-              className={cn("shrink-0", HEADER_ICON_BUTTON_CLASS)}
-            />
-          ) : (
-            <SidebarTrigger className="-ml-2 shrink-0 md:ml-0" />
-          )
-        ) : null}
         {center ? (
           <div className="flex min-w-0 flex-1 items-center">
             <div className="flex min-w-0 max-w-full items-center gap-2">

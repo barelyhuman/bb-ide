@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import type {
   ThreadTimelineLinkHandler,
   ThreadTimelineLocalFileLink,
@@ -109,7 +109,6 @@ import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { useThreadUnreadDividerState } from "./useThreadUnreadDividerState";
 import { useThreadTimelinePages } from "./useThreadTimelinePages";
-import { terminalsEnabledAtom } from "@/lib/system-config-atoms";
 import {
   buildOpenInEditorHandler,
   resolveWorkspaceChangedFileOpenTarget,
@@ -430,10 +429,7 @@ export function ThreadDetailView() {
     errorMessage: "Failed to assign manager.",
     lifecycleOperation: "assign_manager",
   });
-  const terminalsEnabled = useAtomValue(terminalsEnabledAtom);
-  const terminalsListQuery = useThreadTerminals(threadId ?? "", {
-    enabled: terminalsEnabled,
-  });
+  const terminalsListQuery = useThreadTerminals(threadId ?? "");
   const activeTerminalCount = useMemo(
     () =>
       terminalsListQuery.data?.sessions.filter(
@@ -1031,9 +1027,7 @@ export function ThreadDetailView() {
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
   const canCreateTerminal =
-    terminalsEnabled &&
-    thread.environmentId !== null &&
-    environment?.status === "ready";
+    thread.environmentId !== null && environment?.status === "ready";
   const threadGitStatusDisplay = getGitStatusDisplay(workspaceStatus, {
     mergeBaseBranch,
     showBranchComparison: showBranchComparisonUi,
@@ -1090,12 +1084,11 @@ export function ThreadDetailView() {
       isManagerThread={isManagerThread}
       isSecondaryPanelOpen={isSecondaryPanelOpen}
       activeTerminalCount={activeTerminalCount}
-      isTerminalPanelOpen={terminalsEnabled && terminalPanelState.isOpen}
+      isTerminalPanelOpen={terminalPanelState.isOpen}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleSecondaryPanel}
       onToggleTerminalPanel={toggleTerminalPanel}
-      showTerminalPanelToggle={terminalsEnabled}
       threadHeaderGitActions={gitActions.threadHeaderGitActions}
       threadTitle={threadTitle}
       workspaceOpenButton={workspaceOpenButton}
@@ -1313,15 +1306,13 @@ export function ThreadDetailView() {
           showGitDiffTab: canUseGitUi,
         }}
         terminalPanel={
-          terminalsEnabled ? (
-            <ThreadTerminalPanel
-              canCreateTerminal={canCreateTerminal}
-              threadId={thread.id}
-            />
-          ) : undefined
+          <ThreadTerminalPanel
+            canCreateTerminal={canCreateTerminal}
+            threadId={thread.id}
+          />
         }
         terminalPanelHeightPercent={terminalPanelState.panelHeightPercent}
-        terminalPanelOpen={terminalsEnabled && terminalPanelState.isOpen}
+        terminalPanelOpen={terminalPanelState.isOpen}
         onTerminalPanelResize={handleTerminalPanelResize}
         timeline={{
           activeThinking,

@@ -281,35 +281,33 @@ export function createApp(
     })),
   );
 
-  if (deps.config.featureFlags.terminals) {
-    app.get(
-      "/ws/threads/:threadId/terminals/:terminalId",
-      upgradeWebSocket((context) => {
-        const threadId = context.req.param("threadId");
-        const terminalId = context.req.param("terminalId");
-        return {
-          onOpen: (_event, socket) =>
-            onTerminalSocketOpen(deps, {
-              socket,
-              terminalId,
-              threadId,
-            }),
-          onMessage: (event, socket) =>
-            onTerminalSocketMessage(deps, {
-              raw: event.data,
-              socket,
-              terminalId,
-              threadId,
-            }),
-          onClose: (_event, socket) =>
-            onTerminalSocketClose(deps, {
-              socket,
-              terminalId,
-            }),
-        };
-      }),
-    );
-  }
+  app.get(
+    "/ws/threads/:threadId/terminals/:terminalId",
+    upgradeWebSocket((context) => {
+      const threadId = context.req.param("threadId");
+      const terminalId = context.req.param("terminalId");
+      return {
+        onOpen: (_event, socket) =>
+          onTerminalSocketOpen(deps, {
+            socket,
+            terminalId,
+            threadId,
+          }),
+        onMessage: (event, socket) =>
+          onTerminalSocketMessage(deps, {
+            raw: event.data,
+            socket,
+            terminalId,
+            threadId,
+          }),
+        onClose: (_event, socket) =>
+          onTerminalSocketClose(deps, {
+            socket,
+            terminalId,
+          }),
+      };
+    }),
+  );
 
   app.get(
     "/internal/ws",

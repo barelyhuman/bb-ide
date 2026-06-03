@@ -107,10 +107,7 @@ const managerTemplates = {
 } satisfies ManagerTemplatesResponse;
 
 const systemConfig = {
-  featureFlags: {
-    askUserQuestion: false,
-    terminals: false,
-  },
+  featureFlags: {},
   hostDaemonPort: null,
   voiceTranscriptionEnabled: false,
 } satisfies SystemConfigResponse;

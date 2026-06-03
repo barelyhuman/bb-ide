@@ -15,7 +15,6 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-  useIsSidebarShowing,
 } from "@/components/ui/sidebar.js";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
@@ -38,6 +37,7 @@ import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvi
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
 import {
+  BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,
   getBbDesktopInfo,
   MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
@@ -148,50 +148,62 @@ function SidebarStateBridge({
   );
 }
 
-function FloatingSidebarTrigger() {
-  const isSidebarShowing = useIsSidebarShowing();
-  if (isSidebarShowing) return null;
-  return (
-    <div className="absolute left-3 top-3.5 z-20">
-      <SidebarTrigger className="h-5 w-5 rounded-md p-0" />
-    </div>
-  );
-}
-
 function resetSidebarResizeDocumentState(): void {
   document.body.classList.remove("sidebar-resizing");
   clearResizeCursor();
   document.body.style.userSelect = "";
 }
 
+interface SidebarTriggerOverlayProps {
+  usesDesktopChrome: boolean;
+}
+
 /**
- * Desktop-only sidebar toggle, pinned to the window's top-left just right of
- * the macOS traffic lights. Rendered once at the layout root — outside the
- * sliding sidebar panel and the content inset — so it holds a constant
- * window position while the sidebar animates in/out behind it, instead of
- * riding whichever container would otherwise host it.
+ * Sidebar toggle pinned at the app's top-left, rendered once at the layout root
+ * — outside the sliding sidebar panel and the content inset — so it holds a
+ * constant position while the sidebar animates in/out behind it, instead of
+ * riding whichever container would otherwise host it. The collapsed page header
+ * reserves its footprint as animated padding (see AppPageHeader), so toggling
+ * slides the header content smoothly past it rather than snapping around a
+ * toggle that mounts/unmounts in the header.
  *
- * The wrapper is offset clear of the traffic lights and stays a window-drag
- * region; only the button itself is no-drag, so the title strip above and
- * below the (shorter) button stays draggable rather than becoming an
- * oversized dead zone.
+ * Desktop chrome offsets it clear of the macOS traffic lights and keeps the
+ * strip a window-drag region; only the button itself is no-drag, so the title
+ * strip above and below the (shorter) button stays draggable rather than
+ * becoming an oversized dead zone. Browser chrome has no traffic lights, so it
+ * sits flush at the top-left with a small inset.
  */
-function DesktopSidebarTriggerOverlay() {
+function SidebarTriggerOverlay({
+  usesDesktopChrome,
+}: SidebarTriggerOverlayProps) {
+  if (usesDesktopChrome) {
+    return (
+      <div
+        data-testid="app-desktop-sidebar-trigger"
+        className={cn(
+          "fixed top-0 z-50 flex h-12 items-center",
+          MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
+          MACOS_WINDOW_DRAG_CLASS,
+        )}
+      >
+        <SidebarTrigger
+          className={cn(
+            MACOS_WINDOW_NO_DRAG_CLASS,
+            MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
+          )}
+        />
+      </div>
+    );
+  }
   return (
     <div
-      data-testid="app-desktop-sidebar-trigger"
+      data-testid="app-sidebar-trigger-overlay"
       className={cn(
-        "fixed top-0 z-50 flex h-12 items-center",
-        MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
-        MACOS_WINDOW_DRAG_CLASS,
+        "fixed left-0 top-0 z-50 flex h-12 items-center",
+        BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,
       )}
     >
-      <SidebarTrigger
-        className={cn(
-          MACOS_WINDOW_NO_DRAG_CLASS,
-          MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
-        )}
-      />
+      <SidebarTrigger />
     </div>
   );
 }
@@ -390,8 +402,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const showHeader = !isThreadView;
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  const showFloatingSidebarTrigger =
-    !showHeader && isRootView && !usesDesktopChrome;
   const sidebarProviderStyle: SidebarProviderStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
   };
@@ -574,14 +584,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           <AppSidebar
             onResizeMouseDown={handleResizeMouseDown}
             isResizing={isSidebarResizing}
-            showInlineTrigger={true}
+            showTopReserve={true}
           />
           <SidebarInset>
             <div
               data-testid="app-layout-content-shell"
               className="relative flex h-[100dvh] min-w-0 w-full flex-col"
             >
-              {showFloatingSidebarTrigger ? <FloatingSidebarTrigger /> : null}
               {showHeader ? (
                 <AppHeader
                   usesDesktopChrome={usesDesktopChrome}
@@ -600,7 +609,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </main>
             </div>
           </SidebarInset>
-          {usesDesktopChrome ? <DesktopSidebarTriggerOverlay /> : null}
+          <SidebarTriggerOverlay usesDesktopChrome={usesDesktopChrome} />
         </SidebarStateBridge>
         <ProjectPathDialog
           target={quickCreateProject.projectPathDialog.target}

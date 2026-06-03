@@ -3,7 +3,7 @@ import type {
   SystemExecutionOptionsModelLoadError,
   SystemExecutionOptionsResponse,
 } from "@bb/server-contract";
-import type { FeatureFlags, ProviderInfo } from "@bb/domain";
+import type { ProviderInfo } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
@@ -16,11 +16,6 @@ export interface SystemExecutionOptionsRequest {
   providerId?: string;
 }
 
-interface ApplyProviderFeatureFlagsArgs {
-  featureFlags: FeatureFlags;
-  providers: ProviderInfo[];
-}
-
 interface BuildModelLoadErrorArgs {
   error: ApiError;
   provider: ProviderInfo;
@@ -30,29 +25,6 @@ type ModelListResult = Pick<
   SystemExecutionOptionsResponse,
   "modelLoadError" | "models" | "selectedOnlyModels"
 >;
-
-export function applyProviderFeatureFlags({
-  featureFlags,
-  providers,
-}: ApplyProviderFeatureFlagsArgs): ProviderInfo[] {
-  if (featureFlags.askUserQuestion) {
-    return providers;
-  }
-
-  return providers.map((provider) => {
-    if (!provider.capabilities.supportsUserQuestion) {
-      return provider;
-    }
-
-    return {
-      ...provider,
-      capabilities: {
-        ...provider.capabilities,
-        supportsUserQuestion: false,
-      },
-    };
-  });
-}
 
 export async function resolveSystemExecutionOptions(
   deps: AppDeps,
@@ -64,10 +36,6 @@ export async function resolveSystemExecutionOptions(
     timeoutMs: COMMAND_TIMEOUT_MS,
     command: { type: "provider.list" },
   });
-  const featureFlaggedProviders = applyProviderFeatureFlags({
-    featureFlags: deps.config.featureFlags,
-    providers,
-  });
   const requestedProvider = query.providerId
     ? providers.find((provider) => provider.id === query.providerId)
     : undefined;
@@ -75,7 +43,7 @@ export async function resolveSystemExecutionOptions(
 
   if (!modelsProvider) {
     return {
-      providers: featureFlaggedProviders,
+      providers,
       models: [],
       selectedOnlyModels: [],
       modelLoadError: null,
@@ -123,7 +91,7 @@ export async function resolveSystemExecutionOptions(
   }
 
   return {
-    providers: featureFlaggedProviders,
+    providers,
     models: modelResult.models,
     selectedOnlyModels: modelResult.selectedOnlyModels,
     modelLoadError: modelResult.modelLoadError,

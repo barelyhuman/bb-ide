@@ -1,4 +1,4 @@
-import { defaultFeatureFlags, hostTypeSchema, type HostType } from "@bb/domain";
+import { hostTypeSchema, type HostType } from "@bb/domain";
 import { DEFAULTS } from "./defaults.js";
 import { defineEnvVar, type EnvVarParseArgs } from "./env.js";
 import {
@@ -181,18 +181,6 @@ export const OPENAI_API_KEY_ENV = defineEnvVar<string>({
   parse: parseStringEnvValue,
 });
 
-export const BB_FF_ASK_USER_QUESTION_ENV = defineEnvVar<boolean>({
-  description: "Enable the Ask User Question feature",
-  name: "BB_FF_ASK_USER_QUESTION",
-  parse: parseBooleanEnvValue,
-});
-
-export const BB_FF_TERMINALS_ENV = defineEnvVar<boolean>({
-  description: "Enable terminal sessions in threads",
-  name: "BB_FF_TERMINALS",
-  parse: parseBooleanEnvValue,
-});
-
 export const BB_DEV_APP_HOST_ENV = defineEnvVar<string>({
   description:
     "Development-only Vite bind host for apps/app. Set to 0.0.0.0 to test from phones or other LAN devices.",
@@ -268,6 +256,3 @@ export const DEFAULT_BB_DEV_APP_HOST = "";
 export const DEFAULT_BB_DEV_REPLAY_CAPTURE = false;
 export const DEFAULT_BB_INFERENCE = DEFAULTS.inferenceModel;
 export const DEFAULT_BB_TRANSCRIPTION = DEFAULTS.transcriptionModel;
-export const DEFAULT_BB_FF_ASK_USER_QUESTION =
-  defaultFeatureFlags.askUserQuestion;
-export const DEFAULT_BB_FF_TERMINALS = defaultFeatureFlags.terminals;

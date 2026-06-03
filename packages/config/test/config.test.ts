@@ -304,8 +304,6 @@ describe("consumer-specific config", () => {
         BB_APP_URL: undefined,
         BB_APP_VERSION: undefined,
         BB_EXTERNAL_URL: undefined,
-        BB_FF_ASK_USER_QUESTION: undefined,
-        BB_FF_TERMINALS: undefined,
         BB_INFERENCE: undefined,
         BB_TRANSCRIPTION: undefined,
       }),
@@ -317,10 +315,6 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_APP_URL).toBe("");
     expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
-    expect(serverConfig.featureFlags).toEqual({
-      askUserQuestion: true,
-      terminals: true,
-    });
     expect(serverConfig.BB_INFERENCE).toBe("codex/gpt-5.4-mini");
     expect(serverConfig.BB_TRANSCRIPTION).toBe("codex/gpt-4o-mini-transcribe");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
@@ -402,29 +396,7 @@ describe("consumer-specific config", () => {
     ).toThrow(/BB_TRANSCRIPTION/u);
   });
 
-  it("parses feature flags from env", () => {
-    const serverConfig = loadServerConfig({
-      env: createServerRuntimeEnv({
-        BB_FF_ASK_USER_QUESTION: "false",
-        BB_FF_TERMINALS: "true",
-      }),
-    });
-
-    expect(serverConfig.featureFlags.askUserQuestion).toBe(false);
-    expect(serverConfig.featureFlags.terminals).toBe(true);
-  });
-
   it("accepts envsafe-compatible boolean forms from env", () => {
-    const serverConfig = loadServerConfig({
-      env: createServerRuntimeEnv({
-        BB_FF_ASK_USER_QUESTION: "1",
-        BB_FF_TERMINALS: "YES",
-      }),
-    });
-
-    expect(serverConfig.featureFlags.askUserQuestion).toBe(true);
-    expect(serverConfig.featureFlags.terminals).toBe(true);
-
     const hostDaemonConfig = loadHostDaemonConnectionConfig({
       env: createHostDaemonRuntimeEnv({
         BB_DEV_REPLAY_CAPTURE: "0",
@@ -432,26 +404,6 @@ describe("consumer-specific config", () => {
     });
 
     expect(hostDaemonConfig.BB_DEV_REPLAY_CAPTURE).toBe(false);
-  });
-
-  it("rejects invalid feature flag booleans in server config", () => {
-    expect(() =>
-      loadServerConfig({
-        env: createServerRuntimeEnv({
-          BB_FF_ASK_USER_QUESTION: "not-bool",
-        }),
-      }),
-    ).toThrow(/BB_FF_ASK_USER_QUESTION/u);
-  });
-
-  it("rejects invalid terminal feature flag booleans in server config", () => {
-    expect(() =>
-      loadServerConfig({
-        env: createServerRuntimeEnv({
-          BB_FF_TERMINALS: "not-bool",
-        }),
-      }),
-    ).toThrow(/BB_FF_TERMINALS/u);
   });
 
   it("requires a valid server URL for the daemon and CLI", () => {

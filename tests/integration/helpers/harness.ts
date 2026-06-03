@@ -20,7 +20,6 @@ import {
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
 import { createHostWatcher } from "@bb/host-watcher";
-import { defaultFeatureFlags, type FeatureFlags } from "@bb/domain";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
 import { createApp } from "../../../apps/server/src/server.js";
@@ -52,7 +51,6 @@ let loadedProjectEnvPath: string | null | undefined;
 
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 type InternalHostDaemonClient = ReturnType<typeof createHostDaemonClient>;
-type FeatureFlagOverrides = Partial<FeatureFlags>;
 
 const testLogger: ServerLogger = {
   debug(): void {},
@@ -92,7 +90,6 @@ export interface IntegrationHarness {
 
 export interface CreateHarnessOptions {
   adapterFactory?: ProviderAdapterFactory;
-  featureFlags?: FeatureFlagOverrides;
 }
 
 export type WithHarnessCallback<T> = (
@@ -132,16 +129,6 @@ function resolveAdapterFactory(
     return options.adapterFactory;
   }
   return () => createFakeAdapter();
-}
-
-function resolveFeatureFlags(
-  overrides: FeatureFlagOverrides | undefined,
-): FeatureFlags {
-  return {
-    askUserQuestion:
-      overrides?.askUserQuestion ?? defaultFeatureFlags.askUserQuestion,
-    terminals: overrides?.terminals ?? defaultFeatureFlags.terminals,
-  };
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -234,7 +221,6 @@ async function startIntegrationServer(
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-dev",
     dataDir: serverDataDir,
-    featureFlags: resolveFeatureFlags(options.featureFlags),
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",

@@ -4,11 +4,7 @@ import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
-import {
-  defaultFeatureFlags,
-  type FeatureFlags,
-  type HostType,
-} from "@bb/domain";
+import type { HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
@@ -43,15 +39,8 @@ export interface RunningTestServer extends TestAppHarness {
   close(): Promise<void>;
 }
 
-type TestFeatureFlagOverrides = Partial<FeatureFlags>;
-type OptionalTestFeatureFlagOverrides = TestFeatureFlagOverrides | undefined;
-
-export type TestAppHarnessConfigOverrides = Omit<
-  Partial<ServerRuntimeConfig>,
-  "featureFlags"
-> & {
+export type TestAppHarnessConfigOverrides = Partial<ServerRuntimeConfig> & {
   appVersionService?: AppVersionService;
-  featureFlags?: TestFeatureFlagOverrides;
 };
 
 export const testLogger = {
@@ -88,16 +77,6 @@ function decodeTestDaemonKey(token: string): TestDaemonKeyParts | null {
   };
 }
 
-function resolveTestFeatureFlags(
-  overrides: OptionalTestFeatureFlagOverrides,
-): FeatureFlags {
-  return {
-    askUserQuestion:
-      overrides?.askUserQuestion ?? defaultFeatureFlags.askUserQuestion,
-    terminals: overrides?.terminals ?? defaultFeatureFlags.terminals,
-  };
-}
-
 export function createTestDaemonHostKey(
   args: Partial<TestDaemonKeyParts> = {},
 ): string {
@@ -110,11 +89,7 @@ export function createTestDaemonHostKey(
 export async function createTestAppHarness(
   overrides: TestAppHarnessConfigOverrides = {},
 ): Promise<TestAppHarness> {
-  const {
-    appVersionService,
-    featureFlags: featureFlagOverrides,
-    ...configOverrides
-  } = overrides;
+  const { appVersionService, ...configOverrides } = overrides;
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
@@ -155,7 +130,6 @@ export async function createTestAppHarness(
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-test",
     dataDir,
-    featureFlags: resolveTestFeatureFlags(featureFlagOverrides),
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     isDevelopment: true,

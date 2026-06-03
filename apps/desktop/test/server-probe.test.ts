@@ -77,7 +77,6 @@ describe("probeBbServer", () => {
             response,
             200,
             JSON.stringify({
-              featureFlags: {},
               hostDaemonPort: 38887,
               voiceTranscriptionEnabled: false,
             }),
@@ -128,7 +127,6 @@ describe("probeBbServer", () => {
             response,
             200,
             JSON.stringify({
-              featureFlags: {},
               hostDaemonPort: 38887,
               voiceTranscriptionEnabled: false,
             }),

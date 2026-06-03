@@ -2,7 +2,6 @@
 
 import { createStore } from "jotai";
 import { cleanup, waitFor } from "@testing-library/react";
-import { defaultFeatureFlags, type FeatureFlags } from "@bb/domain";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +15,6 @@ vi.mock("partysocket/ws", async () => {
 });
 
 interface SuccessfulSystemConfigRoute {
-  featureFlags?: FeatureFlags;
   hostDaemonPort: number | null;
   voiceTranscriptionEnabled: boolean;
 }
@@ -42,7 +40,6 @@ interface AtomModules {
   FakeReconnectingWebSocket: typeof import("@/test/fake-reconnecting-websocket").FakeReconnectingWebSocket;
   localHostIdAtom: typeof import("./system-config-atoms").localHostIdAtom;
   systemConfigAtom: typeof import("./system-config-atoms").systemConfigAtom;
-  terminalsEnabledAtom: typeof import("./system-config-atoms").terminalsEnabledAtom;
   wsManager: typeof import("./ws").wsManager;
 }
 
@@ -64,7 +61,6 @@ function installAtomFetchRoutes(state: SystemConfigRouteState) {
         }
 
         return jsonResponse({
-          featureFlags: nextConfig.featureFlags ?? defaultFeatureFlags,
           hostDaemonPort: nextConfig.hostDaemonPort,
           voiceTranscriptionEnabled: nextConfig.voiceTranscriptionEnabled,
         });
@@ -89,7 +85,7 @@ async function importFreshAtomModules(): Promise<AtomModules> {
   vi.resetModules();
 
   const [
-    { localHostIdAtom, systemConfigAtom, terminalsEnabledAtom },
+    { localHostIdAtom, systemConfigAtom },
     { wsManager },
     { FakeReconnectingWebSocket },
   ] = await Promise.all([
@@ -102,7 +98,6 @@ async function importFreshAtomModules(): Promise<AtomModules> {
     FakeReconnectingWebSocket,
     localHostIdAtom,
     systemConfigAtom,
-    terminalsEnabledAtom,
     wsManager,
   };
 }
@@ -117,27 +112,6 @@ afterEach(() => {
 });
 
 describe("atoms", () => {
-  it("derives terminal availability from system config feature flags", async () => {
-    installAtomFetchRoutes({
-      configs: [
-        {
-          featureFlags: {
-            ...defaultFeatureFlags,
-            terminals: true,
-          },
-          hostDaemonPort: null,
-          voiceTranscriptionEnabled: false,
-        },
-      ],
-      daemonStatuses: [],
-    });
-
-    const { terminalsEnabledAtom } = await importFreshAtomModules();
-    const store = createStore();
-
-    expect(await store.get(terminalsEnabledAtom)).toBe(true);
-  });
-
   it("does not re-fetch config after the websocket first connects when the initial load succeeds", async () => {
     installAtomFetchRoutes({
       configs: [

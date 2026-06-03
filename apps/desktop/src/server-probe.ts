@@ -8,7 +8,6 @@ const healthResponseSchema = z
 
 const systemConfigResponseSchema = z
   .object({
-    featureFlags: z.record(z.string(), z.boolean()),
     hostDaemonPort: z.number().int().min(1).max(65_535),
     voiceTranscriptionEnabled: z.boolean(),
   })

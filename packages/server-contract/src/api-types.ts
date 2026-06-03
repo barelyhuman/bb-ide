@@ -4,7 +4,6 @@ import {
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
   activeThinkingSchema,
-  featureFlagsSchema,
   environmentSchema,
   gitBranchNameSchema,
   gitBranchRefClassificationSchema,
@@ -1987,6 +1986,54 @@ export const sidebarBootstrapResponseSchema = z.object({
 export type SidebarBootstrapResponse = z.infer<
   typeof sidebarBootstrapResponseSchema
 >;
+
+/**
+ * Feature flags exposed to clients as a name→enabled map. The wire type is a
+ * loose `Record<string, boolean>` so the response shape never changes as flags
+ * are added or retired: flag lifecycle (add → toggle → delete) stays
+ * non-breaking for independently-versioned clients, which read an absent flag
+ * as off instead of crashing on a missing `featureFlags` object.
+ *
+ * Strictness lives at the boundaries — the server produces flags through
+ * {@link buildFeatureFlags} (exhaustive over {@link FEATURE_FLAG_NAMES}) and
+ * consumers read them through {@link isFeatureEnabled} (typed names, fail-closed).
+ */
+export const featureFlagsSchema = z.record(z.string(), z.boolean());
+export type FeatureFlags = z.infer<typeof featureFlagsSchema>;
+
+/**
+ * Known feature flags — the single source of truth for flag names.
+ *
+ * `placeholder` is a PERMANENT, non-functional keep-alive: it guarantees this
+ * registry is never empty, so `FeatureFlagName` never collapses to `never` and
+ * the typed boundary helpers stay callable even after every real flag has been
+ * cleaned up. Add real flags alongside it; do NOT remove it, and do NOT gate
+ * behavior on it. Keeping it means retiring a launched flag is just a one-line
+ * deletion here — never a re-derivation of this whole seam.
+ */
+export const FEATURE_FLAG_NAMES = ["placeholder"] as const;
+export type FeatureFlagName = (typeof FEATURE_FLAG_NAMES)[number];
+
+/**
+ * Producer boundary: requires a value for every known flag — adding a flag to
+ * the registry forces the server to wire it — then widens to the loose wire type.
+ */
+export function buildFeatureFlags(
+  flags: Record<FeatureFlagName, boolean>,
+): FeatureFlags {
+  return flags;
+}
+
+/**
+ * Consumer boundary: typed flag name with autocomplete; fail-closed when a
+ * client/server version skew omits the flag.
+ */
+export function isFeatureEnabled(
+  flags: FeatureFlags,
+  name: FeatureFlagName,
+): boolean {
+  return flags[name] === true;
+}
 
 export const systemConfigResponseSchema = z.object({
   featureFlags: featureFlagsSchema,

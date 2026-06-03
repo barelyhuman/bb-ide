@@ -38,9 +38,6 @@ export type {
 
 export { reconcileReasoningLevel } from "./reasoning-level.js";
 
-export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
-export type { FeatureFlags } from "./feature-flags.js";
-
 export {
   gitBranchNameSchema,
   gitBranchRefClassificationSchema,

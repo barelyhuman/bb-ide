@@ -24,6 +24,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { AppLayout } from "./AppLayout";
 import {
+  BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_APP_REGION_NO_DRAG_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
@@ -49,10 +50,7 @@ interface SidebarResizeEndScenario {
 }
 
 const testSystemConfig: SystemConfigResponse = {
-  featureFlags: {
-    askUserQuestion: false,
-    terminals: false,
-  },
+  featureFlags: {},
   hostDaemonPort: null,
   voiceTranscriptionEnabled: false,
 };
@@ -157,7 +155,7 @@ describe("AppLayout desktop chrome", () => {
     expect(screen.queryByTestId("app-desktop-sidebar-trigger")).toBeNull();
     expect(screen.queryByTestId("app-page-header-trigger-spacer")).toBeNull();
     expect(
-      screen.getByTestId("app-sidebar-inline-trigger-row").className,
+      screen.getByTestId("app-sidebar-top-reserve-row").className,
     ).not.toContain(MACOS_TRAFFIC_LIGHT_RESERVE_CLASS);
     expect(
       screen.getByTestId("app-sidebar-primary-actions").className,
@@ -202,8 +200,8 @@ describe("AppLayout desktop chrome", () => {
 
     await screen.findByRole("button", { name: "Toggle Sidebar" });
     const contentShell = screen.getByTestId("app-layout-content-shell");
-    const inlineTriggerRow = screen.getByTestId(
-      "app-sidebar-inline-trigger-row",
+    const topReserveRow = screen.getByTestId(
+      "app-sidebar-top-reserve-row",
     );
     const primaryActions = screen.getByTestId("app-sidebar-primary-actions");
     const sidebarPanel = document.querySelector("[data-sidebar='panel']");
@@ -221,14 +219,14 @@ describe("AppLayout desktop chrome", () => {
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
     ).toHaveLength(1);
     expect(
-      within(inlineTriggerRow).queryByRole("button", {
+      within(topReserveRow).queryByRole("button", {
         name: "Toggle Sidebar",
       }),
     ).toBeNull();
     expect(contentShell.className).not.toContain("pt-10");
     expect(sidebarPanel?.className).toContain("md:z-10");
-    expect(inlineTriggerRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
-    expect(inlineTriggerRow.className).not.toContain(
+    expect(topReserveRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
+    expect(topReserveRow.className).not.toContain(
       MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
     );
     expect(primaryActions.className).not.toContain(
@@ -274,9 +272,8 @@ describe("AppLayout desktop chrome", () => {
     const sidebarTrigger = within(overlay).getByRole("button", {
       name: "Toggle Sidebar",
     });
-    const triggerSpacer = screen.getByTestId("app-page-header-trigger-spacer");
-    const inlineTriggerRow = screen.getByTestId(
-      "app-sidebar-inline-trigger-row",
+    const topReserveRow = screen.getByTestId(
+      "app-sidebar-top-reserve-row",
     );
     const sidebarTriggers = screen.getAllByRole("button", {
       name: "Toggle Sidebar",
@@ -288,26 +285,29 @@ describe("AppLayout desktop chrome", () => {
     // below the title-bar chrome as when expanded, instead of riding up under
     // the pinned trigger during the collapse animation. It remains a pure
     // window-drag spacer with no second toggle.
-    expect(inlineTriggerRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
+    expect(topReserveRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(
-      within(inlineTriggerRow).queryByRole("button", {
+      within(topReserveRow).queryByRole("button", {
         name: "Toggle Sidebar",
       }),
     ).toBeNull();
     // Collapsing keeps the single pinned overlay toggle. The header reserves
-    // the toggle's footprint with a non-interactive spacer instead of a second
-    // trigger, so its content lines up the same as when the sidebar is open.
+    // the toggle's footprint as left padding (no second trigger, no spacer
+    // element) so its content lines up the same as when the sidebar is open.
     expect(sidebarTriggers).toHaveLength(1);
     expect(sidebarTriggers[0]).toBe(sidebarTrigger);
     expect(
       within(headerRow).queryByRole("button", { name: "Toggle Sidebar" }),
     ).toBeNull();
-    expect(triggerSpacer.getAttribute("aria-hidden")).toBe("true");
-    expect(headerRow.contains(triggerSpacer)).toBe(true);
+    expect(screen.queryByTestId("app-page-header-trigger-spacer")).toBeNull();
     expect(document.querySelectorAll("[data-sidebar='trigger']")).toHaveLength(
       1,
     );
     expect(headerRow.className).toContain(MACOS_COLLAPSED_HEADER_RESERVE_CLASS);
+    // The reserve transitions on the same 200ms linear curve as the sidebar
+    // slide so the two compose into one smooth motion instead of the header
+    // snapping left/right the instant the sidebar state flips.
+    expect(headerRow.className).toContain("transition-[padding]");
     expect(headerRow.parentElement?.className).toContain(
       MACOS_WINDOW_DRAG_CLASS,
     );
@@ -324,6 +324,55 @@ describe("AppLayout desktop chrome", () => {
     expect(sidebarTrigger.className).toContain(
       MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
     );
+  });
+
+  it("pins a single browser sidebar trigger and reserves the collapsed header footprint", async () => {
+    await renderAppLayout({
+      desktopInfo: null,
+      initialEntry: "/projects/proj_browser",
+    });
+
+    const trigger = await screen.findByRole("button", {
+      name: "Toggle Sidebar",
+    });
+    const overlay = screen.getByTestId("app-sidebar-trigger-overlay");
+    const headerRow = screen.getByTestId("app-page-header-content-row");
+    const topReserveRow = screen.getByTestId(
+      "app-sidebar-top-reserve-row",
+    );
+
+    // The pinned overlay is the only toggle; neither the header nor the
+    // sidebar's top reserve hosts one, so toggling can't make a button
+    // mount/unmount in the header (the source of the old jump).
+    expect(screen.queryByTestId("app-desktop-sidebar-trigger")).toBeNull();
+    expect(within(overlay).getByRole("button", { name: "Toggle Sidebar" })).toBe(
+      trigger,
+    );
+    expect(
+      screen.getAllByRole("button", { name: "Toggle Sidebar" }),
+    ).toHaveLength(1);
+    expect(
+      within(headerRow).queryByRole("button", { name: "Toggle Sidebar" }),
+    ).toBeNull();
+    expect(
+      within(topReserveRow).queryByRole("button", { name: "Toggle Sidebar" }),
+    ).toBeNull();
+
+    // Expanded reserves nothing; collapsing applies the animated padding reserve
+    // (on the same transition as the sidebar slide) so the header content glides
+    // clear of the pinned toggle instead of snapping.
+    expect(headerRow.className).not.toContain(
+      BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+    );
+    expect(headerRow.className).toContain("transition-[padding]");
+
+    fireEvent.click(trigger);
+
+    expect(headerRow.className).toContain(BROWSER_COLLAPSED_HEADER_RESERVE_CLASS);
+    // Still exactly one toggle after collapsing — the same pinned overlay.
+    expect(
+      screen.getAllByRole("button", { name: "Toggle Sidebar" }),
+    ).toHaveLength(1);
   });
 
   it.each<SidebarResizeEndScenario>([

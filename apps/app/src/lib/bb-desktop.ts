@@ -12,12 +12,29 @@ import type { BbDesktopApi, BbDesktopBrowserApi } from "@bb/server-contract";
 //    it sits right of the 36px conversation rail, so the trigger overhangs the
 //    header's left edge and the leading tab has to clear the trigger, not just
 //    the lights.
-//  - COLLAPSED_HEADER_RESERVE (`pl-16`): the page header's remainder, added on
-//    top of its own `px-4` (16px) so the two sum to the full reserve and the
-//    trigger spacer lands under the pinned trigger.
+//  - COLLAPSED_HEADER_RESERVE (`pl-25` = 100px): the page header folds the
+//    whole pinned-trigger footprint into a single left padding: the `pl-20`
+//    clear-the-lights step less the header's own `px-4` (80 − 16 = 64) lands at
+//    the trigger's left edge, plus the trigger's own width (`w-7`, 28px) and the
+//    `gap-2` after it (8px) = 100px, so the leading content sits just right of
+//    the trigger. It is one padding rather than padding + a spacer element so it
+//    can transition in lockstep with the sidebar slide — otherwise it snaps on
+//    and off instantly while the inset animates and the header jumps on toggle.
 export const MACOS_TRAFFIC_LIGHT_RESERVE_CLASS = "pl-20";
 export const MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS = "left-20";
-export const MACOS_COLLAPSED_HEADER_RESERVE_CLASS = "pl-16";
+export const MACOS_COLLAPSED_HEADER_RESERVE_CLASS = "pl-25";
+
+// Browser-chrome analogs of the macOS reserve above. The web build has no
+// traffic lights, so it pins the sidebar toggle flush at the app's top-left with
+// a small inset (see AppLayout's SidebarTriggerOverlay), and the collapsed page
+// header reserves that footprint as left padding so its content clears the
+// pinned toggle — the same trick as macOS, just smaller. Keep the inset and the
+// reserve in sync: `pl-8` (32px) on top of the header's own `px-4` (16px) sums to
+// 48px, which clears the 12px inset + the 28px trigger + an 8px gap;
+// `max-md:pointer-coarse:pl-10` (40px) covers the larger 36px touch trigger.
+export const BROWSER_SIDEBAR_TRIGGER_INSET_CLASS = "pl-3";
+export const BROWSER_COLLAPSED_HEADER_RESERVE_CLASS =
+  "pl-8 max-md:pointer-coarse:pl-10";
 export const MACOS_WINDOW_DRAG_CLASS =
   "select-none [app-region:drag] [-webkit-app-region:drag]";
 export const MACOS_APP_REGION_NO_DRAG_CLASS =

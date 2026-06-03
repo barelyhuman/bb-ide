@@ -194,6 +194,11 @@ interface ResolveDesktopServerUrlArgs {
   env: NodeJS.ProcessEnv;
 }
 
+interface ResolveDesktopWindowUrlArgs {
+  env: NodeJS.ProcessEnv;
+  serverUrl: string;
+}
+
 interface ResolveDesktopUpdateFeedUrlArgs {
   env: NodeJS.ProcessEnv;
 }
@@ -236,6 +241,31 @@ function resolveDesktopServerUrl(args: ResolveDesktopServerUrlArgs): string {
   }
 
   throw new Error("BB_SERVER_PORT must be a valid TCP port");
+}
+
+/**
+ * The URL the main window loads. Defaults to the attached/owned bb server, which
+ * serves the built UI. In dev, `run-electron-dev.mjs` sets `BB_DESKTOP_APP_URL`
+ * to the running Vite dev server — but only when it has confirmed Vite is
+ * actually listening — so the desktop shell loads live source with HMR while
+ * still talking to the same server it attached to. It is unset in packaged
+ * builds, so production always loads the server itself.
+ */
+function resolveDesktopWindowUrl(args: ResolveDesktopWindowUrlArgs): string {
+  const rawAppUrl = args.env.BB_DESKTOP_APP_URL?.trim();
+  if (rawAppUrl === undefined || rawAppUrl.length === 0) {
+    return args.serverUrl;
+  }
+  let parsedAppUrl: URL;
+  try {
+    parsedAppUrl = new URL(rawAppUrl);
+  } catch {
+    throw new Error("BB_DESKTOP_APP_URL must be a valid URL");
+  }
+  if (parsedAppUrl.protocol !== "http:" && parsedAppUrl.protocol !== "https:") {
+    throw new Error("BB_DESKTOP_APP_URL must be an http(s) URL");
+  }
+  return rawAppUrl;
 }
 
 function resolveDesktopUpdateFeedUrl(
@@ -899,7 +929,15 @@ async function initializeRuntime(args: InitializeRuntimeArgs): Promise<void> {
       serverUrl: existingProbe.serverUrl,
       userDataPath: null,
     });
-    await loadBbApp(existingProbe.serverUrl);
+    // When attaching to an already-running server (the `pnpm dev` case) load the
+    // Vite dev URL if the launcher provided one, so the shell gets live source
+    // and HMR. The attached server still handles every API/WS request.
+    await loadBbApp(
+      resolveDesktopWindowUrl({
+        env: process.env,
+        serverUrl: existingProbe.serverUrl,
+      }),
+    );
     refreshApplicationMenu();
     return;
   }

@@ -128,11 +128,7 @@ async function waitForDaemonMessage(
 async function createTerminalRouteFixture(
   args: CreateTerminalRouteFixtureArgs = {},
 ): Promise<TerminalRouteFixture> {
-  const harness = await createTestAppHarness({
-    featureFlags: {
-      terminals: true,
-    },
-  });
+  const harness = await createTestAppHarness();
   const seeded = seedHostSession(harness.deps, { id: "terminal-host" });
   const { project } = seedProjectWithSource(harness.deps, {
     hostId: seeded.host.id,
@@ -218,30 +214,6 @@ describe("public thread terminal routes", () => {
     }
   });
 
-  it("does not register terminal routes when the terminals flag is disabled", async () => {
-    const harness = await createTestAppHarness({
-      featureFlags: {
-        terminals: false,
-      },
-    });
-    harnesses.push(harness);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: seedHost(harness.deps, { id: "terminal-disabled-host" }).id,
-      path: "/tmp/terminal-disabled-project",
-    });
-    const thread = seedThread(harness.deps, {
-      environmentId: null,
-      projectId: project.id,
-      status: "idle",
-    });
-
-    const response = await harness.app.request(
-      `/api/v1/threads/${thread.id}/terminals`,
-    );
-
-    expect(response.status).toBe(404);
-  });
-
   it("lists terminal sessions for a thread", async () => {
     const fixture = await createTerminalRouteFixture();
     harnesses.push(fixture.harness);
@@ -293,11 +265,7 @@ describe("public thread terminal routes", () => {
   });
 
   it("rejects terminal creation when the thread has no environment", async () => {
-    const harness = await createTestAppHarness({
-      featureFlags: {
-        terminals: true,
-      },
-    });
+    const harness = await createTestAppHarness();
     harnesses.push(harness);
     const host = seedHost(harness.deps, { id: "terminal-no-env-host" });
     const { project } = seedProjectWithSource(harness.deps, {
