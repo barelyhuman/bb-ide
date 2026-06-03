@@ -9,8 +9,6 @@ interface RenderScreenArgs {
   recent?: readonly BrowserHistoryEntry[];
 }
 
-const SEARCH_LABEL = "Search the web or type a URL";
-
 function renderScreen(args: RenderScreenArgs = {}) {
   const onNavigateInput = vi.fn();
   const onClearRecent = vi.fn();
@@ -24,40 +22,9 @@ function renderScreen(args: RenderScreenArgs = {}) {
   return { onNavigateInput, onClearRecent };
 }
 
-function submitSearch(input: HTMLElement): void {
-  const form = input.closest("form");
-  if (form === null) {
-    throw new Error("expected the search input to be inside a form");
-  }
-  fireEvent.submit(form);
-}
-
 afterEach(cleanup);
 
 describe("BrowserNewTabScreen", () => {
-  it("submits the trimmed query to the default engine and clears the field", () => {
-    const { onNavigateInput } = renderScreen();
-    const input = screen.getByRole<HTMLInputElement>("textbox", {
-      name: SEARCH_LABEL,
-    });
-
-    fireEvent.change(input, { target: { value: "  claude code  " } });
-    submitSearch(input);
-
-    expect(onNavigateInput).toHaveBeenCalledWith("claude code");
-    expect(input.value).toBe("");
-  });
-
-  it("ignores a blank submit", () => {
-    const { onNavigateInput } = renderScreen();
-    const input = screen.getByRole("textbox", { name: SEARCH_LABEL });
-
-    fireEvent.change(input, { target: { value: "   " } });
-    submitSearch(input);
-
-    expect(onNavigateInput).not.toHaveBeenCalled();
-  });
-
   it("lists recently visited entries and opens one", () => {
     const now = Date.now();
     const recent: BrowserHistoryEntry[] = [

@@ -32,6 +32,12 @@ import { cn } from "@/lib/utils";
 import { isDesktopBrowserAvailable } from "@/lib/bb-desktop";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isPromptDraftEmpty, type PromptDraftState } from "@/lib/prompt-draft";
+import {
+  LAUNCHER_ROW_BASE_CLASS,
+  LAUNCHER_ROW_ICON_CLASS,
+  LauncherRowTrailing,
+  LauncherSectionHeader,
+} from "./launcherRow";
 
 export const CREATE_APP_PROMPT_TEMPLATE = `You are creating a new global bb app.
 
@@ -198,12 +204,6 @@ const FILE_SEARCH_SOURCE_LABELS = {
 const CREATE_APP_ENTRY_ID = "file-search-result-create-app";
 const OPEN_BROWSER_ENTRY_ID = "file-search-result-open-browser";
 
-const SECTION_HEADER_CLASS =
-  "sticky top-0 z-10 bg-background px-1 pb-2 text-xs font-medium uppercase tracking-wider text-subtle-foreground";
-const LAUNCHER_TILE_BASE_CLASS =
-  "group flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-const LAUNCHER_TILE_ICON_CLASS =
-  "flex size-4 shrink-0 items-center justify-center overflow-hidden text-muted-foreground";
 const LAUNCHER_TILE_ICON_CLASS_DASHED =
   "flex size-4 shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground";
 
@@ -414,7 +414,7 @@ function LauncherTile({
       onMouseEnter={onActivate}
       title={title}
       className={cn(
-        LAUNCHER_TILE_BASE_CLASS,
+        LAUNCHER_ROW_BASE_CLASS,
         "scroll-mt-7",
         isActive ? "bg-state-active" : "hover:bg-state-hover",
       )}
@@ -442,7 +442,7 @@ function AppResultRow({
       onSelect={handleSelect}
       title={getFileSearchResultTitle(suggestion)}
     >
-      <span className={LAUNCHER_TILE_ICON_CLASS}>
+      <span className={LAUNCHER_ROW_ICON_CLASS}>
         <ResolvedAppIcon
           icon={suggestion.app.icon}
           className="size-3.5 text-muted-foreground"
@@ -503,7 +503,7 @@ function OpenBrowserTile({
       onActivate={onActivate}
       onSelect={onSelect}
     >
-      <span className={LAUNCHER_TILE_ICON_CLASS}>
+      <span className={LAUNCHER_ROW_ICON_CLASS}>
         <Icon name="Globe" className="size-3.5" aria-hidden />
       </span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -596,7 +596,7 @@ function RecentResultRow({
       onSelect={handleSelect}
       title={`${label}: ${item.path}`}
     >
-      <span className={LAUNCHER_TILE_ICON_CLASS}>
+      <span className={LAUNCHER_ROW_ICON_CLASS}>
         <Icon
           name={RECENT_CHIP_ICON_NAME[chip]}
           className="size-3.5"
@@ -617,26 +617,7 @@ function RecentResultRow({
           </>
         ) : null}
       </span>
-      <span className="ml-auto flex shrink-0 items-center justify-end">
-        <span
-          className={cn(
-            "whitespace-nowrap text-xs text-muted-foreground",
-            isActive ? "hidden" : "group-hover:hidden",
-          )}
-        >
-          {relativeTime}
-        </span>
-        <span
-          className={cn(
-            "items-center gap-1 text-xs text-subtle-foreground",
-            isActive ? "flex" : "hidden group-hover:flex",
-          )}
-          aria-hidden
-        >
-          <Icon name="ArrowUpRight" className="size-3" aria-hidden />
-          open
-        </span>
-      </span>
+      <LauncherRowTrailing idle={relativeTime} isActive={isActive} />
     </LauncherTile>
   );
 }
@@ -1027,9 +1008,11 @@ function NewTabResults({
     <div className="min-h-0 flex-1 overflow-y-auto pb-1">
       {appsSection ? (
         <section>
-          <div className={cn(SECTION_HEADER_CLASS, "pt-0")}>
-            {FILE_SEARCH_SECTION_LABELS.apps}
-          </div>
+          <LauncherSectionHeader
+            label={FILE_SEARCH_SECTION_LABELS.apps}
+            sticky
+            className="pt-0"
+          />
           <div
             role="listbox"
             aria-label={FILE_SEARCH_SECTION_LABELS.apps}
@@ -1071,9 +1054,11 @@ function NewTabResults({
 
       {openSection ? (
         <section className={cn(showAppsSection && "mt-3")}>
-          <div className={cn(SECTION_HEADER_CLASS, showAppsSection && "pt-2")}>
-            {FILE_SEARCH_SECTION_LABELS.open}
-          </div>
+          <LauncherSectionHeader
+            label={FILE_SEARCH_SECTION_LABELS.open}
+            sticky
+            className={showAppsSection ? "pt-2" : undefined}
+          />
           <div
             role="listbox"
             aria-label={FILE_SEARCH_SECTION_LABELS.open}
@@ -1099,14 +1084,11 @@ function NewTabResults({
 
       {showFilesSection && filesSection ? (
         <section className={cn((showAppsSection || showOpenSection) && "mt-3")}>
-          <div
-            className={cn(
-              SECTION_HEADER_CLASS,
-              (showAppsSection || showOpenSection) && "pt-2",
-            )}
-          >
-            {FILE_SEARCH_SECTION_LABELS.files}
-          </div>
+          <LauncherSectionHeader
+            label={FILE_SEARCH_SECTION_LABELS.files}
+            sticky
+            className={showAppsSection || showOpenSection ? "pt-2" : undefined}
+          />
           <div
             role="listbox"
             aria-label={FILE_SEARCH_SECTION_LABELS.files}
@@ -1149,20 +1131,12 @@ function NewTabResults({
 
       {showRecentSection ? (
         <section className={cn(hasRecentSectionPredecessor && "mt-3")}>
-          <div
-            className={cn(
-              SECTION_HEADER_CLASS,
-              "flex items-baseline gap-2",
-              hasRecentSectionPredecessor && "pt-2",
-            )}
-          >
-            <span>{FILE_SEARCH_SECTION_LABELS.recent}</span>
-            {recent.count > 0 ? (
-              <span className="font-mono text-xs font-normal tracking-normal normal-case text-muted-foreground opacity-80">
-                {recent.count}
-              </span>
-            ) : null}
-          </div>
+          <LauncherSectionHeader
+            label={FILE_SEARCH_SECTION_LABELS.recent}
+            count={recent.count > 0 ? recent.count : undefined}
+            sticky
+            className={hasRecentSectionPredecessor ? "pt-2" : undefined}
+          />
           {recentSection ? (
             <div
               role="listbox"

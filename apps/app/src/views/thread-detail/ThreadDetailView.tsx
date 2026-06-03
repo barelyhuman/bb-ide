@@ -588,11 +588,10 @@ export function ThreadDetailView() {
         }
         case "browser": {
           const browserLabel =
-            tab.title ??
-            (tab.url.length > 0 ? getBrowserUrlHost(tab.url) : "New tab");
+            tab.title ?? (tab.url.length > 0 ? getBrowserUrlHost(tab.url) : "");
           return {
             id: tab.id,
-            filename: browserLabel.length > 0 ? browserLabel : "New tab",
+            filename: browserLabel.length > 0 ? browserLabel : "Browser",
             isActive: activeBrowserTab?.id === tab.id,
             leadingVisual: (
               <Icon name="Globe" className="size-3.5" aria-hidden />

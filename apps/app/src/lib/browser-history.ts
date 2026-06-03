@@ -54,7 +54,7 @@ const browserHistoryStorage = createLocalStorageSyncStorage<
   serialize: (value) => JSON.stringify(value),
 });
 
-function getBrowserHistoryStorageKey(threadId: string): string {
+export function getBrowserHistoryStorageKey(threadId: string): string {
   return `${BROWSER_HISTORY_STORAGE_PREFIX}-${encodeURIComponent(
     threadId.trim(),
   )}-${BROWSER_HISTORY_STORAGE_VERSION}`;

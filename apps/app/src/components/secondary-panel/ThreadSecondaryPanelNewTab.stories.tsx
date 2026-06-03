@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { ThreadType } from "@bb/domain";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type {
@@ -8,6 +8,7 @@ import type {
   WorkspacePathListResponse,
 } from "@bb/server-contract";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { WithDesktopBrowser } from "../../../.ladle/story-desktop";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
   appsQueryKey,
@@ -34,6 +35,7 @@ const BLANK_THREAD_ID = "";
 const APPS_THREAD_ID = "thr_new_tab_apps_story";
 const RECENTS_THREAD_ID = "thr_new_tab_recents_story";
 const SEARCH_THREAD_ID = "thr_new_tab_search_story";
+const OPEN_BROWSER_THREAD_ID = "thr_new_tab_browser_story";
 
 const noop = () => {};
 
@@ -155,9 +157,15 @@ interface NewTabPanelStoryProps {
   initialQuery: string;
   projectId: string | undefined;
   recentItems: readonly ThreadRecentItem[];
+  /** Wire the desktop-only "Open browser" launcher entry (requires the bridge). */
+  showOpenBrowser: boolean;
   threadStoragePaths: readonly WorkspacePathEntry[];
   workspacePaths: readonly WorkspacePathEntry[];
 }
+
+type NewTabStoryOutcome =
+  | { kind: "file"; selection: FileSearchSelection }
+  | { kind: "browser" };
 
 interface StoryQueryClientArgs {
   apps: readonly AppSummary[];
@@ -177,6 +185,7 @@ interface SeededNewTabPageProps {
   currentThreadId: string;
   currentThreadType: ThreadType | undefined;
   initialQuery: string;
+  onOpenBrowser: (() => void) | undefined;
   onSelect: (selection: FileSearchSelection) => void;
   projectId: string | undefined;
   recentItems: readonly ThreadRecentItem[];
@@ -284,6 +293,7 @@ function SeededNewTabPage({
   currentThreadId,
   currentThreadType,
   initialQuery,
+  onOpenBrowser,
   onSelect,
   projectId,
   recentItems,
@@ -299,6 +309,7 @@ function SeededNewTabPage({
       currentThreadType={currentThreadType}
       focusRequest={0}
       initialQuery={initialQuery}
+      onOpenBrowser={onOpenBrowser}
       onSelect={onSelect}
     />
   );
@@ -311,10 +322,11 @@ function NewTabPanelStory({
   initialQuery,
   projectId,
   recentItems,
+  showOpenBrowser,
   threadStoragePaths,
   workspacePaths,
 }: NewTabPanelStoryProps) {
-  const [selection, setSelection] = useState<FileSearchSelection | null>(null);
+  const [outcome, setOutcome] = useState<NewTabStoryOutcome | null>(null);
   const queryClient = useStoryQueryClient({
     apps,
     currentThreadId,
@@ -323,30 +335,48 @@ function NewTabPanelStory({
     threadStoragePaths,
     workspacePaths,
   });
-  const fileTabs = useMemo<SecondaryPanelFileTab[]>(
-    () =>
-      selection === null
-        ? [NEW_TAB]
-        : [
-            {
-              id:
-                selection.source === "app"
-                  ? `app:${selection.applicationId}`
-                  : `${selection.source}:${selection.path}`,
-              filename:
-                selection.source === "app"
-                  ? selection.applicationId
-                  : (selection.path.split("/").at(-1) ?? selection.path),
-              isActive: true,
-              statusLabel: null,
-              onSelect: noop,
-              onClose: () => setSelection(null),
-            },
-          ],
-    [selection],
-  );
+  const handleSelect = useCallback((selection: FileSearchSelection) => {
+    setOutcome({ kind: "file", selection });
+  }, []);
+  const handleOpenBrowser = useCallback(() => {
+    setOutcome({ kind: "browser" });
+  }, []);
+  const fileTabs = useMemo<SecondaryPanelFileTab[]>(() => {
+    if (outcome === null) {
+      return [NEW_TAB];
+    }
+    if (outcome.kind === "browser") {
+      return [
+        {
+          id: "browser",
+          filename: "Browser",
+          isActive: true,
+          statusLabel: null,
+          onSelect: noop,
+          onClose: () => setOutcome(null),
+        },
+      ];
+    }
+    const { selection } = outcome;
+    return [
+      {
+        id:
+          selection.source === "app"
+            ? `app:${selection.applicationId}`
+            : `${selection.source}:${selection.path}`,
+        filename:
+          selection.source === "app"
+            ? selection.applicationId
+            : (selection.path.split("/").at(-1) ?? selection.path),
+        isActive: true,
+        statusLabel: null,
+        onSelect: noop,
+        onClose: () => setOutcome(null),
+      },
+    ];
+  }, [outcome]);
   const content =
-    selection === null ? (
+    outcome === null ? (
       <QueryClientProvider client={queryClient}>
         <SeededNewTabPage
           currentThreadId={currentThreadId}
@@ -354,23 +384,32 @@ function NewTabPanelStory({
           initialQuery={initialQuery}
           projectId={projectId}
           recentItems={recentItems}
-          onSelect={setSelection}
+          onOpenBrowser={showOpenBrowser ? handleOpenBrowser : undefined}
+          onSelect={handleSelect}
         />
       </QueryClientProvider>
+    ) : outcome.kind === "browser" ? (
+      <div className="flex min-h-full flex-col justify-center px-4 text-sm">
+        <p className="font-medium text-foreground">Opened browser tab</p>
+        <p className="pt-1 text-xs text-muted-foreground">
+          A new in-panel web browser tab opens here (see the
+          &ldquo;secondary-panel/Browser tab&rdquo; story).
+        </p>
+      </div>
     ) : (
       <div className="flex min-h-full flex-col justify-center px-4 text-sm">
         <p className="font-medium text-foreground">
           Selected{" "}
-          {selection.source === "app"
+          {outcome.selection.source === "app"
             ? "app"
-            : selection.source === "workspace"
+            : outcome.selection.source === "workspace"
               ? "workspace file"
               : "thread storage file"}
         </p>
         <p className="pt-1 font-mono text-xs text-muted-foreground">
-          {selection.source === "app"
-            ? selection.applicationId
-            : selection.path}
+          {outcome.selection.source === "app"
+            ? outcome.selection.applicationId
+            : outcome.selection.path}
         </p>
       </div>
     );
@@ -388,7 +427,7 @@ function NewTabPanelStory({
         metadataContent={null}
         onCollapse={noop}
         onClose={noop}
-        onOpenNewTab={() => setSelection(null)}
+        onOpenNewTab={() => setOutcome(null)}
         onPanelChange={noop}
         onPanelFocus={noop}
         isConversationCollapsed={false}
@@ -415,6 +454,7 @@ export function NewTab() {
           initialQuery=""
           projectId={PROJECT_ID}
           recentItems={[]}
+          showOpenBrowser={false}
           threadStoragePaths={[]}
           workspacePaths={[]}
         />
@@ -430,6 +470,7 @@ export function NewTab() {
           initialQuery="s"
           projectId={PROJECT_ID}
           recentItems={[]}
+          showOpenBrowser={false}
           threadStoragePaths={[]}
           workspacePaths={[]}
         />
@@ -445,6 +486,7 @@ export function NewTab() {
           initialQuery="story"
           projectId={PROJECT_ID}
           recentItems={RECENT_ROW_ITEMS}
+          showOpenBrowser={false}
           threadStoragePaths={[]}
           workspacePaths={[]}
         />
@@ -460,9 +502,28 @@ export function NewTab() {
           initialQuery="thread"
           projectId={PROJECT_ID}
           recentItems={[]}
+          showOpenBrowser={false}
           threadStoragePaths={THREAD_STORAGE_PATH_RESULTS}
           workspacePaths={WORKSPACE_PATH_RESULTS}
         />
+      </StoryRow>
+      <StoryRow
+        label="open browser"
+        hint="desktop-only Open browser action in the launcher's Open section"
+      >
+        <WithDesktopBrowser>
+          <NewTabPanelStory
+            apps={[]}
+            currentThreadId={OPEN_BROWSER_THREAD_ID}
+            currentThreadType="standard"
+            initialQuery=""
+            projectId={PROJECT_ID}
+            recentItems={[]}
+            showOpenBrowser
+            threadStoragePaths={[]}
+            workspacePaths={[]}
+          />
+        </WithDesktopBrowser>
       </StoryRow>
     </StoryCard>
   );

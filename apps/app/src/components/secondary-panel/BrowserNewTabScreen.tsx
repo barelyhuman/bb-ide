@@ -1,21 +1,19 @@
-import { useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "@/components/ui/icon.js";
-import { Input } from "@/components/ui/input.js";
 import { cn } from "@/lib/utils";
 import { getBrowserUrlHost } from "@/lib/browser-url";
 import { formatRelativeTime } from "@/lib/relative-time";
 import type { BrowserHistoryEntry } from "@/lib/browser-history";
+import {
+  LAUNCHER_ROW_BASE_CLASS,
+  LAUNCHER_ROW_ICON_CLASS,
+  LauncherRowTrailing,
+  LauncherSectionHeader,
+} from "./launcherRow";
 
 interface BrowserNewTabScreenProps {
   onNavigateInput: (rawInput: string) => void;
   recent: readonly BrowserHistoryEntry[];
   onClearRecent: () => void;
-}
-
-interface BrowserRowButtonProps {
-  url: string;
-  onSelect: () => void;
-  children: ReactNode;
 }
 
 interface BrowserRecentRowProps {
@@ -24,30 +22,14 @@ interface BrowserRecentRowProps {
   onNavigate: (url: string) => void;
 }
 
-// Match the secondary-panel launcher (NewTabFileSearch): uppercase section
-// labels, hairline-bordered chips, and dense rows that share the app's tokens.
-const SECTION_LABEL_CLASS =
-  "px-1 text-xs font-medium uppercase tracking-wider text-subtle-foreground";
-const ROW_BASE_CLASS =
-  "group flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-const ROW_CHIP_CLASS =
-  "flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-hairline bg-surface-raised text-muted-foreground";
-
-// Shared row shell for recently-visited rows, mirroring the launcher's
-// LauncherTile so hover, focus, and density stay identical.
-function BrowserRowButton({ url, onSelect, children }: BrowserRowButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      title={url}
-      className={ROW_BASE_CLASS}
-    >
-      {children}
-    </button>
-  );
-}
-
+/**
+ * A recently-visited row, styled like the New tab page's recent rows: the page
+ * title leads with the host trailing as muted metadata, and the visit time gives
+ * way to an "open" affordance on hover. Reopening routes through `onNavigate`.
+ *
+ * Favicons are intentionally not persisted (they are untrusted remote URLs), so
+ * every row shows the same browser glyph as a uniform placeholder.
+ */
 function BrowserRecentRow({ entry, now, onNavigate }: BrowserRecentRowProps) {
   const host = getBrowserUrlHost(entry.url);
   const title = entry.title?.trim();
@@ -55,31 +37,25 @@ function BrowserRecentRow({ entry, now, onNavigate }: BrowserRecentRowProps) {
   const relativeTime = formatRelativeTime({ timestamp: entry.visitedAt, now });
 
   return (
-    <BrowserRowButton url={entry.url} onSelect={() => onNavigate(entry.url)}>
-      <span className={ROW_CHIP_CLASS}>
-        <Icon name="Globe" className="size-3.5" aria-hidden />
+    <button
+      type="button"
+      onClick={() => onNavigate(entry.url)}
+      title={entry.url}
+      className={cn(LAUNCHER_ROW_BASE_CLASS, "hover:bg-state-hover")}
+    >
+      <span className={LAUNCHER_ROW_ICON_CLASS}>
+        <Icon name="Browser" className="size-3.5" aria-hidden />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm text-foreground">{primary}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-foreground">{primary}</span>
         {primary !== host ? (
-          <span className="truncate font-mono text-xs text-muted-foreground">
+          <span className="truncate font-mono text-muted-foreground [flex-shrink:9999]">
             {host}
           </span>
         ) : null}
       </span>
-      <span className="ml-auto flex shrink-0 items-center justify-end">
-        <span className="whitespace-nowrap text-xs text-muted-foreground group-hover:hidden">
-          {relativeTime}
-        </span>
-        <span
-          className="hidden items-center gap-1 text-xs text-subtle-foreground group-hover:flex"
-          aria-hidden
-        >
-          <Icon name="ArrowUpRight" className="size-3" aria-hidden />
-          open
-        </span>
-      </span>
-    </BrowserRowButton>
+      <LauncherRowTrailing idle={relativeTime} isActive={false} />
+    </button>
   );
 }
 
@@ -88,63 +64,27 @@ export function BrowserNewTabScreen({
   recent,
   onClearRecent,
 }: BrowserNewTabScreenProps) {
-  const [query, setQuery] = useState("");
   const now = Date.now();
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = query.trim();
-    if (trimmed.length === 0) {
-      return;
-    }
-    onNavigateInput(trimmed);
-    setQuery("");
-  };
 
   return (
     <div className="flex h-full flex-col overflow-y-auto px-4 pb-6 pt-8">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
-        <div>
-          <form onSubmit={handleSubmit} className="relative">
-            <Icon
-              name="Search"
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search the web or type a URL"
-              aria-label="Search the web or type a URL"
-              autoComplete="off"
-              spellCheck={false}
-              className="pl-9"
-            />
-          </form>
-          <p className="mt-2 px-1 text-xs text-muted-foreground">
-            Searches go to your default engine.
-          </p>
-        </div>
-
         {recent.length > 0 ? (
           <section>
-            <div
-              className={cn(SECTION_LABEL_CLASS, "mb-1.5 flex items-baseline gap-2")}
-            >
-              <span>Recently visited</span>
-              <span className="font-mono text-xs font-normal normal-case tracking-normal text-muted-foreground opacity-80">
-                {recent.length}
-              </span>
-              <button
-                type="button"
-                onClick={onClearRecent}
-                aria-label="Clear recently visited"
-                className="ml-auto rounded text-xs font-normal normal-case tracking-normal text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                Clear
-              </button>
-            </div>
+            <LauncherSectionHeader
+              label="Recently visited"
+              count={recent.length}
+              action={
+                <button
+                  type="button"
+                  onClick={onClearRecent}
+                  aria-label="Clear recently visited"
+                  className="rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  Clear
+                </button>
+              }
+            />
             <ul aria-label="Recently visited" className="flex flex-col gap-px">
               {recent.map((entry) => (
                 <li key={entry.url}>
@@ -157,7 +97,12 @@ export function BrowserNewTabScreen({
               ))}
             </ul>
           </section>
-        ) : null}
+        ) : (
+          <p className="rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-xs text-muted-foreground">
+            Pages you visit appear here. Type a URL or search in the address bar
+            above to get started.
+          </p>
+        )}
       </div>
     </div>
   );
