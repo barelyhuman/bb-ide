@@ -31,7 +31,16 @@ const STANDALONE_TMP_PREFIX = "bb-standalone-";
 const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
 type EnvironmentMap = Record<string, string>;
-const STANDALONE_THREAD_CONTEXT_ENV = ["BB_THREAD_ID", "BB_ENVIRONMENT_ID"];
+// Thread-context env the parent agent injects into every shell. A standalone
+// pair must not inherit it: BB_THREAD_STORAGE in particular points at the parent
+// thread's own storage subdirectory, which the daemon would otherwise adopt as
+// its storage root and diverge from the server's data-dir-derived path, breaking
+// manager thread.start with "Thread storage path escapes the storage root".
+const STANDALONE_THREAD_CONTEXT_ENV = [
+  "BB_THREAD_ID",
+  "BB_ENVIRONMENT_ID",
+  "BB_THREAD_STORAGE",
+];
 
 interface StandaloneStateRuntime {
   daemonPid: number | null;
@@ -190,8 +199,10 @@ export function buildStandaloneShellExports(env: EnvironmentMap): string {
 }
 
 /**
- * Builds the standalone QA process environment and applies provider-key policy:
- * ambient OPENAI_API_KEY is stripped unless BB_QA_OPENAI_API_KEY opts in.
+ * Builds the standalone QA process environment. Isolates the pair from the
+ * parent agent by stripping inherited thread context (see
+ * STANDALONE_THREAD_CONTEXT_ENV) and applies provider-key policy: ambient
+ * OPENAI_API_KEY is stripped unless BB_QA_OPENAI_API_KEY opts in.
  */
 export function buildStandaloneRuntimeEnv(
   args: BuildStandaloneRuntimeEnvArgs,
@@ -200,6 +211,9 @@ export function buildStandaloneRuntimeEnv(
     ...args.baseEnv,
     ...args.overrides,
   };
+  for (const key of STANDALONE_THREAD_CONTEXT_ENV) {
+    delete env[key];
+  }
   const qaOpenAiApiKey = env[STANDALONE_OPENAI_API_KEY_ENV];
   if (typeof qaOpenAiApiKey === "string" && qaOpenAiApiKey.trim().length > 0) {
     env.OPENAI_API_KEY = qaOpenAiApiKey;

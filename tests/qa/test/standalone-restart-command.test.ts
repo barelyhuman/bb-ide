@@ -107,10 +107,30 @@ describe("standalone restart command", () => {
     ).toEqual([
       "unset BB_THREAD_ID",
       "unset BB_ENVIRONMENT_ID",
+      "unset BB_THREAD_STORAGE",
       "export BB_HOST_DAEMON_PORT='3334'",
       "export BB_PROJECT_ID='proj_standalone'",
       "export BB_SERVER_URL='http://127.0.0.1:3333'",
     ]);
+  });
+
+  it("strips inherited thread context so the daemon derives its own storage root", () => {
+    expect(
+      buildStandaloneRuntimeEnv({
+        baseEnv: {
+          BB_ENVIRONMENT_ID: "env_parent",
+          BB_THREAD_ID: "thr_parent",
+          BB_THREAD_STORAGE: "/home/user/.bb/thread-storage/thr_parent",
+          PATH: "/usr/bin",
+        },
+        overrides: {
+          BB_DATA_DIR: "/tmp/standalone/bb-root",
+        },
+      }),
+    ).toEqual({
+      BB_DATA_DIR: "/tmp/standalone/bb-root",
+      PATH: "/usr/bin",
+    });
   });
 
   it("does not inherit OPENAI_API_KEY into standalone runtime env by default", () => {
