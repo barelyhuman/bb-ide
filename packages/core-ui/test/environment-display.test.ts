@@ -86,6 +86,41 @@ describe("formatEnvironmentDisplay", () => {
     });
   });
 
+  describe("provisioning", () => {
+    it("reports 'Provisioning' for a worktree env before discovery populates isWorktree", () => {
+      const result = formatEnvironmentDisplay({
+        environment: makeEnvironment({
+          status: "provisioning",
+          workspaceProvisionType: "managed-worktree",
+          isWorktree: false,
+        }),
+        isLocalHost: true,
+      });
+      expect(result.modeLabel).toBe("Provisioning");
+      // Discovered structural properties are not yet known mid-provision.
+      expect(result.mode).toBe("direct");
+    });
+
+    it("reports 'Provisioning' for a local unmanaged env", () => {
+      const result = formatEnvironmentDisplay({
+        environment: makeEnvironment({ status: "provisioning" }),
+        isLocalHost: true,
+      });
+      expect(result.modeLabel).toBe("Provisioning");
+    });
+
+    it("reports 'Provisioning' for a remote env and keeps the host suffix", () => {
+      const result = formatEnvironmentDisplay({
+        environment: makeEnvironment({ status: "provisioning" }),
+        isLocalHost: false,
+        hostName: "Mac mini",
+      });
+      expect(result.modeLabel).toBe("Provisioning");
+      expect(result.hostLabel).toBe("Mac mini");
+      expect(result.location).toBe("remote");
+    });
+  });
+
   describe("remote host", () => {
     it("includes host name when provided", () => {
       const result = formatEnvironmentDisplay({

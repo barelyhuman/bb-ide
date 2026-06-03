@@ -2,7 +2,10 @@ import type { Environment, EnvironmentWorkspaceDisplayKind } from "@bb/domain";
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
-  /** Human-readable mode: "Working locally", "Working remotely", or "Worktree". */
+  /**
+   * Human-readable mode: "Provisioning" while the environment is still being
+   * set up, otherwise "Working locally", "Working remotely", or "Worktree".
+   */
   modeLabel: string;
   /** Host display name, if available. Null when the host has no name. */
   hostLabel: string | null;
@@ -37,12 +40,17 @@ export function formatEnvironmentDisplay({
     },
   });
 
+  // While the workspace is still being provisioned, discovered properties such
+  // as `isWorktree` are not yet populated, so the mode is not yet knowable.
+  // Report the lifecycle state honestly instead of guessing "Working locally".
   const modeLabel =
-    mode === "worktree"
-      ? "Worktree"
-      : isLocalHost
-        ? "Working locally"
-        : "Working remotely";
+    environment.status === "provisioning"
+      ? "Provisioning"
+      : mode === "worktree"
+        ? "Worktree"
+        : isLocalHost
+          ? "Working locally"
+          : "Working remotely";
 
   const location: EnvironmentDisplayInfo["location"] = isLocalHost
     ? "local"

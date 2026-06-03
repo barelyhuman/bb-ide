@@ -1,16 +1,17 @@
 import { useState, type ReactNode } from "react";
 import type {
+  Environment,
   PermissionMode,
   ThreadQueuedMessage,
   WorkspaceStatus,
 } from "@bb/domain";
+import { formatEnvironmentDisplay } from "@bb/core-ui";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
 import {
   FollowUpPromptBox,
   type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
 import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
-import { PersistentHostIconName } from "@/lib/host-display";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import type {
   AttachmentsConfig,
@@ -23,6 +24,7 @@ import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
+  makeEnvironment,
   makeExecutionControlsProps,
   STORY_PROVIDER_OPTIONS,
 } from "../../../.ladle/story-fixtures";
@@ -59,40 +61,108 @@ const basePermission = {
 };
 
 // ---------------------------------------------------------------------------
-// Environment summary slot — pre-built element passed straight through.
+// Environment summary slot.
+//
+// Derived the SAME way production does it (ThreadDetailView): start from a real
+// `Environment` and run it through `formatEnvironmentDisplay` +
+// `getEnvironmentWorkspaceLabelIconName`. The story must never hand-write label
+// strings like "Working locally" — that decouples it from the real derivation
+// and lets the story render states the code cannot produce (e.g. "Working
+// locally" while provisioning). Feeding the formatter keeps the story honest:
+// changing the label logic changes these rows automatically.
 // ---------------------------------------------------------------------------
 
-// Mirrors production: ThreadDetailView feeds these props from
-// formatEnvironmentDisplay, so the labels here track the same shape.
-const localEnvironmentSummary: ReactNode = (
-  <ThreadEnvironmentSummary
-    environmentLabel="Working locally"
-    environmentIcon={PersistentHostIconName}
-    environmentBranchName="bb/promptbox-stories"
-  />
-);
+interface EnvironmentSummaryArgs {
+  environment: Environment;
+  isLocalHost: boolean;
+  hostName?: string;
+  hostConnected?: boolean;
+  branchName?: string;
+  onCreateNewThreadInWorktree?: () => void;
+}
 
-const remoteEnvironmentSummary: ReactNode = (
-  <ThreadEnvironmentSummary
-    environmentLabel="Working remotely"
-    environmentHostLabel="ec2-builder"
-    environmentHostConnected
-    environmentIcon={PersistentHostIconName}
-    environmentBranchName="bb/promptbox-stories"
-  />
-);
+function makeEnvironmentSummary({
+  environment,
+  isLocalHost,
+  hostName,
+  hostConnected,
+  branchName,
+  onCreateNewThreadInWorktree,
+}: EnvironmentSummaryArgs): ReactNode {
+  const display = formatEnvironmentDisplay({
+    environment,
+    isLocalHost,
+    hostName,
+  });
+  return (
+    <ThreadEnvironmentSummary
+      environmentLabel={display.modeLabel}
+      environmentHostLabel={
+        display.location === "remote"
+          ? (display.hostLabel ?? undefined)
+          : undefined
+      }
+      environmentHostConnected={hostConnected}
+      environmentIcon={getEnvironmentWorkspaceLabelIconName(
+        display.workspaceDisplayKind,
+      )}
+      environmentBranchName={branchName}
+      onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
+    />
+  );
+}
 
-const worktreeEnvironmentSummary: ReactNode = (
-  <ThreadEnvironmentSummary
-    environmentLabel="Worktree"
-    environmentIcon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
-    environmentBranchName="bb/promptbox-stories"
-    // Worktree threads expose a "new thread in this worktree" affordance —
-    // production wires it to the new-thread route. The story just needs a
-    // non-null handler so the MessageSquarePlus icon renders.
-    onCreateNewThreadInWorktree={noop}
-  />
-);
+const localEnvironmentSummary: ReactNode = makeEnvironmentSummary({
+  environment: makeEnvironment({
+    managed: false,
+    isWorktree: false,
+    workspaceProvisionType: "unmanaged",
+    status: "ready",
+  }),
+  isLocalHost: true,
+  branchName: "bb/promptbox-stories",
+});
+
+const remoteEnvironmentSummary: ReactNode = makeEnvironmentSummary({
+  environment: makeEnvironment({
+    managed: false,
+    isWorktree: false,
+    workspaceProvisionType: "unmanaged",
+    status: "ready",
+  }),
+  isLocalHost: false,
+  hostName: "ec2-builder",
+  hostConnected: true,
+  branchName: "bb/promptbox-stories",
+});
+
+const worktreeEnvironmentSummary: ReactNode = makeEnvironmentSummary({
+  environment: makeEnvironment({
+    isWorktree: true,
+    workspaceProvisionType: "managed-worktree",
+    status: "ready",
+  }),
+  isLocalHost: true,
+  branchName: "bb/promptbox-stories",
+  // Worktree threads expose a "new thread in this worktree" affordance —
+  // production wires it to the new-thread route. The story just needs a
+  // non-null handler so the MessageSquarePlus icon renders.
+  onCreateNewThreadInWorktree: noop,
+});
+
+// A freshly-created worktree whose workspace is still being provisioned:
+// discovered properties (isWorktree, branch) aren't populated yet, so the
+// formatter reports the lifecycle ("Provisioning") instead of guessing a mode,
+// and there is no branch chip. Because this runs the real formatter, it is
+// structurally impossible for this row to show "Working locally".
+const provisioningEnvironmentSummary: ReactNode = makeEnvironmentSummary({
+  environment: makeEnvironment({
+    isWorktree: false,
+    workspaceProvisionType: "managed-worktree",
+    status: "provisioning",
+  }),
+  isLocalHost: true,
+});
 
 const usage: ThreadContextWindowUsage = {
   usedTokens: 32_400,
@@ -341,11 +411,12 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="blocked: provisioning"
-        hint="environment still spinning up"
+        hint="environment still spinning up — 'Provisioning' label, no branch yet"
       >
         <Row
           submitMode={{ kind: "blocked", reason: "provisioning" }}
           threadRuntimeDisplayStatus="provisioning"
+          environmentSummary={provisioningEnvironmentSummary}
         />
       </StoryRow>
       <StoryRow

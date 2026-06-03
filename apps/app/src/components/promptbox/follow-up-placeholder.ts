@@ -12,11 +12,15 @@ export function getFollowUpPromptPlaceholder(
   displayStatus: ThreadRuntimeDisplayStatus,
   isManagerThread: boolean,
 ): string {
-  if (displayStatus === "created" || displayStatus === "provisioning") {
+  if (displayStatus === "created") {
     return isManagerThread ? "Hiring manager..." : "Creating thread...";
   }
 
   switch (displayStatus) {
+    case "provisioning":
+      // Matches the timeline's provisioning operation title ("Provisioning
+      // thread"), which is uniform across standard and manager threads.
+      return "Provisioning thread...";
     case "waiting-for-host":
       return "Host disconnected";
     case "host-reconnecting":
