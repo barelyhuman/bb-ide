@@ -1,9 +1,10 @@
 import type { ThreadType } from "@bb/domain";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type RefObject } from "react";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
 import { threadTypeLabel } from "@/lib/thread-title";
+import { useRenameDialogAutoFocus } from "./useRenameDialogAutoFocus.js";
 
 export interface ThreadRenameDialogTarget {
   id: string;
@@ -24,15 +25,17 @@ export function ThreadRenameDialog({
   onOpenChange,
   onRename,
 }: ThreadRenameDialogProps) {
+  const { inputRef, handleOpenAutoFocus } = useRenameDialogAutoFocus();
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onOpenAutoFocus={handleOpenAutoFocus}>
         {target ? (
           <ThreadRenameDialogContent
             key={target.id}
             target={target}
             pending={pending}
             onRename={onRename}
+            inputRef={inputRef}
           />
         ) : null}
       </DialogContent>
@@ -44,12 +47,14 @@ export interface ThreadRenameDialogContentProps {
   target: ThreadRenameDialogTarget;
   pending: boolean;
   onRename: (threadId: string, title: string) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
 }
 
 export function ThreadRenameDialogContent({
   target,
   pending,
   onRename,
+  inputRef,
 }: ThreadRenameDialogContentProps) {
   const inputId = useId();
   const [nextTitle, setNextTitle] = useState(target.currentTitle);
@@ -85,10 +90,10 @@ export function ThreadRenameDialogContent({
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Input
+            ref={inputRef}
             id={inputId}
             aria-label={`${label.charAt(0).toUpperCase() + label.slice(1)} name`}
             value={nextTitle}
-            autoFocus
             autoCapitalize="sentences"
             autoCorrect="off"
             spellCheck={false}

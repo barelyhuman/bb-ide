@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   ThreadRenameDialogContent,
   type ThreadRenameDialogTarget,
@@ -29,6 +30,7 @@ const longTitleTarget: ThreadRenameDialogTarget = {
 };
 
 export function Overview() {
+  const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <StoryCard>
       <StoryRow label="default" hint="standard thread, idle">
@@ -37,6 +39,7 @@ export function Overview() {
             target={defaultTarget}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -49,6 +52,7 @@ export function Overview() {
             target={managerTarget}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -61,6 +65,7 @@ export function Overview() {
             target={defaultTarget}
             pending
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -73,6 +78,7 @@ export function Overview() {
             target={longTitleTarget}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -85,6 +91,7 @@ export function Overview() {
             target={{ id: "thr_blank", currentTitle: "" }}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>

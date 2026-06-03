@@ -1,7 +1,8 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type RefObject } from "react";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
+import { useRenameDialogAutoFocus } from "./useRenameDialogAutoFocus.js";
 
 export interface HostRenameDialogTarget {
   id: string;
@@ -21,15 +22,17 @@ export function HostRenameDialog({
   onOpenChange,
   onRename,
 }: HostRenameDialogProps) {
+  const { inputRef, handleOpenAutoFocus } = useRenameDialogAutoFocus();
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onOpenAutoFocus={handleOpenAutoFocus}>
         {target ? (
           <HostRenameDialogContent
             key={target.id}
             target={target}
             pending={pending}
             onRename={onRename}
+            inputRef={inputRef}
           />
         ) : null}
       </DialogContent>
@@ -41,12 +44,14 @@ export interface HostRenameDialogContentProps {
   target: HostRenameDialogTarget;
   pending: boolean;
   onRename: (hostId: string, name: string) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
 }
 
 export function HostRenameDialogContent({
   target,
   pending,
   onRename,
+  inputRef,
 }: HostRenameDialogContentProps) {
   const inputId = useId();
   const [nextName, setNextName] = useState(target.currentName);
@@ -76,10 +81,10 @@ export function HostRenameDialogContent({
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Input
+            ref={inputRef}
             id={inputId}
             aria-label="Host name"
             value={nextName}
-            autoFocus
             disabled={pending}
             onChange={(event) => {
               setNextName(event.target.value);

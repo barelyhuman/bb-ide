@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   ProjectRenameDialogContent,
   type ProjectRenameDialogTarget,
@@ -31,6 +32,7 @@ const emptyTarget: ProjectRenameDialogTarget = {
 };
 
 export function Overview() {
+  const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <StoryCard>
       <StoryRow label="default" hint="standard project name in the input">
@@ -39,6 +41,7 @@ export function Overview() {
             target={target}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -48,6 +51,7 @@ export function Overview() {
             target={longTarget}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -60,6 +64,7 @@ export function Overview() {
             target={target}
             pending
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -72,6 +77,7 @@ export function Overview() {
             target={emptyTarget}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>

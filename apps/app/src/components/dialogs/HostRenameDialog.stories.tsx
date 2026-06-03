@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   HostRenameDialogContent,
   type HostRenameDialogTarget,
@@ -23,6 +24,7 @@ const emptyTarget: HostRenameDialogTarget = {
 };
 
 export function Overview() {
+  const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <StoryCard>
       <StoryRow label="default" hint="standard host with current name prefilled">
@@ -31,6 +33,7 @@ export function Overview() {
             target={target}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>
@@ -39,7 +42,12 @@ export function Overview() {
         hint="submit in flight — input and submit disabled"
       >
         <DialogStage>
-          <HostRenameDialogContent target={target} pending onRename={noop} />
+          <HostRenameDialogContent
+            target={target}
+            pending
+            onRename={noop}
+            inputRef={inputRef}
+          />
         </DialogStage>
       </StoryRow>
       <StoryRow
@@ -51,6 +59,7 @@ export function Overview() {
             target={emptyTarget}
             pending={false}
             onRename={noop}
+            inputRef={inputRef}
           />
         </DialogStage>
       </StoryRow>

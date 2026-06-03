@@ -1,7 +1,8 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type RefObject } from "react";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
+import { useRenameDialogAutoFocus } from "./useRenameDialogAutoFocus.js";
 
 export interface ProjectRenameDialogTarget {
   id: string;
@@ -19,6 +20,7 @@ export interface ProjectRenameDialogContentProps {
   target: ProjectRenameDialogTarget;
   pending: boolean;
   onRename: (projectId: string, name: string) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
 }
 
 export function ProjectRenameDialog({
@@ -27,15 +29,17 @@ export function ProjectRenameDialog({
   onOpenChange,
   onRename,
 }: ProjectRenameDialogProps) {
+  const { inputRef, handleOpenAutoFocus } = useRenameDialogAutoFocus();
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onOpenAutoFocus={handleOpenAutoFocus}>
         {target ? (
           <ProjectRenameDialogContent
             key={target.id}
             target={target}
             pending={pending}
             onRename={onRename}
+            inputRef={inputRef}
           />
         ) : null}
       </DialogContent>
@@ -47,6 +51,7 @@ export function ProjectRenameDialogContent({
   target,
   pending,
   onRename,
+  inputRef,
 }: ProjectRenameDialogContentProps) {
   const inputId = useId();
   const [nextName, setNextName] = useState(target.currentName);
@@ -78,10 +83,10 @@ export function ProjectRenameDialogContent({
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Input
+            ref={inputRef}
             id={inputId}
             aria-label="Project name"
             value={nextName}
-            autoFocus
             autoCapitalize="words"
             autoCorrect="off"
             spellCheck={false}
