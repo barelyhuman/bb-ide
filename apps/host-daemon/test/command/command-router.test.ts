@@ -1363,6 +1363,111 @@ describe("CommandRouter", () => {
     ]);
   });
 
+  it("waits for an in-flight thread.unarchive before resuming a turn for the same thread", async () => {
+    const dataDir = await makeTempDir("bb-command-router-unarchive-");
+    const calls: string[] = [];
+    const runtime = createFakeRuntime();
+    const unarchiveStarted = createDeferred<void>();
+    const unarchiveDeferred = createDeferred<void>();
+    runtime.unarchiveThread.mockImplementation(
+      async (_args: UnarchiveThreadArgs) => {
+        calls.push("unarchive:start");
+        unarchiveStarted.resolve(undefined);
+        await unarchiveDeferred.promise;
+        calls.push("unarchive:done");
+      },
+    );
+    runtime.resumeThread.mockImplementation(
+      async ({ providerThreadId }: ResumeThreadArgs) => {
+        calls.push("resume");
+        return { providerThreadId: providerThreadId ?? "provider-resumed" };
+      },
+    );
+    runtime.runTurn.mockImplementation(async () => {
+      calls.push("runTurn");
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir,
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+
+    const handling = router.handleCommands([
+      {
+        id: "unarchive",
+        attemptId: "attempt-unarchive",
+        cursor: 1,
+        command: {
+          type: "thread.unarchive",
+          threadId: "thread-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+        },
+      },
+      {
+        id: "submit",
+        attemptId: "attempt-submit",
+        cursor: 2,
+        command: {
+          type: "turn.submit",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          requestId: nextClientRequestId(),
+          input: [{ type: "text", text: "after unarchive" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default" as const,
+            reasoningLevel: "medium" as const,
+            permissionMode: "full" as const,
+            permissionEscalation: null,
+          },
+          resumeContext: {
+            workspaceContext: {
+              workspacePath: "/tmp/env-1",
+              workspaceProvisionType: "unmanaged" as const,
+            },
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "provider-1",
+            instructions: "Be a helpful coding agent.",
+            dynamicTools: [],
+            instructionMode: "append" as const,
+          },
+          target: { mode: "start" },
+        },
+      },
+    ]);
+
+    await unarchiveStarted.promise;
+    // The turn must not resume the provider session while the unarchive is in
+    // flight, or the provider rejects the resume as still archived.
+    expect(runtime.resumeThread).not.toHaveBeenCalled();
+    expect(runtime.runTurn).not.toHaveBeenCalled();
+
+    unarchiveDeferred.resolve(undefined);
+    await handling;
+
+    expect(calls).toEqual([
+      "unarchive:start",
+      "unarchive:done",
+      "resume",
+      "runTurn",
+    ]);
+  });
+
   it("runs provider commands for different threads concurrently", async () => {
     const runtime = createFakeRuntime();
     const threadA = createDeferred<undefined>();

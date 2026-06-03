@@ -150,6 +150,10 @@ export class CommandRouter {
   private readonly readFetchedAt;
   private readonly environmentLanes = new Map<string, EnvironmentLaneState>();
   private readonly fileWriteLaneTails = new Map<string, Promise<void>>();
+  // Per-thread barrier keyed by threadId. A turn submission
+  // (turn.submit/thread.start) waits for an in-flight thread.unarchive of the
+  // same thread so it cannot resume a still-archived provider session.
+  private readonly threadUnarchiveBarriers = new Map<string, Promise<void>>();
   // Stale failed reports retry in the background after the current result is
   // reported, so one permanently failing result cannot block newer completions.
   private readonly pendingResults: PendingCommandResultReport[] = [];
@@ -247,10 +251,12 @@ export class CommandRouter {
     let task: Promise<ExecutedCommandResult>;
     const fileWriteLaneKey = this.getFileWriteLaneKey(envelope.command);
     const environmentLaneMode = this.getEnvironmentLaneMode(envelope.command);
-    if (fileWriteLaneKey) {
-      task = this.runInFileWriteLane(fileWriteLaneKey, () =>
+    const runCommand = () =>
+      this.runAfterThreadUnarchiveBarrier(envelope.command, () =>
         this.executeCommandWithLaneStart(envelope, laneWorkMetrics),
       );
+    if (fileWriteLaneKey) {
+      task = this.runInFileWriteLane(fileWriteLaneKey, runCommand);
     } else if (environmentLaneMode && "environmentId" in envelope.command) {
       const { environmentId } = envelope.command;
       if (!environmentId) {
@@ -258,13 +264,17 @@ export class CommandRouter {
           `Command ${envelope.command.type} is missing environmentId`,
         );
       }
-      task = this.runInEnvironmentLane(environmentId, environmentLaneMode, () =>
-        this.executeCommandWithLaneStart(envelope, laneWorkMetrics),
+      task = this.runInEnvironmentLane(
+        environmentId,
+        environmentLaneMode,
+        runCommand,
       );
     } else {
-      laneWorkMetrics.startedAtMs = receivedAtMs;
-      task = this.executeCommand(envelope);
+      task = runCommand();
     }
+    // Register synchronously, before awaiting, so a turn submission dispatched
+    // in the same batch observes the unarchive that precedes it.
+    this.registerThreadUnarchiveBarrier(envelope.command, task);
 
     const executed = await task;
     const report: PendingCommandResultReport = {
@@ -569,6 +579,55 @@ export class CommandRouter {
     state.writeTail = done;
     this.deleteEnvironmentLaneWhenIdle(environmentId, state, done);
     return next;
+  }
+
+  /**
+   * Order a turn submission after any in-flight unarchive for the same thread.
+   * thread.unarchive runs on the provider maintenance runtime while turn.submit
+   * resumes the thread runtime, so the two are otherwise unordered and a turn
+   * can reach the provider before the session is unarchived.
+   */
+  private async runAfterThreadUnarchiveBarrier<T>(
+    command: HostDaemonCommand,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const threadId = this.getThreadUnarchiveBarrierWaitThreadId(command);
+    if (threadId) {
+      const barrier = this.threadUnarchiveBarriers.get(threadId);
+      if (barrier) {
+        await barrier;
+      }
+    }
+    return work();
+  }
+
+  private registerThreadUnarchiveBarrier(
+    command: HostDaemonCommand,
+    task: Promise<ExecutedCommandResult>,
+  ): void {
+    if (command.type !== "thread.unarchive") {
+      return;
+    }
+    const { threadId } = command;
+    const barrier = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.threadUnarchiveBarriers.set(threadId, barrier);
+    void barrier.then(() => {
+      if (this.threadUnarchiveBarriers.get(threadId) === barrier) {
+        this.threadUnarchiveBarriers.delete(threadId);
+      }
+    });
+  }
+
+  private getThreadUnarchiveBarrierWaitThreadId(
+    command: HostDaemonCommand,
+  ): string | null {
+    if (command.type === "turn.submit" || command.type === "thread.start") {
+      return command.threadId;
+    }
+    return null;
   }
 
   private runInFileWriteLane<T>(
