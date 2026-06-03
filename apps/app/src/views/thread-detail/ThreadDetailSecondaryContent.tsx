@@ -253,6 +253,16 @@ export function ThreadDetailSecondaryContent({
         key={timeline.threadId}
         direction="vertical"
         className="h-full w-full min-w-0"
+        // react-resizable-panels sets an INLINE `overflow: hidden` on the group
+        // root, which is still programmatically scrollable. A `scrollIntoView`
+        // from the app-preview iframe (clicking an in-page `#anchor`) walks up
+        // and bumps this group's `scrollTop`, dragging the whole view — Thread
+        // Details Header included — out of place. `clip` makes it a non-scroll
+        // container so it can never hold an offset. Must be inline `style` (an
+        // `overflow-clip` class loses to the library's inline style), and ONLY
+        // on the group root — Panels' inline `overflow: hidden` is load-bearing
+        // for nested scroll-area height and must stay untouched.
+        style={{ overflow: "clip" }}
       >
         <Panel
           id="thread-detail-main-panel"
@@ -285,6 +295,11 @@ export function ThreadDetailSecondaryContent({
               ref={horizontalPanelGroupRef}
               direction="horizontal"
               className="h-full min-w-0 flex-1"
+              // Same scroll-leak guard as the vertical group above: this group
+              // is a common ancestor of the timeline (header) and secondary
+              // (iframe) Panels, so its inline `overflow: hidden` is the same
+              // latent leak. `clip` makes it a non-scroll container.
+              style={{ overflow: "clip" }}
             >
               <Panel
                 id="thread-detail-timeline-panel"
