@@ -1,11 +1,8 @@
-import type {
-  EnvironmentStatus,
-  WorkspaceProvisionType,
-} from "@bb/domain";
+import type { EnvironmentStatus, WorkspaceProvisionType } from "@bb/domain";
 import type { WorkspaceContext } from "@bb/host-daemon-contract";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
 
-export interface WorkspaceCommandTargetEnvironment {
+interface WorkspaceCommandTargetEnvironment {
   cleanupRequestedAt: number | null;
   hostId: string;
   id: string;
@@ -14,12 +11,12 @@ export interface WorkspaceCommandTargetEnvironment {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-export interface WorkspaceCommandTargetPath {
+interface WorkspaceCommandTargetPath {
   path: string;
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-export interface WorkspaceCommandTarget {
+interface WorkspaceCommandTarget {
   environmentId: string;
   hostId: string;
   workspaceContext: WorkspaceContext;
@@ -49,14 +46,4 @@ export function requireWorkspaceCommandTarget(
       workspaceProvisionType: environment.workspaceProvisionType,
     }),
   };
-}
-
-export function getWorkspaceCommandTarget(
-  environment: WorkspaceCommandTargetEnvironment,
-): WorkspaceCommandTarget | null {
-  if (environment.status !== "ready" || !environment.path) {
-    return null;
-  }
-
-  return requireWorkspaceCommandTarget(environment);
 }

@@ -6,12 +6,10 @@ import {
   hasPendingHostCommandForThread,
   environments,
   events,
-  transitionThreadStatus,
   threads,
 } from "@bb/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
-  type AgentProviderId,
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
 } from "@bb/agent-providers";
@@ -32,7 +30,6 @@ import type {
 import type {
   HostDaemonCommand,
   TurnSubmitTarget,
-  WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -50,6 +47,7 @@ import {
   type ExistingThreadExecutionInputRequest,
 } from "./thread-execution-plan.js";
 import { workspaceContextFromPath } from "../environments/workspace-command-target.js";
+import { tryTransition } from "./thread-transitions.js";
 
 export type ExecutionOptionsRequest = ExistingThreadExecutionInputRequest;
 
@@ -59,7 +57,7 @@ export interface QueueThreadStopCommandArgs {
   threadId: string;
 }
 
-export interface QueueThreadStartCommandEnvironment {
+interface QueueThreadStartCommandEnvironment {
   cleanupRequestedAt: number | null;
   hostId: string;
   id: string;
@@ -68,20 +66,15 @@ export interface QueueThreadStartCommandEnvironment {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-export interface ThreadHostCommandEnvironment {
+interface ThreadHostCommandEnvironment {
   hostId: string;
   id: string;
 }
 
-export interface ThreadUnarchiveCommandEnvironment {
+interface ThreadUnarchiveCommandEnvironment {
   hostId: string;
   id: string;
   status: EnvironmentStatus;
-}
-
-export interface ThreadWorkspaceCommandEnvironment extends ThreadHostCommandEnvironment {
-  path: string | null;
-  workspaceProvisionType: WorkspaceProvisionType;
 }
 
 export interface QueueThreadStartCommandArgs {
@@ -96,19 +89,18 @@ export interface QueueThreadStartCommandArgs {
   thread: Thread;
 }
 
-export interface TurnSubmitCommandPayloadArgs {
+interface PreparedTurnSubmitCommandBuildArgs {
   environmentId: string;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   providerThreadId: string;
-  requestId: ClientTurnRequestId;
   runtimeContext: ResolvedThreadRuntimeCommandConfig;
   target: TurnSubmitTarget;
   threadId: string;
 }
 
-export interface PrepareTurnSubmitCommandPayloadArgs {
+interface PrepareTurnSubmitCommandPayloadArgs {
   environment: ThreadRuntimeCommandEnvironment;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
@@ -118,21 +110,13 @@ export interface PrepareTurnSubmitCommandPayloadArgs {
   thread: Thread;
 }
 
-export interface CreateTurnSubmitCommandPayloadArgs extends PrepareTurnSubmitCommandPayloadArgs {
-  requestId: ClientTurnRequestId;
-}
-
-export interface FinalizeTurnSubmitCommandPayloadArgs {
+interface FinalizeTurnSubmitCommandPayloadArgs {
   requestId: ClientTurnRequestId;
   preparedCommand: PreparedTurnSubmitCommandPayload;
 }
 
 export type PreparedTurnSubmitCommandPayload = Omit<
   Extract<HostDaemonCommand, { type: "turn.submit" }>,
-  "requestId"
->;
-type PreparedTurnSubmitCommandBuildArgs = Omit<
-  TurnSubmitCommandPayloadArgs,
   "requestId"
 >;
 
@@ -157,39 +141,33 @@ interface QueueTurnSubmitCommandInTransactionArgs {
   sessionId: string | null;
 }
 
-export interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayloadArgs {
+interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayloadArgs {
   requestId: ClientTurnRequestId;
 }
 
-export interface QueueThreadRenameCommandArgs {
+interface QueueThreadRenameCommandArgs {
   environment: ThreadHostCommandEnvironment;
   providerId: string;
   threadId: string;
   title: string;
 }
 
-export interface QueueThreadArchiveCommandArgs {
-  environment: ThreadWorkspaceCommandEnvironment;
-  providerThreadId: string;
-  thread: Thread;
-}
-
-export interface QueueThreadUnarchiveCommandArgs {
+interface QueueThreadUnarchiveCommandArgs {
   environment: ThreadUnarchiveCommandEnvironment;
   providerThreadId: string;
   thread: Thread;
 }
 
-export interface EnsureThreadNativeArchiveSettledArgs {
+interface EnsureThreadNativeArchiveSettledArgs {
   environment: Pick<Environment, "hostId">;
   thread: Pick<Thread, "id">;
 }
 
-export interface QueueArchivedThreadProviderArchiveCommandArgs {
+interface QueueArchivedThreadProviderArchiveCommandArgs {
   threadId: string;
 }
 
-export interface QueueThreadDeletedCommandArgs {
+interface QueueThreadDeletedCommandArgs {
   environment: ThreadHostCommandEnvironment;
   threadId: string;
 }
@@ -230,18 +208,6 @@ function toRuntimeExecutionOptions(
     permissionMode: args.execution.permissionMode,
     permissionEscalation: args.permissionEscalation,
   };
-}
-
-function requireAgentProviderId(providerId: string): AgentProviderId {
-  if (isAgentProviderId(providerId)) {
-    return providerId;
-  }
-
-  throw new ApiError(
-    500,
-    "internal_error",
-    `Manager thread has unsupported provider ${providerId}`,
-  );
 }
 
 export async function buildExecutionOptions(
@@ -343,13 +309,17 @@ export async function prepareTurnSubmitCommandPayload(
     thread: args.thread,
     environment: args.environment,
   });
-  const input =
-    args.thread.type === "manager"
-      ? appendManagerToolReminder(
-          args.input,
-          requireAgentProviderId(args.thread.providerId),
-        )
-      : args.input;
+  let input = args.input;
+  if (args.thread.type === "manager") {
+    if (!isAgentProviderId(args.thread.providerId)) {
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Manager thread has unsupported provider ${args.thread.providerId}`,
+      );
+    }
+    input = appendManagerToolReminder(args.input, args.thread.providerId);
+  }
   return buildPreparedTurnSubmitCommandPayload({
     environmentId: args.environment.id,
     execution: args.execution,
@@ -359,17 +329,6 @@ export async function prepareTurnSubmitCommandPayload(
     runtimeContext,
     target: args.target,
     threadId: args.thread.id,
-  });
-}
-
-async function createTurnSubmitCommandPayload(
-  deps: LoggedWorkSessionDeps,
-  args: CreateTurnSubmitCommandPayloadArgs,
-): Promise<Extract<HostDaemonCommand, { type: "turn.submit" }>> {
-  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
-  return addRequestIdToTurnSubmitCommandPayload({
-    requestId: args.requestId,
-    preparedCommand,
   });
 }
 
@@ -396,7 +355,11 @@ export async function queueTurnSubmitCommand(
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
   });
-  const command = await createTurnSubmitCommandPayload(deps, args);
+  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
+  const command = addRequestIdToTurnSubmitCommandPayload({
+    requestId: args.requestId,
+    preparedCommand,
+  });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
@@ -405,7 +368,7 @@ export async function queueTurnSubmitCommand(
   });
 
   if (args.thread.status === "idle") {
-    transitionThreadStatus(deps.db, deps.hub, args.thread.id, "active");
+    tryTransition(deps.db, deps.hub, args.thread.id, "active");
   }
 }
 
@@ -462,29 +425,6 @@ function threadHasCodexSpawnAgentToolCall(
   return row !== undefined;
 }
 
-function shouldSkipArchiveForwardingForCascadeRisk(
-  deps: Pick<AppDeps, "db">,
-  thread: Thread,
-): boolean {
-  return (
-    threadHasLiveChildren(deps, thread.id) ||
-    threadHasCodexSpawnAgentToolCall(deps, thread.id)
-  );
-}
-
-function buildThreadWorkspaceContext(
-  environment: ThreadWorkspaceCommandEnvironment,
-): WorkspaceContext | null {
-  if (!environment.path) {
-    return null;
-  }
-
-  return workspaceContextFromPath({
-    path: environment.path,
-    workspaceProvisionType: environment.workspaceProvisionType,
-  });
-}
-
 export function queueThreadRenameCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadRenameCommandArgs,
@@ -525,53 +465,6 @@ export function queueThreadRenameCommandInTransaction(
       environmentId: args.environment.id,
       threadId: args.threadId,
       title: args.title,
-    }),
-  });
-  return true;
-}
-
-export function queueThreadArchiveCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueThreadArchiveCommandArgs,
-): boolean {
-  if (
-    !providerSupportsThreadArchiveForwarding(args.thread.providerId)
-  ) {
-    return false;
-  }
-
-  if (shouldSkipArchiveForwardingForCascadeRisk(deps, args.thread)) {
-    return false;
-  }
-
-  const workspaceContext = buildThreadWorkspaceContext(args.environment);
-  if (!workspaceContext) {
-    return false;
-  }
-
-  if (
-    hasExistingThreadArchiveCommand(deps.db, {
-      hostId: args.environment.hostId,
-      providerId: args.thread.providerId,
-      providerThreadId: args.providerThreadId,
-      threadId: args.thread.id,
-    })
-  ) {
-    return false;
-  }
-
-  const session = getActiveSession(deps.db, args.environment.hostId);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "thread.archive",
-    payload: JSON.stringify({
-      type: "thread.archive",
-      environmentId: args.environment.id,
-      threadId: args.thread.id,
-      workspaceContext,
-      providerId: args.thread.providerId,
-      providerThreadId: args.providerThreadId,
     }),
   });
   return true;
@@ -628,16 +521,51 @@ export function queueArchivedThreadProviderArchiveCommand(
     return false;
   }
 
-  return queueThreadArchiveCommand(deps, {
-    environment: {
-      id: environment.id,
-      hostId: environment.hostId,
-      path: environment.path,
-      workspaceProvisionType: environment.workspaceProvisionType,
-    },
-    providerThreadId,
-    thread,
+  if (!providerSupportsThreadArchiveForwarding(thread.providerId)) {
+    return false;
+  }
+
+  if (
+    threadHasLiveChildren(deps, thread.id) ||
+    threadHasCodexSpawnAgentToolCall(deps, thread.id)
+  ) {
+    return false;
+  }
+
+  if (!environment.path) {
+    return false;
+  }
+  const workspaceContext = workspaceContextFromPath({
+    path: environment.path,
+    workspaceProvisionType: environment.workspaceProvisionType,
   });
+
+  if (
+    hasExistingThreadArchiveCommand(deps.db, {
+      hostId: environment.hostId,
+      providerId: thread.providerId,
+      providerThreadId,
+      threadId: thread.id,
+    })
+  ) {
+    return false;
+  }
+
+  const session = getActiveSession(deps.db, environment.hostId);
+  queueCommand(deps.db, deps.hub, {
+    hostId: environment.hostId,
+    sessionId: session?.id ?? null,
+    type: "thread.archive",
+    payload: JSON.stringify({
+      type: "thread.archive",
+      environmentId: environment.id,
+      threadId: thread.id,
+      workspaceContext,
+      providerId: thread.providerId,
+      providerThreadId,
+    }),
+  });
+  return true;
 }
 
 export function queueThreadUnarchiveCommand(

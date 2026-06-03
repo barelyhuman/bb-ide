@@ -92,14 +92,6 @@ interface ResolveEventsToApplyArgs {
   insertedEventIndexes: number[];
 }
 
-interface AppendDaemonEventInputsAtomicallyDeps {
-  db: AppDeps["db"];
-}
-
-interface AppendDaemonEventInputsAtomicallyArgs {
-  eventInputs: AppendDaemonEventInput[];
-}
-
 interface NotifyInsertedEventThreadsDeps {
   hub: AppDeps["hub"];
 }
@@ -168,10 +160,6 @@ type EventEffectFollowUp =
   | ManagerScheduleSyncFollowUp
   | ManagerTurnNotificationFollowUp
   | QueuedMessageAutoSendFollowUp;
-
-interface EventEffectResult {
-  followUps: EventEffectFollowUp[];
-}
 
 interface ManagerScheduleSyncLogContext {
   followUpKind: "manager-schedule-sync";
@@ -272,16 +260,6 @@ function toStoredEvent(args: ToStoredEventArgs): AppendDaemonEventInput {
   };
 }
 
-function appendDaemonEventInputsAtomically(
-  deps: AppendDaemonEventInputsAtomicallyDeps,
-  args: AppendDaemonEventInputsAtomicallyArgs,
-): AppendDaemonEventsResult {
-  return deps.db.transaction(
-    (tx) => appendDaemonEventsInTransaction(tx, args.eventInputs),
-    { behavior: "immediate" },
-  );
-}
-
 function notifyInsertedEventThreads(
   deps: NotifyInsertedEventThreadsDeps,
   args: NotifyInsertedEventThreadsArgs,
@@ -340,7 +318,7 @@ async function archiveCompletedAutomationThreadIfNeeded(
 async function applyEventEffects(
   deps: LoggedPendingInteractionWorkSessionDeps,
   events: HostDaemonEventEnvelope[],
-): Promise<EventEffectResult> {
+): Promise<EventEffectFollowUp[]> {
   // Apply event-owned state changes before returning so the accepted batch and
   // immediately visible thread state agree. Follow-ups that may queue daemon
   // work stay deferred to avoid command waits inside daemon ingress.
@@ -454,7 +432,7 @@ async function applyEventEffects(
       );
     }
   }
-  return { followUps };
+  return followUps;
 }
 
 async function executeEventFollowUp(
@@ -530,15 +508,6 @@ async function executeEventFollowUpBestEffort(
   }
 }
 
-async function executeEventFollowUpBatch(
-  deps: LoggedPendingInteractionWorkSessionDeps,
-  followUps: EventEffectFollowUp[],
-): Promise<void> {
-  await Promise.all(
-    followUps.map((followUp) => executeEventFollowUpBestEffort(deps, followUp)),
-  );
-}
-
 function deferEventFollowUpBatch(
   deps: LoggedPendingInteractionWorkSessionDeps,
   followUps: EventEffectFollowUp[],
@@ -551,7 +520,13 @@ function deferEventFollowUpBatch(
     config: deps.config,
     logger: deps.logger,
     name: "Event follow-up scheduling",
-    work: () => executeEventFollowUpBatch(deps, followUps),
+    work: async () => {
+      await Promise.all(
+        followUps.map((followUp) =>
+          executeEventFollowUpBestEffort(deps, followUp),
+        ),
+      );
+    },
   });
 }
 
@@ -803,9 +778,10 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       const postableEvents = entries.map((entry) => entry.envelope);
       let appendResult: AppendDaemonEventsResult;
       try {
-        appendResult = appendDaemonEventInputsAtomically(deps, {
-          eventInputs,
-        });
+        appendResult = deps.db.transaction(
+          (tx) => appendDaemonEventsInTransaction(tx, eventInputs),
+          { behavior: "immediate" },
+        );
       } catch (error) {
         if (error instanceof ProducerEventPayloadMismatchError) {
           deps.logger.error(
@@ -842,7 +818,7 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
         insertedInputIndexes: appendResult.insertedInputIndexes,
       });
 
-      const eventEffectResult = await applyEventEffects(
+      const followUps = await applyEventEffects(
         deps,
         resolveEventsToApply({
           db: deps.db,
@@ -858,15 +834,11 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
         maybePruneActiveThreadEventHistory(deps, candidate);
       }
 
-      const result = {
-        followUps: eventEffectResult.followUps,
-        response: context.json({
-          acceptedEvents: appendResult.acceptedEvents,
-          rejectedEvents,
-        }),
-      };
-      deferEventFollowUpBatch(deps, result.followUps);
-      return result.response;
+      deferEventFollowUpBatch(deps, followUps);
+      return context.json({
+        acceptedEvents: appendResult.acceptedEvents,
+        rejectedEvents,
+      });
     },
   );
 }

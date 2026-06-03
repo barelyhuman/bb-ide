@@ -108,35 +108,22 @@ interface EnvironmentProvisionTransactionDeps extends EnvironmentProvisionWriteD
   pendingInteractions: AppDeps["pendingInteractions"];
 }
 
-export interface RequestEnvironmentProvisionArgs {
+interface RequestEnvironmentProvisionArgs {
   environmentId: string;
   request: EnvironmentProvisionRequest;
 }
 
-export interface RequestEnvironmentReprovisionArgs
-  extends RequestEnvironmentProvisionArgs {}
+interface RequestEnvironmentReprovisionArgs extends RequestEnvironmentProvisionArgs {}
 
-export interface AdvanceEnvironmentProvisioningArgs {
+interface AdvanceEnvironmentProvisioningArgs {
   environmentId: string | null | undefined;
 }
 
-export interface EnvironmentProvisioningCommandMutationArgs {
-  commandId: string;
-}
-
-export interface EnvironmentProvisioningCommandLookupArgs {
-  commandId: string;
-}
-
-export interface SettleEnvironmentProvisionCommandResultArgs {
+interface SettleEnvironmentProvisionCommandResultArgs {
   command: EnvironmentProvisionCommand;
   commandRow: HostDaemonCommandRow;
   deps: EnvironmentProvisionTransactionDeps;
   report: EnvironmentProvisionCommandResultReport;
-}
-
-export interface FailEnvironmentProvisioningForCommandArgs extends EnvironmentProvisioningCommandMutationArgs {
-  failureReason: string;
 }
 
 interface QueueEnvironmentProvisionCommandArgs {
@@ -146,7 +133,7 @@ interface QueueEnvironmentProvisionCommandArgs {
 }
 
 interface FailEnvironmentProvisioningDurablyArgs {
-  commandId?: string;
+  commandId: string;
   environmentId: string;
   failureEntry: ProvisioningTranscriptEntry;
   failureReason: string;
@@ -315,20 +302,6 @@ function readEnvironmentProvisioningIdFromOperation(
   ).provisioningId;
 }
 
-export function getEnvironmentProvisioningIdForCommand(
-  deps: EnvironmentProvisionReadDeps,
-  args: EnvironmentProvisioningCommandLookupArgs,
-): string | null {
-  const operation = getActiveProvisionOperationByCommandId(
-    deps,
-    args.commandId,
-  );
-  if (!operation) {
-    return null;
-  }
-  return readEnvironmentProvisioningIdFromOperation(operation);
-}
-
 function isWorkspaceProvisioningTranscriptEntry(
   entry: ProvisioningTranscriptEntry,
 ): boolean {
@@ -447,94 +420,7 @@ export function completeEnvironmentProvisioning(
   return true;
 }
 
-export function hasActiveEnvironmentProvisionOperationForCommand(
-  deps: EnvironmentProvisionReadDeps,
-  args: EnvironmentProvisioningCommandMutationArgs,
-): boolean {
-  return getActiveProvisionOperationByCommandId(deps, args.commandId) !== null;
-}
-
-export function completeEnvironmentProvisioningForCommand(
-  deps: EnvironmentProvisionReadDeps,
-  args: EnvironmentProvisioningCommandMutationArgs,
-): boolean {
-  const operation = getActiveProvisionOperationByCommandId(
-    deps,
-    args.commandId,
-  );
-  if (!operation) {
-    return false;
-  }
-
-  markEnvironmentOperationRecordCompleted(deps.db, {
-    environmentId: operation.environmentId,
-    kind: operation.kind,
-  });
-  return true;
-}
-
-export function failEnvironmentProvisioningForCommand(
-  deps: EnvironmentProvisionWriteDeps,
-  args: FailEnvironmentProvisioningForCommandArgs,
-): boolean {
-  const operation = getActiveProvisionOperationByCommandId(
-    deps,
-    args.commandId,
-  );
-  if (!operation) {
-    return false;
-  }
-
-  markEnvironmentOperationRecordFailed(deps.db, {
-    environmentId: operation.environmentId,
-    kind: operation.kind,
-    failureReason: args.failureReason,
-  });
-
-  const environment = getEnvironment(deps.db, operation.environmentId);
-  if (
-    environment &&
-    environment.status !== "destroyed" &&
-    environment.status !== "error"
-  ) {
-    setEnvironmentStatus(deps.db, deps.hub, operation.environmentId, {
-      status: "error",
-    });
-  }
-
-  return true;
-}
-
-export function failEnvironmentProvisioning(
-  deps: EnvironmentProvisionWriteDeps,
-  args: { environmentId: string; failureReason: string },
-): boolean {
-  const operation = getActiveProvisionOperation(deps, args.environmentId);
-  if (!operation) {
-    return false;
-  }
-
-  markEnvironmentOperationRecordFailed(deps.db, {
-    environmentId: args.environmentId,
-    kind: operation.kind,
-    failureReason: args.failureReason,
-  });
-
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (
-    environment &&
-    environment.status !== "destroyed" &&
-    environment.status !== "error"
-  ) {
-    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
-      status: "error",
-    });
-  }
-
-  return true;
-}
-
-export function recordEnvironmentProvisioningFailureInTransaction(
+function recordEnvironmentProvisioningFailureInTransaction(
   deps: EnvironmentProvisionTransactionDeps,
   args: FailEnvironmentProvisioningDurablyArgs,
 ): boolean {
@@ -542,24 +428,24 @@ export function recordEnvironmentProvisioningFailureInTransaction(
   if (!environment) {
     return false;
   }
-  const operation = args.commandId
-    ? getActiveProvisionOperationByCommandId(deps, args.commandId)
-    : getActiveProvisionOperation(deps, environment.id);
+  const operation = getActiveProvisionOperationByCommandId(
+    deps,
+    args.commandId,
+  );
   if (!operation) {
     return false;
   }
   const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
   const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
 
-  if (args.commandId) {
-    failEnvironmentProvisioningForCommand(deps, {
-      commandId: args.commandId,
-      failureReason: args.failureReason,
-    });
-  } else {
-    failEnvironmentProvisioning(deps, {
-      environmentId: environment.id,
-      failureReason: args.failureReason,
+  markEnvironmentOperationRecordFailed(deps.db, {
+    environmentId: operation.environmentId,
+    kind: operation.kind,
+    failureReason: args.failureReason,
+  });
+  if (environment.status !== "destroyed" && environment.status !== "error") {
+    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
+      status: "error",
     });
   }
 
@@ -590,23 +476,16 @@ export function settleEnvironmentProvisionCommandResult(
   args: SettleEnvironmentProvisionCommandResultArgs,
 ): CommandResultSideEffectsResult {
   const postCommitActions: CommandResultPostCommitAction[] = [];
-  if (
-    !hasActiveEnvironmentProvisionOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
+  const operation = getActiveProvisionOperationByCommandId(
+    args.deps,
+    args.commandRow.id,
+  );
+  if (!operation) {
     return emptyCommandResultSideEffects();
   }
 
-  const environmentProvisioningId = getEnvironmentProvisioningIdForCommand(
-    args.deps,
-    {
-      commandId: args.commandRow.id,
-    },
-  );
-  if (environmentProvisioningId === null) {
-    return emptyCommandResultSideEffects();
-  }
+  const environmentProvisioningId =
+    readEnvironmentProvisioningIdFromOperation(operation);
 
   const boundThreads = args.deps.db
     .select()
@@ -719,8 +598,9 @@ export function settleEnvironmentProvisionCommandResult(
       });
     }
 
-    completeEnvironmentProvisioningForCommand(args.deps, {
-      commandId: args.commandRow.id,
+    markEnvironmentOperationRecordCompleted(args.deps.db, {
+      environmentId: operation.environmentId,
+      kind: operation.kind,
     });
 
     postCommitActions.push({
@@ -842,19 +722,19 @@ export async function advanceEnvironmentProvisioning(
 
 export const MANAGED_REPROVISION_QUEUED = "queued" as const;
 export const MANAGED_REPROVISION_IN_PROGRESS = "already-provisioning" as const;
-export interface QueuedManagedReprovision {
+interface QueuedManagedReprovision {
   provisionEventSequence: number;
   status: typeof MANAGED_REPROVISION_QUEUED;
 }
-export type ManagedReprovisionResult =
+type ManagedReprovisionResult =
   | QueuedManagedReprovision
   | typeof MANAGED_REPROVISION_IN_PROGRESS;
 
-export interface ActiveManagedEnvironmentProvisionArgs {
+interface ActiveManagedEnvironmentProvisionArgs {
   environmentId: string;
 }
 
-export interface QueueManagedEnvironmentReprovisionArgs {
+interface QueueManagedEnvironmentReprovisionArgs {
   environment: Environment;
   projectId: string;
   provisionEventSequence: number;

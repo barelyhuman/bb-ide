@@ -1,4 +1,4 @@
-import { getThread, transitionThreadStatus } from "@bb/db";
+import { getThread } from "@bb/db";
 import type { ThreadEvent, ThreadStatus } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
@@ -6,8 +6,9 @@ import {
   resetActiveThreadEventPruningState,
 } from "../services/system/event-pruning.js";
 import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
+import { tryTransition } from "../services/threads/thread-transitions.js";
 
-export interface ApplyTurnCompletedEventResult {
+interface ApplyTurnCompletedEventResult {
   nextStatus: ThreadStatus | null;
   thread: ReturnType<typeof getThread>;
 }
@@ -38,7 +39,7 @@ export function applyTurnCompletedEvent(
 
   try {
     if (nextStatus) {
-      transitionThreadStatus(deps.db, deps.hub, payload.threadId, nextStatus);
+      tryTransition(deps.db, deps.hub, payload.threadId, nextStatus);
     }
   } catch {
     // Ignore invalid transitions from concurrent changes.

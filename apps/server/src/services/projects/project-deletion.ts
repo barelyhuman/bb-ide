@@ -22,12 +22,12 @@ import {
 } from "../environments/environment-cleanup-internal.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import {
-  requestThreadStopAndFinalize,
+  finalizeStoppedThread,
   requestThreadStopIfNeeded,
 } from "../threads/thread-lifecycle.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 
-export interface ProjectDeletionArgs {
+interface ProjectDeletionArgs {
   projectId: string;
 }
 
@@ -37,16 +37,6 @@ interface ProjectDeletionThread {
   id: string;
   status: ThreadStatus;
   stopRequestedAt: number | null;
-}
-
-interface ProjectDeletionThreadStopArgs {
-  environmentsById: Map<string, Environment>;
-  threads: ProjectDeletionThread[];
-}
-
-interface AdvanceProjectThreadsForDeletionArgs {
-  environmentsById: Map<string, Environment>;
-  projectId: string;
 }
 
 type ProjectDeletionDeps = LoggedPendingInteractionWorkSessionDeps &
@@ -81,28 +71,6 @@ function listProjectDeletionThreads(
     .all();
 }
 
-function mapEnvironmentsById(
-  environments: Environment[],
-): Map<string, Environment> {
-  return new Map(
-    environments.map((environment) => [environment.id, environment]),
-  );
-}
-
-function requestProjectThreadStopsForDeletion(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: ProjectDeletionThreadStopArgs,
-): void {
-  for (const thread of args.threads) {
-    const environment = thread.environmentId
-      ? (args.environmentsById.get(thread.environmentId) ?? null)
-      : null;
-    if (environment) {
-      requestThreadStopIfNeeded(deps, thread, environment);
-    }
-  }
-}
-
 function tombstoneProjectThreadsForDeletion(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ProjectDeletionArgs,
@@ -128,31 +96,6 @@ function tombstoneProjectThreadsForDeletion(
   );
   notificationBuffer.flushInto(deps.hub);
   return projectThreads;
-}
-
-async function advanceProjectThreadsForDeletion(
-  deps: ProjectDeletionDeps,
-  args: AdvanceProjectThreadsForDeletionArgs,
-): Promise<void> {
-  const projectThreads = listProjectDeletionThreads(deps.db, {
-    projectId: args.projectId,
-  });
-
-  for (const thread of projectThreads) {
-    const environment = thread.environmentId
-      ? (args.environmentsById.get(thread.environmentId) ?? null)
-      : null;
-
-    if (thread.deletedAt === null) {
-      markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
-    }
-    deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
-    requestThreadStopAndFinalize(deps, {
-      cancelPendingCommand: false,
-      environment,
-      thread,
-    });
-  }
 }
 
 function hasRemainingProjectThreads(
@@ -183,11 +126,18 @@ export function beginProjectDeletion(
   }
 
   const projectEnvironments = listEnvironments(deps.db, args.projectId);
+  const environmentsById = new Map(
+    projectEnvironments.map((environment) => [environment.id, environment]),
+  );
   const projectThreads = tombstoneProjectThreadsForDeletion(deps, args);
-  requestProjectThreadStopsForDeletion(deps, {
-    environmentsById: mapEnvironmentsById(projectEnvironments),
-    threads: projectThreads,
-  });
+  for (const thread of projectThreads) {
+    const environment = thread.environmentId
+      ? (environmentsById.get(thread.environmentId) ?? null)
+      : null;
+    if (environment) {
+      requestThreadStopIfNeeded(deps, thread, environment);
+    }
+  }
 }
 
 export function requestProjectDeletionAdvance(
@@ -220,12 +170,29 @@ export async function advanceProjectDeletion(
   }
 
   const projectEnvironments = listEnvironments(deps.db, args.projectId);
-  const environmentsById = mapEnvironmentsById(projectEnvironments);
-
-  await advanceProjectThreadsForDeletion(deps, {
-    environmentsById,
+  const environmentsById = new Map(
+    projectEnvironments.map((environment) => [environment.id, environment]),
+  );
+  const projectThreads = listProjectDeletionThreads(deps.db, {
     projectId: args.projectId,
   });
+  for (const thread of projectThreads) {
+    const environment = thread.environmentId
+      ? (environmentsById.get(thread.environmentId) ?? null)
+      : null;
+
+    if (thread.deletedAt === null) {
+      markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
+    }
+    deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
+    if (environment) {
+      requestThreadStopIfNeeded(deps, thread, environment);
+    }
+    finalizeStoppedThread(deps, {
+      cancelPendingCommand: false,
+      threadId: thread.id,
+    });
+  }
 
   for (const environment of projectEnvironments) {
     if (!environment.managed || environment.status === "destroyed") {

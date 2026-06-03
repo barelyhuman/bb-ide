@@ -37,8 +37,8 @@ import {
 import {
   advanceThreadProvisioning,
   requestThreadProvision,
-  type RequestThreadProvisionArgs,
 } from "./thread-provisioning.js";
+import type { ThreadProvisionEnvironmentIntent } from "./thread-provisioning-context.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
 
 type ThreadCreateDeps = Pick<
@@ -67,9 +67,6 @@ interface CreateProvisioningThreadArgs {
   >[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
 }
-
-type ThreadProvisionEnvironmentIntent =
-  RequestThreadProvisionArgs["environmentIntent"];
 
 interface PrepareManagerThreadInitialInputArgs {
   environmentIntent: ThreadProvisionEnvironmentIntent;

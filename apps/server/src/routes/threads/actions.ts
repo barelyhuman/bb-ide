@@ -30,7 +30,9 @@ import { ApiError } from "../../errors.js";
 import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
 import {
   cancelPendingEnvironmentCleanup,
-  requestEnvironmentCleanupAndAdvance,
+  requestEnvironmentCleanup,
+  requestEnvironmentCleanupAdvance,
+  wouldCleanupEnvironment,
 } from "../../services/environments/environment-cleanup-internal.js";
 import { requirePublicThread } from "../../services/lib/entity-lookup.js";
 import {
@@ -55,7 +57,6 @@ import {
 import {
   archiveManagerThreads,
   archiveThreadWithLifecycleEffects,
-  wouldCleanupAfterThreadArchive,
 } from "../../services/threads/thread-archive.js";
 import {
   requireThreadCommandEnvironment,
@@ -296,7 +297,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       });
       return context.json({ ok: true });
     }
-    const shouldRequestCleanup = wouldCleanupAfterThreadArchive(deps, thread);
+    const shouldRequestCleanup = wouldCleanupEnvironment(deps, {
+      environmentId: thread.environmentId,
+      excludeThreadId: thread.id,
+    });
     const environment = requireThreadHostCommandEnvironment({
       db: deps.db,
       thread,
@@ -309,7 +313,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(404, "thread_not_found", "Thread not found");
     }
     if (shouldRequestCleanup) {
-      requestEnvironmentCleanupAndAdvance(deps, {
+      requestEnvironmentCleanup(deps, {
+        environmentId: thread.environmentId,
+      });
+      requestEnvironmentCleanupAdvance(deps, {
         environmentId: thread.environmentId,
       });
     }
@@ -326,12 +333,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       );
     }
 
-    const result = archiveManagerThreads(deps, {
+    const archivedThreadIds = archiveManagerThreads(deps, {
       managerThread: thread,
     });
     return context.json({
       ok: true,
-      archivedThreadIds: result.archivedThreadIds,
+      archivedThreadIds,
     });
   });
 

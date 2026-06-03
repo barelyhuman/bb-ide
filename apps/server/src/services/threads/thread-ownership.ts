@@ -26,23 +26,18 @@ interface QueueManagerSystemMessageBestEffortArgs {
   reason: "assigned" | "removed";
 }
 
-export interface HandleThreadOwnershipChangeArgs {
+interface HandleThreadOwnershipChangeArgs {
   previousThread: Thread;
   queueManagerMessages: boolean;
   updatedThread: Thread;
 }
 
-export interface ReleaseUnarchivedChildrenFromArchivedManagerArgs {
+interface ReleaseUnarchivedChildrenFromArchivedManagerArgs {
   managerThreadId: string;
 }
 
-export interface ArchiveThreadAndReleaseChildrenArgs {
-  thread: Thread;
-}
-
-export interface ArchiveThreadAndReleaseChildrenResult {
-  archivedThread: Thread;
-  releasedThreads: Thread[];
+interface ArchiveThreadAndReleaseChildrenArgs {
+  threadId: string;
 }
 
 interface ThreadOwnershipTransactionDeps {
@@ -123,11 +118,10 @@ export async function handleThreadOwnershipChange(
 function releaseUnarchivedChildrenFromArchivedManagerInTransaction(
   deps: ThreadOwnershipTransactionDeps,
   args: ReleaseUnarchivedChildrenFromArchivedManagerArgs,
-): Thread[] {
+): void {
   const childThreads = listUnarchivedAssignedChildThreads(deps.db, {
     parentThreadId: args.managerThreadId,
   });
-  const releasedThreads: Thread[] = [];
 
   for (const childThread of childThreads) {
     const updatedThread = updateThread(deps.db, deps.hub, childThread.id, {
@@ -142,45 +136,38 @@ function releaseUnarchivedChildrenFromArchivedManagerInTransaction(
       previousParentThreadId: childThread.parentThreadId,
       nextParentThreadId: updatedThread.parentThreadId,
     });
-    releasedThreads.push(updatedThread);
   }
-
-  return releasedThreads;
 }
 
 export function archiveThreadAndReleaseChildren(
   deps: Pick<LoggedPendingInteractionWorkSessionDeps, "db" | "hub">,
   args: ArchiveThreadAndReleaseChildrenArgs,
-): ArchiveThreadAndReleaseChildrenResult | null {
+): Thread | null {
   const notificationBuffer = new NotificationBuffer();
   const result = deps.db.transaction(
     (tx) => {
       const archivedThread = archiveThread(
         tx,
         notificationBuffer,
-        args.thread.id,
+        args.threadId,
       );
       if (!archivedThread) {
         return null;
       }
 
-      const releasedThreads =
-        archivedThread.type === "manager"
-          ? releaseUnarchivedChildrenFromArchivedManagerInTransaction(
-              {
-                db: tx,
-                hub: notificationBuffer,
-              },
-              {
-                managerThreadId: archivedThread.id,
-              },
-            )
-          : [];
+      if (archivedThread.type === "manager") {
+        releaseUnarchivedChildrenFromArchivedManagerInTransaction(
+          {
+            db: tx,
+            hub: notificationBuffer,
+          },
+          {
+            managerThreadId: archivedThread.id,
+          },
+        );
+      }
 
-      return {
-        archivedThread,
-        releasedThreads,
-      };
+      return archivedThread;
     },
     { behavior: "immediate" },
   );

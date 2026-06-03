@@ -25,7 +25,10 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { parseOptionalInteger } from "../../services/lib/validation.js";
-import { requestEnvironmentCleanupAndAdvance } from "../../services/environments/environment-cleanup-internal.js";
+import {
+  requestEnvironmentCleanup,
+  requestEnvironmentCleanupAdvance,
+} from "../../services/environments/environment-cleanup-internal.js";
 import {
   getNonDestroyedHostWithStatus,
   requireEnvironment,
@@ -33,7 +36,10 @@ import {
   requirePublicThread,
 } from "../../services/lib/entity-lookup.js";
 import { queueThreadRenameCommand } from "../../services/threads/thread-commands.js";
-import { requestThreadStopAndFinalize } from "../../services/threads/thread-lifecycle.js";
+import {
+  finalizeStoppedThread,
+  requestThreadStopIfNeeded,
+} from "../../services/threads/thread-lifecycle.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
 import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
 import {
@@ -254,21 +260,23 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     if (thread.environmentId === null) {
-      requestThreadStopAndFinalize(deps, {
+      finalizeStoppedThread(deps, {
         cancelPendingCommand: false,
-        environment: null,
-        thread,
+        threadId: thread.id,
       });
       return context.json({ ok: true });
     }
 
     const environment = requireEnvironment(deps.db, thread.environmentId);
-    requestThreadStopAndFinalize(deps, {
+    requestThreadStopIfNeeded(deps, thread, environment);
+    finalizeStoppedThread(deps, {
       cancelPendingCommand: false,
-      environment,
-      thread,
+      threadId: thread.id,
     });
-    requestEnvironmentCleanupAndAdvance(deps, {
+    requestEnvironmentCleanup(deps, {
+      environmentId: environment.id,
+    });
+    requestEnvironmentCleanupAdvance(deps, {
       environmentId: environment.id,
     });
     return context.json({ ok: true });

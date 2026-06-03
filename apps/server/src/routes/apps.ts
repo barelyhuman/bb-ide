@@ -77,8 +77,6 @@ interface ApplicationSummaryArgs extends ApplicationManifestReadArgs {
   manifest: AppManifest;
 }
 
-interface ApplicationDetailArgs extends ApplicationManifestReadArgs {}
-
 interface ReadApplicationRelativeFileArgs {
   applicationId: ApplicationId;
   dataDir: string;
@@ -109,8 +107,6 @@ interface WriteApplicationDataEntryArgs extends ReadApplicationDataEntryArgs {
   value: JsonValue;
 }
 
-interface DeleteApplicationDataEntryArgs extends ReadApplicationDataEntryArgs {}
-
 interface CreateInjectedAppHtmlResponseArgs {
   appSessionToken: AppSessionToken | null;
   capabilities: AppCapability[];
@@ -118,10 +114,6 @@ interface CreateInjectedAppHtmlResponseArgs {
   applicationId: ApplicationId;
   requestUrl: string;
   targetThreadId: string | null;
-}
-
-interface ApplicationRouteSegmentArgs {
-  applicationId: string;
 }
 
 interface ServeApplicationStaticFileArgs {
@@ -250,14 +242,12 @@ function parseAppDataPath(rawPath: string): AppDataPath {
   return parsed.data;
 }
 
-function applicationRouteSegment(args: ApplicationRouteSegmentArgs): string {
-  return `/apps/${encodeURIComponent(args.applicationId)}/`;
+function applicationRouteSegment(applicationId: string): string {
+  return `/apps/${encodeURIComponent(applicationId)}/`;
 }
 
-function applicationDataRouteSegment(
-  args: ApplicationRouteSegmentArgs,
-): string {
-  return `/apps/${encodeURIComponent(args.applicationId)}/data/`;
+function applicationDataRouteSegment(applicationId: string): string {
+  return `/apps/${encodeURIComponent(applicationId)}/data/`;
 }
 
 function parseAppDataRoutePath(rawPath: string): AppDataPath {
@@ -574,7 +564,7 @@ async function buildApplicationSummary(
 
 async function buildApplicationDetail(
   deps: AppDeps,
-  args: ApplicationDetailArgs,
+  args: ApplicationManifestReadArgs,
 ): Promise<AppDetail> {
   const manifest = await readApplicationManifestForRequest(deps, args);
   return {
@@ -671,31 +661,18 @@ async function listGlobalApplications(
   return summaries;
 }
 
-function globalAppListSignature(apps: readonly AppSummary[]): string {
-  return JSON.stringify(apps);
-}
-
-function rememberGlobalAppListSignature(
-  deps: Pick<GlobalAppListDeps, "config">,
-  apps: readonly AppSummary[],
-): void {
-  globalAppListSignatureByDataDir.set(
-    deps.config.dataDir,
-    globalAppListSignature(apps),
-  );
-}
-
-export async function refreshGlobalAppListSignature(
+async function refreshGlobalAppListSignature(
   deps: GlobalAppListDeps,
 ): Promise<AppSummary[]> {
   const apps = await listGlobalApplications(deps);
-  rememberGlobalAppListSignature(deps, apps);
+  globalAppListSignatureByDataDir.set(
+    deps.config.dataDir,
+    JSON.stringify(apps),
+  );
   return apps;
 }
 
-export async function notifyGlobalAppsChanged(
-  deps: GlobalAppListDeps,
-): Promise<void> {
+async function notifyGlobalAppsChanged(deps: GlobalAppListDeps): Promise<void> {
   await refreshGlobalAppListSignature(deps);
   deps.hub.notifySystem(["apps-changed"]);
 }
@@ -704,7 +681,7 @@ export async function notifyGlobalAppsChangedIfListChanged(
   deps: GlobalAppListDeps,
 ): Promise<void> {
   const apps = await listGlobalApplications(deps);
-  const nextSignature = globalAppListSignature(apps);
+  const nextSignature = JSON.stringify(apps);
   const previousSignature = globalAppListSignatureByDataDir.get(
     deps.config.dataDir,
   );
@@ -1099,7 +1076,7 @@ async function writeApplicationDataEntry(
 }
 
 async function deleteApplicationDataEntry(
-  args: DeleteApplicationDataEntryArgs,
+  args: ReadApplicationDataEntryArgs,
 ): Promise<void> {
   const appDataRoot = resolveApplicationDataPath(
     args.dataDir,
@@ -1228,7 +1205,7 @@ async function publishApplicationTempRoot(
   }
 }
 
-export async function createGlobalApplication(
+async function createGlobalApplication(
   args: CreateGlobalApplicationArgs,
 ): Promise<ApplicationId> {
   const appsRootPath = resolveAppsRootPath(args.dataDir);
@@ -1503,7 +1480,7 @@ export function registerGlobalAppRoutes(app: Hono, deps: AppDeps): void {
     const dataPath = parseAppDataRoutePath(
       extractRoutePath({
         requestUrl: context.req.url,
-        routeSegment: applicationDataRouteSegment({ applicationId }),
+        routeSegment: applicationDataRouteSegment(applicationId),
       }),
     );
     const entry = await readApplicationDataEntry({
@@ -1532,7 +1509,7 @@ export function registerGlobalAppRoutes(app: Hono, deps: AppDeps): void {
       const dataPath = parseAppDataRoutePath(
         extractRoutePath({
           requestUrl: context.req.url,
-          routeSegment: applicationDataRouteSegment({ applicationId }),
+          routeSegment: applicationDataRouteSegment(applicationId),
         }),
       );
       const entry = await writeApplicationDataEntry({
@@ -1560,7 +1537,7 @@ export function registerGlobalAppRoutes(app: Hono, deps: AppDeps): void {
     const dataPath = parseAppDataRoutePath(
       extractRoutePath({
         requestUrl: context.req.url,
-        routeSegment: applicationDataRouteSegment({ applicationId }),
+        routeSegment: applicationDataRouteSegment(applicationId),
       }),
     );
     await deleteApplicationDataEntry({
@@ -1580,7 +1557,7 @@ export function registerGlobalAppRoutes(app: Hono, deps: AppDeps): void {
       rawApplicationId: applicationId,
       rawPath: extractRoutePath({
         requestUrl: context.req.url,
-        routeSegment: applicationRouteSegment({ applicationId }),
+        routeSegment: applicationRouteSegment(applicationId),
       }),
     });
   });

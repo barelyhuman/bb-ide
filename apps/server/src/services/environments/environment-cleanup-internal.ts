@@ -51,41 +51,33 @@ import { appendSystemErrorEventInTransaction } from "../threads/thread-events.js
 import { tryTransitionInTransaction } from "../threads/thread-transitions.js";
 import { workspaceContextFromPath } from "./workspace-command-target.js";
 
-export interface EnvironmentDestroyTarget {
+interface EnvironmentDestroyTarget {
   hostId: string;
   id: string;
   path: string;
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-export interface AdvanceEnvironmentCleanupArgs {
+interface AdvanceEnvironmentCleanupArgs {
   environmentId: string;
 }
 
-export interface RequestEnvironmentCleanupAdvanceArgs {
+interface RequestEnvironmentCleanupAdvanceArgs {
   environmentId: string | null | undefined;
 }
 
-export interface RequestEnvironmentCleanupArgs {
+interface RequestEnvironmentCleanupArgs {
   environmentId: string | null | undefined;
 }
 
-export interface RequestEnvironmentCleanupAndAdvanceArgs {
+interface CancelPendingEnvironmentCleanupArgs {
   environmentId: string | null | undefined;
 }
 
-export interface CancelPendingEnvironmentCleanupArgs {
-  environmentId: string | null | undefined;
-}
-
-export type CancelPendingEnvironmentCleanupResult =
+type CancelPendingEnvironmentCleanupResult =
   | "cancelled"
   | "in_progress"
   | "not_requested";
-
-export interface EnvironmentCleanupCommandMutationArgs {
-  commandId: string;
-}
 
 type EnvironmentDestroyCommand =
   HostDaemonCommandForType<"environment.destroy">;
@@ -99,17 +91,9 @@ export interface SettleEnvironmentDestroyCommandResultArgs {
   report: EnvironmentDestroyCommandResultReport;
 }
 
-export interface FailEnvironmentCleanupForCommandArgs extends EnvironmentCleanupCommandMutationArgs {
-  failureReason: string;
-}
-
-export interface WouldCleanupEnvironmentArgs {
+interface WouldCleanupEnvironmentArgs {
   environmentId: string | null | undefined;
-  excludeThreadId: string;
-}
-
-export interface WouldCleanupEnvironmentWithNoLiveThreadsArgs {
-  environmentId: string | null | undefined;
+  excludeThreadId?: string;
 }
 
 interface EnvironmentCleanupReadDeps {
@@ -120,8 +104,10 @@ interface EnvironmentCleanupWriteDeps extends EnvironmentCleanupReadDeps {
   hub: DbNotifier;
 }
 
-interface EnvironmentCleanupCancellationDeps
-  extends Omit<EnvironmentCleanupWriteDeps, "db"> {
+interface EnvironmentCleanupCancellationDeps extends Omit<
+  EnvironmentCleanupWriteDeps,
+  "db"
+> {
   db: DbConnection;
 }
 
@@ -277,96 +263,59 @@ function markLiveThreadsErroredAfterDestroySuccess(
   }
 }
 
-export function hasActiveEnvironmentDestroyOperationForCommand(
-  deps: EnvironmentCleanupReadDeps,
-  args: EnvironmentCleanupCommandMutationArgs,
-): boolean {
-  return getActiveDestroyOperationByCommandId(deps, args.commandId) !== null;
-}
-
-export function completeEnvironmentDestroyForCommand(
-  deps: EnvironmentCleanupSettlementDeps,
-  args: EnvironmentCleanupCommandMutationArgs,
-): boolean {
-  const operation = getActiveDestroyOperationByCommandId(deps, args.commandId);
-  if (!operation) {
-    return false;
-  }
-
-  const environment = getEnvironment(deps.db, operation.environmentId);
-  if (!environment) {
-    return false;
-  }
-
-  if (environment.status === "destroying") {
-    setEnvironmentRecordDestroyed(deps.db, deps.hub, operation.environmentId);
-  } else if (environment.status !== "destroyed") {
-    return false;
-  }
-
-  markLiveThreadsErroredAfterDestroySuccess(deps, operation.environmentId);
-  markEnvironmentOperationRecordCompleted(deps.db, {
-    environmentId: operation.environmentId,
-    kind: operation.kind,
-  });
-  return true;
-}
-
-export function failEnvironmentDestroyForCommand(
-  deps: EnvironmentCleanupWriteDeps,
-  args: FailEnvironmentCleanupForCommandArgs,
-): boolean {
-  const operation = getActiveDestroyOperationByCommandId(deps, args.commandId);
-  if (!operation) {
-    return false;
-  }
-
-  markEnvironmentOperationRecordFailed(deps.db, {
-    environmentId: operation.environmentId,
-    kind: operation.kind,
-    failureReason: args.failureReason,
-  });
-
-  const environment = getEnvironment(deps.db, operation.environmentId);
-  if (environment && environment.status === "destroying") {
-    setEnvironmentStatus(deps.db, deps.hub, operation.environmentId, {
-      status: environment.path ? "ready" : "error",
-    });
-  }
-
-  return true;
-}
-
 export function settleEnvironmentDestroyCommandResult(
   args: SettleEnvironmentDestroyCommandResultArgs,
 ): CommandResultSideEffectsResult {
-  if (
-    !hasActiveEnvironmentDestroyOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
+  const operation = getActiveDestroyOperationByCommandId(
+    args.deps,
+    args.commandRow.id,
+  );
+  if (!operation) {
     return emptyCommandResultSideEffects();
   }
 
   if (!args.report.ok) {
-    failEnvironmentDestroyForCommand(args.deps, {
-      commandId: args.commandRow.id,
+    markEnvironmentOperationRecordFailed(args.deps.db, {
+      environmentId: operation.environmentId,
+      kind: operation.kind,
       failureReason: args.report.errorMessage,
     });
+    const failedEnvironment = getEnvironment(
+      args.deps.db,
+      operation.environmentId,
+    );
+    if (failedEnvironment && failedEnvironment.status === "destroying") {
+      setEnvironmentStatus(
+        args.deps.db,
+        args.deps.hub,
+        operation.environmentId,
+        {
+          status: failedEnvironment.path ? "ready" : "error",
+        },
+      );
+    }
     return emptyCommandResultSideEffects();
   }
 
-  const environment = getEnvironment(args.deps.db, args.command.environmentId);
+  const environment = getEnvironment(args.deps.db, operation.environmentId);
   if (!environment) {
     return emptyCommandResultSideEffects();
   }
-  if (
-    !completeEnvironmentDestroyForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
+  if (environment.status === "destroying") {
+    setEnvironmentRecordDestroyed(
+      args.deps.db,
+      args.deps.hub,
+      operation.environmentId,
+    );
+  } else if (environment.status !== "destroyed") {
     return emptyCommandResultSideEffects();
   }
+
+  markLiveThreadsErroredAfterDestroySuccess(args.deps, operation.environmentId);
+  markEnvironmentOperationRecordCompleted(args.deps.db, {
+    environmentId: operation.environmentId,
+    kind: operation.kind,
+  });
 
   return {
     postCommitActions: [
@@ -453,7 +402,11 @@ export function cancelPendingEnvironmentCleanup(
           kind: "destroy",
         });
       }
-      clearEnvironmentCleanupRequestRecord(tx, notificationBuffer, environment.id);
+      clearEnvironmentCleanupRequestRecord(
+        tx,
+        notificationBuffer,
+        environment.id,
+      );
       restoreEnvironmentAfterCleanupCancellation(txDeps, environment);
       return "cancelled";
     },
@@ -528,26 +481,6 @@ export function wouldCleanupEnvironment(
     countLiveThreadsInEnvironment(deps.db, {
       environmentId: environment.id,
       excludeThreadId: args.excludeThreadId,
-    }) === 0
-  );
-}
-
-export function wouldCleanupEnvironmentWithNoLiveThreads(
-  deps: EnvironmentCleanupDecisionDeps,
-  args: WouldCleanupEnvironmentWithNoLiveThreadsArgs,
-): boolean {
-  if (!args.environmentId) {
-    return false;
-  }
-
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (!environment || !environment.managed) {
-    return false;
-  }
-
-  return (
-    countLiveThreadsInEnvironment(deps.db, {
-      environmentId: environment.id,
     }) === 0
   );
 }
@@ -691,12 +624,4 @@ export function requestEnvironmentCleanupAdvance(
     name: "Environment cleanup advance request",
     work: () => runEnvironmentCleanupAdvance(deps, { environmentId }),
   });
-}
-
-export function requestEnvironmentCleanupAndAdvance(
-  deps: LoggedWorkSessionDeps,
-  args: RequestEnvironmentCleanupAndAdvanceArgs,
-): void {
-  requestEnvironmentCleanup(deps, args);
-  requestEnvironmentCleanupAdvance(deps, args);
 }

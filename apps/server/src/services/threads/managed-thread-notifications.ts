@@ -14,14 +14,14 @@ interface RenderManagedThreadNeedsAttentionMessageArgs {
   title: string | null;
 }
 
-export interface QueueManagedThreadTurnNotificationArgs {
+interface QueueManagedThreadTurnNotificationArgs {
   managedThreadId: string;
   managerThreadId: string;
   title: string | null;
   turnStatus: ThreadEventTurnStatus;
 }
 
-export interface QueueManagedThreadNeedsAttentionNotificationArgs {
+interface QueueManagedThreadNeedsAttentionNotificationArgs {
   managedThreadId: string;
   managerThreadId: string;
   title: string | null;

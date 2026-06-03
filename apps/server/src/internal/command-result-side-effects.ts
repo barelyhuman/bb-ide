@@ -17,14 +17,14 @@ type FailedCommandResultReport = Extract<
   { ok: false }
 >;
 
-export interface CommandResultSuccessWaiterResponse {
+interface CommandResultSuccessWaiterResponse {
   commandId: string;
   ok: true;
   result: SuccessfulCommandResultReport["result"];
   type: SuccessfulCommandResultReport["type"];
 }
 
-export interface CommandResultFailureWaiterResponse {
+interface CommandResultFailureWaiterResponse {
   commandId: string;
   errorCode: FailedCommandResultReport["errorCode"];
   errorMessage: string;
@@ -50,21 +50,19 @@ export type CommandResultSettlementDeps = Omit<
 export type CommandResultSideEffectReport =
   HostDaemonCommandResultReportWithoutSession;
 
-export type HostDaemonCommandForType<TType extends HostDaemonDurableCommandType> =
-  Extract<HostDaemonCommand, { type: TType }>;
+export type HostDaemonCommandForType<
+  TType extends HostDaemonDurableCommandType,
+> = Extract<HostDaemonCommand, { type: TType }>;
 
-export type CommandResultReportForType<TType extends HostDaemonDurableCommandType> =
-  Extract<HostDaemonCommandResultReportWithoutSession, { type: TType }>;
+export type CommandResultReportForType<
+  TType extends HostDaemonDurableCommandType,
+> = Extract<HostDaemonCommandResultReportWithoutSession, { type: TType }>;
 
 export type CommandResultFailureReportForType<
   TType extends HostDaemonDurableCommandType,
 > = Extract<CommandResultReportForType<TType>, { ok: false }>;
 
-export type CommandResultSuccessReportForType<
-  TType extends HostDaemonDurableCommandType,
-> = Extract<CommandResultReportForType<TType>, { ok: true }>;
-
-export interface CommandResultPostCommitActionContext {
+interface CommandResultPostCommitActionContext {
   environmentId?: string | null;
   hostId?: string;
   threadId?: string;
@@ -80,7 +78,7 @@ export interface CommandResultSideEffectsResult {
   postCommitActions: CommandResultPostCommitAction[];
 }
 
-export interface BuildCommandResultSettlementDepsArgs {
+interface BuildCommandResultSettlementDepsArgs {
   db: DbTransaction;
   deps: CommandResultSideEffectsDeps;
   hub: DbNotifier;

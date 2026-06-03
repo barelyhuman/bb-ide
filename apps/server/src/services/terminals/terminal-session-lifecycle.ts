@@ -199,7 +199,19 @@ interface CloseStaleOpenedTerminalArgs {
   threadId: string;
 }
 
-export interface TerminalSessionLifecycleOptions {
+interface PublishLifecycleTerminalExitsForSessionsArgs {
+  currentSessions: TerminalSessionRow[];
+  exitedSessions: TerminalSessionRow[];
+  message: string;
+}
+
+interface CloseThreadTerminalsForLifecycleArgs {
+  closeReason: TerminalSessionCloseReason;
+  message: string;
+  threadId: string;
+}
+
+interface TerminalSessionLifecycleOptions {
   attachTimeoutMs?: number;
   db: AppDeps["db"];
   hub: AppDeps["hub"];
@@ -207,47 +219,47 @@ export interface TerminalSessionLifecycleOptions {
   openTimeoutMs?: number;
 }
 
-export interface CreateThreadTerminalArgs {
+interface CreateThreadTerminalArgs {
   payload: CreateThreadTerminalRequest;
   threadId: string;
 }
 
-export interface RenameThreadTerminalArgs {
+interface RenameThreadTerminalArgs {
   payload: UpdateThreadTerminalRequest;
   terminalId: string;
   threadId: string;
 }
 
-export interface CloseThreadTerminalArgs {
+interface CloseThreadTerminalArgs {
   payload: CloseThreadTerminalRequest;
   terminalId: string;
   threadId: string;
 }
 
-export interface CloseDeletedThreadTerminalsArgs {
+interface CloseDeletedThreadTerminalsArgs {
   threadId: string;
 }
 
-export interface CloseArchivedThreadTerminalsArgs {
+interface CloseArchivedThreadTerminalsArgs {
   threadId: string;
 }
 
-export interface CloseDestroyedEnvironmentTerminalsArgs {
+interface CloseDestroyedEnvironmentTerminalsArgs {
   environmentId: string;
 }
 
-export interface ExpireDisconnectedHostTerminalsArgs {
+interface ExpireDisconnectedHostTerminalsArgs {
   daemonSessionId: string;
   hostId: string;
 }
 
-export interface HandleDaemonTerminalMessageArgs {
+interface HandleDaemonTerminalMessageArgs {
   hostId: string;
   message: HostDaemonDaemonWsMessage;
   sessionId: string;
 }
 
-export interface HandleDaemonSessionClosedArgs {
+interface HandleDaemonSessionClosedArgs {
   sessionId: string;
 }
 
@@ -279,12 +291,6 @@ function getTerminalDaemonCloseTarget(
     daemonSessionId: row.daemonSessionId,
     terminalId: row.id,
   };
-}
-
-function buildTerminalSessionMap(
-  sessions: readonly TerminalSessionRow[],
-): ReadonlyMap<string, TerminalSessionRow> {
-  return new Map(sessions.map((session) => [session.id, session]));
 }
 
 export function toTerminalSession(row: TerminalSessionRow): TerminalSession {
@@ -530,44 +536,18 @@ export class TerminalSessionLifecycle {
   }
 
   closeDeletedThreadTerminals(args: CloseDeletedThreadTerminalsArgs): void {
-    const currentSessions = listTerminalSessionsByThread(
-      this.options.db,
-      args.threadId,
-    );
-    this.requestTerminalCloses({
-      closeReason: "thread-deleted",
-      sessions: currentSessions,
-    });
-    const exitedSessions = markThreadTerminalSessionsExited(this.options.db, {
+    this.closeThreadTerminalsForLifecycle({
       threadId: args.threadId,
       closeReason: "thread-deleted",
-    });
-    this.publishLifecycleTerminalExits({
-      code: "terminal_closed",
       message: "Terminal session closed because the thread was deleted",
-      previousSessionsById: buildTerminalSessionMap(currentSessions),
-      sessions: exitedSessions,
     });
   }
 
   closeArchivedThreadTerminals(args: CloseArchivedThreadTerminalsArgs): void {
-    const currentSessions = listTerminalSessionsByThread(
-      this.options.db,
-      args.threadId,
-    );
-    this.requestTerminalCloses({
-      closeReason: "thread-archived",
-      sessions: currentSessions,
-    });
-    const exitedSessions = markThreadTerminalSessionsExited(this.options.db, {
+    this.closeThreadTerminalsForLifecycle({
       threadId: args.threadId,
       closeReason: "thread-archived",
-    });
-    this.publishLifecycleTerminalExits({
-      code: "terminal_closed",
       message: "Terminal session closed because the thread was archived",
-      previousSessionsById: buildTerminalSessionMap(currentSessions),
-      sessions: exitedSessions,
     });
   }
 
@@ -589,11 +569,10 @@ export class TerminalSessionLifecycle {
         closeReason: "environment-destroyed",
       },
     );
-    this.publishLifecycleTerminalExits({
-      code: "terminal_closed",
+    this.publishLifecycleTerminalExitsForSessions({
+      currentSessions,
+      exitedSessions,
       message: "Terminal session closed because the environment was destroyed",
-      previousSessionsById: buildTerminalSessionMap(currentSessions),
-      sessions: exitedSessions,
     });
   }
 
@@ -787,6 +766,41 @@ export class TerminalSessionLifecycle {
     this.disconnectDaemonSessionTerminals({ daemonSessionId: args.sessionId });
   }
 
+  private closeThreadTerminalsForLifecycle(
+    args: CloseThreadTerminalsForLifecycleArgs,
+  ): void {
+    const currentSessions = listTerminalSessionsByThread(
+      this.options.db,
+      args.threadId,
+    );
+    this.requestTerminalCloses({
+      closeReason: args.closeReason,
+      sessions: currentSessions,
+    });
+    const exitedSessions = markThreadTerminalSessionsExited(this.options.db, {
+      threadId: args.threadId,
+      closeReason: args.closeReason,
+    });
+    this.publishLifecycleTerminalExitsForSessions({
+      currentSessions,
+      exitedSessions,
+      message: args.message,
+    });
+  }
+
+  private publishLifecycleTerminalExitsForSessions(
+    args: PublishLifecycleTerminalExitsForSessionsArgs,
+  ): void {
+    this.publishLifecycleTerminalExits({
+      code: "terminal_closed",
+      message: args.message,
+      previousSessionsById: new Map(
+        args.currentSessions.map((session) => [session.id, session]),
+      ),
+      sessions: args.exitedSessions,
+    });
+  }
+
   private requestTerminalCloses(args: RequestTerminalClosesArgs): void {
     for (const session of args.sessions) {
       const target = getTerminalDaemonCloseTarget(session);
@@ -900,7 +914,10 @@ export class TerminalSessionLifecycle {
     if (!current) {
       return;
     }
-    if (current.cols !== args.message.cols || current.rows !== args.message.rows) {
+    if (
+      current.cols !== args.message.cols ||
+      current.rows !== args.message.rows
+    ) {
       const resized = updateTerminalSessionSize(this.options.db, {
         cols: args.message.cols,
         rows: args.message.rows,
@@ -967,9 +984,12 @@ export class TerminalSessionLifecycle {
   private disconnectDaemonSessionTerminals(
     args: DisconnectDaemonSessionTerminalsArgs,
   ): void {
-    const disconnected = markDaemonTerminalSessionsDisconnected(this.options.db, {
-      daemonSessionId: args.daemonSessionId,
-    });
+    const disconnected = markDaemonTerminalSessionsDisconnected(
+      this.options.db,
+      {
+        daemonSessionId: args.daemonSessionId,
+      },
+    );
     for (const session of disconnected) {
       this.rejectPendingOpenForTerminal({
         daemonSessionId: args.daemonSessionId,
@@ -1157,9 +1177,7 @@ export class TerminalSessionLifecycle {
       }
       clearTimeout(pending.timeout);
       this.pendingOpens.delete(requestId);
-      pending.reject(
-        new ApiError(args.status, args.code, args.message),
-      );
+      pending.reject(new ApiError(args.status, args.code, args.message));
     }
   }
 

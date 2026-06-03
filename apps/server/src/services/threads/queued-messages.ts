@@ -9,7 +9,6 @@ import {
   queueCommandInTransaction,
   releaseQueuedMessageClaim,
   releaseStaleQueuedMessageClaims,
-  transitionThreadStatusInTransaction,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
 import type {
@@ -41,10 +40,8 @@ import { requireReadyThreadEnvironment } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { sendThreadMessage } from "./thread-send.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
-import {
-  requireThreadCommandEnvironment,
-  type ThreadCommandEnvironmentSource,
-} from "./thread-command-environment.js";
+import { requireThreadCommandEnvironment } from "./thread-command-environment.js";
+import { tryTransitionInTransaction } from "./thread-transitions.js";
 import {
   prependManagerPreferencesSystemMessageIfChanged,
   recordManagerDynamicFileDeliveryInTransaction,
@@ -74,13 +71,13 @@ interface SendClaimedQueuedMessageForThreadArgs {
   thread: QueuedMessageThread;
 }
 
-interface QueuedMessageThread extends Thread, ThreadCommandEnvironmentSource {}
+interface QueuedMessageThread extends Thread {}
 
-export interface QueuedMessageAutoSendArgs {
+interface QueuedMessageAutoSendArgs {
   threadId: string;
 }
 
-export interface QueuedMessageAutoSendRequestArgs {
+interface QueuedMessageAutoSendRequestArgs {
   queuedMessageId: string;
   threadId: string;
 }
@@ -273,10 +270,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
           type: command.type,
           payload: JSON.stringify(command),
         });
-        transitionThreadStatusInTransaction(tx, {
-          id: thread.id,
-          newStatus: "active",
-        });
+        tryTransitionInTransaction(tx, deps.hub, thread.id, "active");
         return true;
       },
       { behavior: "immediate" },

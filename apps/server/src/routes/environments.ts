@@ -58,7 +58,8 @@ interface AssertSquashMergeTargetIsLocalArgs {
   targetBranch: string;
 }
 
-type WorkspaceStatusCommandResult = HostDaemonOnlineRpcResult<"workspace.status">;
+type WorkspaceStatusCommandResult =
+  HostDaemonOnlineRpcResult<"workspace.status">;
 type WorkspaceDiffCommandResult = HostDaemonOnlineRpcResult<"workspace.diff">;
 
 /**
@@ -233,10 +234,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       );
     }
 
-    const result = archiveEnvironmentThreads(deps, { environment });
+    const archivedThreadIds = archiveEnvironmentThreads(deps, { environment });
     return context.json({
       ok: true,
-      archivedThreadIds: result.archivedThreadIds,
+      archivedThreadIds,
     });
   });
 

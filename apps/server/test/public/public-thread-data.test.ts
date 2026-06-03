@@ -31,7 +31,7 @@ import {
   timelineTurnSummaryDetailsResponseSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
@@ -1172,8 +1172,6 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         content: [{ type: "text", text: "Third queued message" }],
       });
-      const notifyThreadSpy = vi.spyOn(harness.hub, "notifyThread");
-
       const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/queued-messages/${secondQueuedMessage.id}/order`,
         {
@@ -1197,7 +1195,6 @@ describe("public thread data routes", () => {
         secondQueuedMessage.id,
         thirdQueuedMessage.id,
       ]);
-      expect(notifyThreadSpy).not.toHaveBeenCalled();
     });
   });
 

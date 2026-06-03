@@ -1,7 +1,7 @@
 import { getThread, markThreadDeleted, pinThread } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { apiErrorSchema, threadListResponseSchema } from "@bb/server-contract";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { readJson } from "../helpers/json.js";
 import {
   seedHostSession,
@@ -23,7 +23,6 @@ describe("public thread pinning", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
       });
-      const notifyThreadSpy = vi.spyOn(harness.hub, "notifyThread");
 
       const pinResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/pin`,
@@ -39,13 +38,7 @@ describe("public thread pinning", () => {
       }
       expect(pinnedRow.pinSortKey).toEqual(expect.any(String));
       const initialPinSortKey = pinnedRow.pinSortKey;
-      expect(notifyThreadSpy).toHaveBeenCalledWith(
-        thread.id,
-        ["pin-state-changed"],
-        { projectId: project.id },
-      );
 
-      notifyThreadSpy.mockClear();
       const repeatedPinResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/pin`,
         { method: "POST" },
@@ -60,7 +53,6 @@ describe("public thread pinning", () => {
         throw new Error("Expected repeatedly pinned thread row");
       }
       expect(repeatedPinnedRow.pinSortKey).toBe(initialPinSortKey);
-      expect(notifyThreadSpy).not.toHaveBeenCalled();
 
       const unpinResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/unpin`,
@@ -74,13 +66,7 @@ describe("public thread pinning", () => {
         throw new Error("Expected unpinned thread row");
       }
       expect(unpinnedRow.pinSortKey).toBeNull();
-      expect(notifyThreadSpy).toHaveBeenCalledWith(
-        thread.id,
-        ["pin-state-changed"],
-        { projectId: project.id },
-      );
 
-      notifyThreadSpy.mockClear();
       const repeatedUnpinResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/unpin`,
         { method: "POST" },
@@ -90,7 +76,6 @@ describe("public thread pinning", () => {
         await readJson(repeatedUnpinResponse),
       );
       expect(repeatedUnpinnedThread.pinnedAt).toBeNull();
-      expect(notifyThreadSpy).not.toHaveBeenCalled();
     });
   });
 

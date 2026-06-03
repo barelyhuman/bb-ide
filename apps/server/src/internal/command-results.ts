@@ -9,7 +9,6 @@ import {
   hostDaemonCommandSchema,
   hostDaemonDurableCommandTypeSchema,
   isHostDaemonDurableCommandType,
-  type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import {
@@ -66,12 +65,6 @@ type CommandResultOwnerRegistry = {
   [TType in ParsedCommandType]: CommandResultOwner<TType> | null;
 };
 
-function defineCommandResultOwner<TType extends ParsedCommandType>(
-  owner: CommandResultOwner<TType>,
-): CommandResultOwner<TType> {
-  return owner;
-}
-
 function reportMatchesCommandType<TType extends ParsedCommandType>(
   command: ParsedCommandForType<TType>,
   report: CommandResultSideEffectReport,
@@ -81,17 +74,17 @@ function reportMatchesCommandType<TType extends ParsedCommandType>(
 
 const commandResultOwners: CommandResultOwnerRegistry = {
   "environment.cleanup_preflight": null,
-  "environment.destroy": defineCommandResultOwner({
+  "environment.destroy": {
     applySideEffects: settleEnvironmentDestroyCommandResult,
-  }),
-  "environment.provision": defineCommandResultOwner({
+  },
+  "environment.provision": {
     applySideEffects: settleEnvironmentProvisionCommandResult,
-  }),
+  },
   "host.write_file_relative": null,
   "host.delete_file_relative": null,
   "host.delete_path_relative": null,
   "codex.inference.complete": null,
-  "interactive.resolve": defineCommandResultOwner({
+  "interactive.resolve": {
     applySideEffects: ({ deps, command, report }) => {
       deps.pendingInteractions.settleInteractiveResolveCommandResultInTransaction(
         {
@@ -101,49 +94,43 @@ const commandResultOwners: CommandResultOwnerRegistry = {
         },
       );
     },
-  }),
+  },
   "thread.archive": null,
   "thread.deleted": null,
   "thread.rename": null,
   "thread.unarchive": null,
-  "thread.start": defineCommandResultOwner({
+  "thread.start": {
     applySideEffects: settleThreadStartCommandResult,
-  }),
-  "thread.stop": defineCommandResultOwner({
+  },
+  "thread.stop": {
     applySideEffects: settleThreadStopCommandResult,
-  }),
-  "turn.submit": defineCommandResultOwner({
+  },
+  "turn.submit": {
     applySideEffects: settleTurnSubmitCommandResult,
-  }),
+  },
   "codex.voice.transcribe": null,
-  "workspace.commit": defineCommandResultOwner({
+  "workspace.commit": {
     applySideEffects: ({ deps, command, report }) => {
       notifyWorkspaceMutationResult(deps, {
         environmentId: command.environmentId,
         ok: report.ok,
       });
     },
-  }),
-  "workspace.squash_merge": defineCommandResultOwner({
+  },
+  "workspace.squash_merge": {
     applySideEffects: ({ deps, command, report }) => {
       notifyWorkspaceMutationResult(deps, {
         environmentId: command.environmentId,
         ok: report.ok,
       });
     },
-  }),
-};
+  },
+} satisfies CommandResultOwnerRegistry;
 
 function getCommandResultOwner<TType extends ParsedCommandType>(
   command: ParsedCommandForType<TType>,
 ): CommandResultOwner<TType> | null {
   return commandResultOwners[command.type];
-}
-
-function hasCommandResultOwnerSideEffects(
-  type: HostDaemonDurableCommandType,
-): boolean {
-  return commandResultOwners[type]?.applySideEffects !== undefined;
 }
 
 export function handleCommandResultSideEffects(
@@ -154,7 +141,7 @@ export function handleCommandResultSideEffects(
   if (
     report.type !== commandRow.type ||
     !isHostDaemonDurableCommandType(report.type) ||
-    !hasCommandResultOwnerSideEffects(report.type)
+    commandResultOwners[report.type]?.applySideEffects === undefined
   ) {
     return emptyCommandResultSideEffects();
   }
@@ -177,7 +164,7 @@ type CommandResultPostCommitDispatchMode =
   | "inline"
   | "schedule-after-daemon-ingress";
 
-export interface DispatchCommandResultPostCommitActionsArgs {
+interface DispatchCommandResultPostCommitActionsArgs {
   actions: readonly CommandResultPostCommitAction[];
   command: HostDaemonCommandRow;
   deps: CommandResultSideEffectsDeps;
@@ -281,19 +268,13 @@ const storedCommandErrorPayloadSchema = z.object({
   errorMessage: z.string().min(1),
 });
 
-function parseStoredCommandType(
-  commandRow: HostDaemonCommandRow,
-): HostDaemonDurableCommandType {
-  return hostDaemonDurableCommandTypeSchema.parse(commandRow.type);
-}
-
 function buildStoredCommandResultResponse(
   commandRow: HostDaemonCommandRow,
 ): CommandResultWaiterResponse | null {
   if (!commandRow.completedAt || !commandRow.resultPayload) {
     return null;
   }
-  const commandType = parseStoredCommandType(commandRow);
+  const commandType = hostDaemonDurableCommandTypeSchema.parse(commandRow.type);
 
   if (commandRow.state === "success") {
     return {

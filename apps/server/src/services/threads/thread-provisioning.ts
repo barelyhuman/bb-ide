@@ -35,7 +35,7 @@ import {
 } from "./thread-provisioning-environment.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
-export interface RequestThreadProvisionArgs {
+interface RequestThreadProvisionArgs {
   environmentIntent: ThreadProvisionEnvironmentIntent;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
@@ -44,7 +44,7 @@ export interface RequestThreadProvisionArgs {
   titleProvided: boolean;
 }
 
-export interface RequestThreadReprovisionArgs {
+interface RequestThreadReprovisionArgs {
   environment: Environment;
   provisionEventSequence: number;
   execution: ResolvedThreadExecutionOptions;
@@ -55,17 +55,17 @@ export interface RequestThreadReprovisionArgs {
   thread: Thread;
 }
 
-export interface AdvanceThreadProvisioningArgs {
+interface AdvanceThreadProvisioningArgs {
   threadId: string;
 }
 
-export interface RecordThreadProvisionWorkspaceReadyArgs {
+interface RecordThreadProvisionWorkspaceReadyArgs {
   entries: ProvisioningTranscriptEntry[];
   environmentId: string;
   threadId: string;
 }
 
-export interface ThreadProvisionWorkspaceReadyTransactionDeps {
+interface ThreadProvisionWorkspaceReadyTransactionDeps {
   db: DbTransaction;
   hub: DbNotifier;
 }
@@ -225,17 +225,6 @@ export function requestThreadReprovision(
   upsertThreadProvisionOperation(deps.db, {
     threadId: args.thread.id,
     context,
-  });
-}
-
-export function recordThreadProvisionWorkspaceReady(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: RecordThreadProvisionWorkspaceReadyArgs,
-): void {
-  ensureWorkspaceReadyEvent(deps, {
-    threadId: args.threadId,
-    environmentId: args.environmentId,
-    entries: args.entries,
   });
 }
 

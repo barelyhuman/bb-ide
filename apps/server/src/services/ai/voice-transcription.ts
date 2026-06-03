@@ -4,23 +4,15 @@ import {
   parseProviderModelConfig,
   type ProviderModelInfo,
 } from "@bb/config/inference-model";
-import type {
-  LoggedWorkSessionDeps,
-  ServerRuntimeConfig,
-} from "../../types.js";
+import type { LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { requireDefaultConnectedPersistentHostId } from "../lib/entity-lookup.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
-export interface TranscribeVoiceInputArgs {
+interface TranscribeVoiceInputArgs {
   file: File;
   prompt?: string;
-}
-
-export interface VoiceTranscriptionAvailabilityConfig {
-  openAiApiKey: ServerRuntimeConfig["openAiApiKey"];
-  transcriptionModel: ServerRuntimeConfig["transcriptionModel"];
 }
 
 type OptionalJsonValue = JsonValue | null | undefined;
@@ -35,16 +27,6 @@ function parseTranscriptionModel(model: string): ProviderModelInfo {
     name: "BB_TRANSCRIPTION",
     value: model,
   });
-}
-
-export function isVoiceTranscriptionEnabled(
-  config: VoiceTranscriptionAvailabilityConfig,
-): boolean {
-  const modelInfo = parseTranscriptionModel(config.transcriptionModel);
-  if (modelInfo.provider === OPENAI_TRANSCRIPTION_PROVIDER) {
-    return config.openAiApiKey.length > 0;
-  }
-  return false;
 }
 
 function isCodexVoiceTranscriptionAvailable(
@@ -65,7 +47,10 @@ export function resolveVoiceTranscriptionEnabled(
   if (modelInfo.provider === CODEX_TRANSCRIPTION_PROVIDER) {
     return isCodexVoiceTranscriptionAvailable(deps);
   }
-  return isVoiceTranscriptionEnabled(deps.config);
+  if (modelInfo.provider === OPENAI_TRANSCRIPTION_PROVIDER) {
+    return deps.config.openAiApiKey.length > 0;
+  }
+  return false;
 }
 
 function trimPrompt(prompt: string | undefined): string | null {

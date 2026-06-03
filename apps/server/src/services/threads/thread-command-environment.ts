@@ -7,21 +7,18 @@ import {
   throwThreadEnvironmentUnavailable,
 } from "../lib/lifecycle-api-errors.js";
 
-export type ThreadCommandEnvironmentSource = Pick<
-  Thread,
-  "createdAt" | "environmentId" | "id" | "projectId" | "updatedAt"
->;
+type ThreadCommandEnvironmentSource = Pick<Thread, "environmentId">;
 
-export interface RequireThreadCommandEnvironmentArgs {
+interface RequireThreadCommandEnvironmentArgs {
   thread: ThreadCommandEnvironmentSource;
 }
 
-export interface RequireThreadHostCommandEnvironmentArgs {
+interface RequireThreadHostCommandEnvironmentArgs {
   db: DbConnection;
   thread: ThreadCommandEnvironmentSource;
 }
 
-export interface ThreadHostCommandEnvironment {
+interface ThreadHostCommandEnvironment {
   hostId: string;
   id: string;
 }
