@@ -2,12 +2,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadComposerBootstrapResponse } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
-  systemExecutionOptionsQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadQueuedMessagesQueryKey,
 } from "../queries/query-keys";
+import { seedSystemExecutionOptionsCache } from "./system-cache-effects";
 
 interface ThreadComposerBootstrapHydrationArgs {
   bootstrap: ThreadComposerBootstrapResponse;
@@ -56,10 +56,12 @@ export function hydrateThreadComposerBootstrap({
   // environment-less thread maps to). On null we leave the key alone so that
   // owner keeps / fetches its own real data.
   if (bootstrap.executionOptions !== null) {
-    queryClient.setQueryData(
-      systemExecutionOptionsQueryKey({ environmentId, providerId }),
-      bootstrap.executionOptions,
-    );
+    seedSystemExecutionOptionsCache({
+      environmentId,
+      executionOptions: bootstrap.executionOptions,
+      providerId,
+      queryClient,
+    });
   }
 }
 

@@ -9,6 +9,8 @@ interface SourceFileViolation {
   text: string;
 }
 
+type CacheOwnerQueryKeyImportRegistry = Record<string, readonly string[]>;
+
 const RAW_CACHE_WRITE_METHODS = new Set([
   "cancelQueries",
   "invalidateQueries",
@@ -40,6 +42,181 @@ const DEPRECATED_CACHE_SHIM_MODULES = new Set([
   "hooks/realtime-cache-registry",
   "hooks/system-cache-effects",
 ]);
+
+const QUERY_KEYS_MODULE_PATH = "hooks/queries/query-keys";
+
+const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
+  "hooks/cache-owners/cache-invalidation-groups.ts": [
+    "allProjectPathsQueryKeyPrefix",
+    "allProjectSourceBranchesQueryKeyPrefix",
+    "allThreadPendingInteractionsQueryKeyPrefix",
+    "allThreadQueryKeyPrefix",
+    "allThreadQueuedMessagesQueryKeyPrefix",
+    "allThreadTimelineQueryKeyPrefix",
+    "allThreadTimelineTurnSummaryDetailsQueryKeyPrefix",
+    "localPathExistenceQueryKeyPrefix",
+    "projectPathsQueryKeyPrefix",
+    "projectPromptHistoryQueryKey",
+    "projectPromptHistoryQueryKeyPrefix",
+    "projectSourceBranchesQueryKeyPrefix",
+    "projectsQueryKey",
+    "sidebarNavigationQueryKey",
+    "threadPendingInteractionsQueryKey",
+    "threadPromptHistoryQueryKey",
+    "threadPromptHistoryQueryKeyPrefix",
+    "threadQueryKey",
+    "threadQueuedMessagesQueryKey",
+    "threadTimelineQueryKeyPrefix",
+    "threadTimelineTurnSummaryDetailsQueryKeyPrefix",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/composer-cache-owner.ts": [
+    "threadDefaultExecutionOptionsQueryKey",
+    "threadPendingInteractionsQueryKey",
+    "threadPromptHistoryQueryKey",
+    "threadQueuedMessagesQueryKey",
+  ],
+  "hooks/cache-owners/environment-cache-effects.ts": [
+    "environmentFilePreviewQueryKeyPrefix",
+    "environmentGitDiffQueryKeyPrefix",
+    "environmentMergeBaseBranchesQueryKeyPrefix",
+    "environmentWorkStatusQueryKeyPrefix",
+    "systemExecutionOptionsEnvironmentQueryKeyPrefix",
+    "threadComposerBootstrapEnvironmentQueryKeyPrefix",
+  ],
+  "hooks/cache-owners/environment-workspace-cache-owner.ts": [
+    "environmentQueryKey",
+  ],
+  "hooks/cache-owners/mutation-cache-effects.ts": [
+    "projectDefaultExecutionOptionsQueryKeyPrefix",
+    "projectPathsQueryKeyPrefix",
+    "sidebarNavigationQueryKey",
+    "threadDefaultExecutionOptionsQueryKey",
+    "threadPromptHistoryQueryKey",
+    "threadQueryKey",
+    "threadQueuedMessagesQueryKey",
+    "threadStorageFilePreviewQueryKeyPrefix",
+    "threadStorageFilesForThreadQueryKeyPrefix",
+    "threadStoragePathsForThreadQueryKeyPrefix",
+    "threadTimelineQueryKeyPrefix",
+    "threadTimelineTurnSummaryDetailsQueryKeyPrefix",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/project-cache-owner.ts": [
+    "projectsQueryKey",
+    "sidebarNavigationQueryKey",
+  ],
+  "hooks/cache-owners/query-cache.ts": [
+    "ARCHIVED_THREADS_LIST_KIND",
+    "ArchivedThreadsListFilters",
+    "ENVIRONMENT_GIT_DIFF_QUERY_KEY",
+    "ENVIRONMENT_WORK_STATUS_QUERY_KEY",
+    "EnvironmentGitDiffQueryKey",
+    "EnvironmentWorkStatusQueryKey",
+    "THREADS_QUERY_KEY",
+    "ThreadListQueryFilters",
+    "environmentFilePreviewQueryKeyPrefix",
+    "environmentGitDiffQueryKey",
+    "environmentGitDiffQueryKeyPrefix",
+    "environmentMergeBaseBranchesQueryKeyPrefix",
+    "environmentQueryKey",
+    "environmentWorkStatusQueryKey",
+    "environmentWorkStatusQueryKeyPrefix",
+    "isStandardManagerThreadTimelineQueryKey",
+    "sidebarNavigationQueryKey",
+    "threadQueryKey",
+    "threadTimelineQueryKeyPrefix",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/realtime-cache-registry.ts": [
+    "allHostQueryKeyPrefix",
+    "allSystemExecutionOptionsQueryKeyPrefix",
+    "allThreadQueryKeyPrefix",
+    "allThreadTerminalsQueryKeyPrefix",
+    "environmentFilePreviewQueryKeyPrefix",
+    "environmentGitDiffQueryKeyPrefix",
+    "environmentWorkStatusQueryKeyPrefix",
+    "hostsQueryKey",
+    "sidebarNavigationQueryKey",
+    "systemProvidersQueryKey",
+    "threadAppMarkdownPreviewQueryKeyPrefix",
+    "threadAppQueryKeyPrefix",
+    "threadAppsQueryKey",
+    "threadListQueryKey",
+    "threadQueryKey",
+    "threadStorageFilePreviewQueryKeyPrefix",
+    "threadStorageFilesForThreadQueryKeyPrefix",
+    "threadStoragePathsForThreadQueryKeyPrefix",
+    "threadTerminalsQueryKey",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/system-cache-effects.ts": [
+    "allEnvironmentFilePreviewQueryKeyPrefix",
+    "allEnvironmentGitDiffQueryKeyPrefix",
+    "allEnvironmentMergeBaseBranchesQueryKeyPrefix",
+    "allEnvironmentQueryKeyPrefix",
+    "allEnvironmentWorkStatusQueryKeyPrefix",
+    "allHostQueryKeyPrefix",
+    "allProjectPathsQueryKeyPrefix",
+    "allSystemExecutionOptionsQueryKeyPrefix",
+    "allThreadAppMarkdownPreviewQueryKeyPrefix",
+    "allThreadAppQueryKeyPrefix",
+    "allThreadAppsQueryKeyPrefix",
+    "allThreadDefaultExecutionOptionsQueryKeyPrefix",
+    "allThreadPendingInteractionsQueryKeyPrefix",
+    "allThreadQueryKeyPrefix",
+    "allThreadQueuedMessagesQueryKeyPrefix",
+    "allThreadStorageFilePreviewQueryKeyPrefix",
+    "allThreadStorageFilesQueryKeyPrefix",
+    "allThreadStoragePathsQueryKeyPrefix",
+    "allThreadTimelineQueryKeyPrefix",
+    "allThreadTimelineTurnSummaryDetailsQueryKeyPrefix",
+    "hostsQueryKey",
+    "localPathExistenceQueryKeyPrefix",
+    "projectsQueryKey",
+    "replayCapturesQueryKey",
+    "sidebarNavigationQueryKey",
+    "systemExecutionOptionsQueryKey",
+    "systemProvidersQueryKey",
+    "threadPromptHistoryQueryKeyPrefix",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/terminal-cache-owner.ts": ["threadTerminalsQueryKey"],
+  "hooks/cache-owners/thread-archive-cache.ts": [
+    "threadQueryKey",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/thread-detail-cache-owner.ts": [
+    "environmentQueryKey",
+    "hostQueryKey",
+    "hostsQueryKey",
+    "threadComposerBootstrapQueryKey",
+    "threadQueryKey",
+    "threadTimelineQueryKey",
+  ],
+  "hooks/cache-owners/thread-list-cache-owner.ts": [
+    "sidebarNavigationQueryKey",
+    "threadListQueryKey",
+    "threadQueryKey",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/thread-runtime-cache-owner.ts": [
+    "projectPromptHistoryQueryKey",
+    "projectSourceBranchesQueryKeyPrefix",
+    "threadPromptHistoryQueryKey",
+    "threadQueryKey",
+    "threadQueuedMessagesQueryKey",
+    "threadTimelineQueryKeyPrefix",
+    "threadTimelineTurnSummaryDetailsQueryKeyPrefix",
+    "threadsQueryKey",
+  ],
+  "hooks/cache-owners/thread-state-cache-owner.ts": [
+    "projectsQueryKey",
+    "sidebarNavigationQueryKey",
+    "threadQueryKey",
+    "threadsQueryKey",
+  ],
+};
 
 function getAppSourceRoot(): string {
   return path.resolve(new URL("../../", import.meta.url).pathname);
@@ -109,6 +286,31 @@ function violationForNode(
   };
 }
 
+function violationForSourceFile(
+  relativePath: string,
+  text: string,
+): SourceFileViolation {
+  return {
+    filePath: relativePath,
+    line: 1,
+    text,
+  };
+}
+
+function compareSourceFileViolations(
+  left: SourceFileViolation,
+  right: SourceFileViolation,
+): number {
+  const filePathComparison = left.filePath.localeCompare(right.filePath);
+  if (filePathComparison !== 0) {
+    return filePathComparison;
+  }
+  if (left.line !== right.line) {
+    return left.line - right.line;
+  }
+  return left.text.localeCompare(right.text);
+}
+
 function collectRawCacheWriteViolations(): SourceFileViolation[] {
   const violations: SourceFileViolation[] = [];
   for (const filePath of collectSourceFilePaths(getAppSourceRoot())) {
@@ -137,6 +339,142 @@ function collectRawCacheWriteViolations(): SourceFileViolation[] {
     visit(sourceFile);
   }
   return violations;
+}
+
+function getActualImportsForFile(
+  importsByFile: Map<string, Set<string>>,
+  relativePath: string,
+): Set<string> {
+  const existingImports = importsByFile.get(relativePath);
+  if (existingImports) {
+    return existingImports;
+  }
+  const imports = new Set<string>();
+  importsByFile.set(relativePath, imports);
+  return imports;
+}
+
+function collectCacheOwnerQueryKeyImportViolations(): SourceFileViolation[] {
+  const violations: SourceFileViolation[] = [];
+  const actualImportsByFile = new Map<string, Set<string>>();
+  const cacheOwnerSourceFiles = new Map<string, ts.SourceFile>();
+
+  for (const filePath of collectSourceFilePaths(getAppSourceRoot())) {
+    const relativePath = toAppRelativePath(filePath);
+    if (isTestOrStoryFile(relativePath) || !isCacheOwnerFile(relativePath)) {
+      continue;
+    }
+    const sourceFile = parseSourceFile(filePath);
+    cacheOwnerSourceFiles.set(relativePath, sourceFile);
+
+    sourceFile.forEachChild((node) => {
+      if (
+        !ts.isImportDeclaration(node) ||
+        !ts.isStringLiteral(node.moduleSpecifier)
+      ) {
+        return;
+      }
+      const resolvedModulePath = resolveAppImportModulePath(
+        relativePath,
+        node.moduleSpecifier.text,
+      );
+      if (resolvedModulePath !== QUERY_KEYS_MODULE_PATH) {
+        return;
+      }
+
+      const importClause = node.importClause;
+      if (!importClause) {
+        return;
+      }
+      if (importClause.name) {
+        violations.push(
+          violationForNode(
+            sourceFile,
+            filePath,
+            importClause.name,
+            "default query-key import",
+          ),
+        );
+      }
+
+      const namedBindings = importClause.namedBindings;
+      if (!namedBindings) {
+        return;
+      }
+      if (ts.isNamespaceImport(namedBindings)) {
+        violations.push(
+          violationForNode(
+            sourceFile,
+            filePath,
+            namedBindings,
+            "namespace query-key import",
+          ),
+        );
+        return;
+      }
+
+      const actualImports = getActualImportsForFile(
+        actualImportsByFile,
+        relativePath,
+      );
+      const allowedImports = CACHE_OWNER_QUERY_KEY_IMPORTS[relativePath];
+      const allowedImportSet = allowedImports
+        ? new Set(allowedImports)
+        : undefined;
+      for (const element of namedBindings.elements) {
+        const importName = element.propertyName?.text ?? element.name.text;
+        actualImports.add(importName);
+        if (!allowedImportSet) {
+          violations.push(
+            violationForNode(
+              sourceFile,
+              filePath,
+              element,
+              `missing query-key import registry entry: ${importName}`,
+            ),
+          );
+          continue;
+        }
+        if (!allowedImportSet.has(importName)) {
+          violations.push(
+            violationForNode(
+              sourceFile,
+              filePath,
+              element,
+              `undeclared query-key import: ${importName}`,
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  for (const [relativePath, allowedImports] of Object.entries(
+    CACHE_OWNER_QUERY_KEY_IMPORTS,
+  )) {
+    if (!cacheOwnerSourceFiles.has(relativePath)) {
+      violations.push(
+        violationForSourceFile(
+          relativePath,
+          "stale cache-owner query-key import registry entry",
+        ),
+      );
+      continue;
+    }
+    const actualImports = actualImportsByFile.get(relativePath);
+    for (const importName of allowedImports) {
+      if (!actualImports?.has(importName)) {
+        violations.push(
+          violationForSourceFile(
+            relativePath,
+            `unused allowed query-key import: ${importName}`,
+          ),
+        );
+      }
+    }
+  }
+
+  return violations.sort(compareSourceFileViolations);
 }
 
 function collectCacheImportBoundaryViolations(): SourceFileViolation[] {
@@ -224,6 +562,10 @@ function collectDeprecatedCacheShimImportViolations(): SourceFileViolation[] {
 describe("cache owner boundaries", () => {
   it("keeps raw app-domain cache writes inside cache owners", () => {
     expect(collectRawCacheWriteViolations()).toEqual([]);
+  });
+
+  it("keeps cache-owner query-key imports declared per owner", () => {
+    expect(collectCacheOwnerQueryKeyImportViolations()).toEqual([]);
   });
 
   it("keeps mutation, realtime, and action-provider files off query-key imports", () => {

@@ -57,7 +57,7 @@ const NULL_EXECUTION_BOOTSTRAP: ThreadComposerBootstrapResponse = {
 };
 
 describe("composer cache owner", () => {
-  it("does not clobber shared execution options when bootstrap skipped resolution", () => {
+  it("does not clobber new-thread system execution options for an environmentless archived bootstrap", () => {
     const queryClient = createAppQueryClient({
       defaultOptions: {
         queries: {
@@ -98,5 +98,36 @@ describe("composer cache owner", () => {
     expect(
       queryClient.getQueryData(threadPendingInteractionsQueryKey("thread-1")),
     ).toEqual([]);
+  });
+
+  it("does not create a shared system execution options key when an environmentless bootstrap skipped resolution", () => {
+    const queryClient = createAppQueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+      showMutationErrorToasts: false,
+    });
+    const executionOptionsKey = systemExecutionOptionsQueryKey({
+      environmentId: null,
+      providerId: "codex",
+    });
+
+    hydrateThreadComposerBootstrap({
+      bootstrap: NULL_EXECUTION_BOOTSTRAP,
+      environmentId: null,
+      providerId: "codex",
+      queryClient,
+      threadId: "archived-thread-1",
+    });
+
+    expect(queryClient.getQueryState(executionOptionsKey)).toBeUndefined();
+    expect(
+      queryClient.getQueryData(
+        threadDefaultExecutionOptionsQueryKey("archived-thread-1"),
+      ),
+    ).toBeNull();
   });
 });
