@@ -251,16 +251,16 @@ DIRTY_CLEANUP_OPERATION_STATE=$(sqlite3 "$SERVER_DB_PATH" \
   "SELECT state FROM environment_operations WHERE environment_id = '$DIRTY_ARCHIVE_ENV_ID' AND kind = 'destroy';")
 test "$DIRTY_CLEANUP_OPERATION_STATE" = "requested"
 
-DIRTY_STATUS_SUCCESS_COUNT=0
+DIRTY_PREFLIGHT_SUCCESS_COUNT=0
 for _ in {1..30}; do
-  DIRTY_STATUS_SUCCESS_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
-    "SELECT COUNT(*) FROM host_daemon_commands WHERE cursor > $DIRTY_PRE_ARCHIVE_COMMAND_CURSOR AND type = 'workspace.status' AND state = 'success' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
-  if [ "$DIRTY_STATUS_SUCCESS_COUNT" -ge 1 ]; then
+  DIRTY_PREFLIGHT_SUCCESS_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
+    "SELECT COUNT(*) FROM host_daemon_commands WHERE cursor > $DIRTY_PRE_ARCHIVE_COMMAND_CURSOR AND type = 'environment.cleanup_preflight' AND state = 'success' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
+  if [ "$DIRTY_PREFLIGHT_SUCCESS_COUNT" -ge 1 ]; then
     break
   fi
   sleep 1
 done
-test "$DIRTY_STATUS_SUCCESS_COUNT" -ge 1
+test "$DIRTY_PREFLIGHT_SUCCESS_COUNT" -ge 1
 
 DIRTY_DESTROY_COMMAND_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
   "SELECT COUNT(*) FROM host_daemon_commands WHERE type = 'environment.destroy' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
