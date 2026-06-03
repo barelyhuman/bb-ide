@@ -994,6 +994,7 @@ export function PromptBoxInternal({
         placeholder={placeholder}
         rows={1}
         autoFocus={autoFocus}
+        autoComplete="off"
         aria-keyshortcuts={onModifierSubmit ? "Meta+Enter" : undefined}
         enterKeyHint="send"
         className={cn(

@@ -221,6 +221,7 @@ function QuestionInputBlock({
           value={state.otherText}
           rows={1}
           autoFocus
+          autoComplete="off"
           onChange={(event) => {
             onFreeTextChange(event.target.value);
             resizeFreeTextArea(event.target);
