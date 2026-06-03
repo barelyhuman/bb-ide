@@ -9,9 +9,7 @@ import { registerThreadTerminalRoutes } from "./terminals.js";
 export function registerThreadRoutes(app: Hono, deps: AppDeps): void {
   registerThreadBaseRoutes(app, deps);
   registerThreadActionRoutes(app, deps);
-  if (deps.config.featureFlags.terminals) {
-    registerThreadTerminalRoutes(app, deps);
-  }
+  registerThreadTerminalRoutes(app, deps);
   registerThreadDataRoutes(app, deps);
   registerThreadInteractionRoutes(app, deps);
 }

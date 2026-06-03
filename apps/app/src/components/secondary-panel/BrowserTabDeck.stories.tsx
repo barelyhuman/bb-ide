@@ -88,6 +88,7 @@ function BrowserTabStage({ tab, threadId }: BrowserTabStageProps) {
         activeBrowserTabId={tab.id}
         isPanelOpen
         threadId={threadId}
+        environmentId={null}
         onUpdate={noop}
       />
     </PanelStage>

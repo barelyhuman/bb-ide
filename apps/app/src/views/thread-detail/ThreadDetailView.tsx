@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import type {
   ThreadTimelineLinkHandler,
   ThreadTimelineLocalFileLink,
