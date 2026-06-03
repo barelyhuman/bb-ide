@@ -606,6 +606,25 @@ describe("Workspace", () => {
     expect(typeof commit.commitSha).toBe("string");
   });
 
+  it("throws a typed no_changes error when squash-merging a branch with nothing to merge", async () => {
+    const repoPath = await initRepo();
+    // A feature branch with no commits ahead of main: the squash collapses
+    // nothing, so it must surface as no_changes rather than a generic git
+    // "nothing to commit" failure (which the server would relay as a 502).
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    const workspace = new Workspace(repoPath);
+
+    await expect(
+      workspace.squashMergeInto({
+        targetBranch: "main",
+        commitMessage: "feat: nothing to merge",
+      }),
+    ).rejects.toMatchObject({
+      name: "WorkspaceError",
+      code: "no_changes",
+    });
+  });
+
   it("serializes same-checkout mutations", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);

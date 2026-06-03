@@ -62,18 +62,20 @@ type WorkspaceStatusCommandResult = HostDaemonOnlineRpcResult<"workspace.status"
 type WorkspaceDiffCommandResult = HostDaemonOnlineRpcResult<"workspace.diff">;
 
 /**
- * Maps the daemon's typed `no_changes` commit failure (e.g. a concurrent commit
- * already captured the changes) to the same 409 the up-front pre-check returns,
- * instead of letting it surface as a generic 502.
+ * Maps the daemon's typed `no_changes` failure (nothing to commit / nothing to
+ * merge — e.g. a concurrent commit already captured the changes, or the branch
+ * has no committed work) to a clean 409, instead of letting it surface as a
+ * generic 502 git_command_failed.
  */
-async function commitOrThrowNoChanges<TResult>(
+async function mapNoChangesTo409<TResult>(
+  conflictMessage: string,
   run: () => Promise<TResult>,
 ): Promise<TResult> {
   try {
     return await run();
   } catch (error) {
     if (error instanceof ApiError && error.body.code === "no_changes") {
-      throw new ApiError(409, "no_changes", "No uncommitted changes to commit");
+      throw new ApiError(409, "no_changes", conflictMessage);
     }
     throw error;
   }
@@ -443,17 +445,19 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           });
           const commitMessage = aiMessage ?? COMMIT_FALLBACK_MESSAGE;
 
-          const result = await commitOrThrowNoChanges(() =>
-            queueCommandAndWait(deps, {
-              hostId: target.hostId,
-              timeoutMs: COMMAND_TIMEOUT_MS,
-              command: {
-                type: "workspace.commit",
-                environmentId: target.environmentId,
-                workspaceContext,
-                message: commitMessage,
-              },
-            }),
+          const result = await mapNoChangesTo409(
+            "No uncommitted changes to commit",
+            () =>
+              queueCommandAndWait(deps, {
+                hostId: target.hostId,
+                timeoutMs: COMMAND_TIMEOUT_MS,
+                command: {
+                  type: "workspace.commit",
+                  environmentId: target.environmentId,
+                  workspaceContext,
+                  message: commitMessage,
+                },
+              }),
           );
           return context.json({
             ok: true,
@@ -541,17 +545,21 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           });
           const commitMessage = aiMessage ?? SQUASH_MERGE_FALLBACK_MESSAGE;
 
-          const result = await queueCommandAndWait(deps, {
-            hostId: target.hostId,
-            timeoutMs: COMMAND_TIMEOUT_MS,
-            command: {
-              type: "workspace.squash_merge",
-              environmentId: target.environmentId,
-              workspaceContext,
-              targetBranch,
-              commitMessage,
-            },
-          });
+          const result = await mapNoChangesTo409(
+            `No changes to merge into ${targetBranch}`,
+            () =>
+              queueCommandAndWait(deps, {
+                hostId: target.hostId,
+                timeoutMs: COMMAND_TIMEOUT_MS,
+                command: {
+                  type: "workspace.squash_merge",
+                  environmentId: target.environmentId,
+                  workspaceContext,
+                  targetBranch,
+                  commitMessage,
+                },
+              }),
+          );
           return context.json({
             ok: true,
             action: "squash_merge",

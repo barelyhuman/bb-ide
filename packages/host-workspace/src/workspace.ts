@@ -705,6 +705,16 @@ export class Workspace {
       const squashCommit = await new Workspace(tempDir).withMutation(
         async () => {
           await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
+          // A squash of a branch with no committed work ahead of the target
+          // stages nothing; surface that as a typed no_changes condition the
+          // server maps to 409, not a generic git "nothing to commit" failure.
+          const staged = await runGit(["diff", "--cached", "--quiet"], {
+            cwd: tempDir,
+            allowFailure: true,
+          });
+          if (staged.exitCode === 0) {
+            throw new WorkspaceError("no_changes", "No changes to merge");
+          }
           await runGit(["commit", "--no-verify", "-m", options.commitMessage], {
             cwd: tempDir,
           });
