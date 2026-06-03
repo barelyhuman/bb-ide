@@ -78,6 +78,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuSkeleton,
+  SidebarStickyGroup,
   SidebarStickyStack,
   SidebarStickyTier,
 } from "@/components/ui/sidebar.js";
@@ -404,7 +405,7 @@ function TopLevelSidebarSection({
     [consumeClickSuppression],
   );
   return (
-    <div
+    <SidebarStickyGroup
       ref={sectionRef}
       style={sectionStyle}
       className="group/sidebar-section min-w-0"
@@ -446,7 +447,7 @@ function TopLevelSidebarSection({
         ) : null}
       </SidebarStickyTier>
       <div className="mt-1">{children}</div>
-    </div>
+    </SidebarStickyGroup>
   );
 }
 

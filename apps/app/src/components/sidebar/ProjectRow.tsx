@@ -44,6 +44,9 @@ import {
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import {
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+  SidebarStickyGroup,
   SidebarStickyTier,
   type SidebarStickyTierKind,
 } from "@/components/ui/sidebar.js";
@@ -51,10 +54,6 @@ import {
   ProjectActionsContextMenu,
   ProjectActionsMenu,
 } from "@/components/project/ProjectActionsMenu";
-import {
-  SidebarMenuItem,
-  SidebarMenuSkeleton,
-} from "@/components/ui/sidebar.js";
 import {
   COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
   COARSE_POINTER_GLYPH_BOX_CLASS,
@@ -719,7 +718,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
     createThreadInWorktree();
   }, [createThreadInWorktree, onProjectSelect]);
   return (
-    <>
+    <SidebarStickyGroup className="space-y-0.5">
       <EnvironmentThreadGroupHeader
         environmentId={environmentId}
         representativeThread={threads[0]}
@@ -752,7 +751,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
           ))}
         </div>
       ) : null}
-    </>
+    </SidebarStickyGroup>
   );
 });
 
@@ -791,7 +790,7 @@ function ManagedEnvironmentThreadSubGroup({
     createThreadInWorktree();
   }, [createThreadInWorktree, onProjectSelect]);
   return (
-    <>
+    <SidebarStickyGroup className="space-y-px">
       <EnvironmentThreadGroupHeader
         environmentId={environmentId}
         representativeThread={threads[0]}
@@ -829,7 +828,7 @@ function ManagedEnvironmentThreadSubGroup({
           ))}
         </div>
       ) : null}
-    </>
+    </SidebarStickyGroup>
   );
 }
 
@@ -874,7 +873,7 @@ export const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   );
   const showManagedChildren = !isManagerCollapsed && nestedChildCount > 0;
   return (
-    <div
+    <SidebarStickyGroup
       ref={sortableRef}
       style={sortableStyle}
       className={cn("space-y-0.5", isDragging && "relative z-20")}
@@ -923,7 +922,7 @@ export const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
           )}
         </div>
       ) : null}
-    </div>
+    </SidebarStickyGroup>
   );
 });
 
@@ -1287,190 +1286,193 @@ function ProjectRowComponent({
     onCreateProjectThread?.(project.id);
   }, [onCreateProjectThread, project.id]);
   return (
-    <SidebarMenuItem
-      ref={projectRowRef}
-      style={projectRowStyle}
-      data-sidebar-sticky-project-item=""
-      className={cn(isProjectDragging && "relative z-30")}
-      onClickCapture={handleProjectRowClickCapture}
-    >
-      <ProjectActionsContextMenu
-        project={project}
-        onOpenChange={setIsContextActionsOpen}
+    <SidebarStickyGroup asChild data-sidebar-sticky-project-item="">
+      <SidebarMenuItem
+        ref={projectRowRef}
+        style={projectRowStyle}
+        className={cn(isProjectDragging && "relative z-30")}
+        onClickCapture={handleProjectRowClickCapture}
       >
-        <SidebarStickyTier
-          ref={projectDragBindings?.setActivatorNodeRef}
-          tier="project"
-          className={cn(
-            SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
-            "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
-            isActive
-              ? "bg-sidebar-border text-sidebar-foreground"
-              : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            projectDragBindings &&
-              !projectDragBindings.disabled &&
-              "select-none cursor-grab active:cursor-grabbing",
-          )}
-          title={project.name}
-          {...projectDragBindings?.attributes}
-          {...(projectDragBindings?.listeners ?? {})}
+        <ProjectActionsContextMenu
+          project={project}
+          onOpenChange={setIsContextActionsOpen}
         >
-          <button
-            type="button"
-            aria-expanded={!isCollapsed}
-            aria-label={
-              isCollapsed
-                ? `Expand ${project.name}`
-                : `Collapse ${project.name}`
-            }
-            title={
-              isCollapsed
-                ? "Expand project threads"
-                : "Collapse project threads"
-            }
-            onClick={handleProjectRowToggle}
-            className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
-          />
-          <span
+          <SidebarStickyTier
+            ref={projectDragBindings?.setActivatorNodeRef}
+            tier="project"
             className={cn(
-              "pointer-events-none relative z-10 flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover/project-row:text-sidebar-foreground",
-              PROJECT_ROW_LEADING_SLOT_CLASS,
+              SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
+              "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
+              isActive
+                ? "bg-sidebar-border text-sidebar-foreground"
+                : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              projectDragBindings &&
+                !projectDragBindings.disabled &&
+                "select-none cursor-grab active:cursor-grabbing",
             )}
-            aria-hidden
+            title={project.name}
+            {...projectDragBindings?.attributes}
+            {...(projectDragBindings?.listeners ?? {})}
           >
+            <button
+              type="button"
+              aria-expanded={!isCollapsed}
+              aria-label={
+                isCollapsed
+                  ? `Expand ${project.name}`
+                  : `Collapse ${project.name}`
+              }
+              title={
+                isCollapsed
+                  ? "Expand project threads"
+                  : "Collapse project threads"
+              }
+              onClick={handleProjectRowToggle}
+              className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
+            />
             <span
               className={cn(
-                "relative inline-flex items-center justify-center",
-                COARSE_POINTER_ICON_SIZE_CLASS,
+                "pointer-events-none relative z-10 flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover/project-row:text-sidebar-foreground",
+                PROJECT_ROW_LEADING_SLOT_CLASS,
+              )}
+              aria-hidden
+            >
+              <span
+                className={cn(
+                  "relative inline-flex items-center justify-center",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
+                )}
+              >
+                <Icon
+                  name="ChevronRight"
+                  className={cn(
+                    "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
+                    COARSE_POINTER_ICON_SIZE_CLASS,
+                    !isCollapsed && "rotate-90",
+                  )}
+                />
+                {isCollapsed ? (
+                  <Icon
+                    name="Folder"
+                    className={cn(
+                      "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                      COARSE_POINTER_ICON_SIZE_CLASS,
+                    )}
+                  />
+                ) : (
+                  <Icon
+                    name="FolderOpen"
+                    className={cn(
+                      "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                      COARSE_POINTER_ICON_SIZE_CLASS,
+                    )}
+                  />
+                )}
+              </span>
+            </span>
+            <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
+              {project.name}
+            </span>
+            {isLocalPathInvalid ? (
+              <NavLink
+                to={getProjectSettingsRoutePath(project.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onProjectSelect?.();
+                }}
+                title="Project folder not found. Open project settings to fix."
+                aria-label="Project folder not found"
+                className={cn(
+                  "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2",
+                  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+                )}
+              >
+                <Icon
+                  name="AlertTriangle"
+                  className={COARSE_POINTER_ICON_SIZE_CLASS}
+                />
+              </NavLink>
+            ) : null}
+            <span
+              data-sidebar-hover-actions-open={
+                isActionsOpen ? "true" : undefined
+              }
+              className={cn(
+                SIDEBAR_HOVER_ACTIONS_CLASS,
+                "relative z-10 inline-flex shrink-0 items-center",
               )}
             >
-              <Icon
-                name="ChevronRight"
-                className={cn(
-                  "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
-                  COARSE_POINTER_ICON_SIZE_CLASS,
-                  !isCollapsed && "rotate-90",
+              <ProjectActionsMenu
+                project={project}
+                onOpenChange={setIsDropdownActionsOpen}
+                triggerClassName={cn(
+                  "relative z-10 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+                  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
                 )}
               />
-              {isCollapsed ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`New manager in ${project.name}`}
+                title="New manager"
+                disabled={!onCreateProjectManager}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleCreateManager();
+                }}
+                className={cn(
+                  "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+                )}
+              >
                 <Icon
-                  name="Folder"
-                  className={cn(
-                    "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
-                    COARSE_POINTER_ICON_SIZE_CLASS,
-                  )}
+                  name="UserRoundPlus"
+                  className={COARSE_POINTER_ICON_SIZE_CLASS}
                 />
-              ) : (
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`New thread in ${project.name}`}
+                title="New thread"
+                disabled={!onCreateProjectThread}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleCreateThread();
+                }}
+                className={cn(
+                  "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+                )}
+              >
                 <Icon
-                  name="FolderOpen"
-                  className={cn(
-                    "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
-                    COARSE_POINTER_ICON_SIZE_CLASS,
-                  )}
+                  name="MessageSquarePlus"
+                  className={COARSE_POINTER_ICON_SIZE_CLASS}
                 />
-              )}
+              </Button>
             </span>
-          </span>
-          <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
-            {project.name}
-          </span>
-          {isLocalPathInvalid ? (
-            <NavLink
-              to={getProjectSettingsRoutePath(project.id)}
-              onClick={(event) => {
-                event.stopPropagation();
-                onProjectSelect?.();
-              }}
-              title="Project folder not found. Open project settings to fix."
-              aria-label="Project folder not found"
-              className={cn(
-                "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2",
-                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-              )}
-            >
-              <Icon
-                name="AlertTriangle"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
-              />
-            </NavLink>
-          ) : null}
-          <span
-            data-sidebar-hover-actions-open={isActionsOpen ? "true" : undefined}
-            className={cn(
-              SIDEBAR_HOVER_ACTIONS_CLASS,
-              "relative z-10 inline-flex shrink-0 items-center",
-            )}
-          >
-            <ProjectActionsMenu
-              project={project}
-              onOpenChange={setIsDropdownActionsOpen}
-              triggerClassName={cn(
-                "relative z-10 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
-                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-              )}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`New manager in ${project.name}`}
-              title="New manager"
-              disabled={!onCreateProjectManager}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleCreateManager();
-              }}
-              className={cn(
-                "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-              )}
-            >
-              <Icon
-                name="UserRoundPlus"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
-              />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`New thread in ${project.name}`}
-              title="New thread"
-              disabled={!onCreateProjectThread}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleCreateThread();
-              }}
-              className={cn(
-                "rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-              )}
-            >
-              <Icon
-                name="MessageSquarePlus"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
-              />
-            </Button>
-          </span>
-        </SidebarStickyTier>
-      </ProjectActionsContextMenu>
+          </SidebarStickyTier>
+        </ProjectActionsContextMenu>
 
-      {!isCollapsed ? (
-        <ProjectThreadTree
-          projectId={project.id}
-          threadListState={threadListState}
-          selectedThreadId={selectedThreadId}
-          collapsedManagerIds={collapsedManagerIds}
-          collapsedEnvironmentIds={collapsedEnvironmentIds}
-          variant="project"
-          onProjectSelect={onProjectSelect}
-          onToggleManagerCollapsed={onToggleManagerCollapsed}
-          onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-          isManagerReorderPending={isManagerReorderPending}
-          onReorderManager={onReorderManager}
-        />
-      ) : null}
-    </SidebarMenuItem>
+        {!isCollapsed ? (
+          <ProjectThreadTree
+            projectId={project.id}
+            threadListState={threadListState}
+            selectedThreadId={selectedThreadId}
+            collapsedManagerIds={collapsedManagerIds}
+            collapsedEnvironmentIds={collapsedEnvironmentIds}
+            variant="project"
+            onProjectSelect={onProjectSelect}
+            onToggleManagerCollapsed={onToggleManagerCollapsed}
+            onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+            isManagerReorderPending={isManagerReorderPending}
+            onReorderManager={onReorderManager}
+          />
+        ) : null}
+      </SidebarMenuItem>
+    </SidebarStickyGroup>
   );
 }
 

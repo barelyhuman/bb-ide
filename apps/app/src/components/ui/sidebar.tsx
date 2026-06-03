@@ -193,7 +193,8 @@ const Sidebar = React.forwardRef<
     },
     ref,
   ) => {
-    const { isCompactViewport, state, openMobile, setOpenMobile } = useSidebar();
+    const { isCompactViewport, state, openMobile, setOpenMobile } =
+      useSidebar();
 
     if (collapsible === "none") {
       return (
@@ -515,6 +516,38 @@ const SidebarStickyTier = React.forwardRef<
 });
 SidebarStickyTier.displayName = "SidebarStickyTier";
 
+interface SidebarStickyGroupProps extends React.ComponentProps<"div"> {
+  asChild?: boolean;
+}
+
+/**
+ * The containing block for one sticky group: a sticky header tier plus its
+ * collapsible body. CSS `position: sticky` only pushes a header out of the way
+ * of the next one when each header is constrained by its own containing block —
+ * sticky siblings that share a containing block pin at the same offset and
+ * overlap instead. Every nesting level (section/label, project, manager,
+ * worktree) wraps its header + body in one of these so the shove-out behavior
+ * is structural, not per-tier boilerplate that a new tier can forget.
+ *
+ * Pass `asChild` to project the wrapper onto a caller-owned element (e.g. the
+ * project tier's `<li>` SidebarMenuItem) instead of emitting a `<div>`.
+ */
+const SidebarStickyGroup = React.forwardRef<
+  HTMLDivElement,
+  SidebarStickyGroupProps
+>(({ asChild = false, className, ...props }, ref) => {
+  const Comp = asChild ? Slot : "div";
+  return (
+    <Comp
+      ref={ref}
+      data-sidebar-sticky-group=""
+      className={cn(className)}
+      {...props}
+    />
+  );
+});
+SidebarStickyGroup.displayName = "SidebarStickyGroup";
+
 const SidebarGroupAction = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> & { asChild?: boolean }
@@ -816,6 +849,7 @@ export {
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,
+  SidebarStickyGroup,
   SidebarStickyStack,
   SidebarStickyTier,
   SidebarTrigger,
