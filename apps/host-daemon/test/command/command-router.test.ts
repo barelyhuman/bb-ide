@@ -1445,6 +1445,7 @@ describe("CommandRouter", () => {
             providerThreadId: "provider-1",
             instructions: "Be a helpful coding agent.",
             dynamicTools: [],
+            injectedSkillSources: [],
             instructionMode: "append" as const,
           },
           target: { mode: "start" },
