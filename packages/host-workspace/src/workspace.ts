@@ -565,6 +565,17 @@ export class Workspace {
 
     return this.withMutation(async () => {
       await runGit(["add", "-A"], { cwd: this.path });
+      // Detect "nothing to commit" deterministically inside the mutation lock,
+      // so a commit racing a concurrent commit (or an already-clean tree)
+      // surfaces as a typed no_changes condition the server maps to 409,
+      // instead of a generic git failure that surfaces as a 502.
+      const staged = await runGit(["diff", "--cached", "--quiet"], {
+        cwd: this.path,
+        allowFailure: true,
+      });
+      if (staged.exitCode === 0) {
+        throw new WorkspaceError("no_changes", "No changes to commit");
+      }
       const commitArgs = ["commit", "-m", options.message];
       if (options.noVerify) {
         commitArgs.push("--no-verify");

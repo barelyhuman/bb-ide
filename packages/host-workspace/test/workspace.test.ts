@@ -584,6 +584,28 @@ describe("Workspace", () => {
     await expect(fs.stat(path.join(repoPath, "temp.txt"))).rejects.toThrow();
   });
 
+  it("throws a typed no_changes error when there is nothing to commit", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+
+    // Clean tree (the initial commit already captured everything): a commit
+    // must surface as no_changes, not a generic git failure.
+    await expect(
+      workspace.commit({ message: "nothing to commit", noVerify: false }),
+    ).rejects.toMatchObject({
+      name: "WorkspaceError",
+      code: "no_changes",
+    });
+
+    // The repo is untouched and still committable once there is real work.
+    await fs.writeFile(path.join(repoPath, "new.txt"), "real work\n", "utf8");
+    const commit = await workspace.commit({
+      message: "real commit",
+      noVerify: false,
+    });
+    expect(typeof commit.commitSha).toBe("string");
+  });
+
   it("serializes same-checkout mutations", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
