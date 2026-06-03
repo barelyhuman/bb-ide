@@ -153,7 +153,7 @@ PROTOCOL_MANAGER_ID=$(bb manager hire "$BB_PROJECT_ID" \
   --json | jq -r '.id')
 
 bb thread wait "$PROTOCOL_MANAGER_ID" --status idle --timeout 240
-bb thread show "$PROTOCOL_MANAGER_ID" --json | jq '{id, providerId, type, status}'
+bb thread show "$PROTOCOL_MANAGER_ID" --json | jq '.thread | {id, providerId, type, status}'
 bb thread output "$PROTOCOL_MANAGER_ID"
 printf 'manager protocol smoke started at UTC minute: %s\n' "$MANAGER_PROTOCOL_STARTED_AT"
 rg -n "invalid-message|1008|host_unavailable|command_result_type_mismatch|Ignoring host RPC response" \
