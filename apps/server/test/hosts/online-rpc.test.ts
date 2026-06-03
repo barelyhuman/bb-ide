@@ -268,4 +268,75 @@ describe("host online RPC retry semantics", () => {
       expect(closes).toEqual([{ code: 1008, reason: "invalid-message" }]);
     });
   });
+
+  it("rejects schema-valid host RPC responses whose commandType does not match the pending request", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-online-rpc-rejects-pending-command-type-mismatch",
+      });
+      const filePath = "/tmp/report.html";
+      const requests: HostDaemonOnlineRpcRequestMessage[] = [];
+      const closes: DaemonSocketCloseRecord[] = [];
+      const socket: TestHostRpcSocket = {
+        close(code, reason) {
+          closes.push({ code, reason });
+        },
+        send(data) {
+          const request = parseHostRpcRequest(data);
+          requests.push(request);
+          feedRawDaemonWebSocketMessage({
+            harness,
+            hostId: host.id,
+            sessionId: session.id,
+            socket,
+            rawMessage: {
+              type: "host-rpc.response",
+              requestId: request.requestId,
+              commandType: "host.read_file",
+              ok: true,
+              result: {
+                path: filePath,
+                content: "<!doctype html>",
+                contentEncoding: "utf8",
+                mimeType: "text/html",
+                modifiedAtMs: 1234,
+                sizeBytes: 15,
+              },
+            },
+          });
+        },
+      };
+      harness.hub.unregisterDaemon(session.id);
+      harness.hub.registerDaemon(session.id, host.id, socket);
+
+      try {
+        await callHostOnlineRpc(harness.deps, {
+          hostId: host.id,
+          timeoutMs: 1_000,
+          command: {
+            type: "host.file_metadata",
+            path: filePath,
+          },
+        });
+        throw new Error("Expected mismatched host RPC response to fail");
+      } catch (error) {
+        if (!(error instanceof ApiError)) {
+          throw error;
+        }
+        expect(error.status).toBe(500);
+        expect(error.body.code).toBe("command_result_type_mismatch");
+        expect(error.body.message).toContain(
+          "completed with unexpected type host.read_file",
+        );
+      }
+
+      expect(requests.map((request) => request.command)).toEqual([
+        {
+          type: "host.file_metadata",
+          path: filePath,
+        },
+      ]);
+      expect(closes).toEqual([]);
+    });
+  });
 });

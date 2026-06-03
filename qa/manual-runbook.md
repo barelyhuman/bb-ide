@@ -45,6 +45,8 @@ Start an isolated server + daemon pair and load the exported QA environment:
 eval "$(pnpm --silent qa:standalone:start --format env)"
 jq . "$STATE_PATH"
 SERVER_DB_PATH=$(jq -er '.server.dataDir + "/bb.db"' "$STATE_PATH")
+SERVER_LOG_DIR=$(jq -er '(.paths.serverDataDir // .server.dataDir) + "/logs"' "$STATE_PATH")
+DAEMON_LOG_DIR=$(jq -er '(.paths.daemonDataDir // .daemon.dataDir) + "/logs"' "$STATE_PATH")
 
 bb() { node apps/cli/dist/index.js "$@"; }
 ```
@@ -136,6 +138,34 @@ bb thread tell "$SMOKE_THREAD_ID" "Now say goodbye from the smoke pass"
 bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
 bb thread output "$SMOKE_THREAD_ID"
 ```
+
+Create a manager and verify the first bootstrap reaches idle without protocol
+disconnect symptoms. This is a user-facing smoke check; malformed host-RPC
+message invariants require automated boundary tests.
+
+```bash
+MANAGER_PROTOCOL_STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M")
+PROTOCOL_MANAGER_ID=$(bb manager hire "$BB_PROJECT_ID" \
+  --name "QA protocol smoke manager" \
+  --provider codex \
+  --model "$CODEX_MODEL" \
+  --reasoning-level low \
+  --json | jq -r '.id')
+
+bb thread wait "$PROTOCOL_MANAGER_ID" --status idle --timeout 240
+bb thread show "$PROTOCOL_MANAGER_ID" --json | jq '{id, providerId, type, status}'
+bb thread output "$PROTOCOL_MANAGER_ID"
+printf 'manager protocol smoke started at UTC minute: %s\n' "$MANAGER_PROTOCOL_STARTED_AT"
+rg -n "invalid-message|1008|host_unavailable|command_result_type_mismatch|Ignoring host RPC response" \
+  "$SERVER_LOG_DIR" "$DAEMON_LOG_DIR" || true
+```
+
+Expected result:
+
+- the hired thread is type `manager`
+- the manager reaches `idle` and produces its first visible output
+- server and daemon logs have no matching protocol disconnect or host-RPC
+  mismatch entries at or after `$MANAGER_PROTOCOL_STARTED_AT`
 
 Create a managed worktree thread and inspect workspace status:
 
