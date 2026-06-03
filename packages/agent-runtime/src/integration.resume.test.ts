@@ -53,7 +53,7 @@ for (const providerId of providers) {
           input: [
             {
               type: "text",
-              text: "Remember the secret word STRAWBERRY. Just confirm you will remember it.",
+              text: "Remember the word STRAWBERRY. Just confirm you will remember it.",
             },
           ],
           options,
@@ -103,7 +103,7 @@ for (const providerId of providers) {
             input: [
               {
                 type: "text",
-                text: "What was the secret word I told you to remember? Reply with just the word.",
+                text: "What was the word I asked you to remember? Reply with just the word.",
               },
             ],
             options,
