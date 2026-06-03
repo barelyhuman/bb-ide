@@ -701,6 +701,7 @@ export class CommandRouter {
       case "environment.provision":
       case "environment.destroy":
       case "thread.archive":
+      case "thread.unarchive":
       case "workspace.commit":
       case "workspace.squash_merge":
         return "write";

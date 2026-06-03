@@ -916,6 +916,7 @@ describe("public thread archive delete cleanup routes", () => {
       ).toEqual([
         {
           type: "thread.unarchive",
+          environmentId: environment.id,
           threadId: thread.id,
           providerId: "codex",
           providerThreadId: "provider-unarchive-forward",
@@ -1142,6 +1143,7 @@ describe("public thread archive delete cleanup routes", () => {
       ).toEqual([
         {
           type: "thread.unarchive",
+          environmentId: environment.id,
           threadId: thread.id,
           providerId: "codex",
           providerThreadId: "provider-unarchive-restored-ready",

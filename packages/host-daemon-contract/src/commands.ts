@@ -108,10 +108,6 @@ const hostDaemonThreadTargetSchema = z.object({
   threadId: z.string().min(1),
 });
 
-const hostDaemonProviderThreadTargetSchema = z.object({
-  threadId: z.string().min(1),
-});
-
 export const hostDaemonInjectedSkillSourceBaseSchema = z
   .object({
     name: z.string().max(64).regex(INJECTED_SKILL_NAME_PATTERN),
@@ -240,12 +236,15 @@ export const threadArchiveCommandSchema =
     providerThreadId: z.string().min(1),
   });
 
-export const threadUnarchiveCommandSchema =
-  hostDaemonProviderThreadTargetSchema.extend({
-    type: z.literal("thread.unarchive"),
-    providerId: z.string().min(1),
-    providerThreadId: z.string().min(1),
-  });
+// Carries environmentId (not just threadId) so the host daemon can serialize
+// it in the same per-environment write lane as thread.archive; otherwise a
+// slower archive can land after a later unarchive and leave the provider
+// session archived against the user's intent.
+export const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.unarchive"),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1),
+});
 
 export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),

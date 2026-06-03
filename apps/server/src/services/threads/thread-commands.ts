@@ -658,6 +658,7 @@ export function queueThreadUnarchiveCommand(
     type: "thread.unarchive",
     payload: JSON.stringify({
       type: "thread.unarchive",
+      environmentId: args.environment.id,
       threadId: args.thread.id,
       providerId: args.thread.providerId,
       providerThreadId: args.providerThreadId,

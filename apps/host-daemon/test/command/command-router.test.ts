@@ -1412,6 +1412,7 @@ describe("CommandRouter", () => {
         cursor: 1,
         command: {
           type: "thread.unarchive",
+          environmentId: "env-1",
           threadId: "thread-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -1466,6 +1467,81 @@ describe("CommandRouter", () => {
       "resume",
       "runTurn",
     ]);
+  });
+
+  it("serializes thread.archive before a later thread.unarchive for the same environment", async () => {
+    const calls: string[] = [];
+    const runtime = createFakeRuntime();
+    const archiveStarted = createDeferred<void>();
+    const archiveDeferred = createDeferred<void>();
+    runtime.archiveThread.mockImplementation(async () => {
+      calls.push("archive:start");
+      archiveStarted.resolve(undefined);
+      await archiveDeferred.promise;
+      calls.push("archive:done");
+    });
+    runtime.unarchiveThread.mockImplementation(async () => {
+      calls.push("unarchive");
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+
+    const handling = router.handleCommands([
+      {
+        id: "archive",
+        attemptId: "attempt-archive",
+        cursor: 1,
+        command: {
+          type: "thread.archive",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          providerId: "fake",
+          providerThreadId: "provider-1",
+        },
+      },
+      {
+        id: "unarchive",
+        attemptId: "attempt-unarchive",
+        cursor: 2,
+        command: {
+          type: "thread.unarchive",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+        },
+      },
+    ]);
+
+    await archiveStarted.promise;
+    // The later unarchive must not run until the earlier archive completes, or
+    // the slower archive could land last and leave the session archived.
+    expect(runtime.unarchiveThread).not.toHaveBeenCalled();
+
+    archiveDeferred.resolve(undefined);
+    await handling;
+
+    expect(calls).toEqual(["archive:start", "archive:done", "unarchive"]);
   });
 
   it("runs provider commands for different threads concurrently", async () => {

@@ -741,6 +741,7 @@ describe("thread command dispatch", () => {
     const unarchiveResult = await dispatchCommand(
       {
         type: "thread.unarchive",
+        environmentId: "env-1",
         threadId: "thread-1",
         providerId: "fake",
         providerThreadId: "provider-thread-1",
@@ -914,6 +915,7 @@ describe("thread command dispatch", () => {
     const result = await dispatchCommand(
       {
         type: "thread.unarchive",
+        environmentId: "env-unarchive-cleaned",
         threadId: "thread-unarchive-cleaned",
         providerId: "fake",
         providerThreadId: "provider-unarchive-cleaned",
