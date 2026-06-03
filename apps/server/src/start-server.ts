@@ -7,7 +7,6 @@ import { toOptionalString } from "@bb/config/strings";
 import { createLogger } from "@bb/logger";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
-import { createHostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { createAppVersionService } from "./services/system/app-version.js";
@@ -27,7 +26,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   });
   const db = initDb(serverConfig.databasePath, { logger });
   const hub = new NotificationHub();
-  const hostLifecycle = createHostLifecycleService();
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
@@ -93,7 +91,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
       bbAppManagedConfig,
       config: runtimeConfig,
       db,
-      hostLifecycle,
       hub,
       lifecycleDedupers,
       logger,
@@ -123,7 +120,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     void runPeriodicSweeps({
       config: runtimeConfig,
       db,
-      hostLifecycle,
       hub,
       lifecycleDedupers,
       logger,
@@ -142,7 +138,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     shutdownPromise = (async () => {
       eventLoopStallMonitor.stop();
       clearInterval(sweepInterval);
-      hostLifecycle.dispose();
       const closeServer = new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {

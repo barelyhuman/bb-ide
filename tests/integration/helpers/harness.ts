@@ -24,7 +24,6 @@ import { createHostWatcher } from "@bb/host-watcher";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
 import { createApp } from "../../../apps/server/src/server.js";
-import { createHostLifecycleService } from "../../../apps/server/src/services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
 import { createAppVersionService } from "../../../apps/server/src/services/system/app-version.js";
@@ -205,7 +204,6 @@ async function startIntegrationServer(
 
   const db = initDb(":memory:");
   const hub = new NotificationHub();
-  const hostLifecycle = createHostLifecycleService();
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
@@ -253,7 +251,6 @@ async function startIntegrationServer(
     bbAppManagedConfig,
     config,
     db,
-    hostLifecycle,
     hub,
     lifecycleDedupers,
     logger: testLogger,
@@ -294,7 +291,6 @@ async function startIntegrationServer(
     hub,
     machineAuth,
     async close(): Promise<void> {
-      hostLifecycle.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {

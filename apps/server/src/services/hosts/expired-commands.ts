@@ -26,7 +26,6 @@ type ExpiredCommandDeps = Pick<
   AppDeps,
   | "config"
   | "db"
-  | "hostLifecycle"
   | "hub"
   | "lifecycleDedupers"
   | "logger"

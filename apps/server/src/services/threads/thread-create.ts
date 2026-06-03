@@ -43,13 +43,7 @@ import { requireThreadStoragePath } from "./thread-storage.js";
 
 type ThreadCreateDeps = Pick<
   AppDeps,
-  | "config"
-  | "db"
-  | "hostLifecycle"
-  | "hub"
-  | "lifecycleDedupers"
-  | "logger"
-  | "machineAuth"
+  "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
 >;
 
 interface ExistingUnmanagedEnvironmentIntentByHostPathArgs {

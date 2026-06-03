@@ -84,13 +84,7 @@ function resolveAutomationExecutionContext(
 async function runAutomation(
   deps: Pick<
     AppDeps,
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "logger"
-    | "machineAuth"
+    "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
   >,
   automation: AutomationRow,
   now: number,
@@ -165,13 +159,7 @@ async function runAutomation(
 export async function sweepDueAutomations(
   deps: Pick<
     AppDeps,
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "logger"
-    | "machineAuth"
+    "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
   >,
   args: SweepDueAutomationsArgs = {},
 ): Promise<void> {

@@ -1266,7 +1266,6 @@ export interface UpdateThreadInput {
   lastReadAt?: number | null;
   parentThreadId?: string | null;
   title?: string | null;
-  titleFallback?: string | null;
 }
 
 export function updateThread(
@@ -1293,7 +1292,6 @@ export function updateThread(
 
   const set: Partial<typeof threads.$inferInsert> = { updatedAt: now };
   if ("title" in input) set.title = input.title;
-  if ("titleFallback" in input) set.titleFallback = input.titleFallback;
   if ("environmentId" in input) set.environmentId = input.environmentId;
   if ("lastReadAt" in input) {
     set.lastReadAt = input.lastReadAt;

@@ -7,7 +7,6 @@ import type { DbConnection } from "@bb/db";
 import { defaultFeatureFlags, type HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
-import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import {
@@ -93,7 +92,6 @@ export async function createTestAppHarness(
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
-  const hostLifecycle = createHostLifecycleService();
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
@@ -160,7 +158,6 @@ export async function createTestAppHarness(
     bbAppManagedConfig,
     config,
     db,
-    hostLifecycle,
     hub,
     lifecycleDedupers,
     logger: testLogger,
@@ -177,7 +174,6 @@ export async function createTestAppHarness(
     deps,
     hub,
     async cleanup(): Promise<void> {
-      hostLifecycle.dispose();
       await rm(dataDir, { recursive: true, force: true });
     },
   };

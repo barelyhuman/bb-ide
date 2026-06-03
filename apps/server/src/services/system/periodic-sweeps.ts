@@ -206,7 +206,6 @@ export async function runProjectDeletionSweep(
     AppDeps,
     | "config"
     | "db"
-    | "hostLifecycle"
     | "hub"
     | "lifecycleDedupers"
     | "logger"
@@ -235,7 +234,6 @@ export async function runEnvironmentProvisioningSweep(
     AppDeps,
     | "config"
     | "db"
-    | "hostLifecycle"
     | "hub"
     | "lifecycleDedupers"
     | "logger"
@@ -378,7 +376,6 @@ export async function runPeriodicSweeps(
     AppDeps,
     | "config"
     | "db"
-    | "hostLifecycle"
     | "hub"
     | "lifecycleDedupers"
     | "logger"
