@@ -201,15 +201,14 @@ const OPEN_BROWSER_ENTRY_ID = "file-search-result-open-browser";
 const SECTION_HEADER_CLASS =
   "sticky top-0 z-10 bg-background px-1 pb-2 text-xs font-medium uppercase tracking-wider text-subtle-foreground";
 const LAUNCHER_TILE_BASE_CLASS =
-  "group flex w-full min-w-0 items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  "group flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 const LAUNCHER_TILE_ICON_CLASS =
-  "flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-hairline bg-surface-raised";
+  "flex size-4 shrink-0 items-center justify-center overflow-hidden text-muted-foreground";
 const LAUNCHER_TILE_ICON_CLASS_DASHED =
-  "flex size-9 shrink-0 items-center justify-center rounded-md border border-dashed border-border bg-surface-raised text-muted-foreground group-hover:text-foreground";
+  "flex size-4 shrink-0 items-center justify-center text-muted-foreground group-hover:text-foreground";
 
-// File-type identity comes from the glyph alone — the chip stays neutral
-// (shared `LAUNCHER_TILE_ICON_CLASS`) so recent rows match the app/Open-browser
-// tiles without per-type coloring.
+// File-type identity comes from the glyph alone so recent rows stay as compact
+// as file-search results without per-type row coloring.
 const RECENT_CHIP_ICON_NAME = {
   md: "FileText",
   html: "AppWindow",
@@ -456,17 +455,20 @@ function AppResultRow({
       <span className={LAUNCHER_TILE_ICON_CLASS}>
         <ResolvedAppIcon
           icon={suggestion.app.icon}
-          className="size-5 text-foreground"
+          className="size-3.5 text-muted-foreground"
         />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-foreground">
-          {suggestion.name}
-        </span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-foreground">{suggestion.name}</span>
         {showAppId ? (
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {suggestion.appId}
-          </span>
+          <>
+            <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
+              ·
+            </span>
+            <span className="truncate font-mono text-muted-foreground">
+              {suggestion.appId}
+            </span>
+          </>
         ) : null}
       </span>
     </LauncherTile>
@@ -487,13 +489,14 @@ function CreateAppTile({
       onSelect={onSelect}
     >
       <span className={LAUNCHER_TILE_ICON_CLASS_DASHED}>
-        <Icon name="Plus" className="size-5" aria-hidden />
+        <Icon name="Plus" className="size-3.5" aria-hidden />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-foreground">
-          Create App…
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-foreground">Create App…</span>
+        <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
+          ·
         </span>
-        <span className="truncate text-xs text-muted-foreground">
+        <span className="truncate text-muted-foreground">
           Describe an idea, the manager builds it
         </span>
       </span>
@@ -515,13 +518,14 @@ function OpenBrowserTile({
       onSelect={onSelect}
     >
       <span className={LAUNCHER_TILE_ICON_CLASS}>
-        <Icon name="Globe" className="size-5 text-foreground" aria-hidden />
+        <Icon name="Globe" className="size-3.5" aria-hidden />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-foreground">
-          Open browser
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-foreground">Open browser</span>
+        <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
+          ·
         </span>
-        <span className="truncate text-xs text-muted-foreground">
+        <span className="truncate text-muted-foreground">
           Open a new web browser tab
         </span>
       </span>
@@ -574,11 +578,10 @@ function FileResultRow({
 }
 
 /**
- * A recently-opened file row. Shares the {@link LauncherTile} shell with the app
- * and Open-browser tiles so row height, chip size, and hover/active states line
- * up; the file-type tint colors the chip and kind label, and a right-aligned
- * relative timestamp flips to an "open" affordance on hover/selection.
- * Reopening routes through the same `onSelect` path as a file-search result.
+ * A recently-opened file row. It uses the compact launcher shell so recents sit
+ * at roughly the same density as file-search results, with the file-kind glyph
+ * and label carried inline. Reopening routes through the same `onSelect` path
+ * as a file-search result.
  */
 function RecentResultRow({
   id,
@@ -607,27 +610,23 @@ function RecentResultRow({
       <span className={LAUNCHER_TILE_ICON_CLASS}>
         <Icon
           name={RECENT_CHIP_ICON_NAME[chip]}
-          className="size-5 text-muted-foreground"
+          className="size-3.5"
           aria-hidden
         />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-foreground">
-          {name}
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="shrink-0 font-medium">{label}</span>
-          {directory ? (
-            <>
-              <span className="shrink-0 opacity-50" aria-hidden>
-                ·
-              </span>
-              <TruncateStart className="text-muted-foreground [flex-shrink:9999]">
-                {directory}
-              </TruncateStart>
-            </>
-          ) : null}
-        </span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-foreground">{name}</span>
+        <span className="shrink-0 font-medium text-muted-foreground">{label}</span>
+        {directory ? (
+          <>
+            <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
+              ·
+            </span>
+            <TruncateStart className="text-muted-foreground [flex-shrink:9999]">
+              {directory}
+            </TruncateStart>
+          </>
+        ) : null}
       </span>
       <span className="ml-auto flex shrink-0 items-center justify-end">
         <span
@@ -1012,6 +1011,8 @@ function NewTabResults({
     showAppsSection || showOpenSection || showFilesSection;
   const showLoading = isLoading && !showFilesSection;
   const showError = isError && !showFilesSection && !showLoading;
+  const showFileSearchMessage = showLoading || showError;
+  const hasRecentSectionPredecessor = hasSectionsAbove || showFileSearchMessage;
   const showEmptyMessage =
     !showAppsSection &&
     !showOpenSection &&
@@ -1143,7 +1144,7 @@ function NewTabResults({
             })}
           </div>
         </section>
-      ) : showLoading || showError ? (
+      ) : showFileSearchMessage ? (
         <div className={cn((showAppsSection || showOpenSection) && "mt-3")}>
           <FileSearchMessage
             iconName={showError ? "AlertCircle" : "Spinner"}
@@ -1158,12 +1159,12 @@ function NewTabResults({
       ) : null}
 
       {showRecentSection ? (
-        <section className={cn(hasSectionsAbove && "mt-3")}>
+        <section className={cn(hasRecentSectionPredecessor && "mt-3")}>
           <div
             className={cn(
               SECTION_HEADER_CLASS,
               "flex items-baseline gap-2",
-              hasSectionsAbove && "pt-2",
+              hasRecentSectionPredecessor && "pt-2",
             )}
           >
             <span>{FILE_SEARCH_SECTION_LABELS.recent}</span>
