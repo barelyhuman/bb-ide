@@ -12,7 +12,7 @@ import {
   queueCommand,
   setPendingInteractionResolving,
 } from "@bb/db";
-import { setEnvironmentStatus } from "@bb/db/internal-lifecycle";
+import { setEnvironmentStatus } from "@bb/db/internal-environment-lifecycle";
 import { describe, expect, it } from "vitest";
 import {
   handleExpiredCommands,

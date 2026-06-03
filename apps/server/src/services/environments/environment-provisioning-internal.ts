@@ -23,7 +23,7 @@ import {
   markEnvironmentOperationRecordQueued,
   setEnvironmentStatus,
   upsertEnvironmentOperationRecord,
-} from "@bb/db/internal-lifecycle";
+} from "@bb/db/internal-environment-lifecycle";
 import type {
   Environment,
   EnvironmentOperationKind,
@@ -76,7 +76,7 @@ import {
   finalizeStoppedThreadAndRequestCleanupAdvance,
   finalizeStoppedThreadInTransaction,
 } from "../threads/thread-lifecycle.js";
-import { runEnvironmentCleanupAdvance } from "./environment-cleanup.js";
+import { runEnvironmentCleanupAdvance } from "./environment-cleanup-internal.js";
 import {
   emptyCommandResultSideEffects,
   type CommandResultPostCommitAction,
@@ -110,9 +110,11 @@ interface EnvironmentProvisionTransactionDeps extends EnvironmentProvisionWriteD
 
 export interface RequestEnvironmentProvisionArgs {
   environmentId: string;
-  kind: EnvironmentProvisionOperationKind;
   request: EnvironmentProvisionRequest;
 }
+
+export interface RequestEnvironmentReprovisionArgs
+  extends RequestEnvironmentProvisionArgs {}
 
 export interface AdvanceEnvironmentProvisioningArgs {
   environmentId: string | null | undefined;
@@ -766,12 +768,30 @@ export function settleEnvironmentProvisionCommandResult(
 }
 
 export function requestEnvironmentProvision(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: EnvironmentProvisionWriteDeps,
   args: RequestEnvironmentProvisionArgs,
 ): void {
   upsertEnvironmentOperationRecord(deps.db, {
     environmentId: args.environmentId,
-    kind: args.kind,
+    kind: "provision",
+    payload: JSON.stringify(args.request),
+  });
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (environment && environment.status !== "provisioning") {
+    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
+      status: "provisioning",
+    });
+  }
+}
+
+export function requestEnvironmentReprovision(
+  deps: EnvironmentProvisionWriteDeps,
+  args: RequestEnvironmentReprovisionArgs,
+): void {
+  upsertEnvironmentOperationRecord(deps.db, {
+    environmentId: args.environmentId,
+    kind: "reprovision",
     payload: JSON.stringify(args.request),
   });
 
@@ -930,9 +950,8 @@ export async function queueManagedEnvironmentReprovision(
           });
         })();
 
-  requestEnvironmentProvision(deps, {
+  requestEnvironmentReprovision(deps, {
     environmentId: args.environment.id,
-    kind: "reprovision",
     request: buildDirectEnvironmentProvisionRequest({
       command,
       provisioningId: args.provisioningId,

@@ -39,7 +39,7 @@ import {
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { queueEnvironmentDestroyLifecycleCommand } from "../helpers/lifecycle-commands.js";
-import { requestEnvironmentCleanup } from "../../src/services/environments/environment-cleanup.js";
+import { requestEnvironmentCleanup } from "../../src/services/environments/environment-lifecycle-owner.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,

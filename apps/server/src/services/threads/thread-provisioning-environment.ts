@@ -13,8 +13,6 @@ import {
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import {
   markThreadOperationRecordFailed,
-  setEnvironmentStatus,
-  upsertEnvironmentOperationRecord,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
 import {
@@ -30,7 +28,11 @@ import type { AppDeps } from "../../types.js";
 import type { LifecycleCoordinationDeps } from "../../lifecycle-coordination-deps.js";
 import { ApiError } from "../../errors.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
-import { advanceEnvironmentProvisioning } from "../environments/environment-provisioning.js";
+import {
+  advanceEnvironmentProvisioning,
+  requestEnvironmentProvision,
+  requestEnvironmentReprovision,
+} from "../environments/environment-lifecycle-owner.js";
 import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
@@ -655,16 +657,19 @@ function createProvisioningEnvironmentWithOperation(
         threadId: args.thread.id,
         context,
       });
-      upsertEnvironmentOperationRecord(tx, {
-        environmentId: environment.id,
-        kind: "provision",
-        payload: JSON.stringify(
-          args.buildRequest({
+      requestEnvironmentProvision(
+        {
+          db: tx,
+          hub: deps.hub,
+        },
+        {
+          environmentId: environment.id,
+          request: args.buildRequest({
             context,
             environment,
           }),
-        ),
-      });
+        },
+      );
       return { context, environment };
     },
     { behavior: "immediate" },
@@ -928,16 +933,16 @@ function requestCheckoutUnmanagedEnvironmentProvision(
         threadId: args.thread.id,
         context,
       });
-      upsertEnvironmentOperationRecord(tx, {
-        environmentId: args.environment.id,
-        kind: "reprovision",
-        payload: JSON.stringify(request),
-      });
-      if (args.environment.status !== "provisioning") {
-        setEnvironmentStatus(tx, deps.hub, args.environment.id, {
-          status: "provisioning",
-        });
-      }
+      requestEnvironmentReprovision(
+        {
+          db: tx,
+          hub: deps.hub,
+        },
+        {
+          environmentId: args.environment.id,
+          request,
+        },
+      );
 
       return {
         kind: "queued",

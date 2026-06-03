@@ -1,18 +1,4 @@
-export {
-  applyProvisionedEnvironmentRecord,
-  claimManagedEnvironmentReprovisionRecord,
-  clearEnvironmentCleanupRequestRecord,
-  recordEnvironmentCleanupRequest,
-  setEnvironmentRecordDestroyed,
-  setEnvironmentStatus,
-} from "./data/environments.js";
-export {
-  cancelEnvironmentOperationRecord,
-  markEnvironmentOperationRecordCompleted,
-  markEnvironmentOperationRecordFailed,
-  markEnvironmentOperationRecordQueued,
-  upsertEnvironmentOperationRecord,
-} from "./data/environment-operations.js";
+export { claimManagedEnvironmentReprovisionRecord } from "./data/environments.js";
 export {
   cancelProjectOperationRecord,
   markProjectOperationRecordCompleted,

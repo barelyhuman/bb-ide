@@ -17,13 +17,13 @@ import {
   markEnvironmentOperationRecordQueued,
   setEnvironmentStatus,
   upsertEnvironmentOperationRecord,
-} from "@bb/db/internal-lifecycle";
+} from "@bb/db/internal-environment-lifecycle";
 import {
   cancelPendingEnvironmentCleanup,
   requestEnvironmentCleanup,
   settleEnvironmentDestroyCommandResult,
   type SettleEnvironmentDestroyCommandResultArgs,
-} from "../../src/services/environments/environment-cleanup.js";
+} from "../../src/services/environments/environment-lifecycle-owner.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 
 type EnvironmentDestroyCommand =

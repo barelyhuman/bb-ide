@@ -6,7 +6,7 @@ import {
   MANAGED_REPROVISION_IN_PROGRESS,
   MANAGED_REPROVISION_QUEUED,
   queueManagedEnvironmentReprovision,
-} from "../../src/services/environments/environment-provisioning.js";
+} from "../../src/services/environments/environment-lifecycle-owner.js";
 import {
   seedEnvironment,
   seedHost,

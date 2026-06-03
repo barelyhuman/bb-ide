@@ -41,7 +41,7 @@ import type {
   LoggedWorkSessionDeps,
 } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
-import { advanceEnvironmentCleanup } from "../environments/environment-cleanup.js";
+import { advanceEnvironmentCleanup } from "../environments/environment-lifecycle-owner.js";
 import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
@@ -49,7 +49,7 @@ import {
 import {
   advanceEnvironmentProvisioning,
   completeEnvironmentProvisioning,
-} from "../environments/environment-provisioning.js";
+} from "../environments/environment-lifecycle-owner.js";
 import {
   handleExpiredCommands,
   settleLegacyTerminalizedExpiredLifecycleCommands,

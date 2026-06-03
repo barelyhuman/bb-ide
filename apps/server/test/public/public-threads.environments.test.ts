@@ -14,7 +14,7 @@ import {
   hostDaemonCommands,
   listThreads,
 } from "@bb/db";
-import { setEnvironmentStatus } from "@bb/db/internal-lifecycle";
+import { setEnvironmentStatus } from "@bb/db/internal-environment-lifecycle";
 import { PERSONAL_PROJECT_ID, threadSchema } from "@bb/domain";
 import { threadListResponseSchema } from "@bb/server-contract";
 import {

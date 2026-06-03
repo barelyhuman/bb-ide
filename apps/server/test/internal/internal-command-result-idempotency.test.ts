@@ -24,13 +24,13 @@ import { handleCommandResult } from "../../src/internal/command-results.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
-} from "../../src/services/environments/environment-cleanup.js";
+} from "../../src/services/environments/environment-lifecycle-owner.js";
 import { handleExpiredCommands } from "../../src/services/hosts/expired-commands.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
-} from "../../src/services/environments/environment-provisioning.js";
+} from "../../src/services/environments/environment-lifecycle-owner.js";
 import { buildDirectEnvironmentProvisionRequest } from "../../src/services/environments/environment-provision-request.js";
 import {
   requestThreadStart,
@@ -1439,7 +1439,6 @@ describe("internal command result idempotency", () => {
 
       requestEnvironmentProvision(harness.deps, {
         environmentId: environment.id,
-        kind: "provision",
         request: buildDirectEnvironmentProvisionRequest({
           command: buildEnvironmentProvisionCommand({
             environmentId: environment.id,
@@ -1468,7 +1467,6 @@ describe("internal command result idempotency", () => {
 
       requestEnvironmentProvision(harness.deps, {
         environmentId: environment.id,
-        kind: "provision",
         request: buildDirectEnvironmentProvisionRequest({
           command: buildEnvironmentProvisionCommand({
             environmentId: environment.id,

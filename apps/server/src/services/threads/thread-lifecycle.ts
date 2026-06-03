@@ -70,7 +70,7 @@ import {
   requestEnvironmentCleanup,
   requestEnvironmentCleanupAdvance,
   runEnvironmentCleanupAdvance,
-} from "../environments/environment-cleanup.js";
+} from "../environments/environment-lifecycle-owner.js";
 import {
   emptyCommandResultSideEffects,
   type CommandResultFailureReportForType,

@@ -35,7 +35,7 @@ import {
   setEnvironmentRecordDestroyed,
   setEnvironmentStatus,
   upsertEnvironmentOperationRecord,
-} from "@bb/db/internal-lifecycle";
+} from "@bb/db/internal-environment-lifecycle";
 import { type HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import {
   emptyCommandResultSideEffects,

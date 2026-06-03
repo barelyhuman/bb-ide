@@ -8,12 +8,12 @@ import type {
 import { createThreadProvisioningId } from "@bb/db";
 import type { WorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { queueManagedEnvironmentReprovision } from "../environments/environment-provisioning.js";
+import { queueManagedEnvironmentReprovision } from "../environments/environment-lifecycle-owner.js";
 import {
   hasActiveManagedEnvironmentProvision,
   MANAGED_REPROVISION_IN_PROGRESS,
   MANAGED_REPROVISION_QUEUED,
-} from "../environments/environment-provisioning.js";
+} from "../environments/environment-lifecycle-owner.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
 import { appendThreadProvisioningEvent } from "./thread-events.js";

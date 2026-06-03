@@ -31,7 +31,7 @@ import { toThreadQueuedMessage } from "../../services/threads/thread-queued-mess
 import {
   cancelPendingEnvironmentCleanup,
   requestEnvironmentCleanupAndAdvance,
-} from "../../services/environments/environment-cleanup.js";
+} from "../../services/environments/environment-lifecycle-owner.js";
 import { requirePublicThread } from "../../services/lib/entity-lookup.js";
 import {
   requestQueuedMessageAutoSendForThread,

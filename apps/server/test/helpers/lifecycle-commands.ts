@@ -1,8 +1,10 @@
 import { createEnvironmentProvisioningId, queueCommand } from "@bb/db";
 import {
   markEnvironmentOperationRecordQueued,
-  markThreadOperationRecordQueued,
   upsertEnvironmentOperationRecord,
+} from "@bb/db/internal-environment-lifecycle";
+import {
+  markThreadOperationRecordQueued,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
 import type { EnvironmentOperationKind, ThreadOperationKind } from "@bb/domain";

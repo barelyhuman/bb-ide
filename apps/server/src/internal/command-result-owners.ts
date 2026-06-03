@@ -4,8 +4,8 @@ import {
   isHostDaemonDurableCommandType,
   type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
-import { settleEnvironmentDestroyCommandResult } from "../services/environments/environment-cleanup.js";
-import { settleEnvironmentProvisionCommandResult } from "../services/environments/environment-provisioning.js";
+import { settleEnvironmentDestroyCommandResult } from "../services/environments/environment-lifecycle-owner.js";
+import { settleEnvironmentProvisionCommandResult } from "../services/environments/environment-lifecycle-owner.js";
 import {
   settleThreadStartCommandResult,
   settleThreadStopCommandResult,
