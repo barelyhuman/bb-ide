@@ -46,7 +46,7 @@ import {
   withManagerPreferencesDeliveryThreadIdLock,
 } from "../threads/manager-dynamic-file-delivery.js";
 
-export const DUE_NUDGE_BATCH_SIZE = 100;
+const DUE_NUDGE_BATCH_SIZE = 100;
 export type DueManagerThreadNudgeRow = ReturnType<
   typeof listDueManagerThreadNudges
 >[number];
@@ -289,7 +289,7 @@ function isNudgePreparationCurrent(
   );
 }
 
-export function createNudgeSweepCache(): NudgeSweepCache {
+function createNudgeSweepCache(): NudgeSweepCache {
   return {
     environmentById: new Map(),
     pendingTurnSubmitByThreadId: new Map(),
@@ -297,7 +297,7 @@ export function createNudgeSweepCache(): NudgeSweepCache {
   };
 }
 
-export function resetNudgeSweepBatchCache(cache: NudgeSweepCache): void {
+function resetNudgeSweepBatchCache(cache: NudgeSweepCache): void {
   cache.pendingTurnSubmitByThreadId.clear();
 }
 
@@ -346,7 +346,7 @@ function getCachedProviderThreadId(
   return providerThreadId;
 }
 
-export function toDueManagerThreadNudgeCursor(
+function toDueManagerThreadNudgeCursor(
   nudge: DueManagerThreadNudgeRow,
 ): DueManagerThreadNudgeCursor {
   return {
@@ -660,7 +660,7 @@ async function runDueNudgeWithPreferencesLockHeld(
   tryTransition(deps.db, deps.hub, preparation.thread.id, "active");
 }
 
-export async function runDueNudge(
+async function runDueNudge(
   deps: LoggedWorkSessionDeps,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
@@ -670,4 +670,45 @@ export async function runDueNudge(
     { threadId: nudge.threadId },
     () => runDueNudgeWithPreferencesLockHeld(deps, cache, nudge, now),
   );
+}
+
+interface SweepDueNudgesArgs {
+  now?: number;
+}
+
+export async function sweepDueNudges(
+  deps: LoggedWorkSessionDeps,
+  args: SweepDueNudgesArgs = {},
+): Promise<void> {
+  const now = args.now ?? Date.now();
+  const cache = createNudgeSweepCache();
+  let after: DueManagerThreadNudgeCursor | undefined;
+
+  while (true) {
+    const dueNudges = listDueManagerThreadNudges(deps.db, {
+      now,
+      after,
+      limit: DUE_NUDGE_BATCH_SIZE,
+    });
+    for (const nudge of dueNudges) {
+      try {
+        await runDueNudge(deps, cache, nudge, now);
+      } catch (error) {
+        deps.logger.error(
+          {
+            nudgeId: nudge.id,
+            threadId: nudge.threadId,
+            err: error,
+          },
+          "Failed to process a due manager nudge",
+        );
+      }
+    }
+    if (dueNudges.length < DUE_NUDGE_BATCH_SIZE) {
+      return;
+    }
+    const lastNudge = dueNudges[dueNudges.length - 1];
+    after = lastNudge ? toDueManagerThreadNudgeCursor(lastNudge) : undefined;
+    resetNudgeSweepBatchCache(cache);
+  }
 }

@@ -11,8 +11,10 @@ import {
   buildCommandResultSettlementDeps,
   type CommandResultSideEffectReport,
 } from "../../internal/command-result-side-effects.js";
-import { handleCommandResultSideEffects } from "../../internal/command-result-owners.js";
-import { dispatchCommandResultPostCommitActions } from "../../internal/command-result-post-commit-actions.js";
+import {
+  dispatchCommandResultPostCommitActions,
+  handleCommandResultSideEffects,
+} from "../../internal/command-results.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 
 const EXPIRED_COMMAND_ERROR_CODE = "command_expired";

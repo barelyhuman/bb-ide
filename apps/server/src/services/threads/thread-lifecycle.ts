@@ -70,7 +70,7 @@ import {
   requestEnvironmentCleanup,
   requestEnvironmentCleanupAdvance,
   runEnvironmentCleanupAdvance,
-} from "../environments/environment-lifecycle-owner.js";
+} from "../environments/environment-cleanup-internal.js";
 import {
   emptyCommandResultSideEffects,
   type CommandResultFailureReportForType,
@@ -84,6 +84,7 @@ import {
   appendThreadEventInTransaction,
   appendThreadEventsInTransaction,
   appendThreadInterruptedEventInTransaction,
+  appendThreadProvisioningEventInTransaction,
   getActiveTurnId,
   getLastProviderThreadId,
 } from "./thread-events.js";
@@ -110,8 +111,10 @@ import {
   queueManagedThreadTurnNotificationBestEffort,
   type QueueManagedThreadTurnNotificationArgs,
 } from "./managed-thread-notifications.js";
-import { completeThreadProvisioningForStartHandoff } from "./thread-provisioning-handoff.js";
-import { threadProvisionCommonPayloadSchema } from "./thread-provisioning-context.js";
+import {
+  readThreadProvisioningIdFromRecord,
+  threadProvisionCommonPayloadSchema,
+} from "./thread-provisioning-context.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.submit";
@@ -972,6 +975,27 @@ function hasQueuedActiveThreadStart(
   );
 }
 
+function completeProvisionHandoffInTransaction(
+  tx: DbTransaction,
+  threadId: string,
+  environmentId: string,
+): number | null {
+  const operation = getThreadOperation(tx, { threadId, kind: "provision" });
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+    return null;
+  }
+  const provisioningId = readThreadProvisioningIdFromRecord(operation);
+  const sequence = appendThreadProvisioningEventInTransaction(tx, {
+    threadId,
+    environmentId,
+    provisioningId,
+    status: "completed",
+    entries: [],
+  });
+  markThreadOperationRecordCompleted(tx, { threadId, kind: "provision" });
+  return sequence;
+}
+
 /**
  * Makes the provision-to-start durability boundary atomic: after a crash, the
  * thread should have either an active provision op to retry or an active start
@@ -1001,11 +1025,11 @@ function requestThreadStartHandoff(
         };
       }
 
-      const completedProvisionSequence =
-        completeThreadProvisioningForStartHandoff(tx, {
-          threadId: args.threadId,
-          environmentId: args.environmentId,
-        });
+      const completedProvisionSequence = completeProvisionHandoffInTransaction(
+        tx,
+        args.threadId,
+        args.environmentId,
+      );
       upsertThreadOperationRecord(tx, {
         threadId: args.threadId,
         kind: "start",

@@ -6,7 +6,7 @@ import {
   type HostDaemonCommandResult,
   type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
-import type { CommandResultWaiterResponse } from "../../internal/command-result-response.js";
+import type { CommandResultWaiterResponse } from "../../internal/command-result-side-effects.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { roundDurationMs } from "../lib/duration.js";

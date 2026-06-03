@@ -23,7 +23,7 @@ import {
   requestEnvironmentCleanup,
   settleEnvironmentDestroyCommandResult,
   type SettleEnvironmentDestroyCommandResultArgs,
-} from "../../src/services/environments/environment-lifecycle-owner.js";
+} from "../../src/services/environments/environment-cleanup-internal.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 
 type EnvironmentDestroyCommand =

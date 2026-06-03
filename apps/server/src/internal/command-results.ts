@@ -6,21 +6,213 @@ import {
   type HostDaemonCommandRow,
 } from "@bb/db";
 import {
+  hostDaemonCommandSchema,
   hostDaemonDurableCommandTypeSchema,
+  isHostDaemonDurableCommandType,
   type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import {
   buildCommandResultSettlementDeps,
-  type CommandResultSideEffectReport,
+  emptyCommandResultSideEffects,
   type CommandResultPostCommitAction,
+  type CommandResultReportForType,
+  type CommandResultSettlementDeps,
+  type CommandResultSideEffectReport,
   type CommandResultSideEffectsDeps,
+  type CommandResultSideEffectsResult,
+  type CommandResultWaiterResponse,
 } from "./command-result-side-effects.js";
-import { handleCommandResultSideEffects } from "./command-result-owners.js";
-import type { CommandResultWaiterResponse } from "./command-result-response.js";
-import { dispatchCommandResultPostCommitActions } from "./command-result-post-commit-actions.js";
+import { settleEnvironmentDestroyCommandResult } from "../services/environments/environment-cleanup-internal.js";
+import { settleEnvironmentProvisionCommandResult } from "../services/environments/environment-provisioning-internal.js";
+import {
+  settleThreadStartCommandResult,
+  settleThreadStopCommandResult,
+  settleTurnSubmitCommandResult,
+} from "../services/threads/thread-lifecycle.js";
+import { scheduleAfterDaemonIngressResponse } from "../services/hosts/daemon-ingress-scheduler.js";
+import { notifyWorkspaceMutationResult } from "./environment-changes.js";
 import { NotificationBuffer } from "../services/lib/notification-buffer.js";
 import { ApiError } from "../errors.js";
+
+function parseCommand(commandRow: HostDaemonCommandRow) {
+  return hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
+}
+
+type ParsedHostDaemonCommand = ReturnType<typeof parseCommand>;
+type ParsedCommandType = ParsedHostDaemonCommand["type"];
+type ParsedCommandForType<TType extends ParsedCommandType> = Extract<
+  ParsedHostDaemonCommand,
+  { type: TType }
+>;
+
+// Command-result owners apply durable DB side effects before the command row is
+// marked terminal. Work that can queue or wait for another daemon command must
+// be returned as an explicit post-commit action.
+interface ApplyCommandResultSideEffectsArgs<TType extends ParsedCommandType> {
+  command: ParsedCommandForType<TType>;
+  commandRow: HostDaemonCommandRow;
+  deps: CommandResultSettlementDeps;
+  report: CommandResultReportForType<TType>;
+}
+
+interface CommandResultOwner<TType extends ParsedCommandType> {
+  applySideEffects?(
+    args: ApplyCommandResultSideEffectsArgs<TType>,
+  ): CommandResultSideEffectsResult | void;
+}
+
+type CommandResultOwnerRegistry = {
+  [TType in ParsedCommandType]: CommandResultOwner<TType> | null;
+};
+
+function defineCommandResultOwner<TType extends ParsedCommandType>(
+  owner: CommandResultOwner<TType>,
+): CommandResultOwner<TType> {
+  return owner;
+}
+
+function reportMatchesCommandType<TType extends ParsedCommandType>(
+  command: ParsedCommandForType<TType>,
+  report: CommandResultSideEffectReport,
+): report is CommandResultReportForType<TType> {
+  return report.type === command.type;
+}
+
+const commandResultOwners: CommandResultOwnerRegistry = {
+  "environment.cleanup_preflight": null,
+  "environment.destroy": defineCommandResultOwner({
+    applySideEffects: settleEnvironmentDestroyCommandResult,
+  }),
+  "environment.provision": defineCommandResultOwner({
+    applySideEffects: settleEnvironmentProvisionCommandResult,
+  }),
+  "host.write_file_relative": null,
+  "host.delete_file_relative": null,
+  "host.delete_path_relative": null,
+  "codex.inference.complete": null,
+  "interactive.resolve": defineCommandResultOwner({
+    applySideEffects: ({ deps, command, report }) => {
+      deps.pendingInteractions.settleInteractiveResolveCommandResultInTransaction(
+        {
+          command,
+          deps,
+          report,
+        },
+      );
+    },
+  }),
+  "thread.archive": null,
+  "thread.deleted": null,
+  "thread.rename": null,
+  "thread.unarchive": null,
+  "thread.start": defineCommandResultOwner({
+    applySideEffects: settleThreadStartCommandResult,
+  }),
+  "thread.stop": defineCommandResultOwner({
+    applySideEffects: settleThreadStopCommandResult,
+  }),
+  "turn.submit": defineCommandResultOwner({
+    applySideEffects: settleTurnSubmitCommandResult,
+  }),
+  "codex.voice.transcribe": null,
+  "workspace.commit": defineCommandResultOwner({
+    applySideEffects: ({ deps, command, report }) => {
+      notifyWorkspaceMutationResult(deps, {
+        environmentId: command.environmentId,
+        ok: report.ok,
+      });
+    },
+  }),
+  "workspace.squash_merge": defineCommandResultOwner({
+    applySideEffects: ({ deps, command, report }) => {
+      notifyWorkspaceMutationResult(deps, {
+        environmentId: command.environmentId,
+        ok: report.ok,
+      });
+    },
+  }),
+};
+
+function getCommandResultOwner<TType extends ParsedCommandType>(
+  command: ParsedCommandForType<TType>,
+): CommandResultOwner<TType> | null {
+  return commandResultOwners[command.type];
+}
+
+function hasCommandResultOwnerSideEffects(
+  type: HostDaemonDurableCommandType,
+): boolean {
+  return commandResultOwners[type]?.applySideEffects !== undefined;
+}
+
+export function handleCommandResultSideEffects(
+  deps: CommandResultSettlementDeps,
+  report: CommandResultSideEffectReport,
+  commandRow: HostDaemonCommandRow,
+): CommandResultSideEffectsResult {
+  if (
+    report.type !== commandRow.type ||
+    !isHostDaemonDurableCommandType(report.type) ||
+    !hasCommandResultOwnerSideEffects(report.type)
+  ) {
+    return emptyCommandResultSideEffects();
+  }
+
+  const command = parseCommand(commandRow);
+  if (!reportMatchesCommandType(command, report)) {
+    return emptyCommandResultSideEffects();
+  }
+  return (
+    getCommandResultOwner(command)?.applySideEffects?.({
+      deps,
+      report,
+      command,
+      commandRow,
+    }) ?? emptyCommandResultSideEffects()
+  );
+}
+
+type CommandResultPostCommitDispatchMode =
+  | "inline"
+  | "schedule-after-daemon-ingress";
+
+export interface DispatchCommandResultPostCommitActionsArgs {
+  actions: readonly CommandResultPostCommitAction[];
+  command: HostDaemonCommandRow;
+  deps: CommandResultSideEffectsDeps;
+  mode: CommandResultPostCommitDispatchMode;
+}
+
+async function runCommandResultPostCommitAction(
+  deps: CommandResultSideEffectsDeps,
+  action: CommandResultPostCommitAction,
+): Promise<void> {
+  await action.run(deps);
+}
+
+export async function dispatchCommandResultPostCommitActions(
+  args: DispatchCommandResultPostCommitActionsArgs,
+): Promise<void> {
+  for (const action of args.actions) {
+    if (args.mode === "inline") {
+      await runCommandResultPostCommitAction(args.deps, action);
+      continue;
+    }
+
+    scheduleAfterDaemonIngressResponse({
+      config: args.deps.config,
+      context: {
+        ...action.context,
+        commandId: args.command.id,
+        commandType: args.command.type,
+      },
+      logger: args.deps.logger,
+      name: action.name,
+      work: () => runCommandResultPostCommitAction(args.deps, action),
+    });
+  }
+}
 
 interface MissingCommandResultSettlement {
   outcome: "missing";

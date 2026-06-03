@@ -25,7 +25,7 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { parseOptionalInteger } from "../../services/lib/validation.js";
-import { requestEnvironmentCleanupAndAdvance } from "../../services/environments/environment-lifecycle-owner.js";
+import { requestEnvironmentCleanupAndAdvance } from "../../services/environments/environment-cleanup-internal.js";
 import {
   getNonDestroyedHostWithStatus,
   requireEnvironment,

@@ -8,7 +8,7 @@ import {
   requestEnvironmentCleanupAndAdvance,
   wouldCleanupEnvironment,
   wouldCleanupEnvironmentWithNoLiveThreads,
-} from "../environments/environment-lifecycle-owner.js";
+} from "../environments/environment-cleanup-internal.js";
 import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,

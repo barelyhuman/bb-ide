@@ -32,7 +32,7 @@ import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
   requestEnvironmentReprovision,
-} from "../environments/environment-lifecycle-owner.js";
+} from "../environments/environment-provisioning-internal.js";
 import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
@@ -72,10 +72,10 @@ import {
   type ThreadProvisionContext,
   type ThreadProvisionEnvironmentIntent,
   type ThreadProvisionEnvironmentPendingContext,
+  readThreadProvisioningStateFromRecord,
   type ThreadProvisionEnvironmentProvisioningContext,
   type ThreadProvisionProvisionableContext,
 } from "./thread-provisioning-context.js";
-import { readThreadProvisioningStateFromRecord } from "./thread-provisioning-state.js";
 import { tryTransition } from "./thread-transitions.js";
 import {
   resolveManagedTargetPath,

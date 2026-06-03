@@ -21,7 +21,7 @@ import {
   type TerminalServerMessage,
 } from "@bb/server-contract";
 import { COMMAND_RESULT_CACHE_TTL_MS } from "../constants.js";
-import type { CommandResultWaiterResponse } from "../internal/command-result-response.js";
+import type { CommandResultWaiterResponse } from "../internal/command-result-side-effects.js";
 
 interface HubSocket {
   close(code?: number, reason?: string): void;

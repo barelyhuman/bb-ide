@@ -1,11 +1,40 @@
 import type { DbNotifier, DbTransaction } from "@bb/db";
 import type {
   HostDaemonCommand,
+  HostDaemonCommandResultReport,
   HostDaemonCommandResultReportWithoutSession,
   HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 import type { InteractiveLifecycleCoordinationDeps } from "../lifecycle-coordination-deps.js";
 import type { AppDeps } from "../types.js";
+
+type SuccessfulCommandResultReport = Extract<
+  HostDaemonCommandResultReport,
+  { ok: true }
+>;
+type FailedCommandResultReport = Extract<
+  HostDaemonCommandResultReport,
+  { ok: false }
+>;
+
+export interface CommandResultSuccessWaiterResponse {
+  commandId: string;
+  ok: true;
+  result: SuccessfulCommandResultReport["result"];
+  type: SuccessfulCommandResultReport["type"];
+}
+
+export interface CommandResultFailureWaiterResponse {
+  commandId: string;
+  errorCode: FailedCommandResultReport["errorCode"];
+  errorMessage: string;
+  ok: false;
+  type: string;
+}
+
+export type CommandResultWaiterResponse =
+  | CommandResultSuccessWaiterResponse
+  | CommandResultFailureWaiterResponse;
 
 export type CommandResultSideEffectsDeps =
   InteractiveLifecycleCoordinationDeps & Pick<AppDeps, "terminalSessions">;

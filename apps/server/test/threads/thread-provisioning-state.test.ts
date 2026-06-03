@@ -19,7 +19,7 @@ import {
 import {
   readThreadProvisioningIdFromRecord,
   readThreadProvisioningStateFromRecord,
-} from "../../src/services/threads/thread-provisioning-state.js";
+} from "../../src/services/threads/thread-provisioning-context.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
 

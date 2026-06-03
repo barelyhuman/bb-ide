@@ -10,7 +10,7 @@ import {
 } from "@bb/db";
 import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
+import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep-runner.js";
 import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {

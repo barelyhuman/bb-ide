@@ -41,7 +41,7 @@ import type {
   LoggedWorkSessionDeps,
 } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
-import { advanceEnvironmentCleanup } from "../environments/environment-lifecycle-owner.js";
+import { advanceEnvironmentCleanup } from "../environments/environment-cleanup-internal.js";
 import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
@@ -49,13 +49,13 @@ import {
 import {
   advanceEnvironmentProvisioning,
   completeEnvironmentProvisioning,
-} from "../environments/environment-lifecycle-owner.js";
+} from "../environments/environment-provisioning-internal.js";
 import {
   handleExpiredCommands,
   settleLegacyTerminalizedExpiredLifecycleCommands,
 } from "../hosts/expired-commands.js";
 import { handleExpiredHostSessionLeases } from "../../internal/session-owner-side-effects.js";
-import { sweepDueNudges } from "../scheduling/nudge-sweep.js";
+import { sweepDueNudges } from "../scheduling/nudge-sweep-runner.js";
 import {
   advanceProjectDeletion,
   listProjectsPendingDeletion,

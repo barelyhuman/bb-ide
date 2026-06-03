@@ -24,13 +24,13 @@ import { handleCommandResult } from "../../src/internal/command-results.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
-} from "../../src/services/environments/environment-lifecycle-owner.js";
+} from "../../src/services/environments/environment-cleanup-internal.js";
 import { handleExpiredCommands } from "../../src/services/hosts/expired-commands.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
-} from "../../src/services/environments/environment-lifecycle-owner.js";
+} from "../../src/services/environments/environment-provisioning-internal.js";
 import { buildDirectEnvironmentProvisionRequest } from "../../src/services/environments/environment-provision-request.js";
 import {
   requestThreadStart,

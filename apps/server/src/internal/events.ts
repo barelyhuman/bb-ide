@@ -46,7 +46,7 @@ import {
 import {
   requestEnvironmentCleanup,
   wouldCleanupEnvironment,
-} from "../services/environments/environment-lifecycle-owner.js";
+} from "../services/environments/environment-cleanup-internal.js";
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
 import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
 import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";

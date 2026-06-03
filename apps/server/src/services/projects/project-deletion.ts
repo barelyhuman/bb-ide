@@ -19,7 +19,7 @@ import { deleteProjectAttachments } from "./attachments.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
-} from "../environments/environment-lifecycle-owner.js";
+} from "../environments/environment-cleanup-internal.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import {
   requestThreadStopAndFinalize,

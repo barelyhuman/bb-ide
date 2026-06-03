@@ -67,7 +67,7 @@ import {
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { tryTransitionInTransaction } from "../threads/thread-transitions.js";
-import { readThreadProvisioningIdFromRecord } from "../threads/thread-provisioning-state.js";
+import { readThreadProvisioningIdFromRecord } from "../threads/thread-provisioning-context.js";
 import {
   advanceThreadProvisioning,
   recordThreadProvisionWorkspaceReadyInTransaction,
