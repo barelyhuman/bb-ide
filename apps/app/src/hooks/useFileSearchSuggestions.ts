@@ -44,7 +44,10 @@ export interface UseFileSearchSuggestionsArgs {
 export interface UseFileSearchSuggestionsResult {
   suggestions: FileSearchSuggestion[];
   isLoading: boolean;
-  isError: boolean;
+  /** The app list failed to load. Independent of any typed query. */
+  appsError: boolean;
+  /** Workspace/thread-storage path search failed. Only ever true with a query. */
+  fileSearchError: boolean;
   isDebouncing: boolean;
   isUnavailable: boolean;
 }
@@ -181,7 +184,8 @@ export function useFileSearchSuggestions(
     isLoading:
       suggestions.length === 0 &&
       (pathSuggestions.isLoading || (canSearchApps && apps.isLoading)),
-    isError: pathSuggestions.isError || (canSearchApps && apps.isError),
+    appsError: canSearchApps && apps.isError,
+    fileSearchError: pathSuggestions.isError,
     isDebouncing: pathSuggestions.isDebouncing,
     isUnavailable: !canSearchApps && !canSearchWorkspace && !canSearchThreadStorage,
   };

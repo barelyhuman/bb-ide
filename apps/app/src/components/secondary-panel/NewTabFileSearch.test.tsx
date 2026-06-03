@@ -14,7 +14,8 @@ vi.mock("@/hooks/useFileSearchSuggestions", () => ({
   useFileSearchSuggestions: () => ({
     suggestions: [],
     isLoading: false,
-    isError: false,
+    appsError: false,
+    fileSearchError: false,
     isDebouncing: false,
     isUnavailable: false,
   }),

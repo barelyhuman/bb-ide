@@ -382,8 +382,11 @@ function FileSearchMessage({
 }: FileSearchMessageProps) {
   return (
     <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
-      <div className="flex max-w-64 flex-col items-center gap-2">
-        <Icon name={iconName} className={cn("size-4", iconClassName)} />
+      <div className="flex max-w-64 items-center justify-center gap-1.5">
+        <Icon
+          name={iconName}
+          className={cn("size-4 shrink-0", iconClassName)}
+        />
         <p>{message}</p>
       </div>
     </div>
@@ -453,7 +456,7 @@ function AppResultRow({
         <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
           ·
         </span>
-        <span className="truncate font-mono text-muted-foreground">
+        <span className="truncate font-mono text-muted-foreground [flex-shrink:9999]">
           {suggestion.applicationId}
         </span>
       </span>
@@ -482,7 +485,7 @@ function CreateAppTile({
         <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
           ·
         </span>
-        <span className="truncate text-muted-foreground">
+        <span className="truncate text-muted-foreground [flex-shrink:9999]">
           Describe an idea, the manager builds it
         </span>
       </span>
@@ -511,7 +514,7 @@ function OpenBrowserTile({
         <span className="shrink-0 text-muted-foreground opacity-50" aria-hidden>
           ·
         </span>
-        <span className="truncate text-muted-foreground">
+        <span className="truncate text-muted-foreground [flex-shrink:9999]">
           Open a new web browser tab
         </span>
       </span>
@@ -651,8 +654,14 @@ export function NewTabFileSearch({
   const hasQuery = trimmedQuery.length > 0;
   const canPrefillCreateAppPrompt =
     promptDraft.storageKey !== null && currentThreadId.length > 0;
-  const { suggestions, isLoading, isError, isDebouncing, isUnavailable } =
-    useFileSearchSuggestions({
+  const {
+    suggestions,
+    isLoading,
+    appsError,
+    fileSearchError,
+    isDebouncing,
+    isUnavailable,
+  } = useFileSearchSuggestions({
       projectId,
       query,
       limit: FILE_SEARCH_LIMIT,
@@ -899,7 +908,8 @@ export function NewTabFileSearch({
         <NewTabResults
           activeIndex={activeIndex}
           hasQuery={hasQuery}
-          isError={isError}
+          appsError={appsError}
+          fileSearchError={fileSearchError}
           isLoading={isLoading}
           nowMs={nowMs}
           onActivateIndex={setActiveIndex}
@@ -940,7 +950,8 @@ interface NewTabRecentState {
 interface NewTabResultsProps {
   activeIndex: number;
   hasQuery: boolean;
-  isError: boolean;
+  appsError: boolean;
+  fileSearchError: boolean;
   isLoading: boolean;
   nowMs: number;
   onActivateIndex: (index: number) => void;
@@ -956,7 +967,8 @@ interface NewTabResultsProps {
 function NewTabResults({
   activeIndex,
   hasQuery,
-  isError,
+  appsError,
+  fileSearchError,
   isLoading,
   nowMs,
   onActivateIndex,
@@ -980,7 +992,16 @@ function NewTabResults({
   const hasSectionsAbove =
     showAppsSection || showOpenSection || showFilesSection;
   const showLoading = isLoading && !showFilesSection;
-  const showError = isError && !showFilesSection && !showLoading;
+  const showError =
+    (appsError || fileSearchError) && !showFilesSection && !showLoading;
+  // Name only the source that actually failed. File search can only error once a
+  // query has run, so a fresh tab whose app list failed must not blame files.
+  const errorMessage =
+    appsError && fileSearchError
+      ? "App and file search failed."
+      : appsError
+        ? "Couldn't load apps."
+        : "File search failed.";
   const showFileSearchMessage = showLoading || showError;
   const hasRecentSectionPredecessor = hasSectionsAbove || showFileSearchMessage;
   const showEmptyMessage =
@@ -1120,11 +1141,7 @@ function NewTabResults({
           <FileSearchMessage
             iconName={showError ? "AlertCircle" : "Spinner"}
             iconClassName={showLoading ? "animate-spin" : undefined}
-            message={
-              showError
-                ? "App and file search failed."
-                : "Searching apps and files..."
-            }
+            message={showError ? errorMessage : "Searching apps and files..."}
           />
         </div>
       ) : null}
