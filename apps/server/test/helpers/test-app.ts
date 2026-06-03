@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
-import type { HostType } from "@bb/domain";
+import { defaultFeatureFlags, type HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
@@ -130,6 +130,7 @@ export async function createTestAppHarness(
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-test",
     dataDir,
+    featureFlags: defaultFeatureFlags,
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     isDevelopment: true,

@@ -107,7 +107,7 @@ const managerTemplates = {
 } satisfies ManagerTemplatesResponse;
 
 const systemConfig = {
-  featureFlags: {},
+  featureFlags: { placeholder: false },
   hostDaemonPort: null,
   voiceTranscriptionEnabled: false,
 } satisfies SystemConfigResponse;

@@ -1,4 +1,4 @@
-import { hostTypeSchema, type HostType } from "@bb/domain";
+import { defaultFeatureFlags, hostTypeSchema, type HostType } from "@bb/domain";
 import { DEFAULTS } from "./defaults.js";
 import { defineEnvVar, type EnvVarParseArgs } from "./env.js";
 import {
@@ -181,6 +181,13 @@ export const OPENAI_API_KEY_ENV = defineEnvVar<string>({
   parse: parseStringEnvValue,
 });
 
+export const BB_FF_PLACEHOLDER_ENV = defineEnvVar<boolean>({
+  description:
+    "Permanent placeholder feature flag. Non-functional keep-alive so the flag system has at least one entry; do not gate behavior on it.",
+  name: "BB_FF_PLACEHOLDER",
+  parse: parseBooleanEnvValue,
+});
+
 export const BB_DEV_APP_HOST_ENV = defineEnvVar<string>({
   description:
     "Development-only Vite bind host for apps/app. Set to 0.0.0.0 to test from phones or other LAN devices.",
@@ -256,3 +263,4 @@ export const DEFAULT_BB_DEV_APP_HOST = "";
 export const DEFAULT_BB_DEV_REPLAY_CAPTURE = false;
 export const DEFAULT_BB_INFERENCE = DEFAULTS.inferenceModel;
 export const DEFAULT_BB_TRANSCRIPTION = DEFAULTS.transcriptionModel;
+export const DEFAULT_BB_FF_PLACEHOLDER = defaultFeatureFlags.placeholder;

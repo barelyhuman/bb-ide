@@ -304,6 +304,7 @@ describe("consumer-specific config", () => {
         BB_APP_URL: undefined,
         BB_APP_VERSION: undefined,
         BB_EXTERNAL_URL: undefined,
+        BB_FF_PLACEHOLDER: undefined,
         BB_INFERENCE: undefined,
         BB_TRANSCRIPTION: undefined,
       }),
@@ -318,6 +319,27 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_INFERENCE).toBe("codex/gpt-5.4-mini");
     expect(serverConfig.BB_TRANSCRIPTION).toBe("codex/gpt-4o-mini-transcribe");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
+    expect(serverConfig.featureFlags).toEqual({ placeholder: false });
+  });
+
+  it("parses the placeholder feature flag from env", () => {
+    const serverConfig = loadServerConfig({
+      env: createServerRuntimeEnv({
+        BB_FF_PLACEHOLDER: "true",
+      }),
+    });
+
+    expect(serverConfig.featureFlags.placeholder).toBe(true);
+  });
+
+  it("rejects invalid feature flag booleans in server config", () => {
+    expect(() =>
+      loadServerConfig({
+        env: createServerRuntimeEnv({
+          BB_FF_PLACEHOLDER: "not-bool",
+        }),
+      }),
+    ).toThrow(/BB_FF_PLACEHOLDER/u);
   });
 
   it("uses 0.0.0-dev as the default BB_APP_VERSION in production", () => {

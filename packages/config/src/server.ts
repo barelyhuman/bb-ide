@@ -1,3 +1,4 @@
+import type { FeatureFlags } from "@bb/domain";
 import {
   loadCommonConfig,
   type CommonConfig,
@@ -20,6 +21,7 @@ import {
   DEFAULT_OPENAI_API_KEY,
   OPENAI_API_KEY_ENV,
 } from "./env-vars.js";
+import { loadFeatureFlags } from "./feature-flags.js";
 import { assignIfDefined } from "./objects.js";
 import { loadHostDaemonPortValue } from "./ports.js";
 import { loadServerPortConfig, type ServerPortConfig } from "./server-port.js";
@@ -34,6 +36,7 @@ export interface ServerConfig
   BB_INFERENCE: string;
   BB_TRANSCRIPTION: string;
   OPENAI_API_KEY: string;
+  featureFlags: FeatureFlags;
 }
 
 export type LoadServerConfigArgs = LoadCommonConfigArgs;
@@ -111,6 +114,11 @@ export function loadServerConfig(
       defaultValue: DEFAULT_OPENAI_API_KEY,
       definition: OPENAI_API_KEY_ENV,
       env: loader.env,
+    }),
+    featureFlags: loadFeatureFlags({
+      env: loader.env,
+      homeDir: loader.context.homeDir,
+      mode: loader.mode,
     }),
   };
 

@@ -1,5 +1,4 @@
 import {
-  buildFeatureFlags,
   systemExecutionOptionsQuerySchema,
   systemProvidersQuerySchema,
   typedRoutes,
@@ -24,7 +23,7 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
 
   get("/system/config", (context) =>
     context.json({
-      featureFlags: buildFeatureFlags({ placeholder: false }),
+      featureFlags: deps.config.featureFlags,
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: resolveVoiceTranscriptionEnabled(deps),
     }),

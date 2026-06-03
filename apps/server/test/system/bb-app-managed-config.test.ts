@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { defaultFeatureFlags } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   applyBbAppManagedConfig,
@@ -50,6 +51,7 @@ function createRuntimeConfig(): ServerRuntimeConfig {
     appUrl: "https://ambient-app.example.test",
     appVersion: "0.0.0-test",
     dataDir: "/tmp/bb-test",
+    featureFlags: defaultFeatureFlags,
     hostDaemonPort: 38887,
     inferenceModel: "openai/gpt-4o-mini",
     isDevelopment: false,

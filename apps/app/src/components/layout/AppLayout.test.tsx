@@ -50,7 +50,7 @@ interface SidebarResizeEndScenario {
 }
 
 const testSystemConfig: SystemConfigResponse = {
-  featureFlags: {},
+  featureFlags: { placeholder: false },
   hostDaemonPort: null,
   voiceTranscriptionEnabled: false,
 };

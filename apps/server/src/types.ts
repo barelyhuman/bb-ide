@@ -1,4 +1,5 @@
 import type { DbConnection } from "@bb/db";
+import type { FeatureFlags } from "@bb/domain";
 import type { Logger } from "@bb/logger";
 import type { HostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import type { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
@@ -14,6 +15,7 @@ export type ServerLogger = Pick<Logger, "debug" | "error" | "info" | "warn">;
 export interface ServerRuntimeConfig {
   appVersion: string;
   dataDir: string;
+  featureFlags: FeatureFlags;
   hostDaemonPort: number;
   inferenceModel: string;
   isDevelopment: boolean;

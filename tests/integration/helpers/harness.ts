@@ -10,6 +10,7 @@ import {
   type ProviderAdapterFactory,
 } from "@bb/agent-runtime/test";
 import type { DbConnection } from "@bb/db";
+import { defaultFeatureFlags } from "@bb/domain";
 import {
   acquireDaemonLock,
   createHostDaemonApp,
@@ -221,6 +222,7 @@ async function startIntegrationServer(
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-dev",
     dataDir: serverDataDir,
+    featureFlags: defaultFeatureFlags,
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",

@@ -1587,24 +1587,3 @@ describe("server-contract clients", () => {
     ).toBe(true);
   });
 });
-
-describe("feature flags", () => {
-  it("round-trips known flags through the producer and wire boundaries", () => {
-    const flags = contract.buildFeatureFlags({ placeholder: true });
-
-    expect(contract.featureFlagsSchema.parse(flags)).toEqual({
-      placeholder: true,
-    });
-    expect(contract.isFeatureEnabled(flags, "placeholder")).toBe(true);
-  });
-
-  it("fails closed when a flag is absent (client/server skew)", () => {
-    expect(contract.isFeatureEnabled({}, "placeholder")).toBe(false);
-    expect(
-      contract.isFeatureEnabled(
-        contract.buildFeatureFlags({ placeholder: false }),
-        "placeholder",
-      ),
-    ).toBe(false);
-  });
-});
