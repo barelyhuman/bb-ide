@@ -483,3 +483,85 @@ export function cancelCommandInTransaction(
 
   return command;
 }
+
+export interface RequeueFetchedCommandsForSessionArgs {
+  sessionId: string;
+}
+
+export interface RequeueFetchedCommandsForSessionResult {
+  hostIds: string[];
+  requeued: number;
+}
+
+/**
+ * Return commands delivered to a now-dead session to the pending queue.
+ *
+ * On a daemon process restart the prior session's `fetched` commands would
+ * otherwise wait for their delivery lease to elapse (up to the 20min provision
+ * lease) before {@link sweepExpiredCommands} requeues them. This recovers them
+ * immediately so the restarted daemon re-fetches without the stall.
+ *
+ * Only safe to call when the prior session belongs to a daemon process that is
+ * provably gone (a new session-open with a different instanceId): a
+ * same-process socket reconnect may still report the original attempt, so
+ * requeuing then would risk duplicate execution.
+ *
+ * The abandoned attempt is marked `settled` (not `expired`) so the redelivery
+ * is a fresh attempt and does not consume a retry strike.
+ */
+export function requeueFetchedCommandsForSession(
+  db: DbConnection,
+  args: RequeueFetchedCommandsForSessionArgs,
+): RequeueFetchedCommandsForSessionResult {
+  const now = Date.now();
+  return db.transaction((tx) => {
+    const orphaned = tx
+      .select({
+        attemptId: hostDaemonCommandAttempts.id,
+        commandId: hostDaemonCommandAttempts.commandId,
+        hostId: hostDaemonCommands.hostId,
+      })
+      .from(hostDaemonCommandAttempts)
+      .innerJoin(
+        hostDaemonCommands,
+        eq(hostDaemonCommands.id, hostDaemonCommandAttempts.commandId),
+      )
+      .where(
+        and(
+          eq(hostDaemonCommandAttempts.sessionId, args.sessionId),
+          eq(hostDaemonCommandAttempts.status, "active"),
+          eq(hostDaemonCommands.state, "fetched"),
+        ),
+      )
+      .all();
+
+    if (orphaned.length === 0) {
+      return { hostIds: [], requeued: 0 };
+    }
+
+    tx.update(hostDaemonCommandAttempts)
+      .set({ status: "settled", settledAt: now })
+      .where(
+        inArray(
+          hostDaemonCommandAttempts.id,
+          orphaned.map((row) => row.attemptId),
+        ),
+      )
+      .run();
+
+    tx.update(hostDaemonCommands)
+      .set({ state: "pending", fetchedAt: null, sessionId: null })
+      .where(
+        inArray(
+          hostDaemonCommands.id,
+          orphaned.map((row) => row.commandId),
+        ),
+      )
+      .run();
+
+    return {
+      hostIds: [...new Set(orphaned.map((row) => row.hostId))],
+      requeued: orphaned.length,
+    };
+  });
+}

@@ -4,18 +4,22 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
   cancelCommand,
+  getCommand,
   getPendingEnvironmentCommand,
   hasPendingHostCommandForThread,
   fetchCommands,
   getActiveCommandAttemptForCommand,
   queueCommand,
   reportCommandResult,
+  requeueFetchedCommandsForSession,
 } from "../../src/data/commands.js";
 import {
   pruneCompletedDurableCommandRows,
   pruneCompletedReadOnlyCommandRows,
+  sweepExpiredCommands,
 } from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
+import { openSession } from "../../src/data/sessions.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -26,6 +30,120 @@ function setup() {
   });
   return { db, host };
 }
+
+function openTestSession(
+  db: ReturnType<typeof setup>["db"],
+  hostId: string,
+  instanceId: string,
+) {
+  return openSession(db, noopNotifier, {
+    hostId,
+    instanceId,
+    hostName: "test-host",
+    hostType: "persistent",
+    dataDir: "/tmp/test",
+    protocolVersion: 1,
+    heartbeatIntervalMs: 1_000,
+    leaseTimeoutMs: 60_000,
+  });
+}
+
+describe("requeueFetchedCommandsForSession", () => {
+  it("returns a dead session's fetched commands to the pending queue", () => {
+    const { db, host } = setup();
+    const session = openTestSession(db, host.id, "inst-dead");
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "environment.provision",
+      payload: "{}",
+    });
+    const [fetched] = fetchCommands(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: session.id,
+    });
+    expect(fetched?.state).toBe("fetched");
+
+    const result = requeueFetchedCommandsForSession(db, {
+      sessionId: session.id,
+    });
+
+    expect(result.requeued).toBe(1);
+    expect(result.hostIds).toEqual([host.id]);
+    const requeued = getCommand(db, command.id);
+    expect(requeued?.state).toBe("pending");
+    expect(requeued?.fetchedAt).toBeNull();
+    expect(requeued?.sessionId).toBeNull();
+    // The abandoned attempt was settled, so it is no longer active.
+    expect(getActiveCommandAttemptForCommand(db, command.id)).toBeNull();
+  });
+
+  it("does not consume a retry strike: a redelivered command can still expire-and-requeue once", () => {
+    const { db, host } = setup();
+    const dead = openTestSession(db, host.id, "inst-dead");
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "workspace.commit",
+      payload: "{}",
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: dead.id });
+    requeueFetchedCommandsForSession(db, { sessionId: dead.id });
+
+    // Redeliver under a fresh session, then force its delivery lease to expire.
+    const live = openTestSession(db, host.id, "inst-live");
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: live.id });
+    const swept = sweepExpiredCommands(
+      db,
+      noopNotifier,
+      Date.now() + 60_000 + 1_000,
+    );
+
+    // First expiry of the redelivered attempt => requeued, not terminalized.
+    // If the disconnect requeue had marked the attempt `expired` instead of
+    // `settled`, this attempt would count as a retry and be failed here.
+    expect(swept.requeued).toBe(1);
+    expect(swept.expiredCommands).toHaveLength(0);
+  });
+
+  it("only requeues commands fetched by the named session", () => {
+    const { db, host } = setup();
+    const sessionA = openTestSession(db, host.id, "inst-a");
+    const first = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "workspace.commit",
+      payload: "{}",
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: sessionA.id });
+
+    const sessionB = openTestSession(db, host.id, "inst-b");
+    const second = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      sessionId: null,
+      type: "workspace.commit",
+      payload: "{}",
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: sessionB.id });
+
+    const result = requeueFetchedCommandsForSession(db, {
+      sessionId: sessionA.id,
+    });
+
+    expect(result.requeued).toBe(1);
+    expect(getCommand(db, first.id)?.state).toBe("pending");
+    expect(getCommand(db, second.id)?.state).toBe("fetched");
+  });
+
+  it("is a no-op for a session with no fetched commands", () => {
+    const { db, host } = setup();
+    const session = openTestSession(db, host.id, "inst-empty");
+    const result = requeueFetchedCommandsForSession(db, {
+      sessionId: session.id,
+    });
+    expect(result).toEqual({ hostIds: [], requeued: 0 });
+  });
+});
 
 describe("commands", () => {
   it("assigns monotonic cursors per host", () => {

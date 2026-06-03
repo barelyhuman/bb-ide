@@ -4,6 +4,7 @@ import {
   getActiveSession,
   hostDaemonSessions,
   listHostThreadIds,
+  requeueFetchedCommandsForSession,
   type HostDaemonSessionRow,
   type SweepExpiredLeasesResult,
 } from "@bb/db";
@@ -72,6 +73,18 @@ export async function handleHostSessionOpened(
     deps.hub.closeDaemonSession(args.previousSession.id, "replaced");
 
     if (args.previousSession.instanceId !== args.openedSession.instanceId) {
+      // A different instanceId is a new daemon process: the prior process is
+      // gone and cannot report the commands it had fetched. Return them to the
+      // queue now so the restarted daemon re-fetches them, instead of waiting
+      // out the delivery lease (up to 20min for provision). Same-instance
+      // reconnects keep the lease as a safety window, since a blipped-but-alive
+      // daemon may still report the original attempt.
+      const requeued = requeueFetchedCommandsForSession(deps.db, {
+        sessionId: args.previousSession.id,
+      });
+      if (requeued.requeued > 0) {
+        deps.hub.notifyCommand(args.hostId);
+      }
       interruptPendingInteractionsForHostThreads(deps, {
         hostId: args.hostId,
         reason: DAEMON_RESTARTED_PENDING_INTERACTION_REASON,

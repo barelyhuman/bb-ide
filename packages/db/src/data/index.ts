@@ -329,6 +329,7 @@ export {
   queueCommandInTransaction,
   fetchCommands,
   reportCommandResult,
+  requeueFetchedCommandsForSession,
   settleCommandAttemptInTransaction,
 } from "./commands.js";
 export type {
@@ -343,6 +344,8 @@ export type {
   QueueCommandInput,
   HostDaemonCommandRow,
   ReportCommandResultInput,
+  RequeueFetchedCommandsForSessionArgs,
+  RequeueFetchedCommandsForSessionResult,
   SettleCommandAttemptInTransactionArgs,
 } from "./commands.js";
 
