@@ -334,11 +334,6 @@ interface FinalizeStoppedThreadTransactionDeps extends ThreadLifecycleTransactio
   pendingInteractions: AppDeps["pendingInteractions"];
 }
 
-interface HasQueuedThreadOperationCommandArgs {
-  commandId: string | null;
-  db: DbQueryConnection;
-}
-
 interface ApplyActiveTurnInterruptionArgs {
   activeTurnId: string;
   environmentId: string | null;
@@ -347,28 +342,19 @@ interface ApplyActiveTurnInterruptionArgs {
   threadId: string;
 }
 
-function hasQueuedThreadOperationCommandForDb(
-  args: HasQueuedThreadOperationCommandArgs,
+function hasQueuedThreadOperationCommand(
+  db: DbQueryConnection,
+  commandId: string | null,
 ): boolean {
-  if (!args.commandId) {
+  if (!commandId) {
     return false;
   }
 
-  const command = getCommand(args.db, args.commandId);
+  const command = getCommand(db, commandId);
   return (
     command !== null &&
     (command.state === "pending" || command.state === "fetched")
   );
-}
-
-function hasQueuedThreadOperationCommand(
-  deps: ThreadLifecycleReadDeps,
-  commandId: string | null,
-): boolean {
-  return hasQueuedThreadOperationCommandForDb({
-    db: deps.db,
-    commandId,
-  });
 }
 
 function getActiveThreadOperation(
@@ -449,28 +435,14 @@ function applyActiveTurnInterruptionInTransaction(
   });
 }
 
-function hasActiveThreadStartOperation(
+function hasActiveThreadOperation(
   deps: ThreadLifecycleReadDeps,
-  threadId: string,
+  args: {
+    kind: "start" | "stop";
+    threadId: string;
+  },
 ): boolean {
-  return (
-    getActiveThreadOperation(deps, {
-      threadId,
-      kind: "start",
-    }) !== null
-  );
-}
-
-function hasActiveThreadStopOperation(
-  deps: ThreadLifecycleReadDeps,
-  threadId: string,
-): boolean {
-  return (
-    getActiveThreadOperation(deps, {
-      threadId,
-      kind: "stop",
-    }) !== null
-  );
+  return getActiveThreadOperation(deps, args) !== null;
 }
 
 export function queueSettledArchivedThreadProviderArchiveCommand(
@@ -482,8 +454,8 @@ export function queueSettledArchivedThreadProviderArchiveCommand(
     return false;
   }
   if (
-    hasActiveThreadStartOperation(deps, thread.id) ||
-    hasActiveThreadStopOperation(deps, thread.id)
+    hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id }) ||
+    hasActiveThreadOperation(deps, { kind: "stop", threadId: thread.id })
   ) {
     return false;
   }
@@ -681,7 +653,7 @@ export function ensureThreadCanQueueStartRequest(
 ): void {
   if (
     isPreStartThreadStatus(thread.status) &&
-    hasActiveThreadStartOperation(deps, thread.id)
+    hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id })
   ) {
     throwThreadNotWritable(
       thread,
@@ -777,7 +749,7 @@ async function advanceActiveThreadStartIfPresent(
     return false;
   }
 
-  if (hasQueuedThreadOperationCommand(deps, operation.commandId)) {
+  if (hasQueuedThreadOperationCommand(deps.db, operation.commandId)) {
     return true;
   }
   if (operation.state !== "requested") {
@@ -802,7 +774,7 @@ function hasQueuedActiveThreadStart(
   return (
     operation !== null &&
     isActiveLifecycleOperationState(operation.state) &&
-    hasQueuedThreadOperationCommand(deps, operation.commandId)
+    hasQueuedThreadOperationCommand(deps.db, operation.commandId)
   );
 }
 
@@ -824,10 +796,7 @@ function requestThreadStartHandoff(
       if (
         existingStartOperation &&
         isActiveLifecycleOperationState(existingStartOperation.state) &&
-        hasQueuedThreadOperationCommandForDb({
-          db: tx,
-          commandId: existingStartOperation.commandId,
-        })
+        hasQueuedThreadOperationCommand(tx, existingStartOperation.commandId)
       ) {
         return {
           completedProvisionSequence: null,
@@ -933,7 +902,7 @@ export async function advanceThreadStart(
     return null;
   }
 
-  if (hasQueuedThreadOperationCommand(deps, operation.commandId)) {
+  if (hasQueuedThreadOperationCommand(deps.db, operation.commandId)) {
     return operation.commandId;
   }
 
@@ -1010,7 +979,9 @@ export function requestThreadStop(
     existingOperation &&
     isActiveLifecycleOperationState(existingOperation.state)
   ) {
-    if (hasQueuedThreadOperationCommand(deps, existingOperation.commandId)) {
+    if (
+      hasQueuedThreadOperationCommand(deps.db, existingOperation.commandId)
+    ) {
       return;
     }
     advanceThreadStop(deps, {
@@ -1050,7 +1021,7 @@ export function requestThreadStopIfNeeded(
 ): void {
   if (
     thread.status !== "active" &&
-    !hasActiveThreadStartOperation(deps, thread.id)
+    !hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id })
   ) {
     return;
   }
@@ -1223,7 +1194,7 @@ function advanceThreadStop(
     return null;
   }
 
-  if (hasQueuedThreadOperationCommand(deps, operation.commandId)) {
+  if (hasQueuedThreadOperationCommand(deps.db, operation.commandId)) {
     return operation.commandId;
   }
 
