@@ -213,7 +213,7 @@ const LAUNCHER_TILE_ICON_CLASS_DASHED =
 // File-type identity comes from the glyph alone so recent rows stay as compact
 // as file-search results without per-type row coloring.
 const RECENT_CHIP_ICON_NAME = {
-  md: "FileText",
+  md: "File",
   html: "AppWindow",
   report: "ChartColumn",
   code: "Code",
