@@ -87,14 +87,6 @@ export type ThreadProvisioningDeps = LifecycleCoordinationDeps;
 type ThreadProvisionOperationWriteConnection = DbConnection | DbTransaction;
 type ThreadProvisionWriteDeps = Pick<AppDeps, "db" | "hub">;
 type ActiveDirectEnvironmentOperationKind = "provision" | "reprovision";
-type DirectManagedIntent = Extract<
-  ThreadProvisionEnvironmentIntent,
-  { type: "direct-managed" }
->;
-type DirectPersonalIntent = Extract<
-  ThreadProvisionEnvironmentIntent,
-  { type: "direct-personal" }
->;
 type DirectUnmanagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
   { type: "direct-unmanaged" }
@@ -839,29 +831,27 @@ async function resolveEnvironmentCreationPlan(
         thread: args.thread,
       });
     case "direct-managed": {
-      const intent: DirectManagedIntent = args.intent;
       const hostSession = await ensureHostSessionReadyForWork(deps, {
-        hostId: intent.hostId,
+        hostId: args.intent.hostId,
       });
       return buildManagedEnvironmentPlan({
         dataDir: hostSession.dataDir,
-        hostId: intent.hostId,
-        sourcePath: intent.sourcePath,
-        baseBranch: intent.baseBranch,
+        hostId: args.intent.hostId,
+        sourcePath: args.intent.sourcePath,
+        baseBranch: args.intent.baseBranch,
         thread: args.thread,
-        workspaceProvisionType: intent.workspaceProvisionType,
+        workspaceProvisionType: args.intent.workspaceProvisionType,
       });
     }
     case "direct-personal": {
-      const intent: DirectPersonalIntent = args.intent;
       const hostSession = await ensureHostSessionReadyForWork(deps, {
-        hostId: intent.hostId,
+        hostId: args.intent.hostId,
       });
       return buildPersonalEnvironmentPlan({
         dataDir: hostSession.dataDir,
-        hostId: intent.hostId,
+        hostId: args.intent.hostId,
         thread: args.thread,
-        workspaceProvisionType: intent.workspaceProvisionType,
+        workspaceProvisionType: args.intent.workspaceProvisionType,
       });
     }
   }
@@ -972,6 +962,32 @@ function queueCheckoutUnmanagedEnvironment(
   return result;
 }
 
+function attachActiveProvisioningEnvironment(
+  deps: ThreadProvisionWriteDeps,
+  args: EnvironmentPayloadThreadArgs,
+): ThreadProvisioningResult {
+  if (!hasActiveEnvironmentProvisionOperation(deps, args.environment)) {
+    failThreadProvisioning(deps, {
+      thread: args.thread,
+      environmentId: args.environment.id,
+      detail: "Environment is provisioning without an active provision operation",
+    });
+    return {
+      context: args.context,
+      environment: args.environment,
+    };
+  }
+
+  return {
+    context: appendProvisioningStartedEvent(deps, {
+      context: args.context,
+      environment: args.environment,
+      thread: args.thread,
+    }),
+    environment: args.environment,
+  };
+}
+
 function ensureCheckoutUnmanagedEnvironmentRequested(
   deps: ThreadProvisionWriteDeps,
   args: CheckoutUnmanagedEnvironmentArgs,
@@ -1015,23 +1031,11 @@ function ensureCheckoutUnmanagedEnvironmentRequested(
   });
 
   if (environment.status === "provisioning") {
-    if (!hasActiveEnvironmentProvisionOperation(deps, environment)) {
-      failThreadProvisioning(deps, {
-        thread: args.thread,
-        environmentId: environment.id,
-        detail:
-          "Environment is provisioning without an active provision operation",
-      });
-      return { context, environment };
-    }
-    return {
-      context: appendProvisioningStartedEvent(deps, {
-        context,
-        environment,
-        thread: args.thread,
-      }),
+    return attachActiveProvisioningEnvironment(deps, {
+      context,
       environment,
-    };
+      thread: args.thread,
+    });
   }
 
   const startedContext = provisioningStartedContext(context);
@@ -1097,22 +1101,13 @@ async function ensureEnvironmentRequested(
     if (!environment) {
       throw new ApiError(404, "environment_not_found", "Environment not found");
     }
-    let context = attachThreadToEnvironment(deps, {
+    const context = attachThreadToEnvironment(deps, {
       context: args.context,
       environment,
       thread: args.thread,
     });
     if (environment.status === "provisioning") {
-      if (!hasActiveEnvironmentProvisionOperation(deps, environment)) {
-        failThreadProvisioning(deps, {
-          thread: args.thread,
-          environmentId: environment.id,
-          detail:
-            "Environment is provisioning without an active provision operation",
-        });
-        return { context, environment };
-      }
-      context = appendProvisioningStartedEvent(deps, {
+      return attachActiveProvisioningEnvironment(deps, {
         context,
         environment,
         thread: args.thread,
