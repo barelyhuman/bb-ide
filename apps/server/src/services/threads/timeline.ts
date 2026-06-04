@@ -491,14 +491,7 @@ function ensureTimelineWindowTurnStartedRows(
     return [...args.rows];
   }
 
-  const rowsById = new Map<string, StoredEventRow>();
-  for (const row of [...turnStartedRows, ...args.rows]) {
-    rowsById.set(row.id, row);
-  }
-
-  return [...rowsById.values()].sort(
-    (left, right) => left.sequence - right.sequence,
-  );
+  return mergeStoredEventRowsById([...turnStartedRows, ...args.rows]);
 }
 
 interface ResolveTimelineSegmentWindowArgs {
