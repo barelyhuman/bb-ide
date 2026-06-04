@@ -23,7 +23,7 @@ import type { AgentRuntimeOptions, AgentRuntimeSkillRoot } from "./types.js";
 export interface RuntimeProviderProcess {
   adapter: ProviderAdapter;
   child: ChildProcess;
-  expectedShutdown: boolean;
+  expectedShutdownExpectations: number;
   identity: RuntimeProviderIdentityState;
   interactiveRequestScope: string;
   pending: Map<string | number, PendingJsonRpcRequest>;
@@ -65,6 +65,14 @@ export interface ShutdownRuntimeProviderArgs {
   timeoutMs?: number;
 }
 
+export interface ProviderShutdownExpectedArgs {
+  providerId: string;
+}
+
+export interface ClearProviderShutdownExpectedArgs {
+  providerId: string;
+}
+
 interface CleanupFailedStartupArgs {
   providerId: string;
   providerProcess: RuntimeProviderProcess;
@@ -76,9 +84,31 @@ interface TerminateProviderProcessArgs {
   timeoutMs?: number;
 }
 
+interface ProviderProcessExitStatus {
+  code: number | null;
+  signal: string | null;
+}
+
+interface ProviderProcessExitedErrorArgs {
+  providerId: string;
+  status: ProviderProcessExitStatus;
+  stderrChunks: readonly string[];
+}
+
 function createAdapterTurnIdPrefix(): string {
   const adapterId = randomUUID().replaceAll("-", "").slice(0, 16);
   return `turn_${adapterId}_`;
+}
+
+export class ProviderProcessExitedError extends Error {
+  constructor(args: ProviderProcessExitedErrorArgs) {
+    const stderr = formatProviderStderr(args.stderrChunks);
+    super(
+      `Provider "${args.providerId}" exited unexpectedly (${formatProviderProcessExitStatus(args.status)})` +
+        (stderr ? `\nstderr: ${stderr}` : ""),
+    );
+    this.name = "ProviderProcessExitedError";
+  }
 }
 
 export class RuntimeProviderProcessManager {
@@ -105,10 +135,10 @@ export class RuntimeProviderProcessManager {
       const providerProcess = this.spawnProvider(args.providerId, adapter);
 
       try {
-        if (providerProcess.child.exitCode !== null) {
+        if (hasChildProcessExited(providerProcess.child)) {
           const stderr = providerProcess.stderrChunks.join("\n").slice(0, 500);
           throw new Error(
-            `Provider "${args.providerId}" exited during startup with code ${providerProcess.child.exitCode}` +
+            `Provider "${args.providerId}" exited during startup with ${formatChildProcessExitStatus(providerProcess.child)}` +
               (stderr ? `\nstderr: ${stderr}` : ""),
           );
         }
@@ -169,10 +199,10 @@ export class RuntimeProviderProcessManager {
     if (!providerProcess) {
       throw new Error(`Provider "${providerId}" is not running`);
     }
-    if (providerProcess.child.exitCode !== null) {
+    if (hasChildProcessExited(providerProcess.child)) {
       this.processes.delete(providerId);
       throw new Error(
-        `Provider "${providerId}" has exited (code ${providerProcess.child.exitCode})`,
+        `Provider "${providerId}" has exited (${formatChildProcessExitStatus(providerProcess.child)})`,
       );
     }
     return providerProcess;
@@ -184,15 +214,34 @@ export class RuntimeProviderProcessManager {
 
   async shutdownProvider(args: ShutdownRuntimeProviderArgs): Promise<void> {
     const providerProcess = this.processes.get(args.providerId);
-    if (!providerProcess || providerProcess.child.exitCode !== null) {
+    if (!providerProcess || hasChildProcessExited(providerProcess.child)) {
       return;
     }
 
-    providerProcess.expectedShutdown = true;
+    providerProcess.expectedShutdownExpectations += 1;
     await this.terminateProviderProcess({
       providerProcess,
       timeoutMs: args.timeoutMs,
     });
+  }
+
+  markProviderShutdownExpected(args: ProviderShutdownExpectedArgs): boolean {
+    const providerProcess = this.processes.get(args.providerId);
+    if (!providerProcess || hasChildProcessExited(providerProcess.child)) {
+      return false;
+    }
+    providerProcess.expectedShutdownExpectations += 1;
+    return true;
+  }
+
+  clearProviderShutdownExpected(args: ClearProviderShutdownExpectedArgs): void {
+    const providerProcess = this.processes.get(args.providerId);
+    if (!providerProcess) {
+      return;
+    }
+    if (providerProcess.expectedShutdownExpectations > 0) {
+      providerProcess.expectedShutdownExpectations -= 1;
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -263,7 +312,7 @@ export class RuntimeProviderProcessManager {
     const providerProcess: RuntimeProviderProcess = {
       child,
       adapter,
-      expectedShutdown: false,
+      expectedShutdownExpectations: 0,
       interactiveRequestScope: randomUUID(),
       identity: this.args.createProviderIdentityState(providerId),
       pending: new Map(),
@@ -324,7 +373,7 @@ export class RuntimeProviderProcessManager {
     }
 
     this.processes.delete(args.providerId);
-    args.providerProcess.expectedShutdown = true;
+    args.providerProcess.expectedShutdownExpectations += 1;
     for (const [, pending] of args.providerProcess.pending) {
       pending.reject(args.startupError);
     }
@@ -339,14 +388,14 @@ export class RuntimeProviderProcessManager {
   private async terminateProviderProcess(
     args: TerminateProviderProcessArgs,
   ): Promise<void> {
-    if (args.providerProcess.child.exitCode !== null) {
+    if (hasChildProcessExited(args.providerProcess.child)) {
       return;
     }
 
     await new Promise<void>((resolve) => {
       const timeoutMs = args.timeoutMs ?? 5000;
       const softTimer = setTimeout(() => {
-        if (args.providerProcess.child.exitCode === null) {
+        if (!hasChildProcessExited(args.providerProcess.child)) {
           args.providerProcess.child.kill("SIGKILL");
         }
       }, timeoutMs);
@@ -407,12 +456,12 @@ export class RuntimeProviderProcessManager {
       this.args.onProviderThreadDetached(threadId);
     }
     for (const [, pending] of args.providerProcess.pending) {
-      const stderr = formatProviderStderr(args.providerProcess.stderrChunks);
       pending.reject(
-        new Error(
-          `Provider "${args.providerId}" exited unexpectedly` +
-            (stderr ? `\nstderr: ${stderr}` : ""),
-        ),
+        new ProviderProcessExitedError({
+          providerId: args.providerId,
+          status: { code: args.code, signal: args.signal },
+          stderrChunks: args.providerProcess.stderrChunks,
+        }),
       );
     }
     args.providerProcess.pending.clear();
@@ -445,6 +494,37 @@ export class RuntimeProviderProcessManager {
   }
 }
 
+/**
+ * Whether a child process has terminated, covering both normal exits
+ * (`exitCode`) and signal terminations (`signalCode`). Node reports a
+ * signal-killed child with a null `exitCode` and a set `signalCode`.
+ */
+export function hasChildProcessExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+function getChildProcessExitStatus(
+  child: ChildProcess,
+): ProviderProcessExitStatus {
+  return { code: child.exitCode, signal: child.signalCode };
+}
+
+function formatChildProcessExitStatus(child: ChildProcess): string {
+  return formatProviderProcessExitStatus(getChildProcessExitStatus(child));
+}
+
+function formatProviderProcessExitStatus(
+  status: ProviderProcessExitStatus,
+): string {
+  if (status.code !== null) {
+    return `code ${status.code}`;
+  }
+  if (status.signal !== null) {
+    return `signal ${status.signal}`;
+  }
+  return "unknown status";
+}
+
 function formatProviderStderr(stderrChunks: readonly string[]): string | null {
   const stderr = stderrChunks.join("\n").trim();
   if (stderr.length === 0) {
@@ -456,8 +536,10 @@ function formatProviderStderr(stderrChunks: readonly string[]): string | null {
 function consumeExpectedProviderProcessShutdown(
   providerProcess: RuntimeProviderProcess,
 ): boolean {
-  const expected = providerProcess.expectedShutdown;
-  providerProcess.expectedShutdown = false;
+  // One process exit consumes all outstanding expected-shutdown requests,
+  // including overlapping restart-provider stops.
+  const expected = providerProcess.expectedShutdownExpectations > 0;
+  providerProcess.expectedShutdownExpectations = 0;
   return expected;
 }
 

@@ -32,6 +32,7 @@ import {
   type RuntimeProviderRequestKind,
 } from "./runtime-provider-requests.js";
 import {
+  ProviderProcessExitedError,
   RuntimeProviderProcessManager,
   type RuntimeProviderProcess,
 } from "./runtime-provider-process.js";
@@ -1021,23 +1022,42 @@ function createAgentRuntimeInternal(
         turnReplayFilter.clearThread(threadId);
         return;
       }
-      await sendJsonRpcRequest({
-        child: proc.child,
-        message: cmd,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
-        resultSchema: ignoredJsonRpcResultSchema,
-      });
-      emitAcceptedCommandEvents({
-        command: adapterCommand,
-        proc,
-        providerId: pid,
-        rawMethod: cmd.method,
-        sourceThreadId: threadId,
-      });
+
+      // A restart-provider stop expects the provider process to exit during or
+      // after the interrupt. Mark that exit expected before sending the request,
+      // then tolerate only request rejection caused by that process exit.
+      const restartsProvider = cmd.processEffect === "restart-provider";
+      const markedShutdownExpected = restartsProvider
+        ? providerProcesses.markProviderShutdownExpected({ providerId: pid })
+        : false;
+      try {
+        await sendJsonRpcRequest({
+          child: proc.child,
+          message: cmd,
+          pending: proc.pending,
+          getNextId: () => nextRequestId++,
+          resultSchema: ignoredJsonRpcResultSchema,
+        });
+        emitAcceptedCommandEvents({
+          command: adapterCommand,
+          proc,
+          providerId: pid,
+          rawMethod: cmd.method,
+          sourceThreadId: threadId,
+        });
+      } catch (error) {
+        if (!(restartsProvider && error instanceof ProviderProcessExitedError)) {
+          if (markedShutdownExpected) {
+            providerProcesses.clearProviderShutdownExpected({
+              providerId: pid,
+            });
+          }
+          throw error;
+        }
+      }
       turnState.clearThread(threadId);
       turnReplayFilter.clearThread(threadId);
-      if (cmd.processEffect === "restart-provider") {
+      if (restartsProvider) {
         await providerProcesses.shutdownProvider({ providerId: pid });
       }
     },
