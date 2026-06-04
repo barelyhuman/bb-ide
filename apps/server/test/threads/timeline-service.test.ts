@@ -14,7 +14,6 @@ import {
 import {
   buildThreadTimeline as buildThreadTimelineWithResolvedMode,
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
-  profileThreadTimeline,
   resolveThreadTimelineServiceViewMode,
   type ThreadTimelinePageRequest,
 } from "../../src/services/threads/timeline.js";
@@ -823,26 +822,6 @@ describe("buildThreadTimeline", () => {
     expect(pagedRows.map((row) => row.id)).toEqual(
       fullTimeline.rows.map((row) => row.id),
     );
-
-    const fullProfile = profileThreadTimeline(harness.db, thread, {
-      isDevelopment: true,
-      page: {
-        kind: "latest",
-        segmentLimit: UNPAGINATED_TIMELINE_SEGMENT_LIMIT,
-      },
-      timelineViewMode: "manager-conversation",
-    }).profile;
-    const latestProfile = profileThreadTimeline(harness.db, thread, {
-      isDevelopment: true,
-      page: {
-        kind: "latest",
-        segmentLimit: 2,
-      },
-      timelineViewMode: "manager-conversation",
-    }).profile;
-
-    expect(latestProfile.selectionStrategy).toBe("manager-conversation-window");
-    expect(latestProfile.eventRowCount).toBeLessThan(fullProfile.eventRowCount);
   });
 
   it("uses the same manager conversation range selector without anchors", async () => {
@@ -873,18 +852,16 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const profile = profileThreadTimeline(harness.db, thread, {
+    const timeline = buildManagerConversationTimeline(harness.db, thread, {
       isDevelopment: true,
       page: {
         kind: "latest",
         segmentLimit: 20,
       },
-      timelineViewMode: "manager-conversation",
-    }).profile;
+    });
 
-    expect(profile.selectionStrategy).toBe("manager-conversation-window");
-    expect(profile.eventRowCount).toBe(1);
-    expect(profile.responseRowCount).toBeGreaterThan(0);
+    expect(timeline.rows.length).toBeGreaterThan(0);
+    expect(timeline.timelinePage.kind).toBe("latest");
   });
 
   it("keeps accepted in-turn steers inside the primary message segment", async () => {

@@ -106,10 +106,12 @@ interface ProviderUserMessageArgs extends ProviderTurnEventOptions {
 interface AssistantDeltaArgs extends ProviderTurnEventOptions {
   delta: string;
   itemId?: string;
+  parentToolCallId?: string;
 }
 
 interface AssistantCompletedArgs extends ProviderTurnEventOptions {
   itemId?: string;
+  parentToolCallId?: string;
   text: string;
 }
 
@@ -521,6 +523,9 @@ export function createTimelineEventFactory(
           ...providerFields(args),
           itemId: args.itemId ?? `assistant-${base.seq}`,
           delta: args.delta,
+          ...(args.parentToolCallId
+            ? { parentToolCallId: args.parentToolCallId }
+            : {}),
         },
       };
     },
@@ -535,6 +540,9 @@ export function createTimelineEventFactory(
             type: "agentMessage",
             id: args.itemId ?? `assistant-${base.seq}`,
             text: args.text,
+            ...(args.parentToolCallId
+              ? { parentToolCallId: args.parentToolCallId }
+              : {}),
           },
         },
       };

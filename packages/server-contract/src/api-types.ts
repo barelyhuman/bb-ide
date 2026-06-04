@@ -38,6 +38,8 @@ import {
   appDataPathSchema,
   applicationIdSchema,
   callerExecutionInputSourceSchema,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
+  FILE_LIST_QUERY_MAX_LENGTH,
 } from "@bb/domain";
 import { workspaceResolutionFailureSchema } from "@bb/host-daemon-contract";
 import type {
@@ -50,11 +52,16 @@ import type {
 import { apiErrorSchema } from "./errors.js";
 import { timelineRowSchema } from "./thread-timeline.js";
 
+export {
+  BRANCH_LIST_LIMIT_MAX,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
+  FILE_LIST_LIMIT_MAX,
+  FILE_LIST_QUERY_MAX_LENGTH,
+} from "@bb/domain";
+
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 
 export const AUTOMATION_NAME_MAX_LENGTH = 200;
-export const BRANCH_LIST_QUERY_MAX_LENGTH = 256;
-export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const SCHEDULE_CRON_MAX_LENGTH = 100;
 export const SCHEDULE_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_TIMEZONE_MAX_LENGTH = 100;

@@ -155,10 +155,8 @@ Phase 2 ownership decisions from this slice:
 - Route-local `updateThread` remains metadata-only; the DB input does not carry
   lifecycle fields such as `status` or `stopRequestedAt`.
 
-Needs later contract cleanup:
-
-- Public route imports from `@bb/host-daemon-contract`, especially file-list and
-  branch-list limits in route modules.
+- Public route modules no longer import `@bb/host-daemon-contract`. Remaining
+  daemon contract usage is in internal and service modules.
 - Optional execution/default fields that are still resolved below the route
   boundary.
 
@@ -237,6 +235,13 @@ Completed work:
 - Made managed-thread notification argument types private.
 - Simplified voice transcription availability so the model config is parsed
   once and provider availability is checked directly.
+- Removed the test-only timeline profiling path from the production timeline
+  builder, including its public `profileThreadTimeline` export, accumulator
+  types, timing wrappers, and selection-strategy plumbing.
+- Deleted the server-only summary compaction wrapper and moved the compaction
+  assertions beside the `@bb/thread-view` compaction implementation.
+- Deleted no-caller exports and type aliases in DB migration history, domain
+  pending interactions, host daemon session contracts, and thread-view helpers.
 
 ## Phase 2: Collapse Lifecycle Mutation Paths
 
@@ -391,6 +396,8 @@ Validation:
 **Goal:** Delete implicit defaults and compatibility paths that make behavior
 hard to reason about.
 
+Status: in progress.
+
 Work:
 
 - Audit optional and nullable fields in server contracts, daemon contracts,
@@ -414,6 +421,32 @@ Validation:
 
 - `pnpm exec turbo run typecheck --filter=@bb/server --filter=@bb/server-contract --filter=@bb/host-daemon-contract`
 - `pnpm exec turbo run test --filter=@bb/server --filter=@bb/server-contract --filter=@bb/host-daemon-contract`
+
+Completed work:
+
+- Moved file-list and branch-list query/limit caps into `@bb/domain` and
+  re-exported them through `@bb/server-contract` and
+  `@bb/host-daemon-contract`.
+- Updated public route limit parsing to import caps from `@bb/server-contract`
+  instead of `@bb/host-daemon-contract`.
+- Removed the remaining public route imports from `@bb/host-daemon-contract` by
+  letting host-file routes rely on RPC command inference and moving workspace
+  status/diff result mapping into a server environment service.
+- Collapsed duplicate file-list and bounded positive limit parsing in project,
+  thread data, branch-list, file-list, and prompt-history routes.
+
+Completed validation on 2026-06-03:
+
+- `pnpm exec turbo run typecheck --filter=@bb/server --filter=@bb/db --filter=@bb/domain --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/thread-view`
+- `pnpm exec turbo run test --filter=@bb/thread-view --filter=@bb/db --filter=@bb/domain --filter=@bb/server-contract --filter=@bb/host-daemon-contract --force > /tmp/bb-shared-cleanup-test.txt 2>&1`
+  passed: thread-view 16 files / 283 tests, DB 29 files / 307 tests, domain 15
+  files / 67 tests, host-daemon-contract 2 files / 35 tests, server-contract 1
+  file / 18 tests.
+- `pnpm exec turbo run test --filter=@bb/server --force > /tmp/bb-server-test.txt 2>&1`
+  passed: 91 files, 897 tests.
+- `pnpm exec turbo run test --filter=@bb/integration-tests --force > /tmp/bb-integration-test.txt 2>&1`
+  passed: 21 files, 49 tests.
+- `git diff --check`
 
 ## Phase 6: Add Only Small Confidence Tools
 

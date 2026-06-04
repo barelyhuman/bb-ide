@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { HostDaemonOnlineRpcCommand } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import mimeTypes from "mime-types";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -12,11 +11,6 @@ import {
   remapDaemonFileRouteError,
 } from "../services/hosts/daemon-file-response.js";
 import { requirePublicThreadEnvironment } from "../services/lib/entity-lookup.js";
-
-type HostReadFileCommand = Extract<
-  HostDaemonOnlineRpcCommand,
-  { type: "host.read_file" }
->;
 
 const FILES_RAW_PATH_QUERY_KEY = "path";
 const HTML_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
@@ -105,16 +99,14 @@ async function serveRawFilesystemHtmlFile(
   const filePath = parseRawFilesystemPath(rawPath);
   assertHtmlPreviewPath(filePath);
   const { environment } = requirePublicThreadEnvironment(deps.db, threadId);
-  const command: HostReadFileCommand = {
-    type: "host.read_file",
-    path: filePath,
-  };
-
   try {
     const result = await callHostRetryableOnlineRpc(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
-      command,
+      command: {
+        type: "host.read_file",
+        path: filePath,
+      },
     });
     return createRawFilesystemHtmlPreviewResponse(result);
   } catch (error) {

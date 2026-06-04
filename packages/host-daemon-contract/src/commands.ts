@@ -18,6 +18,10 @@ import {
   gitBranchNameSchema,
   jsonObjectSchema,
   applicationIdSchema,
+  BRANCH_LIST_LIMIT_MAX,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
+  FILE_LIST_LIMIT_MAX,
+  FILE_LIST_QUERY_MAX_LENGTH,
 } from "@bb/domain";
 import {
   replayCaptureDaemonListResponseSchema,
@@ -27,10 +31,12 @@ import { z } from "zod";
 
 export const HOST_DAEMON_PROTOCOL_VERSION = 30 as const;
 
-export const FILE_LIST_QUERY_MAX_LENGTH = 256;
-export const FILE_LIST_LIMIT_MAX = 10_000;
-export const BRANCH_LIST_QUERY_MAX_LENGTH = 256;
-export const BRANCH_LIST_LIMIT_MAX = 1_000;
+export {
+  BRANCH_LIST_LIMIT_MAX,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
+  FILE_LIST_LIMIT_MAX,
+  FILE_LIST_QUERY_MAX_LENGTH,
+} from "@bb/domain";
 const INJECTED_SKILL_NAME_PATTERN =
   /^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 
@@ -240,11 +246,13 @@ export const threadArchiveCommandSchema =
 // it in the same per-environment write lane as thread.archive; otherwise a
 // slower archive can land after a later unarchive and leave the provider
 // session archived against the user's intent.
-export const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("thread.unarchive"),
-  providerId: z.string().min(1),
-  providerThreadId: z.string().min(1),
-});
+export const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema.extend(
+  {
+    type: z.literal("thread.unarchive"),
+    providerId: z.string().min(1),
+    providerThreadId: z.string().min(1),
+  },
+);
 
 export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),
@@ -940,7 +948,10 @@ export const developmentReplayResultSchemaByOperation = {
   "capture-get": replayCaptureManifestSchema,
   "capture-delete": emptyReplayResultSchema,
   run: emptyReplayResultSchema,
-} as const satisfies Record<DevelopmentReplayCommand["operation"], z.ZodTypeAny>;
+} as const satisfies Record<
+  DevelopmentReplayCommand["operation"],
+  z.ZodTypeAny
+>;
 
 export type DevelopmentReplayResultByOperation = {
   [K in keyof typeof developmentReplayResultSchemaByOperation]: z.infer<
@@ -998,8 +1009,8 @@ export type HostDaemonOnlineRpcResultForCommand<
     : never;
 
 export type HostDaemonRetryableOnlineRpcResult<
-  TType extends
-    HostDaemonRetryableOnlineRpcCommandType = HostDaemonRetryableOnlineRpcCommandType,
+  TType extends HostDaemonRetryableOnlineRpcCommandType =
+    HostDaemonRetryableOnlineRpcCommandType,
 > = HostDaemonOnlineRpcResultByType[TType];
 
 export function parseHostDaemonOnlineRpcResultForCommand<
@@ -1070,7 +1081,7 @@ type HostDaemonUnknownCommandErrorResultReport =
     ok: false;
     errorCode: string;
     errorMessage: string;
-};
+  };
 type HostDaemonCommandErrorResultReport =
   | HostDaemonKnownCommandErrorResultReportByType[HostDaemonDurableCommandType]
   | HostDaemonUnknownCommandErrorResultReport;

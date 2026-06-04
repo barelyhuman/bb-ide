@@ -41,3 +41,27 @@ export function parseOptionalInteger(
   }
   return parsed;
 }
+
+export interface ParseBoundedPositiveOptionalIntegerArgs {
+  defaultValue: number;
+  max: number;
+  name: string;
+  value: string | undefined;
+}
+
+export function parseBoundedPositiveOptionalInteger(
+  args: ParseBoundedPositiveOptionalIntegerArgs,
+): number {
+  const parsed = Math.min(
+    parseOptionalInteger(args.value, args.name) ?? args.defaultValue,
+    args.max,
+  );
+  if (parsed <= 0) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `${args.name} must be a positive integer`,
+    );
+  }
+  return parsed;
+}

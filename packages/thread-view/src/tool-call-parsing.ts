@@ -660,13 +660,6 @@ function classifyShellSegment(
   }
 }
 
-export function hasShellWriteShape(command: string): boolean {
-  const segments = splitShellCommandSegments(command);
-  return segments.some(
-    (segment) => classifyShellSegment(segment, command).kind === "write",
-  );
-}
-
 export function parseShellCommandIntents(
   command: string | undefined,
 ): EventProjectionToolParsedIntent[] {
@@ -701,21 +694,4 @@ export function formatToolCallCommand(
     })
     .join(", ");
   return `${toolName} { ${compact} }`;
-}
-
-export function isExploringIntent(
-  intent: EventProjectionToolParsedIntent,
-): boolean {
-  return (
-    intent.type === "read" ||
-    intent.type === "list_files" ||
-    intent.type === "search"
-  );
-}
-
-export function isExploringCall(call: {
-  parsedIntents: EventProjectionToolParsedIntent[];
-}): boolean {
-  if (call.parsedIntents.length === 0) return false;
-  return call.parsedIntents.every((intent) => isExploringIntent(intent));
 }

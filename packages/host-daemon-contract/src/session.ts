@@ -293,14 +293,6 @@ export type HostDaemonAppDataResyncRequest = z.infer<
   typeof hostDaemonAppDataResyncRequestSchema
 >;
 
-export const hostDaemonHeartbeatPayloadSchema = z.object({
-  bufferDepth: z.number().int().nonnegative(),
-  lastCommandCursor: z.number().int().nonnegative().nullable(),
-});
-export type HostDaemonHeartbeatPayload = z.infer<
-  typeof hostDaemonHeartbeatPayloadSchema
->;
-
 export const hostDaemonSessionCloseReasonSchema = z.enum([
   "replaced",
   "expired",

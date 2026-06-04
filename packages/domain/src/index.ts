@@ -42,6 +42,13 @@ export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
 export type { FeatureFlags } from "./feature-flags.js";
 
 export {
+  BRANCH_LIST_LIMIT_MAX,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
+  FILE_LIST_LIMIT_MAX,
+  FILE_LIST_QUERY_MAX_LENGTH,
+} from "./host-list-limits.js";
+
+export {
   gitBranchNameSchema,
   gitBranchRefClassificationSchema,
   gitCheckoutRefSchema,

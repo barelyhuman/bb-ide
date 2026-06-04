@@ -119,9 +119,6 @@ export type PendingInteractionApprovalDecision = z.infer<
 >;
 
 export const pendingInteractionFileChangeWriteScopeSchema = z.string().min(1);
-export type PendingInteractionFileChangeWriteScope = z.infer<
-  typeof pendingInteractionFileChangeWriteScopeSchema
->;
 
 export const pendingInteractionCommandApprovalSubjectSchema = z.object({
   kind: z.literal("command"),
@@ -268,8 +265,7 @@ export const pendingInteractionUserQuestionQuestionSchema = z
     });
   })
   .refine(
-    (question) =>
-      question.allowFreeText || (question.options?.length ?? 0) > 0,
+    (question) => question.allowFreeText || (question.options?.length ?? 0) > 0,
     {
       message:
         "User questions must allow free text or provide at least one option",
@@ -355,16 +351,15 @@ export type ApprovalPendingInteractionResolution = z.infer<
   typeof approvalPendingInteractionResolutionSchema
 >;
 
-export const pendingInteractionUserAnswerSchema = z
-  .object({
-    selected: z
-      .array(z.string().min(1))
-      .max(
-        USER_QUESTION_MAX_SELECTED,
-        `User question selected choices cannot exceed ${USER_QUESTION_MAX_SELECTED}`,
-      ),
-    freeText: pendingInteractionUserQuestionFreeTextSchema.optional(),
-  });
+export const pendingInteractionUserAnswerSchema = z.object({
+  selected: z
+    .array(z.string().min(1))
+    .max(
+      USER_QUESTION_MAX_SELECTED,
+      `User question selected choices cannot exceed ${USER_QUESTION_MAX_SELECTED}`,
+    ),
+  freeText: pendingInteractionUserQuestionFreeTextSchema.optional(),
+});
 export type PendingInteractionUserAnswer = z.infer<
   typeof pendingInteractionUserAnswerSchema
 >;

@@ -16,6 +16,7 @@ import {
 } from "@bb/db";
 import {
   buildThreadTimelineFromEvents,
+  compactThreadTimelineSummaryEvents,
   EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   type ThreadEventWithMeta,
@@ -24,7 +25,6 @@ import { replayFixtures } from "@bb/agent-fixtures";
 import { buildThreadEvent } from "@bb/domain";
 import {
   buildThreadTimeline,
-  compactSummaryStoredEventRows,
   toThreadEventWithMeta,
 } from "../../src/services/threads/timeline.js";
 
@@ -44,8 +44,8 @@ export interface TimelineBenchmarkScenario {
   buildAndSerializeSummary: () => string;
   loadSummaryStoredRows: () => StoredEventRow[];
   loadContextWindowUsageRows: () => StoredEventRow[];
-  compactSummaryStoredRows: () => readonly StoredEventRow[];
-  decodeSummaryEvents: () => ThreadEventWithMeta[];
+  compactSummaryEvents: () => ThreadEventWithMeta[];
+  decodeStoredEvents: () => ThreadEventWithMeta[];
   buildSummaryRowsOnly: () => ReturnType<typeof buildThreadTimeline>["rows"];
 }
 
@@ -150,10 +150,11 @@ function createTimelineBenchmarkScenario(
     threadId: thread.id,
     excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   });
-  const summaryEventRows = compactSummaryStoredEventRows(storedEventRows);
-  const decodedSummaryEvents = summaryEventRows.map((row) =>
-    toThreadEventWithMeta(row),
-  );
+  const decodeStoredEvents = () =>
+    storedEventRows.map((row) => toThreadEventWithMeta(row));
+  const compactSummaryEvents = () =>
+    compactThreadTimelineSummaryEvents(decodeStoredEvents());
+  const decodedSummaryEvents = compactSummaryEvents();
   const timelineViewMode =
     thread.type === "manager" ? "manager-conversation" : "standard";
   const buildSummary = () =>
@@ -172,14 +173,10 @@ function createTimelineBenchmarkScenario(
       threadId: thread.id,
       excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
     });
-  const compactSummaryStoredRows = () =>
-    compactSummaryStoredEventRows(storedEventRows);
   const loadContextWindowUsageRows = () =>
     listContextWindowUsageRows(db, {
       threadId: thread.id,
     });
-  const decodeSummaryEvents = () =>
-    summaryEventRows.map((row) => toThreadEventWithMeta(row));
   const buildFullSummaryRowsOnly = () =>
     buildThreadTimelineFromEvents({
       acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
@@ -248,15 +245,15 @@ function createTimelineBenchmarkScenario(
   return {
     id: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
     eventCount: replay.bundle.threadEventRows.length,
-    summaryEventCount: summaryEventRows.length,
+    summaryEventCount: decodedSummaryEvents.length,
     summaryBytes,
     fullBytes,
     buildSummary,
     buildAndSerializeSummary,
     loadSummaryStoredRows,
     loadContextWindowUsageRows,
-    compactSummaryStoredRows,
-    decodeSummaryEvents,
+    compactSummaryEvents,
+    decodeStoredEvents,
     buildSummaryRowsOnly,
   };
 }

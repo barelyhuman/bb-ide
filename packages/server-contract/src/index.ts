@@ -129,7 +129,9 @@ export type {
 
 export {
   AUTOMATION_NAME_MAX_LENGTH,
+  BRANCH_LIST_LIMIT_MAX,
   BRANCH_LIST_QUERY_MAX_LENGTH,
+  FILE_LIST_LIMIT_MAX,
   FILE_LIST_QUERY_MAX_LENGTH,
   automationActionSchema,
   automationNameSchema,

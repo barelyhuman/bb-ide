@@ -22,7 +22,6 @@ import {
 } from "./parse-error-message.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import {
-  normalizeEventProjectionMessages,
   normalizeEventProjection,
   sortEventProjectionMessagesBySource,
 } from "./normalize-event-projection.js";
@@ -638,25 +637,6 @@ function buildFullEventProjection(
     messages: flatProjection.messages,
     turnMessageDetail: options.turnMessageDetail,
   });
-}
-
-export function buildEventProjectionMessages(
-  events: ThreadEventWithMeta[] | undefined,
-  options?: BuildEventProjectionMessagesOptions,
-): EventProjectionMessage[] {
-  if (!events || events.length === 0) {
-    return [];
-  }
-
-  const orderedEvents = getOrderedThreadEvents(events);
-  return normalizeEventProjectionMessages(
-    buildFlatProjectionData({
-      acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
-      events: orderedEvents,
-      includeActiveThinking: false,
-      options,
-    }).messages,
-  );
 }
 
 export function buildEventProjectionEntries(

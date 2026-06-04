@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getPublishedMigrationWhen } from "../src/migration-history.js";
+import { publishedMigrationWhensByTag } from "../src/migration-history.js";
 import {
   createConnection,
   migrate,
@@ -66,13 +66,23 @@ interface ReplaceAppliedMigrationHashArgs {
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const baselineWhen = getPublishedMigrationWhen({ tag: "0000_baseline" });
-const publishedTerminalSessionUserInputWhen = getPublishedMigrationWhen({
-  tag: "0001_terminal_session_user_input",
-});
-const closedSessionPruneIndexesWhen = getPublishedMigrationWhen({
-  tag: "0002_closed_session_prune_indexes",
-});
+
+function requirePublishedMigrationWhen(tag: string): number {
+  const when = publishedMigrationWhensByTag.get(tag);
+  if (when === undefined) {
+    throw new Error(`No published migration timestamp for ${tag}`);
+  }
+
+  return when;
+}
+
+const baselineWhen = requirePublishedMigrationWhen("0000_baseline");
+const publishedTerminalSessionUserInputWhen = requirePublishedMigrationWhen(
+  "0001_terminal_session_user_input",
+);
+const closedSessionPruneIndexesWhen = requirePublishedMigrationWhen(
+  "0002_closed_session_prune_indexes",
+);
 const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
 const threadPinningMigrationWhen = 1779990051923;

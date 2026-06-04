@@ -1,6 +1,5 @@
 import path from "node:path";
 import { listQueuedThreadMessages } from "@bb/db";
-import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
 import {
@@ -60,10 +59,12 @@ import { resolveSystemExecutionOptions } from "../../services/system/execution-o
 import { listThreadPromptHistory } from "../../services/prompt-history.js";
 import { tryResolveExistingThreadExecutionPlan } from "../../services/threads/thread-execution-plan.js";
 import {
+  parseBoundedPositiveOptionalInteger,
   parseInteger,
   parseOptionalInteger,
 } from "../../services/lib/validation.js";
 import { parsePathKindInclusion } from "../path-list-inclusion.js";
+import { parseFileListLimit } from "../file-list-query.js";
 import {
   extractRoutePath,
   parseSafeRelativeRoutePath,
@@ -90,13 +91,14 @@ async function buildThreadComposerBootstrapResponse(
   threadId: string,
 ): Promise<ThreadComposerBootstrapResponse> {
   const thread = requirePublicThread(deps.db, threadId);
-  const defaultExecutionOptions = (
-    await tryResolveExistingThreadExecutionPlan(deps, {
-      executionSource: "client/turn/requested",
-      input: {},
-      threadId,
-    })
-  )?.defaultView ?? null;
+  const defaultExecutionOptions =
+    (
+      await tryResolveExistingThreadExecutionPlan(deps, {
+        executionSource: "client/turn/requested",
+        input: {},
+        threadId,
+      })
+    )?.defaultView ?? null;
   const composerEnvironmentId = shouldResolveThreadComposerExecutionOptions({
     thread,
   })
@@ -156,21 +158,6 @@ const RAW_FILE_HTML_CONTENT_TYPE = "text/html; charset=utf-8";
 const RAW_FILE_CONTENT_TYPE_OPTIONS = "nosniff";
 const HTML_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const GENERIC_HTML_PREVIEW_CSP = "sandbox allow-scripts";
-
-function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
-  const limit = Math.min(
-    parseOptionalInteger(rawLimit, "limit") ?? 1000,
-    FILE_LIST_LIMIT_MAX,
-  );
-  if (limit <= 0) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "limit must be a positive integer",
-    );
-  }
-  return limit;
-}
 
 function parseThreadTimelineSegmentLimit(
   defaultLimit: number,
@@ -421,18 +408,12 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     (context, query) => {
       const threadId = context.req.param("id");
       requirePublicThread(deps.db, threadId);
-      const limit = Math.min(
-        parseOptionalInteger(query.limit, "limit") ??
-          PROMPT_HISTORY_ENTRY_LIMIT,
-        PROMPT_HISTORY_ENTRY_LIMIT,
-      );
-      if (limit <= 0) {
-        throw new ApiError(
-          400,
-          "invalid_request",
-          "limit must be a positive integer",
-        );
-      }
+      const limit = parseBoundedPositiveOptionalInteger({
+        defaultValue: PROMPT_HISTORY_ENTRY_LIMIT,
+        max: PROMPT_HISTORY_ENTRY_LIMIT,
+        name: "limit",
+        value: query.limit,
+      });
 
       return context.json(
         listThreadPromptHistory(deps, {
@@ -532,7 +513,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       const target = await requireThreadStorageTarget(deps, {
         threadId: context.req.param("id"),
       });
-      const limit = parseThreadStorageFileListLimit(query.limit);
+      const limit = parseFileListLimit(query.limit);
 
       try {
         const result = await callHostRetryableOnlineRpc(deps, {
@@ -581,7 +562,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       const target = await requireThreadStorageTarget(deps, {
         threadId: context.req.param("id"),
       });
-      const limit = parseThreadStorageFileListLimit(query.limit);
+      const limit = parseFileListLimit(query.limit);
       const inclusion = parsePathKindInclusion({
         includeFiles: query.includeFiles,
         includeDirectories: query.includeDirectories,

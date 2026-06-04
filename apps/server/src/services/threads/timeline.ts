@@ -8,7 +8,6 @@ import {
   type SystemClientRequestVisibility,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
-import { performance } from "node:perf_hooks";
 import type { ClientTurnRequestId, Thread } from "@bb/domain";
 import type {
   ManagerTimelineView,
@@ -145,80 +144,11 @@ interface PaginatedTimelineRowsResult {
   segmentLimit: number;
 }
 
-export type ThreadTimelineBuildProfileStage =
-  | "event-query"
-  | "accepted-client-request-context-query"
-  | "event-json-decode"
-  | "summary-compaction"
-  | "context-window-query"
-  | "context-window-json-decode"
-  | "thread-view-projection"
-  | "pagination-segmentation"
-  | "response-serialization";
-
-export type ThreadTimelineEventSelectionStrategy =
-  | "full"
-  | "manager-conversation-window"
-  | "standard-window";
-
-export interface ThreadTimelineBuildProfileStageTiming {
-  durationMs: number;
-  stage: ThreadTimelineBuildProfileStage;
-}
-
-export interface ThreadTimelineBuildProfile {
-  compactedEventCount: number;
-  contextWindowEventDataBytes: number;
-  contextWindowEventRowCount: number;
-  decodedEventCount: number;
-  eventDataBytes: number;
-  eventRowCount: number;
-  pageKind: ThreadTimelinePageKind;
-  projectedRowCount: number;
-  responseJsonBytes: number;
-  responseRowCount: number;
-  returnedSegmentCount: number;
-  segmentLimit: number;
-  selectionStrategy: ThreadTimelineEventSelectionStrategy;
-  stageTimings: ThreadTimelineBuildProfileStageTiming[];
-  timelineViewMode: ThreadTimelineServiceViewMode;
-}
-
-export interface ProfileThreadTimelineResult {
-  profile: ThreadTimelineBuildProfile;
-  response: ThreadTimelineResponse;
-}
-
-interface BuildThreadTimelineInternalResult {
-  profile: ThreadTimelineBuildProfile | null;
-  response: ThreadTimelineResponse;
-}
-
-interface ThreadTimelineBuildProfileAccumulator {
-  compactedEventCount: number;
-  contextWindowEventDataBytes: number;
-  contextWindowEventRowCount: number;
-  decodedEventCount: number;
-  eventDataBytes: number;
-  eventRowCount: number;
-  projectedRowCount: number;
-  responseJsonBytes: number;
-  responseRowCount: number;
-  returnedSegmentCount: number;
-  selectionStrategy: ThreadTimelineEventSelectionStrategy;
-  stageTimings: ThreadTimelineBuildProfileStageTiming[];
-}
-
-interface BuildThreadTimelineInternalOptions extends BuildThreadTimelineOptions {
-  includeProfile: boolean;
-}
-
 interface TimelineEventRowSelection {
   acceptedClientRequestContextRows: StoredEventRow[];
   paginationPage: ThreadTimelinePageRequest;
   responsePageKind: ThreadTimelinePageKind;
   rows: StoredEventRow[];
-  strategy: ThreadTimelineEventSelectionStrategy;
 }
 
 interface EnsureTimelineWindowTurnStartedRowsArgs {
@@ -431,8 +361,9 @@ function selectAcceptedClientRequestContextRows(
   db: DbConnection,
   args: SelectAcceptedClientRequestContextRowsArgs,
 ): StoredEventRow[] {
-  const clientRequestIds =
-    collectSteerClientRequestIdsNeedingAcceptedContext(args.rows);
+  const clientRequestIds = collectSteerClientRequestIdsNeedingAcceptedContext(
+    args.rows,
+  );
   if (clientRequestIds.length === 0) {
     return [];
   }
@@ -529,21 +460,6 @@ function resolveTurnSummaryDetailsSourceRange(
     sourceSeqStart: firstRow.sequence,
     turnId: fallbackRange.turnId,
   };
-}
-
-export function compactSummaryStoredEventRows(
-  rows: readonly StoredEventRow[],
-): readonly StoredEventRow[] {
-  const events = rows.map((row) => toThreadEventWithMeta(row));
-  const compactedEvents = compactThreadTimelineSummaryEvents(events);
-  if (compactedEvents === events) {
-    return rows;
-  }
-
-  const retainedEventIds = new Set(
-    compactedEvents.map((eventWithMeta) => eventWithMeta.meta.id),
-  );
-  return rows.filter((row) => retainedEventIds.has(row.id));
 }
 
 function isTimelineSegmentAnchorRow(row: TimelineRow): boolean {
@@ -687,7 +603,6 @@ function selectFullTimelineEventRows(
       threadId: thread.id,
       excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
     }),
-    strategy: "full",
   };
 }
 
@@ -886,10 +801,6 @@ function selectStandardTimelineEventRows(
           },
     responsePageKind: page.kind,
     rows: selectedRowsWithContext.rows,
-    strategy:
-      sequenceStart === 0 && beforeSequence === undefined
-        ? "full"
-        : "standard-window",
   };
 }
 
@@ -933,7 +844,6 @@ function selectManagerConversationTimelineEventRows(
         threadId: thread.id,
       }),
     }),
-    strategy: "manager-conversation-window",
   };
 }
 
@@ -944,11 +854,7 @@ function selectTimelineEventRows(
   systemClientRequestVisibility: SystemClientRequestVisibility,
 ): TimelineEventRowSelection {
   if (options.timelineViewMode === "manager-conversation") {
-    return selectManagerConversationTimelineEventRows(
-      db,
-      thread,
-      options.page,
-    );
+    return selectManagerConversationTimelineEventRows(db, thread, options.page);
   }
 
   return selectStandardTimelineEventRows(
@@ -959,86 +865,11 @@ function selectTimelineEventRows(
   );
 }
 
-function byteLengthOfStoredEventRows(rows: readonly StoredEventRow[]): number {
-  let byteLength = 0;
-  for (const row of rows) {
-    byteLength += Buffer.byteLength(row.data, "utf8");
-  }
-  return byteLength;
-}
-
-function createThreadTimelineBuildProfileAccumulator(): ThreadTimelineBuildProfileAccumulator {
-  return {
-    compactedEventCount: 0,
-    contextWindowEventDataBytes: 0,
-    contextWindowEventRowCount: 0,
-    decodedEventCount: 0,
-    eventDataBytes: 0,
-    eventRowCount: 0,
-    projectedRowCount: 0,
-    responseJsonBytes: 0,
-    responseRowCount: 0,
-    returnedSegmentCount: 0,
-    selectionStrategy: "full",
-    stageTimings: [],
-  };
-}
-
-function measureThreadTimelineStage<TResult>(
-  profile: ThreadTimelineBuildProfileAccumulator | null,
-  stage: ThreadTimelineBuildProfileStage,
-  fn: () => TResult,
-): TResult {
-  if (!profile) {
-    return fn();
-  }
-
-  const startTime = performance.now();
-  const result = fn();
-  profile.stageTimings.push({
-    durationMs: performance.now() - startTime,
-    stage,
-  });
-  return result;
-}
-
-function completeThreadTimelineBuildProfile(
-  accumulator: ThreadTimelineBuildProfileAccumulator,
-  options: BuildThreadTimelineOptions,
-  response: ThreadTimelineResponse,
-): ThreadTimelineBuildProfile {
-  accumulator.responseJsonBytes = measureThreadTimelineStage(
-    accumulator,
-    "response-serialization",
-    () => Buffer.byteLength(JSON.stringify(response), "utf8"),
-  );
-  return {
-    compactedEventCount: accumulator.compactedEventCount,
-    contextWindowEventDataBytes: accumulator.contextWindowEventDataBytes,
-    contextWindowEventRowCount: accumulator.contextWindowEventRowCount,
-    decodedEventCount: accumulator.decodedEventCount,
-    eventDataBytes: accumulator.eventDataBytes,
-    eventRowCount: accumulator.eventRowCount,
-    pageKind: options.page.kind,
-    projectedRowCount: accumulator.projectedRowCount,
-    responseJsonBytes: accumulator.responseJsonBytes,
-    responseRowCount: accumulator.responseRowCount,
-    returnedSegmentCount: accumulator.returnedSegmentCount,
-    segmentLimit: options.page.segmentLimit,
-    selectionStrategy: accumulator.selectionStrategy,
-    stageTimings: accumulator.stageTimings,
-    timelineViewMode: options.timelineViewMode,
-  };
-}
-
-function buildThreadTimelineInternal(
+export function buildThreadTimeline(
   db: DbConnection,
   thread: Thread,
-  options: BuildThreadTimelineInternalOptions,
-): BuildThreadTimelineInternalResult {
-  const profile = options.includeProfile
-    ? createThreadTimelineBuildProfileAccumulator()
-    : null;
+  options: BuildThreadTimelineOptions,
+): ThreadTimelineResponse {
   const includeNestedRows = options.includeNestedRows ?? false;
   const includeProviderUnhandledOperations = options.isDevelopment;
   const viewMode = options.timelineViewMode;
@@ -1046,67 +877,29 @@ function buildThreadTimelineInternal(
     thread,
     timelineViewMode: viewMode,
   });
-  const eventSelection = measureThreadTimelineStage(
-    profile,
-    "event-query",
-    () =>
-      selectTimelineEventRows(
-        db,
-        thread,
-        options,
-        systemClientRequestVisibility,
-      ),
+  const eventSelection = selectTimelineEventRows(
+    db,
+    thread,
+    options,
+    systemClientRequestVisibility,
   );
   const rawEventRows = eventSelection.rows;
-  if (profile) {
-    profile.eventDataBytes = byteLengthOfStoredEventRows(rawEventRows);
-    profile.eventRowCount = rawEventRows.length;
-    profile.selectionStrategy = eventSelection.strategy;
-  }
-  const acceptedClientRequestContextRows = measureThreadTimelineStage(
-    profile,
-    "accepted-client-request-context-query",
-    () =>
-      viewMode === "standard"
-        ? mergeStoredEventRowsById([
-            ...eventSelection.acceptedClientRequestContextRows,
-            ...selectAcceptedClientRequestContextRows(db, {
-              rows: rawEventRows,
-              threadId: thread.id,
-            }),
-          ])
-        : [],
+  const acceptedClientRequestContextRows =
+    viewMode === "standard"
+      ? mergeStoredEventRowsById([
+          ...eventSelection.acceptedClientRequestContextRows,
+          ...selectAcceptedClientRequestContextRows(db, {
+            rows: rawEventRows,
+            threadId: thread.id,
+          }),
+        ])
+      : [];
+  const decodedEvents = compactThreadTimelineSummaryEvents(
+    rawEventRows.map((row) => toThreadEventWithMeta(row)),
   );
-  const decodedRawEvents = measureThreadTimelineStage(
-    profile,
-    "event-json-decode",
-    () => rawEventRows.map((row) => toThreadEventWithMeta(row)),
-  );
-  if (profile) {
-    profile.decodedEventCount = decodedRawEvents.length;
-  }
-  const decodedEvents = measureThreadTimelineStage(
-    profile,
-    "summary-compaction",
-    () => compactThreadTimelineSummaryEvents(decodedRawEvents),
-  );
-  if (profile) {
-    profile.compactedEventCount = decodedEvents.length;
-  }
-  const contextWindowUsageRows = measureThreadTimelineStage(
-    profile,
-    "context-window-query",
-    () =>
-      listContextWindowUsageRows(db, {
-        threadId: thread.id,
-      }),
-  );
-  if (profile) {
-    profile.contextWindowEventDataBytes = byteLengthOfStoredEventRows(
-      contextWindowUsageRows,
-    );
-    profile.contextWindowEventRowCount = contextWindowUsageRows.length;
-  }
+  const contextWindowUsageRows = listContextWindowUsageRows(db, {
+    threadId: thread.id,
+  });
   const commonProjectionOptions = {
     includeDebugRawEvents: false,
     includeProviderUnhandledOperations,
@@ -1115,52 +908,37 @@ function buildThreadTimelineInternal(
     threadStatus: thread.status,
     workspaceRoot: resolveThreadWorkspaceRoot(db, thread),
   };
-  const contextWindowEvents = measureThreadTimelineStage(
-    profile,
-    "context-window-json-decode",
-    () => contextWindowUsageRows.map((row) => toThreadEventWithMeta(row)),
+  const contextWindowEvents = contextWindowUsageRows.map((row) =>
+    toThreadEventWithMeta(row),
   );
   const acceptedClientRequestContext: AcceptedClientRequestContext = {
     acceptedClientRequestEvents: acceptedClientRequestContextRows.map((row) =>
       toThreadEventWithMeta(row),
     ),
   };
-  const timeline = measureThreadTimelineStage(
-    profile,
-    "thread-view-projection",
-    () =>
-      buildThreadTimelineFromEvents({
-        acceptedClientRequestContext,
-        contextWindowEvents,
-        events: decodedEvents,
-        options:
-          viewMode === "manager-conversation"
-            ? {
-                ...commonProjectionOptions,
-                viewMode,
-              }
-            : {
-                ...commonProjectionOptions,
-                includeNestedRows,
-                turnMessageDetail: includeNestedRows ? "full" : "summary",
-                viewMode,
-              },
-      }),
+  const timeline = buildThreadTimelineFromEvents({
+    acceptedClientRequestContext,
+    contextWindowEvents,
+    events: decodedEvents,
+    options:
+      viewMode === "manager-conversation"
+        ? {
+            ...commonProjectionOptions,
+            viewMode,
+          }
+        : {
+            ...commonProjectionOptions,
+            includeNestedRows,
+            turnMessageDetail: includeNestedRows ? "full" : "summary",
+            viewMode,
+          },
+  });
+  const paginatedTimeline = paginateTimelineRows(
+    timeline.rows,
+    eventSelection.paginationPage,
   );
-  if (profile) {
-    profile.projectedRowCount = timeline.rows.length;
-  }
-  const paginatedTimeline = measureThreadTimelineStage(
-    profile,
-    "pagination-segmentation",
-    () => paginateTimelineRows(timeline.rows, eventSelection.paginationPage),
-  );
-  if (profile) {
-    profile.responseRowCount = paginatedTimeline.rows.length;
-    profile.returnedSegmentCount = paginatedTimeline.returnedSegmentCount;
-  }
 
-  const response: ThreadTimelineResponse = {
+  return {
     rows: options.summaryOnly ? [] : paginatedTimeline.rows,
     activeThinking:
       options.page.kind === "latest" ? timeline.activeThinking : null,
@@ -1179,42 +957,6 @@ function buildThreadTimelineInternal(
       hasOlderRows: paginatedTimeline.hasOlderRows,
       olderCursor: paginatedTimeline.olderCursor,
     },
-  };
-  return {
-    response,
-    profile:
-      profile === null
-        ? null
-        : completeThreadTimelineBuildProfile(profile, options, response),
-  };
-}
-
-export function buildThreadTimeline(
-  db: DbConnection,
-  thread: Thread,
-  options: BuildThreadTimelineOptions,
-): ThreadTimelineResponse {
-  return buildThreadTimelineInternal(db, thread, {
-    ...options,
-    includeProfile: false,
-  }).response;
-}
-
-export function profileThreadTimeline(
-  db: DbConnection,
-  thread: Thread,
-  options: BuildThreadTimelineOptions,
-): ProfileThreadTimelineResult {
-  const result = buildThreadTimelineInternal(db, thread, {
-    ...options,
-    includeProfile: true,
-  });
-  if (result.profile === null) {
-    throw new Error("Timeline profile was not captured");
-  }
-  return {
-    profile: result.profile,
-    response: result.response,
   };
 }
 

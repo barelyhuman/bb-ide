@@ -3,9 +3,7 @@ import { updateEnvironmentMetadata } from "@bb/db";
 import {
   type GitBranchRefClassification,
   resolveEnvironmentWorkspaceDisplayKind,
-  type ThreadGitDiffResponse,
   type Environment,
-  type WorkspaceStatus,
 } from "@bb/domain";
 import {
   environmentActionRequestSchema,
@@ -19,10 +17,6 @@ import {
   type EnvironmentDiffQuery,
   type PublicApiSchema,
 } from "@bb/server-contract";
-import type {
-  HostDaemonOnlineRpcResult,
-  WorkspaceResolutionFailure,
-} from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import {
@@ -44,6 +38,10 @@ import {
   parseBranchListLimit,
 } from "./branch-list-query.js";
 import { requireWorkspaceCommandTarget } from "../services/environments/workspace-command-target.js";
+import {
+  requireAvailableWorkspaceDiff,
+  requireAvailableWorkspaceStatus,
+} from "../services/environments/workspace-rpc-results.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
@@ -57,10 +55,6 @@ interface AssertSquashMergeTargetIsLocalArgs {
   selectedBranch: GitBranchRefClassification | null;
   targetBranch: string;
 }
-
-type WorkspaceStatusCommandResult =
-  HostDaemonOnlineRpcResult<"workspace.status">;
-type WorkspaceDiffCommandResult = HostDaemonOnlineRpcResult<"workspace.diff">;
 
 /**
  * Maps the daemon's typed `no_changes` failure (nothing to commit / nothing to
@@ -133,30 +127,6 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
 
 function isWorktreeEnvironment(environment: Environment): boolean {
   return resolveEnvironmentWorkspaceDisplayKind({ environment }) !== "other";
-}
-
-function throwWorkspaceUnavailable(failure: WorkspaceResolutionFailure): never {
-  throw new ApiError(409, "workspace_unavailable", failure.message, {
-    details: { kind: "workspace_unavailable", failure },
-  });
-}
-
-function requireAvailableWorkspaceStatus(
-  result: WorkspaceStatusCommandResult,
-): WorkspaceStatus {
-  if (result.outcome === "available") {
-    return result.workspaceStatus;
-  }
-  throwWorkspaceUnavailable(result.failure);
-}
-
-function requireAvailableWorkspaceDiff(
-  result: WorkspaceDiffCommandResult,
-): ThreadGitDiffResponse {
-  if (result.outcome === "available") {
-    return result.diff;
-  }
-  throwWorkspaceUnavailable(result.failure);
 }
 
 /**

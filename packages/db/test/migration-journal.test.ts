@@ -3,7 +3,6 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  latestPublishedMigrationWhen,
   publishedMigrationWhens,
   publishedMigrationWhensByTag,
 } from "../src/migration-history.js";
@@ -15,6 +14,9 @@ const journalPath = resolve(
   "drizzle",
   "meta",
   "_journal.json",
+);
+const latestPublishedMigrationWhen = Math.max(
+  ...publishedMigrationWhens.map((entry) => entry.when),
 );
 
 interface JournalEntry {

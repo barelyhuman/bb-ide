@@ -19,7 +19,6 @@ import {
   type ReorderManagerThreadResult,
   type ReorderProjectResult,
 } from "@bb/db";
-import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import {
   createManagerThreadRequestSchema,
   createProjectRequestSchema,
@@ -69,7 +68,7 @@ import {
   toThreadResponseFromThread,
 } from "../services/threads/thread-runtime-display.js";
 import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
-import { parseOptionalInteger } from "../services/lib/validation.js";
+import { parseBoundedPositiveOptionalInteger } from "../services/lib/validation.js";
 import {
   beginProjectDeletion,
   requestProjectDeletionAdvance,
@@ -80,6 +79,7 @@ import {
   normalizeBranchQuery,
   parseBranchListLimit,
 } from "./branch-list-query.js";
+import { parseFileListLimit } from "./file-list-query.js";
 
 type ProjectResponseProjectFields = Omit<ProjectResponse, "sources">;
 type ProjectResponseRow = ProjectResponseProjectFields;
@@ -410,18 +410,12 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     (context, query) => {
       const projectId = context.req.param("id");
       requirePublicProject(deps.db, projectId);
-      const limit = Math.min(
-        parseOptionalInteger(query.limit, "limit") ??
-          PROMPT_HISTORY_ENTRY_LIMIT,
-        PROMPT_HISTORY_ENTRY_LIMIT,
-      );
-      if (limit <= 0) {
-        throw new ApiError(
-          400,
-          "invalid_request",
-          "limit must be a positive integer",
-        );
-      }
+      const limit = parseBoundedPositiveOptionalInteger({
+        defaultValue: PROMPT_HISTORY_ENTRY_LIMIT,
+        max: PROMPT_HISTORY_ENTRY_LIMIT,
+        name: "limit",
+        value: query.limit,
+      });
 
       return context.json(
         listProjectPromptHistory(deps, {
@@ -567,17 +561,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       const projectId = context.req.param("id");
       requirePublicStandardProject(deps.db, projectId);
 
-      const limit = Math.min(
-        parseOptionalInteger(query.limit, "limit") ?? 1000,
-        FILE_LIST_LIMIT_MAX,
-      );
-      if (limit <= 0) {
-        throw new ApiError(
-          400,
-          "invalid_request",
-          "limit must be a positive integer",
-        );
-      }
+      const limit = parseFileListLimit(query.limit);
 
       // Both branches dispatch host.list_files against the resolved path —
       // env-scoped requests narrow to a specific environment's workspace
@@ -611,17 +595,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       const projectId = context.req.param("id");
       requirePublicStandardProject(deps.db, projectId);
 
-      const limit = Math.min(
-        parseOptionalInteger(query.limit, "limit") ?? 1000,
-        FILE_LIST_LIMIT_MAX,
-      );
-      if (limit <= 0) {
-        throw new ApiError(
-          400,
-          "invalid_request",
-          "limit must be a positive integer",
-        );
-      }
+      const limit = parseFileListLimit(query.limit);
 
       const target =
         query.environmentId !== null

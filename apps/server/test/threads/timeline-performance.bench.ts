@@ -29,12 +29,12 @@ describe("/timeline performance", () => {
       scenario.loadContextWindowUsageRows();
     });
 
-    bench(`compact summary stored rows ${scenario.id}`, () => {
-      scenario.compactSummaryStoredRows();
+    bench(`compact summary events ${scenario.id}`, () => {
+      scenario.compactSummaryEvents();
     });
 
-    bench(`decode summary events ${scenario.id}`, () => {
-      scenario.decodeSummaryEvents();
+    bench(`decode stored events ${scenario.id}`, () => {
+      scenario.decodeStoredEvents();
     });
 
     bench(`build summary rows ${scenario.id}`, () => {

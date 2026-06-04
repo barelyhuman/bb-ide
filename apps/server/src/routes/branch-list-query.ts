@@ -1,6 +1,5 @@
-import { BRANCH_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
-import { ApiError } from "../errors.js";
-import { parseOptionalInteger } from "../services/lib/validation.js";
+import { BRANCH_LIST_LIMIT_MAX } from "@bb/server-contract";
+import { parseBoundedPositiveOptionalInteger } from "../services/lib/validation.js";
 
 const BRANCH_LIST_LIMIT_DEFAULT = 50;
 
@@ -12,16 +11,10 @@ export function normalizeBranchQuery(
 }
 
 export function parseBranchListLimit(limit: string | undefined): number {
-  const parsed = Math.min(
-    parseOptionalInteger(limit, "limit") ?? BRANCH_LIST_LIMIT_DEFAULT,
-    BRANCH_LIST_LIMIT_MAX,
-  );
-  if (parsed <= 0) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "limit must be a positive integer",
-    );
-  }
-  return parsed;
+  return parseBoundedPositiveOptionalInteger({
+    defaultValue: BRANCH_LIST_LIMIT_DEFAULT,
+    max: BRANCH_LIST_LIMIT_MAX,
+    name: "limit",
+    value: limit,
+  });
 }
