@@ -34,8 +34,8 @@ If the work is driven by a plan (in `plans/`), verify. If there is no plan, skip
 - Is the foundation solid, or are we building on something brittle that will cost us later?
 - Are responsibilities clearly separated, or is logic entangled across concerns?
 - Would a new contributor understand _why_ this code exists, not just _what_ it does?
-- Is any concern being hand-rolled when a well-known, battle-tested library already handles it? Flag it — install and use the library instead.
-- Is complexity abstracted into well-named, well-scoped functions that can be understood and tested independently?
+- Is a substantial concern being hand-rolled when a well-known, battle-tested library already handles it well? Flag it — but weigh the dependency's cost. A library that saves only a few lines isn't worth the supply-chain and maintenance burden.
+- Is complexity abstracted at the right altitude — neither tangled into one blob nor spread across so many layers that you have to chase the logic through indirection to follow it? Favor well-named, well-scoped functions that can be understood and tested independently — and no more structure than the change actually needs.
 - Are files a reasonable size, or is there a thousand-line module that no one will want to touch?
 - Are names precise? A function called `process` or `handle` is a smell — what does it _actually_ do?
 
@@ -79,3 +79,14 @@ Verify the change does not violate any guideline in `AGENTS.md`. Pay particular 
 - Can you hold the entire change in your head and form a clear mental model?
 - Is the code structured so that _reading order_ matches _execution order_ where possible?
 - Is there a clear narrative to the change, or do you have to jump between files to understand what's happening?
+
+## 10. Simplicity and Right-Sizing
+
+Every other dimension pushes toward _adding_ — more abstraction, more separation, more tests, more validation. This one is the deliberate counterweight, and its findings should _remove_ code. Over-engineering is a defect in its own right; it just hides behind respectable-looking structure instead of an obvious hack. Review for it with the same seriousness as a correctness bug.
+
+- **Earn each abstraction.** Does every layer, interface, wrapper, factory, or generic have more than one real caller or implementation _today_? A single-use abstraction is just indirection — inline it. Don't credit structure built for a future that hasn't arrived.
+- **Right-size, don't max-size.** Would a competent engineer write it this way, or is it enterprise cosplay — managers that only forward calls, options bags where every caller passes the same value, configuration nobody sets, generic machinery serving exactly one concrete case?
+- **Judge refactors by net deletion.** Moving or renaming code is not improvement. Be suspicious of a "cleanup" that relocates complexity without reducing it, or that adds lines on net.
+- **Inline-ability test.** Could this helper, class, or module be inlined with no loss of clarity? If so, it probably isn't paying for its own existence.
+- **Would the simplest version be wrong?** If the straightforward version would actually work, the complex one has to justify the difference _in this change_, not in the reviewer's imagination. "Might need it later" is not a justification.
+- **Count the surfaces.** Prefer the fewest clear named surfaces over the most reuse. A little honest duplication beats the wrong abstraction shared across two reluctant callers.
