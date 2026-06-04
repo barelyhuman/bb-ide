@@ -168,7 +168,6 @@ describe("environment command dispatch", () => {
         {
           type: "environment.provision.cancel",
           environmentId: "env-missing",
-          reason: "thread-stop",
         },
         harness.dispatchOptions(),
       ),
@@ -218,7 +217,6 @@ describe("environment command dispatch", () => {
         {
           type: "environment.provision.cancel",
           environmentId: "env-cancel",
-          reason: "thread-stop",
         },
         dispatchOptions,
       ),
@@ -273,7 +271,6 @@ describe("environment command dispatch", () => {
       {
         type: "environment.provision.cancel",
         environmentId: "env-cancel-no-settle",
-        reason: "thread-stop",
       },
       dispatchOptions,
     );

@@ -42,6 +42,8 @@ interface PendingCommandResultReport {
 
 type EnvironmentLaneMode = "read" | "write";
 type CommandLifecycleOutcome = "reported" | "report_deferred";
+type ThreadStopCommand = Extract<HostDaemonCommand, { type: "thread.stop" }>;
+type TurnSubmitCommand = Extract<HostDaemonCommand, { type: "turn.submit" }>;
 
 interface ReadWriteLaneState {
   /** All admitted read and write work. Writes wait on this tail. */
@@ -68,6 +70,23 @@ interface ProviderExecutionLane {
   processKey: string;
   processMode: EnvironmentLaneMode;
   sessionKey: string;
+}
+
+interface ThreadProviderLaneIdentity {
+  environmentId: string;
+  providerId: string | null;
+  providerThreadId: string | null;
+  threadId: string;
+}
+
+interface ThreadProviderLaneTarget {
+  environmentId: string;
+  threadId: string;
+}
+
+interface InFlightThreadProviderLane {
+  count: number;
+  lane: ProviderExecutionLane;
 }
 
 type FileWriteLaneCommand = Extract<
@@ -168,6 +187,10 @@ export class CommandRouter {
   // while session lanes serialize commands for one provider thread/session.
   private readonly providerProcessLanes = new Map<string, ReadWriteLaneState>();
   private readonly providerSessionLaneTails = new Map<string, Promise<void>>();
+  private readonly inFlightThreadProviderLanes = new Map<
+    string,
+    InFlightThreadProviderLane
+  >();
   // Stale failed reports retry in the background after the current result is
   // reported, so one permanently failing result cannot block newer completions.
   private readonly pendingResults: PendingCommandResultReport[] = [];
@@ -291,6 +314,7 @@ export class CommandRouter {
     // Register synchronously, before awaiting, so a turn submission dispatched
     // in the same batch observes the unarchive that precedes it.
     this.registerThreadUnarchiveBarrier(envelope.command, task);
+    this.registerInFlightThreadProviderLane(envelope.command, task);
 
     const executed = await task;
     const report: PendingCommandResultReport = {
@@ -789,19 +813,92 @@ export class CommandRouter {
     };
   }
 
+  private getThreadProviderLaneIdentityKey(
+    args: ThreadProviderLaneTarget,
+  ): string {
+    return `${args.environmentId}\0${args.threadId}`;
+  }
+
+  private createThreadProviderExecutionLane(
+    identity: ThreadProviderLaneIdentity,
+    processMode: EnvironmentLaneMode,
+  ): ProviderExecutionLane {
+    const sessionId =
+      identity.providerThreadId === null
+        ? `thread:${identity.threadId}`
+        : `provider-thread:${identity.providerThreadId}`;
+    return this.createProviderExecutionLane({
+      environmentId: identity.environmentId,
+      processMode,
+      providerId: identity.providerId,
+      sessionId,
+    });
+  }
+
   private providerLaneForThreadStop(
     session: RuntimeThreadProviderSession,
   ): ProviderExecutionLane {
-    const sessionId =
-      session.providerThreadId === null
-        ? `thread:${session.threadId}`
-        : `provider-thread:${session.providerThreadId}`;
-    return this.createProviderExecutionLane({
-      environmentId: session.environmentId,
-      processMode: "write",
-      providerId: session.providerId,
-      sessionId,
-    });
+    return this.createThreadProviderExecutionLane(session, "write");
+  }
+
+  private createInFlightTurnSubmitStopLane(
+    command: TurnSubmitCommand,
+  ): ProviderExecutionLane {
+    return this.createThreadProviderExecutionLane(
+      {
+        environmentId: command.environmentId,
+        providerId: command.resumeContext.providerId,
+        providerThreadId: command.resumeContext.providerThreadId,
+        threadId: command.threadId,
+      },
+      "write",
+    );
+  }
+
+  private getInFlightThreadStopProviderLane(
+    command: ThreadStopCommand,
+  ): ProviderExecutionLane | null {
+    const entry = this.inFlightThreadProviderLanes.get(
+      this.getThreadProviderLaneIdentityKey(command),
+    );
+    return entry?.lane ?? null;
+  }
+
+  private registerInFlightThreadProviderLane(
+    command: HostDaemonCommand,
+    task: Promise<ExecutedCommandResult>,
+  ): void {
+    if (command.type !== "turn.submit") {
+      return;
+    }
+
+    const key = this.getThreadProviderLaneIdentityKey(command);
+    const existing = this.inFlightThreadProviderLanes.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      this.inFlightThreadProviderLanes.set(key, {
+        count: 1,
+        lane: this.createInFlightTurnSubmitStopLane(command),
+      });
+    }
+
+    void task.then(
+      () => this.unregisterInFlightThreadProviderLane(key),
+      () => this.unregisterInFlightThreadProviderLane(key),
+    );
+  }
+
+  private unregisterInFlightThreadProviderLane(key: string): void {
+    const existing = this.inFlightThreadProviderLanes.get(key);
+    if (!existing) {
+      return;
+    }
+    if (existing.count > 1) {
+      existing.count -= 1;
+      return;
+    }
+    this.inFlightThreadProviderLanes.delete(key);
   }
 
   private resolveProviderLane(
@@ -821,12 +918,6 @@ export class CommandRouter {
           sessionId: `thread:${command.threadId}`,
         });
       case "turn.submit":
-        this.options.runtimeManager.recordThreadProviderSession({
-          environmentId: command.environmentId,
-          providerId: command.resumeContext.providerId,
-          providerThreadId: command.resumeContext.providerThreadId,
-          threadId: command.threadId,
-        });
         return this.createProviderExecutionLane({
           environmentId: command.environmentId,
           processMode: "read",
@@ -864,7 +955,9 @@ export class CommandRouter {
           command.environmentId,
           command.threadId,
         );
-        return session ? this.providerLaneForThreadStop(session) : null;
+        return session
+          ? this.providerLaneForThreadStop(session)
+          : this.getInFlightThreadStopProviderLane(command);
       }
       default:
         return null;
@@ -889,6 +982,9 @@ export class CommandRouter {
       case "workspace.commit":
       case "workspace.squash_merge":
         return "write";
+      case "environment.provision.cancel":
+        // Cancel must bypass the write lane held by the provision it aborts.
+        return null;
       default:
         return null;
     }

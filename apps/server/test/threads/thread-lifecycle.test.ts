@@ -9,6 +9,7 @@ import {
   getThreadOperation,
   hostDaemonCommands,
   listEvents,
+  listThreads,
   markThreadStopRequested,
 } from "@bb/db";
 import {
@@ -38,6 +39,7 @@ import {
   ensureCommandDelivered,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
+import { readJson } from "../helpers/json.js";
 import { queueEnvironmentProvisionLifecycleCommand } from "../helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
@@ -655,7 +657,6 @@ describe("thread lifecycle interruption", () => {
       ).toEqual({
         type: "environment.provision.cancel",
         environmentId: fixture.environmentId,
-        reason: "thread-stop",
       });
 
       const events = listEvents(harness.db, { threadId: fixture.threadId });
@@ -787,6 +788,92 @@ describe("thread lifecycle interruption", () => {
       expect(
         listCommandsByType(harness, "environment.provision.cancel"),
       ).toHaveLength(0);
+    });
+  });
+
+  it("rejects new co-tenants while provisioning cancellation is active", async () => {
+    await withTestHarness(async (harness) => {
+      const fixture = seedProvisioningThread(harness);
+      const provisionAttemptId = ensureCommandDelivered(harness, {
+        commandId: fixture.commandId,
+        hostId: fixture.hostId,
+        sessionId: fixture.sessionId,
+      });
+      const stoppedThread = requireThreadRow(harness, fixture.threadId);
+
+      requestThreadStopForCurrentState(harness.deps, stoppedThread, {
+        hostId: fixture.hostId,
+        id: fixture.environmentId,
+      });
+
+      const cancelCommand = getSingleCommandByType(
+        harness,
+        "environment.provision.cancel",
+      );
+      expect(cancelCommand).toMatchObject({
+        state: "pending",
+        type: "environment.provision.cancel",
+      });
+
+      const attachResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: stoppedThread.projectId,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            {
+              type: "text",
+              text: "try to join cancelling provision",
+            },
+          ],
+          environment: {
+            type: "reuse",
+            environmentId: fixture.environmentId,
+          },
+        }),
+      });
+
+      expect(attachResponse.status).toBe(409);
+      await expect(readJson(attachResponse)).resolves.toMatchObject({
+        code: "environment_not_ready",
+      });
+      expect(
+        listThreads(harness.db, { projectId: stoppedThread.projectId }).map(
+          (thread) => thread.id,
+        ),
+      ).toEqual([fixture.threadId]);
+
+      await handleCommandResult(harness.deps, {
+        attemptId: provisionAttemptId,
+        commandId: fixture.commandId,
+        completedAt: Date.now(),
+        ok: false,
+        errorCode: "provision_cancelled",
+        errorMessage: "provision cancelled",
+        type: "environment.provision",
+      });
+
+      expect(getThread(harness.db, fixture.threadId)).toMatchObject({
+        status: "provisioning",
+      });
+      expect(
+        requireThreadRow(harness, fixture.threadId).stopRequestedAt,
+      ).toEqual(expect.any(Number));
+      expect(
+        listThreads(harness.db, { projectId: stoppedThread.projectId }).map(
+          (thread) => thread.id,
+        ),
+      ).toEqual([fixture.threadId]);
+      expect(
+        listEvents(harness.db, { threadId: fixture.threadId }).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["system/thread/interrupted", "system/thread-provisioning"]);
     });
   });
 

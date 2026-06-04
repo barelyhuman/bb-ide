@@ -18,7 +18,7 @@ import type { Environment } from "@bb/domain";
 import type { EnvironmentProvisionCancelCommand } from "@bb/host-daemon-contract";
 import { getActiveEnvironmentProvisionOperation } from "./environment-provisioning-operations.js";
 
-interface EnvironmentProvisionCancellationReadDeps {
+export interface EnvironmentProvisionCancellationReadDeps {
   db: DbQueryConnection;
 }
 
@@ -77,7 +77,7 @@ function restoreEnvironmentAfterProvisionCancellation(
   });
 }
 
-function hasActiveEnvironmentProvisionCancelCommand(
+export function hasActiveEnvironmentProvisionCancelCommand(
   deps: EnvironmentProvisionCancellationReadDeps,
   environmentId: string,
 ): boolean {
@@ -107,7 +107,6 @@ function queueEnvironmentProvisionCancelCommandInTransaction(
   const command: EnvironmentProvisionCancelCommand = {
     type: "environment.provision.cancel",
     environmentId: args.environment.id,
-    reason: "thread-stop",
   };
   queueCommandInTransaction(deps.db, {
     hostId: args.environment.hostId,

@@ -300,7 +300,6 @@ export interface EnsureEnvironmentArgs {
 
 export interface CancelEnvironmentProvisionArgs {
   environmentId: string;
-  reason: "thread-stop";
 }
 
 export interface CancelEnvironmentProvisionResult {
@@ -1009,7 +1008,7 @@ export class RuntimeManager {
     pending.abortController.abort(
       new WorkspaceError(
         "provision_cancelled",
-        `Environment provisioning was cancelled: ${args.reason}`,
+        "Environment provisioning was cancelled",
       ),
     );
     return { aborted: true };

@@ -705,7 +705,6 @@ describe("RuntimeManager", () => {
 
         cancelDuringWork = manager.cancelEnvironmentProvision({
           environmentId: "env-1",
-          reason: "thread-stop",
         });
         if (!options.signal?.aborted) {
           throw new Error("Expected provision signal to be aborted");
@@ -796,7 +795,6 @@ describe("RuntimeManager", () => {
     await expect(
       manager.cancelEnvironmentProvision({
         environmentId: "env-1",
-        reason: "thread-stop",
       }),
     ).resolves.toEqual({ aborted: true });
     await firstCancelled;

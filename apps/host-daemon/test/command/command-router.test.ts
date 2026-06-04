@@ -988,7 +988,6 @@ describe("CommandRouter", () => {
           command: {
             type: "environment.provision.cancel",
             environmentId: "env-cancel-lane",
-            reason: "thread-stop",
           },
         },
       ]),
@@ -1604,8 +1603,15 @@ describe("CommandRouter", () => {
     expect(calls).toEqual([
       "unarchive:start",
       "unarchive:done",
+      "resume",
       "runTurn",
     ]);
+    expect(runtime.resumeThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerThreadId: "provider-1",
+        threadId: "thread-1",
+      }),
+    );
   });
 
   it("serializes thread.archive before a later thread.unarchive for the same environment", async () => {
@@ -1918,12 +1924,112 @@ describe("CommandRouter", () => {
       expect(runtime.stopThread).toHaveBeenCalledTimes(1);
     });
     expect(runtime.runTurn).not.toHaveBeenCalled();
+    expect(runtime.resumeThread).not.toHaveBeenCalled();
     stop.resolve(undefined);
     await vi.waitFor(() => {
       expect(runtime.runTurn).toHaveBeenCalledTimes(1);
     });
+    expect(runtime.resumeThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerThreadId: "provider-a",
+        threadId: "thread-a",
+      }),
+    );
     submittedTurn.resolve(undefined);
     await handling;
+  });
+
+  it("blocks thread.stop while a forgotten turn.submit resumes the provider thread", async () => {
+    const calls: string[] = [];
+    const runtime = createFakeRuntime();
+    const resumedThread = createDeferred<ResumeThreadResult>();
+    const submittedTurn = createDeferred<undefined>();
+    const stop = createDeferred<undefined>();
+    runtime.resumeThread.mockImplementation(async () => {
+      calls.push("resume:start");
+      await resumedThread.promise;
+      calls.push("resume:done");
+      return { providerThreadId: "provider-a" };
+    });
+    runtime.runTurn.mockImplementation(async () => {
+      calls.push("runTurn:start");
+      await submittedTurn.promise;
+      calls.push("runTurn:done");
+    });
+    runtime.stopThread.mockImplementation(async () => {
+      calls.push("stopThread");
+      await stop.promise;
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const turnHandling = router.handleCommands([
+      {
+        id: "run-a",
+        attemptId: "attempt-run-a",
+        cursor: 1,
+        command: createTurnSubmitCommand({
+          environmentId: "env-1",
+          providerThreadId: "provider-a",
+          text: "run",
+          threadId: "thread-a",
+        }),
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(runtime.resumeThread).toHaveBeenCalledTimes(1);
+    });
+    const stopHandling = router.handleCommands([
+      {
+        id: "stop-a",
+        attemptId: "attempt-stop-a",
+        cursor: 2,
+        command: createThreadStopCommand({
+          environmentId: "env-1",
+          threadId: "thread-a",
+        }),
+      },
+    ]);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runtime.stopThread).not.toHaveBeenCalled();
+    expect(runtime.runTurn).not.toHaveBeenCalled();
+
+    resumedThread.resolve({ providerThreadId: "provider-a" });
+    await vi.waitFor(() => {
+      expect(runtime.runTurn).toHaveBeenCalledTimes(1);
+    });
+    expect(runtime.stopThread).not.toHaveBeenCalled();
+
+    submittedTurn.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(runtime.stopThread).toHaveBeenCalledTimes(1);
+    });
+    stop.resolve(undefined);
+    await Promise.all([turnHandling, stopHandling]);
+    expect(calls).toEqual([
+      "resume:start",
+      "resume:done",
+      "runTurn:start",
+      "runTurn:done",
+      "stopThread",
+    ]);
   });
 
   it("keeps unrelated environments concurrent during provider stop", async () => {

@@ -535,7 +535,6 @@ export type EnvironmentProvisionCommand = z.infer<
 export const environmentProvisionCancelCommandSchema =
   hostDaemonEnvironmentTargetSchema.extend({
     type: z.literal("environment.provision.cancel"),
-    reason: z.literal("thread-stop"),
   });
 export type EnvironmentProvisionCancelCommand = z.infer<
   typeof environmentProvisionCancelCommandSchema

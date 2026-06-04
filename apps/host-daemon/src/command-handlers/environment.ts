@@ -101,7 +101,6 @@ export function cancelEnvironmentProvision(
 ): Promise<HostDaemonCommandResult<"environment.provision.cancel">> {
   return options.runtimeManager.cancelEnvironmentProvision({
     environmentId: command.environmentId,
-    reason: command.reason,
   });
 }
 
