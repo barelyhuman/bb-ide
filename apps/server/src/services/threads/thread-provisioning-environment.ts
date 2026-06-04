@@ -102,6 +102,11 @@ type NewThreadProvisionEnvironmentIntent = Exclude<
 
 const ACTIVE_DIRECT_ENVIRONMENT_OPERATION_KINDS: readonly ActiveDirectEnvironmentOperationKind[] =
   ["provision", "reprovision"];
+const INITIAL_PROVISIONING_TEXT_BY_WORKSPACE_TYPE = {
+  unmanaged: "Preparing workspace",
+  "managed-worktree": "Preparing worktree",
+  personal: "Preparing personal workspace",
+} satisfies Record<Environment["workspaceProvisionType"], string>;
 
 interface EnsureWorkspaceReadyEventArgs {
   entries: ProvisioningTranscriptEntry[];
@@ -245,35 +250,16 @@ interface ThreadProvisionReadyEnvironment {
 function initialProvisioningEntries(
   environment: Pick<Environment, "workspaceProvisionType">,
 ): ProvisioningTranscriptEntry[] {
-  switch (environment.workspaceProvisionType) {
-    case "unmanaged":
-      return [
-        {
-          type: "step",
-          key: "workspace-started",
-          text: "Preparing workspace",
-          status: "started",
-        },
-      ];
-    case "managed-worktree":
-      return [
-        {
-          type: "step",
-          key: "workspace-started",
-          text: "Preparing worktree",
-          status: "started",
-        },
-      ];
-    case "personal":
-      return [
-        {
-          type: "step",
-          key: "workspace-started",
-          text: "Preparing personal workspace",
-          status: "started",
-        },
-      ];
-  }
+  return [
+    {
+      type: "step",
+      key: "workspace-started",
+      text: INITIAL_PROVISIONING_TEXT_BY_WORKSPACE_TYPE[
+        environment.workspaceProvisionType
+      ],
+      status: "started",
+    },
+  ];
 }
 
 export function loadActiveThreadProvisionContext(
