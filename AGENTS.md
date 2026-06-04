@@ -11,8 +11,8 @@
 - Prefer maintainability and readability over speed. No one-off hacks — ask whether it would pass code review. We are never in a rush.
 - Reuse before duplicating. If a pattern exists N times, extract a shared component or utility so consistency is structural, not aspirational. When fixing a bug, check whether the same pattern is repeated elsewhere.
 - Leave the code better than you found it. When a change touches code with a weak abstraction, fix or improve it in the same change — don't add another caller to a pattern you wouldn't design today.
-- Right-size the solution. Write the simplest thing that fully works; let abstraction, layers, and configurability arrive when a second real caller demands them, not in anticipation. A single-use wrapper, an interface with one implementation, an options bag every caller fills identically, or config nobody sets is over-engineering — as much a defect as a hack. This pulls against "reuse before duplicating" on purpose: prefer a little duplication over the wrong abstraction, and don't extract before the third occurrence. (Single-use _options-object parameter types_ are not over-engineering — they are the required call style; see Type Safety.)
-- No dead optionality. An optional parameter, options field, or flag that no caller ever sets to a non-default value is dead configurability — delete it, don't keep it "just in case". This is the general form of the contract rule "Accepted-but-ignored route or command fields are forbidden": it applies to every function and component, not only routes and commands.
+- Right-size the solution. Write the simplest thing that fully works; let abstraction, layers, and configurability arrive when a second real caller demands them. A single-use wrapper, a one-implementation interface, an options bag every caller fills identically, or config nobody sets is over-engineering — as much a defect as a hack. This pulls against "reuse before duplicating": prefer a little duplication over the wrong abstraction, and don't extract before the third occurrence. (Single-use options-object parameter types are the required call style, not bloat — see Type Safety.)
+- No dead optionality. An optional parameter, field, or flag no caller ever sets to a non-default is dead configurability — delete it. The general form of "Accepted-but-ignored route or command fields are forbidden," applied to every function and component.
 - Separate concerns. When a substantial concern is better handled by a well-known, battle-tested library, install and use it — but only when the dependency saves materially more than the lines it replaces.
 - Prefer a single object argument over multiple positional arguments, especially when a function takes 3+ parameters of the same type.
 - No inline dynamic imports unless for genuine performance reasons. If it's working around a circular dependency, fix the dependency graph instead.
@@ -88,7 +88,7 @@
 
 ## Reuse Discipline
 
-- Do not add optional function, component, route, or helper arguments just to support a new caller. First ask whether the new caller should share this code at all — a small, honest duplicate is often better than a shared surface bent to fit two callers. If sharing is right, prefer a wrapper, a new object type, or a separate helper over an optional flag. The goal is the fewest clear surfaces, not the most reuse.
+- Do not add optional arguments just to support a new caller. First ask whether the new caller should share this code at all — a small, honest duplicate often beats a shared surface bent to fit two callers. If sharing is right, prefer a wrapper, a new object type, or a separate helper over an optional flag. Aim for the fewest clear surfaces, not the most reuse.
 
 ## Planning Workflow
 
