@@ -133,10 +133,6 @@ interface ReadApplicationStaticFileArgs {
   dataDir: string;
 }
 
-interface LogoResolution {
-  extension: string;
-}
-
 interface CreateGlobalApplicationArgs {
   applicationId: ApplicationId;
   dataDir: string;
@@ -502,7 +498,7 @@ async function resolveApplicationEntry(
 
 async function tryResolveLogo(
   args: ApplicationManifestReadArgs,
-): Promise<LogoResolution | null> {
+): Promise<LogoExtension | null> {
   let entries: Dirent[];
   try {
     entries = await readdir(
@@ -522,7 +518,7 @@ async function tryResolveLogo(
   );
   for (const extension of LOGO_EXTENSIONS) {
     if (topLevelFiles.has(`logo.${extension}`)) {
-      return { extension };
+      return extension;
     }
   }
   return null;
@@ -877,7 +873,7 @@ async function serveApplicationIcon(
   if (!logo) {
     throw new ApiError(404, "ENOENT", "App logo not found");
   }
-  const logoPath = `logo.${logo.extension}`;
+  const logoPath = `logo.${logo}`;
   const metadata = await statApplicationRelativeFile({
     dataDir: deps.config.dataDir,
     applicationId,
@@ -977,10 +973,6 @@ async function listAppDataFilePaths(
   return paths.sort((left, right) => left.localeCompare(right));
 }
 
-function shouldListAppDataPrefixAfterReadError(error: Error): boolean {
-  return error instanceof ApiError && error.body.code === "ENOENT";
-}
-
 async function listApplicationDataEntries(
   args: ListApplicationDataEntriesArgs,
 ): Promise<AppDataEntry[]> {
@@ -994,10 +986,7 @@ async function listApplicationDataEntries(
         }),
       ];
     } catch (error) {
-      if (
-        !(error instanceof Error) ||
-        !shouldListAppDataPrefixAfterReadError(error)
-      ) {
+      if (!(error instanceof ApiError && error.body.code === "ENOENT")) {
         throw error;
       }
     }
