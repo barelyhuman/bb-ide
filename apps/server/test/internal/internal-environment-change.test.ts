@@ -269,8 +269,6 @@ describe("internal environment change websocket hints", () => {
       const notifySystemSpy = vi.spyOn(harness.hub, "notifySystem");
       const socket = createTestDaemonSocket();
 
-      const initialListResponse = await harness.app.request("/api/v1/apps");
-      expect(initialListResponse.status).toBe(200);
       await writeApplication(harness.config.dataDir, {
         manifestVersion: 1,
         id: "external-added",
@@ -309,8 +307,6 @@ describe("internal environment change websocket hints", () => {
         entry: "index.html",
         capabilities: [],
       });
-      const initialListResponse = await harness.app.request("/api/v1/apps");
-      expect(initialListResponse.status).toBe(200);
       const notifySystemSpy = vi.spyOn(harness.hub, "notifySystem");
       const socket = createTestDaemonSocket();
 

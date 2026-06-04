@@ -198,8 +198,6 @@ const LOGO_EXTENSIONS: readonly LogoExtension[] = ["svg", "png", "jpg", "jpeg"];
 const APP_SESSION_TOKEN_PREFIX = "appsess_";
 const INVALID_APP_MANIFEST_MESSAGE =
   "App manifest failed validation. Inspect manifest.json or rebuild the app.";
-const globalAppListSignatureByDataDir = new Map<string, string>();
-
 class InvalidAppManifestError extends ApiError {
   readonly applicationId: ApplicationId;
   readonly manifestPath: string;
@@ -661,34 +659,10 @@ async function listGlobalApplications(
   return summaries;
 }
 
-async function refreshGlobalAppListSignature(
-  deps: GlobalAppListDeps,
-): Promise<AppSummary[]> {
-  const apps = await listGlobalApplications(deps);
-  globalAppListSignatureByDataDir.set(
-    deps.config.dataDir,
-    JSON.stringify(apps),
-  );
-  return apps;
-}
-
-async function notifyGlobalAppsChanged(deps: GlobalAppListDeps): Promise<void> {
-  await refreshGlobalAppListSignature(deps);
-  deps.hub.notifySystem(["apps-changed"]);
-}
-
-export async function notifyGlobalAppsChangedIfListChanged(
+export async function notifyGlobalAppsChanged(
   deps: GlobalAppListDeps,
 ): Promise<void> {
-  const apps = await listGlobalApplications(deps);
-  const nextSignature = JSON.stringify(apps);
-  const previousSignature = globalAppListSignatureByDataDir.get(
-    deps.config.dataDir,
-  );
-  globalAppListSignatureByDataDir.set(deps.config.dataDir, nextSignature);
-  if (previousSignature !== nextSignature) {
-    deps.hub.notifySystem(["apps-changed"]);
-  }
+  deps.hub.notifySystem(["apps-changed"]);
 }
 
 function createHtmlResponse(html: string): Response {
@@ -1343,7 +1317,7 @@ export function registerGlobalAppRoutes(app: Hono, deps: AppDeps): void {
   const appSessions = createAppSessionStore();
 
   get("/apps", async (context) =>
-    context.json(await refreshGlobalAppListSignature(deps)),
+    context.json(await listGlobalApplications(deps)),
   );
 
   post("/apps", createAppRequestSchema, async (context, payload) => {
