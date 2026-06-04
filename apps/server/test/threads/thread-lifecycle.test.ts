@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { getCommand, getThread, getThreadOperation, listEvents } from "@bb/db";
-import type { ThreadEventType } from "@bb/domain";
+import {
+  createPendingClientTurnRequestInTransaction,
+  getClientTurnRequest,
+  getCommand,
+  getThread,
+  getThreadOperation,
+  listEvents,
+} from "@bb/db";
+import { encodeClientTurnRequestIdNumber } from "@bb/domain";
+import type { ClientTurnRequestId, ThreadEventType } from "@bb/domain";
 import {
   finalizeStoppedThread,
   interruptActiveTurnForThread,
@@ -24,6 +32,14 @@ interface ActiveThreadWithTurnFixture {
   providerThreadId: string;
   threadId: string;
   turnId: string;
+}
+
+interface SeedPendingClientTurnRequestArgs {
+  commandId: string;
+  environmentId: string | null;
+  requestEventSequence: number;
+  requestId: ClientTurnRequestId;
+  threadId: string;
 }
 
 function seedActiveThreadWithTurn(
@@ -60,6 +76,22 @@ function seedActiveThreadWithTurn(
     threadId: thread.id,
     turnId,
   };
+}
+
+function seedPendingClientTurnRequest(
+  harness: TestAppHarness,
+  args: SeedPendingClientTurnRequestArgs,
+): void {
+  harness.db.transaction((tx) => {
+    createPendingClientTurnRequestInTransaction(tx, {
+      commandId: args.commandId,
+      commandType: "turn.submit",
+      environmentId: args.environmentId,
+      requestEventSequence: args.requestEventSequence,
+      requestId: args.requestId,
+      threadId: args.threadId,
+    });
+  });
 }
 
 function getSingleEvent(
@@ -147,6 +179,59 @@ describe("thread lifecycle interruption", () => {
 
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
       expect(listEvents(harness.db, { threadId: thread.id })).toEqual([]);
+    });
+  });
+
+  it("finalizes a manually stopped active thread without an active turn and cancels pending requests", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-lifecycle-manual-no-turn",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const requestId = encodeClientTurnRequestIdNumber({ value: 10 });
+      seedPendingClientTurnRequest(harness, {
+        commandId: "hcmd_thread_lifecycle_manual_pending",
+        environmentId: environment.id,
+        requestEventSequence: 10,
+        requestId,
+        threadId: thread.id,
+      });
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        interruptionReason: "manual-stop",
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+
+      expect(
+        finalizeStoppedThread(harness.deps, {
+          threadId: thread.id,
+        }),
+      ).toBe(true);
+
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      expect(getClientTurnRequest(harness.db, { requestId })).toMatchObject({
+        message: "Thread stopped before provider accepted the request",
+        reasonCode: "runtime_canceled",
+        status: "canceled",
+      });
+      expect(
+        listEvents(harness.db, { threadId: thread.id }).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["system/thread/interrupted"]);
     });
   });
 

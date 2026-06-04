@@ -1,13 +1,22 @@
-import { getThread, getThreadOperation, markThreadStopRequested } from "@bb/db";
+import { eq } from "drizzle-orm";
+import {
+  clientTurnRequests,
+  getThread,
+  getThreadOperation,
+  markThreadStopRequested,
+} from "@bb/db";
 import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import { sendThreadMessage } from "../../src/services/threads/thread-send.js";
+import { internalAuthHeaders, waitForQueuedCommand } from "../helpers/commands.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
@@ -50,6 +59,99 @@ describe("internal reconciliation idle-active regression", () => {
 
       expect(response.status).toBe(201);
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
+    });
+  });
+
+  it("settles pending turn requests when a daemon restart loses an active thread", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-restart-request-reconcile",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-restart-request-reconcile",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-restart-request-reconcile",
+        providerThreadId: "provider-thread-restart-request-reconcile",
+      });
+
+      await sendThreadMessage(harness.deps, {
+        environment,
+        payload: {
+          input: [{ type: "text", text: "lost during daemon restart" }],
+          mode: "auto",
+          model: "gpt-5.4",
+          permissionMode: "full",
+          reasoningLevel: "medium",
+          serviceTier: "default",
+        },
+        thread,
+        trigger: "user",
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.state === "pending" &&
+          command.type === "turn.submit" &&
+          command.threadId === thread.id,
+      );
+      expect(
+        harness.db
+          .select()
+          .from(clientTurnRequests)
+          .where(eq(clientTurnRequests.commandId, queued.row.id))
+          .get(),
+      ).toMatchObject({
+        status: "pending",
+        threadId: thread.id,
+      });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-after-restart-request-reconcile",
+          hostName: "Restart Request Reconcile Host",
+          hostType: "persistent",
+          dataDir: "/tmp/restart-request-reconcile-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      expect(
+        harness.db
+          .select()
+          .from(clientTurnRequests)
+          .where(eq(clientTurnRequests.commandId, queued.row.id))
+          .get(),
+      ).toMatchObject({
+        commandCompletedAt: null,
+        message: "Host daemon restarted before provider accepted the request",
+        reasonCode: "provider_restarted",
+        settledAt: expect.any(Number),
+        status: "canceled",
+        threadId: thread.id,
+      });
     });
   });
 

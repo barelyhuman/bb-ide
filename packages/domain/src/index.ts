@@ -97,6 +97,23 @@ export type {
 } from "./terminal.js";
 
 export {
+  clientTurnRequestCommandTypeSchema,
+  clientTurnRequestCommandTypeValues,
+  clientTurnRequestStatusSchema,
+  clientTurnRequestStatusValues,
+  clientTurnRequestTerminalReasonSchema,
+  clientTurnRequestTerminalReasonValues,
+  terminalClientTurnRequestStatusSchema,
+  terminalClientTurnRequestStatusValues,
+} from "./client-turn-request-lifecycle.js";
+export type {
+  ClientTurnRequestCommandType,
+  ClientTurnRequestStatus,
+  ClientTurnRequestTerminalReason,
+  TerminalClientTurnRequestStatus,
+} from "./client-turn-request-lifecycle.js";
+
+export {
   PROMPT_HISTORY_ENTRY_LIMIT,
   promptHistoryEntrySchema,
   promptHistoryScopeSchema,

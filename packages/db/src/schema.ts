@@ -31,6 +31,9 @@ import type {
   ThreadEventItemType,
   ThreadEventScopeKind,
   ThreadEventType,
+  ClientTurnRequestCommandType,
+  ClientTurnRequestStatus,
+  ClientTurnRequestTerminalReason,
   WorkspaceProvisionType,
   ProjectKind,
 } from "@bb/domain";
@@ -659,6 +662,45 @@ export const hostDaemonCommandAttempts = sqliteTable(
       .on(table.status, table.leaseExpiresAt)
       .where(sql`${table.status} = 'active'`),
     index("host_daemon_command_attempts_session_idx").on(table.sessionId),
+  ],
+);
+
+export const clientTurnRequests = sqliteTable(
+  "client_turn_requests",
+  {
+    requestId: text("request_id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    environmentId: text("environment_id").references(() => environments.id, {
+      onDelete: "set null",
+    }),
+    requestEventSequence: integer("request_event_sequence").notNull(),
+    commandId: text("command_id").notNull(),
+    commandType: text("command_type")
+      .$type<ClientTurnRequestCommandType>()
+      .notNull(),
+    status: text("status").$type<ClientTurnRequestStatus>().notNull(),
+    reasonCode: text("reason_code").$type<ClientTurnRequestTerminalReason>(),
+    message: text("message"),
+    createdAt: integer("created_at").notNull(),
+    commandCompletedAt: integer("command_completed_at"),
+    settledAt: integer("settled_at"),
+  },
+  (table) => [
+    uniqueIndex("client_turn_requests_thread_sequence_idx").on(
+      table.threadId,
+      table.requestEventSequence,
+    ),
+    index("client_turn_requests_command_idx").on(table.commandId),
+    index("client_turn_requests_thread_status_idx").on(
+      table.threadId,
+      table.status,
+    ),
+    index("client_turn_requests_thread_request_idx").on(
+      table.threadId,
+      table.requestId,
+    ),
   ],
 );
 

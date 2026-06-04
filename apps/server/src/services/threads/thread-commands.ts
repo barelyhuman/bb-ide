@@ -1,11 +1,13 @@
 import {
   getActiveSession,
+  createPendingClientTurnRequestInTransaction,
   queueCommand,
   queueCommandInTransaction,
   hasExistingThreadArchiveCommand,
   hasPendingHostCommandForThread,
   environments,
   events,
+  transitionThreadStatusInTransaction,
   threads,
 } from "@bb/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -47,7 +49,6 @@ import {
   type ExistingThreadExecutionInputRequest,
 } from "./thread-execution-plan.js";
 import { workspaceContextFromPath } from "../environments/workspace-command-target.js";
-import { tryTransition } from "./thread-transitions.js";
 
 export type ExecutionOptionsRequest = ExistingThreadExecutionInputRequest;
 
@@ -138,11 +139,21 @@ type BuildExecutionOptionsSource =
 interface QueueTurnSubmitCommandInTransactionArgs {
   command: Extract<HostDaemonCommand, { type: "turn.submit" }>;
   hostId: string;
+  /**
+   * Null only for legacy/untracked submissions where no durable
+   * client/turn/requested event exists to relate to this command.
+   */
+  requestEventSequence: number | null;
   sessionId: string | null;
 }
 
 interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayloadArgs {
   requestId: ClientTurnRequestId;
+  /**
+   * Null only for legacy/untracked submissions where no durable
+   * client/turn/requested event exists to relate to this command.
+   */
+  requestEventSequence: number | null;
 }
 
 interface QueueThreadRenameCommandArgs {
@@ -340,12 +351,23 @@ export function queueTurnSubmitCommandInTransaction(
   db: DbTransaction,
   args: QueueTurnSubmitCommandInTransactionArgs,
 ) {
-  return queueCommandInTransaction(db, {
+  const queuedCommand = queueCommandInTransaction(db, {
     hostId: args.hostId,
     sessionId: args.sessionId,
     type: "turn.submit",
     payload: JSON.stringify(args.command),
   });
+  if (args.requestEventSequence !== null) {
+    createPendingClientTurnRequestInTransaction(db, {
+      commandId: queuedCommand.id,
+      commandType: "turn.submit",
+      environmentId: args.command.environmentId,
+      requestEventSequence: args.requestEventSequence,
+      requestId: args.command.requestId,
+      threadId: args.command.threadId,
+    });
+  }
+  return queuedCommand;
 }
 
 export async function queueTurnSubmitCommand(
@@ -364,15 +386,30 @@ export async function queueTurnSubmitCommand(
     requestId: args.requestId,
     preparedCommand,
   });
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session.id,
-    type: "turn.submit",
-    payload: JSON.stringify(command),
-  });
-
-  if (args.thread.status === "idle") {
-    tryTransition(deps.db, deps.hub, args.thread.id, "active");
+  let transitioned = false;
+  deps.db.transaction(
+    (tx) => {
+      queueTurnSubmitCommandInTransaction(tx, {
+        command,
+        hostId: args.environment.hostId,
+        requestEventSequence: args.requestEventSequence,
+        sessionId: session.id,
+      });
+      if (args.thread.status === "idle") {
+        transitionThreadStatusInTransaction(tx, {
+          id: args.thread.id,
+          newStatus: "active",
+        });
+        transitioned = true;
+      }
+    },
+    { behavior: "immediate" },
+  );
+  deps.hub.notifyCommand(args.environment.hostId);
+  if (transitioned) {
+    deps.hub.notifyThread(args.thread.id, ["status-changed"], {
+      projectId: args.thread.projectId,
+    });
   }
 }
 

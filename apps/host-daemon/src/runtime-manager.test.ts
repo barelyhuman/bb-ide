@@ -913,6 +913,7 @@ describe("RuntimeManager", () => {
       "env-active",
       "thr-active",
       "provider-thread-active",
+      null,
     );
 
     await expect(manager.evictIdleEnvironments()).resolves.toEqual([
@@ -1398,7 +1399,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     expect(manager.listActiveThreads()).toEqual([
       {
         threadId: "thread-1",
@@ -1420,13 +1421,13 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     manager.markThreadInactive("env-1", "thread-1");
 
     expect(manager.hasThread("env-1", "thread-1")).toBe(true);
     expect(manager.listActiveThreads()).toEqual([]);
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     expect(manager.listActiveThreads()).toEqual([
       {
         threadId: "thread-1",
@@ -1445,7 +1446,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     manager.forgetThread("env-1", "thread-1");
 
     expect(manager.hasThread("env-1", "thread-1")).toBe(false);
@@ -1475,8 +1476,8 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-storage",
     });
 
-    manager.markThreadActive("env-storage", "thread-1", "provider-1");
-    manager.markThreadActive("env-storage", "thread-2", "provider-2");
+    manager.markThreadActive("env-storage", "thread-1", "provider-1", null);
+    manager.markThreadActive("env-storage", "thread-2", "provider-2", null);
     watchThreadStorageRootArgs?.onChange({
       kind: "thread-storage-changed",
       environmentId: "env-storage",
@@ -1651,7 +1652,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-storage",
     });
 
-    manager.markThreadActive("env-storage", "thread-1", "provider-1");
+    manager.markThreadActive("env-storage", "thread-1", "provider-1", null);
     watchThreadStorageRootArgs?.onWatchError({
       kind: "thread-storage-watch-error",
       message: "watch failed",
@@ -1692,8 +1693,8 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-b",
     });
 
-    manager.markThreadActive("env-a", "thread-a", "provider-a");
-    manager.markThreadActive("env-b", "thread-b", "provider-b");
+    manager.markThreadActive("env-a", "thread-a", "provider-a", null);
+    manager.markThreadActive("env-b", "thread-b", "provider-b", null);
 
     await manager.destroyEnvironment("env-a");
     expect(stopWatchingPathChanges).not.toHaveBeenCalled();
@@ -1728,7 +1729,7 @@ describe("RuntimeManager", () => {
       environmentId: "env-exit",
       workspacePath: "/tmp/env-exit",
     });
-    manager.markThreadActive("env-exit", "thread-1", "provider-1");
+    manager.markThreadActive("env-exit", "thread-1", "provider-1", null);
 
     onProcessExit?.({
       providerId: "fake",
@@ -1773,8 +1774,8 @@ describe("RuntimeManager", () => {
       environmentId: "env-shared",
       workspacePath: "/tmp/env-shared",
     });
-    manager.markThreadActive("env-shared", "thread-a", "provider-a");
-    manager.markThreadActive("env-shared", "thread-b", "provider-b");
+    manager.markThreadActive("env-shared", "thread-a", "provider-a", null);
+    manager.markThreadActive("env-shared", "thread-b", "provider-b", null);
 
     runningProviders = ["fake-beta"];
     onProcessExit?.({

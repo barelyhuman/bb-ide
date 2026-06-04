@@ -17,7 +17,7 @@ import {
 import {
   buildThreadTimelineFromEvents,
   compactThreadTimelineSummaryEvents,
-  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+  EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
@@ -179,7 +179,7 @@ function createTimelineBenchmarkScenario(
     });
   const buildFullSummaryRowsOnly = () =>
     buildThreadTimelineFromEvents({
-      acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+      acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
       contextWindowEvents: [],
       events: decodedSummaryEvents,
       options:
@@ -207,7 +207,7 @@ function createTimelineBenchmarkScenario(
     }).rows;
   const buildSummaryRowsOnly = () =>
     buildThreadTimelineFromEvents({
-      acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+      acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
       contextWindowEvents: [],
       events: decodedSummaryEvents,
       options:

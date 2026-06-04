@@ -147,7 +147,7 @@ describe("ServerConnection", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     harness.manager.markThreadInactive("env-1", "thread-1");
 
     await dispatchCommand(

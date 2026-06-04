@@ -61,7 +61,8 @@ const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKin
 
 interface RuntimeThreadState {
   activeTurnId: string | null;
-  providerThreadId: string;
+  providerId: string | null;
+  providerThreadId: string | null;
   status: "active" | "idle";
 }
 
@@ -234,6 +235,26 @@ export interface RuntimeEntry {
   path: string;
   terminals: Set<string>;
   threads: Map<string, RuntimeThreadState>;
+}
+
+export interface RuntimeThreadProviderSession {
+  environmentId: string;
+  providerId: string | null;
+  providerThreadId: string | null;
+  threadId: string;
+}
+
+export interface RecordThreadProviderSessionArgs {
+  environmentId: string;
+  providerId: string;
+  providerThreadId: string;
+  threadId: string;
+}
+
+export interface RecordThreadProviderStartArgs {
+  environmentId: string;
+  providerId: string;
+  threadId: string;
 }
 
 export interface ApplicationDataChangedNotification {
@@ -516,6 +537,7 @@ export class RuntimeManager {
     environmentId: string,
     threadId: string,
     providerThreadId: string,
+    providerId: string | null,
   ): void {
     const entry = this.entries.get(environmentId);
     if (!entry) {
@@ -525,6 +547,7 @@ export class RuntimeManager {
     const current = entry.threads.get(threadId);
     entry.threads.set(threadId, {
       activeTurnId: current?.activeTurnId ?? null,
+      providerId: providerId ?? current?.providerId ?? null,
       providerThreadId,
       status: "active",
     });
@@ -548,6 +571,63 @@ export class RuntimeManager {
     });
   }
 
+  recordThreadProviderStart(args: RecordThreadProviderStartArgs): void {
+    const entry = this.entries.get(args.environmentId);
+    if (!entry) {
+      return;
+    }
+
+    const current = entry.threads.get(args.threadId);
+    entry.threads.set(args.threadId, {
+      activeTurnId: current?.activeTurnId ?? null,
+      providerId: args.providerId,
+      providerThreadId: current?.providerThreadId ?? null,
+      status: current?.status ?? "idle",
+    });
+    this.trackedThreadStorageTargets.set(args.threadId, {
+      environmentId: args.environmentId,
+      threadId: args.threadId,
+    });
+    this.ensureThreadStorageWatcher();
+  }
+
+  recordThreadProviderSession(args: RecordThreadProviderSessionArgs): void {
+    const entry = this.entries.get(args.environmentId);
+    if (!entry) {
+      return;
+    }
+
+    const current = entry.threads.get(args.threadId);
+    entry.threads.set(args.threadId, {
+      activeTurnId: current?.activeTurnId ?? null,
+      providerId: args.providerId,
+      providerThreadId: args.providerThreadId,
+      status: current?.status ?? "idle",
+    });
+    this.trackedThreadStorageTargets.set(args.threadId, {
+      environmentId: args.environmentId,
+      threadId: args.threadId,
+    });
+    this.ensureThreadStorageWatcher();
+  }
+
+  getThreadProviderSession(
+    environmentId: string,
+    threadId: string,
+  ): RuntimeThreadProviderSession | null {
+    const thread = this.entries.get(environmentId)?.threads.get(threadId);
+    if (!thread) {
+      return null;
+    }
+
+    return {
+      environmentId,
+      providerId: thread.providerId,
+      providerThreadId: thread.providerThreadId,
+      threadId,
+    };
+  }
+
   private markThreadTurnStarted(
     environmentId: string,
     threadId: string,
@@ -560,6 +640,7 @@ export class RuntimeManager {
     }
     entry.threads.set(threadId, {
       activeTurnId: turnId,
+      providerId: entry.threads.get(threadId)?.providerId ?? null,
       providerThreadId,
       status: "active",
     });
@@ -1032,6 +1113,9 @@ export class RuntimeManager {
       }
 
       if (thread.activeTurnId !== null) {
+        if (thread.providerThreadId === null) {
+          continue;
+        }
         events.push({
           type: "turn/completed",
           threadId,
@@ -1172,6 +1256,7 @@ export class RuntimeManager {
               args.environmentId,
               event.threadId,
               event.providerThreadId,
+              null,
             );
           } else if (event.type === "turn/started") {
             this.markThreadTurnStarted(

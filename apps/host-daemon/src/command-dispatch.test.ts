@@ -183,7 +183,7 @@ describe("dispatchCommand", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/bb-command-dispatch-test",
     });
-    manager.markThreadActive("env-1", "thread-1", "provider-thread-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-thread-1", null);
 
     const flushDeferred = createDeferred<void>();
     const flush = vi.fn(async () => flushDeferred.promise);

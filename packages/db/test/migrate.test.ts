@@ -304,6 +304,7 @@ describe("migrate", () => {
         .run();
       db.$client.prepare("DROP INDEX threads_pin_sort_idx").run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
+      db.$client.prepare("DROP TABLE client_turn_requests").run();
       db.$client.prepare("DELETE FROM projects WHERE kind = 'personal'").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN kind").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN sort_key").run();

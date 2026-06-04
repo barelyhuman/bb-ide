@@ -7,7 +7,7 @@ import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
   buildThreadTimelineFromEvents,
   decodeThreadEventRow,
-  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+  EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
   formatThreadTimelineText,
 } from "@bb/thread-view";
 import {
@@ -962,7 +962,7 @@ export function buildBundle(args: {
   });
   const decodedRows = threadEventRows.map((row) => decodeThreadEventRow(row));
   const timelineProjection = buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
     contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
@@ -978,7 +978,7 @@ export function buildBundle(args: {
     },
   });
   const verboseTimelineProjection = buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
     contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {

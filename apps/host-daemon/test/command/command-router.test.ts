@@ -6,7 +6,10 @@ import {
   encodeClientTurnRequestIdNumber,
   type ClientTurnRequestId,
 } from "@bb/domain";
-import type { HostDaemonCommandResultReportWithoutSession } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonCommand,
+  HostDaemonCommandResultReportWithoutSession,
+} from "@bb/host-daemon-contract";
 import {
   WorkspaceError,
   type CommitOptions,
@@ -27,6 +30,8 @@ let nextClientRequestIdValue = 1;
 
 type StartThreadArgs = Parameters<AgentRuntime["startThread"]>[0];
 type StartThreadResult = Awaited<ReturnType<AgentRuntime["startThread"]>>;
+type TurnSubmitCommand = Extract<HostDaemonCommand, { type: "turn.submit" }>;
+type ThreadStopCommand = Extract<HostDaemonCommand, { type: "thread.stop" }>;
 type ResumeThreadArgs = Parameters<AgentRuntime["resumeThread"]>[0];
 type ResumeThreadResult = Awaited<ReturnType<AgentRuntime["resumeThread"]>>;
 type RunTurnArgs = Parameters<AgentRuntime["runTurn"]>[0];
@@ -272,6 +277,53 @@ function createStandardRuntimeCommandContext(args: {
   };
 }
 
+function createTurnSubmitCommand(args: {
+  environmentId: string;
+  providerThreadId: string;
+  text: string;
+  threadId: string;
+}): TurnSubmitCommand {
+  return {
+    type: "turn.submit",
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+    requestId: nextClientRequestId(),
+    input: [{ type: "text", text: args.text }],
+    options: {
+      model: "gpt-5",
+      serviceTier: "default",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      permissionEscalation: null,
+    },
+    resumeContext: {
+      workspaceContext: {
+        workspacePath: `/tmp/${args.environmentId}`,
+        workspaceProvisionType: "unmanaged",
+      },
+      projectId: "project-1",
+      providerId: "fake",
+      providerThreadId: args.providerThreadId,
+      instructions: "Be a helpful coding agent.",
+      dynamicTools: [],
+      injectedSkillSources: [],
+      instructionMode: "append",
+    },
+    target: { mode: "start" },
+  };
+}
+
+function createThreadStopCommand(args: {
+  environmentId: string;
+  threadId: string;
+}): ThreadStopCommand {
+  return {
+    type: "thread.stop",
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+  };
+}
+
 describe("CommandRouter", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -339,15 +391,13 @@ describe("CommandRouter", () => {
     flushDeferred.resolve(undefined);
   });
 
-  it("reports missing host file reads without warning", async () => {
+  it("returns missing host file read errors", async () => {
     const rootPath = await makeTempDir("bb-command-router-read-file-");
     const missingPath = path.join(rootPath, "notes.md");
-    const reportResult = vi.fn(async () => undefined);
     const logger = createLogger();
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchProjectAttachment: unexpectedProjectAttachmentFetch,
-      reportResult,
       runtimeManager: new RuntimeManager({
         provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
       }),
@@ -376,8 +426,6 @@ describe("CommandRouter", () => {
         type: "host-rpc.response",
       }),
     );
-    expect(reportResult).not.toHaveBeenCalled();
-    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("reports missing host file roots without warning", async () => {
@@ -1364,7 +1412,7 @@ describe("CommandRouter", () => {
     ]);
   });
 
-  it("waits for an in-flight thread.unarchive before resuming a turn for the same thread", async () => {
+  it("waits for an in-flight thread.unarchive before running a turn for the same thread", async () => {
     const dataDir = await makeTempDir("bb-command-router-unarchive-");
     const calls: string[] = [];
     const runtime = createFakeRuntime();
@@ -1456,8 +1504,8 @@ describe("CommandRouter", () => {
     ]);
 
     await unarchiveStarted.promise;
-    // The turn must not resume the provider session while the unarchive is in
-    // flight, or the provider rejects the resume as still archived.
+    // The turn must not reach the provider while the unarchive is in flight, or
+    // the provider rejects it as still archived.
     expect(runtime.resumeThread).not.toHaveBeenCalled();
     expect(runtime.runTurn).not.toHaveBeenCalled();
 
@@ -1467,7 +1515,6 @@ describe("CommandRouter", () => {
     expect(calls).toEqual([
       "unarchive:start",
       "unarchive:done",
-      "resume",
       "runTurn",
     ]);
   });
@@ -1563,8 +1610,8 @@ describe("CommandRouter", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-1", "thread-a", "provider-a");
-    manager.markThreadActive("env-1", "thread-b", "provider-b");
+    manager.markThreadActive("env-1", "thread-a", "provider-a", null);
+    manager.markThreadActive("env-1", "thread-b", "provider-b", null);
 
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
@@ -1651,6 +1698,347 @@ describe("CommandRouter", () => {
 
     threadA.resolve(undefined);
     threadB.resolve(undefined);
+    await handling;
+  });
+
+  it("serializes provider commands for the same provider session", async () => {
+    const runtime = createFakeRuntime();
+    const firstTurn = createDeferred<undefined>();
+    const secondTurn = createDeferred<undefined>();
+    runtime.runTurn.mockImplementation(({ input }: RunTurnArgs) => {
+      const firstInput = input[0];
+      if (!firstInput || firstInput.type !== "text") {
+        return secondTurn.promise;
+      }
+      return firstInput.text === "first" ? firstTurn.promise : secondTurn.promise;
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    manager.markThreadActive(
+      "env-1",
+      "thread-a",
+      "provider-a",
+      "fake",
+    );
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "run-a-1",
+        attemptId: "attempt-run-a-1",
+        cursor: 1,
+        command: createTurnSubmitCommand({
+          environmentId: "env-1",
+          providerThreadId: "provider-a",
+          text: "first",
+          threadId: "thread-a",
+        }),
+      },
+      {
+        id: "run-a-2",
+        attemptId: "attempt-run-a-2",
+        cursor: 2,
+        command: createTurnSubmitCommand({
+          environmentId: "env-1",
+          providerThreadId: "provider-a",
+          text: "second",
+          threadId: "thread-a",
+        }),
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(runtime.runTurn).toHaveBeenCalledTimes(1);
+    });
+    firstTurn.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(runtime.runTurn).toHaveBeenCalledTimes(2);
+    });
+    secondTurn.resolve(undefined);
+    await handling;
+  });
+
+  it("blocks turn.submit while stopping the same provider process", async () => {
+    const runtime = createFakeRuntime();
+    const submittedTurn = createDeferred<undefined>();
+    const stop = createDeferred<undefined>();
+    runtime.runTurn.mockReturnValue(submittedTurn.promise);
+    runtime.stopThread.mockReturnValue(stop.promise);
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    manager.markThreadActive(
+      "env-1",
+      "thread-a",
+      "provider-a",
+      "fake",
+    );
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "stop-a",
+        attemptId: "attempt-stop-a",
+        cursor: 1,
+        command: createThreadStopCommand({
+          environmentId: "env-1",
+          threadId: "thread-a",
+        }),
+      },
+      {
+        id: "run-a",
+        attemptId: "attempt-run-a",
+        cursor: 2,
+        command: createTurnSubmitCommand({
+          environmentId: "env-1",
+          providerThreadId: "provider-a",
+          text: "run",
+          threadId: "thread-a",
+        }),
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(runtime.stopThread).toHaveBeenCalledTimes(1);
+    });
+    expect(runtime.runTurn).not.toHaveBeenCalled();
+    stop.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(runtime.runTurn).toHaveBeenCalledTimes(1);
+    });
+    submittedTurn.resolve(undefined);
+    await handling;
+  });
+
+  it("keeps unrelated environments concurrent during provider stop", async () => {
+    const runtime = createFakeRuntime();
+    const stop = createDeferred<undefined>();
+    const otherTurn = createDeferred<undefined>();
+    runtime.stopThread.mockReturnValue(stop.promise);
+    runtime.runTurn.mockReturnValue(otherTurn.promise);
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async (options) =>
+        createFakeWorkspace(
+          options.workspaceProvisionType === "unmanaged"
+            ? options.path
+            : "/tmp/managed",
+        ),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-2",
+      workspacePath: "/tmp/env-2",
+    });
+    manager.markThreadActive(
+      "env-1",
+      "thread-a",
+      "provider-a",
+      "fake",
+    );
+    manager.markThreadActive(
+      "env-2",
+      "thread-b",
+      "provider-b",
+      "fake",
+    );
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "stop-a",
+        attemptId: "attempt-stop-a",
+        cursor: 1,
+        command: createThreadStopCommand({
+          environmentId: "env-1",
+          threadId: "thread-a",
+        }),
+      },
+      {
+        id: "run-b",
+        attemptId: "attempt-run-b",
+        cursor: 2,
+        command: createTurnSubmitCommand({
+          environmentId: "env-2",
+          providerThreadId: "provider-b",
+          text: "run other",
+          threadId: "thread-b",
+        }),
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(runtime.stopThread).toHaveBeenCalledTimes(1);
+      expect(runtime.runTurn).toHaveBeenCalledTimes(1);
+    });
+    stop.resolve(undefined);
+    otherTurn.resolve(undefined);
+    await handling;
+  });
+
+  it("blocks thread.stop while starting the same provider process", async () => {
+    const runtime = createFakeRuntime();
+    const startedThread = createDeferred<StartThreadResult>();
+    const stop = createDeferred<undefined>();
+    runtime.startThread.mockReturnValue(startedThread.promise);
+    runtime.stopThread.mockReturnValue(stop.promise);
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "start-a",
+        attemptId: "attempt-start-a",
+        cursor: 1,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-a",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          requestId: nextClientRequestId(),
+          input: [{ type: "text", text: "start" }],
+        },
+      },
+      {
+        id: "stop-a",
+        attemptId: "attempt-stop-a",
+        cursor: 2,
+        command: createThreadStopCommand({
+          environmentId: "env-1",
+          threadId: "thread-a",
+        }),
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(runtime.startThread).toHaveBeenCalledTimes(1);
+    });
+    expect(runtime.stopThread).not.toHaveBeenCalled();
+    startedThread.resolve({ providerThreadId: "provider-a" });
+    await vi.waitFor(() => {
+      expect(runtime.stopThread).toHaveBeenCalledTimes(1);
+    });
+    stop.resolve(undefined);
+    await handling;
+  });
+
+  it("uses the provider process lane after thread identity records a null provider id", async () => {
+    const runtime = createFakeRuntime();
+    const submittedTurn = createDeferred<undefined>();
+    const stop = createDeferred<undefined>();
+    runtime.runTurn.mockReturnValue(submittedTurn.promise);
+    runtime.stopThread.mockReturnValue(stop.promise);
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => runtime,
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    manager.recordThreadProviderStart({
+      environmentId: "env-1",
+      providerId: "fake",
+      threadId: "thread-a",
+    });
+    manager.markThreadActive("env-1", "thread-a", "provider-a", null);
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "run-a",
+        attemptId: "attempt-run-a",
+        cursor: 1,
+        command: createTurnSubmitCommand({
+          environmentId: "env-1",
+          providerThreadId: "provider-a",
+          text: "run",
+          threadId: "thread-a",
+        }),
+      },
+      {
+        id: "stop-a",
+        attemptId: "attempt-stop-a",
+        cursor: 2,
+        command: createThreadStopCommand({
+          environmentId: "env-1",
+          threadId: "thread-a",
+        }),
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(runtime.runTurn).toHaveBeenCalledTimes(1);
+    });
+    expect(runtime.stopThread).not.toHaveBeenCalled();
+    submittedTurn.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(runtime.stopThread).toHaveBeenCalledTimes(1);
+    });
+    stop.resolve(undefined);
     await handling;
   });
 

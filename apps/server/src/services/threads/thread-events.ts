@@ -67,6 +67,11 @@ export interface ClientTurnRequestedEventArgs {
   type: "client/turn/requested";
 }
 
+export interface PreparedClientTurnRequestedEventArgs
+  extends ClientTurnRequestedEventArgs {
+  requestId: ClientTurnRequestId;
+}
+
 export interface ClientTurnLifecycleEventArgs {
   environmentId: string | null;
   initiator: ThreadTurnInitiator;
@@ -83,6 +88,12 @@ export type ClientTurnEventArgs =
 export interface AppendedClientTurnRequest {
   requestId: ClientTurnRequestId;
   sequence: number;
+}
+
+export interface AppendedClientTurnRequestWithNotification
+  extends AppendedClientTurnRequest {
+  notificationChanges: ThreadChangeKind[];
+  notificationMetadata: ThreadChangeMetadata;
 }
 
 export type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
@@ -252,13 +263,27 @@ interface BuildAppendThreadEventNotificationMetadataArgs {
   eventType: ThreadEventType;
 }
 
-function createClientTurnRequestId(): ClientTurnRequestId {
+export function createClientTurnRequestId(): ClientTurnRequestId {
   const bytes = randomBytes(CLIENT_TURN_REQUEST_ID_SUFFIX_LENGTH);
   return encodeClientTurnRequestIdAlphabetIndexes({
     indexes: [...bytes].map(
       (byte) => byte % CLIENT_TURN_REQUEST_ID_ALPHABET.length,
     ),
   });
+}
+
+function appendBuiltClientTurnRequestedEvent(
+  append: AppendClientTurnEvent,
+  args: PreparedClientTurnRequestedEventArgs,
+): AppendedClientTurnRequest {
+  const sequence = append({
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    type: args.type,
+    scope: threadScope(),
+    data: buildClientTurnRequestedEventData(args, args.requestId),
+  });
+  return { requestId: args.requestId, sequence };
 }
 
 function appendBuiltClientTurnEvent(
@@ -276,15 +301,10 @@ function appendBuiltClientTurnEvent(
         data: buildClientTurnLifecycleEventData(args),
       });
     case "client/turn/requested": {
-      const requestId = createClientTurnRequestId();
-      const sequence = append({
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        scope: threadScope(),
-        data: buildClientTurnRequestedEventData(args, requestId),
+      return appendBuiltClientTurnRequestedEvent(append, {
+        ...args,
+        requestId: createClientTurnRequestId(),
       });
-      return { requestId, sequence };
     }
   }
 }
@@ -569,6 +589,45 @@ export function appendClientTurnEventInTransaction(
     (eventArgs) => appendThreadEventInTransaction(db, eventArgs),
     args,
   );
+}
+
+export function appendPreparedClientTurnRequestedEventInTransaction(
+  db: DbTransaction,
+  args: PreparedClientTurnRequestedEventArgs,
+): AppendedClientTurnRequest {
+  const result = appendPreparedClientTurnRequestedEventWithNotificationInTransaction(
+    db,
+    args,
+  );
+  return {
+    requestId: result.requestId,
+    sequence: result.sequence,
+  };
+}
+
+export function appendPreparedClientTurnRequestedEventWithNotificationInTransaction(
+  db: DbTransaction,
+  args: PreparedClientTurnRequestedEventArgs,
+): AppendedClientTurnRequestWithNotification {
+  const eventArgs: AppendThreadEventArgs = {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    type: args.type,
+    scope: threadScope(),
+    data: buildClientTurnRequestedEventData(args, args.requestId),
+  };
+  const result = appendThreadEventInTransactionWithAttention(db, eventArgs);
+  return {
+    requestId: args.requestId,
+    sequence: result.sequence,
+    notificationChanges: buildAppendThreadEventNotificationChanges(
+      result.readStateUpdate,
+    ),
+    notificationMetadata: buildAppendThreadEventNotificationMetadata({
+      readStateUpdate: result.readStateUpdate,
+      eventType: args.type,
+    }),
+  };
 }
 
 export function parseStoredTurnRequestEvent(

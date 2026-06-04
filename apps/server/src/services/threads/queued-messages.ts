@@ -6,7 +6,6 @@ import {
   getQueuedThreadMessage,
   getThread,
   listIdleThreadsWithQueuedMessages,
-  queueCommandInTransaction,
   releaseQueuedMessageClaim,
   releaseStaleQueuedMessageClaims,
 } from "@bb/db";
@@ -32,6 +31,7 @@ import {
   buildExecutionOptions,
   ensureThreadNativeArchiveSettled,
   prepareTurnSubmitCommandPayload,
+  queueTurnSubmitCommandInTransaction,
 } from "./thread-commands.js";
 import { appendClientTurnEventInTransaction } from "./thread-events.js";
 import { getLastProviderThreadId } from "./thread-events.js";
@@ -263,11 +263,11 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
           requestId: request.requestId,
           preparedCommand,
         });
-        queueCommandInTransaction(tx, {
+        queueTurnSubmitCommandInTransaction(tx, {
+          command,
           hostId: environment.hostId,
+          requestEventSequence: request.sequence,
           sessionId: session.id,
-          type: command.type,
-          payload: JSON.stringify(command),
         });
         tryTransitionInTransaction(tx, deps.hub, thread.id, "active");
         return true;

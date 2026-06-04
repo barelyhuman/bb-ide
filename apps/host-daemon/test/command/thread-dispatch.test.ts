@@ -959,7 +959,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1", null);
 
     const runResult = await dispatchCommand(
       {
@@ -1069,7 +1069,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
 
     await dispatchCommand(
       {
@@ -1154,7 +1154,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     harness.manager.markThreadInactive("env-1", "thread-1");
     expect(harness.manager.listActiveThreads()).toEqual([]);
 
@@ -1207,7 +1207,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     harness.runtime.steerTurn = async (args) => {
       harness.runtimeState.steeredTurnId = args.expectedTurnId;
       harness.runtimeState.steeredClientRequestId = args.clientRequestId;
@@ -1264,7 +1264,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     harness.runtime.steerTurn = async (args) => ({
       status: "stale",
       activeTurnId: args.expectedTurnId,
@@ -1315,7 +1315,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1", null);
 
     const result = await dispatchCommand(
       {
@@ -1422,7 +1422,7 @@ describe("thread command dispatch", () => {
       environmentId: "env-exit",
       workspacePath: "/tmp/env-exit",
     });
-    manager.markThreadActive("env-exit", "thread-1", "provider-1");
+    manager.markThreadActive("env-exit", "thread-1", "provider-1", null);
     onProcessExit?.({
       providerId: "fake",
       threadIds: ["thread-1"],

@@ -49,6 +49,27 @@ export type {
 } from "./project-operations.js";
 
 export {
+  createPendingClientTurnRequest,
+  createPendingClientTurnRequestInTransaction,
+  getClientTurnRequest,
+  listClientTurnRequestsByThreadAndRequestIds,
+  markClientTurnRequestAcceptedInTransaction,
+  recordClientTurnRequestCommandCompletedInTransaction,
+  settleClientTurnRequestsForCommandInTransaction,
+  settlePendingClientTurnRequestsForThreadsInTransaction,
+} from "./client-turn-requests.js";
+export type {
+  ClientTurnRequestRow,
+  CreatePendingClientTurnRequestArgs,
+  GetClientTurnRequestArgs,
+  ListClientTurnRequestsByThreadAndRequestIdsArgs,
+  MarkClientTurnRequestAcceptedArgs,
+  RecordClientTurnRequestCommandCompletedArgs,
+  SettleClientTurnRequestsForCommandArgs,
+  SettlePendingClientTurnRequestsForThreadsArgs,
+} from "./client-turn-requests.js";
+
+export {
   createProjectSource,
   countProjectSources,
   getProjectSourceForProject,
@@ -244,6 +265,7 @@ export {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
   appendStoredThreadEventsInTransaction,
+  findStoredClientTurnRequestSequenceByRequestId,
   findStoredEventRow,
   getActiveStoredTurnId,
   hasStoredTurnStarted,
@@ -286,6 +308,7 @@ export type {
   AppendDaemonEventsResult,
   AppendStoredThreadEventArgs,
   CompletedStoredTurnRow,
+  FindStoredClientTurnRequestSequenceByRequestIdArgs,
   GetLatestThreadSequenceArgs,
   HasStoredTurnStartedArgs,
   InsertEventInput,

@@ -92,6 +92,7 @@ export async function startThread(
       command.environmentId,
       command.threadId,
       result.providerThreadId,
+      command.providerId,
     );
     return result;
   } catch (error) {
@@ -142,6 +143,7 @@ export async function ensureThreadRuntime(
     command.environmentId,
     command.threadId,
     providerThreadId,
+    resumeContext.providerId,
   );
   return entry;
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { desc, eq } from "drizzle-orm";
-import { events, getThreadDynamicContextFileState } from "@bb/db";
+import { and, desc, eq, sql } from "drizzle-orm";
+import {
+  clientTurnRequests,
+  events,
+  getThreadDynamicContextFileState,
+  hostDaemonCommands,
+} from "@bb/db";
 import type { PromptInput, ThreadStatus } from "@bb/domain";
 import { turnRequestEventDataSchema } from "@bb/domain";
 import {
@@ -530,6 +535,10 @@ describe("manager dynamic file delivery", () => {
         providerThreadId: "provider-manager-dynamic-queue-failure",
         turnId: "turn-manager-dynamic-queue-failure",
       });
+      const initialTurnRequestInputs = listTurnRequestInputs(
+        setup.harness,
+        setup.thread.id,
+      );
       const sendPromise = sendThreadMessage(setup.harness.deps, {
         environment: setup.environment,
         payload: {
@@ -559,7 +568,7 @@ describe("manager dynamic file delivery", () => {
         let transactionCountAfterPreferences = 0;
         transactionSpy.mockImplementation((callback) => {
           transactionCountAfterPreferences += 1;
-          if (transactionCountAfterPreferences === 2) {
+          if (transactionCountAfterPreferences === 1) {
             throw new Error("queued turn insert failed");
           }
           return originalTransaction(callback);
@@ -579,7 +588,7 @@ describe("manager dynamic file delivery", () => {
         expect(response.status).toBe(200);
 
         await expect(sendPromise).rejects.toThrow("queued turn insert failed");
-        expect(transactionCountAfterPreferences).toBe(2);
+        expect(transactionCountAfterPreferences).toBe(1);
       } finally {
         transactionSpy.mockRestore();
       }
@@ -589,16 +598,12 @@ describe("manager dynamic file delivery", () => {
           fileKey: MANAGER_PREFERENCES_FILE_KEY,
         }),
       ).toBeNull();
-      const eventInput = getLatestTurnRequestInput(
-        setup.harness,
-        setup.thread.id,
+      expect(listTurnRequestInputs(setup.harness, setup.thread.id)).toEqual(
+        initialTurnRequestInputs,
       );
-      expect(eventInput[0]).toEqual({
-        type: "text",
-        text: expect.stringContaining("Current PREFERENCES.md contents:"),
-        visibility: "agent-only",
-      });
-      expect(eventInput[1]).toEqual(setup.input[0]);
+      expect(setup.harness.db.select().from(clientTurnRequests).all()).toEqual(
+        [],
+      );
     } finally {
       await setup.harness.cleanup();
     }
@@ -622,6 +627,10 @@ describe("manager dynamic file delivery", () => {
         providerThreadId: "provider-manager-dynamic-concurrent",
         turnId: "turn-manager-dynamic-concurrent",
       });
+      const existingTurnRequestCount = listTurnRequestInputs(
+        setup.harness,
+        setup.thread.id,
+      ).length;
 
       const queuedMessages = Promise.all([
         queueManagerSystemMessage(setup.harness.deps, {
@@ -645,13 +654,14 @@ describe("manager dynamic file delivery", () => {
         threadStoragePath: setup.threadStoragePath,
         content: "concurrent prefs\n",
       });
-      await expect(queuedMessages).resolves.toEqual([true, true]);
+      const results = await queuedMessages;
+      expect(results.filter(Boolean)).toHaveLength(1);
 
       const turnInputs = listTurnRequestInputs(
         setup.harness,
         setup.thread.id,
-      ).slice(-2);
-      expect(turnInputs).toHaveLength(2);
+      ).slice(existingTurnRequestCount);
+      expect(turnInputs).toHaveLength(1);
       const injectedPreferencesMessages = turnInputs
         .map((input) => input[0])
         .filter(
@@ -682,7 +692,38 @@ describe("manager dynamic file delivery", () => {
               item.text === "[bb system]\n\nSecond concurrent inbound turn.",
           ),
         ),
-      ).toBe(true);
+      ).toBe(false);
+
+      const turnSubmitRows = setup.harness.db
+        .select({ id: hostDaemonCommands.id })
+        .from(hostDaemonCommands)
+        .where(
+          and(
+            eq(hostDaemonCommands.type, "turn.submit"),
+            sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${setup.thread.id}`,
+          ),
+        )
+        .all();
+      expect(turnSubmitRows).toHaveLength(1);
+
+      const lifecycleRows = setup.harness.db
+        .select({
+          commandId: clientTurnRequests.commandId,
+          commandType: clientTurnRequests.commandType,
+          status: clientTurnRequests.status,
+          threadId: clientTurnRequests.threadId,
+        })
+        .from(clientTurnRequests)
+        .where(eq(clientTurnRequests.threadId, setup.thread.id))
+        .all();
+      expect(lifecycleRows).toEqual([
+        {
+          commandId: turnSubmitRows[0]?.id,
+          commandType: "turn.submit",
+          status: "pending",
+          threadId: setup.thread.id,
+        },
+      ]);
     } finally {
       await setup.harness.cleanup();
     }

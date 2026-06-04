@@ -47,7 +47,8 @@ import {
 } from "./build-event-projection.js";
 import {
   buildAcceptedClientRequestById,
-  type AcceptedClientRequestContext,
+  buildClientTurnRequestSettlementById,
+  type ClientTurnRequestSettlementContext,
 } from "./accepted-client-request-context.js";
 import { parsePendingSteerFromClientRequest } from "./user-message-parsing.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
@@ -127,7 +128,7 @@ export type ThreadTimelineFromEventsOptions =
   | ManagerConversationTimelineFromEventsOptions;
 
 export interface BuildThreadTimelineFromEventsArgs {
-  acceptedClientRequestContext: AcceptedClientRequestContext;
+  acceptedClientRequestContext: ClientTurnRequestSettlementContext;
   contextWindowEvents: ThreadEventWithMeta[];
   events: ThreadEventWithMeta[];
   options: ThreadTimelineFromEventsOptions;
@@ -801,7 +802,7 @@ function convertPendingSteerMessage(
 }
 
 function buildPendingSteerRowsFromEvents(
-  acceptedClientRequestContext: AcceptedClientRequestContext,
+  acceptedClientRequestContext: ClientTurnRequestSettlementContext,
   events: ThreadEventWithMeta[],
   options: ThreadTimelineFromEventsBaseOptions,
 ): TimelineUserConversationRow[] {
@@ -810,9 +811,20 @@ function buildPendingSteerRowsFromEvents(
     context: acceptedClientRequestContext,
     events: orderedEvents,
   });
+  const clientTurnRequestSettlementById = buildClientTurnRequestSettlementById({
+    context: acceptedClientRequestContext,
+    events: orderedEvents,
+  });
   const pendingSteerRows: TimelineUserConversationRow[] = [];
 
   for (const { event, meta } of orderedEvents) {
+    const settlement =
+      event.type === "client/turn/requested"
+        ? clientTurnRequestSettlementById.get(event.requestId)
+        : undefined;
+    if (settlement && settlement.status !== "pending") {
+      continue;
+    }
     const pendingSteer = parsePendingSteerFromClientRequest({
       acceptedClientRequest:
         event.type === "client/turn/requested"

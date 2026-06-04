@@ -23,7 +23,10 @@ import {
 } from "./command-dispatch.js";
 import { isExpectedCommandDispatchError } from "./command-dispatch-support.js";
 import type { HostDaemonLogger } from "./logger.js";
-import { RuntimeManager } from "./runtime-manager.js";
+import {
+  RuntimeManager,
+  type RuntimeThreadProviderSession,
+} from "./runtime-manager.js";
 import { runtimeErrorLogFields } from "./error-utils.js";
 
 type CommandResultReport = HostDaemonCommandResultReportWithoutSession;
@@ -40,11 +43,31 @@ interface PendingCommandResultReport {
 type EnvironmentLaneMode = "read" | "write";
 type CommandLifecycleOutcome = "reported" | "report_deferred";
 
-interface EnvironmentLaneState {
+interface ReadWriteLaneState {
   /** All admitted read and write work. Writes wait on this tail. */
   tail: Promise<void>;
   /** Last admitted write. Reads wait on this tail, then join `tail`. */
   writeTail: Promise<void>;
+}
+
+interface ReadWriteLaneArgs<T> {
+  key: string;
+  lanes: Map<string, ReadWriteLaneState>;
+  mode: EnvironmentLaneMode;
+  work: () => Promise<T>;
+}
+
+interface ReadWriteLaneIdleArgs {
+  key: string;
+  lanes: Map<string, ReadWriteLaneState>;
+  state: ReadWriteLaneState;
+  tail: Promise<void>;
+}
+
+interface ProviderExecutionLane {
+  processKey: string;
+  processMode: EnvironmentLaneMode;
+  sessionKey: string;
 }
 
 type FileWriteLaneCommand = Extract<
@@ -135,12 +158,16 @@ export class CommandRouter {
   private readonly logger;
   private readonly now;
   private readonly readFetchedAt;
-  private readonly environmentLanes = new Map<string, EnvironmentLaneState>();
+  private readonly environmentLanes = new Map<string, ReadWriteLaneState>();
   private readonly fileWriteLaneTails = new Map<string, Promise<void>>();
   // Per-thread barrier keyed by threadId. A turn submission
   // (turn.submit/thread.start) waits for an in-flight thread.unarchive of the
   // same thread so it cannot resume a still-archived provider session.
   private readonly threadUnarchiveBarriers = new Map<string, Promise<void>>();
+  // Provider process lanes protect commands that share one provider process,
+  // while session lanes serialize commands for one provider thread/session.
+  private readonly providerProcessLanes = new Map<string, ReadWriteLaneState>();
+  private readonly providerSessionLaneTails = new Map<string, Promise<void>>();
   // Stale failed reports retry in the background after the current result is
   // reported, so one permanently failing result cannot block newer completions.
   private readonly pendingResults: PendingCommandResultReport[] = [];
@@ -238,26 +265,28 @@ export class CommandRouter {
     let task: Promise<ExecutedCommandResult>;
     const fileWriteLaneKey = this.getFileWriteLaneKey(envelope.command);
     const environmentLaneMode = this.getEnvironmentLaneMode(envelope.command);
-    const runCommand = () =>
-      this.runAfterThreadUnarchiveBarrier(envelope.command, () =>
-        this.executeCommandWithLaneStart(envelope, laneWorkMetrics),
-      );
+    const providerLane = this.resolveProviderLane(envelope.command);
     if (fileWriteLaneKey) {
-      task = this.runInFileWriteLane(fileWriteLaneKey, runCommand);
-    } else if (environmentLaneMode && "environmentId" in envelope.command) {
-      const { environmentId } = envelope.command;
-      if (!environmentId) {
-        throw new Error(
-          `Command ${envelope.command.type} is missing environmentId`,
-        );
-      }
-      task = this.runInEnvironmentLane(
-        environmentId,
-        environmentLaneMode,
-        runCommand,
+      task = this.runInFileWriteLane(fileWriteLaneKey, () =>
+        this.runAfterThreadUnarchiveBarrier(envelope.command, () =>
+          this.executeCommandWithLaneStart(envelope, laneWorkMetrics),
+        ),
       );
     } else {
-      task = runCommand();
+      const runCommand = () =>
+        this.runAfterThreadUnarchiveBarrier(envelope.command, () => {
+          if (environmentLaneMode || providerLane) {
+            return this.executeCommandWithLaneStart(envelope, laneWorkMetrics);
+          }
+          laneWorkMetrics.startedAtMs = receivedAtMs;
+          return this.executeCommand(envelope);
+        });
+      task = this.runInExecutionLanes(
+        envelope.command,
+        environmentLaneMode,
+        providerLane,
+        runCommand,
+      );
     }
     // Register synchronously, before awaiting, so a turn submission dispatched
     // in the same batch observes the unarchive that precedes it.
@@ -364,10 +393,45 @@ export class CommandRouter {
     mode: EnvironmentLaneMode,
     work: () => Promise<T>,
   ): Promise<T> {
-    if (mode === "read") {
-      return this.runInEnvironmentReadLane(environmentId, work);
+    return this.runInReadWriteLane({
+      key: environmentId,
+      lanes: this.environmentLanes,
+      mode,
+      work,
+    });
+  }
+
+  private runInExecutionLanes<T>(
+    command: HostDaemonCommand,
+    environmentLaneMode: EnvironmentLaneMode | null,
+    providerLane: ProviderExecutionLane | null,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const providerWork = providerLane
+      ? () => this.runInProviderLane(providerLane, work)
+      : work;
+    if (!environmentLaneMode) {
+      return providerWork();
     }
-    return this.runInEnvironmentWriteLane(environmentId, work);
+    if (!("environmentId" in command) || !command.environmentId) {
+      throw new Error(`Command ${command.type} is missing environmentId`);
+    }
+    return this.runInEnvironmentLane(
+      command.environmentId,
+      environmentLaneMode,
+      providerWork,
+    );
+  }
+
+  private runInProviderLane<T>(
+    lane: ProviderExecutionLane,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.runInProviderProcessLane(
+      lane.processKey,
+      lane.processMode,
+      () => this.runInProviderSessionLane(lane.sessionKey, work),
+    );
   }
 
   private async executeCommand(
@@ -503,58 +567,21 @@ export class CommandRouter {
     );
   }
 
-  private getOrCreateEnvironmentLane(
-    environmentId: string,
-  ): EnvironmentLaneState {
-    const existing = this.environmentLanes.get(environmentId);
+  private getOrCreateReadWriteLane(
+    key: string,
+    lanes: Map<string, ReadWriteLaneState>,
+  ): ReadWriteLaneState {
+    const existing = lanes.get(key);
     if (existing) {
       return existing;
     }
     const resolved = Promise.resolve();
-    const state: EnvironmentLaneState = {
+    const state: ReadWriteLaneState = {
       tail: resolved,
       writeTail: resolved,
     };
-    this.environmentLanes.set(environmentId, state);
+    lanes.set(key, state);
     return state;
-  }
-
-  private runInEnvironmentReadLane<T>(
-    environmentId: string,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    const state = this.getOrCreateEnvironmentLane(environmentId);
-    const previousWrite = state.writeTail;
-    const next = previousWrite.catch(() => undefined).then(work);
-    const done = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    const previousTail = state.tail;
-    // Reads only wait for earlier writes, so adjacent reads can run together.
-    // They still join the full tail so later writes wait for every active read.
-    const tail = Promise.all([previousTail.catch(() => undefined), done]).then(
-      () => undefined,
-    );
-    state.tail = tail;
-    this.deleteEnvironmentLaneWhenIdle(environmentId, state, tail);
-    return next;
-  }
-
-  private runInEnvironmentWriteLane<T>(
-    environmentId: string,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    const state = this.getOrCreateEnvironmentLane(environmentId);
-    const next = state.tail.catch(() => undefined).then(work);
-    const done = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    state.tail = done;
-    state.writeTail = done;
-    this.deleteEnvironmentLaneWhenIdle(environmentId, state, done);
-    return next;
   }
 
   /**
@@ -611,6 +638,35 @@ export class CommandRouter {
     return next;
   }
 
+  private runInProviderProcessLane<T>(
+    key: string,
+    mode: EnvironmentLaneMode,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.runInReadWriteLane({
+      key,
+      lanes: this.providerProcessLanes,
+      mode,
+      work,
+    });
+  }
+
+  private runInProviderSessionLane<T>(
+    key: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const previousTail =
+      this.providerSessionLaneTails.get(key) ?? Promise.resolve();
+    const next = previousTail.catch(() => undefined).then(work);
+    const done = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.providerSessionLaneTails.set(key, done);
+    this.deleteProviderSessionLaneWhenIdle(key, done);
+    return next;
+  }
+
   private deleteFileWriteLaneWhenIdle(key: string, tail: Promise<void>): void {
     void tail.then(() => {
       if (this.fileWriteLaneTails.get(key) === tail) {
@@ -619,17 +675,63 @@ export class CommandRouter {
     });
   }
 
-  private deleteEnvironmentLaneWhenIdle(
-    environmentId: string,
-    state: EnvironmentLaneState,
+  private deleteProviderSessionLaneWhenIdle(
+    key: string,
     tail: Promise<void>,
   ): void {
     void tail.then(() => {
-      if (
-        this.environmentLanes.get(environmentId) === state &&
-        state.tail === tail
-      ) {
-        this.environmentLanes.delete(environmentId);
+      if (this.providerSessionLaneTails.get(key) === tail) {
+        this.providerSessionLaneTails.delete(key);
+      }
+    });
+  }
+
+  private runInReadWriteLane<T>({
+    key,
+    lanes,
+    mode,
+    work,
+  }: ReadWriteLaneArgs<T>): Promise<T> {
+    const state = this.getOrCreateReadWriteLane(key, lanes);
+    if (mode === "read") {
+      const previousWrite = state.writeTail;
+      const next = previousWrite.catch(() => undefined).then(work);
+      const done = next.then(
+        () => undefined,
+        () => undefined,
+      );
+      const previousTail = state.tail;
+      // Reads only wait for earlier writes, so adjacent reads can run together.
+      // They still join the full tail so later writes wait for every active read.
+      const tail = Promise.all([
+        previousTail.catch(() => undefined),
+        done,
+      ]).then(() => undefined);
+      state.tail = tail;
+      this.deleteReadWriteLaneWhenIdle({ key, lanes, state, tail });
+      return next;
+    }
+
+    const next = state.tail.catch(() => undefined).then(work);
+    const done = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    state.tail = done;
+    state.writeTail = done;
+    this.deleteReadWriteLaneWhenIdle({ key, lanes, state, tail: done });
+    return next;
+  }
+
+  private deleteReadWriteLaneWhenIdle({
+    key,
+    lanes,
+    state,
+    tail,
+  }: ReadWriteLaneIdleArgs): void {
+    void tail.then(() => {
+      if (lanes.get(key) === state && state.tail === tail) {
+        lanes.delete(key);
       }
     });
   }
@@ -651,6 +753,122 @@ export class CommandRouter {
       command.type === "host.delete_file_relative" ||
       command.type === "host.delete_path_relative"
     );
+  }
+
+  private getProviderProcessLaneKey(
+    environmentId: string,
+    providerId: string | null,
+  ): string {
+    // Legacy or thread.stop paths can lack provider ownership. Bucket them
+    // together per environment so unknown ownership stays conservative without
+    // serializing unrelated environments.
+    return `${environmentId}\0${providerId ?? "unknown-provider"}`;
+  }
+
+  private getProviderSessionLaneKey(
+    processKey: string,
+    sessionId: string,
+  ): string {
+    return `${processKey}\0${sessionId}`;
+  }
+
+  private createProviderExecutionLane(args: {
+    environmentId: string;
+    processMode: EnvironmentLaneMode;
+    providerId: string | null;
+    sessionId: string;
+  }): ProviderExecutionLane {
+    const processKey = this.getProviderProcessLaneKey(
+      args.environmentId,
+      args.providerId,
+    );
+    return {
+      processKey,
+      processMode: args.processMode,
+      sessionKey: this.getProviderSessionLaneKey(processKey, args.sessionId),
+    };
+  }
+
+  private providerLaneForThreadStop(
+    session: RuntimeThreadProviderSession,
+  ): ProviderExecutionLane {
+    const sessionId =
+      session.providerThreadId === null
+        ? `thread:${session.threadId}`
+        : `provider-thread:${session.providerThreadId}`;
+    return this.createProviderExecutionLane({
+      environmentId: session.environmentId,
+      processMode: "write",
+      providerId: session.providerId,
+      sessionId,
+    });
+  }
+
+  private resolveProviderLane(
+    command: HostDaemonCommand,
+  ): ProviderExecutionLane | null {
+    switch (command.type) {
+      case "thread.start":
+        this.options.runtimeManager.recordThreadProviderStart({
+          environmentId: command.environmentId,
+          providerId: command.providerId,
+          threadId: command.threadId,
+        });
+        return this.createProviderExecutionLane({
+          environmentId: command.environmentId,
+          processMode: "read",
+          providerId: command.providerId,
+          sessionId: `thread:${command.threadId}`,
+        });
+      case "turn.submit":
+        this.options.runtimeManager.recordThreadProviderSession({
+          environmentId: command.environmentId,
+          providerId: command.resumeContext.providerId,
+          providerThreadId: command.resumeContext.providerThreadId,
+          threadId: command.threadId,
+        });
+        return this.createProviderExecutionLane({
+          environmentId: command.environmentId,
+          processMode: "read",
+          providerId: command.resumeContext.providerId,
+          sessionId: `provider-thread:${command.resumeContext.providerThreadId}`,
+        });
+      case "thread.archive":
+        this.options.runtimeManager.recordThreadProviderSession({
+          environmentId: command.environmentId,
+          providerId: command.providerId,
+          providerThreadId: command.providerThreadId,
+          threadId: command.threadId,
+        });
+        return this.createProviderExecutionLane({
+          environmentId: command.environmentId,
+          processMode: "read",
+          providerId: command.providerId,
+          sessionId: `provider-thread:${command.providerThreadId}`,
+        });
+      case "interactive.resolve":
+        this.options.runtimeManager.recordThreadProviderSession({
+          environmentId: command.environmentId,
+          providerId: command.providerId,
+          providerThreadId: command.providerThreadId,
+          threadId: command.threadId,
+        });
+        return this.createProviderExecutionLane({
+          environmentId: command.environmentId,
+          processMode: "read",
+          providerId: command.providerId,
+          sessionId: `provider-thread:${command.providerThreadId}`,
+        });
+      case "thread.stop": {
+        const session = this.options.runtimeManager.getThreadProviderSession(
+          command.environmentId,
+          command.threadId,
+        );
+        return session ? this.providerLaneForThreadStop(session) : null;
+      }
+      default:
+        return null;
+    }
   }
 
   private getEnvironmentLaneMode(

@@ -1,4 +1,9 @@
-import { getThread } from "@bb/db";
+import {
+  getThread,
+  hasPendingHostCommandForThread,
+  transitionThreadStatusInTransaction,
+  type DbTransaction,
+} from "@bb/db";
 import type {
   PromptInput,
   ResolvedThreadExecutionOptions,
@@ -7,15 +12,24 @@ import type {
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import {
+  addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
   ensureThreadNativeArchiveSettled,
-  queueTurnSubmitCommand,
+  prepareTurnSubmitCommandPayload,
+  queueTurnSubmitCommandInTransaction,
+  type PreparedTurnSubmitCommandPayload,
 } from "./thread-commands.js";
 import {
   ensureThreadCanQueueStartRequest,
-  queueReadyThreadTurnCommand,
+  prepareReadyThreadTurnCommand,
+  queuePreparedReadyThreadTurnCommandInTransaction,
 } from "./thread-lifecycle.js";
-import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
+import {
+  appendClientTurnEventInTransaction,
+  appendPreparedClientTurnRequestedEventInTransaction,
+  createClientTurnRequestId,
+  getActiveTurnId,
+} from "./thread-events.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
@@ -25,10 +39,11 @@ import {
   type ManagerDynamicFileDeliveryStateUpdate,
   prependManagerPreferencesSystemMessageIfChanged,
   recordManagerDynamicFileDelivery,
+  recordManagerDynamicFileDeliveryInTransaction,
   withManagerPreferencesDeliveryLock,
 } from "./manager-dynamic-file-delivery.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
-import { tryTransition } from "./thread-transitions.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 
 const MANAGER_SYSTEM_MESSAGE_SOURCE = "tell";
 
@@ -45,20 +60,59 @@ interface QueueReadyManagerSystemMessageArgs {
   thread: Thread;
 }
 
+interface QueueActiveManagerSystemMessageInTransactionArgs
+  extends QueueReadyManagerSystemMessageArgs {
+  sessionId: string;
+  preparedCommand: PreparedTurnSubmitCommandPayload;
+}
+
 function buildSystemInput(messageText: string): PromptInput[] {
   return [{ type: "text", text: messageText }];
 }
 
-async function queueReadyManagerSystemMessage(
-  deps: LoggedPendingInteractionWorkSessionDeps,
+function hasPendingActiveManagerCommand(
+  db: DbTransaction,
   args: QueueReadyManagerSystemMessageArgs,
-): Promise<void> {
-  const expectedSteerTurnId =
-    args.thread.status === "active"
-      ? getActiveTurnId(deps, args.thread.id)
-      : null;
+): boolean {
+  return (
+    hasPendingHostCommandForThread(db, {
+      hostId: args.environment.hostId,
+      threadId: args.thread.id,
+      type: "turn.submit",
+    }) ||
+    hasPendingHostCommandForThread(db, {
+      hostId: args.environment.hostId,
+      threadId: args.thread.id,
+      type: "thread.archive",
+    }) ||
+    hasPendingHostCommandForThread(db, {
+      hostId: args.environment.hostId,
+      threadId: args.thread.id,
+      type: "thread.stop",
+    })
+  );
+}
 
-  const request = appendClientTurnEvent(deps, {
+function queueActiveManagerSystemMessageInTransaction(
+  tx: DbTransaction,
+  args: QueueActiveManagerSystemMessageInTransactionArgs,
+): boolean {
+  const currentThread = getThread(tx, args.thread.id);
+  if (
+    !currentThread ||
+    currentThread.type !== "manager" ||
+    currentThread.environmentId !== args.environment.id ||
+    currentThread.status !== "active" ||
+    currentThread.archivedAt !== null ||
+    currentThread.deletedAt !== null ||
+    currentThread.stopRequestedAt !== null ||
+    hasPendingActiveManagerCommand(tx, args)
+  ) {
+    return false;
+  }
+
+  const expectedSteerTurnId = getActiveTurnId({ db: tx }, args.thread.id);
+  const request = appendClientTurnEventInTransaction(tx, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     type: "client/turn/requested",
@@ -68,48 +122,99 @@ async function queueReadyManagerSystemMessage(
     senderThreadId: null,
     requestMethod: "turn/start",
     source: MANAGER_SYSTEM_MESSAGE_SOURCE,
-    target:
-      args.thread.status === "active"
-        ? {
-            kind: "auto",
-            expectedTurnId: expectedSteerTurnId,
-          }
-        : { kind: "new-turn" },
+    target: {
+      kind: "auto",
+      expectedTurnId: expectedSteerTurnId,
+    },
   });
+  recordManagerDynamicFileDeliveryInTransaction(tx, args.stateUpdate);
+  queueTurnSubmitCommandInTransaction(tx, {
+    command: addRequestIdToTurnSubmitCommandPayload({
+      requestId: request.requestId,
+      preparedCommand: {
+        ...args.preparedCommand,
+        target: {
+          mode: "auto",
+          expectedTurnId: expectedSteerTurnId,
+        },
+      },
+    }),
+    hostId: args.environment.hostId,
+    requestEventSequence: request.sequence,
+    sessionId: args.sessionId,
+  });
+  return true;
+}
+
+async function queueActiveManagerSystemMessage(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: QueueReadyManagerSystemMessageArgs,
+): Promise<boolean> {
+  const expectedSteerTurnId = getActiveTurnId(deps, args.thread.id);
   const permissionEscalation = resolvePermissionEscalation({
     thread: args.thread,
     initiator: "system",
   });
-
-  if (args.thread.status === "active") {
-    await queueTurnSubmitCommand(deps, {
-      thread: args.thread,
-      input: args.input,
-      requestId: request.requestId,
-      execution: args.execution,
-      permissionEscalation,
-      target: {
-        mode: "auto",
-        expectedTurnId: expectedSteerTurnId,
-      },
-      environment: {
-        id: args.environment.id,
-        hostId: args.environment.hostId,
-        cleanupRequestedAt: args.environment.cleanupRequestedAt,
-        path: args.environment.path,
-        status: args.environment.status,
-        workspaceProvisionType: args.environment.workspaceProvisionType,
-      },
-    });
-    recordManagerDynamicFileDelivery(deps, args.stateUpdate);
-    return;
-  }
-
-  ensureThreadCanQueueStartRequest(deps, args.thread);
-  const queuedMode = await queueReadyThreadTurnCommand(deps, {
+  const session = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.environment.hostId,
+  });
+  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
     thread: args.thread,
     input: args.input,
-    requestId: request.requestId,
+    execution: args.execution,
+    permissionEscalation,
+    target: {
+      mode: "auto",
+      expectedTurnId: expectedSteerTurnId,
+    },
+    environment: {
+      id: args.environment.id,
+      hostId: args.environment.hostId,
+      cleanupRequestedAt: args.environment.cleanupRequestedAt,
+      path: args.environment.path,
+      status: args.environment.status,
+      workspaceProvisionType: args.environment.workspaceProvisionType,
+    },
+  });
+
+  const queued = deps.db.transaction(
+    (tx) =>
+      queueActiveManagerSystemMessageInTransaction(tx, {
+        ...args,
+        preparedCommand,
+        sessionId: session.id,
+      }),
+    { behavior: "immediate" },
+  );
+  if (!queued) {
+    return false;
+  }
+
+  deps.hub.notifyThread(args.thread.id, ["events-appended"], {
+    eventTypes: ["client/turn/requested"],
+  });
+  deps.hub.notifyCommand(args.environment.hostId);
+  return true;
+}
+
+async function queueReadyManagerSystemMessage(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: QueueReadyManagerSystemMessageArgs,
+): Promise<boolean> {
+  if (args.thread.status === "active") {
+    return queueActiveManagerSystemMessage(deps, args);
+  }
+
+  const permissionEscalation = resolvePermissionEscalation({
+    thread: args.thread,
+    initiator: "system",
+  });
+  const requestId = createClientTurnRequestId();
+
+  const command = await prepareReadyThreadTurnCommand(deps, {
+    thread: args.thread,
+    input: args.input,
+    requestId,
     execution: args.execution,
     permissionEscalation,
     environment: {
@@ -120,11 +225,54 @@ async function queueReadyManagerSystemMessage(
       status: args.environment.status,
       workspaceProvisionType: args.environment.workspaceProvisionType,
     },
+    projectId: args.thread.projectId,
+    providerId: args.thread.providerId,
+    managerTemplateName: null,
   });
-  if (queuedMode === "turn.submit") {
-    tryTransition(deps.db, deps.hub, args.thread.id, "active");
+  let transitioned = false;
+  deps.db.transaction(
+    (tx) => {
+      ensureThreadCanQueueStartRequest({ db: tx }, args.thread);
+      const request = appendPreparedClientTurnRequestedEventInTransaction(tx, {
+        threadId: args.thread.id,
+        environmentId: args.environment.id,
+        type: "client/turn/requested",
+        input: args.input,
+        execution: args.execution,
+        initiator: "system",
+        senderThreadId: null,
+        requestMethod: "turn/start",
+        source: MANAGER_SYSTEM_MESSAGE_SOURCE,
+        target: { kind: "new-turn" },
+        requestId,
+      });
+      const queuedMode = queuePreparedReadyThreadTurnCommandInTransaction(tx, {
+        command,
+        hostId: args.environment.hostId,
+        requestEventSequence: request.sequence,
+        thread: args.thread,
+      });
+      if (queuedMode === "turn.submit") {
+        transitionThreadStatusInTransaction(tx, {
+          id: args.thread.id,
+          newStatus: "active",
+        });
+        transitioned = true;
+      }
+      recordManagerDynamicFileDeliveryInTransaction(tx, args.stateUpdate);
+    },
+    { behavior: "immediate" },
+  );
+  deps.hub.notifyThread(args.thread.id, ["events-appended"], {
+    eventTypes: ["client/turn/requested"],
+  });
+  deps.hub.notifyCommand(args.environment.hostId);
+  if (transitioned) {
+    deps.hub.notifyThread(args.thread.id, ["status-changed"], {
+      projectId: args.thread.projectId,
+    });
   }
-  recordManagerDynamicFileDelivery(deps, args.stateUpdate);
+  return true;
 }
 
 export async function queueManagerSystemMessage(
@@ -161,7 +309,7 @@ export async function queueManagerSystemMessage(
     },
     "client/turn/requested",
   );
-  await withManagerPreferencesDeliveryLock(
+  return await withManagerPreferencesDeliveryLock(
     { thread: managerThread },
     async () => {
       const preparedInput =
@@ -183,11 +331,11 @@ export async function queueManagerSystemMessage(
         })
       ) {
         recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
-        return;
+        return true;
       }
 
       const readyEnvironment = requireReadyThreadEnvironment(environment);
-      await queueReadyManagerSystemMessage(deps, {
+      return await queueReadyManagerSystemMessage(deps, {
         thread: managerThread,
         input: preparedInput.input,
         stateUpdate: preparedInput.stateUpdate,
@@ -196,5 +344,4 @@ export async function queueManagerSystemMessage(
       });
     },
   );
-  return true;
 }
