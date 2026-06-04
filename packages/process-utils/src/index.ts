@@ -39,7 +39,6 @@ export interface PortableOutputChildProcess extends PortableChildProcess {
 export interface ResolveContainedPathArgs {
   rootPath: string;
   candidatePath: string;
-  allowRoot?: boolean;
 }
 
 export interface SanitizeInheritedChildProcessEnvArgs {
@@ -154,7 +153,7 @@ export function resolveContainedPath(
   const relativePath = relative(resolvedRootPath, resolvedCandidatePath);
 
   if (relativePath === "") {
-    return args.allowRoot === true ? resolvedCandidatePath : null;
+    return null;
   }
 
   if (
