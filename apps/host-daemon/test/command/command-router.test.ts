@@ -935,6 +935,95 @@ describe("CommandRouter", () => {
     expect(eventSink.flush).toHaveBeenCalledTimes(1);
   });
 
+  it("does not queue environment provision cancellation behind the environment write lane", async () => {
+    const workspace = createFakeWorkspace("/tmp/env-cancel-lane");
+    const reportResult = vi.fn(async () => undefined);
+    const provisionStarted = createDeferred<void>();
+    const manager = new RuntimeManager({
+      createRuntime: () => createFakeRuntime(),
+      provisionWorkspace: async (options) => {
+        provisionStarted.resolve(undefined);
+        await new Promise<void>((_, reject) => {
+          options.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        });
+        return workspace;
+      },
+    });
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      reportResult,
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+
+    const provisionHandling = router.handleCommands([
+      {
+        id: "provision",
+        attemptId: "attempt-provision",
+        cursor: 1,
+        command: {
+          type: "environment.provision",
+          environmentId: "env-cancel-lane",
+          initiator: null,
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/env-cancel-lane",
+        },
+      },
+    ]);
+
+    await provisionStarted.promise;
+    await Promise.race([
+      router.handleCommands([
+        {
+          id: "cancel",
+          attemptId: "attempt-cancel",
+          cursor: 2,
+          command: {
+            type: "environment.provision.cancel",
+            environmentId: "env-cancel-lane",
+            reason: "thread-stop",
+          },
+        },
+      ]),
+      new Promise<void>((_, reject) => {
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "environment.provision.cancel did not bypass the write lane",
+              ),
+            ),
+          500,
+        );
+      }),
+    ]);
+    await provisionHandling;
+
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "cancel",
+        ok: true,
+        result: { aborted: true },
+        type: "environment.provision.cancel",
+      }),
+    );
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "provision",
+        errorCode: "provision_cancelled",
+        ok: false,
+        type: "environment.provision",
+      }),
+    );
+  });
+
   it("waits for an in-flight write before starting a read for the same environment", async () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const commitDeferred = createDeferred<{

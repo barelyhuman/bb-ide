@@ -19,7 +19,10 @@ import {
   type CommandDispatchOptions,
   type CommandOf,
 } from "./command-dispatch-support.js";
-import { provisionEnvironment } from "./command-handlers/environment.js";
+import {
+  cancelEnvironmentProvision,
+  provisionEnvironment,
+} from "./command-handlers/environment.js";
 import { listHostBranches } from "./command-handlers/host-branches.js";
 import {
   listHostFiles,
@@ -305,6 +308,7 @@ const commandHandlers: CommandHandlerMap = {
   "host.delete_file_relative": deleteHostRelativeFile,
   "host.delete_path_relative": deleteHostRelativePath,
   "environment.provision": provisionEnvironment,
+  "environment.provision.cancel": cancelEnvironmentProvision,
   "environment.cleanup_preflight": environmentCleanupPreflight,
   "environment.destroy": async (command, options) => {
     const resolution = await resolveWorkspaceForCommand({

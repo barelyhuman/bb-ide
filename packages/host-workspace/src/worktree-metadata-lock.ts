@@ -16,10 +16,12 @@ type GitCommandArgs = string[];
 export async function withWorktreeMetadataLock<T>(
   commonDir: string,
   work: WorktreeMetadataLockWork<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const resolvedCommonDir = path.resolve(commonDir);
   return withProcessLocalQueuedLocks({
     locks: [{ key: resolvedCommonDir }],
+    signal,
     work,
   });
 }
@@ -29,5 +31,9 @@ export async function runGitWithWorktreeMetadataLock(
   options: RunGitOptions,
 ): Promise<GitCommandResult> {
   const commonDir = await getGitCommonDir(options.cwd);
-  return withWorktreeMetadataLock(commonDir, () => runGit(args, options));
+  return withWorktreeMetadataLock(
+    commonDir,
+    () => runGit(args, options),
+    options.signal,
+  );
 }

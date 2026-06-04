@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPersonalWorkspaceRoot, WorkspaceError } from "@bb/host-workspace";
+import {
+  getPersonalWorkspaceRoot,
+  WorkspaceError,
+  type HostWorkspace,
+} from "@bb/host-workspace";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import type { BufferedEventInput } from "../../src/event-buffer.js";
@@ -55,6 +59,7 @@ describe("environment command dispatch", () => {
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
         onProgress: expect.any(Function),
+        signal: expect.any(AbortSignal),
       },
     ]);
   });
@@ -109,6 +114,7 @@ describe("environment command dispatch", () => {
         baseBranch: "main",
         timeoutMs: 900000,
         onProgress: expect.any(Function),
+        signal: expect.any(AbortSignal),
       },
     ]);
   });
@@ -149,8 +155,134 @@ describe("environment command dispatch", () => {
         personalWorkspaceRoot,
         targetPath,
         onProgress: expect.any(Function),
+        signal: expect.any(AbortSignal),
       },
     ]);
+  });
+
+  it("returns success when cancelling a provision with no in-flight work", async () => {
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "environment.provision.cancel",
+          environmentId: "env-missing",
+          reason: "thread-stop",
+        },
+        harness.dispatchOptions(),
+      ),
+    ).resolves.toEqual({ aborted: false });
+  });
+
+  it("aborts in-flight environment provisioning", async () => {
+    const { workspace } = createFakeWorkspace("/tmp/cancelled");
+    const { runtime } = createFakeRuntime();
+    let provisionSignal: AbortSignal | undefined;
+    let resolveProvisionStarted: () => void = () => undefined;
+    const provisionStarted = new Promise<void>((resolve) => {
+      resolveProvisionStarted = resolve;
+    });
+    const manager = new RuntimeManager({
+      createRuntime: () => runtime,
+      provisionWorkspace: async (options) => {
+        provisionSignal = options.signal;
+        resolveProvisionStarted();
+        await new Promise<void>((resolve, reject) => {
+          options.signal?.addEventListener(
+            "abort",
+            () => {
+              reject(options.signal?.reason);
+            },
+            { once: true },
+          );
+        });
+        return workspace;
+      },
+    });
+    const dispatchOptions = makeDispatchOptions({ runtimeManager: manager });
+    const provision = dispatchCommand(
+      {
+        type: "environment.provision",
+        environmentId: "env-cancel",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/cancelled",
+      },
+      dispatchOptions,
+    );
+    await provisionStarted;
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "environment.provision.cancel",
+          environmentId: "env-cancel",
+          reason: "thread-stop",
+        },
+        dispatchOptions,
+      ),
+    ).resolves.toEqual({ aborted: true });
+
+    expect(provisionSignal?.aborted).toBe(true);
+    await expect(provision).rejects.toMatchObject({
+      code: "provision_cancelled",
+    });
+  });
+
+  it("reports provision cancellation after delivering abort without waiting for work to settle", async () => {
+    const { runtime } = createFakeRuntime();
+    let abortObserved = false;
+    let provisionSettled = false;
+    let provisionSignal: AbortSignal | undefined;
+    let resolveProvisionStarted: () => void = () => undefined;
+    const provisionStarted = new Promise<void>((resolve) => {
+      resolveProvisionStarted = resolve;
+    });
+    const manager = new RuntimeManager({
+      createRuntime: () => runtime,
+      provisionWorkspace: async (options) => {
+        provisionSignal = options.signal;
+        options.signal?.addEventListener(
+          "abort",
+          () => {
+            abortObserved = true;
+          },
+          { once: true },
+        );
+        resolveProvisionStarted();
+        return new Promise<HostWorkspace>(() => undefined);
+      },
+    });
+    const dispatchOptions = makeDispatchOptions({ runtimeManager: manager });
+    const provision = dispatchCommand(
+      {
+        type: "environment.provision",
+        environmentId: "env-cancel-no-settle",
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/cancelled-no-settle",
+      },
+      dispatchOptions,
+    ).finally(() => {
+      provisionSettled = true;
+    });
+    await provisionStarted;
+
+    const cancel = dispatchCommand(
+      {
+        type: "environment.provision.cancel",
+        environmentId: "env-cancel-no-settle",
+        reason: "thread-stop",
+      },
+      dispatchOptions,
+    );
+
+    await expect(cancel).resolves.toEqual({ aborted: true });
+    expect(provisionSignal?.aborted).toBe(true);
+    expect(abortObserved).toBe(true);
+    expect(provisionSettled).toBe(false);
+    void provision;
   });
 
   it("rejects personal provision targets outside the data dir personal workspace root", async () => {
@@ -389,6 +521,7 @@ describe("environment command dispatch", () => {
       {
         workspaceProvisionType: "reconnect-managed-worktree",
         path: "/tmp/env-1",
+        signal: expect.any(AbortSignal),
       },
     ]);
   });

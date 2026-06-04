@@ -51,12 +51,14 @@ export interface CreateWorkspaceArgs {
   timeoutMs: number;
   onProgress?: ProgressCallback;
   pruneEmptyParent?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface RunSetupScriptArgs {
   workspacePath: string;
   timeoutMs: number;
   onProgress?: ProgressCallback;
+  signal?: AbortSignal;
 }
 
 export interface RemoveWorktreeArgs {
@@ -80,6 +82,8 @@ interface KillSetupScriptProcessArgs {
   child: PortableOutputChildProcess;
   signal: NodeJS.Signals;
 }
+
+const SETUP_SCRIPT_ABORT_KILL_GRACE_MS = 2_000;
 
 function emitProgress(
   onProgress: ProgressCallback | undefined,
@@ -214,15 +218,32 @@ function killSetupScriptProcess(args: KillSetupScriptProcessArgs): void {
   args.child.kill(args.signal);
 }
 
+function createProvisionCancelledError(cause?: unknown): WorkspaceError {
+  return new WorkspaceError(
+    "provision_cancelled",
+    "Workspace provisioning was cancelled",
+    { cause },
+  );
+}
+
+function throwIfProvisionAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw createProvisionCancelledError(signal.reason);
+  }
+}
+
 export async function createWorktree(
   args: CreateWorkspaceArgs,
 ): Promise<{ path: string }> {
+  throwIfProvisionAborted(args.signal);
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };
   }
 
+  throwIfProvisionAborted(args.signal);
   await ensureWorkspaceParentDirectory(args.targetPath);
 
+  throwIfProvisionAborted(args.signal);
   const baseBranch =
     args.baseBranch ?? (await readDefaultBranch(args.sourcePath));
   if (!baseBranch) {
@@ -254,6 +275,7 @@ export async function createWorktree(
   try {
     const result = await runGitWithWorktreeMetadataLock(gitArgs, {
       cwd: args.sourcePath,
+      signal: args.signal,
     });
     emitGitOutput(args.onProgress, "git-worktree", result);
     emitStep({
@@ -274,6 +296,7 @@ export async function createWorktree(
       workspacePath: args.targetPath,
       timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
+      signal: args.signal,
     });
     return { path: args.targetPath };
   } catch (error) {
@@ -299,11 +322,13 @@ export async function createWorktree(
 export async function runSetupScript(
   args: RunSetupScriptArgs,
 ): Promise<{ ran: boolean; exitCode?: number; output?: string }> {
+  throwIfProvisionAborted(args.signal);
   const scriptPath = await resolveSetupScriptPath(args.workspacePath);
   if (!scriptPath) {
     return { ran: false };
   }
 
+  throwIfProvisionAborted(args.signal);
   const command = buildSetupScriptCommand({
     platform: process.platform,
     scriptPath,
@@ -331,6 +356,8 @@ export async function runSetupScript(
   const outputChunks: string[] = [];
   const outputLineReader = createTerminalOutputLineReader();
   let outputIndex = 0;
+  let abortKillTimeout: NodeJS.Timeout | undefined;
+  let abortRequested = false;
   let timedOut = false;
 
   const emitSetupOutputLines = (lines: string[]): void => {
@@ -356,6 +383,26 @@ export async function runSetupScript(
       signal: "SIGKILL",
     });
   }, timeoutMs);
+  const abortSetupScript = () => {
+    if (abortRequested) {
+      return;
+    }
+    abortRequested = true;
+    killSetupScriptProcess({
+      child,
+      signal: "SIGTERM",
+    });
+    abortKillTimeout = setTimeout(() => {
+      killSetupScriptProcess({
+        child,
+        signal: "SIGKILL",
+      });
+    }, SETUP_SCRIPT_ABORT_KILL_GRACE_MS);
+  };
+  args.signal?.addEventListener("abort", abortSetupScript, { once: true });
+  if (args.signal?.aborted) {
+    abortSetupScript();
+  }
 
   try {
     const result = await new Promise<{
@@ -369,6 +416,18 @@ export async function runSetupScript(
     const output = outputChunks.join("");
     emitSetupOutputLines(outputLineReader.flush());
     const durationMs = Date.now() - startedAt;
+    if (abortRequested || args.signal?.aborted) {
+      emitStep({
+        onProgress: args.onProgress,
+        key: "setup-cancelled",
+        text: ".bb-env-setup.sh cancelled",
+        status: "failed",
+        startedAt,
+        metadata: { durationMs },
+      });
+      throw createProvisionCancelledError(args.signal?.reason);
+    }
+
     if (timedOut) {
       emitStep({
         onProgress: args.onProgress,
@@ -425,6 +484,10 @@ export async function runSetupScript(
     return { ran: true, exitCode: result.exitCode ?? 0, output };
   } finally {
     clearTimeout(timeout);
+    if (abortKillTimeout) {
+      clearTimeout(abortKillTimeout);
+    }
+    args.signal?.removeEventListener("abort", abortSetupScript);
   }
 }
 

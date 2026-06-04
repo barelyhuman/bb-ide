@@ -677,15 +677,133 @@ describe("RuntimeManager", () => {
     expect(secondEntry).toBe(firstEntry);
     expect(createRuntime).toHaveBeenCalledTimes(1);
     expect(provisionWorkspace).toHaveBeenCalledTimes(2);
-    expect(provisionWorkspace).toHaveBeenNthCalledWith(2, {
-      workspaceProvisionType: "unmanaged",
-      path: "/tmp/env-1",
-      checkout: { kind: "existing", name: "feature-existing" },
-    });
+    expect(provisionWorkspace).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/env-1",
+        checkout: { kind: "existing", name: "feature-existing" },
+      }),
+    );
     expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
       environmentId: "env-1",
       changeKinds: ["work-status-changed", "git-refs-changed"],
     });
+  });
+
+  it("registers existing environment provisioning before invoking work", async () => {
+    let manager: RuntimeManager;
+    let callCount = 0;
+    let cancelDuringWork: Promise<{ aborted: boolean }> | null = null;
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const provisionWorkspace = vi.fn(
+      async (options: ProvisionWorkspaceArgs) => {
+        callCount += 1;
+        if (callCount === 1) {
+          return workspace;
+        }
+
+        cancelDuringWork = manager.cancelEnvironmentProvision({
+          environmentId: "env-1",
+          reason: "thread-stop",
+        });
+        if (!options.signal?.aborted) {
+          throw new Error("Expected provision signal to be aborted");
+        }
+        throw options.signal.reason;
+      },
+    );
+    manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    await expect(
+      manager.ensureEnvironment({
+        environmentId: "env-1",
+        provision: {
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/env-1",
+          checkout: { kind: "existing", name: "feature-existing" },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "provision_cancelled" });
+    if (!cancelDuringWork) {
+      throw new Error("Expected cancellation to be requested during provision");
+    }
+    await expect(cancelDuringWork).resolves.toEqual({ aborted: true });
+  });
+
+  it("shares existing environment provisioning cancellation across concurrent callers", async () => {
+    const provisionStarted = createDeferred<void>();
+    const provisionSignals: AbortSignal[] = [];
+    let callCount = 0;
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const provisionWorkspace = vi.fn(
+      async (options: ProvisionWorkspaceArgs) => {
+        callCount += 1;
+        if (callCount === 1) {
+          return workspace;
+        }
+        if (!options.signal) {
+          throw new Error("Expected provision signal");
+        }
+        provisionSignals.push(options.signal);
+        provisionStarted.resolve();
+        return new Promise<HostWorkspace>((_resolve, reject) => {
+          options.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        });
+      },
+    );
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+    const provision: ProvisionWorkspaceArgs = {
+      workspaceProvisionType: "unmanaged",
+      path: "/tmp/env-1",
+      checkout: { kind: "existing", name: "feature-existing" },
+    };
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    const first = manager.ensureEnvironment({
+      environmentId: "env-1",
+      provision,
+    });
+    await provisionStarted.promise;
+    const second = manager.ensureEnvironment({
+      environmentId: "env-1",
+      provision,
+    });
+    const firstCancelled = expect(first).rejects.toMatchObject({
+      code: "provision_cancelled",
+    });
+    const secondCancelled = expect(second).rejects.toMatchObject({
+      code: "provision_cancelled",
+    });
+
+    await expect(
+      manager.cancelEnvironmentProvision({
+        environmentId: "env-1",
+        reason: "thread-stop",
+      }),
+    ).resolves.toEqual({ aborted: true });
+    await firstCancelled;
+    await secondCancelled;
+    expect(provisionWorkspace).toHaveBeenCalledTimes(2);
+    expect(provisionSignals).toHaveLength(1);
+    expect(provisionSignals[0]?.aborted).toBe(true);
   });
 
   it("passes managed worktree git metadata roots to created runtimes", async () => {

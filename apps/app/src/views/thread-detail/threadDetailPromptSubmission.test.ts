@@ -4,6 +4,7 @@ import {
   buildAutoFollowUpRequest,
   buildCreateQueuedFollowUpRequest,
   buildFollowUpShortcutRequest,
+  buildFollowUpSubmitMode,
   canSubmitFollowUpShortcut,
   resolveDefaultExecutionOptionsState,
   shouldQueueFollowUpMessage,
@@ -242,5 +243,47 @@ describe("threadDetailPromptSubmission", () => {
     for (const status of immediateStatuses) {
       expect(shouldQueueFollowUpMessage(status)).toBe(false);
     }
+  });
+
+  it("offers stop-only mode while a thread is created or provisioning", () => {
+    const onStop = () => undefined;
+    const stoppableStatuses: ThreadRuntimeDisplayStatus[] = [
+      "created",
+      "provisioning",
+    ];
+
+    for (const runtimeDisplayStatus of stoppableStatuses) {
+      expect(
+        buildFollowUpSubmitMode({
+          hasPendingInteraction: false,
+          isDefaultExecutionOptionsLoading: true,
+          isStopRequested: false,
+          onStop,
+          runtimeDisplayStatus,
+        }),
+      ).toEqual({ kind: "stop-only", onStop });
+    }
+  });
+
+  it("keeps stopping and pending interactions blocked before provisioning stop-only mode", () => {
+    const onStop = () => undefined;
+    expect(
+      buildFollowUpSubmitMode({
+        hasPendingInteraction: false,
+        isDefaultExecutionOptionsLoading: false,
+        isStopRequested: true,
+        onStop,
+        runtimeDisplayStatus: "provisioning",
+      }),
+    ).toEqual({ kind: "blocked", reason: "stopping" });
+    expect(
+      buildFollowUpSubmitMode({
+        hasPendingInteraction: true,
+        isDefaultExecutionOptionsLoading: false,
+        isStopRequested: false,
+        onStop,
+        runtimeDisplayStatus: "provisioning",
+      }),
+    ).toEqual({ kind: "blocked", reason: "pending-interaction" });
   });
 });

@@ -69,7 +69,7 @@ Messaging:
     --model <model>                        Model override for this turn
     --reasoning-level <level>              Reasoning level override
 
-  bb thread stop [id]                      Stop an active thread
+  bb thread stop [id]                      Stop an active or provisioning thread
     --self                                 Stop current thread
 
 Ownership:

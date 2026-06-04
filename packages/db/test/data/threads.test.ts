@@ -12,6 +12,7 @@ import {
   setThreadExecutionOverride,
   hasPendingThreadShutdownInEnvironment,
   listHostThreadIds,
+  listStopRequestedThreads,
   listActiveVisiblePinnedThreadRoots,
   listThreadEnvironmentAssignmentsOnHost,
   listTrackedThreadStorageTargetsOnHost,
@@ -958,6 +959,78 @@ describe("threads", () => {
 
     const cleared = clearThreadStopRequested(db, noopNotifier, thread.id);
     expect(cleared?.stopRequestedAt).toBeNull();
+  });
+
+  it("lists stop-requested threads in deterministic bounded batches", () => {
+    const { db, host, project } = setup();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/thread-stop-requested-batch",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const firstTie = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "active",
+    });
+    const secondTie = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "active",
+    });
+    const later = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "active",
+    });
+    const unrequested = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "active",
+    });
+
+    markThreadStopRequested(db, noopNotifier, {
+      threadId: firstTie.id,
+      requestedAt: 100,
+    });
+    markThreadStopRequested(db, noopNotifier, {
+      threadId: secondTie.id,
+      requestedAt: 100,
+    });
+    markThreadStopRequested(db, noopNotifier, {
+      threadId: later.id,
+      requestedAt: 200,
+    });
+
+    const expectedTieIds = [firstTie.id, secondTie.id].sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const batch = listStopRequestedThreads(db, { limit: 2 });
+
+    expect(batch.map((thread) => thread.threadId)).toEqual(expectedTieIds);
+    expect(batch.map((thread) => thread.stopRequestedAt)).toEqual([100, 100]);
+    expect(batch).toEqual([
+      expect.objectContaining({
+        environmentId: environment.id,
+        hostId: host.id,
+        status: "active",
+      }),
+      expect.objectContaining({
+        environmentId: environment.id,
+        hostId: host.id,
+        status: "active",
+      }),
+    ]);
+    expect(batch.map((thread) => thread.threadId)).not.toContain(later.id);
+    expect(batch.map((thread) => thread.threadId)).not.toContain(
+      unrequested.id,
+    );
   });
 
   it("counts only non-archived, non-deleted threads as live", () => {

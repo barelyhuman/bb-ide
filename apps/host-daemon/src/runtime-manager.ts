@@ -41,6 +41,7 @@ import type {
 } from "@bb/host-watcher";
 import {
   provisionWorkspace,
+  WorkspaceError,
   type HostWorkspace,
   type ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
@@ -99,12 +100,14 @@ interface CreateEntryArgs
     EnsureEnvironmentArgs,
     "injectedSkillSources" | "targetThreadId"
   > {
+  provisionSignal: AbortSignal;
   skillConfig: RuntimeSkillConfig | null;
 }
 
 interface ApplyExistingEnvironmentProvisionArgs {
   entry: RuntimeEntry;
   provision: ProvisionWorkspaceArgs | undefined;
+  signal: AbortSignal;
 }
 
 interface EnsureCompatibleEntryArgs {
@@ -295,6 +298,15 @@ export interface EnsureEnvironmentArgs {
   provision?: ProvisionWorkspaceArgs;
 }
 
+export interface CancelEnvironmentProvisionArgs {
+  environmentId: string;
+  reason: "thread-stop";
+}
+
+export interface CancelEnvironmentProvisionResult {
+  aborted: boolean;
+}
+
 export interface RuntimeManagerOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
@@ -349,6 +361,16 @@ interface RuntimeWorkspaceWriteRootsArgs {
   workspaceRoots: readonly string[];
 }
 
+interface PendingEnvironmentProvision {
+  abortController: AbortController;
+  done: Promise<unknown>;
+}
+
+interface RunCancellableEnvironmentProvisionArgs {
+  environmentId: string;
+  work: (signal: AbortSignal) => Promise<void>;
+}
+
 export class RuntimeManager {
   private readonly createRuntime;
   private readonly hostWatcher;
@@ -356,6 +378,10 @@ export class RuntimeManager {
   private readonly baseShellEnv;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
+  private readonly pendingEnvironmentProvisions = new Map<
+    string,
+    PendingEnvironmentProvision
+  >();
   private readonly trackedThreadStorageTargets = new Map<
     string,
     ThreadStorageTarget
@@ -908,9 +934,14 @@ export class RuntimeManager {
     const skillConfig = await this.resolveRuntimeSkillConfig(args);
     const existing = this.entries.get(args.environmentId);
     if (existing) {
-      await this.applyExistingEnvironmentProvision({
-        entry: existing,
-        provision: args.provision,
+      await this.runCancellableEnvironmentProvision({
+        environmentId: args.environmentId,
+        work: (signal) =>
+          this.applyExistingEnvironmentProvision({
+            entry: existing,
+            provision: args.provision,
+            signal,
+          }),
       });
       const compatible = await this.ensureCompatibleEntry({
         entry: existing,
@@ -939,20 +970,90 @@ export class RuntimeManager {
       }
     }
 
-    const creation = this.createEntry({
-      ...args,
-      skillConfig,
-    })
+    const pendingProvision = this.createPendingEnvironmentProvision(
+      args.environmentId,
+    );
+    const creation = Promise.resolve()
+      .then(() =>
+        this.createEntry({
+          ...args,
+          provisionSignal: pendingProvision.abortController.signal,
+          skillConfig,
+        }),
+      )
       .then((entry) => {
         this.entries.set(args.environmentId, entry);
         return entry;
       })
       .finally(() => {
         this.pendingEntries.delete(args.environmentId);
+        this.clearPendingEnvironmentProvision(
+          args.environmentId,
+          pendingProvision,
+        );
       });
+    pendingProvision.done = creation;
     this.pendingEntries.set(args.environmentId, creation);
 
     return creation;
+  }
+
+  async cancelEnvironmentProvision(
+    args: CancelEnvironmentProvisionArgs,
+  ): Promise<CancelEnvironmentProvisionResult> {
+    const pending = this.pendingEnvironmentProvisions.get(args.environmentId);
+    if (!pending) {
+      return { aborted: false };
+    }
+
+    pending.abortController.abort(
+      new WorkspaceError(
+        "provision_cancelled",
+        `Environment provisioning was cancelled: ${args.reason}`,
+      ),
+    );
+    return { aborted: true };
+  }
+
+  private async runCancellableEnvironmentProvision(
+    args: RunCancellableEnvironmentProvisionArgs,
+  ): Promise<void> {
+    const existing = this.pendingEnvironmentProvisions.get(args.environmentId);
+    if (existing) {
+      await existing.done;
+      return;
+    }
+
+    const pending = this.createPendingEnvironmentProvision(args.environmentId);
+    const done = Promise.resolve().then(() =>
+      args.work(pending.abortController.signal),
+    );
+    pending.done = done;
+    try {
+      return await done;
+    } finally {
+      this.clearPendingEnvironmentProvision(args.environmentId, pending);
+    }
+  }
+
+  private createPendingEnvironmentProvision(
+    environmentId: string,
+  ): PendingEnvironmentProvision {
+    const pending: PendingEnvironmentProvision = {
+      abortController: new AbortController(),
+      done: Promise.resolve(),
+    };
+    this.pendingEnvironmentProvisions.set(environmentId, pending);
+    return pending;
+  }
+
+  private clearPendingEnvironmentProvision(
+    environmentId: string,
+    pending: PendingEnvironmentProvision,
+  ): void {
+    if (this.pendingEnvironmentProvisions.get(environmentId) === pending) {
+      this.pendingEnvironmentProvisions.delete(environmentId);
+    }
   }
 
   private async applyExistingEnvironmentProvision(
@@ -970,7 +1071,7 @@ export class RuntimeManager {
       );
     }
 
-    await this.provisionWorkspace(args.provision);
+    await this.provisionWorkspace({ ...args.provision, signal: args.signal });
     this.options.onWorkspaceStatusChanged?.({
       environmentId: args.entry.environmentId,
       changeKinds: ["work-status-changed", "git-refs-changed"],
@@ -1207,7 +1308,10 @@ export class RuntimeManager {
       );
     }
 
-    const workspace = await this.provisionWorkspace(provision);
+    const workspace = await this.provisionWorkspace({
+      ...provision,
+      signal: args.provisionSignal,
+    });
     const [workspaceWatchState, workspaceWriteRoots] = await Promise.all([
       this.createWorkspaceWatchState(workspace),
       workspace.getAdditionalWorkspaceWriteRoots(),

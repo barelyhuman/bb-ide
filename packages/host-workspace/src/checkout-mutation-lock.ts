@@ -34,9 +34,11 @@ function getCheckoutMutationAdmissionLockSpecs(
 export async function withCheckoutMutationAdmission<T>(
   checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   return withProcessLocalQueuedLocks({
     locks: [getCheckoutMutationAdmissionLockSpec(checkoutPath)],
+    signal,
     work,
   });
 }
@@ -65,19 +67,26 @@ async function tryResolveCheckoutMutationLockSpec(
 export async function withCheckoutMutationLock<T>(
   checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return withCheckoutMutationAdmission(checkoutPath, async () => {
-    const lock = await resolveCheckoutMutationLockSpec(checkoutPath);
-    return withProcessLocalQueuedLocks({ locks: [lock], work });
-  });
+  return withCheckoutMutationAdmission(
+    checkoutPath,
+    async () => {
+      const lock = await resolveCheckoutMutationLockSpec(checkoutPath);
+      return withProcessLocalQueuedLocks({ locks: [lock], signal, work });
+    },
+    signal,
+  );
 }
 
 async function withCheckoutMutationAdmissions<T>(
   checkoutPaths: string[],
   work: CheckoutMutationLockWork<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   return withProcessLocalQueuedLocks({
     locks: getCheckoutMutationAdmissionLockSpecs(checkoutPaths),
+    signal,
     work,
   });
 }
@@ -85,34 +94,48 @@ async function withCheckoutMutationAdmissions<T>(
 export async function tryWithCheckoutMutationLock<T>(
   checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
+  signal?: AbortSignal,
 ): Promise<T | null> {
-  return withCheckoutMutationAdmission(checkoutPath, async () => {
-    const lock = await tryResolveCheckoutMutationLockSpec(checkoutPath);
-    if (!lock) {
-      return null;
-    }
+  return withCheckoutMutationAdmission(
+    checkoutPath,
+    async () => {
+      const lock = await tryResolveCheckoutMutationLockSpec(checkoutPath);
+      if (!lock) {
+        return null;
+      }
 
-    return withProcessLocalQueuedLocks({ locks: [lock], work });
-  });
+      return withProcessLocalQueuedLocks({ locks: [lock], signal, work });
+    },
+    signal,
+  );
 }
 
 export async function withCheckoutMutationLocks<T>(
   checkoutPaths: string[],
   work: CheckoutMutationLockWork<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return withCheckoutMutationAdmissions(checkoutPaths, async () => {
-    const locks = await Promise.all(
-      checkoutPaths.map((checkoutPath) =>
-        resolveCheckoutMutationLockSpec(checkoutPath),
-      ),
-    );
-    return withProcessLocalQueuedLocks({ locks, work });
-  });
+  return withCheckoutMutationAdmissions(
+    checkoutPaths,
+    async () => {
+      const locks = await Promise.all(
+        checkoutPaths.map((checkoutPath) =>
+          resolveCheckoutMutationLockSpec(checkoutPath),
+        ),
+      );
+      return withProcessLocalQueuedLocks({ locks, signal, work });
+    },
+    signal,
+  );
 }
 
 export async function runGitWithCheckoutMutationLock(
   args: string[],
   options: RunGitOptions,
 ): Promise<GitCommandResult> {
-  return withCheckoutMutationLock(options.cwd, () => runGit(args, options));
+  return withCheckoutMutationLock(
+    options.cwd,
+    () => runGit(args, options),
+    options.signal,
+  );
 }

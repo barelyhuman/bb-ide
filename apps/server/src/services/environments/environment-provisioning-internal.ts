@@ -1,5 +1,6 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
+  cancelCommandInTransaction,
   type HostDaemonCommandRow,
   type DbNotifier,
   type DbQueryConnection,
@@ -8,7 +9,6 @@ import {
   getActiveSession,
   getCommand,
   getEnvironment,
-  getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
   getThreadOperation,
   listStoredThreadProvisioningRowsByProvisioningId,
@@ -18,6 +18,7 @@ import {
 } from "@bb/db";
 import {
   applyProvisionedEnvironmentRecord,
+  cancelEnvironmentOperationRecord,
   markEnvironmentOperationRecordCompleted,
   markEnvironmentOperationRecordFailed,
   markEnvironmentOperationRecordQueued,
@@ -26,10 +27,10 @@ import {
 } from "@bb/db/internal-environment-lifecycle";
 import type {
   Environment,
-  EnvironmentOperationKind,
   ProvisioningTranscriptEntry,
   SystemThreadProvisioningStatus,
   ThreadProvisioningStage,
+  ThreadStatus,
 } from "@bb/domain";
 import {
   activeLifecycleOperationStates,
@@ -75,8 +76,13 @@ import {
 import {
   finalizeStoppedThreadAndRequestCleanupAdvance,
   finalizeStoppedThreadInTransaction,
+  requestThreadStopForCurrentState,
 } from "../threads/thread-lifecycle.js";
 import { runEnvironmentCleanupAdvance } from "./environment-cleanup-internal.js";
+import {
+  getActiveEnvironmentProvisionOperation,
+  type EnvironmentProvisionOperationKind,
+} from "./environment-provisioning-operations.js";
 import {
   emptyCommandResultSideEffects,
   type CommandResultPostCommitAction,
@@ -85,15 +91,14 @@ import {
   type HostDaemonCommandForType,
 } from "../../internal/command-result-side-effects.js";
 
-type EnvironmentProvisionOperationKind = Extract<
-  EnvironmentOperationKind,
-  "provision" | "reprovision"
->;
-
 type EnvironmentProvisionCommand =
   HostDaemonCommandForType<"environment.provision">;
 type EnvironmentProvisionCommandResultReport =
   CommandResultReportForType<"environment.provision">;
+type EnvironmentProvisionCancelCommand =
+  HostDaemonCommandForType<"environment.provision.cancel">;
+type EnvironmentProvisionCancelCommandResultReport =
+  CommandResultReportForType<"environment.provision.cancel">;
 
 interface EnvironmentProvisionReadDeps {
   db: DbQueryConnection;
@@ -105,6 +110,7 @@ interface EnvironmentProvisionWriteDeps extends EnvironmentProvisionReadDeps {
 
 interface EnvironmentProvisionTransactionDeps extends EnvironmentProvisionWriteDeps {
   db: DbTransaction;
+  logger: AppDeps["logger"];
   pendingInteractions: AppDeps["pendingInteractions"];
 }
 
@@ -126,6 +132,13 @@ interface SettleEnvironmentProvisionCommandResultArgs {
   report: EnvironmentProvisionCommandResultReport;
 }
 
+interface SettleEnvironmentProvisionCancelCommandResultArgs {
+  command: EnvironmentProvisionCancelCommand;
+  commandRow: HostDaemonCommandRow;
+  deps: EnvironmentProvisionTransactionDeps;
+  report: EnvironmentProvisionCancelCommandResultReport;
+}
+
 interface QueueEnvironmentProvisionCommandArgs {
   command: EnvironmentProvisionCommand;
   environment: Environment;
@@ -145,7 +158,14 @@ interface LiveEnvironmentThread {
   provisionOperationProvisioningEnvironmentId: string | null;
   provisionOperationProvisioningId: string | null;
   provisionOperationProvisioningStage: ThreadProvisioningStage | null;
+  stopRequestedAt: number | null;
   workspaceReadyEventSequence: number | null;
+}
+
+interface StopRequestedEnvironmentProvisionThread {
+  id: string;
+  status: ThreadStatus;
+  stopRequestedAt: number | null;
 }
 
 interface AppendThreadProvisioningEventToEnvironmentThreadsArgs {
@@ -168,6 +188,7 @@ function listLiveEnvironmentThreads(
         threadOperations.provisioningEnvironmentId,
       provisionOperationProvisioningId: threadOperations.provisioningId,
       provisionOperationProvisioningStage: threadOperations.provisioningStage,
+      stopRequestedAt: threads.stopRequestedAt,
       workspaceReadyEventSequence: threadOperations.workspaceReadyEventSequence,
     })
     .from(threads)
@@ -181,6 +202,31 @@ function listLiveEnvironmentThreads(
     )
     .where(
       and(eq(threads.environmentId, environmentId), isNull(threads.deletedAt)),
+    )
+    .all();
+}
+
+function listStopRequestedEnvironmentProvisionThreads(
+  deps: EnvironmentProvisionReadDeps,
+  environmentId: string,
+): StopRequestedEnvironmentProvisionThread[] {
+  return deps.db
+    .select({
+      id: threads.id,
+      status: threads.status,
+      stopRequestedAt: threads.stopRequestedAt,
+    })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.environmentId, environmentId),
+        inArray(threads.status, ["created", "provisioning"]),
+        // This settlement is for explicit user stop intent only. Archived and
+        // deleted threads continue through their existing cleanup paths.
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+        isNotNull(threads.stopRequestedAt),
+      ),
     )
     .all();
 }
@@ -253,28 +299,6 @@ function queueEnvironmentProvisionCommand(
   });
 
   return queuedCommand.id;
-}
-
-function getActiveProvisionOperation(
-  deps: EnvironmentProvisionReadDeps,
-  environmentId: string,
-):
-  | (EnvironmentOperationRow & { kind: EnvironmentProvisionOperationKind })
-  | null {
-  for (const kind of ["reprovision", "provision"] as const) {
-    const operation = getEnvironmentOperation(deps.db, {
-      environmentId,
-      kind,
-    });
-    if (operation && isActiveLifecycleOperationState(operation.state)) {
-      return {
-        ...operation,
-        kind,
-      };
-    }
-  }
-
-  return null;
 }
 
 function getActiveProvisionOperationByCommandId(
@@ -360,6 +384,27 @@ function hasActiveThreadProvisionOperation(
   return Boolean(operation && isActiveLifecycleOperationState(operation.state));
 }
 
+function hasCancelledThreadProvisionOperation(
+  deps: EnvironmentProvisionReadDeps,
+  threadId: string,
+): boolean {
+  const operation = getThreadOperation(deps.db, {
+    threadId,
+    kind: "provision",
+  });
+  return operation?.state === "cancelled";
+}
+
+function shouldPreserveThreadProvisionCancellationOutcome(
+  deps: EnvironmentProvisionReadDeps,
+  thread: LiveEnvironmentThread,
+): boolean {
+  return (
+    thread.stopRequestedAt !== null ||
+    hasCancelledThreadProvisionOperation(deps, thread.id)
+  );
+}
+
 interface ProvisionedEnvironmentBranchMetadata {
   baseBranch?: string | null;
   mergeBaseBranch?: string | null;
@@ -408,7 +453,10 @@ export function completeEnvironmentProvisioning(
   deps: EnvironmentProvisionReadDeps,
   args: { environmentId: string },
 ): boolean {
-  const operation = getActiveProvisionOperation(deps, args.environmentId);
+  const operation = getActiveEnvironmentProvisionOperation(
+    deps,
+    args.environmentId,
+  );
   if (!operation) {
     return false;
   }
@@ -436,6 +484,9 @@ function recordEnvironmentProvisioningFailureInTransaction(
     return false;
   }
   const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
+  const failureThreads = liveThreads.filter(
+    (thread) => !shouldPreserveThreadProvisionCancellationOutcome(deps, thread),
+  );
   const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
 
   markEnvironmentOperationRecordFailed(deps.db, {
@@ -453,11 +504,11 @@ function recordEnvironmentProvisioningFailureInTransaction(
     environmentId: environment.id,
     fallbackProvisioningId: provisioningId,
     status: "failed",
-    threads: liveThreads,
+    threads: failureThreads,
     entries: [args.failureEntry],
   });
 
-  for (const thread of liveThreads) {
+  for (const thread of failureThreads) {
     appendSystemErrorEventInTransaction(deps, {
       threadId: thread.id,
       environmentId: environment.id,
@@ -550,7 +601,11 @@ export function settleEnvironmentProvisionCommandResult(
         }
         continue;
       }
-      if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
+      if (
+        thread.archivedAt !== null ||
+        thread.stopRequestedAt !== null ||
+        hasCancelledThreadProvisionOperation(args.deps, thread.id)
+      ) {
         continue;
       }
 
@@ -647,6 +702,119 @@ export function settleEnvironmentProvisionCommandResult(
   return { postCommitActions };
 }
 
+export function settleEnvironmentProvisionCancelCommandResult(
+  args: SettleEnvironmentProvisionCancelCommandResultArgs,
+): CommandResultSideEffectsResult {
+  const stoppedThreads = listStopRequestedEnvironmentProvisionThreads(
+    args.deps,
+    args.command.environmentId,
+  );
+  if (!args.report.ok) {
+    const operation = getActiveEnvironmentProvisionOperation(
+      args.deps,
+      args.command.environmentId,
+    );
+    args.deps.logger.warn(
+      {
+        activeProvisionOperationCommandId: operation?.commandId ?? null,
+        activeProvisionOperationKind: operation?.kind ?? null,
+        activeProvisionOperationState: operation?.state ?? null,
+        commandId: args.commandRow.id,
+        environmentId: args.command.environmentId,
+        errorCode: args.report.errorCode,
+        errorMessage: args.report.errorMessage,
+        stoppedThreadCount: stoppedThreads.length,
+        stoppedThreadIds: stoppedThreads.map((thread) => thread.id),
+      },
+      "Environment provision cancel command failed",
+    );
+
+    const environment = getEnvironment(args.deps.db, args.command.environmentId);
+    if (!environment || stoppedThreads.length === 0) {
+      return emptyCommandResultSideEffects();
+    }
+
+    return {
+      postCommitActions: [
+        {
+          name: "Retry thread stop after provision cancellation failure",
+          context: {
+            environmentId: args.command.environmentId,
+          },
+          run: (deps) => {
+            for (const thread of stoppedThreads) {
+              requestThreadStopForCurrentState(
+                deps,
+                {
+                  environmentId: args.command.environmentId,
+                  id: thread.id,
+                  status: thread.status,
+                  stopRequestedAt: thread.stopRequestedAt,
+                },
+                {
+                  hostId: environment.hostId,
+                  id: environment.id,
+                },
+              );
+            }
+          },
+        },
+      ],
+    };
+  }
+
+  const postCommitActions: CommandResultPostCommitAction[] = [];
+  const operation = getActiveEnvironmentProvisionOperation(
+    args.deps,
+    args.command.environmentId,
+  );
+  if (operation) {
+    if (operation.commandId !== null) {
+      cancelCommandInTransaction(args.deps.db, {
+        commandId: operation.commandId,
+        resultPayload: JSON.stringify({
+          errorCode: "environment_provision_cancelled",
+          errorMessage: "Environment provisioning was cancelled",
+        }),
+      });
+    }
+    cancelEnvironmentOperationRecord(args.deps.db, {
+      environmentId: operation.environmentId,
+      kind: operation.kind,
+    });
+  }
+
+  const environment = getEnvironment(args.deps.db, args.command.environmentId);
+  if (environment?.status === "provisioning") {
+    setEnvironmentStatus(args.deps.db, args.deps.hub, environment.id, {
+      status: environment.path ? "ready" : "error",
+    });
+  }
+
+  let finalizedThread = false;
+  for (const thread of stoppedThreads) {
+    finalizedThread =
+      finalizeStoppedThreadInTransaction(args.deps, {
+        threadId: thread.id,
+      }) || finalizedThread;
+  }
+
+  if (finalizedThread) {
+    postCommitActions.push({
+      name: "Environment cleanup advance after provision cancellation",
+      context: {
+        environmentId: args.command.environmentId,
+      },
+      run: (deps) =>
+        runEnvironmentCleanupAdvance(deps, {
+          environmentId: args.command.environmentId,
+        }),
+    });
+  }
+
+  return { postCommitActions };
+}
+
 export function requestEnvironmentProvision(
   deps: EnvironmentProvisionWriteDeps,
   args: RequestEnvironmentProvisionArgs,
@@ -696,7 +864,7 @@ export async function advanceEnvironmentProvisioning(
     return null;
   }
 
-  const operation = getActiveProvisionOperation(deps, environment.id);
+  const operation = getActiveEnvironmentProvisionOperation(deps, environment.id);
   if (!operation) {
     return null;
   }
@@ -746,7 +914,9 @@ export function hasActiveManagedEnvironmentProvision(
   deps: Pick<AppDeps, "db">,
   args: ActiveManagedEnvironmentProvisionArgs,
 ): boolean {
-  return Boolean(getActiveProvisionOperation(deps, args.environmentId));
+  return Boolean(
+    getActiveEnvironmentProvisionOperation(deps, args.environmentId),
+  );
 }
 
 export async function queueManagedEnvironmentReprovision(
@@ -768,7 +938,7 @@ export async function queueManagedEnvironmentReprovision(
     );
   }
 
-  const activeOperation = getActiveProvisionOperation(
+  const activeOperation = getActiveEnvironmentProvisionOperation(
     deps,
     args.environment.id,
   );

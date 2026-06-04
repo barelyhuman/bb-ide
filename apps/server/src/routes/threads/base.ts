@@ -38,7 +38,7 @@ import {
 import { queueThreadRenameCommand } from "../../services/threads/thread-commands.js";
 import {
   finalizeStoppedThread,
-  requestThreadStopIfNeeded,
+  requestActiveRuntimeThreadStopIfNeeded,
 } from "../../services/threads/thread-lifecycle.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
 import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
@@ -267,7 +267,9 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     }
 
     const environment = requireEnvironment(deps.db, thread.environmentId);
-    requestThreadStopIfNeeded(deps, thread, environment);
+    // Deletion finalization owns non-runtime cleanup; only active runtime work
+    // needs a daemon stop request here.
+    requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     finalizeStoppedThread(deps, {
       cancelPendingCommand: false,
       threadId: thread.id,

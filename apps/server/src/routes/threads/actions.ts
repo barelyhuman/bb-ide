@@ -49,7 +49,7 @@ import {
   queueThreadUnarchiveCommand,
 } from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
-import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
+import { requestThreadStopForCurrentState } from "../../services/threads/thread-lifecycle.js";
 import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
@@ -241,11 +241,14 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
 
   post("/threads/:id/stop", async (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
-    const environment = requireThreadHostCommandEnvironment({
-      db: deps.db,
-      thread,
-    });
-    requestThreadStopIfNeeded(deps, thread, environment);
+    const environment =
+      thread.environmentId === null
+        ? null
+        : requireThreadHostCommandEnvironment({
+            db: deps.db,
+            thread,
+          });
+    requestThreadStopForCurrentState(deps, thread, environment);
     return context.json({ ok: true });
   });
 

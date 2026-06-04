@@ -53,6 +53,7 @@ import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 import {
   buildAutoFollowUpRequest,
   buildCreateQueuedFollowUpRequest,
+  buildFollowUpSubmitMode,
   buildFollowUpShortcutRequest,
   buildSendQueuedMessageByIdRequest,
   canSubmitFollowUpShortcut,
@@ -255,7 +256,6 @@ export function ThreadDetailPromptArea({
   const runtimeDisplayStatus = thread.runtime.displayStatus;
   const isCreated = runtimeDisplayStatus === "created";
   const isProvisioning = runtimeDisplayStatus === "provisioning";
-  const isWaitingForHost = runtimeDisplayStatus === "waiting-for-host";
   const isStopRequested =
     thread.stopRequestedAt !== null ||
     (stopThread.isPending && stopThread.variables === thread.id);
@@ -277,36 +277,18 @@ export function ThreadDetailPromptArea({
     stopThread.mutate(thread.id);
   }, [stopThread, thread.id]);
   const submitMode: FollowUpSubmitMode = useMemo(() => {
-    if (isStopRequested) {
-      return { kind: "blocked", reason: "stopping" };
-    }
-    if (hasPendingInteraction) {
-      return { kind: "blocked", reason: "pending-interaction" };
-    }
-    if (isCreated || isProvisioning) {
-      return { kind: "blocked", reason: "provisioning" };
-    }
-    if (isDefaultExecutionOptionsLoading) {
-      return { kind: "blocked", reason: "loading-execution-options" };
-    }
-    if (isWaitingForHost) {
-      return { kind: "stop-only", onStop: handleStopThread };
-    }
-    if (
-      runtimeDisplayStatus === "active" ||
-      runtimeDisplayStatus === "host-reconnecting"
-    ) {
-      return { kind: "queue", onStop: handleStopThread };
-    }
-    return { kind: "ready" };
+    return buildFollowUpSubmitMode({
+      hasPendingInteraction,
+      isDefaultExecutionOptionsLoading,
+      isStopRequested,
+      onStop: handleStopThread,
+      runtimeDisplayStatus,
+    });
   }, [
     handleStopThread,
     hasPendingInteraction,
     isDefaultExecutionOptionsLoading,
-    isCreated,
-    isProvisioning,
     isStopRequested,
-    isWaitingForHost,
     runtimeDisplayStatus,
   ]);
   const promptPlaceholder = isStopRequested

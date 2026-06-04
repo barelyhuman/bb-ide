@@ -50,8 +50,7 @@ export interface BuildAutoFollowUpRequestArgs extends BaseFollowUpRequestArgs {
   execution: FollowUpExecutionSelection;
 }
 
-export interface BuildCreateQueuedFollowUpRequestArgs
-  extends BaseFollowUpRequestArgs {
+export interface BuildCreateQueuedFollowUpRequestArgs extends BaseFollowUpRequestArgs {
   execution: FollowUpExecutionSelection;
 }
 
@@ -71,6 +70,14 @@ export interface CanSubmitFollowUpShortcutArgs {
   queuedMessageCount: number;
   runtimeDisplayStatus: ThreadRuntimeDisplayStatus;
   submitModeKind: FollowUpSubmitMode["kind"];
+}
+
+export interface BuildFollowUpSubmitModeArgs {
+  hasPendingInteraction: boolean;
+  isDefaultExecutionOptionsLoading: boolean;
+  isStopRequested: boolean;
+  onStop: () => void;
+  runtimeDisplayStatus: ThreadRuntimeDisplayStatus;
 }
 
 export interface ResolveDefaultExecutionOptionsStateArgs {
@@ -96,6 +103,37 @@ export function shouldQueueFollowUpMessage(
   displayStatus: ThreadRuntimeDisplayStatus,
 ): boolean {
   return displayStatus === "active" || displayStatus === "host-reconnecting";
+}
+
+export function buildFollowUpSubmitMode({
+  hasPendingInteraction,
+  isDefaultExecutionOptionsLoading,
+  isStopRequested,
+  onStop,
+  runtimeDisplayStatus,
+}: BuildFollowUpSubmitModeArgs): FollowUpSubmitMode {
+  if (isStopRequested) {
+    return { kind: "blocked", reason: "stopping" };
+  }
+  if (hasPendingInteraction) {
+    return { kind: "blocked", reason: "pending-interaction" };
+  }
+  if (
+    runtimeDisplayStatus === "created" ||
+    runtimeDisplayStatus === "provisioning"
+  ) {
+    return { kind: "stop-only", onStop };
+  }
+  if (isDefaultExecutionOptionsLoading) {
+    return { kind: "blocked", reason: "loading-execution-options" };
+  }
+  if (runtimeDisplayStatus === "waiting-for-host") {
+    return { kind: "stop-only", onStop };
+  }
+  if (shouldQueueFollowUpMessage(runtimeDisplayStatus)) {
+    return { kind: "queue", onStop };
+  }
+  return { kind: "ready" };
 }
 
 export function canSubmitFollowUpShortcut({

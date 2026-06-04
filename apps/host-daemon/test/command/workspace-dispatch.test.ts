@@ -116,10 +116,11 @@ describe("workspace command dispatch", () => {
     }
     expect(result.workspaceStatus.workingTree.state).toBe("clean");
     expect(harness.provisions).toEqual([
-      {
+      expect.objectContaining({
         workspaceProvisionType: "unmanaged",
         path: "/tmp/env-rehydrate",
-      },
+        signal: expect.any(AbortSignal),
+      }),
     ]);
   });
 

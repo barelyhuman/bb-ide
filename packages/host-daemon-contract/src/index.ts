@@ -85,6 +85,7 @@ export {
   HOST_DAEMON_DURABLE_COMMAND_TYPES,
   HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
+  environmentProvisionCancelCommandSchema,
   environmentProvisionCommandSchema,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
@@ -110,6 +111,7 @@ export {
   workspaceResolutionFailureSchema,
 } from "./commands.js";
 export type {
+  EnvironmentProvisionCancelCommand,
   EnvironmentProvisionCommand,
   HostDaemonCommand,
   HostDaemonCommandEnvelope,

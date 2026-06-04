@@ -813,10 +813,11 @@ describe("thread command dispatch", () => {
 
     expect(result).toEqual({});
     expect(harness.provisions).toEqual([
-      {
+      expect.objectContaining({
         workspaceProvisionType: "unmanaged",
         path: "/tmp/recreated-env",
-      },
+        signal: expect.any(AbortSignal),
+      }),
     ]);
     expect(harness.runtimeState.archivedThreadId).toBe("thread-archive");
     expect(harness.runtimeState.archivedProviderId).toBe("fake");
@@ -1394,10 +1395,11 @@ describe("thread command dispatch", () => {
 
     expect(result).toEqual({ appliedAs: "new-turn" });
     expect(harness.provisions).toEqual([
-      {
+      expect.objectContaining({
         workspaceProvisionType: "unmanaged",
         path: "/tmp/env-lazy",
-      },
+        signal: expect.any(AbortSignal),
+      }),
     ]);
     expect(harness.runtimeState.resumedEnvironmentId).toBe("env-lazy");
     expect(harness.runtimeState.resumedProviderThreadId).toBe("provider-1");
