@@ -298,17 +298,14 @@ export function ensureWorkspaceReadyEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: EnsureWorkspaceReadyEventArgs,
 ): number | null {
-  const result = deps.db.transaction(
-    (tx) => ensureWorkspaceReadyEventRecord(tx, args),
+  return deps.db.transaction(
+    (tx) =>
+      ensureWorkspaceReadyEventInTransaction(
+        { db: tx, hub: deps.hub },
+        args,
+      ),
     { behavior: "immediate" },
   );
-
-  if (result !== null) {
-    deps.hub.notifyThread(args.threadId, ["events-appended"], {
-      eventTypes: ["system/thread-provisioning"],
-    });
-  }
-  return result;
 }
 
 function ensureWorkspaceReadyEventRecord(

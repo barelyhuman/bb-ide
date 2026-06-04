@@ -175,6 +175,35 @@ export function seedThread(
   });
 }
 
+export function seedThreadFixture(
+  harness: { deps: Pick<AppDeps, "db" | "hub"> },
+  args: {
+    session?: Parameters<typeof seedHostSession>[1];
+    environment?: Omit<
+      Parameters<typeof seedEnvironment>[1],
+      "hostId" | "projectId"
+    >;
+    thread?: Omit<
+      Parameters<typeof seedThread>[1],
+      "projectId" | "environmentId"
+    >;
+  } = {},
+) {
+  const { host, session } = seedHostSession(harness.deps, args.session);
+  const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+  const environment = seedEnvironment(harness.deps, {
+    hostId: host.id,
+    projectId: project.id,
+    ...args.environment,
+  });
+  const thread = seedThread(harness.deps, {
+    projectId: project.id,
+    environmentId: environment.id,
+    ...args.thread,
+  });
+  return { host, session, project, environment, thread };
+}
+
 export function seedQueuedMessage(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {

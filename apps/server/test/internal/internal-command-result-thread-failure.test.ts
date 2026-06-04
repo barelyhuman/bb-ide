@@ -27,6 +27,7 @@ import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
+  seedThreadFixture,
   seedProjectWithSource,
   seedThread,
   seedThreadRuntimeState,
@@ -216,20 +217,11 @@ async function queueManagedTurnSubmitScenario(
 describe("thread command failure side effects", () => {
   it("transitions thread to error when thread.start fails", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, project, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-start-fail",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
 
       const command = queueCommand(harness.db, harness.hub, {
@@ -301,20 +293,11 @@ describe("thread command failure side effects", () => {
 
   it("rejects mismatched command result types before terminalizing command rows", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, project, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-start-result-type-mismatch",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
 
       const command = queueCommand(harness.db, harness.hub, {
@@ -494,20 +477,11 @@ describe("thread command failure side effects", () => {
 
   it("transitions thread to error without manager notification when unmanaged turn.submit fails", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, project, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-turn-fail",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -599,20 +573,11 @@ describe("thread command failure side effects", () => {
 
   it("records turn.submit failure when a user stop was requested after fetch", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, project, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-turn-fail-after-stop-request",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -984,20 +949,11 @@ describe("thread command failure side effects", () => {
 
   it("keeps thread active when a successful turn.submit result is retried", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, project, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-turn-success-retry",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
 
       const command = queueCommand(harness.db, harness.hub, {
@@ -1062,20 +1018,11 @@ describe("thread command failure side effects", () => {
 
   it("does not transition thread when a successful thread.start is reported", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, project, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-start-ok",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
 
       const command = queueCommand(harness.db, harness.hub, {

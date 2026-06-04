@@ -1038,30 +1038,14 @@ export function interruptActiveTurnForThread(
   deps: Pick<AppDeps, "db" | "hub">,
   args: InterruptActiveTurnForThreadArgs,
 ): boolean {
-  const activeTurnId = getActiveTurnId(deps, args.threadId);
-  if (!activeTurnId) {
-    return false;
-  }
-
-  const providerThreadId = getLastProviderThreadId(deps, args.threadId);
-
-  deps.db.transaction(
-    (tx) => {
-      applyActiveTurnInterruptionInTransaction(tx, {
-        activeTurnId,
-        environmentId: args.environmentId,
-        providerThreadId,
-        reason: args.reason,
-        threadId: args.threadId,
-      });
-    },
+  return deps.db.transaction(
+    (tx) =>
+      interruptActiveTurnForThreadInTransaction(
+        { db: tx, hub: deps.hub },
+        args,
+      ),
     { behavior: "immediate" },
   );
-  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"], {
-    eventTypes: ["turn/completed", "system/thread/interrupted"],
-  });
-
-  return true;
 }
 
 function interruptActiveTurnForThreadInTransaction(

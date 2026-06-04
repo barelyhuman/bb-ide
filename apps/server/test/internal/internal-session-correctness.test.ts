@@ -36,6 +36,7 @@ import {
 import {
   seedEnvironment,
   seedHostSession,
+  seedThreadFixture,
   seedProjectWithSource,
   seedThread,
   seedTurnStarted,
@@ -634,20 +635,11 @@ describe("internal session correctness", () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-daemon-active-disconnect",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
 
       onDaemonSocketClose(harness.deps, session.id);
@@ -709,19 +701,10 @@ describe("internal session correctness", () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-daemon-pending-interaction-disconnect",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -775,20 +758,11 @@ describe("internal session correctness", () => {
 
   it("closes expired lease sockets and interrupts pending interactions during sweeps", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-daemon-expired-lease-interaction",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -875,20 +849,11 @@ describe("internal session correctness", () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-daemon-reconnect",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -984,20 +949,11 @@ describe("internal session correctness", () => {
 
   it("interrupts pending interactions when a same-instance reconnect no longer reports an active thread", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-daemon-same-instance-disowns-thread",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -1171,19 +1127,10 @@ describe("internal session correctness", () => {
 
   it("interrupts pending interactions when a replacement daemon session has a new instance id", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { host, session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-daemon-session-restart-interaction",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,

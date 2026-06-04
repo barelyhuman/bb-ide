@@ -16,6 +16,7 @@ import {
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
   resolveThreadTimelineServiceViewMode,
   type ThreadTimelinePageRequest,
+  type ThreadTimelineServiceViewMode,
 } from "../../src/services/threads/timeline.js";
 import { ApiError } from "../../src/errors.js";
 
@@ -32,12 +33,14 @@ interface TimelineServiceTestOptions {
   includeNestedRows?: boolean;
   isDevelopment: boolean;
   page?: ThreadTimelinePageRequest;
+  timelineViewMode?: ThreadTimelineServiceViewMode;
 }
 
 interface TimelineTurnSummaryDetailsTestOptions {
   isDevelopment: boolean;
   sourceSeqEnd: number;
   sourceSeqStart: number;
+  timelineViewMode?: ThreadTimelineServiceViewMode;
   turnId: string;
 }
 
@@ -53,7 +56,7 @@ interface SeedTimelineThreadResult {
 
 interface SeedTimelineThreadArgs {
   status?: Thread["status"];
-  type: Thread["type"];
+  type?: Thread["type"];
 }
 
 interface SeedTimelineClientTurnRequestedArgs {
@@ -67,18 +70,12 @@ interface SeedTimelineClientTurnRequestedArgs {
   threadId: string;
 }
 
-interface ReconstructManagerConversationTimelineByPagesArgs {
-  db: DbConnection;
-  isDevelopment: boolean;
-  segmentLimit: number;
-  thread: Thread;
-}
-
 interface ReconstructThreadTimelineByPagesArgs {
   db: DbConnection;
   isDevelopment: boolean;
   segmentLimit: number;
   thread: Thread;
+  timelineViewMode?: ThreadTimelineServiceViewMode;
 }
 
 function flattenTimelineSourceRows(
@@ -120,22 +117,7 @@ function buildThreadTimeline(
       kind: "latest",
       segmentLimit: UNPAGINATED_TIMELINE_SEGMENT_LIMIT,
     },
-    timelineViewMode: "standard",
-  });
-}
-
-function buildManagerConversationTimeline(
-  db: DbConnection,
-  thread: Thread,
-  options: TimelineServiceTestOptions,
-) {
-  return buildThreadTimelineWithResolvedMode(db, thread, {
-    ...options,
-    page: options.page ?? {
-      kind: "latest",
-      segmentLimit: UNPAGINATED_TIMELINE_SEGMENT_LIMIT,
-    },
-    timelineViewMode: "manager-conversation",
+    timelineViewMode: options.timelineViewMode ?? "standard",
   });
 }
 
@@ -144,6 +126,7 @@ function reconstructThreadTimelineByPages({
   isDevelopment,
   segmentLimit,
   thread,
+  timelineViewMode,
 }: ReconstructThreadTimelineByPagesArgs): TimelineRow[] {
   const latestPage = buildThreadTimeline(db, thread, {
     isDevelopment,
@@ -151,6 +134,7 @@ function reconstructThreadTimelineByPages({
       kind: "latest",
       segmentLimit,
     },
+    timelineViewMode,
   });
   const rows = [...latestPage.rows];
   let olderCursor = latestPage.timelinePage.olderCursor;
@@ -163,38 +147,7 @@ function reconstructThreadTimelineByPages({
         beforeCursor: olderCursor,
         segmentLimit,
       },
-    });
-    rows.unshift(...olderPage.rows);
-    olderCursor = olderPage.timelinePage.olderCursor;
-  }
-
-  return rows;
-}
-
-function reconstructManagerConversationTimelineByPages({
-  db,
-  isDevelopment,
-  segmentLimit,
-  thread,
-}: ReconstructManagerConversationTimelineByPagesArgs): TimelineRow[] {
-  const latestPage = buildManagerConversationTimeline(db, thread, {
-    isDevelopment,
-    page: {
-      kind: "latest",
-      segmentLimit,
-    },
-  });
-  const rows = [...latestPage.rows];
-  let olderCursor = latestPage.timelinePage.olderCursor;
-
-  while (olderCursor !== null) {
-    const olderPage = buildManagerConversationTimeline(db, thread, {
-      isDevelopment,
-      page: {
-        kind: "older",
-        beforeCursor: olderCursor,
-        segmentLimit,
-      },
+      timelineViewMode,
     });
     rows.unshift(...olderPage.rows);
     olderCursor = olderPage.timelinePage.olderCursor;
@@ -210,24 +163,13 @@ function buildTimelineTurnSummaryDetails(
 ) {
   return buildTimelineTurnSummaryDetailsWithResolvedMode(db, thread, {
     ...options,
-    timelineViewMode: "standard",
-  });
-}
-
-function buildManagerConversationTurnSummaryDetails(
-  db: DbConnection,
-  thread: Thread,
-  options: TimelineTurnSummaryDetailsTestOptions,
-) {
-  return buildTimelineTurnSummaryDetailsWithResolvedMode(db, thread, {
-    ...options,
-    timelineViewMode: "manager-conversation",
+    timelineViewMode: options.timelineViewMode ?? "standard",
   });
 }
 
 function seedTimelineThread(
   harness: TimelineTestHarness,
-  args: SeedTimelineThreadArgs,
+  args: SeedTimelineThreadArgs = {},
 ): SeedTimelineThreadResult {
   const host = seedHost(harness.deps);
   const { project } = seedProjectWithSource(harness.deps, {
@@ -766,50 +708,51 @@ describe("buildThreadTimeline", () => {
       });
     }
 
-    const fullTimeline = buildManagerConversationTimeline(harness.db, thread, {
+    const fullTimeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
+      timelineViewMode: "manager-conversation",
     });
     const crossingOperationRowId = `${thread.id}:op:provider-unhandled:32`;
-    const directOlderPage = buildManagerConversationTimeline(
-      harness.db,
-      thread,
-      {
-        isDevelopment: true,
-        page: {
-          kind: "older",
-          beforeCursor: {
-            anchorSeq: 31,
-            anchorId: `${thread.id}:user-seed:31`,
-          },
-          segmentLimit: 1,
+    const directOlderPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "older",
+        beforeCursor: {
+          anchorSeq: 31,
+          anchorId: `${thread.id}:user-seed:31`,
         },
+        segmentLimit: 1,
       },
-    );
-    const reconstructedRows = reconstructManagerConversationTimelineByPages({
+      timelineViewMode: "manager-conversation",
+    });
+    const reconstructedRows = reconstructThreadTimelineByPages({
       db: harness.db,
       isDevelopment: true,
       segmentLimit: 1,
       thread,
+      timelineViewMode: "manager-conversation",
     });
-    const latestPage = buildManagerConversationTimeline(harness.db, thread, {
+    const latestPage = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
       page: {
         kind: "latest",
         segmentLimit: 2,
       },
+      timelineViewMode: "manager-conversation",
     });
     const latestOlderCursor = latestPage.timelinePage.olderCursor;
     expect(latestOlderCursor).not.toBeNull();
     if (latestOlderCursor === null) {
       throw new Error("Expected an older cursor for the latest page");
     }
-    const olderPage = buildManagerConversationTimeline(harness.db, thread, {
+    const olderPage = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
       page: {
         kind: "older",
         beforeCursor: latestOlderCursor,
         segmentLimit: 3,
       },
+      timelineViewMode: "manager-conversation",
     });
     const pagedRows = [...olderPage.rows, ...latestPage.rows];
 
@@ -852,12 +795,13 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildManagerConversationTimeline(harness.db, thread, {
+    const timeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
       page: {
         kind: "latest",
         segmentLimit: 20,
       },
+      timelineViewMode: "manager-conversation",
     });
 
     expect(timeline.rows.length).toBeGreaterThan(0);
@@ -1443,22 +1387,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 1,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
@@ -1469,7 +1402,7 @@ describe("buildThreadTimeline", () => {
     for (let index = 0; index < 1000; index += 1) {
       seedEvent(harness.deps, {
         threadId: thread.id,
-        environmentId: environment.id,
+        environmentId: environmentId,
         providerThreadId: "provider-thread-1",
         scope: turnScope("turn-1"),
         sequence: index + 2,
@@ -1483,7 +1416,7 @@ describe("buildThreadTimeline", () => {
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1002,
@@ -1498,7 +1431,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1003,
@@ -1509,7 +1442,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1004,
@@ -1546,22 +1479,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: threadScope(),
       sequence: 1,
@@ -1602,24 +1524,14 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       createdAt: 100,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -1629,7 +1541,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       createdAt: 200,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -1661,24 +1573,14 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       createdAt: 100,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -1688,7 +1590,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       createdAt: 250,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -1716,24 +1618,14 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       createdAt: 100,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -1743,7 +1635,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       createdAt: 300,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -1771,24 +1663,14 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       createdAt: 100,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -1798,7 +1680,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       createdAt: 150,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -1815,7 +1697,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       createdAt: 250,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -1828,7 +1710,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       createdAt: 400,
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -1858,22 +1740,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -1882,7 +1753,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -1894,7 +1765,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -1910,7 +1781,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -1925,7 +1796,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 5,
@@ -1952,23 +1823,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -1977,7 +1838,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -1993,7 +1854,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -2005,7 +1866,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       scope: threadScope(),
       sequence: 4,
       type: "system/thread/interrupted",
@@ -2026,23 +1887,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2051,7 +1902,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -2098,23 +1949,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2123,7 +1964,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -2139,7 +1980,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -2155,7 +1996,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -2177,23 +2018,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2202,7 +2033,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       scope: threadScope(),
       sequence: 2,
       type: "system/thread/interrupted",
@@ -2212,7 +2043,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -2234,23 +2065,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2259,7 +2080,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -2291,11 +2112,10 @@ describe("buildThreadTimeline", () => {
       ],
     });
 
-    const managerConversationTimeline = buildManagerConversationTimeline(
-      harness.db,
-      thread,
-      { isDevelopment: true },
-    );
+    const managerConversationTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      timelineViewMode: "manager-conversation",
+    });
     expect(managerConversationTimeline.pendingTodos).toBeNull();
   });
 
@@ -2308,23 +2128,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2361,23 +2171,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       status: "active",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2386,7 +2186,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -2402,7 +2202,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -2414,7 +2214,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -2443,22 +2243,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2473,7 +2262,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-2"),
       sequence: 2,
@@ -2502,22 +2291,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2532,7 +2310,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-2"),
       sequence: 2,
@@ -2557,22 +2335,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2581,7 +2348,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -2598,7 +2365,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -2613,7 +2380,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -2637,22 +2404,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -2661,7 +2417,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -2678,7 +2434,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -2693,7 +2449,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -2704,7 +2460,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 5,
       type: "client/turn/requested",
       scope: threadScope(),
@@ -2728,7 +2484,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 8,
@@ -3091,22 +2847,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -3115,7 +2860,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -3132,7 +2877,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3147,7 +2892,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -3158,7 +2903,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 5,
       type: "client/turn/requested",
       scope: threadScope(),
@@ -3184,14 +2929,14 @@ describe("buildThreadTimeline", () => {
     for (let sequence = 6; sequence < 136; sequence += 1) {
       seedEvent(harness.deps, {
         threadId: thread.id,
-        environmentId: environment.id,
+        environmentId: environmentId,
         sequence,
         type: "system/thread-provisioning",
         scope: threadScope(),
         data: {
           provisioningId: `tpv-${sequence}`,
           status: "completed",
-          environmentId: environment.id,
+          environmentId: environmentId,
           entries: [],
         },
       });
@@ -3199,7 +2944,7 @@ describe("buildThreadTimeline", () => {
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 136,
@@ -3246,22 +2991,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -3270,7 +3004,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -3285,7 +3019,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3314,22 +3048,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -3338,7 +3061,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -3356,7 +3079,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3368,7 +3091,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -3388,7 +3111,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 5,
@@ -3421,22 +3144,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -3445,7 +3157,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -3460,7 +3172,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3484,22 +3196,11 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
-    });
+    const { environmentId, thread } = seedTimelineThread(harness);
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -3508,7 +3209,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -3528,7 +3229,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3585,24 +3286,14 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       type: "manager",
     });
 
     // System-initiated welcome message (hidden by default manager conversation view)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 1,
       type: "client/turn/requested",
       scope: threadScope(),
@@ -3628,14 +3319,14 @@ describe("buildThreadTimeline", () => {
     // Provisioning operation (should be visible)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 2,
       type: "system/thread-provisioning",
       scope: threadScope(),
       data: {
         provisioningId: "tpv-1",
         status: "completed",
-        environmentId: environment.id,
+        environmentId: environmentId,
         entries: [
           {
             type: "step",
@@ -3649,7 +3340,7 @@ describe("buildThreadTimeline", () => {
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3660,7 +3351,7 @@ describe("buildThreadTimeline", () => {
     // Internal assistant text (should be hidden)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 4,
@@ -3677,7 +3368,7 @@ describe("buildThreadTimeline", () => {
     // Buffered internal assistant delta (should be hidden in the default view)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 5,
@@ -3691,7 +3382,7 @@ describe("buildThreadTimeline", () => {
     // Internal tool call (should be hidden)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 6,
@@ -3710,7 +3401,7 @@ describe("buildThreadTimeline", () => {
     // message_user delivery (should be visible)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 7,
       type: "system/manager/user_message",
       scope: threadScope(),
@@ -3723,7 +3414,7 @@ describe("buildThreadTimeline", () => {
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 8,
@@ -3736,7 +3427,7 @@ describe("buildThreadTimeline", () => {
     // User sends a follow-up message (should be visible)
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 9,
       type: "client/turn/requested",
       scope: threadScope(),
@@ -3767,7 +3458,7 @@ describe("buildThreadTimeline", () => {
     ].join("\n");
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 10,
       type: "client/turn/requested",
       scope: threadScope(),
@@ -3791,13 +3482,10 @@ describe("buildThreadTimeline", () => {
     });
 
     // Default view — should show only operation, message_user, and user message
-    const defaultTimeline = buildManagerConversationTimeline(
-      harness.db,
-      thread,
-      {
-        isDevelopment: true,
-      },
-    );
+    const defaultTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      timelineViewMode: "manager-conversation",
+    });
     const defaultKinds = defaultTimeline.rows.map((row) =>
       row.kind === "conversation" ? row.role : row.kind,
     );
@@ -3884,23 +3572,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       type: "manager",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 1,
       type: "client/turn/requested",
       scope: threadScope(),
@@ -3924,7 +3602,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -3933,7 +3611,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -3945,7 +3623,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       scope: threadScope(),
       sequence: 4,
       type: "system/error",
@@ -3956,8 +3634,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildManagerConversationTimeline(harness.db, thread, {
+    const timeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: false,
+      timelineViewMode: "manager-conversation",
     });
     const sourceRows = flattenTimelineSourceRows(timeline.rows);
 
@@ -4039,13 +3718,10 @@ describe("buildThreadTimeline", () => {
       });
     }
 
-    const defaultTimeline = buildManagerConversationTimeline(
-      harness.db,
-      managerThread,
-      {
-        isDevelopment: false,
-      },
-    );
+    const defaultTimeline = buildThreadTimeline(harness.db, managerThread, {
+      isDevelopment: false,
+      timelineViewMode: "manager-conversation",
+    });
     expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
       "system-start-message",
     );
@@ -4094,7 +3770,7 @@ describe("buildThreadTimeline", () => {
       }),
     );
 
-    const defaultDetails = buildManagerConversationTurnSummaryDetails(
+    const defaultDetails = buildTimelineTurnSummaryDetails(
       harness.db,
       managerThread,
       {
@@ -4102,6 +3778,7 @@ describe("buildThreadTimeline", () => {
         turnId: "turn-1",
         sourceSeqEnd: 2,
         sourceSeqStart: 1,
+        timelineViewMode: "manager-conversation",
       },
     );
     expect(JSON.stringify(defaultDetails.rows)).not.toContain(
@@ -4170,13 +3847,10 @@ describe("buildThreadTimeline", () => {
       });
     }
 
-    const defaultTimeline = buildManagerConversationTimeline(
-      harness.db,
-      managerThread,
-      {
-        isDevelopment: false,
-      },
-    );
+    const defaultTimeline = buildThreadTimeline(harness.db, managerThread, {
+      isDevelopment: false,
+      timelineViewMode: "manager-conversation",
+    });
     expect(defaultTimeline.rows).not.toContainEqual(
       expect.objectContaining({
         role: "user",
@@ -4225,23 +3899,13 @@ describe("buildThreadTimeline", () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
-    const host = seedHost(harness.deps);
-    const { project } = seedProjectWithSource(harness.deps, {
-      hostId: host.id,
-    });
-    const environment = seedEnvironment(harness.deps, {
-      hostId: host.id,
-      projectId: project.id,
-    });
-    const thread = seedThread(harness.deps, {
-      projectId: project.id,
-      environmentId: environment.id,
+    const { environmentId, thread } = seedTimelineThread(harness, {
       type: "manager",
     });
 
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 1,
@@ -4250,7 +3914,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 2,
@@ -4264,7 +3928,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 3,
@@ -4278,7 +3942,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       sequence: 4,
       type: "system/manager/user_message",
       scope: threadScope(),
@@ -4290,7 +3954,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 5,
@@ -4305,7 +3969,7 @@ describe("buildThreadTimeline", () => {
     });
     seedEvent(harness.deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: environmentId,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 6,
@@ -4315,8 +3979,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildManagerConversationTimeline(harness.db, thread, {
+    const timeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
+      timelineViewMode: "manager-conversation",
     });
     const rows = flattenTimelineSourceRows(timeline.rows);
 

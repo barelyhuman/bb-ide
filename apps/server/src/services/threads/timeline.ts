@@ -157,11 +157,6 @@ export interface ResolveThreadTimelineServiceViewModeArgs {
   thread: Thread;
 }
 
-export interface ResolveSystemClientRequestVisibilityArgs {
-  thread: Thread;
-  timelineViewMode: ThreadTimelineServiceViewMode;
-}
-
 export function resolveThreadTimelineServiceViewMode({
   managerTimelineView,
   thread,
@@ -172,10 +167,10 @@ export function resolveThreadTimelineServiceViewMode({
   return "standard";
 }
 
-export function resolveSystemClientRequestVisibility({
-  thread,
-  timelineViewMode,
-}: ResolveSystemClientRequestVisibilityArgs): SystemClientRequestVisibility {
+function resolveSystemClientRequestVisibility(
+  thread: Thread,
+  timelineViewMode: ThreadTimelineServiceViewMode,
+): SystemClientRequestVisibility {
   return thread.type === "manager" && timelineViewMode === "standard"
     ? "visible"
     : "hidden";
@@ -702,10 +697,10 @@ export function buildThreadTimeline(
   const includeNestedRows = options.includeNestedRows ?? false;
   const includeProviderUnhandledOperations = options.isDevelopment;
   const viewMode = options.timelineViewMode;
-  const systemClientRequestVisibility = resolveSystemClientRequestVisibility({
+  const systemClientRequestVisibility = resolveSystemClientRequestVisibility(
     thread,
-    timelineViewMode: viewMode,
-  });
+    viewMode,
+  );
   const eventSelection = selectTimelineEventRows(
     db,
     thread,
@@ -882,10 +877,10 @@ export function buildTimelineTurnSummaryDetails(
     );
   }
   const viewMode = options.timelineViewMode;
-  const systemClientRequestVisibility = resolveSystemClientRequestVisibility({
+  const systemClientRequestVisibility = resolveSystemClientRequestVisibility(
     thread,
-    timelineViewMode: viewMode,
-  });
+    viewMode,
+  );
   const sourceRange = resolveTurnSummaryDetailsSourceRange({
     exactEventRows: exactEventRowsForRequestedTurn.rows,
     fallbackRange: {

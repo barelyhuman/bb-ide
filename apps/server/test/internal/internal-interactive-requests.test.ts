@@ -14,6 +14,7 @@ import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
+  seedThreadFixture,
   seedProjectWithSource,
   seedThread,
   seedThreadRuntimeState,
@@ -116,19 +117,10 @@ function registerInteractiveRequest(
 describe("internal interactive request lifecycle", () => {
   it("persists an interactive request and delivers a later resolution through a command", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-resolve",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -234,20 +226,11 @@ describe("internal interactive request lifecycle", () => {
 
   it("persists user-question interactive requests", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-user-question-enabled",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        providerId: "claude-code",
+      },
+        thread: { providerId: "claude-code" },
       });
 
       const response = await registerInteractiveRequest({
@@ -287,19 +270,10 @@ describe("internal interactive request lifecycle", () => {
 
   it("persists a session-scoped command approval resolution", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-session-resolve",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -401,19 +375,10 @@ describe("internal interactive request lifecycle", () => {
 
   it("returns the existing pending interaction when registration is retried", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-registration-retry",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       const body = buildCommandApprovalInteractiveRequest({
         sessionId: session.id,
@@ -562,19 +527,10 @@ describe("internal interactive request lifecycle", () => {
 
   it("returns retryable 503 when interactive request turn/started has not landed", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-turn-start-timeout",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       const body = buildCommandApprovalInteractiveRequest({
         sessionId: session.id,
@@ -599,19 +555,10 @@ describe("internal interactive request lifecycle", () => {
 
   it("returns the existing resolving interaction when registration retry arrives after user resolution", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-registration-retry-resolving",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       const body = buildCommandApprovalInteractiveRequest({
         sessionId: session.id,
@@ -656,19 +603,10 @@ describe("internal interactive request lifecycle", () => {
 
   it("interrupts pending interactive requests for provider exits", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-interrupt",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -838,19 +776,10 @@ describe("internal interactive request lifecycle", () => {
 
   it("interrupts pending interactive requests before deleting threads", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-interaction-delete-thread",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
+      },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -927,20 +856,11 @@ describe("internal interactive request lifecycle", () => {
 
   it("persists Claude interactive requests and resolves them through the same lifecycle", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-claude-interaction-resolve",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        providerId: "claude-code",
+      },
+        thread: { providerId: "claude-code" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,

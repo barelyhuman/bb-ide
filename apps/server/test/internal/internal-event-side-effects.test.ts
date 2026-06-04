@@ -37,6 +37,7 @@ import {
   seedEnvironment,
   seedEvent,
   seedHostSession,
+  seedThreadFixture,
   seedProjectWithSource,
   seedThreadRuntimeState,
   seedThread,
@@ -406,20 +407,11 @@ describe("internal event side effects", () => {
 
   it("does not reactivate a stop-requested thread from a late turn/started event", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-event-stop-requested-start",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
+      },
+        thread: { status: "idle" },
       });
       markThreadStopRequested(harness.db, harness.hub, {
         threadId: thread.id,
@@ -452,20 +444,11 @@ describe("internal event side effects", () => {
 
   it("marks a thread errored when a provider process exit error is reported", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-provider-process-exit",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
 
       const response = await harness.app.request("/internal/session/events", {
@@ -496,20 +479,11 @@ describe("internal event side effects", () => {
 
   it("interrupts pending interactions when a provider process exit error is reported", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-provider-process-exit-interaction",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
@@ -578,20 +552,11 @@ describe("internal event side effects", () => {
 
   it("does not error a stop-requested thread from provider process exit failure events", async () => {
     await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
+      const { session, environment, thread } = seedThreadFixture(harness, {
+        session: {
         id: "host-provider-process-exit-stop-requested",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      },
+        thread: { status: "active" },
       });
       markThreadStopRequested(harness.db, harness.hub, {
         threadId: thread.id,

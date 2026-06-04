@@ -48,6 +48,7 @@ import {
   seedProjectWithSource,
   seedEvent,
   seedThread,
+  seedThreadFixture,
   seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
@@ -344,18 +345,7 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("rejects archive all for non-manager threads", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
+      const { thread } = seedThreadFixture(harness);
 
       const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/archive-all`,
@@ -431,18 +421,8 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("queues Codex archive forwarding for idle threads", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
+      const { environment, thread } = seedThreadFixture(harness, {
+        thread: { status: "idle" },
       });
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
@@ -566,18 +546,8 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("queues Codex archive forwarding after active threads stop", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
+      const { environment, thread } = seedThreadFixture(harness, {
+        thread: { status: "active" },
       });
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
@@ -695,18 +665,8 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("skips Codex thread archive forwarding when no provider thread id is stored", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
+      const { thread } = seedThreadFixture(harness, {
+        thread: { status: "idle" },
       });
 
       const response = await harness.app.request(
@@ -774,18 +734,8 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("skips Codex archive forwarding when stored events show spawnAgent children", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
+      const { environment, thread } = seedThreadFixture(harness, {
+        thread: { status: "idle" },
       });
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
@@ -885,18 +835,8 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("queues Codex unarchive forwarding when the environment is still ready", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
+      const { environment, thread } = seedThreadFixture(harness, {
+        thread: { status: "idle" },
       });
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
@@ -927,18 +867,8 @@ describe("public thread archive delete cleanup routes", () => {
 
   it("blocks follow-up sends while Codex native archive forwarding is pending", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
+      const { environment, thread } = seedThreadFixture(harness, {
+        thread: { status: "idle" },
       });
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,

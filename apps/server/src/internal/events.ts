@@ -161,27 +161,6 @@ type EventEffectFollowUp =
   | ManagerTurnNotificationFollowUp
   | QueuedMessageAutoSendFollowUp;
 
-interface ManagerScheduleSyncLogContext {
-  followUpKind: "manager-schedule-sync";
-  threadId: string;
-}
-
-interface ManagerTurnNotificationLogContext {
-  followUpKind: "manager-turn-notification";
-  managedThreadId: string;
-  managerThreadId: string;
-}
-
-interface QueuedMessageAutoSendLogContext {
-  followUpKind: "queued-message-auto-send";
-  threadId: string;
-}
-
-type EventFollowUpLogContext =
-  | ManagerScheduleSyncLogContext
-  | ManagerTurnNotificationLogContext
-  | QueuedMessageAutoSendLogContext;
-
 function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   providerThreadId: string | null;
 } {
@@ -435,62 +414,36 @@ async function applyEventEffects(
   return followUps;
 }
 
-async function executeEventFollowUp(
-  deps: LoggedPendingInteractionWorkSessionDeps,
-  followUp: EventEffectFollowUp,
-): Promise<void> {
-  switch (followUp.kind) {
-    case "manager-schedule-sync":
-      await syncManagerThreadSchedules(deps, {
-        threadId: followUp.threadId,
-      });
-      return;
-    case "manager-turn-notification":
-      await queueManagedThreadTurnNotificationBestEffort(deps, {
-        managedThreadId: followUp.managedThreadId,
-        managerThreadId: followUp.managerThreadId,
-        turnStatus: followUp.turnStatus,
-        title: followUp.title,
-      });
-      return;
-    case "queued-message-auto-send":
-      await runQueuedMessageAutoSendForThread(deps, {
-        threadId: followUp.threadId,
-      });
-      return;
-  }
-}
-
-function eventFollowUpLogContext(
-  followUp: EventEffectFollowUp,
-): EventFollowUpLogContext {
-  switch (followUp.kind) {
-    case "manager-schedule-sync":
-    case "queued-message-auto-send":
-      return {
-        followUpKind: followUp.kind,
-        threadId: followUp.threadId,
-      };
-    case "manager-turn-notification":
-      return {
-        followUpKind: followUp.kind,
-        managedThreadId: followUp.managedThreadId,
-        managerThreadId: followUp.managerThreadId,
-      };
-  }
-}
-
 async function executeEventFollowUpBestEffort(
   deps: LoggedPendingInteractionWorkSessionDeps,
   followUp: EventEffectFollowUp,
 ): Promise<void> {
   try {
-    await executeEventFollowUp(deps, followUp);
+    switch (followUp.kind) {
+      case "manager-schedule-sync":
+        await syncManagerThreadSchedules(deps, {
+          threadId: followUp.threadId,
+        });
+        return;
+      case "manager-turn-notification":
+        await queueManagedThreadTurnNotificationBestEffort(deps, {
+          managedThreadId: followUp.managedThreadId,
+          managerThreadId: followUp.managerThreadId,
+          turnStatus: followUp.turnStatus,
+          title: followUp.title,
+        });
+        return;
+      case "queued-message-auto-send":
+        await runQueuedMessageAutoSendForThread(deps, {
+          threadId: followUp.threadId,
+        });
+        return;
+    }
   } catch (error) {
     if (isCommandTimeoutError(error)) {
       deps.logger.warn(
         {
-          ...eventFollowUpLogContext(followUp),
+          followUp,
           ...runtimeErrorLogFields(deps.config, error),
         },
         "Event follow-up deferred by host timeout",
@@ -499,7 +452,6 @@ async function executeEventFollowUpBestEffort(
     }
     deps.logger.error(
       {
-        ...eventFollowUpLogContext(followUp),
         err: error,
         followUp,
       },
