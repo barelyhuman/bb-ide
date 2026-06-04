@@ -1,11 +1,11 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { HostDaemonLogger } from "./logger.js";
 
-export interface EventLoopStallMonitorOptions {
+interface EventLoopStallMonitorOptions {
   logger: Pick<HostDaemonLogger, "debug">;
 }
 
-export interface EventLoopStallMonitor {
+interface EventLoopStallMonitor {
   stop: () => void;
 }
 

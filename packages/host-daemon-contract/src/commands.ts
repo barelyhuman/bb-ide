@@ -77,9 +77,6 @@ export function isHostDaemonDurableCommandType(
   return hostDaemonCommandTypes.has(type);
 }
 
-export const hostDaemonExecutionOptionsSchema =
-  runtimeThreadExecutionOptionsSchema;
-
 export const workspaceContextSchema = z.object({
   workspacePath: z.string().min(1),
   workspaceProvisionType: workspaceProvisionTypeSchema,
@@ -114,7 +111,7 @@ const hostDaemonThreadTargetSchema = z.object({
   threadId: z.string().min(1),
 });
 
-export const hostDaemonInjectedSkillSourceBaseSchema = z
+const hostDaemonInjectedSkillSourceBaseSchema = z
   .object({
     name: z.string().max(64).regex(INJECTED_SKILL_NAME_PATTERN),
     description: z.string().min(1).max(1024),
@@ -123,27 +120,21 @@ export const hostDaemonInjectedSkillSourceBaseSchema = z
   })
   .strict();
 
-export const hostDaemonDataDirInjectedSkillSourceSchema =
-  hostDaemonInjectedSkillSourceBaseSchema
-    .extend({
-      sourceType: z.literal("data-dir"),
-      applicationId: z.null(),
-    })
-    .strict();
-
-export const hostDaemonGlobalAppInjectedSkillSourceSchema =
-  hostDaemonInjectedSkillSourceBaseSchema
-    .extend({
-      sourceType: z.literal("global-app"),
-      applicationId: applicationIdSchema,
-    })
-    .strict();
-
 export const hostDaemonInjectedSkillSourceSchema = z.discriminatedUnion(
   "sourceType",
   [
-    hostDaemonDataDirInjectedSkillSourceSchema,
-    hostDaemonGlobalAppInjectedSkillSourceSchema,
+    hostDaemonInjectedSkillSourceBaseSchema
+      .extend({
+        sourceType: z.literal("data-dir"),
+        applicationId: z.null(),
+      })
+      .strict(),
+    hostDaemonInjectedSkillSourceBaseSchema
+      .extend({
+        sourceType: z.literal("global-app"),
+        applicationId: applicationIdSchema,
+      })
+      .strict(),
   ],
 );
 export type HostDaemonInjectedSkillSource = z.infer<
@@ -154,7 +145,7 @@ const hostDaemonThreadRuntimeContextSchema = z.object({
   workspaceContext: workspaceContextSchema,
   projectId: z.string().min(1),
   providerId: z.string().min(1),
-  options: hostDaemonExecutionOptionsSchema,
+  options: runtimeThreadExecutionOptionsSchema,
   instructions: z.string().min(1),
   dynamicTools: z.array(dynamicToolSchema),
   injectedSkillSources: z.array(hostDaemonInjectedSkillSourceSchema),
@@ -215,12 +206,12 @@ export type TurnSubmitTarget = z.infer<typeof turnSubmitTargetSchema>;
  * Submit input for an existing provider thread. The daemon chooses whether
  * auto-targeted input steers the expected active turn or starts a new turn.
  */
-export const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
+const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
   .extend({
     type: z.literal("turn.submit"),
     requestId: clientTurnRequestIdSchema,
     input: z.array(promptInputSchema).min(1),
-    options: hostDaemonExecutionOptionsSchema,
+    options: runtimeThreadExecutionOptionsSchema,
     resumeContext: turnResumeContextSchema,
     target: turnSubmitTargetSchema,
   })
@@ -230,12 +221,12 @@ export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.stop"),
 });
 
-export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
+const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.rename"),
   title: z.string().min(1),
 });
 
-export const threadArchiveCommandSchema =
+const threadArchiveCommandSchema =
   hostDaemonThreadWorkspaceTargetSchema.extend({
     type: z.literal("thread.archive"),
     providerId: z.string().min(1),
@@ -246,29 +237,26 @@ export const threadArchiveCommandSchema =
 // it in the same per-environment write lane as thread.archive; otherwise a
 // slower archive can land after a later unarchive and leave the provider
 // session archived against the user's intent.
-export const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema.extend(
-  {
-    type: z.literal("thread.unarchive"),
-    providerId: z.string().min(1),
-    providerThreadId: z.string().min(1),
-  },
-);
+const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.unarchive"),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1),
+});
 
-export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
+const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),
 });
 
-export const interactiveResolveCommandSchema =
-  hostDaemonThreadTargetSchema.extend({
-    type: z.literal("interactive.resolve"),
-    interactionId: z.string().min(1),
-    providerId: z.string().min(1),
-    providerThreadId: z.string().min(1),
-    providerRequestId: z.string().min(1),
-    resolution: pendingInteractionResolutionSchema,
-  });
+const interactiveResolveCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("interactive.resolve"),
+  interactionId: z.string().min(1),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1),
+  providerRequestId: z.string().min(1),
+  resolution: pendingInteractionResolutionSchema,
+});
 
-export const codexInferenceCompleteCommandSchema = z
+const codexInferenceCompleteCommandSchema = z
   .object({
     type: z.literal("codex.inference.complete"),
     model: z.string().min(1),
@@ -278,7 +266,7 @@ export const codexInferenceCompleteCommandSchema = z
   })
   .strict();
 
-export const codexVoiceTranscribeCommandSchema = z
+const codexVoiceTranscribeCommandSchema = z
   .object({
     type: z.literal("codex.voice.transcribe"),
     model: z.string().min(1),
@@ -303,7 +291,7 @@ export const codexVoiceTranscribeCommandSchema = z
  * only difference is the source of bytes. A missing object at `ref` (e.g.
  * the file did not exist at that ref) returns empty content, not an error.
  */
-export const hostReadFileCommandSchema = z
+const hostReadFileCommandSchema = z
   .object({
     type: z.literal("host.read_file"),
     path: z.string().min(1),
@@ -333,7 +321,7 @@ export type HostReadFileRelativeDotfilePolicy = z.infer<
  * resolves the root and target with realpath, rejects symlink escapes, and can
  * make dot-prefixed path segments indistinguishable from missing files.
  */
-export const hostReadFileRelativeCommandSchema = z
+const hostReadFileRelativeCommandSchema = z
   .object({
     type: z.literal("host.read_file_relative"),
     rootPath: z.string().min(1),
@@ -342,7 +330,7 @@ export const hostReadFileRelativeCommandSchema = z
   })
   .strict();
 
-export const hostWriteFileRelativeCommandSchema = z
+const hostWriteFileRelativeCommandSchema = z
   .object({
     type: z.literal("host.write_file_relative"),
     rootPath: z.string().min(1),
@@ -353,7 +341,7 @@ export const hostWriteFileRelativeCommandSchema = z
   })
   .strict();
 
-export const hostDeleteFileRelativeCommandSchema = z
+const hostDeleteFileRelativeCommandSchema = z
   .object({
     type: z.literal("host.delete_file_relative"),
     rootPath: z.string().min(1),
@@ -362,7 +350,7 @@ export const hostDeleteFileRelativeCommandSchema = z
   })
   .strict();
 
-export const hostDeletePathRelativeCommandSchema = z
+const hostDeletePathRelativeCommandSchema = z
   .object({
     type: z.literal("host.delete_path_relative"),
     rootPath: z.string().min(1),
@@ -371,7 +359,7 @@ export const hostDeletePathRelativeCommandSchema = z
   })
   .strict();
 
-export const hostFileMetadataCommandSchema = z
+const hostFileMetadataCommandSchema = z
   .object({
     type: z.literal("host.file_metadata"),
     path: z.string().min(1),
@@ -379,7 +367,7 @@ export const hostFileMetadataCommandSchema = z
   })
   .strict();
 
-export const hostListFilesCommandSchema = z.object({
+const hostListFilesCommandSchema = z.object({
   type: z.literal("host.list_files"),
   path: z.string().min(1),
   query: z.string().max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
@@ -398,7 +386,7 @@ export const hostPathEntrySchema = z.object({
 });
 export type HostPathEntry = z.infer<typeof hostPathEntrySchema>;
 
-export const hostListPathsCommandSchema = z
+const hostListPathsCommandSchema = z
   .object({
     type: z.literal("host.list_paths"),
     path: z.string().min(1),
@@ -416,7 +404,7 @@ export const hostListPathsCommandSchema = z
  * sibling of `host.list_files`. Does not require an environment row, does not
  * provision anything, and does not create daemon-side workspace state.
  */
-export const hostListBranchesCommandSchema = z.object({
+const hostListBranchesCommandSchema = z.object({
   type: z.literal("host.list_branches"),
   path: z.string().min(1),
   query: z.string().max(BRANCH_LIST_QUERY_MAX_LENGTH).optional(),
@@ -424,7 +412,7 @@ export const hostListBranchesCommandSchema = z.object({
   limit: z.number().int().positive().max(BRANCH_LIST_LIMIT_MAX),
 });
 
-export const managerTemplateSummarySchema = z.object({
+const managerTemplateSummarySchema = z.object({
   name: managerTemplateNameSchema,
 });
 export type ManagerTemplateSummary = z.infer<
@@ -437,17 +425,17 @@ export type ManagerTemplateSummary = z.infer<
  * contain at least one regular file plus the resolved `activeName` (the
  * trimmed first line of the `active` file, falling back to "default").
  */
-export const hostListManagerTemplatesCommandSchema = z
+const hostListManagerTemplatesCommandSchema = z
   .object({
     type: z.literal("host.list_manager_templates"),
   })
   .strict();
 
-export const providerListCommandSchema = z.object({
+const providerListCommandSchema = z.object({
   type: z.literal("provider.list"),
 });
 
-export const providerListModelsCommandSchema = z.object({
+const providerListModelsCommandSchema = z.object({
   type: z.literal("provider.list_models"),
   providerId: z.string().min(1),
 });
@@ -556,30 +544,27 @@ export type EnvironmentProvisionCommand = z.infer<
   typeof environmentProvisionCommandSchema
 >;
 
-export const environmentDestroyCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("environment.destroy"),
-  });
+const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
+  type: z.literal("environment.destroy"),
+});
 
-export const environmentCleanupPreflightCommandSchema =
+const environmentCleanupPreflightCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("environment.cleanup_preflight"),
     mergeBaseBranch: gitBranchNameSchema,
   });
 
-export const workspaceStatusCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.status"),
-    mergeBaseBranch: gitBranchNameSchema.optional(),
-  });
+const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
+  type: z.literal("workspace.status"),
+  mergeBaseBranch: gitBranchNameSchema.optional(),
+});
 
-export const workspaceDiffCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.diff"),
-    target: workspaceDiffTargetSchema,
-    maxDiffBytes: z.number().int().positive(),
-    maxFileListBytes: z.number().int().positive(),
-  });
+const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
+  type: z.literal("workspace.diff"),
+  target: workspaceDiffTargetSchema,
+  maxDiffBytes: z.number().int().positive(),
+  maxFileListBytes: z.number().int().positive(),
+});
 
 export const HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES = [
   "development.replay",
@@ -599,23 +584,6 @@ export const hostDaemonOnlineRpcCommandTypeSchema = z.enum(
   HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES,
 );
 
-// Retry-on-unavailable is limited to idempotent host reads.
-export const HOST_DAEMON_RETRYABLE_ONLINE_RPC_COMMAND_TYPES = [
-  "host.list_files",
-  "host.list_paths",
-  "host.list_branches",
-  "host.list_manager_templates",
-  "host.file_metadata",
-  "host.read_file",
-  "host.read_file_relative",
-  "provider.list",
-  "provider.list_models",
-  "workspace.status",
-  "workspace.diff",
-] as const;
-export const hostDaemonRetryableOnlineRpcCommandTypeSchema = z.enum(
-  HOST_DAEMON_RETRYABLE_ONLINE_RPC_COMMAND_TYPES,
-);
 const developmentReplaySpeedSchema = z.union([
   z.literal(0.5),
   z.literal(1),
@@ -623,7 +591,7 @@ const developmentReplaySpeedSchema = z.union([
   z.literal(5),
   z.literal(10),
 ]);
-export const developmentReplayCommandSchema = z.discriminatedUnion(
+const developmentReplayCommandSchema = z.discriminatedUnion(
   "operation",
   [
     z
@@ -657,9 +625,7 @@ export const developmentReplayCommandSchema = z.discriminatedUnion(
       .strict(),
   ],
 );
-export type DevelopmentReplayCommand = z.infer<
-  typeof developmentReplayCommandSchema
->;
+type DevelopmentReplayCommand = z.infer<typeof developmentReplayCommandSchema>;
 export const hostDaemonOnlineRpcCommandSchema = z.union([
   developmentReplayCommandSchema,
   hostListFilesCommandSchema,
@@ -681,6 +647,7 @@ export type HostDaemonOnlineRpcCommandType = z.infer<
   typeof hostDaemonOnlineRpcCommandTypeSchema
 >;
 
+// Retry-on-unavailable is limited to idempotent host reads.
 export const hostDaemonRetryableOnlineRpcCommandSchema = z.union([
   hostListFilesCommandSchema,
   hostListPathsCommandSchema,
@@ -697,18 +664,14 @@ export const hostDaemonRetryableOnlineRpcCommandSchema = z.union([
 export type HostDaemonRetryableOnlineRpcCommand = z.infer<
   typeof hostDaemonRetryableOnlineRpcCommandSchema
 >;
-export type HostDaemonRetryableOnlineRpcCommandType = z.infer<
-  typeof hostDaemonRetryableOnlineRpcCommandTypeSchema
->;
 
-export const workspaceCommitCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.commit"),
-    message: z.string().min(1),
-  });
+const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
+  type: z.literal("workspace.commit"),
+  message: z.string().min(1),
+});
 
-export const workspaceSquashMergeCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
+const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend(
+  {
     type: z.literal("workspace.squash_merge"),
     targetBranch: gitBranchNameSchema,
     commitMessage: z.string().min(1),
@@ -943,7 +906,7 @@ export type HostDaemonCommandResult<
 
 const emptyReplayResultSchema = z.object({}).strict();
 
-export const developmentReplayResultSchemaByOperation = {
+const developmentReplayResultSchemaByOperation = {
   "capture-list": replayCaptureDaemonListResponseSchema,
   "capture-get": replayCaptureManifestSchema,
   "capture-delete": emptyReplayResultSchema,
@@ -953,13 +916,13 @@ export const developmentReplayResultSchemaByOperation = {
   z.ZodTypeAny
 >;
 
-export type DevelopmentReplayResultByOperation = {
+type DevelopmentReplayResultByOperation = {
   [K in keyof typeof developmentReplayResultSchemaByOperation]: z.infer<
     (typeof developmentReplayResultSchemaByOperation)[K]
   >;
 };
 
-export type DevelopmentReplayResult<
+type DevelopmentReplayResult<
   TCommand extends DevelopmentReplayCommand = DevelopmentReplayCommand,
 > = TCommand extends { operation: infer TOperation }
   ? TOperation extends keyof DevelopmentReplayResultByOperation
@@ -967,7 +930,7 @@ export type DevelopmentReplayResult<
     : never
   : never;
 
-export const developmentReplayResultSchema = z.union([
+const developmentReplayResultSchema = z.union([
   developmentReplayResultSchemaByOperation["capture-list"],
   developmentReplayResultSchemaByOperation["capture-get"],
   developmentReplayResultSchemaByOperation["capture-delete"],
@@ -1007,11 +970,6 @@ export type HostDaemonOnlineRpcResultForCommand<
       ? HostDaemonOnlineRpcResultByType[TType]
       : never
     : never;
-
-export type HostDaemonRetryableOnlineRpcResult<
-  TType extends HostDaemonRetryableOnlineRpcCommandType =
-    HostDaemonRetryableOnlineRpcCommandType,
-> = HostDaemonOnlineRpcResultByType[TType];
 
 export function parseHostDaemonOnlineRpcResultForCommand<
   TCommand extends HostDaemonOnlineRpcCommand,

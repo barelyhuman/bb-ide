@@ -195,7 +195,7 @@ export interface CommandResultRetryOptions {
   retries: number;
 }
 
-export interface CreateServerClientOptions {
+interface CreateServerClientOptions {
   serverUrl: string;
   hostKey: string;
   logger: HostDaemonLogger;
@@ -206,7 +206,7 @@ export interface CreateServerClientOptions {
   fetchFn?: FetchFn;
 }
 
-export interface OpenSessionArgs {
+interface OpenSessionArgs {
   hostId: string;
   hostName: string;
   hostType: HostDaemonSessionOpenRequest["hostType"];

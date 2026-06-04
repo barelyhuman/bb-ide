@@ -71,13 +71,13 @@ export interface ProviderCliCommandRunner {
   run(args: RunProviderCliCommandArgs): Promise<ProviderCliCommandResult>;
 }
 
-export interface InspectProviderCliArgs {
+interface InspectProviderCliArgs {
   definition: ProviderCliDefinition;
   runner: ProviderCliCommandRunner;
   nodePlatform: NodeJS.Platform;
 }
 
-export interface GetProviderCliStatusArgs {
+interface GetProviderCliStatusArgs {
   runner?: ProviderCliCommandRunner;
   nodePlatform?: NodeJS.Platform;
 }
@@ -105,7 +105,7 @@ export interface ProviderCliInstallProcessSpawner {
   spawn(args: SpawnProviderCliInstallProcessArgs): ProviderCliInstallProcess;
 }
 
-export interface StreamProviderCliInstallArgs {
+interface StreamProviderCliInstallArgs {
   provider: ProviderCliKey;
   actionKind: ProviderCliInstallActionKind;
   nodePlatform?: NodeJS.Platform;

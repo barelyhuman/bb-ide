@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import { assignIfDefined } from "@bb/config/objects";
 
-export interface ResolveLocalBbExecutableDirectoryOptions {
+interface ResolveLocalBbExecutableDirectoryOptions {
   cliExecutablePath?: string;
 }
 
@@ -65,16 +65,6 @@ async function resolveCliEntryPath(cliExecutablePath: string): Promise<string> {
   return cliEntryPath;
 }
 
-async function resolveBbExecutable(
-  options: ResolveLocalBbExecutableDirectoryOptions = {},
-): Promise<string> {
-  const resolvedCliExecutablePath =
-    options.cliExecutablePath ?? getDefaultCliExecutablePath();
-  const cliEntryPath = await resolveCliEntryPath(resolvedCliExecutablePath);
-
-  return dirname(cliEntryPath);
-}
-
 function prependPath(
   executableDirectoryPath: string,
   inheritedPath?: string,
@@ -87,7 +77,11 @@ function prependPath(
 export async function resolveLocalBbExecutableDirectory(
   options: ResolveLocalBbExecutableDirectoryOptions = {},
 ): Promise<string> {
-  return resolveBbExecutable(options);
+  const resolvedCliExecutablePath =
+    options.cliExecutablePath ?? getDefaultCliExecutablePath();
+  const cliEntryPath = await resolveCliEntryPath(resolvedCliExecutablePath);
+
+  return dirname(cliEntryPath);
 }
 
 export function prepareRuntimeShellEnv(

@@ -1,6 +1,5 @@
 import {
   createAgentRuntime,
-  listAvailableProviders,
   type AgentRuntime,
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
@@ -51,7 +50,7 @@ export interface CommandDispatchOptions {
   runtimeManager: RuntimeManager;
   terminalManager?: Pick<TerminalManager, "closeEnvironmentTerminals">;
   eventSink: EventSink;
-  listModels?: (args: ListModelsDispatchArgs) => Promise<{
+  listModels?: (args: { providerId: string }) => Promise<{
     models: AvailableModel[];
     selectedOnlyModels: AvailableModel[];
   }>;
@@ -90,36 +89,10 @@ export function isExpectedCommandDispatchError(
   return error instanceof ExpectedCommandDispatchError;
 }
 
-export interface DefaultListModelsOptions {
-  bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
-}
-
 const MISSING_EXECUTABLE_PATTERN = /\bENOENT\b/;
 const SPAWN_PATTERN = /\bspawn\b/;
 
 const defaultModelListRuntimes = new Map<string, AgentRuntime>();
-
-function getDefaultModelListRuntime(
-  options: DefaultListModelsOptions = {},
-): AgentRuntime {
-  const runtimeKey = options.bridgeBundleDir ?? "";
-  const existingRuntime = defaultModelListRuntimes.get(runtimeKey);
-  if (existingRuntime) {
-    return existingRuntime;
-  }
-
-  const runtime = createAgentRuntime({
-    bridgeBundleDir: options.bridgeBundleDir,
-    workspacePath: process.cwd(),
-    onEvent: () => {},
-    onToolCall: async () => ({
-      contentItems: [],
-      success: true,
-    }),
-  });
-  defaultModelListRuntimes.set(runtimeKey, runtime);
-  return runtime;
-}
 
 export async function shutdownDefaultListModelsRuntimes(): Promise<void> {
   const runtimes = [...defaultModelListRuntimes.values()];
@@ -127,18 +100,27 @@ export async function shutdownDefaultListModelsRuntimes(): Promise<void> {
   await Promise.all(runtimes.map((runtime) => runtime.shutdown()));
 }
 
-export interface ListModelsDispatchArgs {
-  providerId: string;
-}
-
 export async function defaultListModels(
-  args: ListModelsDispatchArgs,
-  options: DefaultListModelsOptions = {},
+  args: { providerId: string },
+  options: { bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"] } = {},
 ): Promise<{
   models: AvailableModel[];
   selectedOnlyModels: AvailableModel[];
 }> {
-  const runtime = getDefaultModelListRuntime(options);
+  const runtimeKey = options.bridgeBundleDir ?? "";
+  let runtime = defaultModelListRuntimes.get(runtimeKey);
+  if (!runtime) {
+    runtime = createAgentRuntime({
+      bridgeBundleDir: options.bridgeBundleDir,
+      workspacePath: process.cwd(),
+      onEvent: () => {},
+      onToolCall: async () => ({
+        contentItems: [],
+        success: true,
+      }),
+    });
+    defaultModelListRuntimes.set(runtimeKey, runtime);
+  }
   try {
     return await runtime.listModels(args);
   } catch (error) {
@@ -244,6 +226,3 @@ export async function requireWorkspaceEnvironment(
   });
 }
 
-export function defaultListProviders(): ProviderInfo[] {
-  return listAvailableProviders();
-}

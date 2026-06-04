@@ -36,7 +36,7 @@ export interface ApplicationDataEntry {
   entry: AppDataEntry;
 }
 
-export interface ApplicationDataSnapshot {
+interface ApplicationDataSnapshot {
   applicationIds: ApplicationId[];
   entries: ApplicationDataEntry[];
 }

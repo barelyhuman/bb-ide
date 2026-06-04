@@ -51,7 +51,7 @@ export async function writeHostAuthState(
   });
 }
 
-export interface ResolveServerUrlArgs {
+interface ResolveServerUrlArgs {
   providedServerUrl: string | undefined;
 }
 

@@ -1,17 +1,13 @@
-export interface ErrorSummary {
+interface ErrorSummary {
   errorMessage: string;
   errorName: string;
 }
-
-export type LoggableError = unknown;
-
-export type RuntimeErrorLogFields = { err: LoggableError } | ErrorSummary;
 
 export function normalizeCaughtError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-export function summarizeError(error: LoggableError): ErrorSummary {
+export function summarizeError(error: unknown): ErrorSummary {
   if (error instanceof Error) {
     return {
       errorMessage: error.message,
@@ -26,8 +22,8 @@ export function summarizeError(error: LoggableError): ErrorSummary {
 }
 
 export function runtimeErrorLogFields(
-  error: LoggableError,
-): RuntimeErrorLogFields {
+  error: unknown,
+): { err: unknown } | ErrorSummary {
   return process.env.NODE_ENV === "production"
     ? summarizeError(error)
     : { err: error };

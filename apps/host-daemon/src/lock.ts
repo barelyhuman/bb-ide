@@ -11,7 +11,7 @@ const DAEMON_LOCK_STALE_MS = 10_000;
 const DAEMON_LOCK_RETRY_INTERVAL_MS = 1_000;
 const DAEMON_LOCK_ACQUIRE_RETRIES = 13;
 
-export interface AcquireDaemonLockOptions {
+interface AcquireDaemonLockOptions {
   /** Lock is treated as stale once its mtime is older than this many ms. */
   staleMs?: number;
   /** How many times to retry acquisition while a lock exists. */

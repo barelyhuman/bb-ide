@@ -1,12 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export interface ThreadStorageRootPathOptions {
+interface ThreadStorageRootPathOptions {
   env?: NodeJS.ProcessEnv;
 }
-
-export interface EnsureThreadStorageRootOptions
-  extends ThreadStorageRootPathOptions {}
 
 const THREAD_STORAGE_ENV_VAR = "BB_THREAD_STORAGE";
 
@@ -23,7 +20,7 @@ export function threadStorageRootPath(
 
 export async function ensureThreadStorageRoot(
   dataDir: string,
-  options: EnsureThreadStorageRootOptions = {},
+  options: ThreadStorageRootPathOptions = {},
 ): Promise<string> {
   const rootPath = threadStorageRootPath(dataDir, options);
   await fs.mkdir(rootPath, { recursive: true });

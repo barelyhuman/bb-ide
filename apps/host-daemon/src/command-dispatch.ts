@@ -8,16 +8,16 @@ import type {
   WorkspaceResolutionFailure,
 } from "@bb/host-daemon-contract";
 import type {
-  WorkspaceStatus,
   ResolvedThreadExecutionOptions,
   RuntimeThreadExecutionOptions,
 } from "@bb/domain";
+import { listAvailableProviders } from "@bb/agent-runtime";
 import {
   defaultListModels,
-  defaultListProviders,
   ExpectedCommandDispatchError,
   requireExistingEnvironment,
   type CommandDispatchOptions,
+  type CommandOf,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { listHostBranches } from "./command-handlers/host-branches.js";
@@ -148,13 +148,6 @@ type OnlineRpcHandlerMap = {
   ) => Promise<HostDaemonOnlineRpcResult<TType>>;
 };
 
-type EnvironmentCleanupPreflightCommand = Extract<
-  HostDaemonCommand,
-  { type: "environment.cleanup_preflight" }
->;
-type EnvironmentCleanupPreflightResult =
-  HostDaemonCommandResult<"environment.cleanup_preflight">;
-
 function throwExpectedWorkspacePathNotFoundOrRethrow(error: unknown): never {
   if (error instanceof WorkspaceError && error.code === "path_not_found") {
     throw new ExpectedCommandDispatchError(error.code, error.message);
@@ -162,16 +155,9 @@ function throwExpectedWorkspacePathNotFoundOrRethrow(error: unknown): never {
   throw error;
 }
 
-function workspaceHasCleanupRisk(workspaceStatus: WorkspaceStatus): boolean {
-  return (
-    workspaceStatus.workingTree.hasUncommittedChanges ||
-    workspaceStatus.mergeBase?.hasCommittedUnmergedChanges === true
-  );
-}
-
 function cleanupPreflightFailureResult(
   failure: WorkspaceResolutionFailure,
-): EnvironmentCleanupPreflightResult {
+): HostDaemonCommandResult<"environment.cleanup_preflight"> {
   if (failure.code === "path_not_found") {
     return { outcome: "already_missing", failure };
   }
@@ -181,16 +167,10 @@ function cleanupPreflightFailureResult(
   return { outcome: "probe_failed", failure };
 }
 
-function throwWorkspaceResolutionFailure(
-  failure: WorkspaceResolutionFailure,
-): never {
-  throw new ExpectedCommandDispatchError(failure.code, failure.message);
-}
-
 async function environmentCleanupPreflight(
-  command: EnvironmentCleanupPreflightCommand,
+  command: CommandOf<"environment.cleanup_preflight">,
   options: CommandDispatchOptions,
-): Promise<EnvironmentCleanupPreflightResult> {
+): Promise<HostDaemonCommandResult<"environment.cleanup_preflight">> {
   const resolution = await resolveWorkspaceForCommand({
     dataDir: options.dataDir,
     environmentId: command.environmentId,
@@ -224,7 +204,10 @@ async function environmentCleanupPreflight(
     const workspaceStatus = await entry.workspace.getStatus({
       mergeBaseBranch: command.mergeBaseBranch,
     });
-    if (workspaceHasCleanupRisk(workspaceStatus)) {
+    if (
+      workspaceStatus.workingTree.hasUncommittedChanges ||
+      workspaceStatus.mergeBase?.hasCommittedUnmergedChanges === true
+    ) {
       return {
         outcome: "blocked_by_changes",
         message: "Workspace has uncommitted or unmerged changes",
@@ -241,27 +224,18 @@ async function environmentCleanupPreflight(
 }
 
 const commandHandlers: CommandHandlerMap = {
-  "thread.start": async (
-    command: Extract<HostDaemonCommand, { type: "thread.start" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "thread.start": async (command, options) => {
     recordReplayThreadMetadata(command, options);
     recordReplayTurnRequest(command, options);
     return startThread(command, options);
   },
-  "turn.submit": async (
-    command: Extract<HostDaemonCommand, { type: "turn.submit" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "turn.submit": async (command, options) => {
     recordReplayThreadMetadata(command, options);
     recordReplayTurnRequest(command, options);
     const entry = await ensureThreadRuntime(command, options);
     return submitTurn(command, entry, options);
   },
-  "thread.stop": async (
-    command: Extract<HostDaemonCommand, { type: "thread.stop" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "thread.stop": async (command, options) => {
     const replayTask = options.replayTasks?.get(command.threadId);
     if (replayTask) {
       replayTask.abort.abort();
@@ -281,10 +255,7 @@ const commandHandlers: CommandHandlerMap = {
     );
     return {};
   },
-  "thread.rename": async (
-    command: Extract<HostDaemonCommand, { type: "thread.rename" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "thread.rename": async (command, options) => {
     const entry = await options.runtimeManager.getOrAwait(
       command.environmentId,
     );
@@ -297,10 +268,7 @@ const commandHandlers: CommandHandlerMap = {
     });
     return {};
   },
-  "thread.archive": async (
-    command: Extract<HostDaemonCommand, { type: "thread.archive" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "thread.archive": async (command, options) => {
     const entry = await requireResolvedWorkspaceForCommand({
       dataDir: options.dataDir,
       environmentId: command.environmentId,
@@ -318,10 +286,7 @@ const commandHandlers: CommandHandlerMap = {
     );
     return {};
   },
-  "thread.unarchive": async (
-    command: Extract<HostDaemonCommand, { type: "thread.unarchive" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "thread.unarchive": async (command, options) => {
     const runtime =
       await options.runtimeManager.ensureProviderMaintenanceRuntime({
         dataDir: options.dataDir,
@@ -333,46 +298,16 @@ const commandHandlers: CommandHandlerMap = {
     });
     return {};
   },
-  "thread.deleted": async (
-    command: Extract<HostDaemonCommand, { type: "thread.deleted" }>,
-    options: CommandDispatchOptions,
-  ) => handleThreadDeleted(command, options),
-  "interactive.resolve": async (
-    command: Extract<HostDaemonCommand, { type: "interactive.resolve" }>,
-    options: CommandDispatchOptions,
-  ) => resolveInteractiveRequest(command, options),
-  "codex.inference.complete": async (
-    command: Extract<HostDaemonCommand, { type: "codex.inference.complete" }>,
-    _options: CommandDispatchOptions,
-  ) => completeCodexInference(command),
-  "codex.voice.transcribe": async (
-    command: Extract<HostDaemonCommand, { type: "codex.voice.transcribe" }>,
-    _options: CommandDispatchOptions,
-  ) => transcribeCodexVoice(command),
-  "host.write_file_relative": async (
-    command: Extract<HostDaemonCommand, { type: "host.write_file_relative" }>,
-    _options: CommandDispatchOptions,
-  ) => writeHostRelativeFile(command),
-  "host.delete_file_relative": async (
-    command: Extract<HostDaemonCommand, { type: "host.delete_file_relative" }>,
-    _options: CommandDispatchOptions,
-  ) => deleteHostRelativeFile(command),
-  "host.delete_path_relative": async (
-    command: Extract<HostDaemonCommand, { type: "host.delete_path_relative" }>,
-    _options: CommandDispatchOptions,
-  ) => deleteHostRelativePath(command),
-  "environment.provision": async (
-    command: Extract<HostDaemonCommand, { type: "environment.provision" }>,
-    options: CommandDispatchOptions,
-  ) => provisionEnvironment(command, options),
-  "environment.cleanup_preflight": async (
-    command: EnvironmentCleanupPreflightCommand,
-    options: CommandDispatchOptions,
-  ) => environmentCleanupPreflight(command, options),
-  "environment.destroy": async (
-    command: Extract<HostDaemonCommand, { type: "environment.destroy" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "thread.deleted": handleThreadDeleted,
+  "interactive.resolve": resolveInteractiveRequest,
+  "codex.inference.complete": completeCodexInference,
+  "codex.voice.transcribe": transcribeCodexVoice,
+  "host.write_file_relative": writeHostRelativeFile,
+  "host.delete_file_relative": deleteHostRelativeFile,
+  "host.delete_path_relative": deleteHostRelativePath,
+  "environment.provision": provisionEnvironment,
+  "environment.cleanup_preflight": environmentCleanupPreflight,
+  "environment.destroy": async (command, options) => {
     const resolution = await resolveWorkspaceForCommand({
       dataDir: options.dataDir,
       environmentId: command.environmentId,
@@ -384,7 +319,10 @@ const commandHandlers: CommandHandlerMap = {
       if (resolution.failure.code === "path_not_found") {
         return {};
       }
-      throwWorkspaceResolutionFailure(resolution.failure);
+      throw new ExpectedCommandDispatchError(
+        resolution.failure.code,
+        resolution.failure.message,
+      );
     }
     options.terminalManager?.closeEnvironmentTerminals(
       command.environmentId,
@@ -393,10 +331,7 @@ const commandHandlers: CommandHandlerMap = {
     await options.runtimeManager.destroyEnvironment(command.environmentId);
     return {};
   },
-  "workspace.commit": async (
-    command: Extract<HostDaemonCommand, { type: "workspace.commit" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "workspace.commit": async (command, options) => {
     const entry = await requireResolvedWorkspaceForCommand({
       dataDir: options.dataDir,
       environmentId: command.environmentId,
@@ -410,68 +345,27 @@ const commandHandlers: CommandHandlerMap = {
       noVerify: true,
     });
   },
-  "workspace.squash_merge": async (
-    command: Extract<HostDaemonCommand, { type: "workspace.squash_merge" }>,
-    options: CommandDispatchOptions,
-  ) => squashMerge(command, options),
+  "workspace.squash_merge": squashMerge,
 };
 
 const onlineRpcHandlers: OnlineRpcHandlerMap = {
   "development.replay": dispatchDevelopmentReplayCommand,
-  "host.list_files": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "host.list_files" }>,
-    _options: CommandDispatchOptions,
-  ) => listHostFiles(command),
-  "host.list_paths": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "host.list_paths" }>,
-    _options: CommandDispatchOptions,
-  ) => listHostPaths(command),
-  "host.list_branches": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "host.list_branches" }>,
-    _options: CommandDispatchOptions,
-  ) => listHostBranches(command),
-  "host.list_manager_templates": async (
-    command: Extract<
-      HostDaemonOnlineRpcCommand,
-      { type: "host.list_manager_templates" }
-    >,
-    options: CommandDispatchOptions,
-  ) => listManagerTemplatesCommand(command, { dataDir: options.dataDir }),
-  "host.file_metadata": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "host.file_metadata" }>,
-    _options: CommandDispatchOptions,
-  ) => readHostFileMetadata(command),
-  "host.read_file": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "host.read_file" }>,
-    _options: CommandDispatchOptions,
-  ) => readHostFile(command),
-  "host.read_file_relative": async (
-    command: Extract<
-      HostDaemonOnlineRpcCommand,
-      { type: "host.read_file_relative" }
-    >,
-    _options: CommandDispatchOptions,
-  ) => readHostRelativeFile(command),
-  "provider.list": async (
-    _command: Extract<HostDaemonOnlineRpcCommand, { type: "provider.list" }>,
-    options: CommandDispatchOptions,
-  ) => ({
-    providers: (options.listProviders ?? defaultListProviders)(),
+  "host.list_files": listHostFiles,
+  "host.list_paths": listHostPaths,
+  "host.list_branches": listHostBranches,
+  "host.list_manager_templates": async (command, options) =>
+    listManagerTemplatesCommand(command, { dataDir: options.dataDir }),
+  "host.file_metadata": readHostFileMetadata,
+  "host.read_file": readHostFile,
+  "host.read_file_relative": readHostRelativeFile,
+  "provider.list": async (_command, options) => ({
+    providers: (options.listProviders ?? listAvailableProviders)(),
   }),
-  "provider.list_models": async (
-    command: Extract<
-      HostDaemonOnlineRpcCommand,
-      { type: "provider.list_models" }
-    >,
-    options: CommandDispatchOptions,
-  ) =>
+  "provider.list_models": async (command, options) =>
     (options.listModels ?? defaultListModels)({
       providerId: command.providerId,
     }),
-  "workspace.status": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "workspace.status" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "workspace.status": async (command, options) => {
     const resolution = await resolveWorkspaceForCommand({
       dataDir: options.dataDir,
       environmentId: command.environmentId,
@@ -500,10 +394,7 @@ const onlineRpcHandlers: OnlineRpcHandlerMap = {
       };
     }
   },
-  "workspace.diff": async (
-    command: Extract<HostDaemonOnlineRpcCommand, { type: "workspace.diff" }>,
-    options: CommandDispatchOptions,
-  ) => {
+  "workspace.diff": async (command, options) => {
     const resolution = await resolveWorkspaceForCommand({
       dataDir: options.dataDir,
       environmentId: command.environmentId,
@@ -536,14 +427,6 @@ const onlineRpcHandlers: OnlineRpcHandlerMap = {
   },
 };
 
-function dispatchCommandByType<TType extends HostDaemonDurableCommandType>(
-  type: TType,
-  command: Extract<HostDaemonCommand, { type: TType }>,
-  options: CommandDispatchOptions,
-): Promise<HostDaemonCommandResult<TType>> {
-  return commandHandlers[type](command, options);
-}
-
 export async function dispatchCommand<
   TType extends HostDaemonDurableCommandType,
 >(
@@ -551,7 +434,7 @@ export async function dispatchCommand<
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<TType>> {
   try {
-    return await dispatchCommandByType(command.type, command, options);
+    return await commandHandlers[command.type](command, options);
   } catch (error) {
     throwExpectedWorkspacePathNotFoundOrRethrow(error);
   }
@@ -582,14 +465,6 @@ export async function dispatchDevelopmentReplayCommand(
   }
 }
 
-function dispatchOnlineRpcCommandByType<TType extends HostDaemonOnlineRpcCommandType>(
-  type: TType,
-  command: Extract<HostDaemonOnlineRpcCommand, { type: TType }>,
-  options: CommandDispatchOptions,
-): Promise<HostDaemonOnlineRpcResult<TType>> {
-  return onlineRpcHandlers[type](command, options);
-}
-
 export async function dispatchOnlineRpcCommand<
   TType extends HostDaemonOnlineRpcCommandType,
 >(
@@ -597,7 +472,7 @@ export async function dispatchOnlineRpcCommand<
   options: CommandDispatchOptions,
 ): Promise<HostDaemonOnlineRpcResult<TType>> {
   try {
-    return await dispatchOnlineRpcCommandByType(command.type, command, options);
+    return await onlineRpcHandlers[command.type](command, options);
   } catch (error) {
     throwExpectedWorkspacePathNotFoundOrRethrow(error);
   }

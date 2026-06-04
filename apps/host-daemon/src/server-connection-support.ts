@@ -27,7 +27,7 @@ export interface ReconnectingWebSocketLike {
   reconnect(code?: number, reason?: string): void;
 }
 
-export interface ReconnectingWebSocketOptions {
+interface ReconnectingWebSocketOptions {
   minReconnectionDelay: number;
   maxReconnectionDelay: number;
   reconnectionDelayGrowFactor: number;

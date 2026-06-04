@@ -14,12 +14,12 @@ type ExecFileResult = {
   stderr?: string | Buffer;
 };
 
-export type ExecFileFn = (
+type ExecFileFn = (
   file: string,
   args?: readonly string[],
 ) => Promise<ExecFileResult>;
 
-export interface HostIdentity {
+interface HostIdentity {
   hostId: string;
   hostName: string;
 }

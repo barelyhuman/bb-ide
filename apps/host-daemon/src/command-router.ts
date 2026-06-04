@@ -5,7 +5,6 @@ import type {
   HostDaemonOnlineRpcResponseMessage,
   HostDaemonOnlineRpcResultForCommand,
   HostDaemonOnlineRpcCommand,
-  HostDaemonCommandResult,
   HostDaemonCommandResultReport,
   HostDaemonCommandResultReportWithoutSession,
 } from "@bb/host-daemon-contract";
@@ -64,18 +63,6 @@ interface EnvironmentLaneWorkMetrics {
 interface ExecutedCommandResult {
   handlerMs: number;
   result: CommandResultReport;
-}
-
-interface CommandResultBaseReport {
-  attemptId: string;
-  commandId: string;
-  type: HostDaemonCommand["type"];
-}
-
-interface CreateSuccessfulCommandResultArgs {
-  baseReport: CommandResultBaseReport;
-  handlerStartedAtMs: number;
-  result: HostDaemonCommandResult;
 }
 
 interface CommandLifecycleTiming {
@@ -393,15 +380,20 @@ export class CommandRouter {
       commandId: envelope.id,
       type: command.type,
     };
-    const dispatchOptions = this.createDispatchOptions();
 
     try {
-      const result = await dispatchCommand(command, dispatchOptions);
-      return this.createSuccessfulCommandResult({
-        baseReport,
-        handlerStartedAtMs,
+      const result = await dispatchCommand(command, this.createDispatchOptions());
+      const parsed = hostDaemonCommandResultReportSchema.parse({
+        ...baseReport,
+        sessionId: "local-result-validation",
+        completedAt: this.now(),
+        ok: true,
         result,
       });
+      return {
+        handlerMs: elapsedMs(handlerStartedAtMs),
+        result: removeReportSession(parsed),
+      };
     } catch (error) {
       const errorCode = getErrorCode(error);
       if (!isExpectedCommandDispatchError(error)) {
@@ -442,22 +434,6 @@ export class CommandRouter {
         this.options.recordReplayCaptureTurnRequest,
       replayTasks: this.options.replayTasks,
       threadStorageRootPath: this.options.threadStorageRootPath,
-    };
-  }
-
-  private createSuccessfulCommandResult(
-    args: CreateSuccessfulCommandResultArgs,
-  ): ExecutedCommandResult {
-    const result = hostDaemonCommandResultReportSchema.parse({
-      ...args.baseReport,
-      sessionId: "local-result-validation",
-      completedAt: this.now(),
-      ok: true,
-      result: args.result,
-    });
-    return {
-      handlerMs: elapsedMs(args.handlerStartedAtMs),
-      result: removeReportSession(result),
     };
   }
 
@@ -591,9 +567,8 @@ export class CommandRouter {
     command: HostDaemonCommand,
     work: () => Promise<T>,
   ): Promise<T> {
-    const threadId = this.getThreadUnarchiveBarrierWaitThreadId(command);
-    if (threadId) {
-      const barrier = this.threadUnarchiveBarriers.get(threadId);
+    if (command.type === "turn.submit" || command.type === "thread.start") {
+      const barrier = this.threadUnarchiveBarriers.get(command.threadId);
       if (barrier) {
         await barrier;
       }
@@ -619,15 +594,6 @@ export class CommandRouter {
         this.threadUnarchiveBarriers.delete(threadId);
       }
     });
-  }
-
-  private getThreadUnarchiveBarrierWaitThreadId(
-    command: HostDaemonCommand,
-  ): string | null {
-    if (command.type === "turn.submit" || command.type === "thread.start") {
-      return command.threadId;
-    }
-    return null;
   }
 
   private runInFileWriteLane<T>(

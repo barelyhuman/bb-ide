@@ -171,13 +171,11 @@ export interface BufferedEvent extends HostDaemonEventEnvelope {
   payloadHash: string;
 }
 
-export interface EventPostAcceptedResult {
+export interface EventPostResult {
   acceptedEvents: HostDaemonEventBatchResponse["acceptedEvents"];
   rejectedEvents: HostDaemonEventBatchResponse["rejectedEvents"];
   kind: "accepted";
 }
-
-export type EventPostResult = EventPostAcceptedResult;
 
 export interface CreateEventBufferOptions {
   dataDir: string;
