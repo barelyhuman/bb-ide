@@ -1,5 +1,8 @@
 import { Icon } from "@/components/ui/icon.js";
-import { MACOS_WINDOW_DRAG_CLASS } from "@/lib/bb-desktop";
+import {
+  CHROME_ROW_HEIGHT_CLASS,
+  MACOS_WINDOW_DRAG_CLASS,
+} from "@/lib/bb-desktop";
 import { cn } from "@/lib/utils";
 import { PANEL_COLLAPSE_TRANSITION_CLASS } from "./panelTransitionTokens";
 
@@ -63,16 +66,15 @@ export function ConversationCollapsedRail({
           body below the macOS traffic-light cluster. It carries no
           `bg-surface-recessed`, so the red/yellow/green lights sit on clean
           window chrome instead of on top of the rail. Mirrors AppSidebar's top
-          window-drag strip and matches the 48px (`h-12`) title-bar height the
-          sidebar and secondary-panel chrome already use. This strip is the
-          single mechanism that offsets the body below the lights — the recessed
-          body carries no top margin of its own. Only rendered when the rail owns
-          the top-left; on web / under an expanded sidebar the body fills the
-          full height.
+          window-drag strip and matches the title-bar height shared across the
+          chrome (`CHROME_ROW_HEIGHT_CLASS`). This strip is the single mechanism
+          that offsets the body below the lights — the recessed body carries no
+          top margin of its own. Only rendered when the rail owns the top-left;
+          on web / under an expanded sidebar the body fills the full height.
         */
         <div
           data-testid="conversation-collapsed-rail-traffic-light-strip"
-          className={cn("h-12 shrink-0", MACOS_WINDOW_DRAG_CLASS)}
+          className={cn(CHROME_ROW_HEIGHT_CLASS, "shrink-0", MACOS_WINDOW_DRAG_CLASS)}
         />
       ) : null}
       <button

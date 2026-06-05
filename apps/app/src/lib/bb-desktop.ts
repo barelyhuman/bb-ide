@@ -40,7 +40,6 @@ export const MACOS_WINDOW_DRAG_CLASS =
 export const MACOS_APP_REGION_NO_DRAG_CLASS =
   "[app-region:no-drag] [-webkit-app-region:no-drag]";
 export const MACOS_WINDOW_NO_DRAG_CLASS = `relative z-50 ${MACOS_APP_REGION_NO_DRAG_CLASS}`;
-export const MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS = "mt-px";
 
 // Single source of truth for the top chrome row — the titlebar axis shared by
 // the macOS traffic lights, the pinned sidebar collapse trigger, and the

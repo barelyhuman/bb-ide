@@ -28,7 +28,6 @@ import {
   CHROME_ROW_HEIGHT_CLASS,
   MACOS_APP_REGION_NO_DRAG_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
-  MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -251,7 +250,9 @@ describe("AppLayout desktop chrome", () => {
     const headerRow = await screen.findByTestId("app-page-header-content-row");
     const header = headerRow.parentElement;
 
-    expect(header?.className).toContain("h-12");
+    // The thread-title / page header shares the chrome-row height token so its
+    // top bar stays on the same axis as the sidebar arrows and traffic lights.
+    expect(header?.className).toContain(CHROME_ROW_HEIGHT_CLASS);
     expect(header?.className).not.toContain("border-b");
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
@@ -316,9 +317,10 @@ describe("AppLayout desktop chrome", () => {
     expect(overlay.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(overlay.className).not.toContain(MACOS_APP_REGION_NO_DRAG_CLASS);
     expect(sidebarTrigger.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
-    expect(sidebarTrigger.className).toContain(
-      MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
-    );
+    // The overlay centers the trigger on the shared chrome row; the button
+    // carries no per-component vertical nudge of its own.
+    expect(overlay.className).toContain(CHROME_ROW_HEIGHT_CLASS);
+    expect(sidebarTrigger.className).not.toContain("mt-px");
   });
 
   it("keeps the pinned trigger and reserves its footprint in the collapsed header on desktop", async () => {
@@ -395,9 +397,9 @@ describe("AppLayout desktop chrome", () => {
     expect(overlay.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(overlay.className).not.toContain(MACOS_APP_REGION_NO_DRAG_CLASS);
     expect(sidebarTrigger.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
-    expect(sidebarTrigger.className).toContain(
-      MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
-    );
+    // Centering comes from the shared chrome row, not a per-button nudge.
+    expect(overlay.className).toContain(CHROME_ROW_HEIGHT_CLASS);
+    expect(sidebarTrigger.className).not.toContain("mt-px");
   });
 
   it("pins a single browser sidebar trigger and reserves the collapsed header footprint", async () => {

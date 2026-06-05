@@ -38,6 +38,7 @@ import {
   ThreadInfoTabContent,
 } from "./ThreadSecondaryPanelTabContent";
 import {
+  CHROME_ROW_CLASS,
   getBbDesktopInfo,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -271,7 +272,8 @@ export function ThreadSecondaryPanel({
         <div
           data-testid="thread-secondary-panel-top-chrome"
           className={cn(
-            "flex h-12 min-w-0 items-center justify-between gap-2 px-4",
+            CHROME_ROW_CLASS,
+            "min-w-0 justify-between gap-2 px-4",
             usesDesktopChrome && MACOS_WINDOW_DRAG_CLASS,
             reserveLeftForDesktopTrafficLights &&
               MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
