@@ -171,6 +171,46 @@ describe("AppLayout desktop chrome", () => {
     );
   });
 
+  it("renders the sidebar history controls above the primary actions without adding sidebar toggles", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    const primaryActions = await screen.findByTestId(
+      "app-sidebar-primary-actions",
+    );
+    const goBack = within(primaryActions).getByRole("button", {
+      name: "Go back",
+    });
+    const goForward = within(primaryActions).getByRole("button", {
+      name: "Go forward",
+    });
+    const newThread = within(primaryActions).getByRole("button", {
+      name: "New thread",
+    });
+
+    // History controls sit above the New Thread / New Manager actions, with
+    // Back before Forward.
+    expect(
+      Boolean(
+        goBack.compareDocumentPosition(goForward) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        goForward.compareDocumentPosition(newThread) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+
+    // At the app root with no recorded history both controls are inert, and the
+    // sidebar chrome still hosts exactly one toggle.
+    expect(goBack).toHaveProperty("disabled", true);
+    expect(goForward).toHaveProperty("disabled", true);
+    expect(
+      screen.getAllByRole("button", { name: "Toggle Sidebar" }),
+    ).toHaveLength(1);
+  });
+
   it("renders root with project-style header spacing in browser layout", async () => {
     await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
 

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectList, ProjectListActionButtons } from "./ProjectList";
+import { SidebarHistoryNavigationControls } from "./SidebarHistoryNavigationControls";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import {
   getBbDesktopInfo,
@@ -91,6 +92,7 @@ export function AppSidebar({
           data-testid="app-sidebar-primary-actions"
           className="shrink-0 px-2 py-2 group-data-[collapsible=icon]:hidden"
         >
+          <SidebarHistoryNavigationControls onNavigate={closeOnMobile} />
           <ProjectListActionButtons
             onNewChat={handleNewChat}
             onNewManager={handleNewManager}
