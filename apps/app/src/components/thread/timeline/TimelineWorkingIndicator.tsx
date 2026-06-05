@@ -6,6 +6,13 @@ import {
 import { cn } from "@/lib/utils";
 import { TimelineStatusIndicator } from "./TimelineStatusIndicator.js";
 
+// Both indicator states — the plain status line and the expandable thinking
+// header — render at this fixed height and vertically center their label. The
+// expandable variant materializes the moment thinking text streams in; without
+// a shared height the swap grows the row ~8px and the bottom-anchored timeline
+// animates the jump (see HeightTransition's ResizeObserver).
+const INDICATOR_HEADER_HEIGHT_CLASS = "min-h-7 items-center";
+
 export interface TimelineWorkingIndicatorProps {
   label?: string;
   isThinking?: boolean;
@@ -32,6 +39,7 @@ export function TimelineWorkingIndicator({
             <span className="animate-shine">{resolvedLabel}</span>
           }
           headerToneClass={getCollapsibleHeaderToneClass(isExpanded)}
+          headerClassName={INDICATOR_HEADER_HEIGHT_CLASS}
           onToggle={() => setIsExpanded((current) => !current)}
         >
           <div className="max-h-80 overflow-auto whitespace-pre-wrap text-sm italic leading-relaxed text-muted-foreground">
@@ -45,7 +53,7 @@ export function TimelineWorkingIndicator({
   return (
     <TimelineStatusIndicator
       label={<span className="animate-shine">{resolvedLabel}</span>}
-      className={cn("mt-4", className)}
+      className={cn("mt-4 flex", INDICATOR_HEADER_HEIGHT_CLASS, className)}
     />
   );
 }
