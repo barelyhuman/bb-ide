@@ -2,16 +2,19 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Environment, Thread } from "@bb/domain";
+import type { ThreadSchedule } from "@bb/server-contract";
 import { makeWorkspaceStatus } from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GitStatusRow,
   MergeBaseRow,
+  ThreadSchedulesRow,
   WorkspacePathRow,
 } from "./ThreadMetadataContent";
 
 type ThreadOverrides = Partial<Thread>;
 type EnvironmentOverrides = Partial<Environment>;
+type ThreadScheduleOverrides = Partial<ThreadSchedule>;
 
 function makeThread(overrides: ThreadOverrides = {}): Thread {
   const base: Thread = {
@@ -55,6 +58,28 @@ function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
     cleanupRequestedAt: null,
     cleanupMode: null,
     status: "ready",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  return { ...base, ...overrides };
+}
+
+function makeThreadSchedule(
+  overrides: ThreadScheduleOverrides = {},
+): ThreadSchedule {
+  const base: ThreadSchedule = {
+    id: "tsched_test",
+    projectId: "proj_test",
+    threadId: "thr_test",
+    name: "Daily check-in",
+    enabled: true,
+    kind: "cron",
+    cron: "0 8 * * 1-5",
+    timezone: "America/Los_Angeles",
+    prompt: "Review current work and summarize useful progress.",
+    nextFireAt: Date.parse("2026-06-08T15:00:00.000Z"),
+    lastFiredAt: null,
     createdAt: 1,
     updatedAt: 1,
   };
@@ -168,5 +193,34 @@ describe("GitStatusRow", () => {
         "Loaded environment env_test is bound to /tmp/old, not /tmp/current",
       ),
     ).not.toBeNull();
+  });
+});
+
+describe("ThreadSchedulesRow", () => {
+  it("renders nothing when there are no schedules", () => {
+    const { container } = render(<ThreadSchedulesRow schedules={[]} />);
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("shows the schedule name and a humanized next run instead of the raw cron", () => {
+    render(<ThreadSchedulesRow schedules={[makeThreadSchedule()]} />);
+
+    expect(screen.getByText("Schedules")).not.toBeNull();
+    expect(screen.getByText("Daily check-in")).not.toBeNull();
+    // Enabled schedules surface their next run, never the raw cron expression.
+    expect(screen.getByText(/Next /)).not.toBeNull();
+    expect(screen.queryByText("0 8 * * 1-5")).toBeNull();
+  });
+
+  it("marks a disabled schedule as paused with no next run", () => {
+    render(
+      <ThreadSchedulesRow
+        schedules={[makeThreadSchedule({ enabled: false })]}
+      />,
+    );
+
+    expect(screen.getByText(/Paused/)).not.toBeNull();
+    expect(screen.queryByText(/Next /)).toBeNull();
   });
 });

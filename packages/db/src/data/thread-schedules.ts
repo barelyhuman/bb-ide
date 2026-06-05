@@ -1,11 +1,31 @@
-import { and, asc, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte } from "drizzle-orm";
+import type { ThreadType } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createThreadScheduleId } from "../ids.js";
-import { projects, threadSchedules } from "../schema.js";
+import { projects, threadSchedules, threads } from "../schema.js";
 import { buildOrderedNumberCursorFilter } from "./cursor-pagination.js";
 
 export type ThreadScheduleRow = typeof threadSchedules.$inferSelect;
+
+export interface ThreadScheduleOverviewProjectRow {
+  id: string;
+  name: string;
+}
+
+export interface ThreadScheduleOverviewThreadRow {
+  id: string;
+  projectId: string;
+  title: string | null;
+  titleFallback: string | null;
+  type: ThreadType;
+}
+
+export interface ThreadScheduleWithThreadAndProjectRow {
+  project: ThreadScheduleOverviewProjectRow;
+  schedule: ThreadScheduleRow;
+  thread: ThreadScheduleOverviewThreadRow;
+}
 
 export interface CreateThreadScheduleInput {
   cron: string;
@@ -111,6 +131,43 @@ export function listThreadSchedulesByThread(
     .from(threadSchedules)
     .where(eq(threadSchedules.threadId, threadId))
     .orderBy(asc(threadSchedules.name))
+    .all();
+}
+
+export function listThreadSchedulesWithThreadAndProject(
+  db: DbConnection,
+): ThreadScheduleWithThreadAndProjectRow[] {
+  return db
+    .select({
+      project: {
+        id: projects.id,
+        name: projects.name,
+      },
+      schedule: threadSchedules,
+      thread: {
+        id: threads.id,
+        projectId: threads.projectId,
+        title: threads.title,
+        titleFallback: threads.titleFallback,
+        type: threads.type,
+      },
+    })
+    .from(threadSchedules)
+    .innerJoin(threads, eq(threadSchedules.threadId, threads.id))
+    .innerJoin(projects, eq(threadSchedules.projectId, projects.id))
+    .where(
+      and(
+        isNull(threads.deletedAt),
+        isNull(threads.archivedAt),
+        isNull(projects.deletedAt),
+      ),
+    )
+    .orderBy(
+      desc(threadSchedules.enabled),
+      asc(threadSchedules.nextFireAt),
+      asc(threadSchedules.name),
+      asc(threadSchedules.id),
+    )
     .all();
 }
 

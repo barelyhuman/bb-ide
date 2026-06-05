@@ -1400,6 +1400,9 @@ describe("server-contract clients", () => {
     expect(publicClient.system["execution-options"].$url().pathname).toBe(
       "/api/v1/system/execution-options",
     );
+    expect(publicClient.automations.$url().pathname).toBe(
+      "/api/v1/automations",
+    );
     expect(
       publicClient.projects[":id"].managers.$url({
         param: { id: "proj_123" },

@@ -135,6 +135,8 @@ const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
     "allAppQueryKeyPrefix",
     "allAppsQueryKeyPrefix",
     "allSystemExecutionOptionsQueryKeyPrefix",
+    "allThreadSchedulesQueryKeyPrefix",
+    "automationsOverviewQueryKey",
     "appMarkdownPreviewQueryKeyPrefix",
     "appQueryKey",
     "appSourcesQueryKey",

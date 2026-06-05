@@ -12,6 +12,7 @@ import type {
   WorkspaceDiffTarget,
 } from "@bb/domain";
 import type {
+  AutomationsOverviewResponse,
   CreateManagerThreadRequest,
   CreateProjectSourceRequest,
   CreateProjectRequest,
@@ -51,6 +52,7 @@ import type {
   ThreadQueuedMessageListResponse,
   ThreadListResponse,
   ThreadResponse,
+  ThreadSchedule,
   ThreadWithIncludesResponse,
   PathListIncludeQueryValue,
   BranchListQuery,
@@ -554,6 +556,14 @@ export async function listProjectsWithThreads(
   );
 }
 
+export async function listAutomationsOverview(
+  signal?: AbortSignal,
+): Promise<AutomationsOverviewResponse> {
+  return request<AutomationsOverviewResponse>(
+    apiClient.automations.$get(undefined, requestOptions(signal)),
+  );
+}
+
 export async function listProjectPromptHistory(
   projectId: string,
   signal?: AbortSignal,
@@ -804,6 +814,18 @@ export async function getThreadAssignedChildSummary(
   );
 }
 
+export async function listThreadSchedules(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ThreadSchedule[]> {
+  return request<ThreadSchedule[]>(
+    apiClient.threads[":id"].schedules.$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
+  );
+}
+
 interface ListThreadStorageFilesArgs {
   id: string;
   options: ThreadStorageFileListOptions;
@@ -884,12 +906,8 @@ export async function getThreadStorageFilePreview(
   );
 }
 
-export async function listApps(
-  signal?: AbortSignal,
-): Promise<AppSummary[]> {
-  return request<AppSummary[]>(
-    apiClient.apps.$get({}, requestOptions(signal)),
-  );
+export async function listApps(signal?: AbortSignal): Promise<AppSummary[]> {
+  return request<AppSummary[]>(apiClient.apps.$get({}, requestOptions(signal)));
 }
 
 export async function listAppSources(

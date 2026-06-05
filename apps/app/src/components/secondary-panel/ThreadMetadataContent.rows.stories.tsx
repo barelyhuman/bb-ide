@@ -8,6 +8,7 @@ import {
   MergeBaseRow,
   GitStatusRow,
   ArchivedRow,
+  ThreadSchedulesRow,
   ChangedFilesRow,
   ThreadMetadataCard,
 } from "./ThreadMetadataContent";
@@ -18,6 +19,7 @@ import {
   makeEnvironment,
   makeHost,
   makeThread,
+  makeThreadSchedule,
   makeWorkspaceStatus,
 } from "./ThreadMetadataContent.fixtures";
 import { HOST_IDS, HOST_NAMES } from "../../../.ladle/story-fixtures";
@@ -579,6 +581,53 @@ export function Archived() {
       <StoryRow label="archived">
         <RowStage>
           <ArchivedRow thread={makeThread({ archivedAt: 1_700_000_000_000 })} />
+        </RowStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Thread schedules — the "Schedules" row. Hidden entirely when there are none.
+// ---------------------------------------------------------------------------
+
+export function ThreadSchedules() {
+  return (
+    <StoryCard>
+      <StoryRow label="single, enabled">
+        <RowStage>
+          <ThreadSchedulesRow schedules={[makeThreadSchedule()]} />
+        </RowStage>
+      </StoryRow>
+      <StoryRow label="single, disabled" hint='reads "Not running" + Disabled pill'>
+        <RowStage>
+          <ThreadSchedulesRow
+            schedules={[
+              makeThreadSchedule({
+                id: "sched_cleanup",
+                name: "Weekly cleanup",
+                enabled: false,
+                cron: "0 18 * * 5",
+                prompt: "Close stale follow-ups and archive merged threads.",
+              }),
+            ]}
+          />
+        </RowStage>
+      </StoryRow>
+      <StoryRow label="multiple">
+        <RowStage>
+          <ThreadSchedulesRow
+            schedules={[
+              makeThreadSchedule(),
+              makeThreadSchedule({
+                id: "sched_cleanup",
+                name: "Weekly cleanup",
+                enabled: false,
+                cron: "0 18 * * 5",
+                prompt: "Close stale follow-ups and archive merged threads.",
+              }),
+            ]}
+          />
         </RowStage>
       </StoryRow>
     </StoryCard>

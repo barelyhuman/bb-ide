@@ -24,7 +24,10 @@ import {
   MACOS_WINDOW_NO_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
-import { getRootComposeRoutePath } from "@/lib/app-route-paths";
+import {
+  getAutomationsRoutePath,
+  getRootComposeRoutePath,
+} from "@/lib/app-route-paths";
 import { useSetRootComposeMode } from "@/lib/root-compose-selection";
 
 interface AppSidebarProps {
@@ -70,6 +73,11 @@ export function AppSidebar({
     });
   }, [closeOnMobile, navigate, setRootComposeMode]);
 
+  const handleOpenAutomations = useCallback(() => {
+    closeOnMobile();
+    void navigate(getAutomationsRoutePath());
+  }, [closeOnMobile, navigate]);
+
   return (
     <>
       <Sidebar>
@@ -112,6 +120,7 @@ export function AppSidebar({
           <ProjectListActionButtons
             onNewChat={handleNewChat}
             onNewManager={handleNewManager}
+            onOpenAutomations={handleOpenAutomations}
           />
         </div>
         <SidebarContent>

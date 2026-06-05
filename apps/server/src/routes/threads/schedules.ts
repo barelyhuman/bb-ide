@@ -14,7 +14,6 @@ import {
   updateThreadScheduleRequestSchema,
   type CreateThreadScheduleRequest,
   type PublicApiSchema,
-  type ThreadSchedule,
   type UpdateThreadScheduleConfigRequest,
   type UpdateThreadScheduleEnabledRequest,
   type UpdateThreadScheduleRequest,
@@ -28,6 +27,7 @@ import {
   ScheduleValidationError,
   validateScheduleDefinition,
 } from "../../services/scheduling/schedule-helpers.js";
+import { toThreadScheduleResponse } from "../../services/scheduling/thread-schedule-response.js";
 
 interface RequireThreadScheduleArgs {
   scheduleId: string;
@@ -55,24 +55,6 @@ interface BuildThreadScheduleConfigUpdateInputArgs {
 interface BuildThreadScheduleEnabledUpdateInputArgs {
   current: ThreadScheduleRow;
   payload: UpdateThreadScheduleEnabledRequest;
-}
-
-function toThreadScheduleResponse(row: ThreadScheduleRow): ThreadSchedule {
-  return {
-    id: row.id,
-    projectId: row.projectId,
-    threadId: row.threadId,
-    name: row.name,
-    enabled: row.enabled,
-    kind: row.kind,
-    cron: row.cron,
-    timezone: row.timezone,
-    prompt: row.prompt,
-    nextFireAt: row.nextFireAt,
-    lastFiredAt: row.lastFiredAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
 }
 
 function computeNextFireAt(values: ScheduleTimingValues): number {
@@ -180,6 +162,11 @@ function translateThreadScheduleWriteError(error: unknown): never {
   throw error;
 }
 
+// Archiving a thread disables its schedules; this keeps an archived thread from
+// ever holding an enabled schedule via the create/enable write paths.
+const ARCHIVED_THREAD_SCHEDULE_ENABLE_MESSAGE =
+  "Cannot enable a schedule on an archived thread. Unarchive the thread first.";
+
 export function registerThreadScheduleRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -199,8 +186,15 @@ export function registerThreadScheduleRoutes(app: Hono, deps: AppDeps): void {
     createThreadScheduleRequestSchema,
     (context, payload) => {
       const thread = requirePublicThread(deps.db, context.req.param("id"));
+      const values = resolveCreateThreadScheduleValues(payload);
+      if (values.enabled && thread.archivedAt !== null) {
+        throw new ApiError(
+          409,
+          "invalid_request",
+          ARCHIVED_THREAD_SCHEDULE_ENABLE_MESSAGE,
+        );
+      }
       try {
-        const values = resolveCreateThreadScheduleValues(payload);
         validateScheduleDefinition(values);
         const schedule = createThreadSchedule(deps.db, deps.hub, {
           projectId: thread.projectId,
@@ -228,6 +222,17 @@ export function registerThreadScheduleRoutes(app: Hono, deps: AppDeps): void {
         threadId: thread.id,
         scheduleId: context.req.param("scheduleId"),
       });
+      if (
+        isThreadScheduleEnabledUpdate(payload) &&
+        payload.enabled &&
+        thread.archivedAt !== null
+      ) {
+        throw new ApiError(
+          409,
+          "invalid_request",
+          ARCHIVED_THREAD_SCHEDULE_ENABLE_MESSAGE,
+        );
+      }
 
       try {
         if (

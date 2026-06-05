@@ -275,6 +275,7 @@ function buildSecondaryContentProps({
       selectedMergeBaseBranch: undefined,
       mergeBaseBranchOptions: undefined,
       isLoadingMergeBaseBranchOptions: false,
+      threadSchedules: [],
       updateThreadPending: false,
       onAssignManager: noopAssignManager,
       onMergeBaseBranchChange: noopBranchChange,

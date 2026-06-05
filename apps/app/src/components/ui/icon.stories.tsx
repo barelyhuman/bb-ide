@@ -30,6 +30,7 @@ const USAGE: Partial<Record<IconName, string>> = {
   CircleDashed:
     "Thread row busy spinner, manager-children busy section indicator",
   CircleX: "Auth callback failure state",
+  Clock: "Automations nav button in sidebar, automation rows in Automations view",
   Columns2: "Git diff toolbar “split view”",
   Container: "Container icon",
   Copy: "CopyButton, metadata-value copy buttons",

@@ -88,6 +88,18 @@ export interface ClaimAutomationScheduledRunResult {
 
 type AutomationReadConnection = DbConnection | DbTransaction;
 
+export type AutomationRow = typeof automations.$inferSelect;
+
+export interface AutomationOverviewProjectRow {
+  id: string;
+  name: string;
+}
+
+export interface AutomationWithProjectRow {
+  automation: AutomationRow;
+  project: AutomationOverviewProjectRow;
+}
+
 export function createAutomation(
   db: DbConnection,
   notifier: DbNotifier,
@@ -134,6 +146,24 @@ export function listAutomations(db: DbConnection, projectId: string) {
     .from(automations)
     .where(eq(automations.projectId, projectId))
     .orderBy(desc(automations.createdAt))
+    .all();
+}
+
+export function listAutomationsWithProjects(
+  db: DbConnection,
+): AutomationWithProjectRow[] {
+  return db
+    .select({
+      automation: automations,
+      project: {
+        id: projects.id,
+        name: projects.name,
+      },
+    })
+    .from(automations)
+    .innerJoin(projects, eq(automations.projectId, projects.id))
+    .where(isNull(projects.deletedAt))
+    .orderBy(desc(automations.createdAt), desc(automations.id))
     .all();
 }
 

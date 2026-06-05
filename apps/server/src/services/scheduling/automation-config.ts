@@ -2,8 +2,10 @@ import {
   listEnvironmentsByIds,
   listNonDestroyedHostsByIds,
   listProjectSources,
+  listProjectSourcesByProjectIds,
   type automations,
 } from "@bb/db";
+import type { ProjectSource } from "@bb/domain";
 import { ZodError } from "zod";
 import { z } from "zod";
 import {
@@ -53,6 +55,18 @@ export interface StoredAutomationValidationResult {
 
 export interface SafeParsedAutomationDefinitionResult {
   parsedDefinition: ParsedAutomationDefinition | null;
+}
+
+export interface BuildStableThreadRequestProjectDataArgs {
+  environmentIds: readonly string[];
+  hostIds: readonly string[];
+  projectId: string;
+}
+
+export interface BuildStableThreadRequestProjectDataMapArgs {
+  environmentIds: readonly string[];
+  hostIds: readonly string[];
+  projectIds: readonly string[];
 }
 
 interface RequireAutomationHostAffinityArgs {
@@ -122,7 +136,7 @@ export function parseAutomationAction(action: string) {
   return parseJsonWithSchema(action, automationActionSchema);
 }
 
-function parseAutomationDefinition(
+export function parseAutomationDefinition(
   row: Pick<AutomationRow, "action" | "triggerConfig">,
 ): ParsedAutomationDefinition {
   return {
@@ -172,11 +186,7 @@ function computeAutomationValidation(
 
 export function buildStableThreadRequestProjectData(
   deps: AutomationConfigDeps,
-  args: {
-    environmentIds: readonly string[];
-    hostIds: readonly string[];
-    projectId: string;
-  },
+  args: BuildStableThreadRequestProjectDataArgs,
 ): StableThreadRequestProjectData {
   const primaryHostId = resolvePrimaryHostId(deps);
   const hostIds =
@@ -197,6 +207,57 @@ export function buildStableThreadRequestProjectData(
     projectId: args.projectId,
     projectSources: listProjectSources(deps.db, args.projectId),
   };
+}
+
+export function buildStableThreadRequestProjectDataMap(
+  deps: AutomationConfigDeps,
+  args: BuildStableThreadRequestProjectDataMapArgs,
+): ReadonlyMap<string, StableThreadRequestProjectData> {
+  const primaryHostId = resolvePrimaryHostId(deps);
+  const hostIds =
+    primaryHostId === null
+      ? args.hostIds
+      : [...new Set([...args.hostIds, primaryHostId])];
+  const environmentsById = new Map(
+    listEnvironmentsByIds(deps.db, args.environmentIds).map((environment) => [
+      environment.id,
+      environment,
+    ]),
+  );
+  const existingHostIds = new Set(
+    listNonDestroyedHostsByIds(deps.db, hostIds).map((host) => host.id),
+  );
+  const projectSourcesByProjectId = new Map<string, ProjectSource[]>();
+
+  for (const projectSource of listProjectSourcesByProjectIds(
+    deps.db,
+    args.projectIds,
+  )) {
+    const projectSources = projectSourcesByProjectId.get(
+      projectSource.projectId,
+    );
+    if (projectSources) {
+      projectSources.push(projectSource);
+    } else {
+      projectSourcesByProjectId.set(projectSource.projectId, [projectSource]);
+    }
+  }
+
+  const projectDataByProjectId = new Map<
+    string,
+    StableThreadRequestProjectData
+  >();
+  for (const projectId of args.projectIds) {
+    projectDataByProjectId.set(projectId, {
+      environmentsById,
+      existingHostIds,
+      primaryHostId,
+      projectId,
+      projectSources: projectSourcesByProjectId.get(projectId) ?? [],
+    });
+  }
+
+  return projectDataByProjectId;
 }
 
 function computeAutomationValidationWithProjectData(

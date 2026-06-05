@@ -38,6 +38,7 @@ import {
   useThreadComposerBootstrap,
   useThreadDetailBootstrap,
   useThreadPendingInteractions,
+  useThreadSchedules,
   type ProjectThreadSubsetFilters,
 } from "../../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/dialogs/ThreadGitActionDialog";
@@ -362,6 +363,9 @@ export function ThreadDetailView() {
       staleTime: composerHydratedDataStaleTime,
     },
   );
+  const { data: threadSchedules = [] } = useThreadSchedules(thread?.id ?? "", {
+    enabled: threadQueryState.status === "ready" && Boolean(thread?.id),
+  });
   const hasPendingInteraction =
     getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
@@ -1387,6 +1391,7 @@ export function ThreadDetailView() {
           mergeBaseBranchOptionsTruncated,
           mergeBaseRemoteBranchOptions,
           isLoadingMergeBaseBranchOptions,
+          threadSchedules,
           updateThreadPending:
             updateThread.isPending || updateEnvironment.isPending,
           storage: metadataStorage,

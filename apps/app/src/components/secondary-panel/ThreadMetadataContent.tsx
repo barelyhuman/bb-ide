@@ -10,6 +10,7 @@ import type {
   ThreadListEntry,
   WorkspaceStatus,
 } from "@bb/domain";
+import type { ThreadSchedule } from "@bb/server-contract";
 import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,10 @@ import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { CopyableInlineLabel } from "@/components/ui/copy-button.js";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import {
+  formatCronCadence,
+  formatScheduleStatusLabel,
+} from "@/lib/format-schedule";
 import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
 import {
   DropdownMenu,
@@ -536,6 +541,42 @@ export function ArchivedRow({ thread }: ArchivedRowProps) {
   );
 }
 
+export interface ThreadSchedulesRowProps {
+  schedules: readonly ThreadSchedule[];
+}
+
+export function ThreadSchedulesRow({ schedules }: ThreadSchedulesRowProps) {
+  if (schedules.length === 0) return null;
+
+  return (
+    <DetailRow label="Schedules" align="start" valueClassName="min-w-0">
+      <div className="flex flex-col gap-1.5">
+        {schedules.map((schedule) => (
+          <div
+            key={schedule.id}
+            className={cn(
+              "min-w-0 leading-snug",
+              !schedule.enabled && "opacity-60",
+            )}
+          >
+            <div className="truncate font-medium text-foreground">
+              {schedule.name}
+            </div>
+            <div className="truncate text-muted-foreground">
+              {`${formatCronCadence(schedule.cron)} · ${formatScheduleStatusLabel(
+                {
+                  enabled: schedule.enabled,
+                  nextRunAt: schedule.nextFireAt,
+                },
+              )}`}
+            </div>
+          </div>
+        ))}
+      </div>
+    </DetailRow>
+  );
+}
+
 export interface ChangedFilesRowProps {
   thread: Thread;
   workspaceStatus: WorkspaceStatus | undefined;
@@ -627,6 +668,7 @@ export interface ThreadMetadataContentProps {
   mergeBaseBranchOptionsTruncated?: boolean;
   mergeBaseRemoteBranchOptions?: readonly string[];
   isLoadingMergeBaseBranchOptions: boolean;
+  threadSchedules: readonly ThreadSchedule[];
   updateThreadPending: boolean;
   storage?: ManagerWorkspaceRowProps;
   onAssignManager: (parentThreadId: string | null) => void;
@@ -648,6 +690,7 @@ export function hasAnyThreadMetadata({
   workspaceStatus,
   workspaceStatusError,
   workspaceUnavailable,
+  threadSchedules,
 }: Pick<
   ThreadMetadataContentProps,
   | "thread"
@@ -656,6 +699,7 @@ export function hasAnyThreadMetadata({
   | "workspaceStatus"
   | "workspaceStatusError"
   | "workspaceUnavailable"
+  | "threadSchedules"
 >): boolean {
   const isManagerThread = thread.type === "manager";
   const parentThreadId = thread.parentThreadId ?? undefined;
@@ -681,6 +725,7 @@ export function hasAnyThreadMetadata({
     (!isManagerThread && branchName) ||
     showWorkspaceStatus ||
     showThreadChangedFiles ||
+    threadSchedules.length > 0 ||
     thread.archivedAt != null ||
     (parentThreadDisplayName && parentThreadId),
   );
@@ -733,6 +778,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     mergeBaseBranchOptionsTruncated,
     mergeBaseRemoteBranchOptions,
     isLoadingMergeBaseBranchOptions,
+    threadSchedules,
     updateThreadPending,
     storage,
     onAssignManager,
@@ -795,6 +841,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         selectedMergeBaseBranch={selectedMergeBaseBranch}
       />
       <ArchivedRow thread={thread} />
+      <ThreadSchedulesRow schedules={threadSchedules} />
       <ChangedFilesRow
         thread={thread}
         workspaceStatus={workspaceStatus}

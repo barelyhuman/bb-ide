@@ -325,10 +325,7 @@ export function Overview() {
       >
         {singleProject({ threadListState: { status: "loading" } })}
       </StoryRow>
-      <StoryRow
-        label="ready, no threads"
-        hint='empty state: "No threads"'
-      >
+      <StoryRow label="ready, no threads" hint='empty state: "No threads"'>
         {singleProject({
           threadListState: { status: "ready", threads: [] },
         })}
@@ -720,6 +717,7 @@ export function Full() {
             <ProjectListActionButtons
               onNewChat={noop}
               onNewManager={noop}
+              onOpenAutomations={noop}
             />
           </div>
           <ProjectListShell>

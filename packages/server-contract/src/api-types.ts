@@ -658,6 +658,50 @@ export const threadScheduleSchema = z.object({
 });
 export type ThreadSchedule = z.infer<typeof threadScheduleSchema>;
 
+export const automationsOverviewProjectSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+});
+export type AutomationsOverviewProject = z.infer<
+  typeof automationsOverviewProjectSchema
+>;
+
+export const automationsOverviewThreadSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  title: z.string().nullable(),
+  titleFallback: z.string().nullable(),
+  type: threadTypeSchema,
+});
+export type AutomationsOverviewThread = z.infer<
+  typeof automationsOverviewThreadSchema
+>;
+
+export const automationsOverviewAutomationSchema = z.object({
+  automation: automationSchema,
+  project: automationsOverviewProjectSchema,
+});
+export type AutomationsOverviewAutomation = z.infer<
+  typeof automationsOverviewAutomationSchema
+>;
+
+export const automationsOverviewThreadScheduleSchema = z.object({
+  project: automationsOverviewProjectSchema,
+  schedule: threadScheduleSchema,
+  thread: automationsOverviewThreadSchema,
+});
+export type AutomationsOverviewThreadSchedule = z.infer<
+  typeof automationsOverviewThreadScheduleSchema
+>;
+
+export const automationsOverviewResponseSchema = z.object({
+  automations: z.array(automationsOverviewAutomationSchema),
+  threadSchedules: z.array(automationsOverviewThreadScheduleSchema),
+});
+export type AutomationsOverviewResponse = z.infer<
+  typeof automationsOverviewResponseSchema
+>;
+
 export const createThreadScheduleRequestSchema = z
   .object({
     name: scheduleNameSchema,

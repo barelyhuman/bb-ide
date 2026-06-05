@@ -65,6 +65,7 @@ export {
   getAutomation,
   hasOpenAutomationThread,
   listAutomations,
+  listAutomationsWithProjects,
   listDueAutomations,
   restoreAutomationAfterFailedRun,
   updateAutomation,
@@ -72,6 +73,9 @@ export {
 export type {
   ClaimAutomationScheduledRunArgs,
   ClaimAutomationScheduledRunResult,
+  AutomationOverviewProjectRow,
+  AutomationRow,
+  AutomationWithProjectRow,
   CreateAutomationInput,
   DueAutomationCursor,
   ListDueAutomationsArgs,
@@ -154,6 +158,7 @@ export {
   getThreadSchedule,
   listDueThreadSchedules,
   listThreadSchedulesByThread,
+  listThreadSchedulesWithThreadAndProject,
   updateThreadSchedule,
 } from "./thread-schedules.js";
 export type {
@@ -164,6 +169,9 @@ export type {
   DueThreadScheduleCursor,
   ListDueThreadSchedulesArgs,
   ThreadScheduleRow,
+  ThreadScheduleOverviewProjectRow,
+  ThreadScheduleOverviewThreadRow,
+  ThreadScheduleWithThreadAndProjectRow,
   UpdateThreadScheduleInput,
 } from "./thread-schedules.js";
 

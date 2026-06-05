@@ -48,6 +48,7 @@ import {
 } from "@/lib/bb-desktop";
 import {
   getLegacyProjectComposeRoutePath,
+  AUTOMATIONS_ROUTE_PATH,
   getProjectArchivedRoutePath,
   getProjectSettingsRoutePath,
 } from "@/lib/app-route-paths";
@@ -216,6 +217,7 @@ function SidebarTriggerOverlay({
 
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Threads" },
+  [AUTOMATIONS_ROUTE_PATH]: { title: "Automations" },
   "/settings": { title: "Settings" },
   "/development-only/replay": { title: "Replay threads" },
 };
@@ -438,18 +440,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           subtitle: undefined,
         }
       : isArchivedView && projectId
-      ? {
-          title: "",
-          subtitle: undefined,
-          breadcrumbs: [
-            {
-              label: projectLabel ?? projectId,
-              to: getLegacyProjectComposeRoutePath(projectId),
-            },
-            { label: "Archived" },
-          ],
-        }
-      : isSettingsView && projectId
         ? {
             title: "",
             subtitle: undefined,
@@ -458,15 +448,27 @@ export function AppLayout({ children }: AppLayoutProps) {
                 label: projectLabel ?? projectId,
                 to: getLegacyProjectComposeRoutePath(projectId),
               },
-              { label: "Settings" },
+              { label: "Archived" },
             ],
           }
-        : projectId
+        : isSettingsView && projectId
           ? {
-              title: projectLabel ?? projectId,
+              title: "",
               subtitle: undefined,
+              breadcrumbs: [
+                {
+                  label: projectLabel ?? projectId,
+                  to: getLegacyProjectComposeRoutePath(projectId),
+                },
+                { label: "Settings" },
+              ],
             }
-          : (routeTitles[location.pathname] ?? { title: "" });
+          : projectId
+            ? {
+                title: projectLabel ?? projectId,
+                subtitle: undefined,
+              }
+            : (routeTitles[location.pathname] ?? { title: "" });
 
   const documentTitle = (() => {
     if (isThreadView) {

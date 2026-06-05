@@ -132,6 +132,7 @@ interface ProjectListProps {
 export interface ProjectListActionButtonsProps {
   onNewChat?: () => void;
   onNewManager?: () => void;
+  onOpenAutomations?: () => void;
 }
 
 interface ProjectListShellProps {
@@ -566,6 +567,7 @@ const SortableProjectRow = memo(function SortableProjectRow({
 export function ProjectListActionButtons({
   onNewChat,
   onNewManager,
+  onOpenAutomations,
 }: ProjectListActionButtonsProps) {
   const isNewChatDisabled = !onNewChat;
   const isNewManagerDisabled = !onNewManager;
@@ -608,6 +610,23 @@ export function ProjectListActionButtons({
           aria-hidden="true"
         />
       </Button>
+      {onOpenAutomations ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={PROJECT_LIST_ACTION_BUTTON_CLASS}
+          onClick={onOpenAutomations}
+          title="Automations"
+        >
+          <Icon name="Clock" />
+          <span className="min-w-0 flex-1 truncate text-left">Automations</span>
+          <span
+            className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
+            aria-hidden="true"
+          />
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import type {
 } from "./common.js";
 import type {
   Automation,
+  AutomationsOverviewResponse,
   AppDataListQuery,
   AppDataListResponse,
   AppDataReadResponse,
@@ -229,6 +230,13 @@ export type PublicApiSchema = {
       PathAppSourceName & { json: SyncAppSourceRequest },
       AppSourceStatus
     >;
+  };
+
+  // ─── Automations ─────────────────────────────────────────────────────
+
+  "/automations": {
+    /** List all project automations and thread schedules visible to the user. */
+    $get: Endpoint<EmptyInput, AutomationsOverviewResponse>;
   };
 
   // ─── Projects ────────────────────────────────────────────────────────

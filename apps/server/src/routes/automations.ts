@@ -3,11 +3,18 @@ import {
   deleteAutomation,
   getAutomation,
   listAutomations,
+  listAutomationsWithProjects,
+  listThreadSchedulesWithThreadAndProject,
   updateAutomation,
+  type AutomationWithProjectRow,
+  type ThreadScheduleWithThreadAndProjectRow,
 } from "@bb/db";
 import type { Project } from "@bb/domain";
 import {
+  automationsOverviewResponseSchema,
   type AutomationAction,
+  type AutomationsOverviewAutomation,
+  type AutomationsOverviewThreadSchedule,
   type AutomationScheduleTrigger,
   createAutomationRequestSchema,
   typedRoutes,
@@ -24,8 +31,11 @@ import type { AppDeps } from "../types.js";
 import { runtimeErrorLogFields } from "../services/lib/error-log-fields.js";
 import {
   buildStableThreadRequestProjectData,
+  buildStableThreadRequestProjectDataMap,
+  parseAutomationDefinition,
   parseAutomationAction,
   parseAutomationTriggerConfig,
+  type ParsedAutomationDefinition,
   safeParseAutomationDefinition,
   serializeAutomationAction,
   serializeAutomationTrigger,
@@ -33,6 +43,7 @@ import {
   toAutomationResponseWithProjectData,
   validateStoredAutomationDefinition,
 } from "../services/scheduling/automation-config.js";
+import { toThreadScheduleResponse } from "../services/scheduling/thread-schedule-response.js";
 import {
   ScheduleValidationError,
   computeNextScheduledTime,
@@ -71,6 +82,36 @@ interface ResolveAutomationActionForProjectArgs {
 }
 
 type AutomationRouteDeps = Pick<AppDeps, "config" | "db">;
+
+interface BuildAutomationsOverviewArgs {
+  deps: AppDeps;
+  rows: readonly AutomationWithProjectRow[];
+}
+
+interface BuildThreadSchedulesOverviewArgs {
+  rows: ThreadScheduleWithThreadAndProjectRow[];
+}
+
+interface ParsedAutomationOverviewRow {
+  automation: AutomationWithProjectRow["automation"];
+  parsedDefinition: ParsedAutomationDefinition;
+  project: AutomationWithProjectRow["project"];
+}
+
+interface ParseAutomationOverviewRowsArgs {
+  deps: AppDeps;
+  rows: readonly AutomationWithProjectRow[];
+}
+
+interface AutomationOverviewValidationIds {
+  environmentIds: string[];
+  hostIds: string[];
+  projectIds: string[];
+}
+
+interface CollectAutomationOverviewValidationIdsArgs {
+  rows: readonly ParsedAutomationOverviewRow[];
+}
 
 function requireProjectAutomation(
   deps: Pick<AppDeps, "db">,
@@ -244,9 +285,137 @@ function isAutomationEnabledUpdate(
   return "enabled" in payload;
 }
 
+function parseAutomationOverviewRows({
+  deps,
+  rows,
+}: ParseAutomationOverviewRowsArgs): ParsedAutomationOverviewRow[] {
+  return rows.flatMap(({ automation, project }) => {
+    try {
+      return [
+        {
+          automation,
+          parsedDefinition: parseAutomationDefinition(automation),
+          project,
+        },
+      ];
+    } catch (error) {
+      deps.logger.warn(
+        {
+          automationId: automation.id,
+          projectId: automation.projectId,
+          ...runtimeErrorLogFields(deps.config, error),
+        },
+        "Skipping malformed automation row in overview response",
+      );
+      return [];
+    }
+  });
+}
+
+function collectAutomationOverviewValidationIds({
+  rows,
+}: CollectAutomationOverviewValidationIdsArgs): AutomationOverviewValidationIds {
+  const environmentIds = new Set<string>();
+  const hostIds = new Set<string>();
+  const projectIds = new Set<string>();
+
+  for (const { automation, parsedDefinition } of rows) {
+    projectIds.add(automation.projectId);
+    const environment = parsedDefinition.action.threadRequest.environment;
+    switch (environment.type) {
+      case "host":
+        if (environment.hostId !== undefined) {
+          hostIds.add(environment.hostId);
+        }
+        break;
+      case "reuse":
+        environmentIds.add(environment.environmentId);
+        break;
+      default: {
+        const exhaustiveCheck: never = environment;
+        throw new Error(
+          `Unsupported automation thread environment: ${exhaustiveCheck}`,
+        );
+      }
+    }
+  }
+
+  return {
+    environmentIds: [...environmentIds],
+    hostIds: [...hostIds],
+    projectIds: [...projectIds],
+  };
+}
+
+function buildAutomationsOverviewItems({
+  deps,
+  rows,
+}: BuildAutomationsOverviewArgs): AutomationsOverviewAutomation[] {
+  const parsedRows = parseAutomationOverviewRows({ deps, rows });
+  const validationIds = collectAutomationOverviewValidationIds({
+    rows: parsedRows,
+  });
+  const projectDataByProjectId = buildStableThreadRequestProjectDataMap(
+    deps,
+    validationIds,
+  );
+
+  return parsedRows.flatMap(({ automation, parsedDefinition, project }) => {
+    try {
+      const projectData = projectDataByProjectId.get(automation.projectId);
+      if (!projectData) {
+        throw new Error("Automation overview project data was not loaded");
+      }
+      return [
+        {
+          automation: toAutomationResponseWithProjectData(
+            automation,
+            parsedDefinition,
+            projectData,
+          ),
+          project,
+        },
+      ];
+    } catch (error) {
+      deps.logger.warn(
+        {
+          automationId: automation.id,
+          projectId: automation.projectId,
+          ...runtimeErrorLogFields(deps.config, error),
+        },
+        "Skipping malformed automation row in overview response",
+      );
+      return [];
+    }
+  });
+}
+
+function buildThreadSchedulesOverviewItems({
+  rows,
+}: BuildThreadSchedulesOverviewArgs): AutomationsOverviewThreadSchedule[] {
+  return rows.map(({ project, schedule, thread }) => ({
+    project,
+    schedule: toThreadScheduleResponse(schedule),
+    thread,
+  }));
+}
+
 export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
+
+  get("/automations", (context) => {
+    const response = automationsOverviewResponseSchema.parse({
+      automations: buildAutomationsOverviewItems({
+        deps,
+        rows: listAutomationsWithProjects(deps.db),
+      }),
+      threadSchedules: buildThreadSchedulesOverviewItems({
+        rows: listThreadSchedulesWithThreadAndProject(deps.db),
+      }),
+    });
+    return context.json(response);
   });
 
   get("/projects/:id/automations", (context) => {

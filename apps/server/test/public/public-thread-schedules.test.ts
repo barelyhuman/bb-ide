@@ -347,4 +347,59 @@ describe("public thread schedule routes", () => {
       });
     });
   });
+
+  it("rejects creating or enabling a schedule on an archived thread", async () => {
+    await withTestHarness(async (harness) => {
+      const { project, thread } = seedThreadFixture(harness, {
+        session: { id: "host-thread-schedule-archived-enable" },
+      });
+      const schedule = createThreadSchedule(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "Morning summary",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        prompt: "Summarize.",
+        enabled: true,
+        nextFireAt: Date.now() + 60_000,
+      });
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        { method: "POST" },
+      );
+      expect(archiveResponse.status).toBe(200);
+
+      // Re-enabling the (now disabled) schedule on the archived thread is
+      // rejected, and the schedule stays disabled.
+      const enableResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/schedules/${schedule.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ enabled: true }),
+        },
+      );
+      expect(enableResponse.status).toBe(409);
+      expect(getThreadSchedule(harness.db, schedule.id)).toMatchObject({
+        enabled: false,
+      });
+
+      // Creating a new enabled schedule on the archived thread is rejected too.
+      const createResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/schedules`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "Evening summary",
+            cron: "0 18 * * *",
+            timezone: "UTC",
+            prompt: "Summarize.",
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(409);
+    });
+  });
 });

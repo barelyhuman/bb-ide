@@ -10,12 +10,14 @@ import type {
   ThreadType,
 } from "@bb/domain";
 import type {
+  AutomationsOverviewResponse,
   PromptHistoryResponse,
   ThreadComposerBootstrapResponse,
   ThreadQueuedMessageListResponse,
   ThreadListResponse,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
+  ThreadSchedule,
   ThreadWithIncludesResponse,
   ThreadStorageFileListResponse,
   ThreadStoragePathListResponse,
@@ -37,6 +39,7 @@ import {
 } from "./query-placeholders";
 import {
   archivedThreadsListQueryKey,
+  automationsOverviewQueryKey,
   disabledThreadListQueryKey,
   threadComposerBootstrapQueryKey,
   threadDetailBootstrapQueryKey,
@@ -46,6 +49,7 @@ import {
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
+  threadSchedulesQueryKey,
   threadStorageFilesQueryKey,
   threadStoragePathsQueryKey,
   threadStorageFilePreviewQueryKey,
@@ -526,6 +530,17 @@ export function useThreadStorageFilePreview(
  */
 const APPS_STALE_TIME_MS = 30_000;
 
+export function useAutomationsOverview(options?: QueryOptions) {
+  return useQuery<AutomationsOverviewResponse>({
+    queryKey: automationsOverviewQueryKey(),
+    queryFn: ({ signal }) => api.listAutomationsOverview(signal),
+    enabled: options?.enabled ?? true,
+    refetchOnMount: options?.refetchOnMount ?? true,
+    refetchOnWindowFocus: false,
+    staleTime: options?.staleTime,
+  });
+}
+
 export function useApps(options?: QueryOptions) {
   return useQuery<AppSummary[]>({
     queryKey: appsQueryKey(),
@@ -554,8 +569,7 @@ export function useApp(
 ) {
   return useQuery<AppDetail>({
     queryKey: appQueryKey(applicationId ?? ""),
-    queryFn: ({ signal }) =>
-      api.getApp(applicationId ?? "", signal),
+    queryFn: ({ signal }) => api.getApp(applicationId ?? "", signal),
     enabled: (options?.enabled ?? true) && Boolean(applicationId),
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
@@ -608,6 +622,21 @@ export function useThreadHostFilePreview(
       Boolean(environmentId) &&
       Boolean(path),
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadSchedules(id: string, options?: QueryOptions) {
+  return useQuery<ThreadSchedule[]>({
+    queryKey: threadSchedulesQueryKey(id),
+    queryFn: ({ signal }) =>
+      api.listThreadSchedules(
+        requireThreadId(id, "useThreadSchedules"),
+        signal,
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnMount: options?.refetchOnMount ?? true,
+    refetchOnWindowFocus: false,
+    staleTime: options?.staleTime,
   });
 }
 

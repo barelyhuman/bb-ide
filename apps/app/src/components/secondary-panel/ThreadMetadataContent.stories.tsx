@@ -6,6 +6,7 @@ import {
   PanelStage,
   baseProps,
   makeThread,
+  makeThreadSchedule,
 } from "./ThreadMetadataContent.fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
@@ -47,6 +48,23 @@ export function Overview() {
       >
         {render({
           thread: makeThread({ archivedAt: 1_700_000_000_000 }),
+        })}
+      </StoryRow>
+      <StoryRow
+        label="standard, with schedules"
+        hint="threadSchedules present — the Schedules row lists each schedule"
+      >
+        {render({
+          threadSchedules: [
+            makeThreadSchedule(),
+            makeThreadSchedule({
+              id: "sched_cleanup",
+              name: "Weekly cleanup",
+              enabled: false,
+              cron: "0 18 * * 5",
+              prompt: "Close stale follow-ups and archive merged threads.",
+            }),
+          ],
         })}
       </StoryRow>
       <StoryRow

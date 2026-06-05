@@ -1,7 +1,14 @@
-import { createAutomation, getAutomation } from "@bb/db";
+import { eq } from "drizzle-orm";
+import {
+  createAutomation,
+  createThreadSchedule,
+  getAutomation,
+  threads,
+} from "@bb/db";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import {
   automationSchema,
+  automationsOverviewResponseSchema,
   AUTOMATION_NAME_MAX_LENGTH,
   SCHEDULE_CRON_MAX_LENGTH,
   SCHEDULE_TIMEZONE_MAX_LENGTH,
@@ -17,6 +24,7 @@ import {
   seedHostSession,
   seedPrimaryHost,
   seedProjectWithSource,
+  seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -1016,6 +1024,237 @@ describe("public automation routes", () => {
           id: validAutomation.id,
           name: "Valid automation",
         }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("lists automations and thread schedules in the overview", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-overview",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Overview Project",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        title: "Overview thread",
+      });
+      const followUpThread = seedThread(harness.deps, {
+        projectId: project.id,
+        title: "Overview follow-up thread",
+      });
+      const morningSchedule = createThreadSchedule(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "Morning nudge",
+        enabled: true,
+        cron: "0 8 * * 1-5",
+        timezone: "America/Los_Angeles",
+        prompt: "Check on the current plan.",
+        nextFireAt: Date.now() + 60_000,
+      });
+      const afternoonSchedule = createThreadSchedule(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: followUpThread.id,
+        name: "Afternoon nudge",
+        enabled: true,
+        cron: "0 13 * * 1-5",
+        timezone: "America/Los_Angeles",
+        prompt: "Check on open follow-ups.",
+        nextFireAt: Date.now() + 120_000,
+      });
+      vi.setSystemTime(new Date("2026-04-02T12:01:00.000Z"));
+      const dailyAutomation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Daily automation",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(weekdayMorningTrigger),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Run the daily automation" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: {
+                type: "managed-worktree",
+                baseBranch: { kind: "default" },
+              },
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: Date.now() + 120_000,
+      });
+      vi.setSystemTime(new Date("2026-04-02T12:02:00.000Z"));
+      const weeklyAutomation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Weekly automation",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(losAngelesWeekdayMorningTrigger),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Run the weekly automation" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: {
+                type: "managed-worktree",
+                baseBranch: { kind: "default" },
+              },
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: Date.now() + 240_000,
+      });
+
+      const response = await harness.app.request("/api/v1/automations");
+
+      expect(response.status).toBe(200);
+      const overview = automationsOverviewResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(overview.automations.map((item) => item.automation.id)).toEqual([
+        weeklyAutomation.id,
+        dailyAutomation.id,
+      ]);
+      expect(overview.threadSchedules.map((item) => item.schedule.id)).toEqual([
+        morningSchedule.id,
+        afternoonSchedule.id,
+      ]);
+      expect(overview).toEqual({
+        automations: [
+          {
+            automation: {
+              ...overview.automations[0].automation,
+              id: weeklyAutomation.id,
+              name: "Weekly automation",
+            },
+            project: {
+              id: project.id,
+              name: "Overview Project",
+            },
+          },
+          {
+            automation: {
+              ...overview.automations[1].automation,
+              id: dailyAutomation.id,
+              name: "Daily automation",
+            },
+            project: {
+              id: project.id,
+              name: "Overview Project",
+            },
+          },
+        ],
+        threadSchedules: [
+          {
+            project: {
+              id: project.id,
+              name: "Overview Project",
+            },
+            schedule: {
+              ...overview.threadSchedules[0].schedule,
+              id: morningSchedule.id,
+              name: "Morning nudge",
+            },
+            thread: {
+              ...overview.threadSchedules[0].thread,
+              id: thread.id,
+              title: "Overview thread",
+            },
+          },
+          {
+            project: {
+              id: project.id,
+              name: "Overview Project",
+            },
+            schedule: {
+              ...overview.threadSchedules[1].schedule,
+              id: afternoonSchedule.id,
+              name: "Afternoon nudge",
+            },
+            thread: {
+              ...overview.threadSchedules[1].thread,
+              id: followUpThread.id,
+              title: "Overview follow-up thread",
+            },
+          },
+        ],
+      });
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("excludes archived threads from the overview", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-overview-archived",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Archived Overview Project",
+      });
+      const activeThread = seedThread(harness.deps, {
+        projectId: project.id,
+        title: "Active thread",
+      });
+      const archivedThread = seedThread(harness.deps, {
+        projectId: project.id,
+        title: "Archived thread",
+      });
+      const activeSchedule = createThreadSchedule(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: activeThread.id,
+        name: "Active nudge",
+        enabled: true,
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        prompt: "Active.",
+        nextFireAt: Date.now() + 60_000,
+      });
+      // Keep the archived thread's schedule enabled to prove the overview
+      // filters by thread archival, not by schedule state.
+      createThreadSchedule(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: archivedThread.id,
+        name: "Archived nudge",
+        enabled: true,
+        cron: "0 9 * * *",
+        timezone: "UTC",
+        prompt: "Archived.",
+        nextFireAt: Date.now() + 60_000,
+      });
+      harness.db
+        .update(threads)
+        .set({ archivedAt: Date.now() })
+        .where(eq(threads.id, archivedThread.id))
+        .run();
+
+      const response = await harness.app.request("/api/v1/automations");
+      expect(response.status).toBe(200);
+      const overview = automationsOverviewResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(overview.threadSchedules.map((item) => item.schedule.id)).toEqual([
+        activeSchedule.id,
       ]);
     } finally {
       vi.useRealTimers();
