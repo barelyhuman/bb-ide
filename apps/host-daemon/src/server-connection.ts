@@ -12,18 +12,14 @@ import {
   DEFAULT_CONNECTION_TIMEOUT_MS,
   DEFAULT_MAX_RECONNECTION_DELAY,
   DEFAULT_MIN_RECONNECTION_DELAY,
-  DEFAULT_POLL_AFTER_DISCONNECT_MS,
-  DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_RECONNECTION_DELAY_GROW_FACTOR,
   DEFAULT_STARTUP_TIMEOUT_MS,
   OPEN_READY_STATE,
   createDefaultReconnectingWebSocket,
   decodeWebSocketMessageData,
   type CreateReconnectingWebSocket,
-  type IntervalHandle,
   type ReconnectingWebSocketLike,
   type ServerConnectionOptions,
-  type TimeoutHandle,
 } from "./server-connection-support.js";
 import { normalizeCaughtError, runtimeErrorLogFields } from "./error-utils.js";
 import { ServerResponseError } from "./server-client.js";
@@ -89,8 +85,6 @@ export class ServerConnection {
   private readonly reconnectionDelayGrowFactor: number;
   private readonly connectionTimeout: number;
   private readonly startupTimeoutMs: number;
-  private readonly pollAfterDisconnectMs: number;
-  private readonly pollIntervalMs: number;
   private readonly setTimeoutFn: typeof setTimeout;
   private readonly clearTimeoutFn: typeof clearTimeout;
   private readonly setIntervalFn: typeof setInterval;
@@ -98,9 +92,7 @@ export class ServerConnection {
 
   private session: HostDaemonSessionOpenResponse | null = null;
   private websocket: ReconnectingWebSocketLike | null = null;
-  private pollingDelayTimer: TimeoutHandle | null = null;
-  private pollingInterval: IntervalHandle | null = null;
-  private heartbeatInterval: IntervalHandle | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
   private sessionCloseHandler: ServerConnectionOptions["onSessionClose"];
   private fatalConnectError: ServerResponseError | null = null;
@@ -124,9 +116,6 @@ export class ServerConnection {
       options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS;
     this.startupTimeoutMs =
       options.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
-    this.pollAfterDisconnectMs =
-      options.pollAfterDisconnectMs ?? DEFAULT_POLL_AFTER_DISCONNECT_MS;
-    this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.setTimeoutFn = options.setTimeoutFn ?? setTimeout;
     this.clearTimeoutFn = options.clearTimeoutFn ?? clearTimeout;
     this.setIntervalFn = options.setIntervalFn ?? setInterval;
@@ -145,14 +134,13 @@ export class ServerConnection {
   async shutdown(): Promise<void> {
     this.stopped = true;
     this.pendingRecoverableMessages.clear();
-    this.stopPollingFallback();
     this.clearHeartbeat();
     this.clearSession();
 
     if (this.websocket) {
       const websocket = this.websocket;
       this.websocket = null;
-      // Suppress handlers so an intentional close cannot start fallback polling.
+      // Suppress handlers so an intentional close cannot start reconnect work.
       websocket.onmessage = null;
       websocket.onclose = null;
       websocket.close();
@@ -288,7 +276,6 @@ export class ServerConnection {
         const handleOpen = async () => {
           hasOpened = true;
           this.clearTimeoutFn(startupTimer);
-          this.stopPollingFallback();
           this.resetHeartbeat();
           this.options.setSession?.(session);
           this.options.logger.info(
@@ -336,7 +323,6 @@ export class ServerConnection {
         if (this.stopped) {
           return;
         }
-        this.startPollingFallback();
       };
 
       websocket.onerror = (error) => {
@@ -384,13 +370,6 @@ export class ServerConnection {
     const message = hostDaemonServerWsMessageSchema.safeParse(decoded);
     if (!message.success) {
       this.handleInvalidServerMessage({ data, error: message.error });
-      return;
-    }
-
-    if (message.data.type === "commands-available") {
-      void Promise.resolve(this.options.onCommandsAvailable?.()).catch(
-        () => undefined,
-      );
       return;
     }
 
@@ -509,41 +488,6 @@ export class ServerConnection {
 
     this.session = null;
     this.options.setSession?.(null);
-  }
-
-  private requestCommandsIfSessionOpen(): void {
-    if (!this.session) {
-      return;
-    }
-
-    void Promise.resolve(this.options.onCommandsAvailable?.()).catch(
-      () => undefined,
-    );
-  }
-
-  private startPollingFallback(): void {
-    if (this.pollingDelayTimer || this.pollingInterval || this.stopped) {
-      return;
-    }
-
-    this.pollingDelayTimer = this.setTimeoutFn(() => {
-      this.pollingDelayTimer = null;
-      this.requestCommandsIfSessionOpen();
-      this.pollingInterval = this.setIntervalFn(() => {
-        this.requestCommandsIfSessionOpen();
-      }, this.pollIntervalMs);
-    }, this.pollAfterDisconnectMs);
-  }
-
-  private stopPollingFallback(): void {
-    if (this.pollingDelayTimer) {
-      this.clearTimeoutFn(this.pollingDelayTimer);
-      this.pollingDelayTimer = null;
-    }
-    if (this.pollingInterval) {
-      this.clearIntervalFn(this.pollingInterval);
-      this.pollingInterval = null;
-    }
   }
 
   private buildWebSocketUrl(sessionId: string): string {

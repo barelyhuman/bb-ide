@@ -85,12 +85,14 @@ describe("inferenceComplete", () => {
         harness,
         ({ command }) => command.type === "codex.inference.complete",
       );
+      const completionExpectation =
+        expect(completion).rejects.toBeInstanceOf(InferenceTimeoutError);
       await reportQueuedCommandError(harness, queued, {
         errorCode: "codex_request_timeout",
         errorMessage: "Codex request timed out after 5000ms",
       });
 
-      await expect(completion).rejects.toBeInstanceOf(InferenceTimeoutError);
+      await completionExpectation;
     });
   });
 
@@ -109,17 +111,18 @@ describe("inferenceComplete", () => {
         harness,
         ({ command }) => command.type === "codex.inference.complete",
       );
-      await reportQueuedCommandError(harness, queued, {
-        errorCode: "codex_auth_missing",
-        errorMessage: "Codex auth file not found",
-      });
-
-      await expect(completion).rejects.toMatchObject({
+      const completionExpectation = expect(completion).rejects.toMatchObject({
         body: {
           code: "codex_auth_missing",
         },
         status: 502,
       });
+      await reportQueuedCommandError(harness, queued, {
+        errorCode: "codex_auth_missing",
+        errorMessage: "Codex auth file not found",
+      });
+
+      await completionExpectation;
     });
   });
 });

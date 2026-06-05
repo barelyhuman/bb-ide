@@ -11,8 +11,6 @@ import {
   unarchiveThread,
 } from "../../helpers/api.js";
 import {
-  waitForCommand,
-  waitForCommandsDrained,
   waitForPathRemoval,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
@@ -63,19 +61,6 @@ describe.sequential(
 
         await archiveThread(harness.api, threadA.thread.id);
         await archiveThread(harness.api, threadB.thread.id);
-        await waitForCommand(
-          harness.db,
-          (command) =>
-            command.type === "environment.destroy" &&
-            command.command.type === "environment.destroy" &&
-            command.command.environmentId === threadA.environment.id,
-          DEFAULT_TIMEOUT_MS,
-        );
-        await waitForCommandsDrained(
-          harness.db,
-          harness.hostId,
-          DEFAULT_TIMEOUT_MS,
-        );
         await waitForPathRemoval(originalWorkspacePath, DEFAULT_TIMEOUT_MS);
 
         await unarchiveThread(harness.api, threadA.thread.id);

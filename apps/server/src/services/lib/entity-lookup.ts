@@ -5,13 +5,12 @@ import {
   getNonDestroyedHost,
   getMostRecentlyUpdatedConnectedHostId,
   getProject,
-  getProjectOperation,
   getThread,
   listConnectedHostIds,
   listHostThreadIds as listHostThreadIdsFromDb,
   listPublicHosts,
 } from "@bb/db";
-import type { Environment, Host, Project } from "@bb/domain";
+import type { Environment, Host } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../../errors.js";
 import {
@@ -26,8 +25,9 @@ import {
 } from "./lifecycle-api-errors.js";
 
 type HostRow = NonNullable<ReturnType<typeof getHost>>;
+type ProjectRow = NonNullable<ReturnType<typeof getProject>>;
 type ThreadRow = NonNullable<ReturnType<typeof getThread>>;
-type StandardProject = Project & { kind: "standard" };
+type StandardProject = ProjectRow & { kind: "standard" };
 
 export interface ThreadEnvironmentLookupResult {
   environment: Environment;
@@ -64,7 +64,7 @@ function throwHostNotFound(): never {
   throw new ApiError(404, "host_not_found", "Host not found");
 }
 
-function isStandardProject(project: Project): project is StandardProject {
+function isStandardProject(project: ProjectRow): project is StandardProject {
   return project.kind === "standard";
 }
 
@@ -136,7 +136,7 @@ export function requireConnectedHostSession(
   return session;
 }
 
-export function requireProject(db: DbConnection, projectId: string): Project {
+export function requireProject(db: DbConnection, projectId: string): ProjectRow {
   const project = getProject(db, projectId);
   if (!project) {
     throw new ApiError(404, "project_not_found", "Project not found");
@@ -147,16 +147,12 @@ export function requireProject(db: DbConnection, projectId: string): Project {
 export function requirePublicProject(
   db: DbConnection,
   projectId: string,
-): Project {
+): ProjectRow {
   const project = requireProject(db, projectId);
-  const deleteOperation = getProjectOperation(db, {
-    projectId,
-    kind: "delete",
-  });
-  if (deleteOperation) {
+  if (project.deletedAt !== null) {
     throwProjectUnavailable({
       reason: "pending_deletion",
-      deletedAt: null,
+      deletedAt: project.deletedAt,
     });
   }
   return project;
@@ -186,13 +182,8 @@ export function requirePublicThread(
   threadId: string,
 ): ThreadRow {
   const thread = requireThread(db, threadId);
-  if (
-    thread.deletedAt !== null ||
-    getProjectOperation(db, {
-      projectId: thread.projectId,
-      kind: "delete",
-    }) !== null
-  ) {
+  const project = getProject(db, thread.projectId);
+  if (thread.deletedAt !== null || project?.deletedAt !== null) {
     throw new ApiError(404, "thread_not_found", "Thread not found");
   }
   return thread;

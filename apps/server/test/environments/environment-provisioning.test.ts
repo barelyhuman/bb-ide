@@ -1,12 +1,19 @@
-import { eq } from "drizzle-orm";
-import { getEnvironment, hostDaemonCommands } from "@bb/db";
+import {
+  environments,
+  getEnvironment,
+  getThread,
+  listEvents,
+  threads,
+} from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../src/errors.js";
 import {
+  dispatchManagedEnvironmentReprovision,
   MANAGED_REPROVISION_IN_PROGRESS,
-  MANAGED_REPROVISION_QUEUED,
-  queueManagedEnvironmentReprovision,
+  MANAGED_REPROVISION_STARTED,
 } from "../../src/services/environments/environment-provisioning-internal.js";
+import { runStartupRecoverySweep } from "../../src/services/system/periodic-sweeps.js";
+import { createThreadFromRequest } from "../../src/services/threads/thread-create.js";
 import {
   seedEnvironment,
   seedHost,
@@ -15,13 +22,13 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import {
-  requireManagedWorktreeEnvironmentProvisionQueuedCommand,
+  requireManagedWorktreeEnvironmentProvisionLiveCommand,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 describe("environment reprovisioning", () => {
-  it("queues managed reprovision at most once per environment", async () => {
+  it("starts managed reprovision at most once per environment", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reprovision-once",
@@ -44,7 +51,7 @@ describe("environment reprovisioning", () => {
         environmentId: environment.id,
       });
 
-      const firstAttempt = await queueManagedEnvironmentReprovision(
+      const firstAttempt = await dispatchManagedEnvironmentReprovision(
         harness.deps,
         {
           environment,
@@ -54,7 +61,7 @@ describe("environment reprovisioning", () => {
           threadId: thread.id,
         },
       );
-      const secondAttempt = await queueManagedEnvironmentReprovision(
+      const secondAttempt = await dispatchManagedEnvironmentReprovision(
         harness.deps,
         {
           environment,
@@ -66,7 +73,7 @@ describe("environment reprovisioning", () => {
       );
 
       expect(firstAttempt).toMatchObject({
-        status: MANAGED_REPROVISION_QUEUED,
+        status: MANAGED_REPROVISION_STARTED,
         provisionEventSequence: expect.any(Number),
       });
       expect(secondAttempt).toBe(MANAGED_REPROVISION_IN_PROGRESS);
@@ -78,15 +85,9 @@ describe("environment reprovisioning", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
-      expect(
-        harness.db
-          .select()
-          .from(hostDaemonCommands)
-          .where(eq(hostDaemonCommands.type, "environment.provision"))
-          .all(),
-      ).toHaveLength(1);
+      expect(managedCommand.command.type).toBe("environment.provision");
     });
   });
 
@@ -113,7 +114,7 @@ describe("environment reprovisioning", () => {
         environmentId: environment.id,
       });
 
-      await queueManagedEnvironmentReprovision(harness.deps, {
+      await dispatchManagedEnvironmentReprovision(harness.deps, {
         environment,
         projectId: thread.projectId,
         provisionEventSequence: 1,
@@ -126,7 +127,7 @@ describe("environment reprovisioning", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(
         "bb/existing-readable-branch",
       );
@@ -157,7 +158,7 @@ describe("environment reprovisioning", () => {
         environmentId: environment.id,
       });
 
-      await queueManagedEnvironmentReprovision(harness.deps, {
+      await dispatchManagedEnvironmentReprovision(harness.deps, {
         environment,
         projectId: thread.projectId,
         provisionEventSequence: 1,
@@ -170,7 +171,7 @@ describe("environment reprovisioning", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.baseBranch).toBe("release/2026-05");
     });
   });
@@ -199,7 +200,7 @@ describe("environment reprovisioning", () => {
         environmentId: environment.id,
       });
 
-      await queueManagedEnvironmentReprovision(harness.deps, {
+      await dispatchManagedEnvironmentReprovision(harness.deps, {
         environment,
         projectId: thread.projectId,
         provisionEventSequence: 1,
@@ -212,7 +213,7 @@ describe("environment reprovisioning", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.baseBranch).toBeNull();
     });
   });
@@ -241,7 +242,7 @@ describe("environment reprovisioning", () => {
 
       let thrownError: ApiError | null = null;
       try {
-        await queueManagedEnvironmentReprovision(harness.deps, {
+        await dispatchManagedEnvironmentReprovision(harness.deps, {
           environment,
           projectId: thread.projectId,
           provisionEventSequence: 1,
@@ -270,13 +271,89 @@ describe("environment reprovisioning", () => {
         status: 502,
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
+    });
+  });
+
+  it("fails host-backed thread creation before creating provisioning state when the host is disconnected", async () => {
+    await withTestHarness(async (harness) => {
+      const host = seedHost(harness.deps, {
+        id: "host-thread-create-offline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-create-offline-project",
+      });
+
+      let thrownError: ApiError | null = null;
+      try {
+        await createThreadFromRequest(harness.deps, {
+          automationId: null,
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
+          },
+          input: [{ type: "text", text: "offline create" }],
+          origin: "cli",
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          thrownError = error;
+        } else {
+          throw error;
+        }
+      }
+
+      expect(thrownError).toMatchObject({
+        body: {
+          code: "host_unavailable",
+          message: "Host is not connected",
+        },
+        status: 502,
+      });
+      expect(harness.db.select({ id: threads.id }).from(threads).all()).toEqual(
+        [],
+      );
       expect(
-        harness.db
-          .select()
-          .from(hostDaemonCommands)
-          .where(eq(hostDaemonCommands.type, "environment.provision"))
-          .all(),
-      ).toHaveLength(0);
+        harness.db.select({ id: environments.id }).from(environments).all(),
+      ).toEqual([]);
+    });
+  });
+
+  it("marks orphaned provisioning environments interrupted on startup recovery", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-orphaned-env-provision",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        status: "provisioning",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      await runStartupRecoverySweep(harness.deps);
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "error",
+      });
+      expect(listEvents(harness.db, { threadId: thread.id }).map((event) => event.type))
+        .toEqual(["system/thread-provisioning", "system/error"]);
     });
   });
 });

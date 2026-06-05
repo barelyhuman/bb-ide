@@ -10,7 +10,7 @@ import type {
   AutomationAction,
   AutomationThreadRequest,
 } from "@bb/server-contract";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import {
   type AutomationRow,
   parseAutomationAction,
@@ -81,11 +81,10 @@ function resolveAutomationExecutionContext(
   };
 }
 
+type AutomationSweepDeps = LoggedPendingInteractionWorkSessionDeps;
+
 async function runAutomation(
-  deps: Pick<
-    AppDeps,
-    "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
-  >,
+  deps: AutomationSweepDeps,
   automation: AutomationRow,
   now: number,
 ): Promise<void> {
@@ -156,10 +155,7 @@ async function runAutomation(
 }
 
 export async function sweepDueAutomations(
-  deps: Pick<
-    AppDeps,
-    "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
-  >,
+  deps: AutomationSweepDeps,
   args: SweepDueAutomationsArgs = {},
 ): Promise<void> {
   const now = args.now ?? Date.now();

@@ -841,13 +841,6 @@ describe("internal interactive request lifecycle", () => {
 
       expect(await threadEventWaiter.promise).toBe(true);
 
-      const queuedDelete = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.deleted" && command.threadId === thread.id,
-      );
-      expect(queuedDelete.row.sessionId).toBe(session.id);
-
       expect(
         harness.deps.pendingInteractions.listThreadInteractions(thread.id),
       ).toEqual([]);

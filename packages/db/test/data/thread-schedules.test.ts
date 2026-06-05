@@ -13,7 +13,7 @@ import {
   listThreadSchedulesByThread,
   updateThreadSchedule,
 } from "../../src/data/thread-schedules.js";
-import { createProject } from "../../src/data/projects.js";
+import { createProject, markProjectDeleted } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
 
@@ -105,6 +105,27 @@ describe("thread schedules", () => {
     ).toEqual([due.id]);
     expect(deleteThreadSchedule(db, noopNotifier, due.id)).toBe(true);
     expect(deleteThreadSchedule(db, noopNotifier, due.id)).toBe(false);
+  });
+
+  it("does not list due schedules for deleted projects", () => {
+    const { db, project, thread } = setup();
+    const now = Date.now();
+    createThreadSchedule(db, noopNotifier, {
+      projectId: project.id,
+      threadId: thread.id,
+      name: "deleted-project",
+      cron: "0 * * * *",
+      timezone: "UTC",
+      prompt: "Do not run after project deletion.",
+      enabled: true,
+      nextFireAt: now - 1,
+    });
+    markProjectDeleted(db, noopNotifier, {
+      projectId: project.id,
+      deletedAt: now,
+    });
+
+    expect(listDueThreadSchedules(db, { now })).toEqual([]);
   });
 
   it("does not advance a schedule after it is disabled", () => {

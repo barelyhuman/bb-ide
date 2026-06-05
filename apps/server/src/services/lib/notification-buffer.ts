@@ -48,12 +48,6 @@ export class NotificationBuffer implements DbNotifier {
     });
   }
 
-  notifyCommand(hostId: string): void {
-    this.notifications.push({
-      flush: (notifier) => notifier.notifyCommand(hostId),
-    });
-  }
-
   notifySystem(changes: SystemChangeKind[]): void {
     this.notifications.push({
       flush: (notifier) => notifier.notifySystem([...changes]),

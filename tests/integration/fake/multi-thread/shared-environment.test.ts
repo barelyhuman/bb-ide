@@ -13,7 +13,6 @@ import {
   createReadyReuseThread,
 } from "../../helpers/fixtures.js";
 import { withHarness } from "../../helpers/harness.js";
-import { countQueuedCommandsByType } from "../../helpers/queries.js";
 import {
   ACTIVE_TIMEOUT_MS,
   assertEventsBelongToThread,
@@ -271,10 +270,6 @@ describe.sequential(
           "idle",
           TURN_TIMEOUT_MS,
         );
-
-        expect(
-          countQueuedCommandsByType(harness.db, "environment.destroy"),
-        ).toBe(0);
 
         const environment = await getEnvironment(
           harness.api,

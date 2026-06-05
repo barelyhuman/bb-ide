@@ -19,9 +19,7 @@ import { ApiError } from "../../errors.js";
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
-  ensureThreadNativeArchiveSettled,
   prepareTurnSubmitCommandPayload,
-  queueTurnSubmitCommandInTransaction,
 } from "./thread-commands.js";
 import {
   appendPreparedClientTurnRequestedEventWithNotificationInTransaction,
@@ -30,12 +28,12 @@ import {
   getActiveTurnId,
 } from "./thread-events.js";
 import {
-  ensureThreadCanQueueStartRequest,
+  ensureThreadCanStartRequest,
   prepareReadyThreadTurnCommand,
-  queuePreparedReadyThreadTurnCommandInTransaction,
+  prepareReadyThreadTurnDispatchInTransaction,
 } from "./thread-lifecycle.js";
 import {
-  queueTurnDuringReprovision,
+  dispatchTurnDuringReprovision,
   requireReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
 import {
@@ -49,6 +47,10 @@ import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
 import {
   disconnectedHostUnavailableDetails,
   threadNotWritableReasonForStatus,
@@ -331,14 +333,13 @@ export async function sendThreadMessage(
 ): Promise<void> {
   const { environment, payload, thread } = args;
   ensureThreadIsWritable(thread);
-  ensureThreadNativeArchiveSettled(deps, { environment, thread });
   if (args.trigger === "user") {
     ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
   }
   const mode = resolveSendMode(thread, payload.mode);
   ensureRuntimeCanAcceptActiveSend(deps, args);
   if (mode === "start") {
-    ensureThreadCanQueueStartRequest(deps, thread);
+    ensureThreadCanStartRequest(thread);
   }
   const senderThreadId = resolveMessageSenderThreadId(deps, {
     senderThreadId: payload.senderThreadId,
@@ -381,7 +382,7 @@ export async function sendThreadMessage(
     );
 
     if (
-      await queueTurnDuringReprovision({
+      await dispatchTurnDuringReprovision({
         deps,
         environment,
         execution,
@@ -424,27 +425,30 @@ export async function sendThreadMessage(
         },
         projectId: thread.projectId,
         providerId: thread.providerId,
+        syncGeneratedTitle: false,
       });
       const queuedRequest = appendAndQueueSendThreadMessageInTransaction({
-        beforeAppendInTransaction: ({ tx }) => {
-          ensureThreadCanQueueStartRequest({ db: tx }, thread);
+        beforeAppendInTransaction: () => {
+          ensureThreadCanStartRequest(thread);
         },
         db: deps.db,
         environmentId: thread.environmentId,
         execution,
         initiator,
         input: preparedInput.input,
-        queueInTransaction: ({ requestEventSequence, tx }) => {
-          const queuedMode = queuePreparedReadyThreadTurnCommandInTransaction(
+        queueInTransaction: ({ tx }) => {
+          const dispatchKind = prepareReadyThreadTurnDispatchInTransaction(
             tx,
             {
               command,
-              hostId: readyEnvironment.hostId,
-              requestEventSequence,
               thread,
             },
           );
-          if (queuedMode === "turn.submit") {
+          const currentThread = getThread(tx, thread.id);
+          if (
+            dispatchKind === "turn.submit" ||
+            currentThread?.status === "error"
+          ) {
             transitionThreadStatusInTransaction(tx, {
               id: thread.id,
               newStatus: "active",
@@ -464,7 +468,17 @@ export async function sendThreadMessage(
         queuedRequest.request.notificationChanges,
         queuedRequest.request.notificationMetadata,
       );
-      deps.hub.notifyCommand(readyEnvironment.hostId);
+      startLiveHostCommand(deps, {
+        command: command.command,
+        hostId: readyEnvironment.hostId,
+        timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+        onError: (error) => {
+          deps.logger.warn(
+            { err: error, threadId: thread.id },
+            "Live ready turn command failed",
+          );
+        },
+      });
       if (queuedRequest.threadBecameActive) {
         deps.hub.notifyThread(thread.id, ["status-changed"], {
           projectId: thread.projectId,
@@ -473,7 +487,7 @@ export async function sendThreadMessage(
       return;
     }
 
-    const session = await ensureHostSessionReadyForWork(deps, {
+    await ensureHostSessionReadyForWork(deps, {
       hostId: readyEnvironment.hostId,
     });
     const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
@@ -504,13 +518,7 @@ export async function sendThreadMessage(
       execution,
       initiator,
       input: preparedInput.input,
-      queueInTransaction: ({ requestEventSequence, tx }) => {
-        queueTurnSubmitCommandInTransaction(tx, {
-          command,
-          hostId: readyEnvironment.hostId,
-          requestEventSequence,
-          sessionId: session.id,
-        });
+      queueInTransaction: () => {
         return { threadBecameActive: false };
       },
       requestId,
@@ -524,6 +532,16 @@ export async function sendThreadMessage(
       queuedRequest.request.notificationChanges,
       queuedRequest.request.notificationMetadata,
     );
-    deps.hub.notifyCommand(readyEnvironment.hostId);
+    startLiveHostCommand(deps, {
+      command,
+      hostId: readyEnvironment.hostId,
+      timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+      onError: (error) => {
+        deps.logger.warn(
+          { err: error, threadId: thread.id },
+          "Live turn submit command failed",
+        );
+      },
+    });
   });
 }

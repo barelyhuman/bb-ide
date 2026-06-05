@@ -1,8 +1,6 @@
 import {
   createTerminalSession,
-  getThread,
   getTerminalSessionForThread,
-  listTerminalSessionsByEnvironment,
   listTerminalSessionsByThread,
   markDaemonTerminalSessionsDisconnected,
   markEnvironmentTerminalSessionsExited,
@@ -24,11 +22,6 @@ import {
 } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readJson } from "../helpers/json.js";
-import {
-  reportQueuedCommandSuccess,
-  waitForQueuedCommand,
-} from "../helpers/commands.js";
-import { queueEnvironmentDestroyLifecycleCommand } from "../helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
   seedHost,
@@ -678,89 +671,6 @@ describe("public thread terminal routes", () => {
         session: expect.objectContaining({
           id: stored.id,
           closeReason: "thread-archived",
-          status: "exited",
-        }),
-      }),
-    );
-  });
-
-  it("closes terminal sessions after an environment destroy result", async () => {
-    const fixture = await createTerminalRouteFixture({
-      environmentStatus: "destroying",
-    });
-    harnesses.push(fixture.harness);
-    const stored = createTerminalSession(fixture.harness.db, {
-      cols: 80,
-      currentCwd: null,
-      daemonSessionId: fixture.session.id,
-      environmentId: fixture.environment.id,
-      hostId: fixture.host.id,
-      initialCwd: "/tmp/terminal-workspace",
-      rows: 24,
-      status: "running",
-      threadId: fixture.thread.id,
-      title: "Terminal 1",
-    });
-    const browserSocket = createFakeBrowserSocket();
-    fixture.harness.hub.registerTerminalClient(stored.id, browserSocket);
-    const destroyCommand = queueEnvironmentDestroyLifecycleCommand(
-      fixture.harness,
-      {
-        hostId: fixture.host.id,
-        sessionId: fixture.session.id,
-        environmentId: fixture.environment.id,
-        command: {
-          type: "environment.destroy",
-          environmentId: fixture.environment.id,
-          workspaceContext: {
-            workspacePath: "/tmp/terminal-workspace",
-            workspaceProvisionType: "managed-worktree",
-          },
-        },
-      },
-    );
-
-    const queuedDestroy = await waitForQueuedCommand(
-      fixture.harness,
-      ({ row }) => row.id === destroyCommand.id,
-    );
-    const response = await reportQueuedCommandSuccess(
-      fixture.harness,
-      queuedDestroy,
-      {},
-    );
-
-    expect(response.status).toBe(200);
-    expect(getThread(fixture.harness.db, fixture.thread.id)).toMatchObject({
-      status: "error",
-    });
-    await vi.waitFor(() => {
-      expect(
-        listTerminalSessionsByEnvironment(
-          fixture.harness.db,
-          fixture.environment.id,
-        ),
-      ).toEqual([
-        expect.objectContaining({
-          id: stored.id,
-          closeReason: "environment-destroyed",
-          daemonSessionId: null,
-          status: "exited",
-        }),
-      ]);
-    });
-    const closeMessage = await waitForDaemonMessage(fixture.socket, 1);
-    expect(closeMessage).toMatchObject({
-      type: "terminal.close",
-      terminalId: stored.id,
-      reason: "environment-destroyed",
-    });
-    expect(readBrowserMessages(browserSocket)).toContainEqual(
-      expect.objectContaining({
-        type: "exited",
-        session: expect.objectContaining({
-          id: stored.id,
-          closeReason: "environment-destroyed",
           status: "exited",
         }),
       }),

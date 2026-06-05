@@ -1,55 +1,23 @@
 import {
-  asc,
   eq,
   and,
-  isNotNull,
   sql,
   lt,
   ne,
-  inArray,
   or,
+  inArray,
 } from "drizzle-orm";
-import {
-  activeLifecycleOperationStates,
-  type ThreadEventItemType,
-} from "@bb/domain";
+import { type ThreadEventItemType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
-  environmentOperations,
-  hostDaemonCommandAttempts,
-  hostDaemonCommands,
   hostDaemonSessions,
   environments,
   maintenanceScanCursors,
-  pendingInteractions,
-  threadOperations,
 } from "../schema.js";
-
-const LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD = JSON.stringify({
-  errorCode: "command_expired",
-  errorMessage: "Command expired after retry",
-});
-const LEGACY_TERMINALIZED_EXPIRED_ENVIRONMENT_LIFECYCLE_COMMAND_TYPES = [
-  "environment.destroy",
-  "environment.provision",
-];
-const LEGACY_TERMINALIZED_EXPIRED_THREAD_LIFECYCLE_COMMAND_TYPES = [
-  "thread.start",
-  "thread.stop",
-];
-const LEGACY_TERMINALIZED_EXPIRED_INTERACTION_LIFECYCLE_COMMAND_TYPES = [
-  "interactive.resolve",
-];
 
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
-
-/** Completed daemon commands keep result payloads briefly for result retries. */
-export const COMPLETED_COMMAND_PAYLOAD_RETENTION_MS = 24 * 60 * 60_000;
-
-/** Completed daemon command rows are retained briefly for debugging/history. */
-export const COMPLETED_COMMAND_ROW_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
 /** Closed daemon session rows are retained briefly for debugging/history. */
 export const CLOSED_SESSION_ROW_RETENTION_MS = 7 * 24 * 60 * 60_000;
@@ -61,7 +29,6 @@ export const COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS = 32 * 1024;
 export const COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS = 2 * 1024;
 export const COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS = 2 * 1024;
 export const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_VERSION = 1;
-export const DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE = 1_000;
 export const DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE = 1_000;
 export const DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE = 250;
 
@@ -70,43 +37,6 @@ const COMPLETED_EVENT_OUTPUT_TRUNCATION_MARKER =
 const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_POLICY =
   "completed_event_output_truncation";
 
-type CompletedCommandState = "success" | "error";
-export const READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
-  "environment.cleanup_preflight",
-] as const;
-const LEGACY_READ_ONLY_HOST_DAEMON_COMMAND_TYPES = [
-  "host.file_metadata",
-  "host.list_branches",
-  "host.list_files",
-  // Removed with the manager storage templates feature; keep pruning
-  // historical rows on deployments that still hold them.
-  "host.list_manager_templates",
-  "host.list_paths",
-  "host.read_file",
-  "host.read_file_relative",
-  "provider.list",
-  "provider.list_models",
-  "workspace.diff",
-  "workspace.status",
-] as const;
-export const COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES = [
-  ...READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
-  // Historical rows for command types that now run only through online RPC
-  // or were removed entirely.
-  ...LEGACY_READ_ONLY_HOST_DAEMON_COMMAND_TYPES,
-  // Historical replay capture rows from the removed durable replay protocol.
-  "replay.capture_get",
-  "replay.capture_list",
-] as const;
-type ReadOnlyHostDaemonCommandType =
-  (typeof COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES)[number];
-type CompletedCommandRowDeleteParameters = [
-  CompletedCommandState,
-  CompletedCommandState,
-  ...ReadOnlyHostDaemonCommandType[],
-  number,
-  number,
-];
 type ClosedSessionState = "closed";
 type ClosedSessionDeleteParameters = [ClosedSessionState, number, number];
 type CompletedEventOutputItemKind = Extract<
@@ -155,23 +85,6 @@ interface AdvanceCompletedEventOutputScanCursorArgs
   updatedAt: number;
 }
 
-export interface PruneCompletedCommandPayloadsArgs {
-  completedBefore: number;
-}
-
-export interface PruneCompletedCommandPayloadsResult {
-  pruned: number;
-}
-
-export interface PruneCompletedCommandRowsArgs {
-  completedBefore: number;
-  limit: number;
-}
-
-export interface PruneCompletedCommandsResult {
-  deleted: number;
-}
-
 export interface PruneClosedSessionsArgs {
   closedBefore: number;
   limit: number;
@@ -198,148 +111,6 @@ export interface SweepExpiredLeasesResult {
   expiredHostIds: string[];
   expiredSessionIds: string[];
   sessionsClosed: number;
-}
-
-export interface SweepExpiredCommandsResult {
-  expiredCommands: ExpiredCommandAttempt[];
-  requeued: number;
-}
-
-export interface ExpiredCommandAttempt {
-  attemptId: string;
-  commandId: string;
-}
-
-export interface ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs {
-  limit: number;
-}
-
-type SqlPredicate = ReturnType<typeof and>;
-
-function isExpiredActiveCommandAttemptPredicate(
-  currentTime: number,
-): SqlPredicate {
-  return and(
-    eq(hostDaemonCommandAttempts.status, "active"),
-    sql`${hostDaemonCommandAttempts.leaseExpiresAt} <= ${currentTime}`,
-  );
-}
-
-function hasNoExpiredCommandAttemptPredicate(): SqlPredicate {
-  return sql`NOT EXISTS (
-    SELECT 1
-    FROM host_daemon_command_attempts AS previous_attempt
-    WHERE previous_attempt.command_id = ${hostDaemonCommandAttempts.commandId}
-      AND previous_attempt.status = 'expired'
-  )`;
-}
-
-function hasExpiredCommandAttemptPredicate(): SqlPredicate {
-  return sql`EXISTS (
-    SELECT 1
-    FROM host_daemon_command_attempts AS previous_attempt
-    WHERE previous_attempt.command_id = ${hostDaemonCommandAttempts.commandId}
-      AND previous_attempt.status = 'expired'
-  )`;
-}
-
-function isFirstExpiredCommandAttemptPredicate(
-  currentTime: number,
-): SqlPredicate {
-  return and(
-    isExpiredActiveCommandAttemptPredicate(currentTime),
-    hasNoExpiredCommandAttemptPredicate(),
-  );
-}
-
-function isRetriedExpiredCommandPredicate(currentTime: number): SqlPredicate {
-  return and(
-    isExpiredActiveCommandAttemptPredicate(currentTime),
-    hasExpiredCommandAttemptPredicate(),
-  );
-}
-
-export function pruneCompletedCommandPayloads(
-  db: DbConnection,
-  args: PruneCompletedCommandPayloadsArgs,
-): PruneCompletedCommandPayloadsResult {
-  const result = db
-    .update(hostDaemonCommands)
-    .set({
-      payload: "{}",
-      resultPayload: null,
-    })
-    .where(
-      and(
-        inArray(hostDaemonCommands.state, ["success", "error"]),
-        isNotNull(hostDaemonCommands.completedAt),
-        lt(hostDaemonCommands.completedAt, args.completedBefore),
-        or(
-          ne(hostDaemonCommands.payload, "{}"),
-          isNotNull(hostDaemonCommands.resultPayload),
-        ),
-      ),
-    )
-    .run();
-
-  return { pruned: result.changes };
-}
-
-function deleteCompletedCommandRowsByCohort(
-  db: DbConnection,
-  args: PruneCompletedCommandRowsArgs & { includeReadOnlyTypes: boolean },
-): PruneCompletedCommandsResult {
-  const readOnlyCommandPlaceholders = COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES.map(
-    () => "?",
-  ).join(", ");
-  const typePredicate = args.includeReadOnlyTypes
-    ? `type IN (${readOnlyCommandPlaceholders})`
-    : `type NOT IN (${readOnlyCommandPlaceholders})`;
-  const result = db.$client
-    .prepare<CompletedCommandRowDeleteParameters>(
-      `
-        DELETE FROM host_daemon_commands
-        WHERE id IN (
-          SELECT id
-          FROM host_daemon_commands INDEXED BY host_daemon_commands_completed_prune_idx
-          WHERE state IN (?, ?)
-            AND completed_at IS NOT NULL
-            AND ${typePredicate}
-            AND completed_at < ?
-          ORDER BY completed_at
-          LIMIT ?
-        )
-      `,
-    )
-    .run(
-      "success",
-      "error",
-      ...COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES,
-      args.completedBefore,
-      args.limit,
-    );
-
-  return { deleted: result.changes };
-}
-
-export function pruneCompletedReadOnlyCommandRows(
-  db: DbConnection,
-  args: PruneCompletedCommandRowsArgs,
-): PruneCompletedCommandsResult {
-  return deleteCompletedCommandRowsByCohort(db, {
-    ...args,
-    includeReadOnlyTypes: true,
-  });
-}
-
-export function pruneCompletedDurableCommandRows(
-  db: DbConnection,
-  args: PruneCompletedCommandRowsArgs,
-): PruneCompletedCommandsResult {
-  return deleteCompletedCommandRowsByCohort(db, {
-    ...args,
-    includeReadOnlyTypes: false,
-  });
 }
 
 export function pruneClosedSessions(
@@ -568,222 +339,6 @@ export function truncateCompletedEventItemOutputs(
       outputPath: "resultText",
     }),
   };
-}
-
-/**
- * Sweep expired command delivery attempts.
- *
- * - first expired attempt: mark attempt expired and make the command fetchable
- *   again;
- * - later expired attempt: mark the exact attempt expired and return it for
- *   command-result settlement.
- *
- * Retried expirations are terminalized by the server with command-result owner
- * side effects and command completion in one transaction.
- */
-export function sweepExpiredCommands(
-  db: DbConnection,
-  _notifier: DbNotifier,
-  now?: number,
-): SweepExpiredCommandsResult {
-  const currentTime = now ?? Date.now();
-  return db.transaction((tx) => {
-    const firstExpiredAttempts = tx
-      .select({
-        attemptId: hostDaemonCommandAttempts.id,
-        commandId: hostDaemonCommandAttempts.commandId,
-      })
-      .from(hostDaemonCommandAttempts)
-      .where(isFirstExpiredCommandAttemptPredicate(currentTime))
-      .all();
-
-    if (firstExpiredAttempts.length > 0) {
-      tx.update(hostDaemonCommandAttempts)
-        .set({
-          status: "expired",
-          settledAt: currentTime,
-        })
-        .where(
-          inArray(
-            hostDaemonCommandAttempts.id,
-            firstExpiredAttempts.map((attempt) => attempt.attemptId),
-          ),
-        )
-        .run();
-      tx.update(hostDaemonCommands)
-        .set({
-          state: "pending",
-          fetchedAt: null,
-          sessionId: null,
-        })
-        .where(
-          inArray(
-            hostDaemonCommands.id,
-            firstExpiredAttempts.map((attempt) => attempt.commandId),
-          ),
-        )
-        .run();
-    }
-
-    const expiredCommands = tx
-      .select({
-        attemptId: hostDaemonCommandAttempts.id,
-        commandId: hostDaemonCommandAttempts.commandId,
-      })
-      .from(hostDaemonCommandAttempts)
-      .where(isRetriedExpiredCommandPredicate(currentTime))
-      .all();
-
-    if (expiredCommands.length > 0) {
-      tx.update(hostDaemonCommandAttempts)
-        .set({
-          status: "expired",
-          settledAt: currentTime,
-        })
-        .where(
-          inArray(
-            hostDaemonCommandAttempts.id,
-            expiredCommands.map((attempt) => attempt.attemptId),
-          ),
-        )
-        .run();
-    }
-
-    return {
-      requeued: firstExpiredAttempts.length,
-      expiredCommands,
-    };
-  });
-}
-
-/**
- * Temporary compatibility scan for rows terminalized by pre-unification sweep
- * code before command owner side effects ran. Remove after deployed instances
- * have had at least one durable-command retention window to drain this backlog.
- */
-export function listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement(
-  db: DbConnection,
-  args: ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs,
-): string[] {
-  if (args.limit <= 0) {
-    return [];
-  }
-
-  const activeStates = [...activeLifecycleOperationStates];
-  const environmentCommandIds = db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .innerJoin(
-      environmentOperations,
-      eq(environmentOperations.commandId, hostDaemonCommands.id),
-    )
-    .where(
-      and(
-        inArray(hostDaemonCommands.type, [
-          ...LEGACY_TERMINALIZED_EXPIRED_ENVIRONMENT_LIFECYCLE_COMMAND_TYPES,
-        ]),
-        eq(hostDaemonCommands.state, "error"),
-        isNotNull(hostDaemonCommands.completedAt),
-        eq(
-          hostDaemonCommands.resultPayload,
-          LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD,
-        ),
-        or(
-          and(
-            eq(hostDaemonCommands.type, "environment.destroy"),
-            eq(environmentOperations.kind, "destroy"),
-          ),
-          and(
-            eq(hostDaemonCommands.type, "environment.provision"),
-            inArray(environmentOperations.kind, ["provision", "reprovision"]),
-          ),
-        ),
-        inArray(environmentOperations.state, activeStates),
-      ),
-    )
-    .orderBy(asc(hostDaemonCommands.completedAt), asc(hostDaemonCommands.id))
-    .limit(args.limit)
-    .all()
-    .map((row) => row.id);
-
-  const remainingThreadLimit = args.limit - environmentCommandIds.length;
-  if (remainingThreadLimit <= 0) {
-    return environmentCommandIds;
-  }
-
-  const threadCommandIds = db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .innerJoin(
-      threadOperations,
-      eq(threadOperations.commandId, hostDaemonCommands.id),
-    )
-    .where(
-      and(
-        inArray(hostDaemonCommands.type, [
-          ...LEGACY_TERMINALIZED_EXPIRED_THREAD_LIFECYCLE_COMMAND_TYPES,
-        ]),
-        eq(hostDaemonCommands.state, "error"),
-        isNotNull(hostDaemonCommands.completedAt),
-        eq(
-          hostDaemonCommands.resultPayload,
-          LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD,
-        ),
-        or(
-          and(
-            eq(hostDaemonCommands.type, "thread.start"),
-            eq(threadOperations.kind, "start"),
-          ),
-          and(
-            eq(hostDaemonCommands.type, "thread.stop"),
-            eq(threadOperations.kind, "stop"),
-          ),
-        ),
-        inArray(threadOperations.state, activeStates),
-      ),
-    )
-    .orderBy(asc(hostDaemonCommands.completedAt), asc(hostDaemonCommands.id))
-    .limit(remainingThreadLimit)
-    .all()
-    .map((row) => row.id);
-
-  const remainingInteractionLimit =
-    args.limit - environmentCommandIds.length - threadCommandIds.length;
-  if (remainingInteractionLimit <= 0) {
-    return [...environmentCommandIds, ...threadCommandIds];
-  }
-
-  const interactionCommandIds = db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .innerJoin(
-      pendingInteractions,
-      eq(pendingInteractions.resolvingCommandId, hostDaemonCommands.id),
-    )
-    .where(
-      and(
-        inArray(hostDaemonCommands.type, [
-          ...LEGACY_TERMINALIZED_EXPIRED_INTERACTION_LIFECYCLE_COMMAND_TYPES,
-        ]),
-        eq(hostDaemonCommands.state, "error"),
-        isNotNull(hostDaemonCommands.completedAt),
-        eq(
-          hostDaemonCommands.resultPayload,
-          LEGACY_TERMINALIZED_EXPIRED_COMMAND_RESULT_PAYLOAD,
-        ),
-        eq(pendingInteractions.status, "resolving"),
-      ),
-    )
-    .orderBy(asc(hostDaemonCommands.completedAt), asc(hostDaemonCommands.id))
-    .limit(remainingInteractionLimit)
-    .all()
-    .map((row) => row.id);
-
-  return [
-    ...environmentCommandIds,
-    ...threadCommandIds,
-    ...interactionCommandIds,
-  ];
 }
 
 /**

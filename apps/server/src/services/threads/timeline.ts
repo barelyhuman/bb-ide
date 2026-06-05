@@ -4,8 +4,7 @@ import {
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   buildThreadTimelineTurnDetailsFromEvents,
   compactThreadTimelineSummaryEvents,
-  type ClientTurnRequestSettlement,
-  type ClientTurnRequestSettlementContext,
+  type AcceptedClientRequestContext,
   type SystemClientRequestVisibility,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
@@ -20,7 +19,6 @@ import {
   findTimelineSegmentAnchorSequenceAfter,
   getEnvironment,
   getTimelineSegmentAnchorAtSequence,
-  listClientTurnRequestsByThreadAndRequestIds,
   listContextWindowUsageRows,
   listFilteredStoredTimelineWindowEventRows,
   listRecentStoredEventRows,
@@ -33,7 +31,6 @@ import {
   listTimelineSegmentAnchorsDescending,
 } from "@bb/db";
 import type {
-  ClientTurnRequestRow,
   DbConnection,
   StoredEventRow,
   TimelineSegmentAnchorAudience,
@@ -127,7 +124,6 @@ export const THREAD_TIMELINE_SEGMENT_LIMIT_MAX = 100;
 export type ThreadTimelineBuildProfileStage =
   | "event-query"
   | "accepted-client-request-context-query"
-  | "client-turn-request-settlement-query"
   | "event-json-decode"
   | "summary-compaction"
   | "context-window-query"
@@ -207,11 +203,6 @@ interface TimelineWindowRowsArgs {
 }
 
 interface SelectAcceptedClientRequestContextRowsArgs {
-  rows: readonly StoredEventRow[];
-  threadId: string;
-}
-
-interface SelectClientTurnRequestSettlementsArgs {
   rows: readonly StoredEventRow[];
   threadId: string;
 }
@@ -335,19 +326,6 @@ function collectSteerClientRequestIdsNeedingAcceptedContext(
   return [...clientRequestIds];
 }
 
-function collectClientTurnRequestIds(
-  rows: readonly StoredEventRow[],
-): ClientTurnRequestId[] {
-  const clientRequestIds = new Set<ClientTurnRequestId>();
-  for (const row of rows) {
-    const requestId = tryReadClientTurnRequestedRequestId(row);
-    if (requestId !== null) {
-      clientRequestIds.add(requestId);
-    }
-  }
-  return [...clientRequestIds];
-}
-
 function collectSteerClientRequestIdsBeforeCursor(
   args: CollectSteerClientRequestIdsBeforeCursorArgs,
 ): ReadonlySet<ClientTurnRequestId> {
@@ -428,34 +406,6 @@ function selectAcceptedClientRequestContextRows(
     clientRequestIds,
     threadId: args.threadId,
   });
-}
-
-function toClientTurnRequestSettlement(
-  row: ClientTurnRequestRow,
-): ClientTurnRequestSettlement {
-  return {
-    message: row.message,
-    reasonCode: row.reasonCode,
-    requestId: row.requestId,
-    settledAt: row.settledAt,
-    status: row.status,
-    turnId: null,
-  };
-}
-
-function selectClientTurnRequestSettlements(
-  db: DbConnection,
-  args: SelectClientTurnRequestSettlementsArgs,
-): ClientTurnRequestSettlement[] {
-  const requestIds = collectClientTurnRequestIds(args.rows);
-  if (requestIds.length === 0) {
-    return [];
-  }
-
-  return listClientTurnRequestsByThreadAndRequestIds(db, {
-    requestIds,
-    threadId: args.threadId,
-  }).map(toClientTurnRequestSettlement);
 }
 
 function partitionAcceptedInputRowsByRequestedTurn(
@@ -960,15 +910,6 @@ function buildThreadTimelineInternal(
           ])
         : [],
   );
-  const clientTurnRequestSettlements = measureThreadTimelineStage(
-    profile,
-    "client-turn-request-settlement-query",
-    () =>
-      selectClientTurnRequestSettlements(db, {
-        rows: rawEventRows,
-        threadId: thread.id,
-      }),
-  );
   const decodedRawEvents = measureThreadTimelineStage(
     profile,
     "event-json-decode",
@@ -1012,11 +953,10 @@ function buildThreadTimelineInternal(
     "context-window-json-decode",
     () => contextWindowUsageRows.map((row) => toThreadEventWithMeta(row)),
   );
-  const acceptedClientRequestContext: ClientTurnRequestSettlementContext = {
+  const acceptedClientRequestContext: AcceptedClientRequestContext = {
     acceptedClientRequestEvents: acceptedClientRequestContextRows.map((row) =>
       toThreadEventWithMeta(row),
     ),
-    clientTurnRequestSettlements,
   };
   const timeline = measureThreadTimelineStage(
     profile,

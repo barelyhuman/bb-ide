@@ -2,17 +2,15 @@ import { listProviderTurnIdleWatchdogCandidates } from "@bb/db";
 import type { ProviderTurnIdleWatchdogCandidateRow } from "@bb/db";
 import type { SystemProviderTurnWatchdogEventData } from "@bb/domain";
 import { threadScope } from "@bb/domain";
-import type { AppDeps } from "../../types.js";
+import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { appendThreadEvent } from "./thread-events.js";
 import { requestThreadStop } from "./thread-lifecycle.js";
 
 export const PROVIDER_TURN_IDLE_WATCHDOG_THRESHOLD_MS = 15 * 60_000;
 export const PROVIDER_TURN_IDLE_WATCHDOG_BATCH_SIZE = 25;
 
-export type ProviderTurnWatchdogSweepDeps = Pick<
-  AppDeps,
-  "db" | "hub" | "logger"
->;
+export type ProviderTurnWatchdogSweepDeps =
+  LoggedPendingInteractionWorkSessionDeps;
 
 export interface RunProviderTurnWatchdogSweepOptions {
   idleThresholdMs?: number;

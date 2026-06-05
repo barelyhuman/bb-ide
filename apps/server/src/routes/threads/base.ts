@@ -35,7 +35,7 @@ import {
   requirePublicProject,
   requirePublicThread,
 } from "../../services/lib/entity-lookup.js";
-import { queueThreadRenameCommand } from "../../services/threads/thread-commands.js";
+import { dispatchThreadRenameCommand } from "../../services/threads/thread-commands.js";
 import {
   finalizeStoppedThread,
   requestActiveRuntimeThreadStopIfNeeded,
@@ -222,7 +222,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     ) {
       const environment = requireEnvironment(deps.db, updated.environmentId);
       if (environment.status === "ready" && environment.path) {
-        queueThreadRenameCommand(deps, {
+        dispatchThreadRenameCommand(deps, {
           environment: {
             id: environment.id,
             hostId: environment.hostId,
@@ -260,7 +260,6 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     if (thread.environmentId === null) {
       finalizeStoppedThread(deps, {
-        cancelPendingCommand: false,
         threadId: thread.id,
       });
       return context.json({ ok: true });
@@ -271,7 +270,6 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     // needs a daemon stop request here.
     requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     finalizeStoppedThread(deps, {
-      cancelPendingCommand: false,
       threadId: thread.id,
     });
     requestEnvironmentCleanup(deps, {

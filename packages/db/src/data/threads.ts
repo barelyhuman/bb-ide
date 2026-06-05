@@ -44,7 +44,7 @@ export const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
   provisioning: ["active", "idle", "error"],
   idle: ["provisioning", "active", "error"],
   active: ["idle", "error"],
-  error: ["active", "idle"],
+  error: ["provisioning", "active", "idle"],
 };
 
 export interface CreateThreadInput {
@@ -1429,11 +1429,15 @@ export function markThreadStopRequested(
   notifier: DbNotifier,
   args: MarkThreadStopRequestedArgs,
 ) {
+  const existing = getThread(db, args.threadId);
+  if (!existing) return null;
+
+  const now = Date.now();
   const updated = db
     .update(threads)
     .set({
-      stopRequestedAt: args.requestedAt ?? Date.now(),
-      updatedAt: Date.now(),
+      stopRequestedAt: existing.stopRequestedAt ?? args.requestedAt ?? now,
+      updatedAt: now,
     })
     .where(eq(threads.id, args.threadId))
     .returning()

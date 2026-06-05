@@ -15,8 +15,7 @@ import {
   restoreAutomationAfterFailedRun,
   updateAutomation,
 } from "../../src/data/automations.js";
-import { upsertProjectOperationRecord } from "../../src/data/project-operations.js";
-import { createProject } from "../../src/data/projects.js";
+import { createProject, markProjectDeleted } from "../../src/data/projects.js";
 import { openSession } from "../../src/data/sessions.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -133,10 +132,8 @@ describe("automations", () => {
       now: now - 120_000,
     });
 
-    upsertProjectOperationRecord(db, {
+    markProjectDeleted(db, noopNotifier, {
       projectId: project.id,
-      kind: "delete",
-      payload: JSON.stringify({}),
     });
 
     expect(listDueAutomations(db, { now })).toEqual([]);

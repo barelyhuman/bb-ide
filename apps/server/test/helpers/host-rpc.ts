@@ -3,7 +3,7 @@ import {
   hostDaemonServerWsMessageSchema,
   type HostDaemonOnlineRpcRequestMessage,
   type HostDaemonOnlineRpcResponseMessage,
-  type HostDaemonOnlineRpcResult,
+  type HostDaemonRpcResultForCommand,
 } from "@bb/host-daemon-contract";
 import type { AvailableModel, ProviderInfo } from "@bb/domain";
 import type { TestAppHarness } from "./test-app.js";
@@ -39,7 +39,9 @@ export interface ProviderHostRpcResponder {
 export type HostRpcHandlerResult =
   | {
       ok: true;
-      result: HostDaemonOnlineRpcResult;
+      result: HostDaemonRpcResultForCommand<
+        HostDaemonOnlineRpcRequestMessage["command"]
+      >;
     }
   | {
       ok: false;

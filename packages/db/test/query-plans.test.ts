@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
 import { threadScope, turnScope } from "@bb/domain";
 import {
   createConnection,
@@ -9,14 +8,6 @@ import {
 } from "../src/connection.js";
 import { migrate } from "../src/migrate.js";
 import { noopNotifier } from "../src/notifier.js";
-import {
-  fetchCommands,
-  getPendingEnvironmentCommand,
-  hasExistingThreadArchiveCommand,
-  hasPendingHostCommandForThread,
-  queueCommand,
-  reportCommandResult,
-} from "../src/data/commands.js";
 import {
   createPendingInteraction,
   getPendingInteractionByProviderRequest,
@@ -28,11 +19,7 @@ import {
 } from "../src/data/events.js";
 import {
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
-  COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES,
-  pruneCompletedReadOnlyCommandRows,
-  pruneCompletedCommandPayloads,
   pruneClosedSessions,
-  sweepExpiredCommands,
   truncateCompletedEventItemOutputs,
 } from "../src/data/sweeps.js";
 import { getDatabaseMaintenanceActivity } from "../src/data/maintenance.js";
@@ -40,7 +27,6 @@ import { openSession } from "../src/data/sessions.js";
 import { upsertHost } from "../src/data/hosts.js";
 import { createProject } from "../src/data/projects.js";
 import { createThread } from "../src/data/threads.js";
-import { hostDaemonCommandAttempts } from "../src/schema.js";
 
 type SqliteParameter = string | number | bigint | Buffer | null;
 type LoggedSqlPredicate = (fields: SlowDbQueryLogFields) => boolean;
@@ -132,22 +118,6 @@ function setup(): TestDb {
   return { db, host, logger, thread };
 }
 
-function expireActiveCommandAttempt(
-  db: DbConnection,
-  commandId: string,
-  now: number,
-): void {
-  db.update(hostDaemonCommandAttempts)
-    .set({ leaseExpiresAt: now - 1 })
-    .where(
-      and(
-        eq(hostDaemonCommandAttempts.commandId, commandId),
-        eq(hostDaemonCommandAttempts.status, "active"),
-      ),
-    )
-    .run();
-}
-
 function closeSessionAt(args: CloseSessionAtArgs): void {
   args.db.$client
     .prepare<CloseSessionAtParameters>(
@@ -195,84 +165,6 @@ function assertEmittedQueryPlanUsesIndex(
 }
 
 describe("slow query index plans", () => {
-  it("uses the payload pruning partial index for emitted completed-command pruning SQL", () => {
-    const { db, host, logger } = setup();
-    const now = Date.now();
-    const completedBefore = now - 5_000;
-    const command = queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: JSON.stringify({ stale: true }),
-      type: "workspace.commit",
-    });
-    reportCommandResult(db, noopNotifier, {
-      commandId: command.id,
-      completedAt: now - 10_000,
-      resultPayload: JSON.stringify({ ok: true }),
-      state: "success",
-    });
-    logger.clear();
-
-    pruneCompletedCommandPayloads(db, { completedBefore });
-
-    const debugLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) =>
-        fields.operation === "run" &&
-        fields.sql.startsWith('update "host_daemon_commands" set "payload"'),
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog,
-      indexName: "host_daemon_commands_payload_prune_idx",
-      params: ["{}", null, "success", "error", completedBefore, "{}"],
-    });
-
-    db.$client.close();
-  });
-
-  it("uses the completed-command prune partial index for emitted delete SQL", () => {
-    const { db, host, logger } = setup();
-    const now = Date.now();
-    const completedBefore = now - 5_000;
-    const command = queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: "{}",
-      type: "environment.cleanup_preflight",
-    });
-    reportCommandResult(db, noopNotifier, {
-      commandId: command.id,
-      completedAt: now - 10_000,
-      resultPayload: null,
-      state: "success",
-    });
-    logger.clear();
-
-    pruneCompletedReadOnlyCommandRows(db, { completedBefore, limit: 100 });
-
-    const debugLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) =>
-        fields.operation === "run" &&
-        fields.sql.startsWith("DELETE FROM host_daemon_commands"),
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog,
-      indexName: "host_daemon_commands_completed_prune_idx",
-      params: [
-        "success",
-        "error",
-        ...COMPLETED_READ_ONLY_COMMAND_PRUNE_TYPES,
-        completedBefore,
-        100,
-      ],
-    });
-
-    db.$client.close();
-  });
-
   it("uses the closed-session prune index for emitted delete SQL", () => {
     const { db, host, logger } = setup();
     const now = Date.now();
@@ -308,110 +200,6 @@ describe("slow query index plans", () => {
       indexName: "host_daemon_sessions_closed_prune_idx",
       params: ["closed", closedBefore, 100],
     });
-    const details = queryPlanDetails({
-      db,
-      params: ["closed", closedBefore, 100],
-      sql: debugLog.fields.sql,
-    });
-    expect(details).toContain("host_daemon_commands_session_idx");
-    expect(details).not.toContain("SCAN host_daemon_commands");
-
-    db.$client.close();
-  });
-
-  it("uses SQL-side retry predicates for expired-command sweep queries", () => {
-    const { db, host, logger } = setup();
-    const now = Date.now();
-    const firstAttemptCommand = queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: JSON.stringify({ threadId: "thr_expired_query_plan" }),
-      type: "workspace.commit",
-    });
-    const retriedCommand = queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: JSON.stringify({ threadId: "thr_retried_expired_query_plan" }),
-      type: "workspace.commit",
-    });
-    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
-    expireActiveCommandAttempt(db, retriedCommand.id, now);
-    sweepExpiredCommands(db, noopNotifier, now);
-    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
-    expireActiveCommandAttempt(db, firstAttemptCommand.id, now);
-    expireActiveCommandAttempt(db, retriedCommand.id, now);
-    logger.clear();
-
-    sweepExpiredCommands(db, noopNotifier, now);
-
-    const firstExpiredAttemptsLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) => {
-        const statement = fields.sql.toLowerCase();
-        return (
-          fields.operation === "all" &&
-          statement.includes('from "host_daemon_command_attempts"') &&
-          statement.includes('"lease_expires_at" <= ?') &&
-          statement.includes("not exists")
-        );
-      },
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog: firstExpiredAttemptsLog,
-      indexName: "host_daemon_command_attempts_active_expiry_idx",
-      params: ["active", now],
-    });
-
-    const expiredIdsLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) => {
-        const statement = fields.sql.toLowerCase();
-        return (
-          fields.operation === "all" &&
-          statement.includes('from "host_daemon_command_attempts"') &&
-          statement.includes('"lease_expires_at" <= ?') &&
-          statement.includes("exists") &&
-          !statement.includes("not exists")
-        );
-      },
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog: expiredIdsLog,
-      indexName: "host_daemon_command_attempts_active_expiry_idx",
-      params: ["active", now],
-    });
-
-    db.$client.close();
-  });
-
-  it("uses the host/state/cursor index for emitted command fetch SQL", () => {
-    const { db, host, logger } = setup();
-    queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: "{}",
-      type: "workspace.commit",
-    });
-    logger.clear();
-
-    fetchCommands(db, noopNotifier, { hostId: host.id, sessionId: null });
-
-    const debugLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) =>
-        fields.operation === "all" &&
-        fields.sql.includes('from "host_daemon_commands"') &&
-        fields.sql.includes('order by "host_daemon_commands"."cursor"'),
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog,
-      indexName: "host_daemon_commands_host_state_cursor_idx",
-      params: [host.id, "pending", 100],
-    });
-
     db.$client.close();
   });
 
@@ -451,151 +239,6 @@ describe("slow query index plans", () => {
       indexName: "pending_interactions_provider_request_idx",
       params: ["codex", "provider-thread-query-plan", "request-query-plan"],
     });
-
-    db.$client.close();
-  });
-
-  it("uses the host/type/state index for host command lookups", () => {
-    const { db, host, logger } = setup();
-    queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: JSON.stringify({ threadId: "thr_target" }),
-      type: "turn.submit",
-    });
-    logger.clear();
-
-    expect(
-      hasPendingHostCommandForThread(db, {
-        hostId: host.id,
-        threadId: "thr_target",
-        type: "turn.submit",
-      }),
-    ).toBe(true);
-
-    const debugLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) =>
-        fields.operation === "get" &&
-        fields.sql.includes('select "id" from "host_daemon_commands"') &&
-        fields.sql.includes('"host_daemon_commands"."type" = ?'),
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog,
-      indexName: "host_daemon_commands_host_type_state_idx",
-      params: [host.id, "turn.submit", "pending", "fetched", "thr_target"],
-    });
-
-    db.$client.close();
-  });
-
-  it("uses the host/type/state index for native archive dedupe lookups", () => {
-    const { db, host, logger } = setup();
-    queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: JSON.stringify({
-        threadId: "thr_target",
-        providerId: "codex",
-        providerThreadId: "provider_target",
-      }),
-      type: "thread.archive",
-    });
-    logger.clear();
-
-    expect(
-      hasExistingThreadArchiveCommand(db, {
-        hostId: host.id,
-        providerId: "codex",
-        providerThreadId: "provider_target",
-        threadId: "thr_target",
-      }),
-    ).toBe(true);
-
-    const debugLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) =>
-        fields.operation === "get" &&
-        fields.sql.includes('select "id" from "host_daemon_commands"') &&
-        fields.sql.includes('"host_daemon_commands"."type" = ?') &&
-        fields.sql.includes('"host_daemon_commands"."host_id" = ?') &&
-        fields.bindingArgumentCount === 8,
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog,
-      indexName: "host_daemon_commands_host_type_state_idx",
-      params: [
-        host.id,
-        "thread.archive",
-        "pending",
-        "fetched",
-        "success",
-        "thr_target",
-        "codex",
-        "provider_target",
-      ],
-    });
-
-    const details = queryPlanDetails({
-      db,
-      params: [
-        host.id,
-        "thread.archive",
-        "pending",
-        "fetched",
-        "success",
-        "thr_target",
-        "codex",
-        "provider_target",
-      ],
-      sql: debugLog.fields.sql,
-    });
-    expect(details).not.toContain("host_daemon_commands_host_state_cursor_idx");
-
-    db.$client.close();
-  });
-
-  it("uses the type/state index for pending environment command lookups", () => {
-    const { db, host, logger } = setup();
-    queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      payload: JSON.stringify({ environmentId: "env_target" }),
-      type: "environment.destroy",
-    });
-    logger.clear();
-
-    expect(
-      getPendingEnvironmentCommand(db, {
-        environmentId: "env_target",
-        type: "environment.destroy",
-      }),
-    ).not.toBeNull();
-
-    const debugLog = findOnlyDebugLog({
-      logger,
-      predicate: (fields) =>
-        fields.operation === "get" &&
-        fields.sql.includes('select "id" from "host_daemon_commands"') &&
-        fields.sql.includes('"host_daemon_commands"."type" = ?') &&
-        !fields.sql.includes('"host_daemon_commands"."host_id" = ?') &&
-        fields.bindingArgumentCount === 4,
-    });
-    assertEmittedQueryPlanUsesIndex({
-      db,
-      debugLog,
-      indexName: "host_daemon_commands_type_state_idx",
-      params: ["environment.destroy", "pending", "fetched", "env_target"],
-    });
-
-    const details = queryPlanDetails({
-      db,
-      params: ["environment.destroy", "pending", "fetched", "env_target"],
-      sql: debugLog.fields.sql,
-    });
-    expect(details).not.toContain("host_daemon_commands_state_fetched_at_idx");
 
     db.$client.close();
   });
@@ -862,21 +505,4 @@ describe("slow query index plans", () => {
     db.$client.close();
   });
 
-  it("drops the redundant host/state prefix index after creating its replacement", () => {
-    const { db } = setup();
-    const indexRows = db.$client
-      .prepare<
-        [],
-        IndexNameRow
-      >("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'host_daemon_commands'")
-      .all();
-    const indexNames = indexRows.map((row) => row.name);
-
-    expect(indexNames).toContain("host_daemon_commands_host_state_cursor_idx");
-    expect(indexNames).toContain("host_daemon_commands_host_type_state_idx");
-    expect(indexNames).toContain("host_daemon_commands_type_state_idx");
-    expect(indexNames).not.toContain("host_daemon_commands_host_state_idx");
-
-    db.$client.close();
-  });
 });

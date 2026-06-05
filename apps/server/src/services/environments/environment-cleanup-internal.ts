@@ -1,50 +1,40 @@
-import type {
-  EnvironmentOperationKind,
-  WorkspaceProvisionType,
-} from "@bb/domain";
+import type { WorkspaceProvisionType } from "@bb/domain";
 import {
-  isActiveLifecycleOperationState,
   resolveEnvironmentMergeBaseBranch,
   threadScope,
 } from "@bb/domain";
 import {
-  cancelCommandInTransaction,
   countLiveThreadsInEnvironment,
-  getCommand,
   getEnvironment,
-  getEnvironmentOperation,
-  getEnvironmentOperationByCommandId,
   getActiveSession,
-  getPendingEnvironmentCommand,
   hasPendingThreadShutdownInEnvironment,
   listLiveThreadsInEnvironment,
-  queueCommand,
-  type HostDaemonCommandRow,
   type DbNotifier,
   type DbConnection,
   type DbQueryConnection,
   type DbTransaction,
 } from "@bb/db";
 import {
-  cancelEnvironmentOperationRecord,
   clearEnvironmentCleanupRequestRecord,
-  markEnvironmentOperationRecordCompleted,
-  markEnvironmentOperationRecordFailed,
-  markEnvironmentOperationRecordQueued,
   recordEnvironmentCleanupRequest,
   setEnvironmentRecordDestroyed,
   setEnvironmentStatus,
-  upsertEnvironmentOperationRecord,
 } from "@bb/db/internal-environment-lifecycle";
 import { type HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import {
   emptyCommandResultSideEffects,
   type CommandResultReportForType,
+  type CommandResultSideEffectsDeps,
   type CommandResultSideEffectsResult,
+  type HostDaemonCommandExecutionRecord,
   type HostDaemonCommandForType,
 } from "../../internal/command-result-side-effects.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
-import { queueCommandAndWait } from "../hosts/command-wait.js";
+import { runLiveCommandAndWait } from "../hosts/live-command-wait.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { appendSystemErrorEventInTransaction } from "../threads/thread-events.js";
@@ -86,8 +76,8 @@ type EnvironmentDestroyCommandResultReport =
 
 export interface SettleEnvironmentDestroyCommandResultArgs {
   command: EnvironmentDestroyCommand;
-  commandRow: HostDaemonCommandRow;
   deps: EnvironmentCleanupSettlementDeps;
+  execution: HostDaemonCommandExecutionRecord;
   report: EnvironmentDestroyCommandResultReport;
 }
 
@@ -163,21 +153,12 @@ async function workspaceCanBeSafelyCleaned(
     return true;
   }
 
-  if (
-    getPendingEnvironmentCommand(deps.db, {
-      environmentId: environment.id,
-      type: "environment.cleanup_preflight",
-    })
-  ) {
-    return false;
-  }
-
   const mergeBaseBranch = resolveEnvironmentMergeBaseBranch(environment);
   if (!mergeBaseBranch) {
     return false;
   }
 
-  const result = await queueCommandAndWait(deps, {
+  const result = await runLiveCommandAndWait(deps, {
     hostId: environment.hostId,
     timeoutMs: 30_000,
     command: {
@@ -199,37 +180,15 @@ function canRequestCleanup(
   return environment.managed && environment.status !== "destroyed";
 }
 
-function hasDestroyOperationRequest(
+function isDestroyRequested(
   deps: EnvironmentCleanupReadDeps,
   environmentId: string,
 ): boolean {
-  const operation = getEnvironmentOperation(deps.db, {
-    environmentId,
-    kind: "destroy",
-  });
-
-  if (operation && isActiveLifecycleOperationState(operation.state)) {
-    return true;
-  }
-
   const environment = getEnvironment(deps.db, environmentId);
-  return environment !== null && environment.cleanupMode !== null;
-}
-
-function getActiveDestroyOperationByCommandId(
-  deps: EnvironmentCleanupReadDeps,
-  commandId: string,
-) {
-  const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
-  if (
-    !operation ||
-    operation.kind !== "destroy" ||
-    !isActiveLifecycleOperationState(operation.state)
-  ) {
-    return null;
-  }
-
-  return operation;
+  return (
+    environment !== null &&
+    (environment.cleanupMode !== null || environment.status === "destroying")
+  );
 }
 
 function restoreEnvironmentAfterCleanupCancellation(
@@ -266,29 +225,16 @@ function markLiveThreadsErroredAfterDestroySuccess(
 export function settleEnvironmentDestroyCommandResult(
   args: SettleEnvironmentDestroyCommandResultArgs,
 ): CommandResultSideEffectsResult {
-  const operation = getActiveDestroyOperationByCommandId(
-    args.deps,
-    args.commandRow.id,
-  );
-  if (!operation) {
-    return emptyCommandResultSideEffects();
-  }
-
   if (!args.report.ok) {
-    markEnvironmentOperationRecordFailed(args.deps.db, {
-      environmentId: operation.environmentId,
-      kind: operation.kind,
-      failureReason: args.report.errorMessage,
-    });
     const failedEnvironment = getEnvironment(
       args.deps.db,
-      operation.environmentId,
+      args.command.environmentId,
     );
     if (failedEnvironment && failedEnvironment.status === "destroying") {
       setEnvironmentStatus(
         args.deps.db,
         args.deps.hub,
-        operation.environmentId,
+        args.command.environmentId,
         {
           status: failedEnvironment.path ? "ready" : "error",
         },
@@ -297,7 +243,7 @@ export function settleEnvironmentDestroyCommandResult(
     return emptyCommandResultSideEffects();
   }
 
-  const environment = getEnvironment(args.deps.db, operation.environmentId);
+  const environment = getEnvironment(args.deps.db, args.command.environmentId);
   if (!environment) {
     return emptyCommandResultSideEffects();
   }
@@ -305,17 +251,13 @@ export function settleEnvironmentDestroyCommandResult(
     setEnvironmentRecordDestroyed(
       args.deps.db,
       args.deps.hub,
-      operation.environmentId,
+      args.command.environmentId,
     );
   } else if (environment.status !== "destroyed") {
     return emptyCommandResultSideEffects();
   }
 
-  markLiveThreadsErroredAfterDestroySuccess(args.deps, operation.environmentId);
-  markEnvironmentOperationRecordCompleted(args.deps.db, {
-    environmentId: operation.environmentId,
-    kind: operation.kind,
-  });
+  markLiveThreadsErroredAfterDestroySuccess(args.deps, args.command.environmentId);
 
   return {
     postCommitActions: [
@@ -346,12 +288,6 @@ export function requestEnvironmentCleanup(
     return;
   }
 
-  upsertEnvironmentOperationRecord(deps.db, {
-    environmentId: environment.id,
-    kind: "destroy",
-    payload: JSON.stringify({}),
-    requestedAt: environment.cleanupRequestedAt ?? undefined,
-  });
   recordEnvironmentCleanupRequest(deps.db, deps.hub, environment.id, {});
 }
 
@@ -376,32 +312,6 @@ export function cancelPendingEnvironmentCleanup(
         return "not_requested";
       }
 
-      const operation = getEnvironmentOperation(tx, {
-        environmentId: environment.id,
-        kind: "destroy",
-      });
-      if (operation?.commandId) {
-        const command = getCommand(tx, operation.commandId);
-        if (command?.state === "fetched") {
-          return "in_progress";
-        }
-        if (command?.state === "pending") {
-          cancelCommandInTransaction(tx, {
-            commandId: command.id,
-            resultPayload: JSON.stringify({
-              errorCode: "environment_cleanup_cancelled",
-              errorMessage: "Environment cleanup was cancelled",
-            }),
-          });
-        }
-      }
-
-      if (operation) {
-        cancelEnvironmentOperationRecord(tx, {
-          environmentId: environment.id,
-          kind: "destroy",
-        });
-      }
       clearEnvironmentCleanupRequestRecord(
         tx,
         notificationBuffer,
@@ -417,46 +327,34 @@ export function cancelPendingEnvironmentCleanup(
   return result;
 }
 
-function queueEnvironmentDestroyCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+function dispatchEnvironmentDestroy(
+  deps: CommandResultSideEffectsDeps,
   environment: EnvironmentDestroyTarget,
 ) {
-  const pendingCommand = getPendingEnvironmentCommand(deps.db, {
-    environmentId: environment.id,
-    type: "environment.destroy",
-  });
-  if (pendingCommand) {
-    return pendingCommand.id;
-  }
-
-  const session = getActiveSession(deps.db, environment.hostId);
-  const queuedCommand = queueCommand(deps.db, deps.hub, {
-    hostId: environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "environment.destroy",
-    payload: JSON.stringify({
+  startLiveHostCommand(deps, {
+    command: {
       type: "environment.destroy",
       environmentId: environment.id,
       workspaceContext: workspaceContextFromPath(environment),
-    }),
+    },
+    hostId: environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, environmentId: environment.id },
+        "Live environment destroy command failed",
+      );
+    },
   });
-
-  return queuedCommand.id;
 }
 
-function queueDestroyAndMarkDestroying(
-  deps: Pick<AppDeps, "db" | "hub">,
+function dispatchDestroyAndMarkDestroying(
+  deps: CommandResultSideEffectsDeps,
   environment: EnvironmentDestroyTarget & {
-    operationKind: Extract<EnvironmentOperationKind, "destroy">;
     status: NonNullable<ReturnType<typeof getEnvironment>>["status"];
   },
 ): void {
-  const commandId = queueEnvironmentDestroyCommand(deps, environment);
-  markEnvironmentOperationRecordQueued(deps.db, {
-    environmentId: environment.id,
-    kind: environment.operationKind,
-    commandId,
-  });
+  dispatchEnvironmentDestroy(deps, environment);
   if (environment.status !== "destroying") {
     setEnvironmentStatus(deps.db, deps.hub, environment.id, {
       status: "destroying",
@@ -486,19 +384,15 @@ export function wouldCleanupEnvironment(
 }
 
 export async function advanceEnvironmentCleanup(
-  deps: LoggedWorkSessionDeps,
+  deps: CommandResultSideEffectsDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
   const environment = getEnvironment(deps.db, args.environmentId);
-  let destroyOperation = getEnvironmentOperation(deps.db, {
-    environmentId: args.environmentId,
-    kind: "destroy",
-  });
   if (
     !environment ||
     !environment.managed ||
     environment.status === "destroyed" ||
-    !hasDestroyOperationRequest(deps, args.environmentId)
+    !isDestroyRequested(deps, args.environmentId)
   ) {
     return;
   }
@@ -508,15 +402,6 @@ export async function advanceEnvironmentCleanup(
     0
   ) {
     return;
-  }
-
-  if (!destroyOperation) {
-    destroyOperation = upsertEnvironmentOperationRecord(deps.db, {
-      environmentId: environment.id,
-      kind: "destroy",
-      payload: JSON.stringify({}),
-      requestedAt: environment.cleanupRequestedAt ?? undefined,
-    });
   }
 
   if (
@@ -532,25 +417,7 @@ export async function advanceEnvironmentCleanup(
       return;
     }
 
-    if (destroyOperation) {
-      markEnvironmentOperationRecordCompleted(deps.db, {
-        environmentId: environment.id,
-        kind: "destroy",
-      });
-    }
     setEnvironmentRecordDestroyed(deps.db, deps.hub, environment.id);
-    return;
-  }
-
-  if (
-    destroyOperation &&
-    isActiveLifecycleOperationState(destroyOperation.state) &&
-    destroyOperation.commandId &&
-    getPendingEnvironmentCommand(deps.db, {
-      environmentId: environment.id,
-      type: "environment.destroy",
-    })
-  ) {
     return;
   }
 
@@ -584,10 +451,9 @@ export async function advanceEnvironmentCleanup(
     return;
   }
 
-  queueDestroyAndMarkDestroying(deps, {
+  dispatchDestroyAndMarkDestroying(deps, {
     hostId: refreshedEnvironment.hostId,
     id: refreshedEnvironment.id,
-    operationKind: "destroy",
     path: refreshedEnvironment.path,
     status: refreshedEnvironment.status,
     workspaceProvisionType: refreshedEnvironment.workspaceProvisionType,
@@ -595,7 +461,7 @@ export async function advanceEnvironmentCleanup(
 }
 
 export async function runEnvironmentCleanupAdvance(
-  deps: LoggedWorkSessionDeps,
+  deps: CommandResultSideEffectsDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
   await deps.lifecycleDedupers.environmentCleanupAdvance.run(
@@ -607,7 +473,7 @@ export async function runEnvironmentCleanupAdvance(
 }
 
 export function requestEnvironmentCleanupAdvance(
-  deps: LoggedWorkSessionDeps,
+  deps: CommandResultSideEffectsDeps,
   args: RequestEnvironmentCleanupAdvanceArgs,
 ): void {
   if (!args.environmentId) {

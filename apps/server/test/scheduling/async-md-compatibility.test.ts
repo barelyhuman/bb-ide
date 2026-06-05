@@ -1,10 +1,5 @@
 import path from "node:path";
-import { eq } from "drizzle-orm";
-import {
-  getThreadDynamicContextFileState,
-  hostDaemonCommands,
-  listEvents,
-} from "@bb/db";
+import { getThreadDynamicContextFileState, listEvents } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,9 +7,12 @@ import {
   queueAsyncMdMigrationReminderIfPresent,
 } from "../../src/services/scheduling/async-md-compatibility.js";
 import {
+  listQueuedThreadCommands,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
+  type QueuedCommand,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import {
   seedEnvironment,
@@ -41,7 +39,7 @@ interface RespondToAsyncMdMetadataMissingArgs {
 
 async function respondToAsyncMdMetadata(
   args: RespondToAsyncMdMetadataArgs,
-): Promise<void> {
+): Promise<QueuedCommand> {
   const queued = await waitForQueuedCommand(
     args.harness,
     ({ command, row }) =>
@@ -50,9 +48,7 @@ async function respondToAsyncMdMetadata(
       command.path === args.asyncPath,
   );
   if (queued.command.type !== "host.file_metadata") {
-    throw new Error(
-      `Expected host.file_metadata, got ${queued.command.type}`,
-    );
+    throw new Error(`Expected host.file_metadata, got ${queued.command.type}`);
   }
   expect(queued.command.rootPath).toBe(args.threadStoragePath);
   const response = await reportQueuedCommandSuccess(args.harness, queued, {
@@ -61,11 +57,12 @@ async function respondToAsyncMdMetadata(
     sizeBytes: args.sizeBytes,
   });
   expect(response.status).toBe(200);
+  return queued;
 }
 
 async function respondToAsyncMdMetadataMissing(
   args: RespondToAsyncMdMetadataMissingArgs,
-): Promise<void> {
+): Promise<QueuedCommand> {
   const queued = await waitForQueuedCommand(
     args.harness,
     ({ command, row }) =>
@@ -74,9 +71,7 @@ async function respondToAsyncMdMetadataMissing(
       command.path === args.asyncPath,
   );
   if (queued.command.type !== "host.file_metadata") {
-    throw new Error(
-      `Expected host.file_metadata, got ${queued.command.type}`,
-    );
+    throw new Error(`Expected host.file_metadata, got ${queued.command.type}`);
   }
   expect(queued.command.rootPath).toBe(args.threadStoragePath);
   const response = await reportQueuedCommandError(args.harness, queued, {
@@ -84,6 +79,7 @@ async function respondToAsyncMdMetadataMissing(
     errorMessage: "File not found",
   });
   expect(response.status).toBe(200);
+  return queued;
 }
 
 async function respondToPreferencesMissing(
@@ -104,22 +100,18 @@ async function respondToPreferencesMissing(
   expect(response.status).toBe(200);
 }
 
-function countQueuedTurnSubmitCommands(harness: TestAppHarness): number {
-  return harness.db
-    .select()
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.type, "turn.submit"))
-    .all().length;
-}
-
-function countQueuedAsyncMdMetadataCommands(
+async function expectNoAsyncMdMetadataCommandAfter(
   harness: TestAppHarness,
-): number {
-  return harness.db
-    .select()
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.type, "host.file_metadata"))
-    .all().length;
+  afterCursor: number,
+): Promise<void> {
+  await expect(
+    waitForQueuedCommandAfter(
+      harness,
+      afterCursor,
+      ({ command }) => command.type === "host.file_metadata",
+      50,
+    ),
+  ).rejects.toThrow("Timed out waiting for queued command");
 }
 
 describe("ASYNC.md compatibility", () => {
@@ -176,9 +168,7 @@ describe("ASYNC.md compatibility", () => {
           command.type === "turn.submit" && command.threadId === manager.id,
       );
       if (turnSubmit.command.type !== "turn.submit") {
-        throw new Error(
-          `Expected turn.submit, got ${turnSubmit.command.type}`,
-        );
+        throw new Error(`Expected turn.submit, got ${turnSubmit.command.type}`);
       }
       expect(
         turnSubmit.command.input.some(
@@ -198,8 +188,9 @@ describe("ASYNC.md compatibility", () => {
         threadId: manager.id,
       });
 
-      const requestRows = listEvents(harness.db, { threadId: manager.id })
-        .filter((event) => event.type === "client/turn/requested");
+      const requestRows = listEvents(harness.db, {
+        threadId: manager.id,
+      }).filter((event) => event.type === "client/turn/requested");
       const latestRequest = requestRows[requestRows.length - 1];
       if (!latestRequest) {
         throw new Error("Expected a client/turn/requested event");
@@ -213,18 +204,21 @@ describe("ASYNC.md compatibility", () => {
         text: expect.stringContaining("`ASYNC.md` is deprecated"),
       });
 
-      const queuedBeforeRepeat = countQueuedTurnSubmitCommands(harness);
-      const metadataCommandsBeforeRepeat =
-        countQueuedAsyncMdMetadataCommands(harness);
+      const cursorBeforeRepeat = turnSubmit.row.cursor;
+      const queuedBeforeRepeat = listQueuedThreadCommands(
+        harness,
+        "turn.submit",
+        manager.id,
+      ).length;
       const repeatReminderPromise = queueAsyncMdMigrationReminderIfPresent(
         harness.deps,
         { threadId: manager.id },
       );
       await expect(repeatReminderPromise).resolves.toBe(false);
-      expect(countQueuedAsyncMdMetadataCommands(harness)).toBe(
-        metadataCommandsBeforeRepeat,
-      );
-      expect(countQueuedTurnSubmitCommands(harness)).toBe(queuedBeforeRepeat);
+      await expectNoAsyncMdMetadataCommandAfter(harness, cursorBeforeRepeat);
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", manager.id),
+      ).toHaveLength(queuedBeforeRepeat);
     });
   });
 
@@ -264,7 +258,7 @@ describe("ASYNC.md compatibility", () => {
         harness.deps,
         { threadId: manager.id },
       );
-      await respondToAsyncMdMetadataMissing({
+      const metadataCommand = await respondToAsyncMdMetadataMissing({
         asyncPath,
         harness,
         threadStoragePath,
@@ -281,18 +275,23 @@ describe("ASYNC.md compatibility", () => {
         threadId: manager.id,
       });
 
-      const queuedBeforeRepeat = countQueuedTurnSubmitCommands(harness);
-      const metadataCommandsBeforeRepeat =
-        countQueuedAsyncMdMetadataCommands(harness);
+      const queuedBeforeRepeat = listQueuedThreadCommands(
+        harness,
+        "turn.submit",
+        manager.id,
+      ).length;
       const repeatReminderPromise = queueAsyncMdMigrationReminderIfPresent(
         harness.deps,
         { threadId: manager.id },
       );
       await expect(repeatReminderPromise).resolves.toBe(false);
-      expect(countQueuedAsyncMdMetadataCommands(harness)).toBe(
-        metadataCommandsBeforeRepeat,
+      await expectNoAsyncMdMetadataCommandAfter(
+        harness,
+        metadataCommand.row.cursor,
       );
-      expect(countQueuedTurnSubmitCommands(harness)).toBe(queuedBeforeRepeat);
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", manager.id),
+      ).toHaveLength(queuedBeforeRepeat);
     });
   });
 });

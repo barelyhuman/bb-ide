@@ -1,5 +1,4 @@
 import { getThread, type DbNotifier, type DbTransaction } from "@bb/db";
-import { markThreadOperationRecordFailed } from "@bb/db/internal-lifecycle";
 import {
   type Environment,
   type PromptInput,
@@ -21,6 +20,7 @@ import {
   createMetadataPendingContext,
   createReprovisioningContext,
   type ThreadProvisionEnvironmentIntent,
+  type ThreadProvisionContext,
   type ThreadProvisionProvisionableContext,
 } from "./thread-provisioning-context.js";
 import {
@@ -29,9 +29,10 @@ import {
   ensureWorkspaceReadyEventInTransaction,
   failThreadProvisioning,
   loadActiveThreadProvisionContext,
-  upsertThreadProvisionOperation,
+  saveThreadProvisionContext,
   type ThreadProvisioningDeps,
 } from "./thread-provisioning-environment.js";
+import { forgetActiveThreadProvisionContext } from "./thread-provisioning-active-context.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
 interface RequestThreadProvisionArgs {
@@ -54,6 +55,12 @@ interface RequestThreadReprovisionArgs {
 }
 
 interface AdvanceThreadProvisioningArgs {
+  context?: ThreadProvisionContext;
+  threadId: string;
+}
+
+interface InterruptUnrecoverableThreadProvisioningArgs {
+  detail: string;
   threadId: string;
 }
 
@@ -107,6 +114,7 @@ async function startThreadIfEnvironmentReady(
   }
 
   const workspaceReadyEventSequence = ensureWorkspaceReadyEvent(deps, {
+    context: args.context,
     threadId: args.thread.id,
     environmentId: args.environment.id,
     entries: buildCwdBranchEntries({
@@ -137,13 +145,14 @@ async function startThreadIfEnvironmentReady(
     }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
+    syncGeneratedTitle: !args.context.request.titleProvided,
   });
 }
 
 export function requestThreadProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadProvisionArgs,
-): void {
+): ThreadProvisionContext {
   const initiator: ThreadTurnInitiator =
     args.thread.type === "manager" ? "system" : "user";
   const target: TurnRequestTarget = { kind: "thread-start" };
@@ -179,16 +188,17 @@ export function requestThreadProvision(
     ...args,
     clientRequestId: request.requestId,
   });
-  upsertThreadProvisionOperation(deps.db, {
+  saveThreadProvisionContext({
     threadId: args.thread.id,
     context,
   });
+  return context;
 }
 
 export function requestThreadReprovision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadReprovisionArgs,
-): void {
+): ThreadProvisionContext {
   const request = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
@@ -217,10 +227,11 @@ export function requestThreadReprovision(
     input: args.input,
     provisioningId: args.provisioningId,
   });
-  upsertThreadProvisionOperation(deps.db, {
+  saveThreadProvisionContext({
     threadId: args.thread.id,
     context,
   });
+  return context;
 }
 
 export function recordThreadProvisionWorkspaceReadyInTransaction(
@@ -242,16 +253,18 @@ async function advanceThreadProvisioningOnce(
   if (!thread || thread.deletedAt !== null) {
     return;
   }
-  let context = loadActiveThreadProvisionContext(deps, thread.id);
+  let context = args.context ?? loadActiveThreadProvisionContext(deps, thread.id);
   if (!context) {
+    failThreadProvisioning(deps, {
+      thread,
+      environmentId: thread.environmentId,
+      detail:
+        "Server restarted before live thread provisioning context completed; retry the thread to continue.",
+    });
     return;
   }
   if (thread.status === "error") {
-    markThreadOperationRecordFailed(deps.db, {
-      threadId: thread.id,
-      kind: "provision",
-      failureReason: "Thread provisioning failed",
-    });
+    forgetActiveThreadProvisionContext(thread.id);
     return;
   }
   if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
@@ -286,4 +299,28 @@ export async function advanceThreadProvisioning(
   await deps.lifecycleDedupers.threadProvisionAdvance.run(args.threadId, () =>
     advanceThreadProvisioningOnce(deps, args),
   );
+}
+
+export function interruptUnrecoverableThreadProvisioning(
+  deps: ThreadProvisioningDeps,
+  args: InterruptUnrecoverableThreadProvisioningArgs,
+): void {
+  const thread = getThread(deps.db, args.threadId);
+  if (!thread || thread.deletedAt !== null) {
+    return;
+  }
+  const context = loadActiveThreadProvisionContext(deps, thread.id);
+  if (!context) {
+    failThreadProvisioning(deps, {
+      thread,
+      environmentId: thread.environmentId,
+      detail: args.detail,
+    });
+    return;
+  }
+  failThreadProvisioning(deps, {
+    thread,
+    environmentId: attachedEnvironmentIdForContext(context),
+    detail: args.detail,
+  });
 }

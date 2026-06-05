@@ -1,11 +1,6 @@
 import pRetry, { AbortError } from "p-retry";
 import {
-  HOST_DAEMON_DURABLE_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
-  hostDaemonCommandEnvelopeSchema,
-  hostDaemonCommandResultResponseSchema,
-  hostDaemonCommandResultReportSchema,
-  hostDaemonCommandsQuerySchema,
   hostDaemonAppDataChangeRequestSchema,
   hostDaemonAppDataResyncRequestSchema,
   hostDaemonEventBatchRequestSchema,
@@ -19,14 +14,11 @@ import {
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
-  type HostDaemonCommandResultResponse,
   type HostDaemonInteractiveInterruptResponse,
   type HostDaemonInteractiveRequestResponse,
   type HostDaemonActiveThread,
   type HostDaemonAppDataChangePayload,
   type HostDaemonAppDataResyncPayload,
-  type HostDaemonCommandEnvelope,
-  type HostDaemonCommandResultReportWithoutSession,
   type HostDaemonEventEnvelope,
   type HostDaemonLoadedEnvironment,
   type HostDaemonSessionOpenRequest,
@@ -42,10 +34,6 @@ import type {
   FetchProjectAttachmentArgs,
 } from "./project-attachments.js";
 
-const knownCommandTypes = new Set<string>(HOST_DAEMON_DURABLE_COMMAND_TYPES);
-const DEFAULT_COMMAND_FETCH_LIMIT = 100;
-const DEFAULT_COMMAND_FETCH_WAIT_MS = 0;
-
 interface JsonRecord {
   readonly [key: string]: unknown;
 }
@@ -56,12 +44,6 @@ interface ApiErrorResponseBody {
   retryable?: boolean;
 }
 
-interface RawCommandHeader {
-  attemptId?: string;
-  commandId?: string;
-  type?: string;
-}
-
 interface ServerResponseErrorArgs {
   action: string;
   bodyMessage: string | null;
@@ -69,14 +51,6 @@ interface ServerResponseErrorArgs {
   retryable: boolean;
   status: number;
   statusText: string;
-}
-
-interface ReportCommandErrorArgs {
-  attemptId: string;
-  commandId: string;
-  errorCode: string;
-  errorMessage: string;
-  type: string;
 }
 
 export class ServerResponseError extends Error {
@@ -108,29 +82,6 @@ function isJsonRecord(value: unknown): value is JsonRecord {
 
 function toJsonRecord(value: unknown): JsonRecord | null {
   return isJsonRecord(value) ? value : null;
-}
-
-function parseRawCommandBatch(json: unknown): unknown[] {
-  const record = toJsonRecord(json);
-  if (record && Array.isArray(record.commands)) {
-    return record.commands;
-  }
-  throw new Error("Invalid command batch structure: missing commands array");
-}
-
-function readRawCommandHeader(rawCommand: unknown): RawCommandHeader {
-  const record = toJsonRecord(rawCommand);
-  if (!record) {
-    return {};
-  }
-  const command = toJsonRecord(record.command);
-  return {
-    attemptId:
-      typeof record.attemptId === "string" ? record.attemptId : undefined,
-    commandId: typeof record.id === "string" ? record.id : undefined,
-    type:
-      command && typeof command.type === "string" ? command.type : undefined,
-  };
 }
 
 function parseApiErrorResponseBody(text: string): ApiErrorResponseBody | null {
@@ -188,13 +139,6 @@ function toRetryControlError(error: ServerResponseError): Error {
 
 type FetchFn = typeof fetch;
 
-export interface CommandResultRetryOptions {
-  maxTimeoutMs: number;
-  minTimeoutMs: number;
-  randomize: boolean;
-  retries: number;
-}
-
 interface CreateServerClientOptions {
   serverUrl: string;
   hostKey: string;
@@ -202,7 +146,6 @@ interface CreateServerClientOptions {
   getSessionId: () => string;
   /** Runs before each POST attempt so retryable ordering preconditions can be repaired. */
   beforeInteractiveRequestRegistrationAttempt?: () => Promise<void>;
-  commandResultRetryOptions?: CommandResultRetryOptions;
   fetchFn?: FetchFn;
 }
 
@@ -221,16 +164,9 @@ interface OpenSessionArgs {
 
 export interface ServerClient {
   openSession(args: OpenSessionArgs): Promise<HostDaemonSessionOpenResponse>;
-  fetchCommands(options?: {
-    limit?: number;
-    waitMs?: number;
-  }): Promise<HostDaemonCommandEnvelope[]>;
   fetchProjectAttachment(
     args: FetchProjectAttachmentArgs,
   ): Promise<FetchedProjectAttachment>;
-  reportCommandResult(
-    report: HostDaemonCommandResultReportWithoutSession,
-  ): Promise<HostDaemonCommandResultResponse>;
   postAppDataChange(args: HostDaemonAppDataChangePayload): Promise<void>;
   postAppDataResync(args: HostDaemonAppDataResyncPayload): Promise<void>;
   postEvents(events: HostDaemonEventEnvelope[]): Promise<EventPostResult>;
@@ -245,14 +181,7 @@ export interface ServerClient {
   }): Promise<HostDaemonInteractiveInterruptResponse>;
 }
 
-const COMMAND_RESULT_RETRIES = 5;
 const INTERACTIVE_REQUEST_REGISTRATION_RETRIES = 5;
-const DEFAULT_COMMAND_RESULT_RETRY_OPTIONS: CommandResultRetryOptions = {
-  maxTimeoutMs: 2_000,
-  minTimeoutMs: 100,
-  randomize: true,
-  retries: COMMAND_RESULT_RETRIES,
-};
 
 function usesSecureInternalFetchTransport(serverUrl: string): boolean {
   let parsed: URL;
@@ -353,8 +282,6 @@ export function createServerClient(
   options: CreateServerClientOptions,
 ): ServerClient {
   const fetchFn = options.fetchFn ?? fetch;
-  const commandResultRetryOptions =
-    options.commandResultRetryOptions ?? DEFAULT_COMMAND_RESULT_RETRY_OPTIONS;
 
   function requireSessionId(): string {
     const sessionId = options.getSessionId();
@@ -401,42 +328,6 @@ export function createServerClient(
     });
   }
 
-  async function reportCommandError(
-    args: ReportCommandErrorArgs,
-  ): Promise<void> {
-    try {
-      const response = await fetchFn(
-        buildInternalUrl("/session/command-result"),
-        {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify({
-            sessionId: requireSessionId(),
-            attemptId: args.attemptId,
-            commandId: args.commandId,
-            type: args.type,
-            completedAt: Date.now(),
-            ok: false,
-            errorCode: args.errorCode,
-            errorMessage: args.errorMessage,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        options.logger.warn(
-          { status: response.status, commandId: args.commandId },
-          "failed to report command error result",
-        );
-      }
-    } catch (error) {
-      options.logger.warn(
-        runtimeErrorLogFields(error),
-        "error while reporting command error",
-      );
-    }
-  }
-
   return {
     async openSession(
       args: OpenSessionArgs,
@@ -462,96 +353,6 @@ export function createServerClient(
       }
 
       return hostDaemonSessionOpenResponseSchema.parse(await response.json());
-    },
-
-    async fetchCommands(optionsArg = {}): Promise<HostDaemonCommandEnvelope[]> {
-      const query = hostDaemonCommandsQuerySchema.parse({
-        sessionId: requireSessionId(),
-        limit: String(optionsArg.limit ?? DEFAULT_COMMAND_FETCH_LIMIT),
-        waitMs: String(optionsArg.waitMs ?? DEFAULT_COMMAND_FETCH_WAIT_MS),
-      });
-      const response = await fetchFn(
-        buildInternalUrl("/session/commands", query),
-        {
-          method: "GET",
-          headers: headers(),
-        },
-      );
-
-      if (response.status === 204) {
-        return [];
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch commands: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const rawCommands = parseRawCommandBatch(await response.json());
-      const accepted: HostDaemonCommandEnvelope[] = [];
-      const reportPromises: Promise<void>[] = [];
-
-      for (const rawCommand of rawCommands) {
-        const header = readRawCommandHeader(rawCommand);
-        const rawType = header.type;
-
-        if (rawType && knownCommandTypes.has(rawType)) {
-          const parsed = hostDaemonCommandEnvelopeSchema.safeParse(rawCommand);
-          if (parsed.success) {
-            accepted.push(parsed.data);
-          } else {
-            options.logger.warn(
-              { type: rawType, error: parsed.error.message },
-              "failed to parse command envelope, skipping",
-            );
-            if (header.commandId && header.attemptId) {
-              reportPromises.push(
-                reportCommandError({
-                  attemptId: header.attemptId,
-                  commandId: header.commandId,
-                  type: rawType,
-                  errorCode: "invalid_command",
-                  errorMessage: `Invalid command envelope for type ${rawType}`,
-                }),
-              );
-            } else {
-              options.logger.warn(
-                { rawCommand },
-                "cannot report invalid command: missing id or attempt id",
-              );
-            }
-          }
-        } else {
-          options.logger.warn(
-            { type: rawType ?? "missing" },
-            "unknown command type in batch, reporting error to server",
-          );
-          if (header.commandId && header.attemptId) {
-            const type = rawType ?? "unknown";
-            reportPromises.push(
-              reportCommandError({
-                attemptId: header.attemptId,
-                commandId: header.commandId,
-                type,
-                errorCode: "unknown_command",
-                errorMessage: `Unrecognized command type: ${type}`,
-              }),
-            );
-          } else {
-            options.logger.warn(
-              { rawCommand },
-              "cannot report unknown command: missing id or attempt id",
-            );
-          }
-        }
-      }
-
-      // Wait for all command error reports to complete before returning
-      // so callers don't race ahead of the error reports within the same fetch cycle.
-      await Promise.all(reportPromises);
-
-      return accepted;
     },
 
     async fetchProjectAttachment(
@@ -592,53 +393,6 @@ export function createServerClient(
       return {
         bytes,
       };
-    },
-
-    async reportCommandResult(
-      report: HostDaemonCommandResultReportWithoutSession,
-    ): Promise<HostDaemonCommandResultResponse> {
-      return pRetry(
-        async () => {
-          const payload = hostDaemonCommandResultReportSchema.parse({
-            ...report,
-            sessionId: requireSessionId(),
-          });
-          const response = await fetchFn(
-            buildInternalUrl("/session/command-result"),
-            {
-              method: "POST",
-              headers: headers(),
-              body: JSON.stringify(payload),
-            },
-          );
-
-          if (!response.ok) {
-            throw toRetryControlError(
-              await createResponseError("report command result", response),
-            );
-          }
-
-          return hostDaemonCommandResultResponseSchema.parse(
-            await response.json(),
-          );
-        },
-        {
-          retries: commandResultRetryOptions.retries,
-          minTimeout: commandResultRetryOptions.minTimeoutMs,
-          maxTimeout: commandResultRetryOptions.maxTimeoutMs,
-          randomize: commandResultRetryOptions.randomize,
-          onFailedAttempt(context): void {
-            options.logger.warn(
-              {
-                attempt: context.attemptNumber,
-                retriesLeft: context.retriesLeft,
-                ...runtimeErrorLogFields(context),
-              },
-              "command result POST failed, retrying",
-            );
-          },
-        },
-      );
     },
 
     async postAppDataChange(args): Promise<void> {

@@ -12,10 +12,7 @@ import {
   createHostDaemonClient,
   hostDaemonEnrollRequestSchema,
   hostDaemonEnrollResponseSchema,
-  hostDaemonCommandEnvelopeSchema,
-  hostDaemonCommandResultResponseSchema,
   hostDaemonCommandResultSchemaByType,
-  hostDaemonCommandsQuerySchema,
   hostDaemonCommandSchema,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonEventBatchRequestSchema,
@@ -570,12 +567,10 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "workspace.commit",
         environmentId: "env_123",
-        environmentStatus: "ready",
         workspaceContext: {
           workspacePath: "/tmp/workspace",
           workspaceProvisionType: "unmanaged",
         },
-        threadId: "thr_123",
         message: "Checkpoint work",
       }),
     ).toMatchObject({
@@ -675,26 +670,18 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
-      hostDaemonCommandEnvelopeSchema.parse({
-        id: "hcmd_123",
-        attemptId: "hcat_123",
-        cursor: 7,
-        command: {
-          type: "workspace.commit",
-          environmentId: "env_123",
-          environmentStatus: "ready",
-          workspaceContext: {
-            workspacePath: "/tmp/workspace",
-            workspaceProvisionType: "unmanaged",
-          },
-          threadId: "thr_123",
-          message: "Checkpoint work",
+      hostDaemonCommandSchema.parse({
+        type: "workspace.commit",
+        environmentId: "env_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
         },
+        message: "Checkpoint work",
       }),
     ).toMatchObject({
-      id: "hcmd_123",
-      attemptId: "hcat_123",
-      cursor: 7,
+      type: "workspace.commit",
+      environmentId: "env_123",
     });
 
     expect(
@@ -1953,16 +1940,6 @@ describe("host-daemon session schemas", () => {
     ).toThrow();
 
     expect(
-      hostDaemonCommandsQuerySchema.parse({
-        sessionId: "session_123",
-        limit: "100",
-        waitMs: "0",
-      }),
-    ).toMatchObject({
-      sessionId: "session_123",
-    });
-
-    expect(
       hostDaemonSessionOpenResponseSchema.parse({
         sessionId: "session_123",
         heartbeatIntervalMs: 5_000,
@@ -2106,23 +2083,6 @@ describe("host-daemon session schemas", () => {
         rejectedEvents: [],
         threadHighWaterMarks: {
           thr_123: 42,
-        },
-      }),
-    ).toThrow();
-
-    expect(
-      hostDaemonCommandResultResponseSchema.parse({
-        ok: true,
-      }),
-    ).toEqual({
-      ok: true,
-    });
-
-    expect(() =>
-      hostDaemonCommandResultResponseSchema.parse({
-        ok: true,
-        threadHighWaterMarks: {
-          thr_123: 43,
         },
       }),
     ).toThrow();
@@ -2315,10 +2275,10 @@ describe("host-daemon session schemas", () => {
 
   it("restricts daemon websocket control and RPC messages", () => {
     expect(
-      hostDaemonServerWsMessageSchema.parse({
+      hostDaemonServerWsMessageSchema.safeParse({
         type: "commands-available",
-      }),
-    ).toEqual({ type: "commands-available" });
+      }).success,
+    ).toBe(false);
 
     expect(
       hostDaemonServerWsMessageSchema.parse({
@@ -2620,12 +2580,6 @@ describe("host-daemon session schemas", () => {
     const client = createHostDaemonClient("http://localhost:3334", "secret");
 
     expect(client.session.open.$url().pathname).toBe("/internal/session/open");
-    expect(client.session.commands.$url().pathname).toBe(
-      "/internal/session/commands",
-    );
-    expect(client.session["command-result"].$url().pathname).toBe(
-      "/internal/session/command-result",
-    );
     expect(client.session["app-data-change"].$url().pathname).toBe(
       "/internal/session/app-data-change",
     );

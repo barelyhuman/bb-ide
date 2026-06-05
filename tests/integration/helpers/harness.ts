@@ -204,11 +204,6 @@ async function startIntegrationServer(
 
   const db = initDb(":memory:");
   const hub = new NotificationHub();
-  const pendingInteractions = new PendingInteractionLifecycle({
-    db,
-    hub,
-    logger: testLogger,
-  });
   const terminalSessions = new TerminalSessionLifecycle({
     attachTimeoutMs: 50,
     db,
@@ -216,7 +211,6 @@ async function startIntegrationServer(
     logger: testLogger,
     openTimeoutMs: 50,
   });
-  pendingInteractions.start();
   const config: ServerRuntimeConfig = {
     appVersion: "0.0.0-dev",
     builtinSkillsRootPath: path.join(serverDataDir, "builtin-skills"),
@@ -244,6 +238,16 @@ async function startIntegrationServer(
     hub,
     logger: testLogger,
   });
+  const pendingInteractions = new PendingInteractionLifecycle({
+    config,
+    db,
+    hub,
+    lifecycleDedupers,
+    logger: testLogger,
+    machineAuth,
+    terminalSessions,
+  });
+  pendingInteractions.start();
   const appVersion = createAppVersionService({
     config,
     logger: testLogger,

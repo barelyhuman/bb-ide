@@ -18,7 +18,6 @@ import {
   shouldCompactDatabase,
   shouldRunIncrementalVacuum,
 } from "../../src/data/maintenance.js";
-import { queueCommand, reportCommandResult } from "../../src/data/commands.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread, markThreadDeleted } from "../../src/data/threads.js";
@@ -83,26 +82,11 @@ function readPreservedValue(db: DbConnection): string | undefined {
 
 describe("database maintenance", () => {
   it("detects active work that should block compaction", () => {
-    const { db, host, project } = setup();
+    const { db, project } = setup();
     const idleActivity = getDatabaseMaintenanceActivity(db);
+    expect(idleActivity.activeCommandCount).toBe(0);
     expect(isDatabaseMaintenanceIdle(idleActivity)).toBe(true);
 
-    const command = queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      sessionId: null,
-      type: "workspace.commit",
-      payload: "{}",
-    });
-    const commandActivity = getDatabaseMaintenanceActivity(db);
-    expect(commandActivity.activeCommandCount).toBe(1);
-    expect(isDatabaseMaintenanceIdle(commandActivity)).toBe(false);
-
-    reportCommandResult(db, noopNotifier, {
-      commandId: command.id,
-      state: "success",
-      completedAt: Date.now(),
-      resultPayload: null,
-    });
     const activeThread = createThread(db, noopNotifier, {
       projectId: project.id,
       providerId: "codex",

@@ -1,31 +1,20 @@
-import { queueCommand } from "@bb/db";
 import { performance } from "node:perf_hooks";
 import {
-  hostDaemonCommandResultSchemaByType,
   type HostDaemonCommand,
   type HostDaemonCommandResult,
   type HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
-import type { CommandResultWaiterResponse } from "../../internal/command-result-side-effects.js";
-import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
+import type { LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { roundDurationMs } from "../lib/duration.js";
-import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
+import { callHostOnlineRpc } from "./online-rpc.js";
 
-export interface QueueCommandAndWaitArgs<
+export interface RunLiveCommandAndWaitArgs<
   TType extends HostDaemonDurableCommandType,
 > {
   command: Extract<HostDaemonCommand, { type: TType }>;
   hostId: string;
   timeoutMs: number;
-}
-
-export interface WaitForQueuedCommandResultArgs<
-  TType extends HostDaemonDurableCommandType,
-> {
-  commandId: string;
-  timeoutMs: number;
-  type: TType;
 }
 
 type SlowCommandWaitOutcome =
@@ -37,7 +26,6 @@ type SlowCommandWaitOutcome =
   | "unknown_error";
 
 interface LogSlowCommandWaitArgs {
-  commandId: string;
   commandType: HostDaemonDurableCommandType;
   completed: boolean;
   durationMs: number;
@@ -45,7 +33,6 @@ interface LogSlowCommandWaitArgs {
   errorName?: string;
   hostId: string;
   outcome: SlowCommandWaitOutcome;
-  sessionId: string;
   status?: number;
 }
 
@@ -67,7 +54,6 @@ function logSlowCommandWait(
   }
   deps.logger.debug(
     {
-      commandId: args.commandId,
       commandType: args.commandType,
       completed: args.completed,
       durationMs: roundDurationMs(args.durationMs),
@@ -75,10 +61,9 @@ function logSlowCommandWait(
       ...(args.errorName ? { errorName: args.errorName } : {}),
       hostId: args.hostId,
       outcome: args.outcome,
-      sessionId: args.sessionId,
       ...(args.status !== undefined ? { status: args.status } : {}),
     },
-    "Slow host command wait",
+    "Slow live host command wait",
   );
 }
 
@@ -127,33 +112,23 @@ function classifySlowCommandWaitFailure(
   };
 }
 
-export function queueCommandAndWait<TType extends HostDaemonDurableCommandType>(
+export function runLiveCommandAndWait<TType extends HostDaemonDurableCommandType>(
   deps: LoggedWorkSessionDeps,
-  args: QueueCommandAndWaitArgs<TType>,
+  args: RunLiveCommandAndWaitArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;
-export async function queueCommandAndWait(
+export async function runLiveCommandAndWait(
   deps: LoggedWorkSessionDeps,
-  args: QueueCommandAndWaitArgs<HostDaemonDurableCommandType>,
+  args: RunLiveCommandAndWaitArgs<HostDaemonDurableCommandType>,
 ): Promise<HostDaemonCommandResult> {
-  const session = await ensureHostSessionReadyForWork(deps, {
-    hostId: args.hostId,
-  });
-  const queuedCommand = queueCommand(deps.db, deps.hub, {
-    hostId: args.hostId,
-    sessionId: session.id,
-    type: args.command.type,
-    payload: JSON.stringify(args.command),
-  });
-
   const startedAt = performance.now();
   let logOutcome: SlowCommandWaitOutcome = "success";
   let completed = true;
   let failureLogFields: SlowCommandWaitFailureLogFields | null = null;
   try {
-    return await waitForQueuedCommandResult(deps, {
-      commandId: queuedCommand.id,
+    return await callHostOnlineRpc(deps, {
+      command: args.command,
+      hostId: args.hostId,
       timeoutMs: args.timeoutMs,
-      type: args.command.type,
     });
   } catch (error) {
     completed = false;
@@ -162,7 +137,6 @@ export async function queueCommandAndWait(
     throw error;
   } finally {
     logSlowCommandWait(deps, {
-      commandId: queuedCommand.id,
       commandType: args.command.type,
       completed,
       durationMs: performance.now() - startedAt,
@@ -174,54 +148,9 @@ export async function queueCommandAndWait(
         : {}),
       hostId: args.hostId,
       outcome: logOutcome,
-      sessionId: session.id,
       ...(failureLogFields?.status !== undefined
         ? { status: failureLogFields.status }
         : {}),
     });
   }
-}
-
-export function waitForQueuedCommandResult<
-  TType extends HostDaemonDurableCommandType,
->(
-  deps: Pick<AppDeps, "hub">,
-  args: WaitForQueuedCommandResultArgs<TType>,
-): Promise<HostDaemonCommandResult<TType>>;
-export async function waitForQueuedCommandResult(
-  deps: Pick<AppDeps, "hub">,
-  args: WaitForQueuedCommandResultArgs<HostDaemonDurableCommandType>,
-): Promise<HostDaemonCommandResult> {
-  let completed: CommandResultWaiterResponse;
-  try {
-    completed = await deps.hub.waitForCommandResult(
-      args.commandId,
-      args.timeoutMs,
-    );
-  } catch {
-    throw new ApiError(
-      504,
-      "command_timeout",
-      "Timed out waiting for command result",
-    );
-  }
-
-  if (!completed.ok) {
-    throw new ApiError(
-      502,
-      completed.errorCode ?? "provider_rpc_error",
-      completed.errorMessage ?? "Command failed",
-      false,
-    );
-  }
-
-  if (completed.type !== args.type) {
-    throw new ApiError(
-      500,
-      "command_result_type_mismatch",
-      `Command ${args.commandId} completed with unexpected type ${completed.type}`,
-    );
-  }
-
-  return hostDaemonCommandResultSchemaByType[args.type].parse(completed.result);
 }

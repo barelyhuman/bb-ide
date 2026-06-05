@@ -1,44 +1,34 @@
+import { and, eq, isNull } from "drizzle-orm";
 import {
   CLOSED_SESSION_ROW_RETENTION_MS,
   compactDatabase,
-  COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
-  COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_EVENT_OUTPUT_RETENTION_MS,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
   DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
   DATABASE_INCREMENTAL_VACUUM_MAX_PAGES,
   DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
   DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
-  DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
   getDatabaseAutoVacuumMode,
   getDatabaseCompactionStats,
   getDatabaseFreelistStats,
   getDatabaseMaintenanceActivity,
-  getEnvironment,
-  getThread,
   isDatabaseMaintenanceIdle,
   listStopRequestedThreads,
-  listEnvironmentOperations,
-  listThreadOperations,
+  environments,
   pruneClosedSessions,
-  pruneCompletedDurableCommandRows,
-  pruneCompletedReadOnlyCommandRows,
-  pruneCompletedCommandPayloads,
   runIncrementalVacuum,
   shouldCompactDatabase,
   shouldRunIncrementalVacuum,
   sweepDestroyingEnvironments,
-  sweepExpiredCommands,
   sweepExpiredLeases,
   sweepManagedEnvironments,
+  threads,
   truncateCompletedEventItemOutputs,
 } from "@bb/db";
-import { activeLifecycleOperationStates } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
-  LoggedWorkSessionDeps,
 } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
 import { advanceEnvironmentCleanup } from "../environments/environment-cleanup-internal.js";
@@ -46,14 +36,7 @@ import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
 } from "../lib/error-log-fields.js";
-import {
-  advanceEnvironmentProvisioning,
-  completeEnvironmentProvisioning,
-} from "../environments/environment-provisioning-internal.js";
-import {
-  handleExpiredCommands,
-  settleLegacyTerminalizedExpiredLifecycleCommands,
-} from "../hosts/expired-commands.js";
+import { advanceEnvironmentProvisioning } from "../environments/environment-provisioning-internal.js";
 import { handleExpiredHostSessionLeases } from "../../internal/session-owner-side-effects.js";
 import { sweepDueThreadSchedules } from "../scheduling/thread-schedule-sweep.js";
 import {
@@ -61,9 +44,8 @@ import {
   listProjectsPendingDeletion,
 } from "../projects/project-deletion.js";
 import {
-  advanceThreadStart,
-  completeThreadStart,
   finalizeStoppedThreadAndAdvanceCleanup,
+  hasLiveThreadStartInFlight,
   requestThreadStopForCurrentState,
 } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
@@ -172,7 +154,7 @@ export function runDatabaseMaintenanceSweep(
 }
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
-  deps: LoggedWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   evaluateCleanup: EvaluateManagedEnvironmentArchiveCleanupFn,
 ): Promise<void> {
   for (const environment of sweepManagedEnvironments(deps.db)) {
@@ -203,17 +185,7 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
 }
 
 export async function runProjectDeletionSweep(
-  deps: Pick<
-    AppDeps,
-    | "config"
-    | "db"
-    | "hub"
-    | "lifecycleDedupers"
-    | "logger"
-    | "machineAuth"
-    | "pendingInteractions"
-    | "terminalSessions"
-  >,
+  deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
   for (const projectId of listProjectsPendingDeletion(deps)) {
     try {
@@ -231,33 +203,16 @@ export async function runProjectDeletionSweep(
 }
 
 export async function runEnvironmentProvisioningSweep(
-  deps: Pick<
-    AppDeps,
-    "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
-  >,
+  deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
-  const seenEnvironmentIds = new Set<string>();
+  const provisioningEnvironments = deps.db
+    .select({ id: environments.id })
+    .from(environments)
+    .where(eq(environments.status, "provisioning"))
+    .all();
 
-  for (const operation of listEnvironmentOperations(deps.db, {
-    kinds: ["provision", "reprovision"],
-    states: [...activeLifecycleOperationStates],
-  })) {
-    if (seenEnvironmentIds.has(operation.environmentId)) {
-      continue;
-    }
-    seenEnvironmentIds.add(operation.environmentId);
-
+  for (const environment of provisioningEnvironments) {
     try {
-      const environment = getEnvironment(deps.db, operation.environmentId);
-      if (!environment) {
-        continue;
-      }
-      if (environment.status === "ready") {
-        completeEnvironmentProvisioning(deps, {
-          environmentId: environment.id,
-        });
-        continue;
-      }
       await advanceEnvironmentProvisioning(deps, {
         environmentId: environment.id,
       });
@@ -265,8 +220,7 @@ export async function runEnvironmentProvisioningSweep(
       deps.logger.warn(
         {
           err: error,
-          environmentId: operation.environmentId,
-          operationKind: operation.kind,
+          environmentId: environment.id,
         },
         "Environment provisioning sweep failed",
       );
@@ -277,62 +231,30 @@ export async function runEnvironmentProvisioningSweep(
 export async function runThreadLifecycleSweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
-  for (const operation of listThreadOperations(deps.db, {
-    kinds: ["provision"],
-    states: [...activeLifecycleOperationStates],
-  })) {
+  const provisioningThreads = deps.db
+    .select({
+      id: threads.id,
+      status: threads.status,
+    })
+    .from(threads)
+    .where(and(eq(threads.status, "provisioning"), isNull(threads.deletedAt)))
+    .all();
+
+  for (const thread of provisioningThreads) {
     try {
+      if (hasLiveThreadStartInFlight(thread.id)) {
+        continue;
+      }
       await advanceThreadProvisioning(deps, {
-        threadId: operation.threadId,
-      });
-    } catch (error) {
-      deps.logger.warn(
-        {
-          err: error,
-          threadId: operation.threadId,
-          operationKind: operation.kind,
-        },
-        "Thread provisioning sweep failed",
-      );
-    }
-  }
-
-  for (const operation of listThreadOperations(deps.db, {
-    kinds: ["start"],
-    states: [...activeLifecycleOperationStates],
-  })) {
-    try {
-      const thread = getThread(deps.db, operation.threadId);
-      if (!thread || thread.deletedAt !== null || !thread.environmentId) {
-        continue;
-      }
-      if (thread.status === "active") {
-        completeThreadStart(deps, {
-          threadId: thread.id,
-        });
-        continue;
-      }
-      if (thread.status === "error") {
-        continue;
-      }
-
-      const environment = getEnvironment(deps.db, thread.environmentId);
-      if (!environment) {
-        continue;
-      }
-
-      await advanceThreadStart(deps, {
-        hostId: environment.hostId,
         threadId: thread.id,
       });
     } catch (error) {
       deps.logger.warn(
         {
           err: error,
-          threadId: operation.threadId,
-          operationKind: operation.kind,
+          threadId: thread.id,
         },
-        "Thread start sweep failed",
+        "Thread provisioning sweep failed",
       );
     }
   }
@@ -379,56 +301,25 @@ export async function runThreadLifecycleSweep(
   }
 }
 
+export async function runStartupRecoverySweep(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+): Promise<void> {
+  await runEnvironmentProvisioningSweep(deps);
+  await runThreadLifecycleSweep(deps);
+}
+
 export async function runPeriodicSweeps(
-  deps: Pick<
-    AppDeps,
-    | "config"
-    | "db"
-    | "hub"
-    | "lifecycleDedupers"
-    | "logger"
-    | "machineAuth"
-    | "pendingInteractions"
-    | "terminalSessions"
-  >,
+  deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
   try {
     const now = Date.now();
 
     await deps.machineAuth.pruneExpiredKeys();
-    const expired = sweepExpiredCommands(deps.db, deps.hub);
-    if (expired.expiredCommands.length > 0) {
-      await handleExpiredCommands(deps, {
-        commands: expired.expiredCommands,
-      });
-    }
-    const legacyExpired =
-      await settleLegacyTerminalizedExpiredLifecycleCommands(deps);
-    if (legacyExpired.hasMore) {
-      deps.logger.warn(
-        { legacyExpired },
-        "Legacy expired lifecycle command settlement has remaining rows; preserving durable command evidence for next sweep",
-      );
-    } else {
-      pruneCompletedCommandPayloads(deps.db, {
-        completedBefore: now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
-      });
-    }
     truncateCompletedEventItemOutputs(deps.db, {
       createdBefore: now - COMPLETED_EVENT_OUTPUT_RETENTION_MS,
       limit: DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
       truncatedAt: now,
     });
-    pruneCompletedReadOnlyCommandRows(deps.db, {
-      completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
-      limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
-    });
-    if (!legacyExpired.hasMore) {
-      pruneCompletedDurableCommandRows(deps.db, {
-        completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
-        limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
-      });
-    }
     pruneClosedSessions(deps.db, {
       closedBefore: now - CLOSED_SESSION_ROW_RETENTION_MS,
       limit: DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,

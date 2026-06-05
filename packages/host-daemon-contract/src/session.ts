@@ -19,18 +19,18 @@ import {
 import { z } from "zod";
 import type { Endpoint } from "./common.js";
 import type {
-  HostDaemonCommandResultReport,
   HostDaemonOnlineRpcCommandType,
+  HostDaemonRpcCommandType,
 } from "./commands.js";
 import {
-  hostDaemonOnlineRpcCommandSchema,
-  hostDaemonOnlineRpcCommandTypeSchema,
   hostDaemonOnlineRpcResultSchemaByType,
-  hostDaemonCommandEnvelopeSchema,
+  hostDaemonCommandResultSchemaByType,
+  hostDaemonDurableCommandTypeSchema,
+  hostDaemonRpcCommandSchema,
+  hostDaemonRpcCommandTypeSchema,
   workspaceContextSchema,
 } from "./commands.js";
 
-const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
 export const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
 
 export const hostDaemonActiveThreadSchema = z.object({
@@ -116,15 +116,6 @@ export type HostDaemonSessionOpenResponse = z.infer<
   typeof hostDaemonSessionOpenResponseSchema
 >;
 
-export const hostDaemonCommandsQuerySchema = z.object({
-  sessionId: z.string().min(1),
-  limit: nonNegativeIntegerStringSchema,
-  waitMs: nonNegativeIntegerStringSchema,
-});
-export type HostDaemonCommandsQuery = z.infer<
-  typeof hostDaemonCommandsQuerySchema
->;
-
 export const hostDaemonProjectAttachmentContentQuerySchema = z.object({
   sessionId: z.string().min(1),
   threadId: z.string().min(1),
@@ -133,13 +124,6 @@ export const hostDaemonProjectAttachmentContentQuerySchema = z.object({
 });
 export type HostDaemonProjectAttachmentContentQuery = z.infer<
   typeof hostDaemonProjectAttachmentContentQuerySchema
->;
-
-export const hostDaemonCommandBatchSchema = z.object({
-  commands: z.array(hostDaemonCommandEnvelopeSchema),
-});
-export type HostDaemonCommandBatch = z.infer<
-  typeof hostDaemonCommandBatchSchema
 >;
 
 export const hostDaemonEventEnvelopeSchema = z
@@ -192,15 +176,6 @@ export const hostDaemonEventBatchResponseSchema = z
   .strict();
 export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
->;
-
-export const hostDaemonCommandResultResponseSchema = z
-  .object({
-    ok: z.literal(true),
-  })
-  .strict();
-export type HostDaemonCommandResultResponse = z.infer<
-  typeof hostDaemonCommandResultResponseSchema
 >;
 
 export const hostDaemonEnvironmentChangeSchema = z
@@ -319,7 +294,7 @@ const hostDaemonOnlineRpcRequestMessageSchema = z
   .object({
     type: z.literal("host-rpc.request"),
     requestId: hostDaemonOnlineRpcRequestIdSchema,
-    command: hostDaemonOnlineRpcCommandSchema,
+    command: hostDaemonRpcCommandSchema,
   })
   .strict();
 
@@ -331,7 +306,9 @@ const hostDaemonOnlineRpcResponseSuccessBaseSchema = z
   })
   .strict();
 
-function rpcResponseSuccessSchemaFor<TType extends HostDaemonOnlineRpcCommandType>(
+function onlineRpcResponseSuccessSchemaFor<
+  TType extends HostDaemonOnlineRpcCommandType,
+>(
   commandType: TType,
 ) {
   return hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
@@ -340,20 +317,50 @@ function rpcResponseSuccessSchemaFor<TType extends HostDaemonOnlineRpcCommandTyp
   });
 }
 
+function commandRpcResponseSuccessSchemaFor<
+  TType extends HostDaemonRpcCommandType,
+>(commandType: TType) {
+  return hostDaemonOnlineRpcResponseSuccessBaseSchema.extend({
+    commandType: z.literal(commandType),
+    result: hostDaemonCommandResultSchemaByType[
+      hostDaemonDurableCommandTypeSchema.parse(commandType)
+    ],
+  });
+}
+
 const hostDaemonOnlineRpcResponseSuccessSchema = z.discriminatedUnion(
   "commandType",
   [
-    rpcResponseSuccessSchemaFor("development.replay"),
-    rpcResponseSuccessSchemaFor("host.list_files"),
-    rpcResponseSuccessSchemaFor("host.list_paths"),
-    rpcResponseSuccessSchemaFor("host.file_metadata"),
-    rpcResponseSuccessSchemaFor("host.list_branches"),
-    rpcResponseSuccessSchemaFor("host.read_file"),
-    rpcResponseSuccessSchemaFor("host.read_file_relative"),
-    rpcResponseSuccessSchemaFor("provider.list"),
-    rpcResponseSuccessSchemaFor("provider.list_models"),
-    rpcResponseSuccessSchemaFor("workspace.status"),
-    rpcResponseSuccessSchemaFor("workspace.diff"),
+    onlineRpcResponseSuccessSchemaFor("development.replay"),
+    onlineRpcResponseSuccessSchemaFor("host.list_files"),
+    onlineRpcResponseSuccessSchemaFor("host.list_paths"),
+    onlineRpcResponseSuccessSchemaFor("host.file_metadata"),
+    onlineRpcResponseSuccessSchemaFor("host.list_branches"),
+    onlineRpcResponseSuccessSchemaFor("host.read_file"),
+    onlineRpcResponseSuccessSchemaFor("host.read_file_relative"),
+    onlineRpcResponseSuccessSchemaFor("provider.list"),
+    onlineRpcResponseSuccessSchemaFor("provider.list_models"),
+    onlineRpcResponseSuccessSchemaFor("workspace.status"),
+    onlineRpcResponseSuccessSchemaFor("workspace.diff"),
+    commandRpcResponseSuccessSchemaFor("thread.start"),
+    commandRpcResponseSuccessSchemaFor("turn.submit"),
+    commandRpcResponseSuccessSchemaFor("thread.stop"),
+    commandRpcResponseSuccessSchemaFor("thread.rename"),
+    commandRpcResponseSuccessSchemaFor("thread.archive"),
+    commandRpcResponseSuccessSchemaFor("thread.unarchive"),
+    commandRpcResponseSuccessSchemaFor("thread.deleted"),
+    commandRpcResponseSuccessSchemaFor("interactive.resolve"),
+    commandRpcResponseSuccessSchemaFor("codex.inference.complete"),
+    commandRpcResponseSuccessSchemaFor("codex.voice.transcribe"),
+    commandRpcResponseSuccessSchemaFor("host.write_file_relative"),
+    commandRpcResponseSuccessSchemaFor("host.delete_file_relative"),
+    commandRpcResponseSuccessSchemaFor("host.delete_path_relative"),
+    commandRpcResponseSuccessSchemaFor("environment.provision"),
+    commandRpcResponseSuccessSchemaFor("environment.provision.cancel"),
+    commandRpcResponseSuccessSchemaFor("environment.cleanup_preflight"),
+    commandRpcResponseSuccessSchemaFor("environment.destroy"),
+    commandRpcResponseSuccessSchemaFor("workspace.commit"),
+    commandRpcResponseSuccessSchemaFor("workspace.squash_merge"),
   ],
 );
 
@@ -361,7 +368,7 @@ const hostDaemonOnlineRpcResponseFailureSchema = z
   .object({
     type: z.literal("host-rpc.response"),
     requestId: hostDaemonOnlineRpcRequestIdSchema,
-    commandType: hostDaemonOnlineRpcCommandTypeSchema,
+    commandType: hostDaemonRpcCommandTypeSchema,
     ok: z.literal(false),
     errorCode: z.string().min(1),
     errorMessage: z.string().min(1),
@@ -437,11 +444,6 @@ const hostDaemonTerminalCloseMessageSchema = z
 export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
   z
     .object({
-      type: z.literal("commands-available"),
-    })
-    .strict(),
-  z
-    .object({
       type: z.literal("session-close"),
       reason: hostDaemonSessionCloseReasonSchema,
     })
@@ -476,12 +478,6 @@ const hostDaemonApplicationStorageChangedMessageSchema = z
   })
   .strict();
 
-/**
- * Raw host observation that an app's served `public/` files changed on disk.
- * The daemon reports the fact; the server decides how to surface it (it
- * broadcasts a per-app `content-changed` realtime message so open app
- * surfaces live-reload).
- */
 const hostDaemonApplicationContentChangedMessageSchema = z
   .object({
     type: z.literal("application-content-changed"),
@@ -643,16 +639,6 @@ export type HostDaemonInternalSchema = {
       201
     >;
   };
-  "/session/commands": {
-    /** Used by the daemon to fetch pending commands. Supports long-poll via `waitMs`. */
-    $get:
-      | Endpoint<
-          { query: HostDaemonCommandsQuery },
-          HostDaemonCommandBatch,
-          200
-        >
-      | Endpoint<{ query: HostDaemonCommandsQuery }, undefined, 204>;
-  };
   "/session/project-attachment-content": {
     /** Used by the daemon to fetch uploaded prompt attachment bytes for a specific thread. */
     $get: Endpoint<
@@ -660,13 +646,6 @@ export type HostDaemonInternalSchema = {
       Uint8Array,
       200,
       "binary"
-    >;
-  };
-  "/session/command-result": {
-    /** Used by the daemon to report command completion. */
-    $post: Endpoint<
-      { json: HostDaemonCommandResultReport },
-      HostDaemonCommandResultResponse
     >;
   };
   "/session/events": {

@@ -1,23 +1,14 @@
 import {
-  listEnvironmentOperations,
   createEnvironment,
   getEnvironment,
   getThread,
-  getThreadOperation,
   type CreateEnvironmentInput,
-  type DbConnection,
   type DbNotifier,
   type DbTransaction,
   updateThread,
 } from "@bb/db";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import {
-  markThreadOperationRecordFailed,
-  upsertThreadOperationRecord,
-} from "@bb/db/internal-lifecycle";
-import {
-  activeLifecycleOperationStates,
-  isActiveLifecycleOperationState,
   threadScope,
   type Environment,
   type ProvisioningTranscriptEntry,
@@ -25,15 +16,16 @@ import {
 } from "@bb/domain";
 import type { BaseBranchSpec, UnmanagedBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
-import type { LifecycleCoordinationDeps } from "../../lifecycle-coordination-deps.js";
+import type { CommandResultSideEffectsDeps } from "../../internal/command-result-side-effects.js";
 import { ApiError } from "../../errors.js";
-import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import {
   advanceEnvironmentProvisioning,
-  requestEnvironmentProvision,
-  requestEnvironmentReprovision,
+  requestEnvironmentProvisioning,
 } from "../environments/environment-provisioning-internal.js";
-import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
+import {
+  buildDirectEnvironmentProvisionRequest,
+  type EnvironmentProvisionRequest,
+} from "../environments/environment-provision-request.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   appendSystemErrorEvent,
@@ -47,7 +39,7 @@ import {
   SETUP_TIMEOUT_MS,
   type UnmanagedCheckoutCommand,
 } from "./thread-create-helpers.js";
-import { queueThreadRenameCommand } from "./thread-commands.js";
+import { dispatchThreadRenameCommand } from "./thread-commands.js";
 import {
   inferThreadMetadata,
   MANAGED_THREAD_METADATA_TIMEOUT_MAX_ATTEMPTS,
@@ -67,26 +59,27 @@ import {
   isProvisionableContext,
   provisionableContextForWorkspaceReady,
   provisioningStartedContext,
-  threadProvisionCommonPayloadSchema,
   type ThreadProvisionAttachableContext,
   type ThreadProvisionContext,
   type ThreadProvisionEnvironmentIntent,
   type ThreadProvisionEnvironmentPendingContext,
-  readThreadProvisioningStateFromRecord,
   type ThreadProvisionEnvironmentProvisioningContext,
   type ThreadProvisionProvisionableContext,
 } from "./thread-provisioning-context.js";
+import {
+  forgetActiveThreadProvisionContext,
+  getActiveThreadProvisionContext,
+  rememberActiveThreadProvisionContext,
+} from "./thread-provisioning-active-context.js";
 import { tryTransition } from "./thread-transitions.js";
 import {
   resolveManagedTargetPath,
   resolvePersonalTargetPath,
 } from "./worktree-paths.js";
 
-export type ThreadProvisioningDeps = LifecycleCoordinationDeps;
+export type ThreadProvisioningDeps = CommandResultSideEffectsDeps;
 
-type ThreadProvisionOperationWriteConnection = DbConnection | DbTransaction;
 type ThreadProvisionWriteDeps = Pick<AppDeps, "db" | "hub">;
-type ActiveDirectEnvironmentOperationKind = "provision" | "reprovision";
 type DirectUnmanagedIntent = Extract<
   ThreadProvisionEnvironmentIntent,
   { type: "direct-unmanaged" }
@@ -100,8 +93,6 @@ type NewThreadProvisionEnvironmentIntent = Exclude<
   { type: "reuse" } | { type: "checkout-unmanaged" }
 >;
 
-const ACTIVE_DIRECT_ENVIRONMENT_OPERATION_KINDS: readonly ActiveDirectEnvironmentOperationKind[] =
-  ["provision", "reprovision"];
 const INITIAL_PROVISIONING_TEXT_BY_WORKSPACE_TYPE = {
   unmanaged: "Preparing workspace",
   "managed-worktree": "Preparing worktree",
@@ -109,6 +100,7 @@ const INITIAL_PROVISIONING_TEXT_BY_WORKSPACE_TYPE = {
 } satisfies Record<Environment["workspaceProvisionType"], string>;
 
 interface EnsureWorkspaceReadyEventArgs {
+  context?: ThreadProvisionAttachableContext;
   entries: ProvisioningTranscriptEntry[];
   environmentId: string;
   threadId: string;
@@ -165,7 +157,7 @@ interface ThreadProvisionEnvironmentPlan {
   environmentInput: CreateEnvironmentInput;
 }
 
-interface CreateProvisioningEnvironmentWithOperationArgs extends ThreadProvisionEnvironmentPlan {
+interface CreateProvisioningEnvironmentArgs extends ThreadProvisionEnvironmentPlan {
   context: ThreadProvisionEnvironmentPendingContext;
   thread: Thread;
 }
@@ -173,6 +165,7 @@ interface CreateProvisioningEnvironmentWithOperationArgs extends ThreadProvision
 interface ThreadProvisioningResult {
   context: ThreadProvisionContext;
   environment: Environment;
+  provisionRequest?: EnvironmentProvisionRequest | null;
 }
 
 interface ResolveEnvironmentCreationPlanArgs {
@@ -213,7 +206,7 @@ type CheckoutUnmanagedEnvironmentProvisionResult =
       eventAppended: boolean;
       kind: "queued";
     }
-  | { kind: "active-operation" };
+  | { kind: "active-provision" };
 
 interface ManagedEnvironmentPlanArgs {
   dataDir: string;
@@ -266,31 +259,27 @@ export function loadActiveThreadProvisionContext(
   deps: Pick<AppDeps, "db">,
   threadId: string,
 ): ThreadProvisionContext | null {
-  const operation = getThreadOperation(deps.db, {
-    threadId,
-    kind: "provision",
-  });
-  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+  const thread = getThread(deps.db, threadId);
+  const context = getActiveThreadProvisionContext(threadId);
+  if (
+    !thread ||
+    thread.deletedAt !== null ||
+    !context ||
+    thread.status !== "provisioning" ||
+    (context.state.environmentId !== null &&
+      thread.environmentId !== context.state.environmentId)
+  ) {
     return null;
   }
-  return {
-    request: parseJsonWithSchema(
-      operation.payload,
-      threadProvisionCommonPayloadSchema,
-    ),
-    state: readThreadProvisioningStateFromRecord(operation),
-  };
+  return context;
 }
 
-export function upsertThreadProvisionOperation(
-  db: ThreadProvisionOperationWriteConnection,
+export function saveThreadProvisionContext(
   args: SaveThreadProvisionContextArgs,
 ): void {
-  upsertThreadOperationRecord(db, {
+  rememberActiveThreadProvisionContext({
     threadId: args.threadId,
-    kind: "provision",
-    payload: JSON.stringify(args.context.request),
-    provisioningState: args.context.state,
+    context: args.context,
   });
 }
 
@@ -312,20 +301,18 @@ function ensureWorkspaceReadyEventRecord(
   db: DbTransaction,
   args: EnsureWorkspaceReadyEventArgs,
 ): number | null {
-  const operation = getThreadOperation(db, {
-    threadId: args.threadId,
-    kind: "provision",
-  });
-  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+  const thread = getThread(db, args.threadId);
+  const context = args.context ?? getActiveThreadProvisionContext(args.threadId);
+  if (
+    !thread ||
+    thread.deletedAt !== null ||
+    !context ||
+    thread.status !== "provisioning" ||
+    (context.state.environmentId !== null &&
+      context.state.environmentId !== args.environmentId)
+  ) {
     return null;
   }
-  const context = {
-    request: parseJsonWithSchema(
-      operation.payload,
-      threadProvisionCommonPayloadSchema,
-    ),
-    state: readThreadProvisioningStateFromRecord(operation),
-  };
   if (context.state.stage === "workspace-ready") {
     return context.state.workspaceReadyEventSequence;
   }
@@ -343,7 +330,7 @@ function ensureWorkspaceReadyEventRecord(
     status: "active",
     entries: args.entries,
   });
-  upsertThreadProvisionOperation(db, {
+  saveThreadProvisionContext({
     threadId: args.threadId,
     context: createWorkspaceReadyContext(provisionableContext, {
       workspaceReadyEventSequence: appendedSequence,
@@ -369,11 +356,7 @@ export function failThreadProvisioning(
   deps: Pick<AppDeps, "db" | "hub">,
   args: FailThreadProvisioningArgs,
 ): void {
-  markThreadOperationRecordFailed(deps.db, {
-    threadId: args.thread.id,
-    kind: "provision",
-    failureReason: args.detail,
-  });
+  forgetActiveThreadProvisionContext(args.thread.id);
   appendSystemErrorEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environmentId,
@@ -385,17 +368,8 @@ export function failThreadProvisioning(
   tryTransition(deps.db, deps.hub, args.thread.id, "error");
 }
 
-function hasActiveEnvironmentProvisionOperation(
-  deps: { db: ThreadProvisionOperationWriteConnection },
-  environment: Environment,
-): boolean {
-  return (
-    listEnvironmentOperations(deps.db, {
-      environmentIds: [environment.id],
-      kinds: [...ACTIVE_DIRECT_ENVIRONMENT_OPERATION_KINDS],
-      states: [...activeLifecycleOperationStates],
-    }).length > 0
-  );
+function hasActiveEnvironmentProvision(environment: Environment): boolean {
+  return environment.status === "provisioning";
 }
 
 async function resolveMetadataIfNeeded(
@@ -434,7 +408,7 @@ async function resolveMetadataIfNeeded(
           ) {
             return;
           }
-          queueThreadRenameCommand(deps, {
+          dispatchThreadRenameCommand(deps, {
             environment: {
               id: environment.id,
               hostId: environment.hostId,
@@ -457,7 +431,7 @@ async function resolveMetadataIfNeeded(
     const resolvedContext = createEnvironmentPendingContext(args.context, {
       branchSlug: null,
     });
-    upsertThreadProvisionOperation(deps.db, {
+    saveThreadProvisionContext({
       threadId: args.thread.id,
       context: resolvedContext,
     });
@@ -470,7 +444,7 @@ async function resolveMetadataIfNeeded(
         ? deriveBranchSlugFromTitle(args.thread.title)
         : null,
     });
-    upsertThreadProvisionOperation(deps.db, {
+    saveThreadProvisionContext({
       threadId: args.thread.id,
       context: resolvedContext,
     });
@@ -492,7 +466,7 @@ async function resolveMetadataIfNeeded(
   const resolvedContext = createEnvironmentPendingContext(args.context, {
     branchSlug: metadata.branchSlug,
   });
-  upsertThreadProvisionOperation(deps.db, {
+  saveThreadProvisionContext({
     threadId: args.thread.id,
     context: resolvedContext,
   });
@@ -517,7 +491,7 @@ function attachThreadToEnvironment(
   const attachedContext = createEnvironmentAttachedContext(args.context, {
     attachedEnvironmentId: args.environment.id,
   });
-  upsertThreadProvisionOperation(deps.db, {
+  saveThreadProvisionContext({
     threadId: args.thread.id,
     context: attachedContext,
   });
@@ -543,36 +517,29 @@ function appendProvisioningStartedEvent(
   const updatedContext = createEnvironmentProvisioningContext(args.context, {
     provisionEventSequence: appendedSequence,
   });
-  upsertThreadProvisionOperation(deps.db, {
+  saveThreadProvisionContext({
     threadId: args.thread.id,
     context: updatedContext,
   });
   return updatedContext;
 }
 
-function createProvisioningEnvironmentWithOperation(
+function createProvisioningEnvironment(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: CreateProvisioningEnvironmentWithOperationArgs,
+  args: CreateProvisioningEnvironmentArgs,
 ): ThreadProvisioningResult {
   const result = deps.db.transaction(
     (tx) => {
-      const activeOperation = getThreadOperation(tx, {
-        threadId: args.thread.id,
-        kind: "provision",
-      });
+      const activeThread = getThread(tx, args.thread.id);
+      const activeContext = getActiveThreadProvisionContext(args.thread.id);
       if (
-        !activeOperation ||
-        !isActiveLifecycleOperationState(activeOperation.state)
+        !activeThread ||
+        activeThread.status !== "provisioning" ||
+        !activeContext ||
+        activeContext.state.provisioningId !== args.context.state.provisioningId
       ) {
-        throw new Error("Thread provision operation is no longer active");
+        throw new Error("Thread provisioning context is no longer active");
       }
-      const activeContext: ThreadProvisionContext = {
-        request: parseJsonWithSchema(
-          activeOperation.payload,
-          threadProvisionCommonPayloadSchema,
-        ),
-        state: readThreadProvisioningStateFromRecord(activeOperation),
-      };
       const activeAttachedEnvironmentId =
         attachedEnvironmentIdForContext(activeContext);
       if (activeAttachedEnvironmentId) {
@@ -613,24 +580,24 @@ function createProvisioningEnvironmentWithOperation(
       const context = createEnvironmentProvisioningContext(attachedContext, {
         provisionEventSequence: appendedSequence,
       });
-      upsertThreadProvisionOperation(tx, {
+      saveThreadProvisionContext({
         threadId: args.thread.id,
         context,
       });
-      requestEnvironmentProvision(
+      const provisionRequest = args.buildRequest({
+        context,
+        environment,
+      });
+      requestEnvironmentProvisioning(
         {
           db: tx,
           hub: deps.hub,
         },
         {
           environmentId: environment.id,
-          request: args.buildRequest({
-            context,
-            environment,
-          }),
         },
       );
-      return { context, environment };
+      return { context, environment, provisionRequest };
     },
     { behavior: "immediate" },
   );
@@ -848,33 +815,33 @@ function requestCheckoutUnmanagedEnvironmentProvision(
 ): CheckoutUnmanagedEnvironmentProvisionResult {
   return deps.db.transaction(
     (tx) => {
-      if (
-        hasActiveEnvironmentProvisionOperation({ db: tx }, args.environment)
-      ) {
-        return { kind: "active-operation" };
+      if (hasActiveEnvironmentProvision(args.environment)) {
+        return { kind: "active-provision" };
       }
 
-      const activeOperation = getThreadOperation(tx, {
-        threadId: args.thread.id,
-        kind: "provision",
-      });
+      const activeThread = getThread(tx, args.thread.id);
+      const activeContext = getActiveThreadProvisionContext(args.thread.id);
       if (
-        !activeOperation ||
-        !isActiveLifecycleOperationState(activeOperation.state)
+        !activeThread ||
+        activeThread.status !== "provisioning" ||
+        !activeContext ||
+        !isProvisionableContext(activeContext) ||
+        activeContext.state.environmentId !== args.environment.id ||
+        activeContext.state.provisioningId !== args.context.state.provisioningId
       ) {
-        throw new Error("Thread provision operation is no longer active");
+        throw new Error("Thread provisioning context is no longer active");
       }
 
-      const eventAppended = !isEnvironmentProvisioningContext(args.context);
-      const context = isEnvironmentProvisioningContext(args.context)
-        ? args.context
-        : createEnvironmentProvisioningContext(args.context, {
+      const eventAppended = !isEnvironmentProvisioningContext(activeContext);
+      const context = isEnvironmentProvisioningContext(activeContext)
+        ? activeContext
+        : createEnvironmentProvisioningContext(activeContext, {
             provisionEventSequence: appendThreadProvisioningEventInTransaction(
               tx,
               {
                 threadId: args.thread.id,
                 environmentId: args.environment.id,
-                provisioningId: args.context.state.provisioningId,
+                provisioningId: activeContext.state.provisioningId,
                 status: "active",
                 entries: initialProvisioningEntries(args.environment),
               },
@@ -887,18 +854,17 @@ function requestCheckoutUnmanagedEnvironmentProvision(
         thread: args.thread,
       });
 
-      upsertThreadProvisionOperation(tx, {
+      saveThreadProvisionContext({
         threadId: args.thread.id,
         context,
       });
-      requestEnvironmentReprovision(
+      requestEnvironmentProvisioning(
         {
           db: tx,
           hub: deps.hub,
         },
         {
           environmentId: args.environment.id,
-          request,
         },
       );
 
@@ -908,6 +874,7 @@ function requestCheckoutUnmanagedEnvironmentProvision(
         eventAppended,
         environment:
           getEnvironment(tx, args.environment.id) ?? args.environment,
+        provisionRequest: request,
       };
     },
     { behavior: "immediate" },
@@ -925,11 +892,11 @@ function queueCheckoutUnmanagedEnvironment(
     thread: args.thread,
   });
 
-  if (result.kind === "active-operation") {
+  if (result.kind === "active-provision") {
     failThreadProvisioning(deps, {
       thread: args.thread,
       environmentId: args.environment.id,
-      detail: "Environment already has an active provision operation",
+      detail: "Environment already has an active provision",
     });
     return {
       context: args.context,
@@ -949,11 +916,11 @@ function attachActiveProvisioningEnvironment(
   deps: ThreadProvisionWriteDeps,
   args: EnvironmentPayloadThreadArgs,
 ): ThreadProvisioningResult {
-  if (!hasActiveEnvironmentProvisionOperation(deps, args.environment)) {
+  if (!hasActiveEnvironmentProvision(args.environment)) {
     failThreadProvisioning(deps, {
       thread: args.thread,
       environmentId: args.environment.id,
-      detail: "Environment is provisioning without an active provision operation",
+      detail: "Environment is provisioning without an active provision",
     });
     return {
       context: args.context,
@@ -1122,7 +1089,7 @@ async function ensureEnvironmentRequested(
     intent: args.context.request.environmentIntent,
     thread: args.thread,
   });
-  return createProvisioningEnvironmentWithOperation(deps, {
+  return createProvisioningEnvironment(deps, {
     context: args.context,
     thread: args.thread,
     ...plan,
@@ -1137,7 +1104,11 @@ export async function ensureThreadProvisionEnvironmentReady(
     context: args.context,
     thread: args.thread,
   });
-  const { context: attachedContext, environment } =
+  const {
+    context: attachedContext,
+    environment,
+    provisionRequest,
+  } =
     await ensureEnvironmentRequested(deps, {
       context,
       thread: args.thread,
@@ -1146,6 +1117,7 @@ export async function ensureThreadProvisionEnvironmentReady(
   if (environment.status === "provisioning") {
     await advanceEnvironmentProvisioning(deps, {
       environmentId: environment.id,
+      request: provisionRequest ?? null,
     });
   }
   if (!isProvisionableContext(attachedContext)) {

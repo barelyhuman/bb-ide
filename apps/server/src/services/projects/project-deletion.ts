@@ -1,15 +1,14 @@
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import {
   deleteProject,
   getProject,
-  getProjectOperation,
   listEnvironments,
-  listProjectOperations,
+  markProjectDeleted,
   markThreadDeleted,
+  projects,
   threads,
   type DbQueryConnection,
 } from "@bb/db";
-import { upsertProjectOperationRecord } from "@bb/db/internal-lifecycle";
 import type { Environment, ThreadStatus } from "@bb/domain";
 import type {
   AppDeps,
@@ -46,12 +45,7 @@ function isProjectDeletionActive(
   deps: Pick<AppDeps, "db">,
   projectId: string,
 ): boolean {
-  return (
-    getProjectOperation(deps.db, {
-      projectId,
-      kind: "delete",
-    }) !== null
-  );
+  return getProject(deps.db, projectId)?.deletedAt !== null;
 }
 
 function listProjectDeletionThreads(
@@ -78,10 +72,8 @@ function tombstoneProjectThreadsForDeletion(
   const notificationBuffer = new NotificationBuffer();
   const projectThreads = deps.db.transaction(
     (tx) => {
-      upsertProjectOperationRecord(tx, {
+      markProjectDeleted(tx, notificationBuffer, {
         projectId: args.projectId,
-        kind: "delete",
-        payload: JSON.stringify({}),
       });
 
       const threadsForDeletion = listProjectDeletionThreads(tx, args);
@@ -118,7 +110,7 @@ function hasRemainingManagedEnvironments(environments: Environment[]): boolean {
 }
 
 export function beginProjectDeletion(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: ProjectDeletionDeps,
   args: ProjectDeletionArgs,
 ): void {
   if (!getProject(deps.db, args.projectId)) {
@@ -193,7 +185,6 @@ export async function advanceProjectDeletion(
       requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     }
     finalizeStoppedThread(deps, {
-      cancelPendingCommand: false,
       threadId: thread.id,
     });
   }
@@ -227,7 +218,10 @@ export async function advanceProjectDeletion(
 export function listProjectsPendingDeletion(
   deps: Pick<AppDeps, "db">,
 ): string[] {
-  return listProjectOperations(deps.db, {
-    kind: "delete",
-  }).map((operation) => operation.projectId);
+  return deps.db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(isNotNull(projects.deletedAt))
+    .all()
+    .map((project) => project.id);
 }

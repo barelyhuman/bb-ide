@@ -8,7 +8,6 @@ import {
   createEnvironmentId,
   createEnvironmentProvisioningId,
   createEventId,
-  createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
   createProjectId,
@@ -18,7 +17,6 @@ import {
   createThreadId,
   environments,
   events,
-  hostDaemonCommands,
   hostDaemonSessions,
   hosts,
   migrate,
@@ -54,7 +52,7 @@ describe("db rebuild schema", () => {
       )
       .all();
 
-    expect(columns).toHaveLength(15);
+    expect(columns).toHaveLength(14);
     expect(columns).toEqual(
       expect.arrayContaining([
         { name: "id", type: "text", notNull: 1, primaryKey: 1 },
@@ -69,12 +67,6 @@ describe("db rebuild schema", () => {
           primaryKey: 0,
         },
         { name: "session_id", type: "text", notNull: 1, primaryKey: 0 },
-        {
-          name: "resolving_command_id",
-          type: "text",
-          notNull: 0,
-          primaryKey: 0,
-        },
         { name: "status", type: "text", notNull: 1, primaryKey: 0 },
         { name: "payload", type: "text", notNull: 1, primaryKey: 0 },
         { name: "resolution", type: "text", notNull: 0, primaryKey: 0 },
@@ -101,7 +93,6 @@ describe("db rebuild schema", () => {
     const threadId = createThreadId();
     const scheduleId = createThreadScheduleId();
     const sessionId = createHostDaemonSessionId();
-    const commandId = createHostDaemonCommandId();
     const eventId = createEventId();
     const promptHistoryEntryId = createPromptHistoryEntryId();
 
@@ -225,18 +216,6 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
-    db.insert(hostDaemonCommands)
-      .values({
-        id: commandId,
-        hostId,
-        sessionId,
-        cursor: 1,
-        type: "workspace.commit",
-        payload: "{}",
-        state: "queued",
-        createdAt: now,
-      })
-      .run();
     db.insert(queuedThreadMessages)
       .values({
         id: createQueuedThreadMessageId(),
@@ -300,10 +279,6 @@ describe("db rebuild schema", () => {
         contentHash: "sha256:abc",
       },
     );
-    expect(db.select().from(hostDaemonCommands).get()).toMatchObject({
-      sessionId,
-      type: "workspace.commit",
-    });
     expect(db.select().from(promptHistoryEntries).get()).toMatchObject({
       projectId,
       scope: "project",
@@ -580,7 +555,6 @@ describe("db rebuild schema", () => {
     const projectId = createProjectId();
     const environmentId = createEnvironmentId();
     const sessionId = createHostDaemonSessionId();
-    const commandId = createHostDaemonCommandId();
 
     db.insert(hosts)
       .values({
@@ -632,86 +606,10 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
-    db.insert(hostDaemonCommands)
-      .values({
-        id: commandId,
-        hostId,
-        sessionId,
-        cursor: 1,
-        type: "workspace.commit",
-        payload: "{}",
-        state: "queued",
-        createdAt: now,
-      })
-      .run();
-
-    // Commands reference host without cascade, so delete commands first.
-    db.delete(hostDaemonCommands).run();
     db.delete(hosts).where(eq(hosts.id, hostId)).run();
 
     expect(db.select().from(environments).all()).toHaveLength(0);
     expect(db.select().from(hostDaemonSessions).all()).toHaveLength(0);
-    expect(db.select().from(hostDaemonCommands).all()).toHaveLength(0);
-
-    closeConnection(db);
-  });
-
-  it("nullifies session reference on host-daemon commands when session is deleted", () => {
-    const db = createConnection(":memory:");
-    migrate(db);
-
-    const now = Date.now();
-    const hostId = createHostId();
-    const sessionId = createHostDaemonSessionId();
-    const commandId = createHostDaemonCommandId();
-
-    db.insert(hosts)
-      .values({
-        id: hostId,
-        name: "Local host",
-        type: "persistent",
-        lastSeenAt: now,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-    db.insert(hostDaemonSessions)
-      .values({
-        id: sessionId,
-        hostId,
-        instanceId: "instance-1",
-        hostName: "Local host",
-        hostType: "persistent",
-        dataDir: "/tmp/test-data",
-        protocolVersion: 1,
-        heartbeatIntervalMs: 10_000,
-        leaseTimeoutMs: 30_000,
-        status: "connected",
-        leaseExpiresAt: now + 60_000,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-    db.insert(hostDaemonCommands)
-      .values({
-        id: commandId,
-        hostId,
-        sessionId,
-        cursor: 1,
-        type: "workspace.commit",
-        payload: "{}",
-        state: "queued",
-        createdAt: now,
-      })
-      .run();
-
-    db.delete(hostDaemonSessions)
-      .where(eq(hostDaemonSessions.id, sessionId))
-      .run();
-
-    const commands = db.select().from(hostDaemonCommands).all();
-    expect(commands).toHaveLength(1);
-    expect(commands[0]?.sessionId).toBeNull();
 
     closeConnection(db);
   });
@@ -938,7 +836,6 @@ describe("db rebuild schema", () => {
     expect(createPromptHistoryEntryId()).toMatch(/^phist_/u);
     expect(createQueuedThreadMessageId()).toMatch(/^qmsg_/u);
     expect(createHostDaemonSessionId()).toMatch(/^hses_/u);
-    expect(createHostDaemonCommandId()).toMatch(/^hcmd_/u);
   });
 
   it("requires a non-null data_dir on host_daemon_sessions", () => {

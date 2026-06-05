@@ -1,19 +1,12 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { hostDaemonSessions } from "@bb/db";
 import {
-  fetchCommands,
-  getActiveCommandAttemptForCommand,
-  getCommand,
-  hostDaemonCommands,
-  hostDaemonSessions,
-} from "@bb/db";
-import {
-  hostDaemonCommandResultSchemaByType,
   hostDaemonCommandSchema,
-  hostDaemonOnlineRpcCommandSchema,
   hostDaemonOnlineRpcResponseMessageSchema,
-  hostDaemonOnlineRpcResultSchemaByType,
+  hostDaemonRpcCommandSchema,
   hostDaemonServerWsMessageSchema,
+  parseHostDaemonRpcResultForCommand,
 } from "@bb/host-daemon-contract";
 import {
   CLIENT_TURN_REQUEST_ID_ALPHABET,
@@ -24,37 +17,39 @@ import {
 } from "@bb/domain";
 import type {
   HostDaemonCommand,
-  HostDaemonCommandResultByType,
   HostDaemonEventEnvelope,
-  HostDaemonOnlineRpcCommand,
   HostDaemonOnlineRpcRequestMessage,
-  HostDaemonOnlineRpcResultByType,
+  HostDaemonRpcCommand,
+  HostDaemonRpcResultForCommand,
 } from "@bb/host-daemon-contract";
 import type { TestAppHarness } from "./test-app.js";
 import { createTestDaemonHostKey } from "./test-app.js";
 
-type HostDaemonCommandRow = typeof hostDaemonCommands.$inferSelect;
+interface CapturedRpcRow {
+  completedAt: number | null;
+  createdAt: number;
+  cursor: number;
+  fetchedAt: number;
+  hostId: string;
+  id: string;
+  payload: string;
+  resultPayload: string | null;
+  retryCount: number;
+  sessionId: string | null;
+  state: string;
+  type: string;
+}
 
-type QueuedCommandPayload = HostDaemonCommand | HostDaemonOnlineRpcCommand;
+type QueuedCommandPayload = HostDaemonRpcCommand;
 type QueuedCommandResult<TCommand extends QueuedCommandPayload> =
-  TCommand extends HostDaemonCommand
-    ? HostDaemonCommandResultByType[TCommand["type"]]
-    : TCommand extends HostDaemonOnlineRpcCommand
-      ? HostDaemonOnlineRpcResultByType[TCommand["type"]]
-      : never;
+  HostDaemonRpcResultForCommand<TCommand>;
 
 export interface QueuedCommand<
   TCommand extends QueuedCommandPayload = QueuedCommandPayload,
 > {
   command: TCommand;
-  row: HostDaemonCommandRow;
+  row: CapturedRpcRow;
   rpcRequest?: HostDaemonOnlineRpcRequestMessage;
-}
-
-export interface EnsureCommandDeliveredArgs {
-  commandId: string;
-  hostId: string;
-  sessionId: string | null;
 }
 
 type ManagedWorktreeEnvironmentProvisionCommand = Extract<
@@ -62,22 +57,22 @@ type ManagedWorktreeEnvironmentProvisionCommand = Extract<
   { type: "environment.provision"; workspaceProvisionType: "managed-worktree" }
 >;
 
-export type ManagedWorktreeEnvironmentProvisionQueuedCommand =
+export type ManagedWorktreeEnvironmentProvisionLiveCommand =
   QueuedCommand<ManagedWorktreeEnvironmentProvisionCommand>;
 
-export function isManagedWorktreeEnvironmentProvisionQueuedCommand(
+export function isManagedWorktreeEnvironmentProvisionLiveCommand(
   queued: QueuedCommand,
-): queued is ManagedWorktreeEnvironmentProvisionQueuedCommand {
+): queued is ManagedWorktreeEnvironmentProvisionLiveCommand {
   return (
     queued.command.type === "environment.provision" &&
     queued.command.workspaceProvisionType === "managed-worktree"
   );
 }
 
-export function requireManagedWorktreeEnvironmentProvisionQueuedCommand(
+export function requireManagedWorktreeEnvironmentProvisionLiveCommand(
   queued: QueuedCommand,
-): ManagedWorktreeEnvironmentProvisionQueuedCommand {
-  if (isManagedWorktreeEnvironmentProvisionQueuedCommand(queued)) {
+): ManagedWorktreeEnvironmentProvisionLiveCommand {
+  if (isManagedWorktreeEnvironmentProvisionLiveCommand(queued)) {
     return queued;
   }
   throw new Error("Expected managed-worktree environment.provision command");
@@ -88,17 +83,15 @@ export function listQueuedThreadCommands(
   type: HostDaemonCommand["type"],
   threadId: string,
 ): HostDaemonCommand[] {
-  return harness.db
-    .select({ payload: hostDaemonCommands.payload })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.type, type),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${threadId}`,
-      ),
+  return pendingHostRpcRequests
+    .filter(
+      (queued) =>
+        isCapturedRpcForHarness(harness, queued) &&
+        queued.command.type === type &&
+        "threadId" in queued.command &&
+        queued.command.threadId === threadId,
     )
-    .all()
-    .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+    .map((queued) => hostDaemonCommandSchema.parse(queued.command));
 }
 
 export function listQueuedEnvironmentCommands(
@@ -106,17 +99,15 @@ export function listQueuedEnvironmentCommands(
   type: HostDaemonCommand["type"],
   environmentId: string,
 ): HostDaemonCommand[] {
-  return harness.db
-    .select({ payload: hostDaemonCommands.payload })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.type, type),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${environmentId}`,
-      ),
+  return pendingHostRpcRequests
+    .filter(
+      (queued) =>
+        isCapturedRpcForHarness(harness, queued) &&
+        queued.command.type === type &&
+        "environmentId" in queued.command &&
+        queued.command.environmentId === environmentId,
     )
-    .all()
-    .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+    .map((queued) => hostDaemonCommandSchema.parse(queued.command));
 }
 
 const TEST_PRODUCER_EVENT_ID_PREFIX = "hdevt_";
@@ -210,15 +201,9 @@ function nextTestRpcCursor(
   deps: Pick<TestAppHarness, "db">,
   hostId: string,
 ): number {
-  const realMaxCursor = deps.db
-    .select({ cursor: hostDaemonCommands.cursor })
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.hostId, hostId))
-    .all()
-    .reduce((maxCursor, row) => Math.max(maxCursor, row.cursor), 0);
+  void deps;
   const previousCursor = Math.max(
     testRpcCursorByHost.get(hostId) ?? 0,
-    realMaxCursor,
   );
   const nextCursor = previousCursor + 0.0001;
   testRpcCursorByHost.set(hostId, nextCursor);
@@ -243,9 +228,9 @@ export function registerTestHostRpcCapture(
       if (message.type !== "host-rpc.request") {
         return;
       }
-      const command = hostDaemonOnlineRpcCommandSchema.parse(message.command);
+      const command = hostDaemonRpcCommandSchema.parse(message.command);
       const now = Date.now();
-      const row: HostDaemonCommandRow = {
+      const row: CapturedRpcRow = {
         id: `rpc-${message.requestId}`,
         hostId: args.hostId,
         sessionId: args.sessionId,
@@ -278,6 +263,19 @@ function removePendingHostRpcRequest(requestId: string): void {
   }
 }
 
+function isCapturedRpcForHarness(
+  harness: TestAppHarness,
+  queued: QueuedCommand,
+): boolean {
+  return (
+    harness.db
+      .select({ id: hostDaemonSessions.id })
+      .from(hostDaemonSessions)
+      .where(eq(hostDaemonSessions.hostId, queued.row.hostId))
+      .get() !== undefined
+  );
+}
+
 export async function waitForQueuedCommand(
   harness: TestAppHarness,
   predicate: (queued: QueuedCommand) => boolean,
@@ -286,24 +284,8 @@ export async function waitForQueuedCommand(
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    const rows = harness.db
-      .select()
-      .from(hostDaemonCommands)
-      .orderBy(desc(hostDaemonCommands.createdAt))
-      .all();
-
-    for (const row of rows) {
-      const queued = {
-        command: hostDaemonCommandSchema.parse(JSON.parse(row.payload)),
-        row,
-      };
-      if (predicate(queued)) {
-        return queued;
-      }
-    }
-
     for (const queued of pendingHostRpcRequests) {
-      if (predicate(queued)) {
+      if (isCapturedRpcForHarness(harness, queued) && predicate(queued)) {
         return queued;
       }
     }
@@ -327,64 +309,6 @@ export async function waitForQueuedCommandAfter(
   );
 }
 
-export function ensureCommandDelivered(
-  harness: TestAppHarness,
-  args: EnsureCommandDeliveredArgs,
-): string {
-  const existingAttempt = getActiveCommandAttemptForCommand(
-    harness.db,
-    args.commandId,
-  );
-  if (existingAttempt) {
-    return existingAttempt.id;
-  }
-
-  const command = getCommand(harness.db, args.commandId);
-  if (!command) {
-    throw new Error(`Command ${args.commandId} does not exist`);
-  }
-  if (command.state !== "pending") {
-    throw new Error(
-      `Command ${args.commandId} is ${command.state} and cannot be delivered`,
-    );
-  }
-
-  fetchCommands(harness.db, harness.hub, args);
-  const fetchedAttempt = getActiveCommandAttemptForCommand(
-    harness.db,
-    args.commandId,
-  );
-  if (!fetchedAttempt) {
-    throw new Error(`Command ${args.commandId} is missing active attempt`);
-  }
-  return fetchedAttempt.id;
-}
-
-function getCommandResultAttemptId(
-  harness: TestAppHarness,
-  queued: QueuedCommand,
-  sessionId: string,
-): string {
-  const existingAttempt = getActiveCommandAttemptForCommand(
-    harness.db,
-    queued.row.id,
-  );
-  if (existingAttempt) {
-    return existingAttempt.id;
-  }
-
-  const command = getCommand(harness.db, queued.row.id);
-  if (command?.state === "success" || command?.state === "error") {
-    return `replay-${queued.row.id}`;
-  }
-
-  return ensureCommandDelivered(harness, {
-    commandId: queued.row.id,
-    hostId: queued.row.hostId,
-    sessionId,
-  });
-}
-
 export async function reportQueuedCommandSuccess<
   TCommand extends QueuedCommandPayload,
 >(
@@ -393,50 +317,31 @@ export async function reportQueuedCommandSuccess<
   result: QueuedCommandResult<TCommand>,
   args: { hostId?: string; hostType?: HostType } = {},
 ): Promise<Response> {
-  if (queued.rpcRequest) {
-    const sessionId = queued.row.sessionId;
-    if (!sessionId) {
-      throw new Error("Queued host RPC is missing sessionId");
-    }
-    const parsedResult =
-      hostDaemonOnlineRpcResultSchemaByType[
-        queued.rpcRequest.command.type
-      ].parse(result);
-    harness.hub.recordHostOnlineRpcResponse({
-      message: hostDaemonOnlineRpcResponseMessageSchema.parse({
-        type: "host-rpc.response",
-        requestId: queued.rpcRequest.requestId,
-        commandType: queued.rpcRequest.command.type,
-        ok: true,
-        result: parsedResult,
-      }),
-      sessionId,
-    });
-    removePendingHostRpcRequest(queued.rpcRequest.requestId);
-    return new Response(null, { status: 200 });
-  }
-
   const sessionId = queued.row.sessionId;
   if (!sessionId) {
-    throw new Error("Queued command is missing sessionId");
+    throw new Error("Queued host RPC is missing sessionId");
   }
-  const attemptId = getCommandResultAttemptId(harness, queued, sessionId);
-  const durableCommand = hostDaemonCommandSchema.parse(queued.command);
-
-  return harness.app.request("/internal/session/command-result", {
-    method: "POST",
-    headers: internalAuthHeaders(harness, args),
-    body: JSON.stringify({
-      sessionId,
-      attemptId,
-      commandId: queued.row.id,
-      completedAt: Date.now(),
-      type: durableCommand.type,
+  if (!queued.rpcRequest) {
+    throw new Error("Queued command is missing RPC request metadata");
+  }
+  const parsedResult = parseHostDaemonRpcResultForCommand(
+    queued.rpcRequest.command,
+    result,
+  );
+  harness.hub.recordHostOnlineRpcResponse({
+    message: hostDaemonOnlineRpcResponseMessageSchema.parse({
+      type: "host-rpc.response",
+      requestId: queued.rpcRequest.requestId,
+      commandType: queued.rpcRequest.command.type,
       ok: true,
-      result:
-        hostDaemonCommandResultSchemaByType[durableCommand.type].parse(result),
+      result: parsedResult,
     }),
+    sessionId,
   });
+  removePendingHostRpcRequest(queued.rpcRequest.requestId);
+  await sleep(0);
+  void args;
+  return new Response(null, { status: 200 });
 }
 
 export async function reportQueuedCommandError(
@@ -445,44 +350,26 @@ export async function reportQueuedCommandError(
   args: { errorCode: string; errorMessage: string },
   auth: { hostId?: string; hostType?: HostType } = {},
 ): Promise<Response> {
-  if (queued.rpcRequest) {
-    const sessionId = queued.row.sessionId;
-    if (!sessionId) {
-      throw new Error("Queued host RPC is missing sessionId");
-    }
-    harness.hub.recordHostOnlineRpcResponse({
-      message: {
-        type: "host-rpc.response",
-        requestId: queued.rpcRequest.requestId,
-        commandType: queued.rpcRequest.command.type,
-        ok: false,
-        errorCode: args.errorCode,
-        errorMessage: args.errorMessage,
-      },
-      sessionId,
-    });
-    removePendingHostRpcRequest(queued.rpcRequest.requestId);
-    return new Response(null, { status: 200 });
-  }
-
   const sessionId = queued.row.sessionId;
   if (!sessionId) {
-    throw new Error("Queued command is missing sessionId");
+    throw new Error("Queued host RPC is missing sessionId");
   }
-  const attemptId = getCommandResultAttemptId(harness, queued, sessionId);
-
-  return harness.app.request("/internal/session/command-result", {
-    method: "POST",
-    headers: internalAuthHeaders(harness, auth),
-    body: JSON.stringify({
-      sessionId,
-      attemptId,
-      commandId: queued.row.id,
-      completedAt: Date.now(),
-      type: queued.command.type,
+  if (!queued.rpcRequest) {
+    throw new Error("Queued command is missing RPC request metadata");
+  }
+  harness.hub.recordHostOnlineRpcResponse({
+    message: {
+      type: "host-rpc.response",
+      requestId: queued.rpcRequest.requestId,
+      commandType: queued.rpcRequest.command.type,
       ok: false,
       errorCode: args.errorCode,
       errorMessage: args.errorMessage,
-    }),
+    },
+    sessionId,
   });
+  removePendingHostRpcRequest(queued.rpcRequest.requestId);
+  await sleep(0);
+  void auth;
+  return new Response(null, { status: 200 });
 }

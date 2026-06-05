@@ -46,7 +46,7 @@ import {
 } from "../../services/threads/thread-send.js";
 import {
   buildExecutionOptions,
-  queueThreadUnarchiveCommand,
+  dispatchThreadUnarchiveCommand,
 } from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
 import { requestThreadStopForCurrentState } from "../../services/threads/thread-lifecycle.js";
@@ -363,7 +363,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       ? getEnvironment(deps.db, thread.environmentId)
       : null;
     if (providerThreadId && environment) {
-      queueThreadUnarchiveCommand(deps, {
+      dispatchThreadUnarchiveCommand(deps, {
         environment,
         providerThreadId,
         thread,

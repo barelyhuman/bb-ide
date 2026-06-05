@@ -19,8 +19,6 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerSystemRoutes } from "./routes/system.js";
 import { registerDevelopmentOnlyReplayRoutes } from "./routes/internal-replay.js";
 import { registerThreadRoutes } from "./routes/threads/index.js";
-import { registerInternalCommandRoutes } from "./internal/commands.js";
-import { registerInternalCommandResultRoutes } from "./internal/command-result-route.js";
 import { registerInternalAppDataChangeRoutes } from "./internal/app-data-changes.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalHostRoutes } from "./internal/hosts.js";
@@ -261,8 +259,6 @@ export function createApp(
   const internalApi = new Hono();
   registerInternalHostRoutes(internalApi, deps);
   registerInternalSessionRoutes(internalApi, deps);
-  registerInternalCommandRoutes(internalApi, deps);
-  registerInternalCommandResultRoutes(internalApi, deps);
   registerInternalAppDataChangeRoutes(internalApi, deps);
   registerInternalEventRoutes(internalApi, deps);
   registerInternalToolCallRoutes(internalApi, deps);

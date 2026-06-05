@@ -160,7 +160,6 @@ describe("threads", () => {
         notifyThread: vi.fn(),
         notifyEnvironment: vi.fn(),
         notifyHost: vi.fn(),
-        notifyCommand: vi.fn(),
         notifyProject: vi.fn(),
         notifySystem: vi.fn(),
       };
@@ -776,7 +775,6 @@ describe("threads", () => {
       notifyThread: vi.fn(),
       notifyEnvironment: vi.fn(),
       notifyHost: vi.fn(),
-      notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
     };
@@ -862,7 +860,6 @@ describe("threads", () => {
         notifyThread: vi.fn(),
         notifyEnvironment: vi.fn(),
         notifyHost: vi.fn(),
-        notifyCommand: vi.fn(),
         notifyProject: vi.fn(),
         notifySystem: vi.fn(),
       };
@@ -1344,7 +1341,11 @@ describe("transitionThreadStatus", () => {
       "error",
     ]);
     expect(ALLOWED_TRANSITIONS.active).toEqual(["idle", "error"]);
-    expect(ALLOWED_TRANSITIONS.error).toEqual(["active", "idle"]);
+    expect(ALLOWED_TRANSITIONS.error).toEqual([
+      "provisioning",
+      "active",
+      "idle",
+    ]);
   });
 
   it("allows created and provisioning to move active when startup work begins", () => {
@@ -1479,7 +1480,6 @@ describe("transitionThreadStatus", () => {
       notifyThread: vi.fn(),
       notifyEnvironment: vi.fn(),
       notifyHost: vi.fn(),
-      notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
     };

@@ -5,21 +5,16 @@ import {
   createProject,
   createThread,
   createThreadProvisioningId,
-  getThreadOperation,
   migrate,
   noopNotifier,
   upsertHost,
 } from "@bb/db";
-import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
 import type { PromptInput } from "@bb/domain";
+import { getActiveThreadProvisionContext } from "../../src/services/threads/thread-provisioning-active-context.js";
 import {
   requestThreadProvision,
   requestThreadReprovision,
 } from "../../src/services/threads/thread-provisioning.js";
-import {
-  readThreadProvisioningIdFromRecord,
-  readThreadProvisioningStateFromRecord,
-} from "../../src/services/threads/thread-provisioning-context.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
 
@@ -50,14 +45,14 @@ function setup() {
   return { db, environment, host, thread, hub };
 }
 
-describe("thread provisioning operation state", () => {
-  it("stores lifecycle progress in operation columns instead of the request payload", () => {
+describe("thread provisioning state", () => {
+  it("stores provisioning progress in live context without a durable row payload", () => {
     const { db, host, hub, thread } = setup();
     const input: PromptInput[] = [
       { type: "text", text: "start this workspace" },
     ];
 
-    requestThreadProvision(
+    const context = requestThreadProvision(
       { db, hub },
       {
         thread,
@@ -78,18 +73,12 @@ describe("thread provisioning operation state", () => {
       },
     );
 
-    const operation = getThreadOperation(db, {
-      kind: "provision",
-      threadId: thread.id,
-    });
-
-    expect(operation?.provisioningId).toMatch(/^tpv_/);
-    expect(operation?.provisioningStage).toBe("metadata-pending");
-    expect(operation?.provisioningEnvironmentId).toBeNull();
-    expect(operation?.provisionEventSequence).toBeNull();
-    expect(operation?.workspaceReadyEventSequence).toBeNull();
-    expect(operation?.payload).not.toContain('"provisioningId"');
-    expect(operation?.payload).not.toContain('"stage"');
+    expect(context.state.provisioningId).toMatch(/^tpv_/);
+    expect(context.state.stage).toBe("metadata-pending");
+    expect(context.state.environmentId).toBeNull();
+    expect(context.state.provisionEventSequence).toBeNull();
+    expect(context.state.workspaceReadyEventSequence).toBeNull();
+    expect(getActiveThreadProvisionContext(thread.id)).toEqual(context);
     assertPromptHistoryForTurnRequest({
       db,
       threadId: thread.id,
@@ -98,13 +87,14 @@ describe("thread provisioning operation state", () => {
     });
   });
 
-  it("records thread prompt history for reprovision requests", () => {
+  it("keeps reprovision progress in live context and records prompt history", () => {
     const { db, environment, hub, thread } = setup();
     const input: PromptInput[] = [
       { type: "text", text: "resume after reprovision" },
     ];
 
-    requestThreadReprovision(
+    const provisioningId = createThreadProvisioningId();
+    const context = requestThreadReprovision(
       { db, hub },
       {
         thread,
@@ -120,78 +110,23 @@ describe("thread provisioning operation state", () => {
         },
         initiator: "user",
         senderThreadId: null,
-        provisioningId: createThreadProvisioningId(),
+        provisioningId,
       },
     );
 
+    expect(context.state).toEqual({
+      environmentId: environment.id,
+      provisionEventSequence: 0,
+      provisioningId,
+      stage: "environment-provisioning",
+      workspaceReadyEventSequence: null,
+    });
+    expect(getActiveThreadProvisionContext(thread.id)).toEqual(context);
     assertPromptHistoryForTurnRequest({
       db,
       threadId: thread.id,
       scope: "thread",
       input,
-    });
-  });
-
-  it("rejects payload-only provisioning records without provisioning columns", () => {
-    const legacyRecord = {
-      payload: JSON.stringify({
-        provisioningId: "tpv_legacy",
-        stage: "metadata-pending",
-      }),
-      provisionEventSequence: null,
-      provisioningEnvironmentId: null,
-      provisioningId: null,
-      provisioningStage: null,
-      workspaceReadyEventSequence: null,
-    };
-
-    expect(() => readThreadProvisioningStateFromRecord(legacyRecord)).toThrow();
-    expect(() => readThreadProvisioningIdFromRecord(legacyRecord)).toThrow();
-  });
-
-  it("reads environment-provisioning and workspace-ready state from operation columns", () => {
-    const { db, environment, thread } = setup();
-
-    const environmentProvisioning = upsertThreadOperationRecord(db, {
-      threadId: thread.id,
-      kind: "provision",
-      payload: JSON.stringify({ clientRequestId: "creq_23456789ab" }),
-      provisioningState: {
-        environmentId: environment.id,
-        provisionEventSequence: 13,
-        provisioningId: "tpv_progress",
-        stage: "environment-provisioning",
-        workspaceReadyEventSequence: null,
-      },
-    });
-    expect(
-      readThreadProvisioningStateFromRecord(environmentProvisioning),
-    ).toEqual({
-      environmentId: environment.id,
-      provisionEventSequence: 13,
-      provisioningId: "tpv_progress",
-      stage: "environment-provisioning",
-      workspaceReadyEventSequence: null,
-    });
-
-    const workspaceReady = upsertThreadOperationRecord(db, {
-      threadId: thread.id,
-      kind: "provision",
-      payload: JSON.stringify({ clientRequestId: "creq_23456789ac" }),
-      provisioningState: {
-        environmentId: environment.id,
-        provisionEventSequence: 13,
-        provisioningId: "tpv_progress",
-        stage: "workspace-ready",
-        workspaceReadyEventSequence: 17,
-      },
-    });
-    expect(readThreadProvisioningStateFromRecord(workspaceReady)).toEqual({
-      environmentId: environment.id,
-      provisionEventSequence: 13,
-      provisioningId: "tpv_progress",
-      stage: "workspace-ready",
-      workspaceReadyEventSequence: 17,
     });
   });
 });

@@ -7,7 +7,6 @@ import {
 import {
   waitForHostConnected,
   waitForHostDisconnected,
-  waitForEventType,
   waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
@@ -20,7 +19,7 @@ import {
 } from "./shared.js";
 
 describe.sequential("fake provider active crash recovery integration", () => {
-  it("leaves an active thread waiting for its host and recovers after restart", () =>
+  it("marks in-flight work failed on daemon crash and allows retry after restart", () =>
     withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
@@ -47,26 +46,11 @@ describe.sequential("fake provider active crash recovery integration", () => {
         harness.api,
         thread.id,
       );
-      expect(disconnectedThread.status).toBe("active");
-      expect(
-        disconnectedThread.runtime.displayStatus === "host-reconnecting" ||
-          disconnectedThread.runtime.displayStatus === "waiting-for-host",
-      ).toBe(true);
+      expect(disconnectedThread.status).toBe("error");
+      expect(disconnectedThread.runtime.displayStatus).toBe("error");
 
       await harness.startDaemon();
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
-      await waitForEventType(
-        harness.api,
-        thread.id,
-        "system/thread/interrupted",
-        RECOVERY_TIMEOUT_MS,
-      );
-      await waitForThreadStatus(
-        harness.api,
-        thread.id,
-        "idle",
-        RECOVERY_TIMEOUT_MS,
-      );
 
       await sendTextMessage(harness.api, thread.id, {
         text: "recovered after crash",
@@ -88,10 +72,9 @@ describe.sequential("fake provider active crash recovery integration", () => {
       expect(
         events.some(
           (event) =>
-            event.type === "system/thread/interrupted" &&
-            event.data.reason === "host-daemon-restarted",
+            event.type === "system/error" &&
+            event.data.code === "thread_command_failed",
         ),
       ).toBe(true);
-      expect(events.some((event) => event.type === "system/error")).toBe(false);
     }));
 });

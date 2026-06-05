@@ -194,6 +194,14 @@ export function deleteHost(
   notifier: DbNotifier,
   hostId: string,
 ) {
+  return deleteHostRecord(db, notifier, hostId);
+}
+
+export function deleteHostRecord(
+  db: DbConnection,
+  notifier: DbNotifier,
+  hostId: string,
+) {
   const existing = getHost(db, hostId);
   if (!existing) {
     return false;

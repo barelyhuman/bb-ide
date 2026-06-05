@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { turnScope } from "@bb/domain";
 import {
-  buildClientTurnRequestSettlementById,
-  type ClientTurnRequestSettlement,
-  type ClientTurnRequestSettlementContext,
+  buildAcceptedClientRequestById,
+  type AcceptedClientRequestContext,
   type ThreadEventWithMetaLike,
 } from "../src/accepted-client-request-context.js";
 
@@ -13,15 +12,6 @@ interface InputAcceptedEventArgs {
   eventId: string;
   sequence: number;
   turnId: string;
-}
-
-interface ClientTurnRequestSettlementArgs {
-  message?: string | null;
-  reasonCode?: ClientTurnRequestSettlement["reasonCode"];
-  requestId: string;
-  settledAt?: number | null;
-  status: ClientTurnRequestSettlement["status"];
-  turnId?: string | null;
 }
 
 function inputAcceptedEvent({
@@ -47,75 +37,13 @@ function inputAcceptedEvent({
   };
 }
 
-function clientTurnRequestSettlement({
-  message = null,
-  reasonCode = null,
-  requestId,
-  settledAt = null,
-  status,
-  turnId = null,
-}: ClientTurnRequestSettlementArgs): ClientTurnRequestSettlement {
-  return {
-    message,
-    reasonCode,
-    requestId,
-    settledAt,
-    status,
-    turnId,
-  };
-}
-
-describe("client turn request settlement context", () => {
-  it("combines lifecycle rows with accepted input events", () => {
-    const context: ClientTurnRequestSettlementContext = {
-      acceptedClientRequestEvents: [],
-      clientTurnRequestSettlements: [
-        clientTurnRequestSettlement({
-          requestId: "creq_1234567890",
-          status: "pending",
-        }),
-        clientTurnRequestSettlement({
-          message: "Provider rejected input",
-          reasonCode: "command_failed",
-          requestId: "creq_1234567891",
-          settledAt: 200,
-          status: "failed",
-        }),
-      ],
-    };
-
-    const settlements = buildClientTurnRequestSettlementById({
-      context,
-      events: [
-        inputAcceptedEvent({
-          clientRequestId: "creq_1234567890",
-          createdAt: 100,
-          eventId: "event-1",
-          sequence: 1,
-          turnId: "turn-1",
-        }),
-      ],
-    });
-
-    expect(settlements.get("creq_1234567890")).toMatchObject({
-      reasonCode: "accepted",
-      status: "accepted",
-      turnId: "turn-1",
-    });
-    expect(settlements.get("creq_1234567891")).toMatchObject({
-      message: "Provider rejected input",
-      reasonCode: "command_failed",
-      status: "failed",
-    });
-  });
-
+describe("accepted client request context", () => {
   it("keeps the first accepted event for duplicate accepted inputs", () => {
-    const context: ClientTurnRequestSettlementContext = {
+    const context: AcceptedClientRequestContext = {
       acceptedClientRequestEvents: [],
-      clientTurnRequestSettlements: [],
     };
 
-    const settlements = buildClientTurnRequestSettlementById({
+    const acceptedRequests = buildAcceptedClientRequestById({
       context,
       events: [
         inputAcceptedEvent({
@@ -135,52 +63,16 @@ describe("client turn request settlement context", () => {
       ],
     });
 
-    expect(settlements.get("creq_1234567890")).toMatchObject({
-      reasonCode: "accepted",
-      settledAt: 100,
-      status: "accepted",
+    expect(acceptedRequests.get("creq_1234567890")).toMatchObject({
+      meta: {
+        createdAt: 100,
+      },
       turnId: "turn-1",
-    });
-  });
-
-  it("preserves failed lifecycle rows when a later accepted event appears", () => {
-    const context: ClientTurnRequestSettlementContext = {
-      acceptedClientRequestEvents: [],
-      clientTurnRequestSettlements: [
-        clientTurnRequestSettlement({
-          message: "Command expired before provider accepted input",
-          reasonCode: "command_expired",
-          requestId: "creq_1234567890",
-          settledAt: 100,
-          status: "expired",
-        }),
-      ],
-    };
-
-    const settlements = buildClientTurnRequestSettlementById({
-      context,
-      events: [
-        inputAcceptedEvent({
-          clientRequestId: "creq_1234567890",
-          createdAt: 200,
-          eventId: "event-2",
-          sequence: 2,
-          turnId: "turn-2",
-        }),
-      ],
-    });
-
-    expect(settlements.get("creq_1234567890")).toMatchObject({
-      message: "Command expired before provider accepted input",
-      reasonCode: "command_expired",
-      settledAt: 100,
-      status: "expired",
-      turnId: null,
     });
   });
 
   it("dedupes current-window and context accepted events with current-window precedence", () => {
-    const context: ClientTurnRequestSettlementContext = {
+    const context: AcceptedClientRequestContext = {
       acceptedClientRequestEvents: [
         inputAcceptedEvent({
           clientRequestId: "creq_1234567890",
@@ -190,10 +82,9 @@ describe("client turn request settlement context", () => {
           turnId: "turn-2",
         }),
       ],
-      clientTurnRequestSettlements: [],
     };
 
-    const settlements = buildClientTurnRequestSettlementById({
+    const acceptedRequests = buildAcceptedClientRequestById({
       context,
       events: [
         inputAcceptedEvent({
@@ -206,11 +97,11 @@ describe("client turn request settlement context", () => {
       ],
     });
 
-    expect(settlements.size).toBe(1);
-    expect(settlements.get("creq_1234567890")).toMatchObject({
-      reasonCode: "accepted",
-      settledAt: 100,
-      status: "accepted",
+    expect(acceptedRequests.size).toBe(1);
+    expect(acceptedRequests.get("creq_1234567890")).toMatchObject({
+      meta: {
+        createdAt: 100,
+      },
       turnId: "turn-1",
     });
   });

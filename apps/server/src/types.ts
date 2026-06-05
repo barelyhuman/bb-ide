@@ -58,4 +58,5 @@ export type PendingInteractionWorkSessionDeps = WorkSessionDeps &
   Pick<AppDeps, "pendingInteractions">;
 
 export type LoggedPendingInteractionWorkSessionDeps =
-  PendingInteractionWorkSessionDeps & Pick<AppDeps, "logger">;
+  PendingInteractionWorkSessionDeps &
+    Pick<AppDeps, "logger" | "terminalSessions">;

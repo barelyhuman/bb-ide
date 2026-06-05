@@ -50,7 +50,7 @@ import {
 import { queueAsyncMdMigrationReminderIfPresent } from "../services/scheduling/async-md-compatibility.js";
 import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
 import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
-import { queueSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
+import { dispatchSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
 import { scheduleAfterDaemonIngressResponse } from "../services/hosts/daemon-ingress-scheduler.js";
 import {
   isCommandTimeoutError,
@@ -264,7 +264,7 @@ function notifyInsertedEventThreads(
 }
 
 async function archiveCompletedAutomationThreadIfNeeded(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: ArchiveCompletedAutomationThreadIfNeededArgs,
 ): Promise<void> {
   if (args.turnStatus !== "completed" || !args.latestThread.automationId) {
@@ -285,7 +285,7 @@ async function archiveCompletedAutomationThreadIfNeeded(
     if (!archivedThread) {
       return;
     }
-    queueSettledArchivedThreadProviderArchiveCommand(deps, {
+    dispatchSettledArchivedThreadProviderArchiveCommand(deps, {
       threadId: archivedThread.id,
     });
     if (shouldRequestCleanup) {

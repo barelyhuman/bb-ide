@@ -2,7 +2,7 @@ import { getThread } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  requireManagedWorktreeEnvironmentProvisionQueuedCommand,
+  requireManagedWorktreeEnvironmentProvisionLiveCommand,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -107,7 +107,7 @@ describe("generated managed branch names", () => {
         "Improve Branch Names",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(
         `bb/improve-branch-names-${thread.id}`,
       );
@@ -165,7 +165,7 @@ describe("generated managed branch names", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(
         `bb/recovered-managed-metadata-${thread.id}`,
       );
@@ -307,7 +307,7 @@ describe("generated managed branch names", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedProvision =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(provision);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(provision);
       expect(managedProvision.command.branchName).toBe(
         `bb/user-picked-title-${thread.id}`,
       );
@@ -396,7 +396,7 @@ describe("generated managed branch names", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     });
@@ -447,7 +447,7 @@ describe("generated managed branch names", () => {
         ({ command }) => command.type === "environment.provision",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.getModel).toHaveBeenCalledWith("openai", "gpt-4o-mini");
       expect(piAiMocks.complete).not.toHaveBeenCalled();
@@ -504,7 +504,7 @@ describe("generated managed branch names", () => {
         "Canonical Generated Title",
       );
       const managedCommand =
-        requireManagedWorktreeEnvironmentProvisionQueuedCommand(queued);
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
       expect(managedCommand.command.branchName).toBe(
         `bb/canonical-generated-title-${thread.id}`,
       );

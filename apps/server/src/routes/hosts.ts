@@ -1,6 +1,7 @@
 import {
   createHostId,
   deleteHost,
+  deleteHostRecord,
   getLatestSessionForHost,
   getHost,
   updateHost,
@@ -52,7 +53,7 @@ async function cancelPendingHostJoin({
     return;
   }
 
-  const deleted = deleteHost(deps.db, deps.hub, host.id);
+  const deleted = deleteHostRecord(deps.db, deps.hub, host.id);
   if (!deleted) {
     throw new ApiError(404, "host_not_found", "Host not found");
   }

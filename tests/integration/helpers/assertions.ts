@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import type { DbConnection } from "@bb/db";
 import type {
   Environment,
   EnvironmentStatus,
@@ -9,12 +8,6 @@ import type {
   ThreadStatus,
 } from "@bb/domain";
 import { createPublicApiClient } from "@bb/server-contract";
-import {
-  listPendingHostCommands,
-  listQueuedCommands,
-  listQueuedCommandsForHostAfterCursor,
-  type QueuedCommand,
-} from "./queries.js";
 import {
   describeThreadEvent,
   previewThreadText,
@@ -29,14 +22,6 @@ interface ThreadStatusFailureContext {
   currentStatus: ThreadStatus | "unknown";
   expectedStatus: ThreadStatus;
   threadId: string;
-}
-
-interface WaitForSuccessfulQueuedCommandsAfterCursorArgs {
-  cursor: number;
-  db: DbConnection;
-  hostId: string;
-  minCount: number;
-  timeoutMs: number;
 }
 
 async function pollUntil<T>(
@@ -345,85 +330,5 @@ export async function waitForPathRemoval(
     `Timed out waiting for ${pathToCheck} to be removed`,
     timeoutMs,
     () => "path still exists",
-  );
-}
-
-export async function waitForCommand(
-  db: DbConnection,
-  predicate: (command: QueuedCommand) => boolean,
-  timeoutMs = 10_000,
-): Promise<QueuedCommand> {
-  let currentCommands = "none";
-  return pollUntil(
-    async () => {
-      const commands = listQueuedCommands(db);
-      currentCommands =
-        commands
-          .map((command) => `${command.cursor}:${command.type}`)
-          .join(", ") || "none";
-      return commands.find(predicate) ?? null;
-    },
-    "Timed out waiting for a matching command",
-    timeoutMs,
-    () => currentCommands,
-  );
-}
-
-function describeQueuedCommands(commands: QueuedCommand[]): string {
-  if (commands.length === 0) {
-    return "none";
-  }
-
-  return commands
-    .map(
-      (command) =>
-        `${command.cursor}:${command.type}:${command.state}:completedAt=${command.completedAt ?? "null"}`,
-    )
-    .join(", ");
-}
-
-function isSuccessfulQueuedCommand(command: QueuedCommand): boolean {
-  return command.state === "success" && command.completedAt !== null;
-}
-
-export async function waitForSuccessfulQueuedCommandsAfterCursor(
-  args: WaitForSuccessfulQueuedCommandsAfterCursorArgs,
-): Promise<QueuedCommand[]> {
-  let currentCommands: QueuedCommand[] = [];
-
-  return pollUntil(
-    async () => {
-      currentCommands = listQueuedCommandsForHostAfterCursor(args.db, {
-        cursor: args.cursor,
-        hostId: args.hostId,
-      });
-      if (currentCommands.length < args.minCount) {
-        return null;
-      }
-      return currentCommands.every(isSuccessfulQueuedCommand)
-        ? currentCommands
-        : null;
-    },
-    `Timed out waiting for ${args.minCount} queued command(s) after cursor ${args.cursor} to succeed`,
-    args.timeoutMs,
-    () => describeQueuedCommands(currentCommands),
-  );
-}
-
-export async function waitForCommandsDrained(
-  db: DbConnection,
-  hostId: string,
-  timeoutMs = 10_000,
-): Promise<void> {
-  let pendingCount = -1;
-  await pollUntil(
-    async () => {
-      const commands = listPendingHostCommands(db, hostId);
-      pendingCount = commands.length;
-      return commands.length === 0 ? commands : null;
-    },
-    `Timed out waiting for host ${hostId} commands to drain`,
-    timeoutMs,
-    () => `${pendingCount} pending commands`,
   );
 }

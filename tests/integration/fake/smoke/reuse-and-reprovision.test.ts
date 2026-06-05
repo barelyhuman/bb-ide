@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { shellSingleQuote } from "@bb/test-helpers";
 import { eq } from "drizzle-orm";
 import { environments } from "@bb/db";
 import { describe, expect, it } from "vitest";
@@ -14,15 +15,14 @@ import {
   unarchiveThread,
 } from "../../helpers/api.js";
 import {
-  waitForCommand,
-  waitForCommandsDrained,
+  waitForEnvironmentStatus,
   waitForPathRemoval,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { createReadyReuseThread } from "../../helpers/fixtures.js";
 import { withHarness } from "../../helpers/harness.js";
+import { runGit } from "../../helpers/seed.js";
 import {
-  countProvisionCommands,
   createProjectFixture,
   createReadyThread,
   DEFAULT_TIMEOUT_MS,
@@ -93,7 +93,6 @@ describe.sequential("fake provider smoke reuse integration", () => {
           path: harness.repoDir,
         },
       });
-      const provisionCountBeforeSecondThread = countProvisionCommands(harness);
 
       const secondThread = await createReadyThread(harness, {
         projectId: project.id,
@@ -107,9 +106,6 @@ describe.sequential("fake provider smoke reuse integration", () => {
         firstThread.thread.environmentId,
       );
       expect(secondThread.environment.id).toBe(firstThread.environment.id);
-      expect(countProvisionCommands(harness)).toBe(
-        provisionCountBeforeSecondThread,
-      );
     }));
 
   it("creates a reuse thread without provisioning a second environment", () =>
@@ -123,8 +119,6 @@ describe.sequential("fake provider smoke reuse integration", () => {
         },
       });
 
-      const provisionCountBefore = countProvisionCommands(harness);
-
       const reusedThread = await createReadyReuseThread(harness, {
         environmentId: environment.id,
         projectId: project.id,
@@ -132,9 +126,6 @@ describe.sequential("fake provider smoke reuse integration", () => {
       });
       expect(reusedThread.thread.environmentId).toBe(thread.environmentId);
       expect(reusedThread.thread.status).toBe("idle");
-
-      const provisionCountAfter = countProvisionCommands(harness);
-      expect(provisionCountAfter).toBe(provisionCountBefore);
 
       await sendTextMessage(harness.api, reusedThread.thread.id, {
         text: "reuse environment",
@@ -157,11 +148,6 @@ describe.sequential("fake provider smoke reuse integration", () => {
 
   it("returns 409 when a second send tries to reprovision while managed reprovision is already in progress", () =>
     withHarness(async (harness) => {
-      await fs.writeFile(
-        path.join(harness.repoDir, ".bb-env-setup.sh"),
-        "#!/bin/sh\nsleep 2\n",
-        "utf8",
-      );
       const project = await createProjectFixture(
         harness,
         "Managed Reprovision Conflict",
@@ -175,24 +161,41 @@ describe.sequential("fake provider smoke reuse integration", () => {
         throw new Error("Managed worktree path was not assigned");
       }
 
+      const coordinationDir = path.join(
+        path.dirname(harness.repoDir),
+        `reprovision-${randomUUID()}`,
+      );
+      const releaseFile = path.join(coordinationDir, "release");
+      await fs.mkdir(coordinationDir, { recursive: true });
+      await fs.writeFile(
+        path.join(harness.repoDir, ".bb-env-setup.sh"),
+        [
+          "set -euo pipefail",
+          `release_file=${shellSingleQuote(releaseFile)}`,
+          'while [ ! -f "$release_file" ]; do sleep 0.05; done',
+          "echo reprovision released",
+        ].join("\n") + "\n",
+        "utf8",
+      );
+      await runGit({
+        cwd: harness.repoDir,
+        args: ["add", ".bb-env-setup.sh"],
+      });
+      await runGit({
+        cwd: harness.repoDir,
+        args: ["commit", "-m", "Add blocking reprovision setup"],
+      });
+
       await archiveThread(harness.api, thread.id);
-      await waitForCommand(
-        harness.db,
-        (command) =>
-          command.type === "environment.destroy" &&
-          command.command.type === "environment.destroy" &&
-          command.command.environmentId === environment.id,
-        DEFAULT_TIMEOUT_MS,
-      );
-      await waitForCommandsDrained(
-        harness.db,
-        harness.hostId,
-        DEFAULT_TIMEOUT_MS,
-      );
       await waitForPathRemoval(originalWorkspacePath, DEFAULT_TIMEOUT_MS);
+      await waitForEnvironmentStatus(
+        harness.api,
+        environment.id,
+        "destroyed",
+        DEFAULT_TIMEOUT_MS,
+      );
 
       await unarchiveThread(harness.api, thread.id);
-      const provisionCountBefore = countProvisionCommands(harness);
       const firstSendResponse = await harness.api.threads[":id"].send.$post({
         param: { id: thread.id },
         json: {
@@ -201,7 +204,18 @@ describe.sequential("fake provider smoke reuse integration", () => {
         },
       });
       expect(firstSendResponse.status).toBe(200);
-      expect(countProvisionCommands(harness)).toBe(provisionCountBefore + 1);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "provisioning",
+        DEFAULT_TIMEOUT_MS,
+      );
+      const reloadingEnvironment = await waitForEnvironmentStatus(
+        harness.api,
+        environment.id,
+        "provisioning",
+        DEFAULT_TIMEOUT_MS,
+      );
 
       const secondSendResponse = await harness.api.threads[":id"].send.$post({
         param: { id: thread.id },
@@ -212,20 +226,24 @@ describe.sequential("fake provider smoke reuse integration", () => {
       });
       expect(secondSendResponse.status).toBe(409);
       await expect(secondSendResponse.json()).resolves.toMatchObject({
-        code: "environment_not_ready",
+        code: "thread_not_writable",
         details: {
-          cleanupRequestedAt: null,
-          environmentStatus: "provisioning",
-          hasPath: true,
+          reason: "still_starting",
+          threadStatus: "provisioning",
         },
       });
-      expect(countProvisionCommands(harness)).toBe(provisionCountBefore + 1);
 
-      const reloadingEnvironment = await getEnvironment(
-        harness.api,
-        environment.id,
-      );
       expect(reloadingEnvironment.status).toBe("provisioning");
+
+      await fs.writeFile(releaseFile, "release\n", "utf8");
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
+      const output = await getThreadOutput(harness.api, thread.id);
+      expect(output).toContain("start reprovision");
     }));
 
   it("rejects reprovision attempts for unmanaged environments", () =>
@@ -241,7 +259,6 @@ describe.sequential("fake provider smoke reuse integration", () => {
           path: harness.repoDir,
         },
       });
-      const provisionCountBefore = countProvisionCommands(harness);
 
       harness.db
         .update(environments)
@@ -269,6 +286,5 @@ describe.sequential("fake provider smoke reuse integration", () => {
           hasPath: false,
         },
       });
-      expect(countProvisionCommands(harness)).toBe(provisionCountBefore);
     }));
 });

@@ -1,6 +1,5 @@
 import {
   createPendingInteraction,
-  deleteQueuedCommandInTransaction,
   getActivePendingInteractionForThread,
   getEnvironment,
   getPendingInteraction,
@@ -9,7 +8,6 @@ import {
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
-  queueCommandInTransaction,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
   setPendingInteractionResolving,
@@ -26,10 +24,11 @@ import {
 } from "@bb/domain";
 import type {
   HostDaemonCommand,
-  HostDaemonCommandResult,
 } from "@bb/host-daemon-contract";
+import type { CommandResultReportForType } from "../../internal/command-result-side-effects.js";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
+import type { LifecycleCoordinationDeps } from "../../lifecycle-coordination-deps.js";
 import { productionErrorLogFields } from "../lib/error-log-fields.js";
 import {
   threadEnvironmentUnavailableDetails,
@@ -43,6 +42,10 @@ import {
   PendingInteractionSerializationError,
   toPendingInteraction,
 } from "./pending-interaction-serialization.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
 import {
   pendingInteractionResolutionEquals,
   validatePendingInteractionResolution,
@@ -72,7 +75,6 @@ interface ResolvePendingInteractionArgs {
 interface QueueInteractionResolutionCommandArgs {
   interaction: PendingInteraction;
   resolution: PendingInteractionResolution;
-  sessionId: string;
 }
 
 interface CompleteResolvingInteractionArgs {
@@ -101,26 +103,10 @@ type InteractiveResolveCommand = Extract<
   { type: "interactive.resolve" }
 >;
 
-interface InteractiveResolveCommandFailureReport {
-  commandId: string;
-  completedAt: number;
-  errorCode: string;
-  errorMessage: string;
-  ok: false;
-  type: "interactive.resolve";
-}
-
-interface InteractiveResolveCommandSuccessReport {
-  commandId: string;
-  completedAt: number;
-  ok: true;
-  result: HostDaemonCommandResult<"interactive.resolve">;
-  type: "interactive.resolve";
-}
-
-type InteractiveResolveCommandResultReport =
-  | InteractiveResolveCommandFailureReport
-  | InteractiveResolveCommandSuccessReport;
+type InteractiveResolveCommandResultReport = Extract<
+  CommandResultReportForType<"interactive.resolve">,
+  { type: "interactive.resolve" }
+>;
 
 interface SettleInteractiveResolveCommandResultArgs {
   command: InteractiveResolveCommand;
@@ -161,11 +147,8 @@ interface InterruptPendingInteractionsForThreadIdsLifecycleArgs {
   threadIds: readonly string[];
 }
 
-interface CreateLifecycleDeps {
-  db: AppDeps["db"];
-  hub: AppDeps["hub"];
-  logger: AppDeps["logger"];
-}
+type CreateLifecycleDeps = LifecycleCoordinationDeps &
+  Pick<AppDeps, "terminalSessions">;
 
 function buildResolveConflictError(interaction: PendingInteraction): ApiError {
   return new ApiError(
@@ -246,9 +229,13 @@ export class PendingInteractionLifecycle {
 
   constructor(args: PendingInteractionLifecycleArgs) {
     this.deps = {
+      config: args.config,
       db: args.db,
       hub: args.hub,
+      lifecycleDedupers: args.lifecycleDedupers,
       logger: args.logger,
+      machineAuth: args.machineAuth,
+      terminalSessions: args.terminalSessions,
     };
   }
 
@@ -418,7 +405,6 @@ export class PendingInteractionLifecycle {
     const updated = this.queueInteractionResolutionCommand({
       interaction: current,
       resolution: args.resolution,
-      sessionId: currentRow.sessionId,
     });
     if (!updated) {
       const latest = this.getThreadInteraction({
@@ -527,7 +513,7 @@ export class PendingInteractionLifecycle {
     if (!completed) {
       this.deps.logger.info(
         {
-          commandId: args.report.commandId,
+          executionId: args.report.executionId,
           interactionId: args.command.interactionId,
         },
         "Interactive resolve command result did not advance pending interaction",
@@ -615,30 +601,32 @@ export class PendingInteractionLifecycle {
       resolution: args.resolution,
     });
     const resolutionJson = JSON.stringify(args.resolution);
-    const commandPayload = JSON.stringify(command);
     const updated = this.deps.db.transaction((tx) => {
-      const queuedCommand = queueCommandInTransaction(tx, {
-        hostId: environment.hostId,
-        sessionId: args.sessionId,
-        type: command.type,
-        payload: commandPayload,
-      });
       const resolving = setPendingInteractionResolving(tx, {
-        commandId: queuedCommand.id,
         id: args.interaction.id,
         resolution: resolutionJson,
       });
       if (resolving) {
         return resolving;
       }
-      deleteQueuedCommandInTransaction(tx, {
-        commandId: queuedCommand.id,
-      });
       return null;
     });
 
     if (updated) {
-      this.deps.hub.notifyCommand(environment.hostId);
+      startLiveHostCommand(
+        { ...this.deps, pendingInteractions: this },
+        {
+          command,
+          hostId: environment.hostId,
+          timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+          onError: (error) => {
+            this.deps.logger.warn(
+              { err: error, interactionId: args.interaction.id },
+              "Live interactive resolve command failed",
+            );
+          },
+        },
+      );
     }
 
     return updated;

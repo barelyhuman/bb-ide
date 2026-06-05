@@ -10,7 +10,6 @@ import {
 } from "../../helpers/fixtures.js";
 import type { IntegrationHarness } from "../../helpers/harness.js";
 import { scaleTimeoutMs } from "../../helpers/time.js";
-import { countQueuedCommandsByType } from "../../helpers/queries.js";
 
 // Setup and provisioning waits: project creation, environment readiness, and archive cleanup.
 export const DEFAULT_TIMEOUT_MS = scaleTimeoutMs(10_000);
@@ -67,8 +66,4 @@ export async function expectEnvironmentDestroyed(
 ): Promise<void> {
   const environment = await getEnvironment(harness.api, environmentId);
   expect(environment.status).toBe("destroyed");
-}
-
-export function countProvisionCommands(harness: IntegrationHarness): number {
-  return countQueuedCommandsByType(harness.db, "environment.provision");
 }

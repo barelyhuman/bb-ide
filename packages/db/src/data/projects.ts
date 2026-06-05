@@ -1,8 +1,12 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import type { DbConnection, DbQueryConnection } from "../connection.js";
+import type {
+  DbConnection,
+  DbQueryConnection,
+  DbTransaction,
+} from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { projects, projectOperations, projectSources } from "../schema.js";
+import { projects, projectSources } from "../schema.js";
 import { createProjectId, createProjectSourceId } from "../ids.js";
 import { toProjectSource } from "./project-sources.js";
 import { createOrderKeyAfter, createOrderKeyBetween } from "./order-keys.js";
@@ -65,14 +69,7 @@ export type ReorderProjectResult =
   | ReorderProjectInvalidNeighborOrder;
 
 function publicProjectFilter() {
-  return and(
-    eq(projects.kind, "standard"),
-    sql`NOT EXISTS (
-      SELECT 1 FROM ${projectOperations}
-      WHERE ${projectOperations.projectId} = ${projects.id}
-      AND ${projectOperations.kind} = 'delete'
-    )`,
-  );
+  return and(eq(projects.kind, "standard"), isNull(projects.deletedAt));
 }
 
 function listOrderedPublicProjects(db: DbQueryConnection): ProjectRow[] {
@@ -222,6 +219,11 @@ export interface UpdateProjectInput {
   name?: string;
 }
 
+export interface MarkProjectDeletedArgs {
+  deletedAt?: number;
+  projectId: string;
+}
+
 export function updateProject(
   db: DbConnection,
   notifier: DbNotifier,
@@ -239,6 +241,30 @@ export function updateProject(
     notifier.notifyProject(id, ["project-updated"]);
   }
   return updated ?? null;
+}
+
+export function markProjectDeleted(
+  db: DbConnection | DbTransaction,
+  notifier: DbNotifier,
+  args: MarkProjectDeletedArgs,
+) {
+  const deletedAt = args.deletedAt ?? Date.now();
+  const updated =
+    db
+      .update(projects)
+      .set({
+        deletedAt,
+        updatedAt: deletedAt,
+      })
+      .where(and(eq(projects.id, args.projectId), isNull(projects.deletedAt)))
+      .returning()
+      .get() ?? null;
+
+  if (updated) {
+    notifier.notifyProject(args.projectId, ["project-updated"]);
+  }
+
+  return updated;
 }
 
 export function reorderProject({

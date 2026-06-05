@@ -22,6 +22,10 @@ import { ApiError } from "../../errors.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
+import {
   isCommandTimeoutError,
   runtimeErrorLogFields,
 } from "../lib/error-log-fields.js";
@@ -29,13 +33,11 @@ import { toThreadQueuedMessage } from "./thread-queued-messages.js";
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
-  ensureThreadNativeArchiveSettled,
   prepareTurnSubmitCommandPayload,
-  queueTurnSubmitCommandInTransaction,
 } from "./thread-commands.js";
 import { appendClientTurnEventInTransaction } from "./thread-events.js";
 import { getLastProviderThreadId } from "./thread-events.js";
-import { ensureThreadCanQueueStartRequest } from "./thread-lifecycle.js";
+import { ensureThreadCanStartRequest } from "./thread-lifecycle.js";
 import { requireReadyThreadEnvironment } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { sendThreadMessage } from "./thread-send.js";
@@ -187,9 +189,8 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   const environment = requireReadyThreadEnvironment(
     await requireThreadCommandEnvironment(deps, { thread }),
   );
-  ensureThreadNativeArchiveSettled(deps, { environment, thread });
   const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
-  ensureThreadCanQueueStartRequest(deps, thread);
+  ensureThreadCanStartRequest(thread);
 
   const payload = sendQueuedMessagePayload(queuedMessage, args.mode);
   const execution = await buildExecutionOptions(
@@ -202,7 +203,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
     initiator: "user",
     thread,
   });
-  const session = await ensureHostSessionReadyForWork(deps, {
+  await ensureHostSessionReadyForWork(deps, {
     hostId: environment.hostId,
   });
   return await withManagerPreferencesDeliveryLock({ thread }, async () => {
@@ -224,14 +225,14 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
       thread,
     });
 
-    const sent = deps.db.transaction(
+    const command = deps.db.transaction(
       (tx) => {
         const consumed = deleteClaimedQueuedThreadMessageInTransaction(tx, {
           id: args.queuedMessage.id,
           claimToken: args.queuedMessage.claimToken,
         });
         if (!consumed) {
-          return false;
+          return null;
         }
         const request = appendClientTurnEventInTransaction(tx, {
           environmentId: thread.environmentId,
@@ -263,18 +264,12 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
           requestId: request.requestId,
           preparedCommand,
         });
-        queueTurnSubmitCommandInTransaction(tx, {
-          command,
-          hostId: environment.hostId,
-          requestEventSequence: request.sequence,
-          sessionId: session.id,
-        });
         tryTransitionInTransaction(tx, deps.hub, thread.id, "active");
-        return true;
+        return command;
       },
       { behavior: "immediate" },
     );
-    if (!sent) {
+    if (!command) {
       throw createQueuedMessageClaimLostError();
     }
 
@@ -285,7 +280,17 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
         eventTypes: ["client/turn/requested"],
       },
     );
-    deps.hub.notifyCommand(environment.hostId);
+    startLiveHostCommand(deps, {
+      command,
+      hostId: environment.hostId,
+      timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+      onError: (error) => {
+        deps.logger.warn(
+          { err: error, threadId: thread.id },
+          "Live queued message command failed",
+        );
+      },
+    });
     return queuedMessage;
   });
 }

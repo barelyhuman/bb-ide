@@ -106,10 +106,12 @@ export type WorkspaceResolutionFailure = z.infer<
   typeof workspaceResolutionFailureSchema
 >;
 
-const hostDaemonThreadTargetSchema = z.object({
-  environmentId: z.string().min(1),
-  threadId: z.string().min(1),
-});
+const hostDaemonThreadTargetSchema = z
+  .object({
+    environmentId: z.string().min(1),
+    threadId: z.string().min(1),
+  })
+  .strict();
 
 const hostDaemonInjectedSkillSourceBaseSchema = z
   .object({
@@ -157,7 +159,7 @@ const hostDaemonThreadRuntimeContextSchema = z.object({
   injectedSkillSources: z.array(hostDaemonInjectedSkillSourceSchema),
   disallowedTools: z.array(z.string()).optional(),
   instructionMode: instructionModeSchema,
-});
+}).strict();
 
 const hostDaemonExistingThreadRuntimeContextSchema =
   hostDaemonThreadRuntimeContextSchema.extend({
@@ -169,9 +171,11 @@ const turnResumeContextSchema =
     options: true,
   });
 
-const hostDaemonEnvironmentTargetSchema = z.object({
-  environmentId: z.string().min(1),
-});
+const hostDaemonEnvironmentTargetSchema = z
+  .object({
+    environmentId: z.string().min(1),
+  })
+  .strict();
 
 const hostDaemonWorkspaceTargetSchema =
   hostDaemonEnvironmentTargetSchema.extend({
@@ -223,45 +227,55 @@ const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
   })
   .strict();
 
-export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("thread.stop"),
-});
+export const threadStopCommandSchema = hostDaemonThreadTargetSchema
+  .extend({
+    type: z.literal("thread.stop"),
+  })
+  .strict();
 
-const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("thread.rename"),
-  title: z.string().min(1),
-});
+const threadRenameCommandSchema = hostDaemonThreadTargetSchema
+  .extend({
+    type: z.literal("thread.rename"),
+    title: z.string().min(1),
+  })
+  .strict();
 
-const threadArchiveCommandSchema = hostDaemonThreadWorkspaceTargetSchema.extend(
-  {
+const threadArchiveCommandSchema = hostDaemonThreadWorkspaceTargetSchema
+  .extend({
     type: z.literal("thread.archive"),
     providerId: z.string().min(1),
     providerThreadId: z.string().min(1),
-  },
-);
+  })
+  .strict();
 
 // Carries environmentId (not just threadId) so the host daemon can serialize
 // it in the same per-environment write lane as thread.archive; otherwise a
 // slower archive can land after a later unarchive and leave the provider
 // session archived against the user's intent.
-const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("thread.unarchive"),
-  providerId: z.string().min(1),
-  providerThreadId: z.string().min(1),
-});
+const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema
+  .extend({
+    type: z.literal("thread.unarchive"),
+    providerId: z.string().min(1),
+    providerThreadId: z.string().min(1),
+  })
+  .strict();
 
-const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("thread.deleted"),
-});
+const threadDeletedCommandSchema = hostDaemonThreadTargetSchema
+  .extend({
+    type: z.literal("thread.deleted"),
+  })
+  .strict();
 
-const interactiveResolveCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("interactive.resolve"),
-  interactionId: z.string().min(1),
-  providerId: z.string().min(1),
-  providerThreadId: z.string().min(1),
-  providerRequestId: z.string().min(1),
-  resolution: pendingInteractionResolutionSchema,
-});
+const interactiveResolveCommandSchema = hostDaemonThreadTargetSchema
+  .extend({
+    type: z.literal("interactive.resolve"),
+    interactionId: z.string().min(1),
+    providerId: z.string().min(1),
+    providerThreadId: z.string().min(1),
+    providerRequestId: z.string().min(1),
+    resolution: pendingInteractionResolutionSchema,
+  })
+  .strict();
 
 const codexInferenceCompleteCommandSchema = z
   .object({
@@ -466,13 +480,15 @@ const unmanagedCheckoutSchema = z.discriminatedUnion("kind", [
 ]);
 
 const unmanagedEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema.extend({
-    workspaceProvisionType: z.literal("unmanaged"),
-    /** Path to validate */
-    path: z.string().min(1),
-    /** When set, the daemon checks out this branch before opening the workspace. */
-    checkout: unmanagedCheckoutSchema.optional(),
-  });
+  environmentProvisionCommandBaseSchema
+    .extend({
+      workspaceProvisionType: z.literal("unmanaged"),
+      /** Path to validate */
+      path: z.string().min(1),
+      /** When set, the daemon checks out this branch before opening the workspace. */
+      checkout: unmanagedCheckoutSchema.optional(),
+    })
+    .strict();
 
 const managedEnvironmentProvisionFieldsSchema = z.object({
   /** Source repo path */
@@ -493,14 +509,17 @@ const managedEnvironmentProvisionFieldsSchema = z.object({
 const managedWorktreeEnvironmentProvisionCommandSchema =
   environmentProvisionCommandBaseSchema
     .merge(managedEnvironmentProvisionFieldsSchema)
-    .extend({ workspaceProvisionType: z.literal("managed-worktree") });
+    .extend({ workspaceProvisionType: z.literal("managed-worktree") })
+    .strict();
 
 const personalEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema.extend({
-    workspaceProvisionType: z.literal("personal"),
-    /** Target directory under the host data dir for the personal workspace. */
-    targetPath: z.string().min(1),
-  });
+  environmentProvisionCommandBaseSchema
+    .extend({
+      workspaceProvisionType: z.literal("personal"),
+      /** Target directory under the host data dir for the personal workspace. */
+      targetPath: z.string().min(1),
+    })
+    .strict();
 
 /**
  * Provision a workspace for an environment.
@@ -533,22 +552,28 @@ export type EnvironmentProvisionCommand = z.infer<
 >;
 
 export const environmentProvisionCancelCommandSchema =
-  hostDaemonEnvironmentTargetSchema.extend({
-    type: z.literal("environment.provision.cancel"),
-  });
+  hostDaemonEnvironmentTargetSchema
+    .extend({
+      type: z.literal("environment.provision.cancel"),
+    })
+    .strict();
 export type EnvironmentProvisionCancelCommand = z.infer<
   typeof environmentProvisionCancelCommandSchema
 >;
 
-const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
-  type: z.literal("environment.destroy"),
-});
+const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema
+  .extend({
+    type: z.literal("environment.destroy"),
+  })
+  .strict();
 
 const environmentCleanupPreflightCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("environment.cleanup_preflight"),
-    mergeBaseBranch: gitBranchNameSchema,
-  });
+  hostDaemonWorkspaceTargetSchema
+    .extend({
+      type: z.literal("environment.cleanup_preflight"),
+      mergeBaseBranch: gitBranchNameSchema,
+    })
+    .strict();
 
 const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.status"),
@@ -578,6 +603,15 @@ export const HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES = [
 export const hostDaemonOnlineRpcCommandTypeSchema = z.enum(
   HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES,
 );
+const hostDaemonOnlineRpcCommandTypes = new Set<string>(
+  HOST_DAEMON_ONLINE_RPC_COMMAND_TYPES,
+);
+
+export function isHostDaemonOnlineRpcCommandType(
+  type: string,
+): type is HostDaemonOnlineRpcCommandType {
+  return hostDaemonOnlineRpcCommandTypes.has(type);
+}
 
 const developmentReplaySpeedSchema = z.union([
   z.literal(0.5),
@@ -655,17 +689,21 @@ export type HostDaemonRetryableOnlineRpcCommand = z.infer<
   typeof hostDaemonRetryableOnlineRpcCommandSchema
 >;
 
-const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
-  type: z.literal("workspace.commit"),
-  message: z.string().min(1),
-});
+const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema
+  .extend({
+    type: z.literal("workspace.commit"),
+    message: z.string().min(1),
+  })
+  .strict();
 
 const workspaceSquashMergeCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.squash_merge"),
-    targetBranch: gitBranchNameSchema,
-    commitMessage: z.string().min(1),
-  });
+  hostDaemonWorkspaceTargetSchema
+    .extend({
+      type: z.literal("workspace.squash_merge"),
+      targetBranch: gitBranchNameSchema,
+      commitMessage: z.string().min(1),
+    })
+    .strict();
 
 const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
@@ -692,6 +730,25 @@ export const hostDaemonCommandSchema = z.union([
   environmentProvisionCommandSchema,
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
+
+export const hostDaemonRpcCommandSchema = z.union([
+  hostDaemonOnlineRpcCommandSchema,
+  hostDaemonCommandSchema,
+]);
+export type HostDaemonRpcCommand = z.infer<typeof hostDaemonRpcCommandSchema>;
+export const hostDaemonRpcCommandTypeSchema = z.union([
+  hostDaemonOnlineRpcCommandTypeSchema,
+  hostDaemonDurableCommandTypeSchema,
+]);
+export type HostDaemonRpcCommandType = z.infer<
+  typeof hostDaemonRpcCommandTypeSchema
+>;
+
+export function isHostDaemonCommand(
+  command: HostDaemonRpcCommand,
+): command is HostDaemonCommand {
+  return isHostDaemonDurableCommandType(command.type);
+}
 
 export function shouldFlushEventsBeforeReportingCommandResult(
   command: HostDaemonCommand,
@@ -955,6 +1012,35 @@ export type HostDaemonOnlineRpcResultForCommand<
       : never
     : never;
 
+export type HostDaemonCommandResultForCommand<
+  TCommand extends HostDaemonCommand = HostDaemonCommand,
+> = TCommand extends { type: infer TType }
+  ? TType extends keyof HostDaemonCommandResultByType
+    ? HostDaemonCommandResultByType[TType]
+    : never
+  : never;
+
+export type HostDaemonRpcResultForCommand<
+  TCommand extends HostDaemonRpcCommand = HostDaemonRpcCommand,
+> = TCommand extends HostDaemonOnlineRpcCommand
+  ? HostDaemonOnlineRpcResultForCommand<TCommand>
+  : TCommand extends HostDaemonCommand
+    ? HostDaemonCommandResultForCommand<TCommand>
+    : never;
+
+export function parseHostDaemonCommandResultForCommand<
+  TCommand extends HostDaemonCommand,
+>(
+  command: TCommand,
+  value: unknown,
+): HostDaemonCommandResultForCommand<TCommand>;
+export function parseHostDaemonCommandResultForCommand(
+  command: HostDaemonCommand,
+  value: unknown,
+): HostDaemonCommandResultForCommand {
+  return hostDaemonCommandResultSchemaByType[command.type].parse(value);
+}
+
 export function parseHostDaemonOnlineRpcResultForCommand<
   TCommand extends HostDaemonOnlineRpcCommand,
 >(
@@ -973,23 +1059,21 @@ export function parseHostDaemonOnlineRpcResultForCommand(
   return hostDaemonOnlineRpcResultSchemaByType[command.type].parse(value);
 }
 
-/**
- * Wire format for a command sent from the server to the daemon.
- *
- * Each command is self-describing — `command` contains the discriminated
- * `type` field plus its payload. `id` is a unique command identifier used
- * to correlate results. `cursor` is per-host monotonic and preserves
- * deterministic fetch order for a host.
- */
-export const hostDaemonCommandEnvelopeSchema = z.object({
-  id: z.string().min(1),
-  attemptId: z.string().min(1),
-  cursor: z.number().int().nonnegative(),
-  command: hostDaemonCommandSchema,
-});
-export type HostDaemonCommandEnvelope = z.infer<
-  typeof hostDaemonCommandEnvelopeSchema
->;
+export function parseHostDaemonRpcResultForCommand<
+  TCommand extends HostDaemonRpcCommand,
+>(
+  command: TCommand,
+  value: unknown,
+): HostDaemonRpcResultForCommand<TCommand>;
+export function parseHostDaemonRpcResultForCommand(
+  command: HostDaemonRpcCommand,
+  value: unknown,
+): HostDaemonRpcResultForCommand {
+  if (isHostDaemonCommand(command)) {
+    return parseHostDaemonCommandResultForCommand(command, value);
+  }
+  return parseHostDaemonOnlineRpcResultForCommand(command, value);
+}
 
 const hostDaemonCommandResultReportBaseSchema = z.object({
   sessionId: z.string().min(1),
@@ -997,6 +1081,8 @@ const hostDaemonCommandResultReportBaseSchema = z.object({
   attemptId: z.string().min(1),
   completedAt: z.number().int().nonnegative(),
 });
+const hostDaemonCommandResultReportWithoutSessionBaseSchema =
+  hostDaemonCommandResultReportBaseSchema.omit({ sessionId: true });
 type HostDaemonCommandResultReportBase = z.infer<
   typeof hostDaemonCommandResultReportBaseSchema
 >;
@@ -1076,12 +1162,45 @@ function createHostDaemonCommandResultReportSchemasForType<
   ] as const;
 }
 
+function createHostDaemonCommandResultReportWithoutSessionSchemasForType<
+  TType extends HostDaemonDurableCommandType,
+>(
+  type: TType,
+  resultSchema: (typeof hostDaemonCommandResultSchemaByType)[TType],
+) {
+  return [
+    hostDaemonCommandResultReportWithoutSessionBaseSchema.extend({
+      type: z.literal(type),
+      ok: z.literal(true),
+      result: resultSchema,
+    }),
+    hostDaemonCommandResultReportWithoutSessionBaseSchema.extend({
+      type: z.literal(type),
+      ok: z.literal(false),
+      errorCode: z.string().min(1),
+      errorMessage: z.string().min(1),
+    }),
+  ] as const;
+}
+
 function createKnownHostDaemonCommandResultReportSchemaForType<
   TType extends HostDaemonDurableCommandType,
 >(type: TType) {
   return z.discriminatedUnion(
     "ok",
     createHostDaemonCommandResultReportSchemasForType(
+      type,
+      hostDaemonCommandResultSchemaByType[type],
+    ),
+  );
+}
+
+function createKnownHostDaemonCommandResultReportWithoutSessionSchemaForType<
+  TType extends HostDaemonDurableCommandType,
+>(type: TType) {
+  return z.discriminatedUnion(
+    "ok",
+    createHostDaemonCommandResultReportWithoutSessionSchemasForType(
       type,
       hostDaemonCommandResultSchemaByType[type],
     ),
@@ -1096,8 +1215,20 @@ const unknownCommandErrorSchema =
     errorCode: z.literal("unknown_command"),
     errorMessage: z.string().min(1),
   });
+const unknownCommandErrorWithoutSessionSchema =
+  hostDaemonCommandResultReportWithoutSessionBaseSchema.extend({
+    type: z.string().min(1),
+    ok: z.literal(false),
+    errorCode: z.literal("unknown_command"),
+    errorMessage: z.string().min(1),
+  });
 const hostDaemonCommandResultReportEnvelopeSchema =
   hostDaemonCommandResultReportBaseSchema.extend({
+    type: z.string().min(1),
+    ok: z.boolean(),
+  });
+const hostDaemonCommandResultReportWithoutSessionEnvelopeSchema =
+  hostDaemonCommandResultReportWithoutSessionBaseSchema.extend({
     type: z.string().min(1),
     ok: z.boolean(),
   });
@@ -1105,6 +1236,12 @@ const knownHostDaemonCommandResultReportSchemasByType = new Map(
   HOST_DAEMON_DURABLE_COMMAND_TYPES.map((type) => [
     type,
     createKnownHostDaemonCommandResultReportSchemaForType(type),
+  ]),
+);
+const knownHostDaemonCommandResultReportWithoutSessionSchemasByType = new Map(
+  HOST_DAEMON_DURABLE_COMMAND_TYPES.map((type) => [
+    type,
+    createKnownHostDaemonCommandResultReportWithoutSessionSchemaForType(type),
   ]),
 );
 
@@ -1128,6 +1265,26 @@ export const hostDaemonCommandResultReportSchema =
     const schema = knownHostDaemonCommandResultReportSchemasByType.get(
       envelope.data.type,
     );
+    if (!schema) {
+      return false;
+    }
+    return schema.safeParse(value).success;
+  });
+
+export const hostDaemonCommandResultReportWithoutSessionSchema =
+  z.custom<HostDaemonCommandResultReportWithoutSession>((value) => {
+    const envelope =
+      hostDaemonCommandResultReportWithoutSessionEnvelopeSchema.safeParse(value);
+    if (!envelope.success) {
+      return false;
+    }
+    if (!isHostDaemonDurableCommandType(envelope.data.type)) {
+      return unknownCommandErrorWithoutSessionSchema.safeParse(value).success;
+    }
+    const schema =
+      knownHostDaemonCommandResultReportWithoutSessionSchemasByType.get(
+        envelope.data.type,
+      );
     if (!schema) {
       return false;
     }

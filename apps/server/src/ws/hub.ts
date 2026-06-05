@@ -21,18 +21,10 @@ import {
   type AppDataBroadcastMessage,
   type TerminalServerMessage,
 } from "@bb/server-contract";
-import { COMMAND_RESULT_CACHE_TTL_MS } from "../constants.js";
-import type { CommandResultWaiterResponse } from "../internal/command-result-side-effects.js";
 
 interface HubSocket {
   close(code?: number, reason?: string): void;
   send(data: string): void;
-}
-
-interface CommandWaiter {
-  reject: (reason?: Error) => void;
-  resolve: (notified: boolean) => void;
-  timeout: ReturnType<typeof setTimeout>;
 }
 
 interface ThreadEventWaiter {
@@ -44,12 +36,6 @@ interface ThreadEventWaiter {
 interface HostEventWaiter {
   reject: (reason?: Error) => void;
   resolve: (notified: boolean) => void;
-  timeout: ReturnType<typeof setTimeout>;
-}
-
-interface CommandResultWaiter {
-  reject: (reason?: Error) => void;
-  resolve: (result: CommandResultWaiterResponse) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
@@ -95,15 +81,6 @@ function subKey(entity: string, id?: string): string {
 export class NotificationHub implements DbNotifier {
   private readonly clientKeysBySocket = new Map<HubSocket, Set<string>>();
   private readonly clientSocketsByKey = new Map<string, Set<HubSocket>>();
-  private readonly commandResultCache = new Map<
-    string,
-    CommandResultWaiterResponse
-  >();
-  private readonly commandResultWaiters = new Map<
-    string,
-    Set<CommandResultWaiter>
-  >();
-  private readonly commandWaiters = new Map<string, Set<CommandWaiter>>();
   private readonly daemonSessions = new Map<
     string,
     { hostId: string; socket: HubSocket }
@@ -314,49 +291,6 @@ export class NotificationHub implements DbNotifier {
     this.pendingDaemonDisconnects.delete(sessionId);
   }
 
-  async waitForCommands(hostId: string, timeoutMs: number): Promise<boolean> {
-    return new Promise<boolean>((resolve, reject) => {
-      const waiter: CommandWaiter = {
-        reject,
-        resolve: (notified) => resolve(notified),
-        timeout: setTimeout(() => {
-          this.deleteCommandWaiter(hostId, waiter);
-          resolve(false);
-        }, timeoutMs),
-      };
-      const waiters =
-        this.commandWaiters.get(hostId) ?? new Set<CommandWaiter>();
-      waiters.add(waiter);
-      this.commandWaiters.set(hostId, waiters);
-    });
-  }
-
-  async waitForCommandResult(
-    commandId: string,
-    timeoutMs: number,
-  ): Promise<CommandResultWaiterResponse> {
-    const cached = this.commandResultCache.get(commandId);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    return new Promise<CommandResultWaiterResponse>((resolve, reject) => {
-      const waiter: CommandResultWaiter = {
-        reject,
-        resolve,
-        timeout: setTimeout(() => {
-          this.deleteCommandResultWaiter(commandId, waiter);
-          reject(new Error("Timed out waiting for command result"));
-        }, timeoutMs),
-      };
-      const waiters =
-        this.commandResultWaiters.get(commandId) ??
-        new Set<CommandResultWaiter>();
-      waiters.add(waiter);
-      this.commandResultWaiters.set(commandId, waiters);
-    });
-  }
-
   async waitForThreadEvent(
     threadId: string,
     timeoutMs: number,
@@ -462,27 +396,6 @@ export class NotificationHub implements DbNotifier {
     return { promise, cancel };
   }
 
-  recordCommandResult(
-    commandId: string,
-    result: CommandResultWaiterResponse,
-  ): void {
-    this.commandResultCache.set(commandId, result);
-    setTimeout(() => {
-      this.commandResultCache.delete(commandId);
-    }, COMMAND_RESULT_CACHE_TTL_MS);
-
-    const waiters = this.commandResultWaiters.get(commandId);
-    if (!waiters) {
-      return;
-    }
-
-    for (const waiter of waiters) {
-      clearTimeout(waiter.timeout);
-      waiter.resolve(result);
-    }
-    this.commandResultWaiters.delete(commandId);
-  }
-
   notifyThread(
     threadId: string,
     changes: ThreadChangeKind[],
@@ -560,21 +473,6 @@ export class NotificationHub implements DbNotifier {
     });
   }
 
-  notifyCommand(hostId: string): void {
-    this.notifyDaemon(hostId);
-
-    const waiters = this.commandWaiters.get(hostId);
-    if (!waiters) {
-      return;
-    }
-
-    for (const waiter of waiters) {
-      clearTimeout(waiter.timeout);
-      waiter.resolve(true);
-    }
-    this.commandWaiters.delete(hostId);
-  }
-
   notifyHost(hostId: string, changes: HostChangeKind[]): void {
     this.notifyClients({
       type: "changed",
@@ -601,21 +499,6 @@ export class NotificationHub implements DbNotifier {
       entity: "system",
       changes,
     });
-  }
-
-  private deleteCommandResultWaiter(
-    commandId: string,
-    waiter: CommandResultWaiter,
-  ): void {
-    const waiters = this.commandResultWaiters.get(commandId);
-    if (!waiters) {
-      return;
-    }
-    clearTimeout(waiter.timeout);
-    waiters.delete(waiter);
-    if (waiters.size === 0) {
-      this.commandResultWaiters.delete(commandId);
-    }
   }
 
   private deleteThreadEventWaiter(
@@ -665,18 +548,6 @@ export class NotificationHub implements DbNotifier {
     }
   }
 
-  private deleteCommandWaiter(hostId: string, waiter: CommandWaiter): void {
-    const waiters = this.commandWaiters.get(hostId);
-    if (!waiters) {
-      return;
-    }
-    clearTimeout(waiter.timeout);
-    waiters.delete(waiter);
-    if (waiters.size === 0) {
-      this.commandWaiters.delete(hostId);
-    }
-  }
-
   private notifyClients(message: ChangedMessage): void {
     const sockets = new Set<HubSocket>();
     const entitySockets = this.clientSocketsByKey.get(subKey(message.entity));
@@ -721,13 +592,6 @@ export class NotificationHub implements DbNotifier {
     for (const socket of sockets) {
       socket.send(payload);
     }
-  }
-
-  notifyDaemon(
-    hostId: string,
-    message: { type: "commands-available" } = { type: "commands-available" },
-  ): void {
-    this.sendDaemonMessage(hostId, message);
   }
 
   sendDaemonMessage(

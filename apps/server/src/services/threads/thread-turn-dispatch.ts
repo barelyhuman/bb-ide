@@ -6,17 +6,20 @@ import type {
   ThreadTurnInitiator,
 } from "@bb/domain";
 import { createThreadProvisioningId } from "@bb/db";
-import type { WorkSessionDeps } from "../../types.js";
+import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
+  dispatchManagedEnvironmentReprovision,
   hasActiveManagedEnvironmentProvision,
   MANAGED_REPROVISION_IN_PROGRESS,
-  MANAGED_REPROVISION_QUEUED,
-  queueManagedEnvironmentReprovision,
+  MANAGED_REPROVISION_STARTED,
 } from "../environments/environment-provisioning-internal.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
-import { appendThreadProvisioningEvent } from "./thread-events.js";
+import {
+  appendThreadProvisioningEvent,
+  getLastProviderThreadId,
+} from "./thread-events.js";
 import { requestThreadReprovision } from "./thread-provisioning.js";
 import { tryTransition } from "./thread-transitions.js";
 
@@ -25,16 +28,21 @@ export interface ReadyThreadEnvironment extends Environment {
   status: "ready";
 }
 
-export interface QueueTurnDuringReprovisionArgs {
-  deps: WorkSessionDeps;
+export interface DispatchTurnDuringReprovisionArgs {
+  deps: LoggedPendingInteractionWorkSessionDeps;
   environment: Environment;
   execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
-  onQueued?: () => void;
+  onStarted?: () => void;
   senderThreadId: string | null;
   thread: Thread;
 }
+
+type ThreadTurnDispatchReadDeps = Pick<
+  LoggedPendingInteractionWorkSessionDeps,
+  "db"
+>;
 
 function reprovisionStartedText(
   workspaceProvisionType: Environment["workspaceProvisionType"],
@@ -47,6 +55,16 @@ function reprovisionStartedText(
     case "unmanaged":
       return "Restoring environment";
   }
+}
+
+function canRecoverPreStartErroredThread(
+  deps: ThreadTurnDispatchReadDeps,
+  thread: Thread,
+): boolean {
+  return (
+    thread.status === "error" &&
+    getLastProviderThreadId(deps, thread.id) === null
+  );
 }
 
 export function requireReadyThreadEnvironment(
@@ -63,8 +81,8 @@ export function requireReadyThreadEnvironment(
   };
 }
 
-export async function queueTurnDuringReprovision(
-  args: QueueTurnDuringReprovisionArgs,
+export async function dispatchTurnDuringReprovision(
+  args: DispatchTurnDuringReprovisionArgs,
 ): Promise<boolean> {
   if (args.environment.status === "ready" && args.environment.path) {
     return false;
@@ -88,7 +106,10 @@ export async function queueTurnDuringReprovision(
     hostId: args.environment.hostId,
   });
 
-  if (args.thread.status === "idle") {
+  if (
+    args.thread.status === "idle" ||
+    canRecoverPreStartErroredThread(args.deps, args.thread)
+  ) {
     tryTransition(args.deps.db, args.deps.hub, args.thread.id, "provisioning");
   }
   const provisioningId = createThreadProvisioningId();
@@ -107,7 +128,18 @@ export async function queueTurnDuringReprovision(
     ],
   });
 
-  const reprovisionResult = await queueManagedEnvironmentReprovision(
+  requestThreadReprovision(args.deps, {
+    thread: args.thread,
+    environment: args.environment,
+    provisionEventSequence,
+    input: args.input,
+    execution: args.execution,
+    initiator: args.initiator,
+    provisioningId,
+    senderThreadId: args.senderThreadId,
+  });
+
+  const reprovisionResult = await dispatchManagedEnvironmentReprovision(
     args.deps,
     {
       environment: args.environment,
@@ -124,20 +156,10 @@ export async function queueTurnDuringReprovision(
       "Environment is already provisioning",
     );
   }
-  if (reprovisionResult.status !== MANAGED_REPROVISION_QUEUED) {
+  if (reprovisionResult.status !== MANAGED_REPROVISION_STARTED) {
     throw new ApiError(500, "internal_error", "Unexpected reprovision result");
   }
 
-  requestThreadReprovision(args.deps, {
-    thread: args.thread,
-    environment: args.environment,
-    provisionEventSequence: reprovisionResult.provisionEventSequence,
-    input: args.input,
-    execution: args.execution,
-    initiator: args.initiator,
-    provisioningId,
-    senderThreadId: args.senderThreadId,
-  });
-  args.onQueued?.();
+  args.onStarted?.();
   return true;
 }

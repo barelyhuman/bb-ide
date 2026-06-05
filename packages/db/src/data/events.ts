@@ -19,12 +19,17 @@ import type {
   HostDaemonProducerEventId,
   ClientTurnRequestId,
   StoredThreadEventDataForType,
+  SystemThreadInterruptedReason,
   ThreadEventItemType,
   ThreadEventScope,
   ThreadEventScopeKind,
   ThreadEventType,
 } from "@bb/domain";
-import { clientTurnRequestIdSchema, getThreadEventScopeTurnId } from "@bb/domain";
+import {
+  clientTurnRequestIdSchema,
+  getThreadEventScopeTurnId,
+  systemThreadInterruptedReasonSchema,
+} from "@bb/domain";
 import type {
   DbConnection,
   DbQueryConnection,
@@ -35,7 +40,6 @@ import type { DbNotifier } from "../notifier.js";
 import { environments, events, threads } from "../schema.js";
 import { createEventId } from "../ids.js";
 import { deriveStoredEventItemFieldsFromSource } from "../stored-event-item-fields.js";
-import { markClientTurnRequestAcceptedInTransaction } from "./client-turn-requests.js";
 
 const STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE = 250;
 
@@ -491,11 +495,7 @@ export function appendDaemonEventsInTransaction(
     const acceptedClientRequestId =
       parseAcceptedInputClientRequestIdFromInput(input);
     if (acceptedClientRequestId !== null) {
-      markClientTurnRequestAcceptedInTransaction(db, {
-        requestId: acceptedClientRequestId,
-        settledAt: now,
-        threadId: input.threadId,
-      });
+      void acceptedClientRequestId;
     }
     nextSequencesByThreadId.set(input.threadId, sequence + 1);
   }
@@ -704,6 +704,10 @@ export interface FindStoredClientTurnRequestSequenceByRequestIdArgs {
 
 export interface ListStoredThreadProvisioningRowsByProvisioningIdArgs {
   provisioningId: string;
+  threadId: string;
+}
+
+export interface GetLatestThreadInterruptedReasonArgs {
   threadId: string;
 }
 
@@ -973,6 +977,30 @@ export function listStoredThreadProvisioningRowsByProvisioningId(
     )
     .orderBy(events.sequence)
     .all();
+}
+
+export function getLatestThreadInterruptedReason(
+  db: DbQueryConnection,
+  args: GetLatestThreadInterruptedReasonArgs,
+): SystemThreadInterruptedReason | null {
+  const row = db
+    .select({
+      reason: sql<string>`json_extract(${events.data}, '$.reason')`,
+    })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "system/thread/interrupted"),
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+  if (!row) {
+    return null;
+  }
+  return systemThreadInterruptedReasonSchema.parse(row.reason);
 }
 
 export function listStoredTurnStartedRowsByTurnIdsUpToSequence(

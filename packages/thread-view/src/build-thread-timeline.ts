@@ -47,8 +47,7 @@ import {
 } from "./build-event-projection.js";
 import {
   buildAcceptedClientRequestById,
-  buildClientTurnRequestSettlementById,
-  type ClientTurnRequestSettlementContext,
+  type AcceptedClientRequestContext,
 } from "./accepted-client-request-context.js";
 import { parsePendingSteerFromClientRequest } from "./user-message-parsing.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
@@ -128,7 +127,7 @@ export type ThreadTimelineFromEventsOptions =
   | ManagerConversationTimelineFromEventsOptions;
 
 export interface BuildThreadTimelineFromEventsArgs {
-  acceptedClientRequestContext: ClientTurnRequestSettlementContext;
+  acceptedClientRequestContext: AcceptedClientRequestContext;
   contextWindowEvents: ThreadEventWithMeta[];
   events: ThreadEventWithMeta[];
   options: ThreadTimelineFromEventsOptions;
@@ -802,7 +801,7 @@ function convertPendingSteerMessage(
 }
 
 function buildPendingSteerRowsFromEvents(
-  acceptedClientRequestContext: ClientTurnRequestSettlementContext,
+  acceptedClientRequestContext: AcceptedClientRequestContext,
   events: ThreadEventWithMeta[],
   options: ThreadTimelineFromEventsBaseOptions,
 ): TimelineUserConversationRow[] {
@@ -811,25 +810,18 @@ function buildPendingSteerRowsFromEvents(
     context: acceptedClientRequestContext,
     events: orderedEvents,
   });
-  const clientTurnRequestSettlementById = buildClientTurnRequestSettlementById({
-    context: acceptedClientRequestContext,
-    events: orderedEvents,
-  });
   const pendingSteerRows: TimelineUserConversationRow[] = [];
 
   for (const { event, meta } of orderedEvents) {
-    const settlement =
+    const acceptedClientRequest =
       event.type === "client/turn/requested"
-        ? clientTurnRequestSettlementById.get(event.requestId)
+        ? acceptedClientRequestById.get(event.requestId)
         : undefined;
-    if (settlement && settlement.status !== "pending") {
+    if (acceptedClientRequest) {
       continue;
     }
     const pendingSteer = parsePendingSteerFromClientRequest({
-      acceptedClientRequest:
-        event.type === "client/turn/requested"
-          ? acceptedClientRequestById.get(event.requestId)
-          : undefined,
+      acceptedClientRequest,
       decoded: event,
       meta,
       options,

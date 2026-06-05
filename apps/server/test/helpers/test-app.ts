@@ -92,11 +92,6 @@ export async function createTestAppHarness(
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
-  const pendingInteractions = new PendingInteractionLifecycle({
-    db,
-    hub,
-    logger: testLogger,
-  });
   const terminalSessions = new TerminalSessionLifecycle({
     attachTimeoutMs: 50,
     db,
@@ -104,7 +99,6 @@ export async function createTestAppHarness(
     logger: testLogger,
     openTimeoutMs: 50,
   });
-  pendingInteractions.start();
   const lifecycleDedupers = createLifecycleDedupers();
   const machineAuth = await createMachineAuthService({
     dataDir,
@@ -149,6 +143,16 @@ export async function createTestAppHarness(
     hub,
     logger: testLogger,
   });
+  const pendingInteractions = new PendingInteractionLifecycle({
+    config,
+    db,
+    hub,
+    lifecycleDedupers,
+    logger: testLogger,
+    machineAuth: testMachineAuth,
+    terminalSessions,
+  });
+  pendingInteractions.start();
   const appVersion =
     appVersionService ??
     createAppVersionService({

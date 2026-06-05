@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
-  parseHostDaemonOnlineRpcResultForCommand,
-  type HostDaemonOnlineRpcCommand,
   type HostDaemonOnlineRpcResponseMessage,
   type HostDaemonOnlineRpcResultForCommand,
   type HostDaemonRetryableOnlineRpcCommand,
+  parseHostDaemonRpcResultForCommand,
+  type HostDaemonRpcCommand,
+  type HostDaemonRpcResultForCommand,
 } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { WorkSessionDeps } from "../../types.js";
@@ -15,7 +16,7 @@ import {
 import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
 
 export interface CallHostOnlineRpcArgs<
-  TCommand extends HostDaemonOnlineRpcCommand,
+  TCommand extends HostDaemonRpcCommand,
 > {
   command: TCommand;
   hostId: string;
@@ -30,14 +31,14 @@ export interface CallHostRetryableOnlineRpcArgs<
   timeoutMs: number;
 }
 
-export function callHostOnlineRpc<TCommand extends HostDaemonOnlineRpcCommand>(
+export function callHostOnlineRpc<TCommand extends HostDaemonRpcCommand>(
   deps: WorkSessionDeps,
   args: CallHostOnlineRpcArgs<TCommand>,
-): Promise<HostDaemonOnlineRpcResultForCommand<TCommand>>;
+): Promise<HostDaemonRpcResultForCommand<TCommand>>;
 export async function callHostOnlineRpc(
   deps: WorkSessionDeps,
-  args: CallHostOnlineRpcArgs<HostDaemonOnlineRpcCommand>,
-): Promise<HostDaemonOnlineRpcResultForCommand> {
+  args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
+): Promise<HostDaemonRpcResultForCommand> {
   return callHostOnlineRpcWithRetry(deps, args, { retryOnUnavailable: false });
 }
 
@@ -56,9 +57,9 @@ export async function callHostRetryableOnlineRpc(
 
 async function callHostOnlineRpcWithRetry(
   deps: WorkSessionDeps,
-  args: CallHostOnlineRpcArgs<HostDaemonOnlineRpcCommand>,
+  args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
   options: { retryOnUnavailable: false },
-): Promise<HostDaemonOnlineRpcResultForCommand>;
+): Promise<HostDaemonRpcResultForCommand>;
 async function callHostOnlineRpcWithRetry(
   deps: WorkSessionDeps,
   args: CallHostRetryableOnlineRpcArgs<HostDaemonRetryableOnlineRpcCommand>,
@@ -66,9 +67,9 @@ async function callHostOnlineRpcWithRetry(
 ): Promise<HostDaemonOnlineRpcResultForCommand>;
 async function callHostOnlineRpcWithRetry(
   deps: WorkSessionDeps,
-  args: CallHostOnlineRpcArgs<HostDaemonOnlineRpcCommand>,
+  args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
   options: { retryOnUnavailable: boolean },
-): Promise<HostDaemonOnlineRpcResultForCommand> {
+): Promise<HostDaemonRpcResultForCommand> {
   await ensureHostSessionReadyForWork(deps, { hostId: args.hostId });
   const response = await requestHostOnlineRpcResponse(deps, args).catch(
     async (error) => {
@@ -97,12 +98,12 @@ async function callHostOnlineRpcWithRetry(
     );
   }
 
-  return parseHostDaemonOnlineRpcResultForCommand(args.command, response.result);
+  return parseHostDaemonRpcResultForCommand(args.command, response.result);
 }
 
 function requestHostOnlineRpcResponse(
   deps: Pick<WorkSessionDeps, "hub">,
-  args: CallHostOnlineRpcArgs<HostDaemonOnlineRpcCommand>,
+  args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
 ): Promise<HostDaemonOnlineRpcResponseMessage> {
   return deps.hub.requestHostOnlineRpc({
     hostId: args.hostId,

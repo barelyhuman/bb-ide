@@ -3,11 +3,11 @@ import {
   findEnvironmentByHostPath,
   hasNonTerminalThreadInEnvironment,
 } from "@bb/db";
-import type { Environment, Project } from "@bb/domain";
+import type { Project } from "@bb/domain";
 import type { UnmanagedBranchSpec } from "@bb/server-contract";
-import type { AppDeps } from "../../types.js";
+import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { hasActiveEnvironmentProvisionCancelCommand } from "../environments/environment-provisioning-cancellation.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
@@ -21,7 +21,10 @@ import {
   getThreadSafe,
   requirePublicProjectForThreadCreate,
 } from "./thread-create-helpers.js";
-import { resolveStableThreadRequestEnvironment } from "./thread-request-eligibility.js";
+import {
+  resolveStableThreadRequestEnvironment,
+  type ResolvedStableThreadRequestEnvironment,
+} from "./thread-request-eligibility.js";
 import { resolveCreateThreadEnvironment } from "./thread-default-policy.js";
 import { assertValidManagerParentThread } from "./thread-parent.js";
 import {
@@ -32,12 +35,12 @@ import {
   advanceThreadProvisioning,
   requestThreadProvision,
 } from "./thread-provisioning.js";
-import type { ThreadProvisionEnvironmentIntent } from "./thread-provisioning-context.js";
+import type {
+  ThreadProvisionContext,
+  ThreadProvisionEnvironmentIntent,
+} from "./thread-provisioning-context.js";
 
-type ThreadCreateDeps = Pick<
-  AppDeps,
-  "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
->;
+type ThreadCreateDeps = LoggedPendingInteractionWorkSessionDeps;
 
 interface ExistingUnmanagedEnvironmentIntentByHostPathArgs {
   branch: UnmanagedBranchSpec | undefined;
@@ -53,10 +56,6 @@ interface ExistingUnmanagedEnvironmentIntentResult {
     | Extract<ThreadProvisionEnvironmentIntent, { type: "checkout-unmanaged" }>;
 }
 
-interface AssertProvisioningEnvironmentNotCancellingArgs {
-  environment: Environment;
-}
-
 interface CreateProvisioningThreadArgs {
   environmentId: string | null;
   executionDefaults: Parameters<
@@ -65,11 +64,17 @@ interface CreateProvisioningThreadArgs {
   request: ThreadCreateServiceRequest;
 }
 
+interface EnsureCreateHostOnlineArgs {
+  resolvedEnvironment: ResolvedStableThreadRequestEnvironment;
+}
+
 function scheduleThreadProvisioningAdvance(
   deps: ThreadCreateDeps,
+  context: ThreadProvisionContext,
   threadId: string,
 ): void {
   void advanceThreadProvisioning(deps, {
+    context,
     threadId,
   }).catch((error) => {
     deps.logger.warn(
@@ -122,17 +127,18 @@ function assertProjectWorkspaceCompatibility(
   }
 }
 
-function assertProvisioningEnvironmentNotCancelling(
+async function ensureCreateHostOnline(
   deps: ThreadCreateDeps,
-  args: AssertProvisioningEnvironmentNotCancellingArgs,
-): void {
-  if (args.environment.status !== "provisioning") {
+  args: EnsureCreateHostOnlineArgs,
+): Promise<void> {
+  const hostId =
+    args.resolvedEnvironment.type === "reuse"
+      ? args.resolvedEnvironment.environment.hostId
+      : args.resolvedEnvironment.hostId;
+  if (hostId === null) {
     return;
   }
-
-  if (hasActiveEnvironmentProvisionCancelCommand(deps, args.environment.id)) {
-    throwEnvironmentNotReady(args.environment);
-  }
+  await ensureHostSessionReadyForWork(deps, { hostId });
 }
 
 function existingUnmanagedEnvironmentIntentByHostPath(
@@ -154,9 +160,6 @@ function existingUnmanagedEnvironmentIntentByHostPath(
 
   if (!args.branch) {
     if (existing.status === "ready" || existing.status === "provisioning") {
-      assertProvisioningEnvironmentNotCancelling(deps, {
-        environment: existing,
-      });
       return {
         environmentId: existing.id,
         intent: {
@@ -217,6 +220,7 @@ async function createProvisioningThread(
     status: "provisioning",
   });
   let execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
+  let context: ThreadProvisionContext;
   try {
     execution = await buildExecutionOptions(
       deps,
@@ -229,7 +233,7 @@ async function createProvisioningThread(
       },
       "client/turn/requested",
     );
-    requestThreadProvision(deps, {
+    context = requestThreadProvision(deps, {
       thread,
       environmentIntent: args.environmentIntent,
       execution,
@@ -246,10 +250,11 @@ async function createProvisioningThread(
   });
   if (shouldAdvanceProvisioningBeforeResponse(args.environmentIntent)) {
     await advanceThreadProvisioning(deps, {
+      context,
       threadId: thread.id,
     });
   } else {
-    scheduleThreadProvisioningAdvance(deps, thread.id);
+    scheduleThreadProvisioningAdvance(deps, context, thread.id);
   }
   return getThreadSafe(deps, thread.id);
 }
@@ -291,6 +296,7 @@ export async function createThreadFromRequest(
     environment: request.environment,
     projectId: request.projectId,
   });
+  await ensureCreateHostOnline(deps, { resolvedEnvironment });
 
   let environmentId: string | null = null;
   let environmentIntent: ThreadProvisionEnvironmentIntent;
@@ -308,9 +314,6 @@ export async function createThreadFromRequest(
         throwEnvironmentNotReady(environment);
       }
       if (environment.status === "provisioning") {
-        assertProvisioningEnvironmentNotCancelling(deps, {
-          environment,
-        });
         requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
       }
       environmentId = environment.id;

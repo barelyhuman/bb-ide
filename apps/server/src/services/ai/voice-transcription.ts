@@ -6,7 +6,7 @@ import {
 } from "@bb/config/inference-model";
 import type { LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { queueCommandAndWait } from "../hosts/command-wait.js";
+import { runLiveCommandAndWait } from "../hosts/live-command-wait.js";
 import { requireDefaultConnectedPersistentHostId } from "../lib/entity-lookup.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
@@ -119,7 +119,7 @@ async function transcribeWithCodexHostDaemon(
     "base64",
   );
   try {
-    const result = await queueCommandAndWait(deps, {
+    const result = await runLiveCommandAndWait(deps, {
       hostId,
       timeoutMs: VOICE_TRANSCRIPTION_TIMEOUT_MS,
       command: {

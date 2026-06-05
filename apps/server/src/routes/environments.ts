@@ -29,7 +29,7 @@ import {
   requireEnvironment,
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
-import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { runLiveCommandAndWait } from "../services/hosts/live-command-wait.js";
 import { callHostRetryableOnlineRpc } from "../services/hosts/online-rpc.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
 import { archiveEnvironmentThreads } from "../services/threads/thread-archive.js";
@@ -419,7 +419,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           const result = await mapNoChangesTo409(
             "No uncommitted changes to commit",
             () =>
-              queueCommandAndWait(deps, {
+              runLiveCommandAndWait(deps, {
                 hostId: target.hostId,
                 timeoutMs: COMMAND_TIMEOUT_MS,
                 command: {
@@ -479,7 +479,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           });
 
           if (workspaceStatus.workingTree.hasUncommittedChanges) {
-            await queueCommandAndWait(deps, {
+            await runLiveCommandAndWait(deps, {
               hostId: target.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
               command: {
@@ -519,7 +519,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           const result = await mapNoChangesTo409(
             `No changes to merge into ${targetBranch}`,
             () =>
-              queueCommandAndWait(deps, {
+              runLiveCommandAndWait(deps, {
                 hostId: target.hostId,
                 timeoutMs: COMMAND_TIMEOUT_MS,
                 command: {

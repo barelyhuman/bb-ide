@@ -35,6 +35,10 @@ interface IndexNameRow {
   name: string;
 }
 
+interface TableNameRow {
+  name: string;
+}
+
 interface MigrationCreatedAtRow {
   createdAt: number;
 }
@@ -73,6 +77,25 @@ interface MigratedThreadScheduleRow {
   threadId: string;
   timezone: string;
   updatedAt: number;
+}
+
+interface OperationBackfillProjectRow {
+  deletedAt: number | null;
+}
+
+interface OperationBackfillEnvironmentRow {
+  status: string;
+}
+
+interface OperationBackfillThreadRow {
+  status: string;
+  stopRequestedAt: number | null;
+}
+
+interface OperationBackfillInterruptedEventRow {
+  data: string;
+  sequence: number;
+  type: string;
 }
 
 interface PersonalProjectMigrationRow {
@@ -153,6 +176,20 @@ function readIndexNames(args: ReadIndexNamesArgs): string[] {
       `,
     )
     .all(args.tableName)
+    .map((row) => row.name);
+}
+
+function readTableNames(db: DbConnection): string[] {
+  return db.$client
+    .prepare<[], TableNameRow>(
+      `
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+        ORDER BY name
+      `,
+    )
+    .all()
     .map((row) => row.name);
 }
 
@@ -316,7 +353,6 @@ describe("migrate", () => {
     try {
       migrate(db);
 
-      db.$client.prepare("DROP INDEX host_daemon_commands_session_idx").run();
       db.$client
         .prepare("DROP INDEX host_daemon_sessions_closed_prune_idx")
         .run();
@@ -328,12 +364,6 @@ describe("migrate", () => {
       db.$client.prepare("DROP INDEX projects_sort_idx").run();
       db.$client.prepare("DROP INDEX projects_personal_singleton_idx").run();
       db.$client.prepare("DROP INDEX threads_project_type_sort_idx").run();
-      db.$client
-        .prepare("DROP INDEX host_daemon_commands_host_type_state_idx")
-        .run();
-      db.$client
-        .prepare("DROP INDEX host_daemon_commands_type_state_idx")
-        .run();
       db.$client.prepare("DROP INDEX threads_pin_sort_idx").run();
       db.$client.prepare("DROP TABLE thread_schedules").run();
       db.$client
@@ -358,7 +388,6 @@ describe("migrate", () => {
         )
         .run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
-      db.$client.prepare("DROP TABLE client_turn_requests").run();
       db.$client.prepare("DELETE FROM projects WHERE kind = 'personal'").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN kind").run();
       db.$client.prepare("ALTER TABLE projects DROP COLUMN sort_key").run();
@@ -371,7 +400,309 @@ describe("migrate", () => {
       db.$client
         .prepare("ALTER TABLE threads DROP COLUMN reasoning_level_override")
         .run();
-      db.$client.prepare("DROP TABLE host_daemon_command_attempts").run();
+      db.$client.prepare("DROP INDEX projects_deleted_idx").run();
+      db.$client.prepare("ALTER TABLE projects DROP COLUMN deleted_at").run();
+      db.$client
+        .prepare(
+          "ALTER TABLE hosts ADD command_cursor integer DEFAULT 0 NOT NULL",
+        )
+        .run();
+      db.$client.exec(`
+        CREATE TABLE host_daemon_commands (
+          id text PRIMARY KEY NOT NULL,
+          host_id text NOT NULL,
+          session_id text,
+          cursor integer NOT NULL,
+          type text NOT NULL,
+          payload text NOT NULL,
+          state text NOT NULL,
+          retry_count integer DEFAULT 0 NOT NULL,
+          result_payload text,
+          created_at integer NOT NULL,
+          fetched_at integer,
+          completed_at integer,
+          FOREIGN KEY (host_id) REFERENCES hosts(id) ON UPDATE no action ON DELETE cascade,
+          FOREIGN KEY (session_id) REFERENCES host_daemon_sessions(id) ON UPDATE no action ON DELETE set null
+        );
+        CREATE TABLE environment_operations (
+          id text PRIMARY KEY NOT NULL,
+          environment_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          payload text NOT NULL,
+          command_id text,
+          requested_at integer NOT NULL,
+          queued_at integer,
+          completed_at integer,
+          failure_reason text,
+          created_at integer NOT NULL,
+          updated_at integer NOT NULL,
+          FOREIGN KEY (environment_id) REFERENCES environments(id) ON UPDATE no action ON DELETE cascade,
+          FOREIGN KEY (command_id) REFERENCES host_daemon_commands(id) ON UPDATE no action ON DELETE set null
+        );
+        CREATE UNIQUE INDEX environment_operations_environment_kind_idx ON environment_operations (environment_id, kind);
+        CREATE UNIQUE INDEX environment_operations_command_idx ON environment_operations (command_id);
+        CREATE INDEX environment_operations_state_idx ON environment_operations (state);
+        CREATE INDEX environment_operations_environment_idx ON environment_operations (environment_id);
+        CREATE TABLE project_operations (
+          id text PRIMARY KEY NOT NULL,
+          project_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          payload text NOT NULL,
+          command_id text,
+          requested_at integer NOT NULL,
+          queued_at integer,
+          completed_at integer,
+          failure_reason text,
+          created_at integer NOT NULL,
+          updated_at integer NOT NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON UPDATE no action ON DELETE cascade,
+          FOREIGN KEY (command_id) REFERENCES host_daemon_commands(id) ON UPDATE no action ON DELETE set null
+        );
+        CREATE UNIQUE INDEX project_operations_project_kind_idx ON project_operations (project_id, kind);
+        CREATE UNIQUE INDEX project_operations_command_idx ON project_operations (command_id);
+        CREATE INDEX project_operations_state_idx ON project_operations (state);
+        CREATE INDEX project_operations_project_idx ON project_operations (project_id);
+        CREATE TABLE thread_operations (
+          id text PRIMARY KEY NOT NULL,
+          thread_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          payload text NOT NULL,
+          provisioning_id text,
+          provisioning_stage text,
+          provisioning_environment_id text,
+          provision_event_sequence integer,
+          workspace_ready_event_sequence integer,
+          command_id text,
+          requested_at integer NOT NULL,
+          queued_at integer,
+          completed_at integer,
+          failure_reason text,
+          created_at integer NOT NULL,
+          updated_at integer NOT NULL,
+          FOREIGN KEY (thread_id) REFERENCES threads(id) ON UPDATE no action ON DELETE cascade,
+          FOREIGN KEY (provisioning_environment_id) REFERENCES environments(id) ON UPDATE no action ON DELETE set null,
+          FOREIGN KEY (command_id) REFERENCES host_daemon_commands(id) ON UPDATE no action ON DELETE set null
+        );
+        CREATE UNIQUE INDEX thread_operations_thread_kind_idx ON thread_operations (thread_id, kind);
+        CREATE UNIQUE INDEX thread_operations_command_idx ON thread_operations (command_id);
+        CREATE INDEX thread_operations_state_idx ON thread_operations (state);
+        CREATE INDEX thread_operations_thread_idx ON thread_operations (thread_id);
+      `);
+      db.$client.exec(`
+        INSERT INTO hosts (
+          id,
+          name,
+          type,
+          command_cursor,
+          destroyed_at,
+          last_seen_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'host_legacy_operation_backfill',
+          'Legacy operation backfill host',
+          'persistent',
+          0,
+          NULL,
+          NULL,
+          1000,
+          1000
+        );
+        INSERT INTO projects (
+          id,
+          name,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'proj_legacy_operation_backfill',
+          'Legacy operation backfill project',
+          1000,
+          1000
+        );
+        INSERT INTO environments (
+          id,
+          project_id,
+          host_id,
+          path,
+          managed,
+          is_git_repo,
+          is_worktree,
+          workspace_provision_type,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'env_legacy_operation_backfill',
+          'proj_legacy_operation_backfill',
+          'host_legacy_operation_backfill',
+          '/tmp/legacy-operation-backfill',
+          1,
+          1,
+          1,
+          'managed-worktree',
+          'provisioning',
+          1000,
+          1000
+        );
+        INSERT INTO threads (
+          id,
+          project_id,
+          environment_id,
+          provider_id,
+          status,
+          latest_attention_at,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'thr_legacy_operation_backfill',
+          'proj_legacy_operation_backfill',
+          'env_legacy_operation_backfill',
+          'codex',
+          'provisioning',
+          1000,
+          1000,
+          1000
+        );
+        INSERT INTO thread_operations (
+          id,
+          thread_id,
+          kind,
+          state,
+          payload,
+          provisioning_id,
+          provisioning_stage,
+          provisioning_environment_id,
+          provision_event_sequence,
+          workspace_ready_event_sequence,
+          command_id,
+          requested_at,
+          queued_at,
+          completed_at,
+          failure_reason,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'top_legacy_provision_backfill',
+          'thr_legacy_operation_backfill',
+          'provision',
+          'queued',
+          '{"workspaceProvisionType":"managed-worktree"}',
+          'tpv_legacy_operation_backfill',
+          'workspace-ready',
+          'env_legacy_operation_backfill',
+          41,
+          42,
+          NULL,
+          2000,
+          2010,
+          NULL,
+          NULL,
+          2000,
+          2010
+        );
+        INSERT INTO thread_operations (
+          id,
+          thread_id,
+          kind,
+          state,
+          payload,
+          provisioning_id,
+          provisioning_stage,
+          provisioning_environment_id,
+          provision_event_sequence,
+          workspace_ready_event_sequence,
+          command_id,
+          requested_at,
+          queued_at,
+          completed_at,
+          failure_reason,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'top_legacy_stop_backfill',
+          'thr_legacy_operation_backfill',
+          'stop',
+          'requested',
+          '{"interruptionReason":"host-daemon-restarted"}',
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          2500,
+          NULL,
+          NULL,
+          NULL,
+          2500,
+          2500
+        );
+        INSERT INTO environment_operations (
+          id,
+          environment_id,
+          kind,
+          state,
+          payload,
+          command_id,
+          requested_at,
+          queued_at,
+          completed_at,
+          failure_reason,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'eop_legacy_provision_backfill',
+          'env_legacy_operation_backfill',
+          'provision',
+          'queued',
+          '{}',
+          NULL,
+          2600,
+          2610,
+          NULL,
+          NULL,
+          2600,
+          2610
+        );
+        INSERT INTO project_operations (
+          id,
+          project_id,
+          kind,
+          state,
+          payload,
+          command_id,
+          requested_at,
+          queued_at,
+          completed_at,
+          failure_reason,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'pop_legacy_delete_backfill',
+          'proj_legacy_operation_backfill',
+          'delete',
+          'requested',
+          '{}',
+          NULL,
+          3000,
+          NULL,
+          NULL,
+          NULL,
+          3000,
+          3000
+        );
+      `);
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -391,20 +722,30 @@ describe("migrate", () => {
         .run("main-0001-hash", publishedTerminalSessionUserInputWhen);
 
       expect(
-        readIndexNames({ db, tableName: "host_daemon_commands" }),
-      ).not.toContain("host_daemon_commands_session_idx");
-      expect(
         readIndexNames({ db, tableName: "host_daemon_sessions" }),
       ).not.toContain("host_daemon_sessions_closed_prune_idx");
 
       migrate(db);
 
       expect(
-        readIndexNames({ db, tableName: "host_daemon_commands" }),
-      ).toContain("host_daemon_commands_session_idx");
-      expect(
         readIndexNames({ db, tableName: "host_daemon_sessions" }),
       ).toContain("host_daemon_sessions_closed_prune_idx");
+      expect(readTableNames(db)).not.toEqual(
+        expect.arrayContaining([
+          "client_turn_requests",
+          "environment_operations",
+          "host_daemon_command_attempts",
+          "host_daemon_commands",
+          "project_operations",
+          "thread_operations",
+        ]),
+      );
+      expect(
+        db.$client
+          .prepare<[], TableInfoRow>("PRAGMA table_info(hosts)")
+          .all()
+          .map((row) => row.name),
+      ).not.toContain("command_cursor");
 
       const migrationCreatedAts = db.$client
         .prepare<[], MigrationCreatedAtRow>(
@@ -420,6 +761,65 @@ describe("migrate", () => {
       expect(migrationCreatedAts).toContain(threadDynamicContextFileStatesWhen);
       expect(migrationCreatedAts).toContain(commandLookupIndexesWhen);
       expect(migrationCreatedAts).toContain(threadPinningMigrationWhen);
+      expect(
+        db.$client
+          .prepare<[], OperationBackfillThreadRow>(
+            `
+            SELECT
+                status,
+                stop_requested_at AS stopRequestedAt
+              FROM threads
+              WHERE id = 'thr_legacy_operation_backfill'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        status: "error",
+        stopRequestedAt: 2_500,
+      });
+      const interruptedEvent = db.$client
+        .prepare<[], OperationBackfillInterruptedEventRow>(
+          `
+            SELECT
+              type,
+              sequence,
+              data
+            FROM events
+            WHERE id = 'evt_top_legacy_stop_backfill'
+          `,
+        )
+        .get();
+      expect(interruptedEvent).toEqual({
+        data: '{"reason":"host-daemon-restarted"}',
+        sequence: 1,
+        type: "system/thread/interrupted",
+      });
+      expect(
+        db.$client
+          .prepare<[], OperationBackfillEnvironmentRow>(
+            `
+              SELECT status
+              FROM environments
+              WHERE id = 'env_legacy_operation_backfill'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        status: "error",
+      });
+      expect(
+        db.$client
+          .prepare<[], OperationBackfillProjectRow>(
+            `
+              SELECT deleted_at AS deletedAt
+              FROM projects
+              WHERE id = 'proj_legacy_operation_backfill'
+            `,
+          )
+          .get(),
+      ).toEqual({
+        deletedAt: 3_000,
+      });
     } finally {
       closeConnection(db);
     }

@@ -8,10 +8,10 @@ import {
   ensurePersonalProject,
   listProjects,
   listPublicProjects,
+  markProjectDeleted,
   reorderProject,
 } from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
-import { upsertProjectOperationRecord } from "../../src/data/project-operations.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -37,7 +37,7 @@ describe("projects", () => {
     ).toEqual([expect.objectContaining({ id: PERSONAL_PROJECT_ID })]);
   });
 
-  it("excludes projects with delete operations from public listings", () => {
+  it("excludes deleted projects from public listings", () => {
     const { db, host } = setup();
     const { project: visibleProject } = createProject(db, noopNotifier, {
       name: "visible-project",
@@ -56,10 +56,8 @@ describe("projects", () => {
       },
     });
 
-    upsertProjectOperationRecord(db, {
+    markProjectDeleted(db, noopNotifier, {
       projectId: deletingProject.id,
-      kind: "delete",
-      payload: JSON.stringify({}),
     });
 
     const allProjectIds = listProjects(db).map((project) => project.id);
@@ -283,10 +281,8 @@ describe("projects", () => {
         path: "/tmp/deleting-project",
       },
     });
-    upsertProjectOperationRecord(db, {
+    markProjectDeleted(db, noopNotifier, {
       projectId: deletingProject.id,
-      kind: "delete",
-      payload: JSON.stringify({}),
     });
 
     expect(

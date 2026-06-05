@@ -200,21 +200,8 @@ OpenAI API-key inference.
 ```bash
 WORKTREE_ENV_PATH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID" | jq -er '.path')
 printf 'helper inference commit smoke\n' > "$WORKTREE_ENV_PATH/helper-inference-smoke.txt"
-HELPER_PRE_COMMIT_COMMAND_CURSOR=$(sqlite3 "$SERVER_DB_PATH" \
-  "SELECT COALESCE(MAX(cursor), 0) FROM host_daemon_commands;")
 
 bb environment commit "$WORKTREE_ENV_ID" --json | jq -e '.action == "commit" and (.commitSha | type == "string")'
-
-HELPER_INFERENCE_COMMAND_COUNT=0
-for _ in {1..30}; do
-  HELPER_INFERENCE_COMMAND_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
-    "SELECT COUNT(*) FROM host_daemon_commands WHERE cursor > $HELPER_PRE_COMMIT_COMMAND_CURSOR AND type = 'codex.inference.complete' AND state = 'success';")
-  if [ "$HELPER_INFERENCE_COMMAND_COUNT" -ge 1 ]; then
-    break
-  fi
-  sleep 1
-done
-test "$HELPER_INFERENCE_COMMAND_COUNT" -ge 1
 ```
 
 Verify merge-base environment metadata:
@@ -266,8 +253,6 @@ DIRTY_ARCHIVE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_T
 DIRTY_ARCHIVE_ENV_PATH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$DIRTY_ARCHIVE_ENV_ID" | jq -er '.path')
 printf 'dirty archive safety\n' > "$DIRTY_ARCHIVE_ENV_PATH/dirty-archive.txt"
 bb thread show "$DIRTY_ARCHIVE_THREAD_ID" --work-status
-DIRTY_PRE_ARCHIVE_COMMAND_CURSOR=$(sqlite3 "$SERVER_DB_PATH" \
-  "SELECT COALESCE(MAX(cursor), 0) FROM host_daemon_commands;")
 
 bb thread archive "$DIRTY_ARCHIVE_THREAD_ID"
 
@@ -276,35 +261,16 @@ curl -fsS "$BB_SERVER_URL/api/v1/environments/$DIRTY_ARCHIVE_ENV_ID" \
   | jq -e '.cleanupMode == "safe" and (.cleanupRequestedAt | type == "number") and .status == "ready"'
 test -d "$DIRTY_ARCHIVE_ENV_PATH"
 test -f "$DIRTY_ARCHIVE_ENV_PATH/dirty-archive.txt"
-
-DIRTY_CLEANUP_OPERATION_STATE=$(sqlite3 "$SERVER_DB_PATH" \
-  "SELECT state FROM environment_operations WHERE environment_id = '$DIRTY_ARCHIVE_ENV_ID' AND kind = 'destroy';")
-test "$DIRTY_CLEANUP_OPERATION_STATE" = "requested"
-
-DIRTY_PREFLIGHT_SUCCESS_COUNT=0
-for _ in {1..30}; do
-  DIRTY_PREFLIGHT_SUCCESS_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
-    "SELECT COUNT(*) FROM host_daemon_commands WHERE cursor > $DIRTY_PRE_ARCHIVE_COMMAND_CURSOR AND type = 'environment.cleanup_preflight' AND state = 'success' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
-  if [ "$DIRTY_PREFLIGHT_SUCCESS_COUNT" -ge 1 ]; then
-    break
-  fi
-  sleep 1
-done
-test "$DIRTY_PREFLIGHT_SUCCESS_COUNT" -ge 1
-
-DIRTY_DESTROY_COMMAND_COUNT=$(sqlite3 "$SERVER_DB_PATH" \
-  "SELECT COUNT(*) FROM host_daemon_commands WHERE type = 'environment.destroy' AND json_extract(payload, '$.environmentId') = '$DIRTY_ARCHIVE_ENV_ID';")
-test "$DIRTY_DESTROY_COMMAND_COUNT" -eq 0
 ```
 
 Expected result:
 
 - The unmanaged thread reaches `idle`, shows output, and accepts a follow-up.
 - The worktree thread reaches `idle`, the environment reports `isWorktree: true`, and workspace status/diff routes return data for uncommitted, branch-committed, and combined targets.
-- `bb environment commit` succeeds and records successful `codex.inference.complete` for helper-generated commit text without requiring `OPENAI_API_KEY`.
+- `bb environment commit` succeeds with helper-generated commit text without requiring `OPENAI_API_KEY`.
 - Environment merge-base metadata can be set, reflected by `bb environment show`, used by thread status/diff output, and cleared.
 - Archiving blocks `bb thread tell`; unarchiving restores normal operation.
-- Dirty isolated managed worktree archive succeeds, records safe cleanup intent, runs the cleanup safety inspection, and keeps the worktree intact without queueing `environment.destroy` while uncommitted or unmerged work remains.
+- Dirty isolated managed worktree archive succeeds, records safe cleanup intent, and keeps the worktree intact while uncommitted or unmerged work remains.
 
 ## Multi-Thread and Shared Environment
 
@@ -423,6 +389,126 @@ bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
 bb thread output "$SMOKE_THREAD_ID"
 ```
 
+Server restart during environment provisioning:
+
+```bash
+SERVER_RESTART_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --model "$CODEX_MODEL" \
+  --reasoning-level low \
+  --new-environment worktree \
+  --prompt "Say exactly: server restart provisioning recovery" \
+  --json | jq -r '.id')
+
+SERVER_RESTART_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$SERVER_RESTART_THREAD_ID" | jq -er '.environmentId')
+for _ in $(seq 1 60); do
+  ENV_STATUS=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$SERVER_RESTART_ENV_ID" | jq -r '.status')
+  [ "$ENV_STATUS" = "provisioning" ] && break
+  sleep 1
+done
+test "$ENV_STATUS" = "provisioning"
+
+kill -TERM "$SERVER_PID"
+while kill -0 "$SERVER_PID" 2>/dev/null; do sleep 1; done
+
+BB_DATA_DIR=$(jq -er '.server.dataDir' "$STATE_PATH") \
+BB_SERVER_PORT=$(jq -er '.server.port' "$STATE_PATH") \
+node apps/server/dist/index.js >> "$(jq -er '.server.logPath' "$STATE_PATH")" 2>&1 &
+SERVER_PID=$!
+
+for _ in $(seq 1 60); do
+  curl -fsS "$BB_SERVER_URL/api/v1/system/config" >/dev/null && break
+  sleep 1
+done
+
+eval "$RESTART_DAEMON_COMMAND"
+DAEMON_PID=$!
+
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$SERVER_RESTART_ENV_ID" | jq
+bb thread show "$SERVER_RESTART_THREAD_ID"
+bb thread log "$SERVER_RESTART_THREAD_ID" --format json | jq '.[-12:]'
+```
+
+Expected result:
+
+- The server restarts with the same data directory and the daemon reconnects.
+- The in-flight environment provision is not replayed from a durable queue.
+- If the live RPC result was lost, the environment/thread reaches an honest
+  `error` or retryable interrupted state, with a system error explaining that
+  the server restarted before live provisioning completed.
+- The operator can retry by sending a new turn after the host is connected.
+
+Host offline before send:
+
+```bash
+kill -TERM "$DAEMON_PID"
+for _ in $(seq 1 60); do
+  HOST_STATUS=$(curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq -r --arg host "$HOST_ID" '.[] | select(.id == $host) | .status')
+  [ "$HOST_STATUS" != "connected" ] && break
+  sleep 1
+done
+test "$HOST_STATUS" != "connected"
+
+if bb thread tell "$SMOKE_THREAD_ID" "This should fail while the host is offline"; then
+  echo "expected offline host send to fail"
+  false
+else
+  echo "offline host send failed fast"
+fi
+
+if sqlite3 "$SERVER_DB_PATH" ".tables" \
+  | tr ' ' '\n' \
+  | rg '^(host_daemon_commands|host_daemon_command_attempts|client_turn_requests)$'; then
+  echo "unexpected durable command/request table"
+  false
+fi
+
+eval "$RESTART_DAEMON_COMMAND"
+DAEMON_PID=$!
+bb thread tell "$SMOKE_THREAD_ID" "Say exactly: offline retry ok"
+bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+bb thread output "$SMOKE_THREAD_ID"
+```
+
+Expected result:
+
+- Sending while the host is offline fails fast.
+- No durable command/request row is inserted; the removed queue tables are not
+  present in the upgraded database.
+- Retrying after the daemon reconnects works as a fresh live RPC request.
+
+Daemon hot-replace mid-RPC:
+
+```bash
+HOT_REPLACE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --model "$CODEX_MODEL" \
+  --reasoning-level low \
+  --prompt "Write 80 detailed bullet points about the history of operating systems." \
+  --json | jq -r '.id')
+
+bb thread wait "$HOT_REPLACE_THREAD_ID" --status active --timeout 30
+OLD_DAEMON_PID=$DAEMON_PID
+eval "$RESTART_DAEMON_COMMAND"
+DAEMON_PID=$!
+test "$DAEMON_PID" != "$OLD_DAEMON_PID"
+
+curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq
+bb thread show "$HOT_REPLACE_THREAD_ID"
+bb thread log "$HOT_REPLACE_THREAD_ID" --format json | jq '.[-12:]'
+```
+
+Expected result:
+
+- The old live waiter is rejected or settled when the old daemon session drops.
+- Any late response from the old session is ignored and is not mis-routed to the
+  replacement daemon session.
+- The thread remains inspectable and records a `thread_command_failed` system
+  error, or an equivalent explicit interruption/error event, for the interrupted
+  RPC.
+
 Kill the daemon during active work:
 
 ```bash
@@ -446,6 +532,8 @@ fi
 
 bb thread output "$SMOKE_THREAD_ID"
 bb thread log "$SMOKE_THREAD_ID" --format json | jq '.[-12:]'
+bb thread log "$SMOKE_THREAD_ID" --format json \
+  | jq -e 'any(.[]; .type == "system/error" and (.data.code // .code // null) == "thread_command_failed")'
 ```
 
 Inspect logs and state:
@@ -460,7 +548,9 @@ Expected result:
 
 - The server stays up while the daemon is restarted.
 - Threads remain inspectable during and after daemon loss.
-- After an interruption mid-turn, the thread either resumes active work and settles to `idle`, or reaches `idle`/`error` and accepts a short new turn after restart.
+- After an interruption mid-turn, the thread records a `thread_command_failed`
+  system error, or an equivalent explicit interruption/error event, and then
+  reaches `idle`/`error` and accepts a short new turn after restart.
 
 ## Provider-Specific Pass
 

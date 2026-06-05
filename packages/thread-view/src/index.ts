@@ -41,15 +41,11 @@ export {
 export type { ThreadTimelineEventSelection } from "./build-thread-timeline.js";
 export {
   EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
-  EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
   buildAcceptedClientRequestById,
-  buildClientTurnRequestSettlementById,
 } from "./accepted-client-request-context.js";
 export type {
   AcceptedClientRequest,
   AcceptedClientRequestContext,
-  ClientTurnRequestSettlement,
-  ClientTurnRequestSettlementContext,
 } from "./accepted-client-request-context.js";
 export type { SystemClientRequestVisibility } from "./event-projection-message.js";
 export {

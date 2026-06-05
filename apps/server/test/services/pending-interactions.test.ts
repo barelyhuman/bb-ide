@@ -3,12 +3,14 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { pendingInteractions as pendingInteractionTable } from "@bb/db";
 import type { PendingInteractionCreate } from "@bb/domain";
+import { handleHostSessionOpened } from "../../src/internal/session-owner-side-effects.js";
 import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import type { AppDeps } from "../../src/types.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
+  seedSession,
   seedThread,
   seedTurnStarted,
 } from "../helpers/seed.js";
@@ -111,9 +113,13 @@ describe("pending interaction lifecycle", () => {
         warn: vi.fn(),
       };
       const lifecycle = new PendingInteractionLifecycle({
+        config: harness.deps.config,
         db: harness.db,
         hub: harness.hub,
+        lifecycleDedupers: harness.deps.lifecycleDedupers,
         logger,
+        machineAuth: harness.deps.machineAuth,
+        terminalSessions: harness.deps.terminalSessions,
       });
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-corrupt-list",
@@ -470,6 +476,69 @@ describe("pending interaction lifecycle", () => {
     });
   });
 
+  it("interrupts resolving interactions when a replacement session reuses the same instance id", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-same-instance-reconnect",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const created = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-same-instance-reconnect",
+          providerId: "codex",
+          providerThreadId: "provider-thread-same-instance-reconnect",
+          providerRequestId: "request-same-instance-reconnect",
+          payload: createUserQuestionPayload(),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
+      }
+      harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId: created.interaction.id,
+        resolution: createUserAnswerResolution({
+          freeText: "Use the existing branch.",
+        }),
+      });
+
+      const replacementSession = seedSession(harness.deps, host.id);
+      await handleHostSessionOpened(harness.deps, {
+        activeThreads: [],
+        hostId: host.id,
+        openedSession: replacementSession,
+        previousSession: session,
+      });
+
+      const row = harness.db
+        .select()
+        .from(pendingInteractionTable)
+        .where(eq(pendingInteractionTable.id, created.interaction.id))
+        .get();
+      expect(row).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
+      });
+    });
+  });
+
   it("rejects active provider request reuse with a different payload", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
@@ -664,7 +733,10 @@ describe("pending interaction lifecycle", () => {
         .from(pendingInteractionTable)
         .where(eq(pendingInteractionTable.id, created.interaction.id))
         .get();
-      expect(resolvingRow?.resolvingCommandId).not.toBeNull();
+      expect(resolvingRow).toMatchObject({
+        status: "resolving",
+        resolution: JSON.stringify(firstResolution.resolution),
+      });
 
       const completed =
         harness.deps.pendingInteractions.completeResolvingInteraction({
@@ -683,7 +755,9 @@ describe("pending interaction lifecycle", () => {
         .from(pendingInteractionTable)
         .where(eq(pendingInteractionTable.id, created.interaction.id))
         .get();
-      expect(resolvedRow?.resolvingCommandId).toBeNull();
+      expect(resolvedRow).toMatchObject({
+        status: "resolved",
+      });
     });
   });
 
@@ -1168,9 +1242,13 @@ describe("pending interaction lifecycle", () => {
   it("does not expire pending interactions on persistent hosts", async () => {
     await withTestHarness(async (harness) => {
       const pendingInteractions = new PendingInteractionLifecycle({
+        config: harness.deps.config,
         db: harness.db,
         hub: harness.hub,
+        lifecycleDedupers: harness.deps.lifecycleDedupers,
         logger: harness.deps.logger,
+        machineAuth: harness.deps.machineAuth,
+        terminalSessions: harness.deps.terminalSessions,
       });
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-no-expiry",

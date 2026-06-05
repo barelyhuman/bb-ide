@@ -98,22 +98,6 @@ export type {
   TerminalSessionStatus,
 } from "./terminal.js";
 
-export {
-  clientTurnRequestCommandTypeSchema,
-  clientTurnRequestCommandTypeValues,
-  clientTurnRequestStatusSchema,
-  clientTurnRequestStatusValues,
-  clientTurnRequestTerminalReasonSchema,
-  clientTurnRequestTerminalReasonValues,
-  terminalClientTurnRequestStatusSchema,
-  terminalClientTurnRequestStatusValues,
-} from "./client-turn-request-lifecycle.js";
-export type {
-  ClientTurnRequestCommandType,
-  ClientTurnRequestStatus,
-  ClientTurnRequestTerminalReason,
-  TerminalClientTurnRequestStatus,
-} from "./client-turn-request-lifecycle.js";
 
 export {
   PROMPT_HISTORY_ENTRY_LIMIT,
@@ -284,29 +268,6 @@ export type {
   CanonicalizeEventSpoolPayloadArgs,
   CanonicalizeProducerEventPayloadArgs,
 } from "./producer-event-payload.js";
-
-export {
-  activeLifecycleOperationStates,
-  environmentOperationKindSchema,
-  environmentOperationKindValues,
-  isActiveLifecycleOperationState,
-  lifecycleOperationStateSchema,
-  lifecycleOperationStateValues,
-  projectOperationKindSchema,
-  projectOperationKindValues,
-  threadOperationKindSchema,
-  threadOperationKindValues,
-  threadProvisioningStageSchema,
-  threadProvisioningStageValues,
-} from "./lifecycle-operations.js";
-export type {
-  EnvironmentOperationKind,
-  LifecycleOperationState,
-  ProjectOperationKind,
-  ThreadOperationKind,
-  ThreadProvisioningState,
-  ThreadProvisioningStage,
-} from "./lifecycle-operations.js";
 
 export {
   PERSONAL_PROJECT_ID,

@@ -1,7 +1,6 @@
 import {
   advanceThreadScheduleAfterFireInTransaction,
   advanceThreadScheduleAfterSkip,
-  advanceThreadScheduleAfterSkipInTransaction,
   type DbConnection,
   type DbTransaction,
   deleteThreadSchedule,
@@ -9,9 +8,7 @@ import {
   getActiveStoredTurnId,
   getEnvironment,
   getThread,
-  hasPendingHostCommandForThread,
   listDueThreadSchedules,
-  transitionThreadStatusInTransaction,
   type ThreadScheduleRow,
   updateThreadSchedule,
 } from "@bb/db";
@@ -20,8 +17,12 @@ import type {
   ResolvedThreadExecutionOptions,
   TurnRequestTarget,
 } from "@bb/domain";
-import type { TurnSubmitTarget } from "@bb/host-daemon-contract";
-import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
+import type {
+  HostDaemonCommand,
+  TurnSubmitTarget,
+} from "@bb/host-daemon-contract";
+import type { AppDeps } from "../../types.js";
+import type { CommandResultSideEffectsDeps } from "../../internal/command-result-side-effects.js";
 import {
   appendClientTurnEventInTransaction,
   getActiveTurnId,
@@ -33,10 +34,14 @@ import {
   buildExecutionOptions,
   prepareTurnSubmitCommandPayload,
   type PreparedTurnSubmitCommandPayload,
-  queueTurnSubmitCommandInTransaction,
 } from "../threads/thread-commands.js";
 import { resolvePermissionEscalation } from "../threads/thread-runtime-config.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
+import { tryTransition } from "../threads/thread-transitions.js";
 import {
   computeNextScheduledTime,
   ScheduleValidationError,
@@ -45,12 +50,9 @@ import {
 const DUE_THREAD_SCHEDULE_BATCH_SIZE = 100;
 
 type ScheduledThread = NonNullable<ReturnType<typeof getThread>>;
-type ScheduledThreadEnvironment = NonNullable<ReturnType<typeof getEnvironment>>;
-
-interface PendingTurnSubmitCommandArgs {
-  hostId: string;
-  threadId: string;
-}
+type ScheduledThreadEnvironment = NonNullable<
+  ReturnType<typeof getEnvironment>
+>;
 
 export interface ThreadScheduleSweepCache {
   environmentById: Map<string, ReturnType<typeof getEnvironment>>;
@@ -117,13 +119,9 @@ interface DisableThreadScheduleFromSweepArgs {
   validationError: string | null;
 }
 
-interface PendingTurnSubmitScheduleResult {
-  kind: "pending-turn-submit";
-}
-
 interface QueuedScheduleResult {
+  command: Extract<HostDaemonCommand, { type: "turn.submit" }>;
   kind: "queued";
-  transitionedToActive: boolean;
 }
 
 interface LostRaceScheduleResult {
@@ -132,7 +130,6 @@ interface LostRaceScheduleResult {
 
 type QueueDueThreadScheduleResult =
   | LostRaceScheduleResult
-  | PendingTurnSubmitScheduleResult
   | QueuedScheduleResult;
 
 function buildThreadScheduleInput(schedule: ThreadScheduleRow): PromptInput[] {
@@ -144,10 +141,7 @@ function buildThreadScheduleInput(schedule: ThreadScheduleRow): PromptInput[] {
   ];
 }
 
-function computeNextFireAt(
-  schedule: ThreadScheduleRow,
-  now: number,
-): number {
+function computeNextFireAt(schedule: ThreadScheduleRow, now: number): number {
   return computeNextScheduledTime({
     cron: schedule.cron,
     now,
@@ -346,22 +340,10 @@ function resetThreadScheduleSweepBatchCache(
 }
 
 function hasPendingTurnSubmitCommand(
-  db: DbConnection | DbTransaction,
-  args: PendingTurnSubmitCommandArgs,
+  threadId: string,
   cache?: ThreadScheduleSweepCache,
 ): boolean {
-  const cached = cache?.pendingTurnSubmitByThreadId.get(args.threadId);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const hasPending = hasPendingHostCommandForThread(db, {
-    hostId: args.hostId,
-    threadId: args.threadId,
-    type: "turn.submit",
-  });
-  cache?.pendingTurnSubmitByThreadId.set(args.threadId, hasPending);
-  return hasPending;
+  return cache?.pendingTurnSubmitByThreadId.get(threadId) ?? false;
 }
 
 function getCachedEnvironment(
@@ -401,7 +383,7 @@ function toDueThreadScheduleCursor(
 }
 
 async function prepareDueThreadSchedule(
-  deps: LoggedWorkSessionDeps,
+  deps: CommandResultSideEffectsDeps,
   cache: ThreadScheduleSweepCache,
   schedule: ThreadScheduleRow,
 ): Promise<DueThreadSchedulePreparation> {
@@ -451,32 +433,10 @@ async function prepareDueThreadSchedule(
     };
   }
 
-  if (
-    hasPendingTurnSubmitCommand(
-      deps.db,
-      {
-        hostId: environment.hostId,
-        threadId: thread.id,
-      },
-      cache,
-    )
-  ) {
+  if (hasPendingTurnSubmitCommand(thread.id, cache)) {
     return {
       kind: "skip",
       reason: "pending-turn-submit",
-    };
-  }
-
-  if (
-    hasPendingHostCommandForThread(deps.db, {
-      hostId: environment.hostId,
-      threadId: thread.id,
-      type: "thread.archive",
-    })
-  ) {
-    return {
-      kind: "skip",
-      reason: "pending-native-archive",
     };
   }
 
@@ -553,34 +513,8 @@ function queueDueThreadScheduleInTransaction(
   },
 ): QueueDueThreadScheduleResult {
   if (
-    hasPendingTurnSubmitCommand(tx, {
-      hostId: args.preparation.environment.hostId,
-      threadId: args.preparation.thread.id,
-    })
-  ) {
-    const advanced = advanceThreadScheduleAfterSkipInTransaction(tx, {
-      expectedNextFireAt: args.schedule.nextFireAt,
-      nextFireAt: args.nextFireAt,
-      scheduleId: args.schedule.id,
-      now: args.now,
-    });
-
-    return advanced ? { kind: "pending-turn-submit" } : { kind: "lost-race" };
-  }
-
-  if (
     !isThreadSchedulePreparationCurrent(tx, {
       preparation: args.preparation,
-    })
-  ) {
-    return { kind: "lost-race" };
-  }
-
-  if (
-    hasPendingHostCommandForThread(tx, {
-      hostId: args.preparation.environment.hostId,
-      threadId: args.preparation.thread.id,
-      type: "thread.archive",
     })
   ) {
     return { kind: "lost-race" };
@@ -612,29 +546,16 @@ function queueDueThreadScheduleInTransaction(
     ),
   });
 
-  queueTurnSubmitCommandInTransaction(tx, {
-    command: addRequestIdToTurnSubmitCommandPayload({
-      requestId: request.requestId,
-      preparedCommand: args.preparation.preparedCommand,
-    }),
-    hostId: args.preparation.environment.hostId,
-    requestEventSequence: request.sequence,
-    sessionId: args.preparation.sessionId,
+  const command = addRequestIdToTurnSubmitCommandPayload({
+    requestId: request.requestId,
+    preparedCommand: args.preparation.preparedCommand,
   });
 
-  if (args.preparation.targetIntent.kind === "start") {
-    transitionThreadStatusInTransaction(tx, {
-      id: args.preparation.thread.id,
-      newStatus: "active",
-    });
-    return { kind: "queued", transitionedToActive: true };
-  }
-
-  return { kind: "queued", transitionedToActive: false };
+  return { command, kind: "queued" };
 }
 
 async function runDueThreadSchedule(
-  deps: LoggedWorkSessionDeps,
+  deps: CommandResultSideEffectsDeps,
   cache: ThreadScheduleSweepCache,
   schedule: ThreadScheduleRow,
   now: number,
@@ -693,31 +614,29 @@ async function runDueThreadSchedule(
     return;
   }
 
-  if (transactionResult.kind === "pending-turn-submit") {
-    cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
-    deps.hub.notifyProject(schedule.projectId, ["thread-schedules-changed"]);
-    deps.logger.info(
-      {
-        scheduleId: schedule.id,
-        reason: "pending-turn-submit",
-        threadId: preparation.thread.id,
-      },
-      "Skipped due thread schedule",
-    );
-    return;
-  }
-
   cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
   deps.hub.notifyProject(schedule.projectId, ["thread-schedules-changed"]);
   deps.hub.notifyThread(preparation.thread.id, ["events-appended"], {
     eventTypes: ["client/turn/requested"],
   });
-  deps.hub.notifyCommand(preparation.environment.hostId);
-  if (transactionResult.transitionedToActive) {
-    deps.hub.notifyThread(preparation.thread.id, ["status-changed"], {
-      projectId: schedule.projectId,
-    });
+  if (preparation.targetIntent.kind === "start") {
+    tryTransition(deps.db, deps.hub, preparation.thread.id, "active");
   }
+  startLiveHostCommand(deps, {
+    command: transactionResult.command,
+    hostId: preparation.environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        {
+          err: error,
+          scheduleId: schedule.id,
+          threadId: preparation.thread.id,
+        },
+        "Live due thread schedule command failed",
+      );
+    },
+  });
 }
 
 interface SweepDueThreadSchedulesArgs {
@@ -725,7 +644,7 @@ interface SweepDueThreadSchedulesArgs {
 }
 
 export async function sweepDueThreadSchedules(
-  deps: LoggedWorkSessionDeps,
+  deps: CommandResultSideEffectsDeps,
   args: SweepDueThreadSchedulesArgs = {},
 ): Promise<void> {
   const now = args.now ?? Date.now();
@@ -756,9 +675,7 @@ export async function sweepDueThreadSchedules(
       return;
     }
     const lastSchedule = dueSchedules[dueSchedules.length - 1];
-    after = lastSchedule
-      ? toDueThreadScheduleCursor(lastSchedule)
-      : undefined;
+    after = lastSchedule ? toDueThreadScheduleCursor(lastSchedule) : undefined;
     resetThreadScheduleSweepBatchCache(cache);
   }
 }

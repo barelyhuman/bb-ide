@@ -14,7 +14,10 @@ import { resolveBuiltinSkillsRootPath } from "./services/skills/builtin-skills-c
 import { createAppVersionService } from "./services/system/app-version.js";
 import { createBbAppManagedConfigReloader } from "./services/system/bb-app-managed-config.js";
 import { startEventLoopStallMonitor } from "./services/system/event-loop-stall-monitor.js";
-import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
+import {
+  runPeriodicSweeps,
+  runStartupRecoverySweep,
+} from "./services/system/periodic-sweeps.js";
 import { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
 import { resolveThreadStorageRootPath } from "./services/threads/thread-storage.js";
 import { createLifecycleDedupers } from "./lifecycle-dedupers.js";
@@ -29,17 +32,11 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   const db = initDb(serverConfig.databasePath, { logger });
   await migrateAppDataLayout({ dataDir: serverConfig.BB_DATA_DIR, logger });
   const hub = new NotificationHub();
-  const pendingInteractions = new PendingInteractionLifecycle({
-    db,
-    hub,
-    logger,
-  });
   const terminalSessions = new TerminalSessionLifecycle({
     db,
     hub,
     logger,
   });
-  pendingInteractions.start();
   const lifecycleDedupers = createLifecycleDedupers();
   const appUrl = toOptionalString(serverConfig.BB_APP_URL);
   const threadStorageRootPath = resolveThreadStorageRootPath({
@@ -84,6 +81,16 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     logger,
   });
   await machineAuth.ensureReady();
+  const pendingInteractions = new PendingInteractionLifecycle({
+    config: runtimeConfig,
+    db,
+    hub,
+    lifecycleDedupers,
+    logger,
+    machineAuth,
+    terminalSessions,
+  });
+  pendingInteractions.start();
 
   const appVersion = createAppVersionService({
     config: runtimeConfig,
@@ -107,6 +114,20 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   );
   const eventLoopStallMonitor = startEventLoopStallMonitor({ logger });
 
+  const sweepDeps = {
+    config: runtimeConfig,
+    db,
+    hub,
+    lifecycleDedupers,
+    logger,
+    machineAuth,
+    pendingInteractions,
+    terminalSessions,
+  };
+  await runStartupRecoverySweep(sweepDeps).catch((error) => {
+    logger.error({ err: error }, "Startup recovery sweep failed");
+  });
+
   const server = serve({
     port: serverConfig.BB_SERVER_PORT,
     fetch: app.fetch,
@@ -122,16 +143,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   );
 
   const sweepInterval = setInterval(() => {
-    void runPeriodicSweeps({
-      config: runtimeConfig,
-      db,
-      hub,
-      lifecycleDedupers,
-      logger,
-      machineAuth,
-      pendingInteractions,
-      terminalSessions,
-    });
+    void runPeriodicSweeps(sweepDeps);
   }, 10_000);
   sweepInterval.unref();
 

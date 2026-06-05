@@ -5,6 +5,7 @@ export {
   getProject,
   listProjects,
   listPublicProjects,
+  markProjectDeleted,
   reorderProject,
   updateProject,
   deleteProject,
@@ -12,6 +13,7 @@ export {
 export type {
   CreateProjectInput,
   ProjectRow,
+  MarkProjectDeletedArgs,
   ReorderProjectArgs,
   ReorderProjectResult,
   UpdateProjectInput,
@@ -37,37 +39,6 @@ export type {
   GetProjectExecutionDefaultsArgs,
   UpsertProjectExecutionDefaultsArgs,
 } from "./project-execution-defaults.js";
-
-export {
-  getProjectOperation,
-  listProjectOperations,
-} from "./project-operations.js";
-export type {
-  GetProjectOperationArgs,
-  ListProjectOperationsArgs,
-  ProjectOperationRow,
-} from "./project-operations.js";
-
-export {
-  createPendingClientTurnRequest,
-  createPendingClientTurnRequestInTransaction,
-  getClientTurnRequest,
-  listClientTurnRequestsByThreadAndRequestIds,
-  markClientTurnRequestAcceptedInTransaction,
-  recordClientTurnRequestCommandCompletedInTransaction,
-  settleClientTurnRequestsForCommandInTransaction,
-  settlePendingClientTurnRequestsForThreadsInTransaction,
-} from "./client-turn-requests.js";
-export type {
-  ClientTurnRequestRow,
-  CreatePendingClientTurnRequestArgs,
-  GetClientTurnRequestArgs,
-  ListClientTurnRequestsByThreadAndRequestIdsArgs,
-  MarkClientTurnRequestAcceptedArgs,
-  RecordClientTurnRequestCommandCompletedArgs,
-  SettleClientTurnRequestsForCommandArgs,
-  SettlePendingClientTurnRequestsForThreadsArgs,
-} from "./client-turn-requests.js";
 
 export {
   createProjectSource,
@@ -174,17 +145,6 @@ export type {
 } from "./threads.js";
 
 export {
-  getThreadOperation,
-  getThreadOperationByCommandId,
-  listThreadOperations,
-} from "./thread-operations.js";
-export type {
-  GetThreadOperationArgs,
-  ListThreadOperationsArgs,
-  ThreadOperationRow,
-} from "./thread-operations.js";
-
-export {
   advanceThreadScheduleAfterFireInTransaction,
   advanceThreadScheduleAfterSkip,
   advanceThreadScheduleAfterSkipInTransaction,
@@ -218,17 +178,6 @@ export type {
 } from "./thread-dynamic-context-file-states.js";
 
 export {
-  getEnvironmentOperation,
-  getEnvironmentOperationByCommandId,
-  listEnvironmentOperations,
-} from "./environment-operations.js";
-export type {
-  EnvironmentOperationRow,
-  GetEnvironmentOperationArgs,
-  ListEnvironmentOperationsArgs,
-} from "./environment-operations.js";
-
-export {
   createEnvironment,
   getEnvironment,
   findEnvironmentByHostPath,
@@ -260,6 +209,7 @@ export {
   markHostSeen,
   updateHost,
   deleteHost,
+  deleteHostRecord,
 } from "./hosts.js";
 export type { UpsertHostInput, UpdateHostInput } from "./hosts.js";
 
@@ -293,6 +243,7 @@ export {
   listStoredTurnInputAcceptedRowsByClientRequestIds,
   listStoredTurnStartedKeys,
   listStoredTurnStartedRowsByTurnIdsUpToSequence,
+  getLatestThreadInterruptedReason,
   listLatestBackgroundTaskStateRowsByItemIds,
   listOpenBackgroundTaskItemRowsForHost,
   listThreadIdsWithLatestHostDaemonRestartInterruption,
@@ -312,6 +263,7 @@ export type {
   AppendStoredThreadEventArgs,
   CompletedStoredTurnRow,
   FindStoredClientTurnRequestSequenceByRequestIdArgs,
+  GetLatestThreadInterruptedReasonArgs,
   GetLatestThreadSequenceArgs,
   HasStoredTurnStartedArgs,
   InsertEventInput,
@@ -344,42 +296,6 @@ export type {
   ThreadTurnInterruptionEventState,
   StoredTurnRequestEventRow,
 } from "./events.js";
-
-export {
-  cancelCommand,
-  cancelCommandInTransaction,
-  deleteQueuedCommandInTransaction,
-  getActiveCommandAttempt,
-  getActiveCommandAttemptForCommand,
-  getCommandAttempt,
-  getCommand,
-  getHostDaemonCommandLeaseMs,
-  getPendingEnvironmentCommand,
-  hasExistingThreadArchiveCommand,
-  hasPendingHostCommandForThread,
-  queueCommand,
-  queueCommandInTransaction,
-  fetchCommands,
-  reportCommandResult,
-  requeueFetchedCommandsForSession,
-  settleCommandAttemptInTransaction,
-} from "./commands.js";
-export type {
-  DeleteQueuedCommandInTransactionArgs,
-  FetchCommandsOptions,
-  FetchedHostDaemonCommandRow,
-  GetActiveCommandAttemptArgs,
-  GetCommandAttemptArgs,
-  HasExistingThreadArchiveCommandArgs,
-  HasPendingHostCommandForThreadArgs,
-  HostDaemonCommandAttemptRow,
-  QueueCommandInput,
-  HostDaemonCommandRow,
-  ReportCommandResultInput,
-  RequeueFetchedCommandsForSessionArgs,
-  RequeueFetchedCommandsForSessionResult,
-  SettleCommandAttemptInTransactionArgs,
-} from "./commands.js";
 
 export {
   createTerminalSession,
@@ -484,19 +400,11 @@ export type {
 
 export {
   CLOSED_SESSION_ROW_RETENTION_MS,
-  COMPLETED_COMMAND_ROW_RETENTION_MS,
-  COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
   COMPLETED_EVENT_OUTPUT_RETENTION_MS,
   DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
-  DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
   pruneClosedSessions,
-  pruneCompletedDurableCommandRows,
-  pruneCompletedReadOnlyCommandRows,
-  pruneCompletedCommandPayloads,
-  listLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlement,
   truncateCompletedEventItemOutputs,
-  sweepExpiredCommands,
   sweepExpiredLeases,
   sweepDestroyingEnvironments,
   sweepManagedEnvironments,
@@ -504,13 +412,6 @@ export {
 export type {
   PruneClosedSessionsArgs,
   PruneClosedSessionsResult,
-  PruneCompletedCommandRowsArgs,
-  PruneCompletedCommandsResult,
-  PruneCompletedCommandPayloadsArgs,
-  PruneCompletedCommandPayloadsResult,
-  ExpiredCommandAttempt,
-  ListLegacyTerminalizedExpiredLifecycleCommandsNeedingSettlementArgs,
-  SweepExpiredCommandsResult,
   SweepExpiredLeasesResult,
   TruncateCompletedEventItemOutputsArgs,
   TruncateCompletedEventItemOutputsResult,

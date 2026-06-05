@@ -1,10 +1,4 @@
 import {
-  getActiveSession,
-  createPendingClientTurnRequestInTransaction,
-  queueCommand,
-  queueCommandInTransaction,
-  hasExistingThreadArchiveCommand,
-  hasPendingHostCommandForThread,
   environments,
   events,
   transitionThreadStatusInTransaction,
@@ -15,9 +9,7 @@ import {
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
 } from "@bb/agent-providers";
-import type { DbTransaction } from "@bb/db";
 import type {
-  Environment,
   PromptInput,
   ProjectExecutionDefaults,
   PermissionEscalation,
@@ -33,8 +25,13 @@ import type {
   TurnSubmitTarget,
 } from "@bb/host-daemon-contract";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
+import type { CommandResultSideEffectsDeps } from "../../internal/command-result-side-effects.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 import {
   resolveThreadRuntimeCommandConfig,
@@ -52,13 +49,13 @@ import { workspaceContextFromPath } from "../environments/workspace-command-targ
 
 export type ExecutionOptionsRequest = ExistingThreadExecutionInputRequest;
 
-export interface QueueThreadStopCommandArgs {
+export interface ThreadStopCommandArgs {
   environmentId: string;
   hostId: string;
   threadId: string;
 }
 
-interface QueueThreadStartCommandEnvironment {
+interface ThreadStartCommandEnvironment {
   cleanupRequestedAt: number | null;
   hostId: string;
   id: string;
@@ -78,14 +75,15 @@ interface ThreadUnarchiveCommandEnvironment {
   status: EnvironmentStatus;
 }
 
-export interface QueueThreadStartCommandArgs {
-  environment: QueueThreadStartCommandEnvironment;
+export interface ThreadStartCommandArgs {
+  environment: ThreadStartCommandEnvironment;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   projectId: string;
   providerId: string;
   requestId: ClientTurnRequestId;
+  syncGeneratedTitle: boolean;
   thread: Thread;
 }
 
@@ -136,50 +134,25 @@ type BuildExecutionOptionsSource =
   | "client/turn/requested"
   | "client/turn/start";
 
-interface QueueTurnSubmitCommandInTransactionArgs {
-  command: Extract<HostDaemonCommand, { type: "turn.submit" }>;
-  hostId: string;
-  /**
-   * Null only for legacy/untracked submissions where no durable
-   * client/turn/requested event exists to relate to this command.
-   */
-  requestEventSequence: number | null;
-  sessionId: string | null;
-}
-
-interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayloadArgs {
+interface DispatchTurnSubmitCommandArgs
+  extends PrepareTurnSubmitCommandPayloadArgs {
   requestId: ClientTurnRequestId;
-  /**
-   * Null only for legacy/untracked submissions where no durable
-   * client/turn/requested event exists to relate to this command.
-   */
-  requestEventSequence: number | null;
 }
 
-interface QueueThreadRenameCommandArgs {
+interface DispatchThreadRenameCommandArgs {
   environment: ThreadHostCommandEnvironment;
   providerId: string;
   threadId: string;
   title: string;
 }
 
-interface QueueThreadUnarchiveCommandArgs {
+interface DispatchThreadUnarchiveCommandArgs {
   environment: ThreadUnarchiveCommandEnvironment;
   providerThreadId: string;
   thread: Thread;
 }
 
-interface EnsureThreadNativeArchiveSettledArgs {
-  environment: Pick<Environment, "hostId">;
-  thread: Pick<Thread, "id">;
-}
-
-interface QueueArchivedThreadProviderArchiveCommandArgs {
-  threadId: string;
-}
-
-interface QueueThreadDeletedCommandArgs {
-  environment: ThreadHostCommandEnvironment;
+interface DispatchArchivedThreadProviderArchiveCommandArgs {
   threadId: string;
 }
 
@@ -241,7 +214,7 @@ export async function buildExecutionOptions(
 
 export async function buildThreadStartCommand(
   deps: LoggedWorkSessionDeps,
-  args: QueueThreadStartCommandArgs,
+  args: ThreadStartCommandArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "thread.start" }>> {
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
@@ -347,38 +320,11 @@ export async function prepareTurnSubmitCommandPayload(
   });
 }
 
-export function queueTurnSubmitCommandInTransaction(
-  db: DbTransaction,
-  args: QueueTurnSubmitCommandInTransactionArgs,
-) {
-  const queuedCommand = queueCommandInTransaction(db, {
-    hostId: args.hostId,
-    sessionId: args.sessionId,
-    type: "turn.submit",
-    payload: JSON.stringify(args.command),
-  });
-  if (args.requestEventSequence !== null) {
-    createPendingClientTurnRequestInTransaction(db, {
-      commandId: queuedCommand.id,
-      commandType: "turn.submit",
-      environmentId: args.command.environmentId,
-      requestEventSequence: args.requestEventSequence,
-      requestId: args.command.requestId,
-      threadId: args.command.threadId,
-    });
-  }
-  return queuedCommand;
-}
-
-export async function queueTurnSubmitCommand(
-  deps: LoggedWorkSessionDeps,
-  args: QueueTurnSubmitCommandArgs,
+export async function dispatchTurnSubmitCommand(
+  deps: CommandResultSideEffectsDeps,
+  args: DispatchTurnSubmitCommandArgs,
 ): Promise<void> {
-  ensureThreadNativeArchiveSettled(deps, {
-    environment: args.environment,
-    thread: args.thread,
-  });
-  const session = await ensureHostSessionReadyForWork(deps, {
+  await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
   });
   const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
@@ -389,12 +335,6 @@ export async function queueTurnSubmitCommand(
   let transitioned = false;
   deps.db.transaction(
     (tx) => {
-      queueTurnSubmitCommandInTransaction(tx, {
-        command,
-        hostId: args.environment.hostId,
-        requestEventSequence: args.requestEventSequence,
-        sessionId: session.id,
-      });
       if (args.thread.status === "idle") {
         transitionThreadStatusInTransaction(tx, {
           id: args.thread.id,
@@ -405,7 +345,17 @@ export async function queueTurnSubmitCommand(
     },
     { behavior: "immediate" },
   );
-  deps.hub.notifyCommand(args.environment.hostId);
+  startLiveHostCommand(deps, {
+    command,
+    hostId: args.environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: args.thread.id },
+        "Live turn submit command failed",
+      );
+    },
+  });
   if (transitioned) {
     deps.hub.notifyThread(args.thread.id, ["status-changed"], {
       projectId: args.thread.projectId,
@@ -466,75 +416,35 @@ function threadHasCodexSpawnAgentToolCall(
   return row !== undefined;
 }
 
-export function queueThreadRenameCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueThreadRenameCommandArgs,
+export function dispatchThreadRenameCommand(
+  deps: CommandResultSideEffectsDeps,
+  args: DispatchThreadRenameCommandArgs,
 ): void {
   if (!providerSupportsThreadRename(args.providerId)) {
     return;
   }
 
-  const session = getActiveSession(deps.db, args.environment.hostId);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "thread.rename",
-    payload: JSON.stringify({
+  startLiveHostCommand(deps, {
+    command: {
       type: "thread.rename",
       environmentId: args.environment.id,
       threadId: args.threadId,
       title: args.title,
-    }),
-  });
-}
-
-export function queueThreadRenameCommandInTransaction(
-  db: DbTransaction,
-  args: QueueThreadRenameCommandArgs,
-): boolean {
-  if (!providerSupportsThreadRename(args.providerId)) {
-    return false;
-  }
-
-  const session = getActiveSession(db, args.environment.hostId);
-  queueCommandInTransaction(db, {
+    },
     hostId: args.environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "thread.rename",
-    payload: JSON.stringify({
-      type: "thread.rename",
-      environmentId: args.environment.id,
-      threadId: args.threadId,
-      title: args.title,
-    }),
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: args.threadId },
+        "Live thread rename command failed",
+      );
+    },
   });
-  return true;
 }
 
-export function ensureThreadNativeArchiveSettled(
-  deps: Pick<AppDeps, "db">,
-  args: EnsureThreadNativeArchiveSettledArgs,
-): void {
-  if (
-    !hasPendingHostCommandForThread(deps.db, {
-      hostId: args.environment.hostId,
-      threadId: args.thread.id,
-      type: "thread.archive",
-    })
-  ) {
-    return;
-  }
-
-  throw new ApiError(
-    409,
-    "thread_archive_in_progress",
-    "Thread archive is still syncing with the provider",
-  );
-}
-
-export function queueArchivedThreadProviderArchiveCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueArchivedThreadProviderArchiveCommandArgs,
+export function dispatchArchivedThreadProviderArchiveCommand(
+  deps: CommandResultSideEffectsDeps,
+  args: DispatchArchivedThreadProviderArchiveCommandArgs,
 ): boolean {
   const thread = deps.db
     .select()
@@ -581,37 +491,30 @@ export function queueArchivedThreadProviderArchiveCommand(
     workspaceProvisionType: environment.workspaceProvisionType,
   });
 
-  if (
-    hasExistingThreadArchiveCommand(deps.db, {
-      hostId: environment.hostId,
-      providerId: thread.providerId,
-      providerThreadId,
-      threadId: thread.id,
-    })
-  ) {
-    return false;
-  }
-
-  const session = getActiveSession(deps.db, environment.hostId);
-  queueCommand(deps.db, deps.hub, {
-    hostId: environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "thread.archive",
-    payload: JSON.stringify({
+  startLiveHostCommand(deps, {
+    command: {
       type: "thread.archive",
       environmentId: environment.id,
       threadId: thread.id,
       workspaceContext,
       providerId: thread.providerId,
       providerThreadId,
-    }),
+    },
+    hostId: environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: thread.id },
+        "Live thread archive command failed",
+      );
+    },
   });
   return true;
 }
 
-export function queueThreadUnarchiveCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueThreadUnarchiveCommandArgs,
+export function dispatchThreadUnarchiveCommand(
+  deps: CommandResultSideEffectsDeps,
+  args: DispatchThreadUnarchiveCommandArgs,
 ): boolean {
   if (!providerSupportsThreadArchiveForwarding(args.thread.providerId)) {
     return false;
@@ -620,45 +523,28 @@ export function queueThreadUnarchiveCommand(
     return false;
   }
 
-  const session = getActiveSession(deps.db, args.environment.hostId);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "thread.unarchive",
-    payload: JSON.stringify({
+  startLiveHostCommand(deps, {
+    command: {
       type: "thread.unarchive",
       environmentId: args.environment.id,
       threadId: args.thread.id,
       providerId: args.thread.providerId,
       providerThreadId: args.providerThreadId,
-    }),
-  });
-  return true;
-}
-
-export function queueThreadDeletedCommandInTransaction(
-  db: DbTransaction,
-  args: QueueThreadDeletedCommandArgs,
-): boolean {
-  const session = getActiveSession(db, args.environment.hostId);
-  if (!session) {
-    return false;
-  }
-  queueCommandInTransaction(db, {
+    },
     hostId: args.environment.hostId,
-    sessionId: session.id,
-    type: "thread.deleted",
-    payload: JSON.stringify({
-      type: "thread.deleted",
-      environmentId: args.environment.id,
-      threadId: args.threadId,
-    }),
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: args.thread.id },
+        "Live thread unarchive command failed",
+      );
+    },
   });
   return true;
 }
 
 export function buildThreadStopCommand(
-  args: QueueThreadStopCommandArgs,
+  args: ThreadStopCommandArgs,
 ): Extract<HostDaemonCommand, { type: "thread.stop" }> {
   return {
     type: "thread.stop",

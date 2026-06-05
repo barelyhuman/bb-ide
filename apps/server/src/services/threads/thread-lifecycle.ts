@@ -8,68 +8,36 @@ import {
   or,
 } from "drizzle-orm";
 import {
-  cancelCommandInTransaction,
   clearThreadStopRequested,
-  createPendingClientTurnRequestInTransaction,
   deleteThread,
   environments,
   events,
-  findStoredClientTurnRequestSequenceByRequestId,
-  getActiveSession,
-  getCommand,
-  getEnvironment,
+  getLatestThreadInterruptedReason,
   getThread,
-  getThreadOperation,
-  getThreadOperationByCommandId,
   listThreadIdsWithLatestHostDaemonRestartInterruption,
   listThreadTurnInterruptionEventStates,
   markThreadStopRequested,
-  queueCommand,
-  queueCommandInTransaction,
-  recordClientTurnRequestCommandCompletedInTransaction,
-  settleClientTurnRequestsForCommandInTransaction,
-  settlePendingClientTurnRequestsForThreadsInTransaction,
   threads,
   transitionThreadStatusInTransaction,
   type DbNotifier,
   type DbQueryConnection,
   type DbTransaction,
-  type HostDaemonCommandRow,
 } from "@bb/db";
-import type { ThreadOperationRow } from "@bb/db";
 import { assertNever } from "@bb/core-ui";
-import { z } from "zod";
 import {
-  cancelThreadOperationRecord,
-  markThreadOperationRecordCompleted,
-  markThreadOperationRecordFailed,
-  markThreadOperationRecordQueued,
-  upsertThreadOperationRecord,
-} from "@bb/db/internal-lifecycle";
-import {
-  isActiveLifecycleOperationState,
-  type ClientTurnRequestTerminalReason,
   type ProvisioningTranscriptEntry,
   type SystemThreadInterruptedReason,
-  type TerminalClientTurnRequestStatus,
   type Thread,
   type ThreadEventScope,
   type ThreadEventType,
   type ThreadStatus,
-  systemThreadInterruptedReasonSchema,
   threadScope,
   turnScope,
 } from "@bb/domain";
-import {
-  threadStartCommandSchema,
-  threadStopCommandSchema,
-} from "@bb/host-daemon-contract";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
   LoggedWorkSessionDeps,
-  PendingInteractionWorkSessionDeps,
-  WorkSessionDeps,
 } from "../../types.js";
 import {
   advanceEnvironmentCleanup,
@@ -82,12 +50,15 @@ import {
   emptyCommandResultSideEffects,
   type CommandResultFailureReportForType,
   type CommandResultPostCommitAction,
+  type CommandResultSideEffectsDeps,
   type CommandResultReportForType,
   type CommandResultSideEffectsResult,
+  type HostDaemonCommandExecutionRecord,
   type HostDaemonCommandForType,
 } from "../../internal/command-result-side-effects.js";
 import {
   appendSystemErrorEventInTransaction,
+  buildSystemErrorEventData,
   appendThreadEventInTransaction,
   appendThreadEventsInTransaction,
   appendThreadInterruptedEventInTransaction,
@@ -104,27 +75,28 @@ import {
   buildThreadStartCommand,
   buildThreadStopCommand,
   prepareTurnSubmitCommandPayload,
-  queueArchivedThreadProviderArchiveCommand,
-  queueThreadDeletedCommandInTransaction,
-  queueThreadRenameCommandInTransaction,
-  queueTurnSubmitCommand,
-  queueTurnSubmitCommandInTransaction,
-  type QueueThreadStartCommandArgs,
-  type QueueThreadStopCommandArgs,
+  dispatchArchivedThreadProviderArchiveCommand,
+  dispatchThreadRenameCommand,
+  type ThreadStartCommandArgs,
+  type ThreadStopCommandArgs,
 } from "./thread-commands.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  runLiveHostCommand,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
-import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { throwThreadNotWritable } from "../lib/lifecycle-api-errors.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { queueManagedThreadTurnNotificationBestEffort } from "./managed-thread-notifications.js";
 import {
-  readThreadProvisioningIdFromRecord,
-  threadProvisionCommonPayloadSchema,
-} from "./thread-provisioning-context.js";
+  forgetActiveThreadProvisionContext,
+  getActiveThreadProvisionContext,
+} from "./thread-provisioning-active-context.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
-type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.submit";
+type ReadyThreadTurnDispatchKind = "thread.start" | "turn.submit";
 type ThreadStartCommand = Awaited<ReturnType<typeof buildThreadStartCommand>>;
 type ThreadStopCommand = ReturnType<typeof buildThreadStopCommand>;
 type TurnSubmitCommand = HostDaemonCommandForType<"turn.submit">;
@@ -158,33 +130,24 @@ export type PreparedReadyThreadTurnCommand =
   | PreparedThreadStartCommand
   | PreparedReadyTurnSubmitCommand;
 
-export interface QueueReadyThreadTurnCommandArgs
-  extends QueueThreadStartCommandArgs {
-  requestEventSequence: number | null;
-}
-
-export interface QueuePreparedReadyThreadTurnCommandInTransactionArgs {
+export interface PrepareReadyThreadTurnDispatchInTransactionArgs {
   command: PreparedReadyThreadTurnCommand;
-  hostId: string;
-  requestEventSequence: number;
-  thread: Thread;
-}
-
-interface QueuePreparedThreadStartCommandInTransactionArgs {
-  command: PreparedThreadStartCommand;
-  hostId: string;
-  requestEventSequence: number;
   thread: Thread;
 }
 
 const threadStartRequestDeduper = createAsyncDeduper<string, void>();
+const activeThreadStartRpcThreadIds = new Set<string>();
+const activeThreadStartGeneratedTitleSyncThreadIds = new Set<string>();
 
-interface AdvanceThreadOperationArgs {
-  hostId: string;
+export function hasLiveThreadStartInFlight(threadId: string): boolean {
+  return activeThreadStartRpcThreadIds.has(threadId);
+}
+
+interface CompleteThreadStartArgs {
   threadId: string;
 }
 
-export interface RequestThreadStopArgs extends QueueThreadStopCommandArgs {
+export interface RequestThreadStopArgs extends ThreadStopCommandArgs {
   interruptionReason: SystemThreadInterruptedReason;
   stopRequestedAt: number | null;
 }
@@ -215,8 +178,6 @@ interface ProvisioningInterruptedThread {
 }
 
 interface FinalizeStoppedThreadArgs {
-  cancelPendingCommand?: boolean;
-  expectedCommandId?: string;
   threadId: string;
 }
 
@@ -236,7 +197,13 @@ interface InterruptActiveThreadsArgs {
   threads: readonly InterruptActiveThreadArgs[];
 }
 
+interface InterruptActiveThreadsForHostArgs {
+  hostId: string;
+  reason: SystemThreadInterruptedReason;
+}
+
 interface InterruptedActiveThreadResult {
+  failureEventAppended: boolean;
   interruptedTurnId: string | null;
   threadId: string;
 }
@@ -250,15 +217,7 @@ interface ReconcileDaemonReportedThreadsArgs {
   hostId: string;
 }
 
-interface ThreadOperationMutationArgs {
-  threadId: string;
-}
-
-interface ThreadOperationCommandMutationArgs {
-  commandId: string;
-}
-
-interface QueueSettledArchivedThreadProviderArchiveCommandArgs {
+interface DispatchSettledArchivedThreadProviderArchiveCommandArgs {
   threadId: string;
 }
 
@@ -275,122 +234,23 @@ interface SettleThreadCommandFailureArgs {
 
 interface SettleThreadStartCommandResultArgs {
   command: ThreadStartCommand;
-  commandRow: HostDaemonCommandRow;
   deps: FinalizeStoppedThreadTransactionDeps;
+  execution: HostDaemonCommandExecutionRecord;
   report: ThreadStartCommandResultReport;
 }
 
 interface SettleTurnSubmitCommandResultArgs {
   command: TurnSubmitCommand;
-  commandRow: HostDaemonCommandRow;
   deps: ThreadCommandResultSettlementDeps;
+  execution: HostDaemonCommandExecutionRecord;
   report: TurnSubmitCommandResultReport;
 }
 
 interface SettleThreadStopCommandResultArgs {
   command: ThreadStopCommand;
-  commandRow: HostDaemonCommandRow;
   deps: FinalizeStoppedThreadTransactionDeps;
+  execution: HostDaemonCommandExecutionRecord;
   report: ThreadStopCommandResultReport;
-}
-
-interface SettleSuccessfulClientTurnRequestsForCommandArgs {
-  commandCompletedAt: number;
-  commandId: string;
-}
-
-interface SettleFailedClientTurnRequestsForCommandArgs {
-  commandCompletedAt: number;
-  commandId: string;
-  errorCode: string;
-  errorMessage: string;
-}
-
-interface FailedClientTurnRequestSettlement {
-  reasonCode: ClientTurnRequestTerminalReason;
-  status: TerminalClientTurnRequestStatus;
-}
-
-interface InterruptedClientTurnRequestSettlement {
-  message: string;
-  reasonCode: ClientTurnRequestTerminalReason;
-  status: TerminalClientTurnRequestStatus;
-}
-
-interface SettleInterruptedClientTurnRequestsForThreadsArgs {
-  reason: SystemThreadInterruptedReason;
-  threadIds: readonly string[];
-}
-
-interface ThreadStopOperationPayload {
-  command: ThreadStopCommand;
-  interruptionReason: SystemThreadInterruptedReason;
-}
-
-const threadStopOperationPayloadSchema = z.union([
-  threadStopCommandSchema.transform(
-    (command): ThreadStopOperationPayload => ({
-      command,
-      interruptionReason: "manual-stop",
-    }),
-  ),
-  z.object({
-    command: threadStopCommandSchema,
-    interruptionReason: systemThreadInterruptedReasonSchema,
-  }),
-]);
-
-function settleSuccessfulClientTurnRequestsForCommand(
-  db: DbTransaction,
-  args: SettleSuccessfulClientTurnRequestsForCommandArgs,
-): void {
-  recordClientTurnRequestCommandCompletedInTransaction(db, {
-    commandCompletedAt: args.commandCompletedAt,
-    commandId: args.commandId,
-  });
-  // Fallback tracked in plans/client-turn-request-lifecycle-follow-up.md:
-  // command success is not provider-native acceptance, so keep
-  // command_succeeded distinguishable until runtimes report exact outcomes.
-  // Native provider acceptance wins when it arrives first; command completion is
-  // still recorded above, while this pending-only settlement no-ops.
-  settleClientTurnRequestsForCommandInTransaction(db, {
-    commandCompletedAt: args.commandCompletedAt,
-    commandId: args.commandId,
-    reasonCode: "command_succeeded",
-    settledAt: args.commandCompletedAt,
-    status: "accepted",
-  });
-}
-
-function clientTurnRequestSettlementForCommandError(
-  errorCode: string,
-): FailedClientTurnRequestSettlement {
-  if (errorCode === "command_expired") {
-    return {
-      reasonCode: "command_expired",
-      status: "expired",
-    };
-  }
-
-  return {
-    reasonCode: "command_failed",
-    status: "failed",
-  };
-}
-
-function settleFailedClientTurnRequestsForCommand(
-  db: DbTransaction,
-  args: SettleFailedClientTurnRequestsForCommandArgs,
-): void {
-  const settlement = clientTurnRequestSettlementForCommandError(args.errorCode);
-  settleClientTurnRequestsForCommandInTransaction(db, {
-    commandCompletedAt: args.commandCompletedAt,
-    commandId: args.commandId,
-    message: args.errorMessage,
-    reasonCode: settlement.reasonCode,
-    settledAt: args.commandCompletedAt,
-    status: settlement.status,
-  });
 }
 
 function nextStatusForInterruptedThread(
@@ -398,8 +258,8 @@ function nextStatusForInterruptedThread(
 ): Extract<ThreadStatus, "idle" | "error"> {
   switch (reason) {
     case "manual-stop":
-    case "host-daemon-restarted":
       return "idle";
+    case "host-daemon-restarted":
     case "provider-turn-idle":
       return "error";
     default:
@@ -422,81 +282,34 @@ function pendingInteractionStopReason(
   }
 }
 
-function clientTurnRequestSettlementForInterruption(
+function threadCommandFailureMessageForInterruption(
   reason: SystemThreadInterruptedReason,
-): InterruptedClientTurnRequestSettlement {
+): string | null {
   switch (reason) {
     case "manual-stop":
-      return {
-        message: "Thread stopped before provider accepted the request",
-        reasonCode: "runtime_canceled",
-        status: "canceled",
-      };
+      return null;
     case "host-daemon-restarted":
-      return {
-        message: "Host daemon restarted before provider accepted the request",
-        reasonCode: "provider_restarted",
-        status: "canceled",
-      };
+      return "Live runtime work failed because the host daemon disconnected";
     case "provider-turn-idle":
-      return {
-        message: "Provider stopped sending progress before accepting the request",
-        reasonCode: "provider_detached",
-        status: "failed",
-      };
+      return "Live runtime work failed because the provider stopped sending progress";
     default:
       return assertNever(reason);
   }
 }
 
-function settleInterruptedClientTurnRequestsForThreadsInTransaction(
-  db: DbTransaction,
-  args: SettleInterruptedClientTurnRequestsForThreadsArgs,
-): void {
-  const settlement = clientTurnRequestSettlementForInterruption(args.reason);
-  settlePendingClientTurnRequestsForThreadsInTransaction(db, {
-    message: settlement.message,
-    reasonCode: settlement.reasonCode,
-    status: settlement.status,
-    threadIds: args.threadIds,
-  });
-}
-
-function parseThreadStopOperationPayload(
-  payload: string,
-): ThreadStopOperationPayload {
-  return parseJsonWithSchema(payload, threadStopOperationPayloadSchema);
-}
-
-function readThreadStopInterruptionReason(
-  operation: ThreadOperationRow | null,
-): SystemThreadInterruptedReason | null {
-  if (!operation) {
-    return null;
-  }
-  try {
-    return parseThreadStopOperationPayload(operation.payload)
-      .interruptionReason;
-  } catch {
-    return null;
-  }
-}
-
-interface RequestThreadStartHandoffArgs {
-  baseCommand: ThreadStartCommand;
-  environmentId: string;
+interface DispatchThreadStartFromRequestArgs {
+  command: ThreadStartCommand;
+  hostId: string;
+  sessionId: string;
   sourceThreadStatus: ThreadStatus;
   threadId: string;
 }
 
-type RequestThreadStartHandoffDisposition =
-  | "blocked"
-  | "created"
-  | "existing-start";
+type ThreadStartDispatchDisposition = "blocked" | "started" | "existing-start";
 
-interface RequestThreadStartHandoffResult {
+interface DispatchThreadStartFromRequestResult {
   completedProvisionSequence: number | null;
-  disposition: RequestThreadStartHandoffDisposition;
+  disposition: ThreadStartDispatchDisposition;
 }
 
 interface ThreadLifecycleReadDeps {
@@ -507,10 +320,7 @@ interface ThreadLifecycleWriteDeps extends ThreadLifecycleReadDeps {
   hub: DbNotifier;
 }
 
-interface ThreadLifecycleCommandQueueDeps {
-  db: AppDeps["db"];
-  hub: AppDeps["hub"];
-}
+type ThreadLifecycleCommandDispatchDeps = CommandResultSideEffectsDeps;
 
 interface ThreadLifecycleTransactionDeps extends ThreadLifecycleWriteDeps {
   db: DbTransaction;
@@ -528,72 +338,14 @@ interface ApplyActiveTurnInterruptionArgs {
   threadId: string;
 }
 
-function hasQueuedThreadOperationCommand(
-  db: DbQueryConnection,
-  commandId: string | null,
-): boolean {
-  if (!commandId) {
-    return false;
-  }
-
-  const command = getCommand(db, commandId);
-  return (
-    command !== null &&
-    (command.state === "pending" || command.state === "fetched")
-  );
+interface MarkThreadStopRequestedWithEventArgs {
+  reason: SystemThreadInterruptedReason;
+  requestedAt?: number;
+  threadId: string;
 }
 
-function getActiveThreadOperation(
-  deps: ThreadLifecycleReadDeps,
-  args: {
-    kind: "provision" | "start" | "stop";
-    threadId: string;
-  },
-) {
-  const operation = getThreadOperation(deps.db, args);
-  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
-    return null;
-  }
-
-  return operation;
-}
-
-function getActiveThreadOperationByCommandId(
-  deps: ThreadLifecycleReadDeps,
-  args: {
-    commandId: string;
-    kind: "start" | "stop";
-  },
-) {
-  const operation = getThreadOperationByCommandId(deps.db, args.commandId);
-  if (
-    !operation ||
-    operation.kind !== args.kind ||
-    !isActiveLifecycleOperationState(operation.state)
-  ) {
-    return null;
-  }
-
-  return operation;
-}
-
-function getThreadOperationCommandState(
-  deps: ThreadLifecycleReadDeps,
-  commandId: string | null,
-): "pending" | "fetched" | "settled" | null {
-  if (!commandId) {
-    return null;
-  }
-
-  const command = getCommand(deps.db, commandId);
-  if (!command) {
-    return null;
-  }
-  if (command.state === "pending" || command.state === "fetched") {
-    return command.state;
-  }
-
-  return "settled";
+function hasActiveThreadProvisioningContext(threadId: string): boolean {
+  return getActiveThreadProvisionContext(threadId) !== null;
 }
 
 function hasThreadInterruptedEvent(
@@ -627,13 +379,13 @@ function buildProvisioningStoppedEntry(): ProvisioningTranscriptEntry {
 function appendProvisioningInterruptedEventInTransaction(
   deps: ThreadLifecycleTransactionDeps,
   thread: ProvisioningInterruptedThread,
-  operation: ThreadOperationRow | null,
 ): void {
-  if (!operation) {
+  const currentThread = getThread(deps.db, thread.id);
+  const context = getActiveThreadProvisionContext(thread.id);
+  if (!currentThread || !context) {
     return;
   }
-  const environmentId =
-    operation.provisioningEnvironmentId ?? thread.environmentId;
+  const environmentId = context.state.environmentId ?? thread.environmentId;
   if (environmentId === null) {
     return;
   }
@@ -641,7 +393,7 @@ function appendProvisioningInterruptedEventInTransaction(
   appendThreadProvisioningEventInTransaction(deps.db, {
     threadId: thread.id,
     environmentId,
-    provisioningId: readThreadProvisioningIdFromRecord(operation),
+    provisioningId: context.state.provisioningId,
     status: "cancelled",
     entries: [buildProvisioningStoppedEntry()],
   });
@@ -650,11 +402,50 @@ function appendProvisioningInterruptedEventInTransaction(
   });
 }
 
+function appendThreadInterruptedEventIfMissingInTransaction(
+  deps: ThreadLifecycleTransactionDeps,
+  args: MarkThreadStopRequestedWithEventArgs,
+): boolean {
+  if (hasThreadInterruptedEvent(deps, args.threadId)) {
+    return false;
+  }
+  appendThreadInterruptedEventInTransaction(deps.db, {
+    threadId: args.threadId,
+    reason: args.reason,
+  });
+  deps.hub.notifyThread(args.threadId, ["events-appended"], {
+    eventTypes: ["system/thread/interrupted"],
+  });
+  return true;
+}
+
+function markThreadStopRequestedWithEventInTransaction(
+  deps: ThreadLifecycleTransactionDeps,
+  args: MarkThreadStopRequestedWithEventArgs,
+): boolean {
+  const currentThread = getThread(deps.db, args.threadId);
+  if (!currentThread || currentThread.stopRequestedAt !== null) {
+    return false;
+  }
+  markThreadStopRequested(deps.db, deps.hub, {
+    requestedAt: args.requestedAt,
+    threadId: args.threadId,
+  });
+  appendThreadInterruptedEventInTransaction(deps.db, {
+    threadId: args.threadId,
+    reason: args.reason,
+  });
+  deps.hub.notifyThread(args.threadId, ["events-appended"], {
+    eventTypes: ["system/thread/interrupted"],
+  });
+  return true;
+}
+
 function applyActiveTurnInterruptionInTransaction(
-  db: DbTransaction,
+  deps: ThreadLifecycleTransactionDeps,
   args: ApplyActiveTurnInterruptionArgs,
-): void {
-  appendThreadEventInTransaction(db, {
+): boolean {
+  appendThreadEventInTransaction(deps.db, {
     threadId: args.threadId,
     environmentId: args.environmentId,
     providerThreadId: args.providerThreadId,
@@ -665,62 +456,33 @@ function applyActiveTurnInterruptionInTransaction(
       status: "interrupted",
     },
   });
-  appendThreadInterruptedEventInTransaction(db, {
-    threadId: args.threadId,
-    reason: args.reason,
-  });
-  transitionThreadStatusInTransaction(db, {
+  const appendedThreadInterruptedEvent =
+    appendThreadInterruptedEventIfMissingInTransaction(deps, args);
+  transitionThreadStatusInTransaction(deps.db, {
     id: args.threadId,
     newStatus: nextStatusForInterruptedThread(args.reason),
   });
+  return appendedThreadInterruptedEvent;
 }
 
-function hasActiveThreadOperation(
-  deps: ThreadLifecycleReadDeps,
-  args: {
-    kind: "provision" | "start" | "stop";
-    threadId: string;
-  },
-): boolean {
-  return getActiveThreadOperation(deps, args) !== null;
-}
-
-export function queueSettledArchivedThreadProviderArchiveCommand(
-  deps: ThreadLifecycleCommandQueueDeps,
-  args: QueueSettledArchivedThreadProviderArchiveCommandArgs,
+export function dispatchSettledArchivedThreadProviderArchiveCommand(
+  deps: ThreadLifecycleCommandDispatchDeps,
+  args: DispatchSettledArchivedThreadProviderArchiveCommandArgs,
 ): boolean {
   const thread = getThread(deps.db, args.threadId);
   if (!thread || thread.status === "active") {
     return false;
   }
   if (
-    hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id }) ||
-    hasActiveThreadOperation(deps, { kind: "stop", threadId: thread.id })
+    hasLiveThreadStartInFlight(thread.id) ||
+    thread.stopRequestedAt !== null
   ) {
     return false;
   }
 
-  return queueArchivedThreadProviderArchiveCommand(deps, {
+  return dispatchArchivedThreadProviderArchiveCommand(deps, {
     threadId: thread.id,
   });
-}
-
-function shouldSyncGeneratedThreadTitle(
-  deps: ThreadLifecycleReadDeps,
-  threadId: string,
-): boolean {
-  const operation = getThreadOperation(deps.db, {
-    threadId,
-    kind: "provision",
-  });
-  if (!operation) {
-    return false;
-  }
-  const request = parseJsonWithSchema(
-    operation.payload,
-    threadProvisionCommonPayloadSchema,
-  );
-  return !request.titleProvided;
 }
 
 function getThreadFailureCommandErrorScope(
@@ -810,43 +572,19 @@ export function settleThreadStartCommandResult(
   if (!thread) {
     return emptyCommandResultSideEffects();
   }
-  const operation = getActiveThreadOperationByCommandId(args.deps, {
-    commandId: args.commandRow.id,
-    kind: "start",
-  });
   if (!args.report.ok) {
-    settleFailedClientTurnRequestsForCommand(args.deps.db, {
-      commandCompletedAt: args.report.completedAt,
-      commandId: args.commandRow.id,
-      errorCode: args.report.errorCode,
-      errorMessage: args.report.errorMessage,
-    });
-    if (operation) {
-      markThreadOperationRecordFailed(args.deps.db, {
-        threadId: operation.threadId,
-        kind: operation.kind,
-        failureReason: args.report.errorMessage,
-      });
-    }
+    forgetActiveThreadProvisionContext(thread.id);
     return settleThreadCommandFailure({
       command: args.command,
       deps: args.deps,
       report: args.report,
     });
   }
-  settleSuccessfulClientTurnRequestsForCommand(args.deps.db, {
-    commandCompletedAt: args.report.completedAt,
-    commandId: args.commandRow.id,
-  });
 
-  if (!operation) {
-    return emptyCommandResultSideEffects();
-  }
-
-  markThreadOperationRecordCompleted(args.deps.db, {
-    threadId: operation.threadId,
-    kind: operation.kind,
-  });
+  const shouldSyncTitle =
+    thread.title !== null &&
+    activeThreadStartGeneratedTitleSyncThreadIds.has(thread.id);
+  completeThreadStart(args.deps, { threadId: thread.id });
   const currentThread = getThread(args.deps.db, args.command.threadId);
   if (currentThread && currentThread.deletedAt !== null) {
     const finalized = finalizeStoppedThreadInTransaction(args.deps, {
@@ -867,19 +605,26 @@ export function settleThreadStartCommandResult(
     }
     return { postCommitActions };
   }
-  if (thread.title && shouldSyncGeneratedThreadTitle(args.deps, thread.id)) {
-    const queuedRename = queueThreadRenameCommandInTransaction(args.deps.db, {
-      environment: {
-        id: args.command.environmentId,
-        hostId: args.commandRow.hostId,
+  const threadTitle = thread.title;
+  if (threadTitle && shouldSyncTitle) {
+    postCommitActions.push({
+      name: "Generated thread title provider rename",
+      context: {
+        environmentId: args.command.environmentId,
+        hostId: args.execution.hostId,
+        threadId: thread.id,
       },
-      providerId: thread.providerId,
-      threadId: thread.id,
-      title: thread.title,
+      run: (deps) =>
+        dispatchThreadRenameCommand(deps, {
+          environment: {
+            id: args.command.environmentId,
+            hostId: args.execution.hostId,
+          },
+          providerId: thread.providerId,
+          threadId: thread.id,
+          title: threadTitle,
+        }),
     });
-    if (queuedRename) {
-      args.deps.hub.notifyCommand(args.commandRow.hostId);
-    }
   }
   return { postCommitActions };
 }
@@ -888,33 +633,17 @@ export function settleTurnSubmitCommandResult(
   args: SettleTurnSubmitCommandResultArgs,
 ): CommandResultSideEffectsResult {
   if (!args.report.ok) {
-    settleFailedClientTurnRequestsForCommand(args.deps.db, {
-      commandCompletedAt: args.report.completedAt,
-      commandId: args.commandRow.id,
-      errorCode: args.report.errorCode,
-      errorMessage: args.report.errorMessage,
-    });
     return settleThreadCommandFailure({
       command: args.command,
       deps: args.deps,
       report: args.report,
     });
   }
-  settleSuccessfulClientTurnRequestsForCommand(args.deps.db, {
-    commandCompletedAt: args.report.completedAt,
-    commandId: args.commandRow.id,
-  });
   return emptyCommandResultSideEffects();
 }
 
-export function ensureThreadCanQueueStartRequest(
-  deps: ThreadLifecycleReadDeps,
-  thread: Thread,
-): void {
-  if (
-    isPreStartThreadStatus(thread.status) &&
-    hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id })
-  ) {
+export function ensureThreadCanStartRequest(thread: Thread): void {
+  if (isPreStartThreadStatus(thread.status)) {
     throwThreadNotWritable(
       thread,
       "still_starting",
@@ -925,7 +654,7 @@ export function ensureThreadCanQueueStartRequest(
 
 export async function prepareReadyThreadTurnCommand(
   deps: LoggedWorkSessionDeps,
-  args: QueueThreadStartCommandArgs,
+  args: ThreadStartCommandArgs,
 ): Promise<PreparedReadyThreadTurnCommand> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
@@ -958,146 +687,36 @@ export async function prepareReadyThreadTurnCommand(
   };
 }
 
-function queuePreparedThreadStartCommandInTransaction(
-  tx: DbTransaction,
-  args: QueuePreparedThreadStartCommandInTransactionArgs,
-): void {
-  if (
-    getActiveThreadOperation(
-      { db: tx },
-      {
-        kind: "start",
-        threadId: args.thread.id,
-      },
-    ) !== null
-  ) {
-    throwThreadNotWritable(
-      args.thread,
-      "still_starting",
-      "Thread is still starting",
-    );
-  }
-
-  const queued = queueCommandInTransaction(tx, {
-    hostId: args.hostId,
-    sessionId: args.command.sessionId,
-    type: args.command.command.type,
-    payload: JSON.stringify(args.command.command),
-  });
-  createPendingClientTurnRequestInTransaction(tx, {
-    commandId: queued.id,
-    commandType: "thread.start",
-    environmentId: args.command.command.environmentId,
-    requestEventSequence: args.requestEventSequence,
-    requestId: args.command.command.requestId,
-    threadId: args.command.command.threadId,
-  });
-  upsertThreadOperationRecord(tx, {
-    threadId: args.command.command.threadId,
-    kind: "start",
-    payload: JSON.stringify(args.command.command),
-  });
-  const queuedOperation = markThreadOperationRecordQueued(tx, {
-    threadId: args.command.command.threadId,
-    kind: "start",
-    commandId: queued.id,
-  });
-  if (!queuedOperation) {
-    throw new Error(
-      `Failed to mark thread start operation queued for ${args.command.command.threadId}`,
-    );
-  }
-}
-
-export function queuePreparedReadyThreadTurnCommandInTransaction(
-  tx: DbTransaction,
-  args: QueuePreparedReadyThreadTurnCommandInTransactionArgs,
-): QueueReadyThreadTurnCommandResult {
+export function prepareReadyThreadTurnDispatchInTransaction(
+  _tx: DbTransaction,
+  args: PrepareReadyThreadTurnDispatchInTransactionArgs,
+): ReadyThreadTurnDispatchKind {
   if (args.command.mode === "turn.submit") {
-    queueTurnSubmitCommandInTransaction(tx, {
-      command: args.command.command,
-      hostId: args.hostId,
-      requestEventSequence: args.requestEventSequence,
-      sessionId: args.command.sessionId,
-    });
     return "turn.submit";
   }
 
-  queuePreparedThreadStartCommandInTransaction(tx, {
-    command: args.command,
-    hostId: args.hostId,
-    requestEventSequence: args.requestEventSequence,
-    thread: args.thread,
-  });
+  ensureThreadCanStartRequest(args.thread);
   return "thread.start";
-}
-
-export function hasActiveThreadStartOperationForCommand(
-  deps: ThreadLifecycleReadDeps,
-  args: ThreadOperationCommandMutationArgs,
-): boolean {
-  return (
-    getActiveThreadOperationByCommandId(deps, {
-      commandId: args.commandId,
-      kind: "start",
-    }) !== null
-  );
-}
-
-export function hasActiveThreadStopOperationForCommand(
-  deps: ThreadLifecycleReadDeps,
-  args: ThreadOperationCommandMutationArgs,
-): boolean {
-  return (
-    getActiveThreadOperationByCommandId(deps, {
-      commandId: args.commandId,
-      kind: "stop",
-    }) !== null
-  );
 }
 
 export function completeThreadStart(
   deps: ThreadLifecycleReadDeps,
-  args: ThreadOperationMutationArgs,
+  args: CompleteThreadStartArgs,
 ): boolean {
-  const operation = getActiveThreadOperation(deps, {
-    threadId: args.threadId,
-    kind: "start",
-  });
-  if (!operation) {
-    return false;
-  }
-
-  markThreadOperationRecordCompleted(deps.db, {
-    threadId: args.threadId,
-    kind: operation.kind,
-  });
-  return true;
+  const thread = getThread(deps.db, args.threadId);
+  const hadContext = hasActiveThreadProvisioningContext(args.threadId);
+  forgetActiveThreadProvisionContext(args.threadId);
+  return hadContext || thread?.status === "active";
 }
 
 export function settleThreadStopCommandResult(
   args: SettleThreadStopCommandResultArgs,
 ): CommandResultSideEffectsResult {
-  const operation = getActiveThreadOperationByCommandId(args.deps, {
-    commandId: args.commandRow.id,
-    kind: "stop",
-  });
-  if (!operation) {
-    return emptyCommandResultSideEffects();
-  }
-
   if (!args.report.ok) {
-    markThreadOperationRecordFailed(args.deps.db, {
-      threadId: operation.threadId,
-      kind: operation.kind,
-      failureReason: args.report.errorMessage,
-    });
     return emptyCommandResultSideEffects();
   }
 
   finalizeStoppedThreadInTransaction(args.deps, {
-    cancelPendingCommand: false,
-    expectedCommandId: args.commandRow.id,
     threadId: args.command.threadId,
   });
 
@@ -1110,7 +729,7 @@ export function settleThreadStopCommandResult(
           threadId: args.command.threadId,
         },
         run: (deps) => {
-          queueSettledArchivedThreadProviderArchiveCommand(deps, {
+          dispatchSettledArchivedThreadProviderArchiveCommand(deps, {
             threadId: args.command.threadId,
           });
         },
@@ -1130,60 +749,17 @@ export function settleThreadStopCommandResult(
   };
 }
 
-async function advanceActiveThreadStartIfPresent(
-  deps: WorkSessionDeps,
-  args: QueueThreadStartCommandArgs,
-): Promise<boolean> {
-  const operation = getThreadOperation(deps.db, {
-    threadId: args.thread.id,
-    kind: "start",
-  });
-  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
-    return false;
-  }
-
-  if (hasQueuedThreadOperationCommand(deps.db, operation.commandId)) {
-    return true;
-  }
-  if (operation.state !== "requested") {
-    return false;
-  }
-
-  await advanceThreadStart(deps, {
-    hostId: args.environment.hostId,
-    threadId: args.thread.id,
-  });
-  return true;
-}
-
-function hasQueuedActiveThreadStart(
-  deps: WorkSessionDeps,
-  args: QueueThreadStartCommandArgs,
-): boolean {
-  const operation = getThreadOperation(deps.db, {
-    threadId: args.thread.id,
-    kind: "start",
-  });
-  return (
-    operation !== null &&
-    isActiveLifecycleOperationState(operation.state) &&
-    hasQueuedThreadOperationCommand(deps.db, operation.commandId)
-  );
-}
-
-/**
- * Makes the provision-to-start durability boundary atomic: after a crash, the
- * thread should have either an active provision op to retry or an active start
- * op for the lifecycle sweep to advance.
- */
-function requestThreadStartHandoff(
+function dispatchThreadStartFromRequest(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: RequestThreadStartHandoffArgs,
-): RequestThreadStartHandoffResult {
-  const result: RequestThreadStartHandoffResult = deps.db.transaction(
+  args: DispatchThreadStartFromRequestArgs,
+): DispatchThreadStartFromRequestResult {
+  const result: DispatchThreadStartFromRequestResult = deps.db.transaction(
     (tx) => {
       const currentThread = getThread(tx, args.threadId);
       const isProvisionHandoff = args.sourceThreadStatus === "provisioning";
+      const activeProvisionContext = isProvisionHandoff
+        ? getActiveThreadProvisionContext(args.threadId)
+        : null;
       if (
         !currentThread ||
         currentThread.deletedAt !== null ||
@@ -1196,33 +772,10 @@ function requestThreadStartHandoff(
         };
       }
 
-      const existingStartOperation = getThreadOperation(tx, {
-        threadId: args.threadId,
-        kind: "start",
-      });
-      if (
-        existingStartOperation &&
-        isActiveLifecycleOperationState(existingStartOperation.state) &&
-        hasQueuedThreadOperationCommand(tx, existingStartOperation.commandId)
-      ) {
-        return {
-          completedProvisionSequence: null,
-          disposition: "existing-start",
-        };
-      }
-
-      const provisionOperation = getThreadOperation(tx, {
-        threadId: args.threadId,
-        kind: "provision",
-      });
       if (
         isProvisionHandoff &&
         (!isPreStartThreadStatus(currentThread.status) ||
-          !(
-            provisionOperation &&
-            isActiveLifecycleOperationState(provisionOperation.state)
-          )
-        )
+          activeProvisionContext === null)
       ) {
         return {
           completedProvisionSequence: null,
@@ -1231,34 +784,22 @@ function requestThreadStartHandoff(
       }
 
       let completedProvisionSequence: number | null = null;
-      if (
-        provisionOperation &&
-        isActiveLifecycleOperationState(provisionOperation.state)
-      ) {
+      if (activeProvisionContext !== null) {
         completedProvisionSequence = appendThreadProvisioningEventInTransaction(
           tx,
           {
             threadId: args.threadId,
-            environmentId: args.environmentId,
-            provisioningId:
-              readThreadProvisioningIdFromRecord(provisionOperation),
+            environmentId: args.command.environmentId,
+            provisioningId: activeProvisionContext.state.provisioningId,
             status: "completed",
             entries: [],
           },
         );
-        markThreadOperationRecordCompleted(tx, {
-          threadId: args.threadId,
-          kind: "provision",
-        });
       }
-      upsertThreadOperationRecord(tx, {
-        threadId: args.threadId,
-        kind: "start",
-        payload: JSON.stringify(args.baseCommand),
-      });
+
       return {
         completedProvisionSequence,
-        disposition: "created",
+        disposition: "started",
       };
     },
     { behavior: "immediate" },
@@ -1273,8 +814,8 @@ function requestThreadStartHandoff(
 }
 
 export async function requestThreadStart(
-  deps: LoggedWorkSessionDeps,
-  args: QueueThreadStartCommandArgs,
+  deps: CommandResultSideEffectsDeps,
+  args: ThreadStartCommandArgs,
 ): Promise<void> {
   await threadStartRequestDeduper.run(args.thread.id, () =>
     requestThreadStartOnce(deps, args),
@@ -1282,178 +823,96 @@ export async function requestThreadStart(
 }
 
 async function requestThreadStartOnce(
-  deps: LoggedWorkSessionDeps,
-  args: QueueThreadStartCommandArgs,
+  deps: CommandResultSideEffectsDeps,
+  args: ThreadStartCommandArgs,
 ): Promise<void> {
-  if (await advanceActiveThreadStartIfPresent(deps, args)) {
+  if (hasLiveThreadStartInFlight(args.thread.id)) {
     return;
   }
 
-  const baseCommand = await buildThreadStartCommand(deps, {
+  const command = await buildThreadStartCommand(deps, {
     ...args,
   });
-  if (hasQueuedActiveThreadStart(deps, args)) {
+  if (hasLiveThreadStartInFlight(args.thread.id)) {
     return;
-  }
-
-  const handoff = requestThreadStartHandoff(deps, {
-    baseCommand,
-    environmentId: args.environment.id,
-    sourceThreadStatus: args.thread.status,
-    threadId: args.thread.id,
-  });
-  if (handoff.disposition === "existing-start") {
-    await advanceActiveThreadStartIfPresent(deps, args);
-    return;
-  }
-  if (handoff.disposition === "blocked") {
-    return;
-  }
-
-  await advanceThreadStart(deps, {
-    hostId: args.environment.hostId,
-    threadId: args.thread.id,
-  });
-}
-
-export async function advanceThreadStart(
-  deps: WorkSessionDeps,
-  args: AdvanceThreadOperationArgs,
-): Promise<string | null> {
-  const operation = getThreadOperation(deps.db, {
-    threadId: args.threadId,
-    kind: "start",
-  });
-  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
-    return null;
-  }
-
-  if (hasQueuedThreadOperationCommand(deps.db, operation.commandId)) {
-    return operation.commandId;
   }
 
   const session = await ensureHostSessionReadyForWork(deps, {
-    hostId: args.hostId,
+    hostId: args.environment.hostId,
   });
-
-  const command = parseJsonWithSchema(
-    operation.payload,
-    threadStartCommandSchema,
-  );
-  const queuedCommand = deps.db.transaction(
-    (tx) => {
-      const queued = queueCommandInTransaction(tx, {
-        hostId: args.hostId,
-        sessionId: session.id,
-        type: command.type,
-        payload: JSON.stringify(command),
+  const result = dispatchThreadStartFromRequest(deps, {
+    command,
+    hostId: args.environment.hostId,
+    sessionId: session.id,
+    sourceThreadStatus: args.thread.status,
+    threadId: args.thread.id,
+  });
+  if (result.disposition === "started") {
+    activeThreadStartRpcThreadIds.add(args.thread.id);
+    if (args.syncGeneratedTitle) {
+      activeThreadStartGeneratedTitleSyncThreadIds.add(args.thread.id);
+    }
+    void runLiveHostCommand(deps, {
+      command,
+      hostId: args.environment.hostId,
+      timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    })
+      .catch((error) => {
+        deps.logger.warn(
+          { err: error, threadId: args.thread.id },
+          "Live thread start command failed",
+        );
+      })
+      .finally(() => {
+        activeThreadStartRpcThreadIds.delete(args.thread.id);
+        activeThreadStartGeneratedTitleSyncThreadIds.delete(args.thread.id);
       });
-      const requestEventSequence =
-        findStoredClientTurnRequestSequenceByRequestId(tx, {
-          requestId: command.requestId,
-          threadId: command.threadId,
-        });
-      if (requestEventSequence !== null) {
-        createPendingClientTurnRequestInTransaction(tx, {
-          commandId: queued.id,
-          commandType: "thread.start",
-          environmentId: command.environmentId,
-          requestEventSequence,
-          requestId: command.requestId,
-          threadId: command.threadId,
-        });
-      }
-      markThreadOperationRecordQueued(tx, {
-        threadId: args.threadId,
-        kind: "start",
-        commandId: queued.id,
-      });
-      return queued;
-    },
-    { behavior: "immediate" },
-  );
-  deps.hub.notifyCommand(args.hostId);
-  return queuedCommand.id;
-}
-
-export async function queueReadyThreadTurnCommand(
-  deps: LoggedWorkSessionDeps,
-  args: QueueReadyThreadTurnCommandArgs,
-): Promise<QueueReadyThreadTurnCommandResult> {
-  const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
-  if (providerThreadId) {
-    await queueTurnSubmitCommand(deps, {
-      thread: args.thread,
-      input: args.input,
-      requestId: args.requestId,
-      execution: args.execution,
-      permissionEscalation: args.permissionEscalation,
-      environment: args.environment,
-      providerThreadId,
-      requestEventSequence: args.requestEventSequence,
-      target: { mode: "start" },
-    });
-    return "turn.submit";
   }
-
-  await requestThreadStart(deps, {
-    thread: args.thread,
-    environment: args.environment,
-    input: args.input,
-    requestId: args.requestId,
-    execution: args.execution,
-    permissionEscalation: args.permissionEscalation,
-    projectId: args.thread.projectId,
-    providerId: args.thread.providerId,
-  });
-  return "thread.start";
 }
 
 export function requestThreadStop(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: CommandResultSideEffectsDeps,
   args: RequestThreadStopArgs,
 ): void {
   if (args.stopRequestedAt === null) {
-    markThreadStopRequested(deps.db, deps.hub, {
-      threadId: args.threadId,
-    });
+    const notificationBuffer = new NotificationBuffer();
+    deps.db.transaction(
+      (tx) => {
+        markThreadStopRequestedWithEventInTransaction(
+          {
+            ...deps,
+            db: tx,
+            hub: notificationBuffer,
+          },
+          {
+            reason: args.interruptionReason,
+            threadId: args.threadId,
+          },
+        );
+      },
+      { behavior: "immediate" },
+    );
+    notificationBuffer.flushInto(deps.hub);
   }
 
-  const existingOperation = getThreadOperation(deps.db, {
-    threadId: args.threadId,
-    kind: "stop",
-  });
+  const currentThread = getThread(deps.db, args.threadId);
   if (
-    existingOperation &&
-    isActiveLifecycleOperationState(existingOperation.state)
+    currentThread?.stopRequestedAt !== null &&
+    args.stopRequestedAt !== null
   ) {
-    if (hasQueuedThreadOperationCommand(deps.db, existingOperation.commandId)) {
-      return;
-    }
-    advanceThreadStop(deps, {
-      hostId: args.hostId,
-      threadId: args.threadId,
-    });
     return;
   }
 
-  const interruptionReason =
-    args.stopRequestedAt === null
-      ? args.interruptionReason
-      : (readThreadStopInterruptionReason(existingOperation) ??
-        args.interruptionReason);
-  const payload: ThreadStopOperationPayload = {
+  startLiveHostCommand(deps, {
     command: buildThreadStopCommand(args),
-    interruptionReason,
-  };
-  upsertThreadOperationRecord(deps.db, {
-    threadId: args.threadId,
-    kind: "stop",
-    payload: JSON.stringify(payload),
-  });
-  advanceThreadStop(deps, {
     hostId: args.hostId,
-    threadId: args.threadId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: args.threadId },
+        "Live thread stop command failed",
+      );
+    },
   });
 }
 
@@ -1474,41 +933,26 @@ function requestPreStartThreadStop(
         return { environmentId: null, finalized: true };
       }
 
-      const provisionOperation = getActiveThreadOperation(txDeps, {
-        threadId: currentThread.id,
-        kind: "provision",
-      });
+      const hasProvisioningContext =
+        currentThread.status === "provisioning" &&
+        hasActiveThreadProvisioningContext(currentThread.id);
       if (
         !isPreStartThreadStatus(currentThread.status) &&
-        provisionOperation === null
+        !hasProvisioningContext
       ) {
         return { environmentId: currentThread.environmentId, finalized: false };
       }
 
       if (currentThread.stopRequestedAt === null) {
-        markThreadStopRequested(tx, notificationBuffer, {
-          threadId: currentThread.id,
-        });
-        appendThreadInterruptedEventInTransaction(tx, {
-          threadId: currentThread.id,
+        markThreadStopRequestedWithEventInTransaction(txDeps, {
           reason: "manual-stop",
-        });
-        notificationBuffer.notifyThread(currentThread.id, ["events-appended"], {
-          eventTypes: ["system/thread/interrupted"],
-        });
-        appendProvisioningInterruptedEventInTransaction(
-          txDeps,
-          currentThread,
-          provisionOperation,
-        );
-      }
-
-      if (provisionOperation !== null) {
-        cancelThreadOperationRecord(tx, {
           threadId: currentThread.id,
-          kind: "provision",
         });
       }
+      if (hasProvisioningContext) {
+        appendProvisioningInterruptedEventInTransaction(txDeps, currentThread);
+      }
+      forgetActiveThreadProvisionContext(currentThread.id);
 
       const environmentId = currentThread.environmentId;
       const cancellation =
@@ -1544,10 +988,7 @@ export function requestThreadStopForCurrentState(
   thread: RequestThreadStopForCurrentStateThread,
   environment: RequestThreadStopForCurrentStateEnvironment | null,
 ): void {
-  if (
-    thread.status === "active" ||
-    hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id })
-  ) {
+  if (thread.status === "active" || hasLiveThreadStartInFlight(thread.id)) {
     if (environment === null) {
       return;
     }
@@ -1563,7 +1004,7 @@ export function requestThreadStopForCurrentState(
 
   if (
     isPreStartThreadStatus(thread.status) ||
-    hasActiveThreadOperation(deps, { kind: "provision", threadId: thread.id })
+    hasActiveThreadProvisioningContext(thread.id)
   ) {
     requestPreStartThreadStop(deps, thread);
   }
@@ -1574,17 +1015,14 @@ export function requestThreadStopForCurrentState(
  * cancellation goes through requestThreadStopForCurrentState.
  */
 export function requestActiveRuntimeThreadStopIfNeeded(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: CommandResultSideEffectsDeps,
   thread: Pick<Thread, "id" | "status" | "stopRequestedAt">,
   environment: {
     hostId: string;
     id: string;
   },
 ): void {
-  if (
-    thread.status !== "active" &&
-    !hasActiveThreadOperation(deps, { kind: "start", threadId: thread.id })
-  ) {
+  if (thread.status !== "active" && !hasLiveThreadStartInFlight(thread.id)) {
     return;
   }
   requestThreadStop(deps, {
@@ -1621,18 +1059,23 @@ function interruptActiveTurnForThreadInTransaction(
 
   const providerThreadId = getLastProviderThreadId(deps, args.threadId);
 
-  applyActiveTurnInterruptionInTransaction(deps.db, {
-    activeTurnId,
-    environmentId: args.environmentId,
-    providerThreadId,
-    reason: args.reason,
-    threadId: args.threadId,
-  });
+  const appendedThreadInterruptedEvent =
+    applyActiveTurnInterruptionInTransaction(deps, {
+      activeTurnId,
+      environmentId: args.environmentId,
+      providerThreadId,
+      reason: args.reason,
+      threadId: args.threadId,
+    });
+  const eventTypes: ThreadEventType[] = ["turn/completed"];
+  if (appendedThreadInterruptedEvent) {
+    eventTypes.push("system/thread/interrupted");
+  }
   deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"], {
-    eventTypes: ["turn/completed", "system/thread/interrupted"],
+    eventTypes,
   });
 
-  return true;
+  return appendedThreadInterruptedEvent;
 }
 
 /**
@@ -1665,6 +1108,9 @@ export function interruptActiveThreads(
         const state = stateByThreadId.get(thread.threadId);
         const activeTurnId = state?.activeTurnId ?? null;
         const providerThreadId = state?.latestProviderThreadId ?? null;
+        const failureMessage = threadCommandFailureMessageForInterruption(
+          args.reason,
+        );
 
         if (activeTurnId !== null) {
           eventArgs.push({
@@ -1680,6 +1126,22 @@ export function interruptActiveThreads(
           });
         }
 
+        if (failureMessage !== null) {
+          eventArgs.push({
+            threadId: thread.threadId,
+            environmentId: thread.environmentId,
+            providerThreadId,
+            type: "system/error",
+            scope:
+              activeTurnId !== null ? turnScope(activeTurnId) : threadScope(),
+            data: buildSystemErrorEventData({
+              code: "thread_command_failed",
+              message: failureMessage,
+              detail: pendingInteractionStopReason(args.reason),
+            }),
+          });
+        }
+
         eventArgs.push({
           threadId: thread.threadId,
           type: "system/thread/interrupted",
@@ -1689,17 +1151,13 @@ export function interruptActiveThreads(
           },
         });
         results.push({
+          failureEventAppended: failureMessage !== null,
           threadId: thread.threadId,
           interruptedTurnId: activeTurnId,
         });
       }
 
       appendThreadEventsInTransaction(tx, eventArgs);
-      settleInterruptedClientTurnRequestsForThreadsInTransaction(tx, {
-        reason: args.reason,
-        threadIds,
-      });
-
       for (const thread of args.threads) {
         transitionThreadStatusInTransaction(tx, {
           id: thread.threadId,
@@ -1717,6 +1175,9 @@ export function interruptActiveThreads(
 
   for (const result of results) {
     const eventTypes: ThreadEventType[] = ["system/thread/interrupted"];
+    if (result.failureEventAppended) {
+      eventTypes.unshift("system/error");
+    }
     if (result.interruptedTurnId !== null) {
       eventTypes.unshift("turn/completed");
     }
@@ -1732,40 +1193,35 @@ export function interruptActiveThreads(
   return { threads: results };
 }
 
-function advanceThreadStop(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: AdvanceThreadOperationArgs,
-): string | null {
-  const operation = getThreadOperation(deps.db, {
-    threadId: args.threadId,
-    kind: "stop",
-  });
-  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
-    return null;
-  }
+export function interruptActiveThreadsForHost(
+  deps: Pick<AppDeps, "db" | "hub" | "pendingInteractions">,
+  args: InterruptActiveThreadsForHostArgs,
+): InterruptActiveThreadsResult {
+  const activeThreads = deps.db
+    .select({
+      environmentId: environments.id,
+      threadId: threads.id,
+    })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(
+      and(
+        eq(environments.hostId, args.hostId),
+        eq(threads.status, "active"),
+        isNull(threads.deletedAt),
+        isNull(threads.stopRequestedAt),
+      ),
+    )
+    .all();
 
-  if (hasQueuedThreadOperationCommand(deps.db, operation.commandId)) {
-    return operation.commandId;
-  }
-
-  const session = getActiveSession(deps.db, args.hostId);
-  const { command } = parseThreadStopOperationPayload(operation.payload);
-  const queuedCommand = queueCommand(deps.db, deps.hub, {
-    hostId: args.hostId,
-    sessionId: session?.id ?? null,
-    type: command.type,
-    payload: JSON.stringify(command),
+  return interruptActiveThreads(deps, {
+    threads: activeThreads,
+    reason: args.reason,
   });
-  markThreadOperationRecordQueued(deps.db, {
-    threadId: args.threadId,
-    kind: "stop",
-    commandId: queuedCommand.id,
-  });
-  return queuedCommand.id;
 }
 
 export function finalizeStoppedThread(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: FinalizeStoppedThreadArgs,
 ): boolean {
   const notificationBuffer = new NotificationBuffer();
@@ -1783,7 +1239,7 @@ export function finalizeStoppedThread(
   );
   notificationBuffer.flushInto(deps.hub);
   if (finalized) {
-    queueSettledArchivedThreadProviderArchiveCommand(deps, {
+    dispatchSettledArchivedThreadProviderArchiveCommand(deps, {
       threadId: args.threadId,
     });
   }
@@ -1799,54 +1255,10 @@ export function finalizeStoppedThreadInTransaction(
     return true;
   }
 
-  const startOperation = getActiveThreadOperation(deps, {
-    threadId: args.threadId,
-    kind: "start",
-  });
-  if (startOperation) {
-    return false;
-  }
-
-  const stopOperation = getActiveThreadOperation(deps, {
-    threadId: args.threadId,
-    kind: "stop",
-  });
-  if (
-    args.expectedCommandId &&
-    stopOperation &&
-    stopOperation.commandId !== args.expectedCommandId
-  ) {
-    return false;
-  }
-  const stopCommandState = getThreadOperationCommandState(
-    deps,
-    stopOperation?.commandId ?? null,
-  );
-  const isSettlingExpectedCommand =
-    args.expectedCommandId !== undefined &&
-    stopOperation?.commandId === args.expectedCommandId;
-  if (stopCommandState === "fetched" && !isSettlingExpectedCommand) {
-    return false;
-  }
-  if (
-    stopCommandState === "pending" &&
-    stopOperation?.commandId &&
-    !isSettlingExpectedCommand
-  ) {
-    if (args.cancelPendingCommand === false) {
-      return false;
-    }
-    cancelCommandInTransaction(deps.db, {
-      commandId: stopOperation.commandId,
-    });
-  }
-
   const interruptionReason =
-    readThreadStopInterruptionReason(stopOperation) ?? "manual-stop";
-  settleInterruptedClientTurnRequestsForThreadsInTransaction(deps.db, {
-    reason: interruptionReason,
-    threadIds: [currentThread.id],
-  });
+    getLatestThreadInterruptedReason(deps.db, {
+      threadId: currentThread.id,
+    }) ?? "manual-stop";
   let appendedThreadInterruptedEvent = false;
   if (currentThread.status === "active") {
     appendedThreadInterruptedEvent = interruptActiveTurnForThreadInTransaction(
@@ -1872,17 +1284,6 @@ export function finalizeStoppedThreadInTransaction(
       currentThread.id,
       nextStatusForInterruptedThread(interruptionReason),
     );
-  }
-
-  const completedStopOperation = getActiveThreadOperation(deps, {
-    threadId: args.threadId,
-    kind: "stop",
-  });
-  if (completedStopOperation) {
-    markThreadOperationRecordCompleted(deps.db, {
-      threadId: args.threadId,
-      kind: completedStopOperation.kind,
-    });
   }
 
   if (currentThread.stopRequestedAt !== null) {
@@ -1926,19 +1327,6 @@ export function finalizeStoppedThreadInTransaction(
     );
 
     const environmentId = finalizedThread.environmentId;
-    const environment = environmentId
-      ? getEnvironment(deps.db, environmentId)
-      : null;
-    if (environment) {
-      const queuedDelete = queueThreadDeletedCommandInTransaction(deps.db, {
-        environment: { hostId: environment.hostId, id: environment.id },
-        threadId: finalizedThread.id,
-      });
-      if (!queuedDelete) {
-        return false;
-      }
-      deps.hub.notifyCommand(environment.hostId);
-    }
     deleteThread(deps.db, deps.hub, finalizedThread.id);
     requestEnvironmentCleanup(deps, {
       environmentId,

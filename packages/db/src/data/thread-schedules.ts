@@ -1,11 +1,8 @@
-import { and, asc, eq, lte, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createThreadScheduleId } from "../ids.js";
-import {
-  projectOperations,
-  threadSchedules,
-} from "../schema.js";
+import { projects, threadSchedules } from "../schema.js";
 import { buildOrderedNumberCursorFilter } from "./cursor-pagination.js";
 
 export type ThreadScheduleRow = typeof threadSchedules.$inferSelect;
@@ -140,12 +137,12 @@ export function listDueThreadSchedules(
       and(
         eq(threadSchedules.enabled, true),
         lte(threadSchedules.nextFireAt, args.now),
-        notInArray(
+        inArray(
           threadSchedules.projectId,
           db
-            .select({ projectId: projectOperations.projectId })
-            .from(projectOperations)
-            .where(eq(projectOperations.kind, "delete")),
+            .select({ projectId: projects.id })
+            .from(projects)
+            .where(isNull(projects.deletedAt)),
         ),
         afterFilter,
       ),

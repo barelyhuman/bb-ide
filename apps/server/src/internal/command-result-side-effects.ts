@@ -1,40 +1,11 @@
 import type { DbNotifier, DbTransaction } from "@bb/db";
 import type {
   HostDaemonCommand,
-  HostDaemonCommandResultReport,
-  HostDaemonCommandResultReportWithoutSession,
+  HostDaemonCommandResult,
   HostDaemonDurableCommandType,
 } from "@bb/host-daemon-contract";
 import type { InteractiveLifecycleCoordinationDeps } from "../lifecycle-coordination-deps.js";
 import type { AppDeps } from "../types.js";
-
-type SuccessfulCommandResultReport = Extract<
-  HostDaemonCommandResultReport,
-  { ok: true }
->;
-type FailedCommandResultReport = Extract<
-  HostDaemonCommandResultReport,
-  { ok: false }
->;
-
-interface CommandResultSuccessWaiterResponse {
-  commandId: string;
-  ok: true;
-  result: SuccessfulCommandResultReport["result"];
-  type: SuccessfulCommandResultReport["type"];
-}
-
-interface CommandResultFailureWaiterResponse {
-  commandId: string;
-  errorCode: FailedCommandResultReport["errorCode"];
-  errorMessage: string;
-  ok: false;
-  type: string;
-}
-
-export type CommandResultWaiterResponse =
-  | CommandResultSuccessWaiterResponse
-  | CommandResultFailureWaiterResponse;
 
 export type CommandResultSideEffectsDeps =
   InteractiveLifecycleCoordinationDeps & Pick<AppDeps, "terminalSessions">;
@@ -47,8 +18,47 @@ export type CommandResultSettlementDeps = Omit<
   hub: DbNotifier;
 };
 
-export type CommandResultSideEffectReport =
-  HostDaemonCommandResultReportWithoutSession;
+export interface HostDaemonCommandExecutionRecord {
+  createdAt: number;
+  hostId: string;
+  id: string;
+}
+
+interface LiveHostCommandResultReportBase {
+  completedAt: number;
+  executionId: string;
+}
+
+export type LiveHostCommandSuccessResultReportForType<
+  TType extends HostDaemonDurableCommandType,
+> = LiveHostCommandResultReportBase & {
+  type: TType;
+  ok: true;
+  result: HostDaemonCommandResult<TType>;
+};
+
+export type LiveHostCommandFailureResultReportForType<
+  TType extends HostDaemonDurableCommandType,
+> = LiveHostCommandResultReportBase & {
+  type: TType;
+  ok: false;
+  errorCode: string;
+  errorMessage: string;
+};
+
+type LiveHostCommandSuccessResultReportByType = {
+  [TType in HostDaemonDurableCommandType]:
+    LiveHostCommandSuccessResultReportForType<TType>;
+};
+
+type LiveHostCommandFailureResultReportByType = {
+  [TType in HostDaemonDurableCommandType]:
+    LiveHostCommandFailureResultReportForType<TType>;
+};
+
+export type LiveHostCommandResultReport =
+  | LiveHostCommandSuccessResultReportByType[HostDaemonDurableCommandType]
+  | LiveHostCommandFailureResultReportByType[HostDaemonDurableCommandType];
 
 export type HostDaemonCommandForType<
   TType extends HostDaemonDurableCommandType,
@@ -56,7 +66,9 @@ export type HostDaemonCommandForType<
 
 export type CommandResultReportForType<
   TType extends HostDaemonDurableCommandType,
-> = Extract<HostDaemonCommandResultReportWithoutSession, { type: TType }>;
+> =
+  | LiveHostCommandSuccessResultReportForType<TType>
+  | LiveHostCommandFailureResultReportForType<TType>;
 
 export type CommandResultFailureReportForType<
   TType extends HostDaemonDurableCommandType,

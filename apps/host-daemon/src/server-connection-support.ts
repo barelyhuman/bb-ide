@@ -13,9 +13,6 @@ import type { HostDaemonLogger } from "./logger.js";
 import type { ServerClient } from "./server-client.js";
 import { createNodeWebSocketConstructor } from "./websocket-constructor.js";
 
-export type TimeoutHandle = ReturnType<typeof setTimeout>;
-export type IntervalHandle = ReturnType<typeof setInterval>;
-
 export interface ReconnectingWebSocketLike {
   readonly readyState: number;
   onopen: ((event: any) => void) | null;
@@ -44,9 +41,7 @@ export type CreateReconnectingWebSocket = (
 
 export type HostDaemonServerTerminalMessage = Exclude<
   HostDaemonServerWsMessage,
-  | { type: "commands-available" }
-  | { type: "session-close" }
-  | HostDaemonOnlineRpcRequestMessage
+  { type: "session-close" } | HostDaemonOnlineRpcRequestMessage
 >;
 
 export interface ServerConnectionOptions {
@@ -66,7 +61,6 @@ export interface ServerConnectionOptions {
   getLoadedEnvironments?: () =>
     | HostDaemonLoadedEnvironment[]
     | Promise<HostDaemonLoadedEnvironment[]>;
-  onCommandsAvailable?: () => void | Promise<void>;
   onTerminalMessage?: (
     message: HostDaemonServerTerminalMessage,
   ) => void | Promise<void>;
@@ -86,8 +80,6 @@ export interface ServerConnectionOptions {
   reconnectionDelayGrowFactor?: number;
   connectionTimeout?: number;
   startupTimeoutMs?: number;
-  pollAfterDisconnectMs?: number;
-  pollIntervalMs?: number;
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
   setIntervalFn?: typeof setInterval;
@@ -99,8 +91,6 @@ export const DEFAULT_MAX_RECONNECTION_DELAY = 30_000;
 export const DEFAULT_RECONNECTION_DELAY_GROW_FACTOR = 2;
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
 export const DEFAULT_STARTUP_TIMEOUT_MS = 60_000;
-export const DEFAULT_POLL_AFTER_DISCONNECT_MS = 5_000;
-export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 export const OPEN_READY_STATE = 1;
 
 export function createDefaultReconnectingWebSocket(

@@ -5,15 +5,12 @@ import {
   createProject,
   createThread,
   migrate,
+  markProjectDeleted,
   noopNotifier,
   updateHost,
   upsertHost,
   type DbConnection,
 } from "@bb/db";
-import {
-  markProjectOperationRecordFailed,
-  upsertProjectOperationRecord,
-} from "@bb/db/internal-lifecycle";
 import type { Host, Project } from "@bb/domain";
 import { ApiError } from "../../src/errors.js";
 import {
@@ -192,9 +189,8 @@ describe("entity lookup lifecycle errors", () => {
   it("returns project_unavailable for pending project deletion", () => {
     const { db, project } = setup();
     try {
-      upsertProjectOperationRecord(db, {
-        kind: "delete",
-        payload: "{}",
+      markProjectDeleted(db, noopNotifier, {
+        deletedAt: 123,
         projectId: project.id,
       });
 
@@ -208,7 +204,7 @@ describe("entity lookup lifecycle errors", () => {
         message: "Project is unavailable",
         details: {
           reason: "pending_deletion",
-          deletedAt: null,
+          deletedAt: 123,
         },
       });
     } finally {
@@ -216,21 +212,18 @@ describe("entity lookup lifecycle errors", () => {
     }
   });
 
-  it("returns project_unavailable for terminal project delete operations", () => {
+  it("returns project_unavailable for repeated project deletion", () => {
     const { db, project } = setup();
     try {
-      upsertProjectOperationRecord(db, {
-        kind: "delete",
-        payload: "{}",
+      markProjectDeleted(db, noopNotifier, {
+        deletedAt: 123,
         projectId: project.id,
       });
-      const failedOperation = markProjectOperationRecordFailed(db, {
-        kind: "delete",
+      const repeated = markProjectDeleted(db, noopNotifier, {
+        deletedAt: 456,
         projectId: project.id,
-        failureReason: "environment cleanup failed",
-        completedAt: 123,
       });
-      expect(failedOperation?.state).toBe("failed");
+      expect(repeated).toBeNull();
 
       const error = captureApiError(() => {
         requirePublicProject(db, project.id);
@@ -242,7 +235,7 @@ describe("entity lookup lifecycle errors", () => {
         message: "Project is unavailable",
         details: {
           reason: "pending_deletion",
-          deletedAt: null,
+          deletedAt: 123,
         },
       });
     } finally {

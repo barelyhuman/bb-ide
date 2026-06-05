@@ -28,20 +28,12 @@ export function createEnvironmentId(): string {
   return createId("env");
 }
 
-export function createEnvironmentOperationId(): string {
-  return createId("eop");
-}
-
 export function createEnvironmentProvisioningId(): string {
   return createId("epv");
 }
 
 export function createThreadId(): string {
   return createId("thr");
-}
-
-export function createThreadOperationId(): string {
-  return createId("top");
 }
 
 export function createThreadProvisioningId(): string {
@@ -54,10 +46,6 @@ export function createAutomationId(): string {
 
 export function createThreadScheduleId(): string {
   return createId("tsched");
-}
-
-export function createProjectOperationId(): string {
-  return createId("pop");
 }
 
 export function createEventId(): string {
@@ -82,14 +70,6 @@ export function createPendingInteractionId(): string {
 
 export function createHostDaemonSessionId(): string {
   return createId("hses");
-}
-
-export function createHostDaemonCommandId(): string {
-  return createId("hcmd");
-}
-
-export function createHostDaemonCommandAttemptId(): string {
-  return createId("hcat");
 }
 
 export function createTerminalSessionId(): string {

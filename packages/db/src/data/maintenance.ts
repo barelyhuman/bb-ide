@@ -1,12 +1,9 @@
-import { and, count, inArray, isNull } from "drizzle-orm";
-import { activeLifecycleOperationStates } from "@bb/domain";
+import { and, count, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import {
-  environmentOperations,
-  hostDaemonCommands,
+  environments,
   pendingInteractions,
-  projectOperations,
-  threadOperations,
+  projects,
   threads,
 } from "../schema.js";
 
@@ -27,7 +24,6 @@ export const DATABASE_INCREMENTAL_VACUUM_MAX_PAGES = 20_000;
  */
 export const DATABASE_MAINTENANCE_BUSY_TIMEOUT_MS = 100;
 
-const ACTIVE_COMMAND_STATES = ["pending", "fetched"] as const;
 const ACTIVE_THREAD_STATUSES = ["active", "provisioning"] as const;
 const ACTIVE_PENDING_INTERACTION_STATUSES = ["pending", "resolving"] as const;
 
@@ -57,11 +53,11 @@ interface DbstatUnusedRow {
 
 export interface DatabaseMaintenanceActivity {
   activeCommandCount: number;
-  activeEnvironmentOperationCount: number;
+  activeEnvironmentProvisioningCount: number;
   activePendingInteractionCount: number;
-  activeProjectOperationCount: number;
+  activeProjectDeletionCount: number;
   activeThreadCount: number;
-  activeThreadOperationCount: number;
+  activeThreadProvisioningCount: number;
 }
 
 export interface DatabaseCompactionStats {
@@ -171,13 +167,7 @@ function runWithMaintenanceBusyTimeout<TValue>(
 export function getDatabaseMaintenanceActivity(
   db: DbConnection,
 ): DatabaseMaintenanceActivity {
-  const activeCommandCount = countValue(
-    db
-      .select({ value: count() })
-      .from(hostDaemonCommands)
-      .where(inArray(hostDaemonCommands.state, [...ACTIVE_COMMAND_STATES]))
-      .get(),
-  );
+  const activeCommandCount = 0;
   const activeThreadCount = countValue(
     db
       .select({ value: count() })
@@ -190,34 +180,25 @@ export function getDatabaseMaintenanceActivity(
       )
       .get(),
   );
-  const activeProjectOperationCount = countValue(
+  const activeProjectDeletionCount = countValue(
     db
       .select({ value: count() })
-      .from(projectOperations)
-      .where(
-        inArray(projectOperations.state, [...activeLifecycleOperationStates]),
-      )
+      .from(projects)
+      .where(isNotNull(projects.deletedAt))
       .get(),
   );
-  const activeEnvironmentOperationCount = countValue(
+  const activeEnvironmentProvisioningCount = countValue(
     db
       .select({ value: count() })
-      .from(environmentOperations)
-      .where(
-        inArray(
-          environmentOperations.state,
-          [...activeLifecycleOperationStates],
-        ),
-      )
+      .from(environments)
+      .where(eq(environments.status, "provisioning"))
       .get(),
   );
-  const activeThreadOperationCount = countValue(
+  const activeThreadProvisioningCount = countValue(
     db
       .select({ value: count() })
-      .from(threadOperations)
-      .where(
-        inArray(threadOperations.state, [...activeLifecycleOperationStates]),
-      )
+      .from(threads)
+      .where(eq(threads.status, "provisioning"))
       .get(),
   );
   const activePendingInteractionCount = countValue(
@@ -234,11 +215,11 @@ export function getDatabaseMaintenanceActivity(
 
   return {
     activeCommandCount,
-    activeEnvironmentOperationCount,
+    activeEnvironmentProvisioningCount,
     activePendingInteractionCount,
-    activeProjectOperationCount,
+    activeProjectDeletionCount,
     activeThreadCount,
-    activeThreadOperationCount,
+    activeThreadProvisioningCount,
   };
 }
 
@@ -247,11 +228,11 @@ export function isDatabaseMaintenanceIdle(
 ): boolean {
   return (
     activity.activeCommandCount === 0 &&
-    activity.activeEnvironmentOperationCount === 0 &&
+    activity.activeEnvironmentProvisioningCount === 0 &&
     activity.activePendingInteractionCount === 0 &&
-    activity.activeProjectOperationCount === 0 &&
+    activity.activeProjectDeletionCount === 0 &&
     activity.activeThreadCount === 0 &&
-    activity.activeThreadOperationCount === 0
+    activity.activeThreadProvisioningCount === 0
   );
 }
 

@@ -4,7 +4,6 @@ import {
   getActiveSession,
   hostDaemonSessions,
   listHostThreadIds,
-  requeueFetchedCommandsForSession,
   type HostDaemonSessionRow,
   type SweepExpiredLeasesResult,
 } from "@bb/db";
@@ -14,7 +13,10 @@ import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
 } from "../types.js";
-import { reconcileDaemonReportedThreads } from "../services/threads/thread-lifecycle.js";
+import {
+  interruptActiveThreadsForHost,
+  reconcileDaemonReportedThreads,
+} from "../services/threads/thread-lifecycle.js";
 import { settleDanglingBackgroundTasks } from "../services/threads/background-task-reconciliation.js";
 
 const DAEMON_RESTARTED_PENDING_INTERACTION_REASON =
@@ -81,28 +83,15 @@ export async function handleHostSessionOpened(
       deps.hub.closeDaemonSession(args.previousSession.id, "replaced");
     }
 
+    interruptPendingInteractionsForHostThreads(deps, {
+      hostId: args.hostId,
+      reason:
+        args.previousSession.instanceId === args.openedSession.instanceId
+          ? DAEMON_DISCONNECTED_PENDING_INTERACTION_REASON
+          : DAEMON_RESTARTED_PENDING_INTERACTION_REASON,
+    });
+
     if (args.previousSession.instanceId !== args.openedSession.instanceId) {
-      if (args.previousSession.status === "active") {
-        // A different instanceId is a new daemon process: the prior process is
-        // gone and cannot report the commands it had fetched. Return them to
-        // the queue now so the restarted daemon re-fetches them, instead of
-        // waiting out the delivery lease (up to 20min for provision).
-        // Same-instance reconnects keep the lease as a safety window, since a
-        // blipped-but-alive daemon may still report the original attempt.
-        // Already-closed previous sessions are excluded: their threads are
-        // interrupted by the disconnect/lease reconciliation, and requeueing
-        // would replay stale work on top of the interruption.
-        const requeued = requeueFetchedCommandsForSession(deps.db, {
-          sessionId: args.previousSession.id,
-        });
-        if (requeued.requeued > 0) {
-          deps.hub.notifyCommand(args.hostId);
-        }
-      }
-      interruptPendingInteractionsForHostThreads(deps, {
-        hostId: args.hostId,
-        reason: DAEMON_RESTARTED_PENDING_INTERACTION_REASON,
-      });
       // The restarted daemon lost its in-memory background-task state and the
       // CLI processes died with it — settle the persisted open items. This
       // also covers restarts inside the disconnect grace window, where the
@@ -137,9 +126,13 @@ export function handleDaemonSocketClosed(
   }
 
   // Close the session immediately so the host status reflects the disconnect
-  // right away. Thread runtime status is notified immediately and again after
-  // grace, but connection loss alone does not prove active turns are gone.
+  // right away. Under the hard-cut live-RPC contract, daemon-owned active work
+  // is unrecoverable once the daemon socket disappears.
   closeSession(deps.db, deps.hub, args.sessionId, "daemon-disconnect");
+  interruptActiveThreadsForHost(deps, {
+    hostId: session.hostId,
+    reason: "host-daemon-restarted",
+  });
 
   notifyHostThreadRuntimeStatusChanged(deps, session.hostId);
   deps.hub.scheduleDaemonDisconnect(

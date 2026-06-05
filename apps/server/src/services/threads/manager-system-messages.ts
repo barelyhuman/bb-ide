@@ -1,6 +1,5 @@
 import {
   getThread,
-  hasPendingHostCommandForThread,
   transitionThreadStatusInTransaction,
   type DbTransaction,
 } from "@bb/db";
@@ -9,20 +8,19 @@ import type {
   ResolvedThreadExecutionOptions,
   Thread,
 } from "@bb/domain";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
-  ensureThreadNativeArchiveSettled,
   prepareTurnSubmitCommandPayload,
-  queueTurnSubmitCommandInTransaction,
   type PreparedTurnSubmitCommandPayload,
 } from "./thread-commands.js";
 import {
-  ensureThreadCanQueueStartRequest,
+  ensureThreadCanStartRequest,
   prepareReadyThreadTurnCommand,
-  queuePreparedReadyThreadTurnCommandInTransaction,
+  prepareReadyThreadTurnDispatchInTransaction,
 } from "./thread-lifecycle.js";
 import {
   appendClientTurnEventInTransaction,
@@ -31,7 +29,7 @@ import {
   getActiveTurnId,
 } from "./thread-events.js";
 import {
-  queueTurnDuringReprovision,
+  dispatchTurnDuringReprovision,
   requireReadyThreadEnvironment,
   type ReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
@@ -44,6 +42,10 @@ import {
 } from "./manager-dynamic-file-delivery.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import {
+  LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+  startLiveHostCommand,
+} from "../hosts/live-command.js";
 
 const MANAGER_SYSTEM_MESSAGE_SOURCE = "tell";
 
@@ -66,37 +68,19 @@ interface QueueActiveManagerSystemMessageInTransactionArgs
   preparedCommand: PreparedTurnSubmitCommandPayload;
 }
 
-function buildSystemInput(messageText: string): PromptInput[] {
-  return [{ type: "text", text: messageText }];
+interface QueueActiveManagerSystemMessageResult {
+  command: Extract<HostDaemonCommand, { type: "turn.submit" }> | null;
+  queued: boolean;
 }
 
-function hasPendingActiveManagerCommand(
-  db: DbTransaction,
-  args: QueueReadyManagerSystemMessageArgs,
-): boolean {
-  return (
-    hasPendingHostCommandForThread(db, {
-      hostId: args.environment.hostId,
-      threadId: args.thread.id,
-      type: "turn.submit",
-    }) ||
-    hasPendingHostCommandForThread(db, {
-      hostId: args.environment.hostId,
-      threadId: args.thread.id,
-      type: "thread.archive",
-    }) ||
-    hasPendingHostCommandForThread(db, {
-      hostId: args.environment.hostId,
-      threadId: args.thread.id,
-      type: "thread.stop",
-    })
-  );
+function buildSystemInput(messageText: string): PromptInput[] {
+  return [{ type: "text", text: messageText }];
 }
 
 function queueActiveManagerSystemMessageInTransaction(
   tx: DbTransaction,
   args: QueueActiveManagerSystemMessageInTransactionArgs,
-): boolean {
+): QueueActiveManagerSystemMessageResult {
   const currentThread = getThread(tx, args.thread.id);
   if (
     !currentThread ||
@@ -105,10 +89,9 @@ function queueActiveManagerSystemMessageInTransaction(
     currentThread.status !== "active" ||
     currentThread.archivedAt !== null ||
     currentThread.deletedAt !== null ||
-    currentThread.stopRequestedAt !== null ||
-    hasPendingActiveManagerCommand(tx, args)
+    currentThread.stopRequestedAt !== null
   ) {
-    return false;
+    return { command: null, queued: false };
   }
 
   const expectedSteerTurnId = getActiveTurnId({ db: tx }, args.thread.id);
@@ -128,7 +111,7 @@ function queueActiveManagerSystemMessageInTransaction(
     },
   });
   recordManagerDynamicFileDeliveryInTransaction(tx, args.stateUpdate);
-  queueTurnSubmitCommandInTransaction(tx, {
+  return {
     command: addRequestIdToTurnSubmitCommandPayload({
       requestId: request.requestId,
       preparedCommand: {
@@ -139,11 +122,8 @@ function queueActiveManagerSystemMessageInTransaction(
         },
       },
     }),
-    hostId: args.environment.hostId,
-    requestEventSequence: request.sequence,
-    sessionId: args.sessionId,
-  });
-  return true;
+    queued: true,
+  };
 }
 
 async function queueActiveManagerSystemMessage(
@@ -186,14 +166,24 @@ async function queueActiveManagerSystemMessage(
       }),
     { behavior: "immediate" },
   );
-  if (!queued) {
+  if (!queued.queued || !queued.command) {
     return false;
   }
 
   deps.hub.notifyThread(args.thread.id, ["events-appended"], {
     eventTypes: ["client/turn/requested"],
   });
-  deps.hub.notifyCommand(args.environment.hostId);
+  startLiveHostCommand(deps, {
+    command: queued.command,
+    hostId: args.environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: args.thread.id },
+        "Live active manager system message command failed",
+      );
+    },
+  });
   return true;
 }
 
@@ -227,12 +217,13 @@ async function queueReadyManagerSystemMessage(
     },
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
+    syncGeneratedTitle: false,
   });
   let transitioned = false;
   deps.db.transaction(
     (tx) => {
-      ensureThreadCanQueueStartRequest({ db: tx }, args.thread);
-      const request = appendPreparedClientTurnRequestedEventInTransaction(tx, {
+      ensureThreadCanStartRequest(args.thread);
+      appendPreparedClientTurnRequestedEventInTransaction(tx, {
         threadId: args.thread.id,
         environmentId: args.environment.id,
         type: "client/turn/requested",
@@ -245,13 +236,11 @@ async function queueReadyManagerSystemMessage(
         target: { kind: "new-turn" },
         requestId,
       });
-      const queuedMode = queuePreparedReadyThreadTurnCommandInTransaction(tx, {
+      const dispatchKind = prepareReadyThreadTurnDispatchInTransaction(tx, {
         command,
-        hostId: args.environment.hostId,
-        requestEventSequence: request.sequence,
         thread: args.thread,
       });
-      if (queuedMode === "turn.submit") {
+      if (dispatchKind === "turn.submit") {
         transitionThreadStatusInTransaction(tx, {
           id: args.thread.id,
           newStatus: "active",
@@ -265,7 +254,17 @@ async function queueReadyManagerSystemMessage(
   deps.hub.notifyThread(args.thread.id, ["events-appended"], {
     eventTypes: ["client/turn/requested"],
   });
-  deps.hub.notifyCommand(args.environment.hostId);
+  startLiveHostCommand(deps, {
+    command: command.command,
+    hostId: args.environment.hostId,
+    timeoutMs: LIVE_DAEMON_COMMAND_TIMEOUT_MS,
+    onError: (error) => {
+      deps.logger.warn(
+        { err: error, threadId: args.thread.id },
+        "Live manager system message command failed",
+      );
+    },
+  });
   if (transitioned) {
     deps.hub.notifyThread(args.thread.id, ["status-changed"], {
       projectId: args.thread.projectId,
@@ -295,10 +294,6 @@ export async function queueManagerSystemMessage(
     deps.db,
     args.managerThreadId,
   );
-  ensureThreadNativeArchiveSettled(deps, {
-    environment,
-    thread: managerThread,
-  });
   const input = buildSystemInput(args.messageText);
   const execution = await buildExecutionOptions(
     deps,
@@ -319,7 +314,7 @@ export async function queueManagerSystemMessage(
         });
 
       if (
-        await queueTurnDuringReprovision({
+        await dispatchTurnDuringReprovision({
           deps,
           environment,
           execution,

@@ -246,32 +246,6 @@ describe("NotificationHub", () => {
     ]);
   });
 
-  it("notifies only the daemon socket registered for the host", () => {
-    const hub = new NotificationHub();
-    const socket1 = createMockHubSocket();
-    const socket2 = createMockHubSocket();
-
-    hub.registerDaemon("session-1", "host-1", socket1);
-    hub.registerDaemon("session-2", "host-2", socket2);
-    hub.notifyCommand("host-1");
-
-    expect(socket1.messages).toHaveLength(1);
-    expect(JSON.parse(socket1.messages[0])).toEqual({
-      type: "commands-available",
-    });
-    expect(socket2.messages).toHaveLength(0);
-  });
-
-  it("treats daemon notifications for unknown hosts as a no-op", () => {
-    const hub = new NotificationHub();
-    const socket = createMockHubSocket();
-
-    hub.registerDaemon("session-1", "host-1", socket);
-
-    expect(() => hub.notifyDaemon("nonexistent-session-id")).not.toThrow();
-    expect(socket.messages).toHaveLength(0);
-  });
-
   it("notifies all clients subscribed to the same thread", () => {
     const hub = new NotificationHub();
     const socket1 = createMockHubSocket();
@@ -303,67 +277,10 @@ describe("NotificationHub", () => {
       await vi.advanceTimersByTimeAsync(1_000);
 
       expect(callback).not.toHaveBeenCalled();
-      hub.notifyCommand("host-1");
       expect(socket1.messages).toHaveLength(0);
-      expect(socket2.messages).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("resolves command waiters and command-result waiters", async () => {
-    const hub = new NotificationHub();
-
-    const commandWait = hub.waitForCommands("host-1", 1_000);
-    const resultWait = hub.waitForCommandResult("cmd-1", 1_000);
-
-    setTimeout(() => {
-      hub.notifyCommand("host-1");
-      hub.recordCommandResult("cmd-1", {
-        commandId: "cmd-1",
-        ok: true,
-        result: {},
-        type: "thread.stop",
-      });
-    }, 0);
-
-    await expect(commandWait).resolves.toBe(true);
-    await expect(resultWait).resolves.toEqual({
-      commandId: "cmd-1",
-      ok: true,
-      result: {},
-      type: "thread.stop",
-    });
-  });
-
-  it("resolves failed command-result waiters", async () => {
-    const hub = new NotificationHub();
-    const resultWait = hub.waitForCommandResult("cmd-2", 1_000);
-
-    setTimeout(() => {
-      hub.recordCommandResult("cmd-2", {
-        commandId: "cmd-2",
-        errorCode: "command_failed",
-        errorMessage: "Command failed",
-        ok: false,
-        type: "thread.stop",
-      });
-    }, 0);
-
-    await expect(resultWait).resolves.toEqual({
-      commandId: "cmd-2",
-      errorCode: "command_failed",
-      errorMessage: "Command failed",
-      ok: false,
-      type: "thread.stop",
-    });
-  });
-
-  it("rejects command-result waiters on timeout", async () => {
-    const hub = new NotificationHub();
-    await expect(hub.waitForCommandResult("cmd-timeout", 1)).rejects.toThrow(
-      "Timed out waiting for command result",
-    );
   });
 
   it("sends host RPC requests to the active daemon and resolves responses", async () => {
