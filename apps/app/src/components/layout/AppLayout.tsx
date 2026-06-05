@@ -52,7 +52,6 @@ import {
   getProjectSettingsRoutePath,
 } from "@/lib/app-route-paths";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
-import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 import { IframeDragGuardOverlay } from "@/lib/iframe-drag-guard";
 import { dispatchBrowserViewBoundsSync } from "@/lib/browser-view-bounds-sync";
@@ -381,20 +380,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
     [sidebarNavigationQuery.data],
   );
-  const [storedUseStandardManagerTimeline] =
-    useStandardManagerTimelinePreference();
-  const prefetchedManagerTimelineView = storedUseStandardManagerTimeline
-    ? "standard"
-    : undefined;
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "", {
     composerBootstrapPrefetch: isThreadView && Boolean(threadId),
     enabled: isThreadView && Boolean(threadId),
-    timelinePrefetch:
-      isThreadView && threadId
-        ? {
-            managerTimelineView: prefetchedManagerTimelineView,
-          }
-        : undefined,
+    timelinePrefetch: isThreadView && Boolean(threadId),
   });
   const hasThreadDetailBootstrapSettled =
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;

@@ -14,7 +14,6 @@ import type {
   ThreadComposerBootstrapResponse,
   ThreadQueuedMessageListResponse,
   ThreadListResponse,
-  ManagerTimelineView,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
   ThreadWithIncludesResponse,
@@ -78,18 +77,12 @@ interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   providerId?: string;
 }
 
-interface ThreadTimelinePrefetchOptions {
-  managerTimelineView?: ManagerTimelineView;
-}
-
 interface ThreadDetailBootstrapQueryOptions extends QueryOptions {
   composerBootstrapPrefetch?: boolean;
-  timelinePrefetch?: ThreadTimelinePrefetchOptions;
+  timelinePrefetch?: boolean;
 }
 
-interface ThreadTimelineQueryOptions extends QueryOptions {
-  managerTimelineView?: ManagerTimelineView;
-}
+type ThreadTimelineQueryOptions = QueryOptions;
 
 type ThreadTimelineTurnSummaryDetailsQueryOptions = QueryOptions;
 
@@ -367,11 +360,7 @@ export function useThreadDetailBootstrap(
         composerBootstrapPrefetch: options?.composerBootstrapPrefetch ?? false,
         queryClient,
         thread,
-        timelinePrefetch: options?.timelinePrefetch
-          ? {
-              managerTimelineView: options.timelinePrefetch.managerTimelineView,
-            }
-          : undefined,
+        timelinePrefetch: options?.timelinePrefetch ?? false,
       });
       return thread;
     },
@@ -626,14 +615,11 @@ export function useThreadTimeline(
   id: string,
   options?: ThreadTimelineQueryOptions,
 ) {
-  const managerTimelineView = options?.managerTimelineView;
-
   return useQuery<ThreadTimelineResponse>({
-    queryKey: threadTimelineQueryKey(id, managerTimelineView),
+    queryKey: threadTimelineQueryKey(id),
     queryFn: () =>
       api.getThreadTimeline({
         id: requireThreadId(id, "useThreadTimeline"),
-        managerTimelineView,
       }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
@@ -645,7 +631,6 @@ export function useThreadTimeline(
         previousData,
         previousQuery?.queryKey,
         id,
-        managerTimelineView,
       ),
   });
 }
@@ -662,7 +647,6 @@ export function useThreadTimelineTurnSummaryDetails(
           identity.threadId,
           "useThreadTimelineTurnSummaryDetails",
         ),
-        managerTimelineView: identity.managerTimelineView,
         sourceSeqEnd: identity.sourceSeqEnd,
         sourceSeqStart: identity.sourceSeqStart,
         turnId: identity.turnId,

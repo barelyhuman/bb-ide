@@ -533,7 +533,6 @@ function buildContextWindowUsage(
       systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
       turnMessageDetail: "summary",
-      viewMode: "standard",
       workspaceRoot: null,
     },
   }).contextWindowUsage;
@@ -556,28 +555,7 @@ function buildTimelineRows(
       systemClientRequestVisibility: "hidden",
       threadStatus,
       turnMessageDetail: "full",
-      viewMode: "standard",
       workspaceRoot,
-    },
-  }).rows;
-}
-
-function buildManagerConversationTimelineRows(
-  events: ThreadEventWithMeta[],
-  threadStatus: BuildTimelineRowsThreadStatus = "idle",
-): TimelineRow[] {
-  return buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
-    contextWindowEvents: [],
-    events,
-    options: {
-      includeDebugRawEvents: false,
-      includeProviderUnhandledOperations: false,
-      isLatestPage: true,
-      systemClientRequestVisibility: "hidden",
-      threadStatus,
-      viewMode: "manager-conversation",
-      workspaceRoot: null,
     },
   }).rows;
 }
@@ -600,7 +578,6 @@ function buildTimelineRowsWithAcceptedContext(
       systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
       turnMessageDetail: "full",
-      viewMode: "standard",
       workspaceRoot: null,
     },
   }).rows;
@@ -1151,8 +1128,8 @@ describe("buildThreadTimelineFromEvents", () => {
     ]);
   });
 
-  it("keeps errors in manager conversation timelines", () => {
-    const rows = buildManagerConversationTimelineRows([
+  it("keeps error rows in the regular timeline", () => {
+    const rows = buildTimelineRows([
       turnStartedEvent({ seq: 1 }),
       providerErrorEvent({
         detail: "The provider stream closed unexpectedly",

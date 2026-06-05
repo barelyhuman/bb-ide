@@ -243,7 +243,7 @@ describe("thread runtime mutations", () => {
     );
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -259,12 +259,12 @@ describe("thread runtime mutations", () => {
 
     await waitFor(() => {
       const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", undefined),
+        threadTimelineQueryKey("thread-1"),
       );
       expect(timeline?.rows).toHaveLength(1);
     });
     const optimisticTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
     );
     const onlyRow = optimisticTimeline?.rows[0];
     expect(onlyRow?.kind).toBe("conversation");
@@ -412,7 +412,7 @@ describe("thread runtime mutations", () => {
       makeThreadWithRuntime({ status: "active" }),
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -428,12 +428,12 @@ describe("thread runtime mutations", () => {
 
     await waitFor(() => {
       const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", undefined),
+        threadTimelineQueryKey("thread-1"),
       );
       expect(timeline?.rows).toHaveLength(1);
     });
     const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
     );
     expect(timeline?.rows[0]).toMatchObject({
       kind: "conversation",
@@ -451,7 +451,7 @@ describe("thread runtime mutations", () => {
     });
   });
 
-  it("does not optimistically append pending steers to manager conversation timelines", async () => {
+  it("optimistically appends pending steers to manager thread timelines", async () => {
     let resolveSend: (() => void) | null = null;
     vi.mocked(api.sendThreadMessage).mockImplementation(
       () =>
@@ -465,11 +465,7 @@ describe("thread runtime mutations", () => {
       makeThreadWithRuntime({ status: "active", type: "manager" }),
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
-      makeTimelineResponse(),
-    );
-    queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", "standard"),
+      threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -484,15 +480,10 @@ describe("thread runtime mutations", () => {
     });
 
     await waitFor(() => {
-      const conversationTimeline =
-        queryClient.getQueryData<ThreadTimelineResponse>(
-          threadTimelineQueryKey("thread-1", undefined),
-        );
-      const standardTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", "standard"),
+      const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
       );
-      expect(conversationTimeline?.rows).toHaveLength(0);
-      expect(standardTimeline?.rows).toHaveLength(1);
+      expect(timeline?.rows).toHaveLength(1);
     });
 
     await act(async () => {
@@ -511,11 +502,7 @@ describe("thread runtime mutations", () => {
     );
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
-      makeTimelineResponse(),
-    );
-    queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", "standard"),
+      threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -534,15 +521,9 @@ describe("thread runtime mutations", () => {
     });
     expect(
       queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", undefined),
+        threadTimelineQueryKey("thread-1"),
       )?.rows,
     ).toEqual([]);
-    expect(
-      queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", "standard"),
-      )?.rows,
-    ).toEqual([]);
-
     await act(async () => {
       resolveSend?.();
       await mutationPromise;
@@ -553,7 +534,7 @@ describe("thread runtime mutations", () => {
     vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -569,7 +550,7 @@ describe("thread runtime mutations", () => {
     });
 
     const finalTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
     );
     expect(finalTimeline?.rows).toHaveLength(0);
   });
@@ -582,7 +563,7 @@ describe("thread runtime mutations", () => {
       makeThreadWithRuntime({ status: "active" }),
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -598,7 +579,7 @@ describe("thread runtime mutations", () => {
     });
 
     const finalTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", undefined),
+      threadTimelineQueryKey("thread-1"),
     );
     expect(finalTimeline?.rows).toHaveLength(0);
   });

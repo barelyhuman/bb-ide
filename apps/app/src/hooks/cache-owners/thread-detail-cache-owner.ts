@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Host, ThreadWithRuntime } from "@bb/domain";
 import type {
-  ManagerTimelineView,
   ThreadResponse,
   ThreadWithIncludesResponse,
 } from "@bb/server-contract";
@@ -19,10 +18,6 @@ import {
 
 type HostList = Host[];
 type HostListQueryData = HostList | undefined;
-
-interface ThreadTimelinePrefetchPolicy {
-  managerTimelineView: ManagerTimelineView | undefined;
-}
 
 interface UpsertHostListArgs {
   host: Host;
@@ -43,7 +38,7 @@ export interface ThreadDetailBootstrapIngestionArgs {
   composerBootstrapPrefetch: boolean;
   queryClient: QueryClient;
   thread: ThreadWithIncludesResponse;
-  timelinePrefetch: ThreadTimelinePrefetchPolicy | undefined;
+  timelinePrefetch: boolean;
 }
 
 function stripThreadIncludes(
@@ -97,16 +92,11 @@ export function ingestThreadDetailBootstrap({
   }
 
   if (timelinePrefetch) {
-    const managerTimelineView =
-      thread.type === "manager"
-        ? timelinePrefetch.managerTimelineView
-        : undefined;
     void queryClient.prefetchQuery({
-      queryKey: threadTimelineQueryKey(thread.id, managerTimelineView),
+      queryKey: threadTimelineQueryKey(thread.id),
       queryFn: () =>
         api.getThreadTimeline({
           id: thread.id,
-          managerTimelineView,
         }),
     });
   }

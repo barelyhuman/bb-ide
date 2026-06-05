@@ -1,6 +1,5 @@
 import {
   buildThreadTimelineFromEvents,
-  MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   buildThreadTimelineTurnDetailsFromEvents,
   compactThreadTimelineSummaryEvents,
@@ -10,7 +9,6 @@ import {
 } from "@bb/thread-view";
 import type { ClientTurnRequestId, Thread } from "@bb/domain";
 import type {
-  ManagerTimelineView,
   TimelinePaginationCursor,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsResponse,
@@ -20,7 +18,6 @@ import {
   getEnvironment,
   getTimelineSegmentAnchorAtSequence,
   listContextWindowUsageRows,
-  listFilteredStoredTimelineWindowEventRows,
   listRecentStoredEventRows,
   listStoredClientTurnRequestIdsInRange,
   listStoredEventRowsInRange,
@@ -108,15 +105,11 @@ interface BuildThreadTimelineOptions {
    * consumers that only need tail state (e.g. `bb status` / `bb thread show`).
    */
   summaryOnly?: boolean;
-  timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
 interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySelection {
   isDevelopment: boolean;
-  timelineViewMode: ThreadTimelineServiceViewMode;
 }
-
-export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
 
 export const THREAD_TIMELINE_DEFAULT_SEGMENT_LIMIT = 20;
 export const THREAD_TIMELINE_SEGMENT_LIMIT_MAX = 100;
@@ -134,7 +127,6 @@ export type ThreadTimelineBuildProfileStage =
 
 export type ThreadTimelineEventSelectionStrategy =
   | "full"
-  | "manager-conversation-window"
   | "standard-window";
 
 export interface ThreadTimelineBuildProfileStageTiming {
@@ -157,7 +149,6 @@ export interface ThreadTimelineBuildProfile {
   segmentLimit: number;
   selectionStrategy: ThreadTimelineEventSelectionStrategy;
   stageTimings: ThreadTimelineBuildProfileStageTiming[];
-  timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
 export interface ProfileThreadTimelineResult {
@@ -222,28 +213,10 @@ interface SplitFutureSteerAcceptedContextRowsResult {
   rows: StoredEventRow[];
 }
 
-export interface ResolveThreadTimelineServiceViewModeArgs {
-  managerTimelineView: ManagerTimelineView | undefined;
-  thread: Thread;
-}
-
-export function resolveThreadTimelineServiceViewMode({
-  managerTimelineView,
-  thread,
-}: ResolveThreadTimelineServiceViewModeArgs): ThreadTimelineServiceViewMode {
-  if (thread.type === "manager" && managerTimelineView !== "standard") {
-    return "manager-conversation";
-  }
-  return "standard";
-}
-
 function resolveSystemClientRequestVisibility(
   thread: Thread,
-  timelineViewMode: ThreadTimelineServiceViewMode,
 ): SystemClientRequestVisibility {
-  return thread.type === "manager" && timelineViewMode === "standard"
-    ? "visible"
-    : "hidden";
+  return thread.type === "manager" ? "visible" : "hidden";
 }
 
 export function toThreadEventWithMeta(
@@ -730,60 +703,12 @@ function selectStandardTimelineEventRows(
   };
 }
 
-function selectManagerConversationTimelineEventRows(
-  db: DbConnection,
-  thread: Thread,
-  page: ThreadTimelinePageRequest,
-): TimelineEventRowSelection {
-  const window = resolveTimelineSegmentWindow(db, {
-    audience: "user",
-    page,
-    threadId: thread.id,
-  });
-  // The manager conversation has no full-timeline fallback: an older page must
-  // resolve against a live cursor, while a latest page with no anchors selects
-  // from the thread start (sequenceStart 0).
-  if (!window.hasAnchors && page.kind === "older") {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "Timeline pagination cursor is no longer available",
-    );
-  }
-
-  return {
-    acceptedClientRequestContextRows: [],
-    paginationPage:
-      page.kind === "older"
-        ? page
-        : {
-            kind: "latest",
-            segmentLimit: page.segmentLimit,
-          },
-    responsePageKind: page.kind,
-    rows: ensureTimelineWindowTurnStartedRows(db, {
-      threadId: thread.id,
-      rows: listFilteredStoredTimelineWindowEventRows(db, {
-        beforeSequence: window.beforeSequence,
-        filter: MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION,
-        sequenceStart: window.sequenceStart,
-        threadId: thread.id,
-      }),
-    }),
-    strategy: "manager-conversation-window",
-  };
-}
-
 function selectTimelineEventRows(
   db: DbConnection,
   thread: Thread,
   options: BuildThreadTimelineOptions,
   systemClientRequestVisibility: SystemClientRequestVisibility,
 ): TimelineEventRowSelection {
-  if (options.timelineViewMode === "manager-conversation") {
-    return selectManagerConversationTimelineEventRows(db, thread, options.page);
-  }
-
   return selectStandardTimelineEventRows(
     db,
     thread,
@@ -860,7 +785,6 @@ function completeThreadTimelineBuildProfile(
     segmentLimit: options.page.segmentLimit,
     selectionStrategy: accumulator.selectionStrategy,
     stageTimings: accumulator.stageTimings,
-    timelineViewMode: options.timelineViewMode,
   };
 }
 
@@ -874,11 +798,8 @@ function buildThreadTimelineInternal(
     : null;
   const includeNestedRows = options.includeNestedRows ?? false;
   const includeProviderUnhandledOperations = options.isDevelopment;
-  const viewMode = options.timelineViewMode;
-  const systemClientRequestVisibility = resolveSystemClientRequestVisibility(
-    thread,
-    viewMode,
-  );
+  const systemClientRequestVisibility =
+    resolveSystemClientRequestVisibility(thread);
   const eventSelection = measureThreadTimelineStage(
     profile,
     "event-query",
@@ -900,15 +821,13 @@ function buildThreadTimelineInternal(
     profile,
     "accepted-client-request-context-query",
     () =>
-      viewMode === "standard"
-        ? mergeStoredEventRowsById([
-            ...eventSelection.acceptedClientRequestContextRows,
-            ...selectAcceptedClientRequestContextRows(db, {
-              rows: rawEventRows,
-              threadId: thread.id,
-            }),
-          ])
-        : [],
+      mergeStoredEventRowsById([
+        ...eventSelection.acceptedClientRequestContextRows,
+        ...selectAcceptedClientRequestContextRows(db, {
+          rows: rawEventRows,
+          threadId: thread.id,
+        }),
+      ]),
   );
   const decodedRawEvents = measureThreadTimelineStage(
     profile,
@@ -966,18 +885,11 @@ function buildThreadTimelineInternal(
         acceptedClientRequestContext,
         contextWindowEvents,
         events: decodedEvents,
-        options:
-          viewMode === "manager-conversation"
-            ? {
-                ...commonProjectionOptions,
-                viewMode,
-              }
-            : {
-                ...commonProjectionOptions,
-                includeNestedRows,
-                turnMessageDetail: includeNestedRows ? "full" : "summary",
-                viewMode,
-              },
+        options: {
+          ...commonProjectionOptions,
+          includeNestedRows,
+          turnMessageDetail: includeNestedRows ? "full" : "summary",
+        },
       }),
   );
   if (profile) {
@@ -1143,11 +1055,8 @@ export function buildTimelineTurnSummaryDetails(
       `Timeline turn summary details range ${options.sourceSeqStart}-${options.sourceSeqEnd} cannot resolve turn/started for ${options.turnId}`,
     );
   }
-  const viewMode = options.timelineViewMode;
-  const systemClientRequestVisibility = resolveSystemClientRequestVisibility(
-    thread,
-    viewMode,
-  );
+  const systemClientRequestVisibility =
+    resolveSystemClientRequestVisibility(thread);
   const sourceRange = resolveTurnSummaryDetailsSourceRange({
     exactEventRows: exactEventRowsForRequestedTurn.rows,
     fallbackRange: {
@@ -1167,7 +1076,6 @@ export function buildTimelineTurnSummaryDetails(
       sourceSeqEnd: sourceRange.sourceSeqEnd,
       sourceSeqStart: sourceRange.sourceSeqStart,
       threadStatus: thread.status,
-      viewMode,
       workspaceRoot: resolveThreadWorkspaceRoot(db, thread),
     },
   });

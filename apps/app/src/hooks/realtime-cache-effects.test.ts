@@ -595,7 +595,7 @@ describe("createRealtimeCacheEffects", () => {
 
   it("does not invalidate timeline queries for status-only thread changes", () => {
     const { effects, queryClient } = createRealtimeEffectsTestContext();
-    const timelineKey = threadTimelineQueryKey("thr_1", undefined);
+    const timelineKey = threadTimelineQueryKey("thr_1");
     queryClient.setQueryData(timelineKey, {
       rows: [],
       timelinePage: {
@@ -626,7 +626,7 @@ describe("createRealtimeCacheEffects", () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const threadKey = threadQueryKey("thr_1");
-    const timelineKey = threadTimelineQueryKey("thr_1", undefined);
+    const timelineKey = threadTimelineQueryKey("thr_1");
     const promptHistoryKey = threadPromptHistoryQueryKey("thr_1");
     queryClient.setQueryData(threadKey, { id: "thr_1" });
     queryClient.setQueryData(promptHistoryKey, []);
@@ -777,7 +777,7 @@ describe("createRealtimeCacheEffects", () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const threadKey = threadQueryKey("thr_1");
-    const timelineKey = threadTimelineQueryKey("thr_1", undefined);
+    const timelineKey = threadTimelineQueryKey("thr_1");
     const threadListKey = threadListQueryKey({
       archived: false,
       projectId: "project-1",
@@ -839,7 +839,7 @@ describe("createRealtimeCacheEffects", () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const threadKey = threadQueryKey("thr_1");
-    const timelineKey = threadTimelineQueryKey("thr_1", undefined);
+    const timelineKey = threadTimelineQueryKey("thr_1");
     const firstProjectThreadListKey = threadListQueryKey({
       archived: false,
       projectId: "project-1",

@@ -254,7 +254,6 @@ describe("thread event pruning", () => {
           kind: "latest",
           segmentLimit: Number.MAX_SAFE_INTEGER,
         },
-        timelineViewMode: "standard",
       });
 
       expect(result.removedAgePrunableEvents).toBe(4);

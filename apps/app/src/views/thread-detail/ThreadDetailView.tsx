@@ -59,7 +59,6 @@ import {
   isAbsoluteFilePathWithinRoot,
   resolveAbsoluteFilePath,
 } from "@/lib/absolute-file-path";
-import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import {
   selectWorkspaceChangedFilesSection,
@@ -367,19 +366,9 @@ export function ThreadDetailView() {
     getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
   const canUseGitUi = thread?.type === "standard";
-  const [
-    storedUseStandardManagerTimeline,
-    setStoredUseStandardManagerTimeline,
-  ] = useStandardManagerTimelinePreference();
-  const useStandardManagerTimeline =
-    isManagerThread && storedUseStandardManagerTimeline;
-  const managerTimelineView = useStandardManagerTimeline
-    ? "standard"
-    : undefined;
   const unreadDividerState = useThreadUnreadDividerState({
     routeThreadId: threadId,
     thread,
-    useStandardManagerTimeline,
   });
   const [hasRequestedMergeBaseOptions, setHasRequestedMergeBaseOptions] =
     useState(false);
@@ -461,16 +450,6 @@ export function ThreadDetailView() {
     onSelectPath: openStorageFile,
     selectedPath: activeStorageFilePath,
   });
-  const handleUseStandardManagerTimelineChange = useCallback(
-    (checked: boolean) => {
-      if (!isManagerThread) {
-        return;
-      }
-
-      setStoredUseStandardManagerTimeline(checked);
-    },
-    [isManagerThread, setStoredUseStandardManagerTimeline],
-  );
   const isUnassignedStandard = isUnassignedStandardThread(thread);
   const shouldLoadManagerThreads =
     threadQueryState.status === "ready" && isUnassignedStandard;
@@ -508,7 +487,6 @@ export function ThreadDetailView() {
     timelineLoading,
     timelineRows,
   } = useThreadTimelinePages({
-    managerTimelineView,
     threadId: threadId ?? "",
   });
   const sendMessage = useSendThreadMessage();
@@ -1153,13 +1131,6 @@ export function ThreadDetailView() {
       thread={thread}
       triggerClassName={HEADER_ICON_BUTTON_CLASS}
       align="end"
-      viewerToggleLabel={isManagerThread ? "Use standard timeline" : undefined}
-      viewerToggleChecked={
-        isManagerThread ? useStandardManagerTimeline : undefined
-      }
-      onViewerToggleCheckedChange={
-        isManagerThread ? handleUseStandardManagerTimelineChange : undefined
-      }
     />
   );
   const workspaceOpenPath = resolveThreadWorkspaceOpenPath({
@@ -1468,7 +1439,6 @@ export function ThreadDetailView() {
           isLoadingOlderTimelineRows,
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
-          managerTimelineView,
           onLoadOlderRows: loadOlderTimelineRows,
           onOpenLink: handleOpenTimelineLink,
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,

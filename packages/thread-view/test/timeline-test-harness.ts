@@ -1077,10 +1077,6 @@ export function renderTimelineFixture(
       ? "full"
       : args.projectionOptions.turnMessageDetail,
   });
-  const viewMode =
-    args.projectionOptions.threadType === "manager"
-      ? "manager-conversation"
-      : "standard";
   const commonProjectionOptions = {
     includeDebugRawEvents:
       args.projectionOptions.includeDebugRawEvents ?? false,
@@ -1096,20 +1092,13 @@ export function renderTimelineFixture(
     acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     contextWindowEvents: [],
     events: decodedEvents,
-    options:
-      viewMode === "manager-conversation"
-        ? {
-            ...commonProjectionOptions,
-            viewMode,
-          }
-        : {
-            ...commonProjectionOptions,
-            includeNestedRows,
-            turnMessageDetail: includeNestedRows
-              ? "full"
-              : args.projectionOptions.turnMessageDetail,
-            viewMode,
-          },
+    options: {
+      ...commonProjectionOptions,
+      includeNestedRows,
+      turnMessageDetail: includeNestedRows
+        ? "full"
+        : args.projectionOptions.turnMessageDetail,
+    },
   });
   const rows = timeline.rows;
   const messages = flattenEventProjectionMessagesDeep(projection);

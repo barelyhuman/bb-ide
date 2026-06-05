@@ -1554,7 +1554,7 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
-  it("shows manager user messages without internal assistant chatter", () => {
+  it("shows manager thread assistant text and user-message tool output in the regular timeline", () => {
     const event = createTimelineEventFactory({
       threadId: "manager-thread-1",
       turnId: "turn-1",
@@ -1576,9 +1576,15 @@ describe("timeline CLI rendering snapshots", () => {
       },
     });
 
-    expect(messageKinds(timeline.messages)).toEqual(["assistant-text"]);
+    expect(messageKinds(timeline.messages)).toEqual([
+      "assistant-text",
+      "assistant-text",
+    ]);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Assistant ───────────────────────────────────────────────
+      internal manager chatter
+
+      ── Assistant ───────────────────────────────────────────────
       Visible manager update"
     `);
   });

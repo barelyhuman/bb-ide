@@ -383,7 +383,6 @@ function buildFlatProjectionData(
         eventParentToolCallId,
         eventTurnId,
         meta,
-        options: args.options,
         shouldTrackActiveThinking,
         state,
       })

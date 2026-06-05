@@ -139,7 +139,6 @@ const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
 const threadPinningMigrationWhen = 1779990051923;
 const threadSchedulesMigrationWhen = 1780614650350;
-const threadScheduleKindDefaultMigrationWhen = 1780687798956;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",

@@ -11,10 +11,7 @@ import {
 } from "./buffered-text-projection.js";
 import { resolveBufferedTextIdentity } from "./buffered-text-identity.js";
 import type { EventMeta } from "./event-decode.js";
-import type {
-  BuildEventProjectionMessagesOptions,
-  EventProjectionAssistantTextMessage,
-} from "./event-projection-types.js";
+import type { EventProjectionAssistantTextMessage } from "./event-projection-types.js";
 import { messageId } from "./format-helpers.js";
 import {
   finalizeReasoningLifecycle,
@@ -28,7 +25,6 @@ interface ProjectAssistantAndReasoningEventArgs {
   eventParentToolCallId: string | undefined;
   eventTurnId: string | undefined;
   meta: EventMeta;
-  options: BuildEventProjectionMessagesOptions | undefined;
   shouldTrackActiveThinking: boolean;
   state: ProjectionState;
 }
@@ -38,12 +34,6 @@ interface CreateAssistantTextMessageArgs {
   eventParentToolCallId: string | undefined;
   messageKey: string;
   meta: EventMeta;
-}
-
-function shouldSuppressBufferedText(
-  options: BuildEventProjectionMessagesOptions | undefined,
-): boolean {
-  return options?.threadType === "manager";
 }
 
 function createAssistantTextMessage(
@@ -81,7 +71,6 @@ export function projectAssistantAndReasoningEvent(
     parentToolCallId: args.eventParentToolCallId,
     turnId: args.eventTurnId,
   });
-  const shouldSuppressText = shouldSuppressBufferedText(args.options);
 
   if (
     args.decoded.type === "item/started" &&
@@ -116,7 +105,7 @@ export function projectAssistantAndReasoningEvent(
         visibleKeys: args.state.visibleAssistantMessageKeys,
       },
       state: args.state,
-      text: shouldSuppressText ? null : parseAssistantDeltaText(args.decoded),
+      text: parseAssistantDeltaText(args.decoded),
     })
   ) {
     return true;
@@ -141,7 +130,7 @@ export function projectAssistantAndReasoningEvent(
         visibleKeys: args.state.visibleAssistantMessageKeys,
       },
       state: args.state,
-      text: shouldSuppressText ? null : parseAssistantFinalText(args.decoded),
+      text: parseAssistantFinalText(args.decoded),
     })
   ) {
     return true;
@@ -167,7 +156,7 @@ export function projectAssistantAndReasoningEvent(
       identity: reasoningIdentity,
       mode: "delta",
       state: args.state,
-      text: shouldSuppressText ? null : parseReasoningDeltaText(args.decoded),
+      text: parseReasoningDeltaText(args.decoded),
     })
   ) {
     return true;
@@ -178,7 +167,7 @@ export function projectAssistantAndReasoningEvent(
       identity: reasoningIdentity,
       mode: "final",
       state: args.state,
-      text: shouldSuppressText ? null : parseReasoningFinalText(args.decoded),
+      text: parseReasoningFinalText(args.decoded),
     })
   ) {
     if (

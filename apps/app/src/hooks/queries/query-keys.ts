@@ -1,4 +1,3 @@
-import type { QueryKey } from "@tanstack/react-query";
 import type { ThreadType } from "@bb/domain";
 import type { ThreadListFilters } from "@/lib/api";
 import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
@@ -10,7 +9,6 @@ import {
   DEFAULT_FILE_ONLY_PATH_LIST_OPTIONS,
   type PathListOptions,
 } from "@/lib/path-list-options";
-import type { ManagerTimelineView } from "@bb/server-contract";
 
 export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
@@ -58,11 +56,6 @@ export const SYSTEM_VERSION_QUERY_KEY = "systemVersion";
 export const LOCAL_PROVIDER_CLI_STATUS_QUERY_KEY = "localProviderCliStatus";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
-export const CONVERSATION_MANAGER_TIMELINE_VIEW =
-  "conversation" satisfies ManagerTimelineView;
-export const STANDARD_MANAGER_TIMELINE_VIEW =
-  "standard" satisfies ManagerTimelineView;
-
 export interface ThreadListQueryFilters {
   projectId?: string;
   type?: ThreadListFilters["type"];
@@ -295,10 +288,8 @@ export type EnvironmentMergeBaseBranchesQueryKeyPrefix = readonly [
 export type ThreadTimelineQueryKey = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
   string,
-  ManagerTimelineView | undefined,
 ];
 export interface ThreadTimelineTurnSummaryDetailsQueryIdentity {
-  managerTimelineView: ManagerTimelineView | undefined;
   sourceSeqEnd: number;
   sourceSeqStart: number;
   threadId: string;
@@ -307,7 +298,6 @@ export interface ThreadTimelineTurnSummaryDetailsQueryIdentity {
 export type ThreadTimelineTurnSummaryDetailsQueryKey = readonly [
   typeof THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY,
   string,
-  ManagerTimelineView | undefined,
   string,
   number,
   number,
@@ -752,13 +742,11 @@ export function environmentMergeBaseBranchesQueryKeyPrefix(
 
 export function threadTimelineQueryKey(
   threadId: string,
-  managerTimelineView: ManagerTimelineView | undefined,
 ): ThreadTimelineQueryKey {
-  return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView];
+  return [THREAD_TIMELINE_QUERY_KEY, threadId];
 }
 
 export function threadTimelineTurnSummaryDetailsQueryKey({
-  managerTimelineView,
   sourceSeqEnd,
   sourceSeqStart,
   threadId,
@@ -767,40 +755,10 @@ export function threadTimelineTurnSummaryDetailsQueryKey({
   return [
     THREAD_TIMELINE_TURN_SUMMARY_DETAILS_QUERY_KEY,
     threadId,
-    managerTimelineView,
     turnId,
     sourceSeqStart,
     sourceSeqEnd,
   ];
-}
-
-export function managerTimelineViewFromThreadTimelineQueryKey(
-  queryKey: QueryKey | undefined,
-): ManagerTimelineView | undefined {
-  if (!queryKey || queryKey[0] !== THREAD_TIMELINE_QUERY_KEY) {
-    return undefined;
-  }
-
-  const managerTimelineView = queryKey[2];
-  if (
-    managerTimelineView === CONVERSATION_MANAGER_TIMELINE_VIEW ||
-    managerTimelineView === STANDARD_MANAGER_TIMELINE_VIEW
-  ) {
-    return managerTimelineView;
-  }
-
-  return undefined;
-}
-
-export function isStandardManagerThreadTimelineQueryKey(
-  queryKey: QueryKey,
-): queryKey is ThreadTimelineQueryKey {
-  return (
-    queryKey[0] === THREAD_TIMELINE_QUERY_KEY &&
-    typeof queryKey[1] === "string" &&
-    managerTimelineViewFromThreadTimelineQueryKey(queryKey) ===
-      STANDARD_MANAGER_TIMELINE_VIEW
-  );
 }
 
 export function threadTimelineQueryKeyPrefix(

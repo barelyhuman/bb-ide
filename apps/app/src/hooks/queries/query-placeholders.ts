@@ -4,7 +4,6 @@ import type {
   EnvironmentDiffBranchesResponse,
   EnvironmentDiffResponse,
   EnvironmentStatusResponse,
-  ManagerTimelineView,
   ProjectBranchesResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
@@ -15,7 +14,6 @@ import {
   PROJECT_SOURCE_BRANCHES_QUERY_KEY,
   THREAD_QUERY_KEY,
   THREAD_TIMELINE_QUERY_KEY,
-  managerTimelineViewFromThreadTimelineQueryKey,
 } from "./query-keys";
 
 type ThreadScopedQueryKeyPrefix =
@@ -173,7 +171,6 @@ export function resolveThreadTimelinePlaceholder(
   previousData: ThreadTimelineResponse | undefined,
   previousQueryKey: QueryKey | undefined,
   nextThreadId: string,
-  nextManagerTimelineView: ManagerTimelineView | undefined,
 ): ThreadTimelineResponse | undefined {
   if (previousData === undefined) {
     return undefined;
@@ -183,11 +180,8 @@ export function resolveThreadTimelinePlaceholder(
     previousQueryKey,
     THREAD_TIMELINE_QUERY_KEY,
   );
-  const previousManagerTimelineView =
-    managerTimelineViewFromThreadTimelineQueryKey(previousQueryKey);
 
-  return previousThreadId === nextThreadId &&
-    previousManagerTimelineView === nextManagerTimelineView
+  return previousThreadId === nextThreadId
     ? previousData
     : undefined;
 }

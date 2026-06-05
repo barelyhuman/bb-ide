@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
-  ManagerTimelineView,
   ThreadTimelineResponse,
   TimelinePaginationCursor,
   TimelineRow,
@@ -9,7 +8,6 @@ import { useThreadTimeline } from "@/hooks/queries/thread-queries";
 import * as api from "@/lib/api";
 
 interface UseThreadTimelinePagesArgs {
-  managerTimelineView: ManagerTimelineView | undefined;
   threadId: string;
 }
 
@@ -71,11 +69,8 @@ export interface RecoverLoadedTimelineAfterStaleCursorArgs {
   surfaceKey: string;
 }
 
-function buildSurfaceKey({
-  managerTimelineView,
-  threadId,
-}: UseThreadTimelinePagesArgs): string {
-  return `${threadId}:${managerTimelineView ?? "default"}`;
+function buildSurfaceKey({ threadId }: UseThreadTimelinePagesArgs): string {
+  return threadId;
 }
 
 function buildLoadedTimelineState({
@@ -216,14 +211,12 @@ export function isStaleTimelinePaginationCursorError(error: Error): boolean {
 }
 
 export function useThreadTimelinePages({
-  managerTimelineView,
   threadId,
 }: UseThreadTimelinePagesArgs): UseThreadTimelinePagesResult {
   const latestTimelineQuery = useThreadTimeline(threadId, {
     refetchOnMount: true,
-    managerTimelineView,
   });
-  const surfaceKey = buildSurfaceKey({ managerTimelineView, threadId });
+  const surfaceKey = buildSurfaceKey({ threadId });
   const [loadedTimeline, setLoadedTimeline] = useState<LoadedTimelineState>(
     () =>
       buildLoadedTimelineState({
@@ -275,7 +268,6 @@ export function useThreadTimelinePages({
       const response = await api.getThreadTimeline({
         beforeCursor: nextOlderCursor,
         id: threadId,
-        managerTimelineView,
       });
       setLoadedTimeline((current) => {
         if (current.surfaceKey !== surfaceKey) {
@@ -328,7 +320,6 @@ export function useThreadTimelinePages({
   }, [
     isLoadingOlderTimelineRows,
     latestTimeline,
-    managerTimelineView,
     nextOlderCursor,
     refetchLatestTimeline,
     surfaceKey,

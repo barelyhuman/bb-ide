@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { ThreadTimelineUnreadDividerPlacement } from "@/components/thread/timeline";
-import type { ThreadType } from "@bb/domain";
 
 interface ThreadUnreadDividerThreadState {
   id: string;
   lastReadAt: number | null;
   latestAttentionAt: number;
-  type: ThreadType;
 }
 
 interface ThreadUnreadDividerSnapshot {
@@ -24,8 +22,6 @@ export interface ThreadUnreadDividerState {
 interface ShouldTrackThreadUnreadDividerArgs {
   routeThreadId: string | undefined;
   threadId: string | undefined;
-  threadType: ThreadType | undefined;
-  useStandardManagerTimeline: boolean;
 }
 
 interface IsThreadUnreadArgs {
@@ -36,7 +32,6 @@ interface IsThreadUnreadArgs {
 export interface UseThreadUnreadDividerStateArgs {
   routeThreadId: string | undefined;
   thread: ThreadUnreadDividerThreadState | undefined;
-  useStandardManagerTimeline: boolean;
 }
 
 const NO_UNREAD_DIVIDER_STATE: ThreadUnreadDividerState = {
@@ -47,18 +42,12 @@ const NO_UNREAD_DIVIDER_STATE: ThreadUnreadDividerState = {
 function shouldTrackThreadUnreadDivider({
   routeThreadId,
   threadId,
-  threadType,
-  useStandardManagerTimeline,
 }: ShouldTrackThreadUnreadDividerArgs): boolean {
-  if (
-    threadId === undefined ||
-    threadType === undefined ||
-    routeThreadId !== threadId
-  ) {
+  if (threadId === undefined || routeThreadId !== threadId) {
     return false;
   }
 
-  return !(threadType === "manager" && useStandardManagerTimeline);
+  return true;
 }
 
 function isThreadUnread({
@@ -86,7 +75,6 @@ function buildUnreadDividerPlacement(
 export function useThreadUnreadDividerState({
   routeThreadId,
   thread,
-  useStandardManagerTimeline,
 }: UseThreadUnreadDividerStateArgs): ThreadUnreadDividerState {
   const [snapshot, setSnapshot] = useState<ThreadUnreadDividerSnapshot | null>(
     null,
@@ -95,19 +83,15 @@ export function useThreadUnreadDividerState({
   const threadId = thread?.id;
   const threadLastReadAt = thread?.lastReadAt;
   const threadLatestAttentionAt = thread?.latestAttentionAt;
-  const threadType = thread?.type;
 
   useEffect(() => {
     if (
       threadId === undefined ||
       threadLastReadAt === undefined ||
       threadLatestAttentionAt === undefined ||
-      threadType === undefined ||
       !shouldTrackThreadUnreadDivider({
         routeThreadId,
         threadId,
-        threadType,
-        useStandardManagerTimeline,
       })
     ) {
       trackedThreadIdRef.current = null;
@@ -121,7 +105,6 @@ export function useThreadUnreadDividerState({
       id: threadId,
       lastReadAt: threadLastReadAt,
       latestAttentionAt: threadLatestAttentionAt,
-      type: threadType,
     };
 
     setSnapshot((currentSnapshot) => {
@@ -157,16 +140,12 @@ export function useThreadUnreadDividerState({
     threadId,
     threadLastReadAt,
     threadLatestAttentionAt,
-    threadType,
-    useStandardManagerTimeline,
   ]);
 
   if (
     !shouldTrackThreadUnreadDivider({
       routeThreadId,
       threadId,
-      threadType,
-      useStandardManagerTimeline,
     }) ||
     snapshot === null ||
     snapshot.threadId !== threadId ||

@@ -2,18 +2,14 @@ import type { Thread } from "@bb/domain";
 import type { ReactNode } from "react";
 import {
   ContextMenu,
-  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.js";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -32,9 +28,6 @@ interface ThreadActionsMenuBaseProps {
    * to true.
    */
   canDelete?: boolean;
-  viewerToggleLabel?: string;
-  viewerToggleChecked?: boolean;
-  onViewerToggleCheckedChange?: (checked: boolean) => void;
   showManagerArchiveAll?: boolean;
 }
 
@@ -50,7 +43,6 @@ interface ThreadActionsContextMenuProps extends ThreadActionsMenuBaseProps {
 }
 
 type ThreadActionsMenuSurface = "context" | "dropdown";
-type ThreadActionsMenuCheckedState = boolean | "indeterminate";
 
 interface ThreadActionsMenuItemsProps extends ThreadActionsMenuBaseProps {
   surface: ThreadActionsMenuSurface;
@@ -60,18 +52,6 @@ interface ThreadActionMenuItemProps {
   children: ReactNode;
   className?: string;
   onSelect?: (event: Event) => void;
-  surface: ThreadActionsMenuSurface;
-}
-
-interface ThreadActionMenuCheckboxItemProps {
-  checked?: ThreadActionsMenuCheckedState;
-  children: ReactNode;
-  onCheckedChange?: (checked: ThreadActionsMenuCheckedState) => void;
-  onSelect?: (event: Event) => void;
-  surface: ThreadActionsMenuSurface;
-}
-
-interface ThreadActionMenuSeparatorProps {
   surface: ThreadActionsMenuSurface;
 }
 
@@ -96,52 +76,9 @@ function ThreadActionMenuItem({
   );
 }
 
-function ThreadActionMenuCheckboxItem({
-  checked,
-  children,
-  onCheckedChange,
-  onSelect,
-  surface,
-}: ThreadActionMenuCheckboxItemProps) {
-  if (surface === "context") {
-    return (
-      <ContextMenuCheckboxItem
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        onSelect={onSelect}
-      >
-        {children}
-      </ContextMenuCheckboxItem>
-    );
-  }
-
-  return (
-    <DropdownMenuCheckboxItem
-      checked={checked}
-      onCheckedChange={onCheckedChange}
-      onSelect={onSelect}
-    >
-      {children}
-    </DropdownMenuCheckboxItem>
-  );
-}
-
-function ThreadActionMenuSeparator({
-  surface,
-}: ThreadActionMenuSeparatorProps) {
-  if (surface === "context") {
-    return <ContextMenuSeparator />;
-  }
-
-  return <DropdownMenuSeparator />;
-}
-
 function ThreadActionsMenuItems({
   thread,
   canDelete = true,
-  viewerToggleLabel,
-  viewerToggleChecked,
-  onViewerToggleCheckedChange,
   showManagerArchiveAll = false,
   surface,
 }: ThreadActionsMenuItemsProps) {
@@ -231,25 +168,6 @@ function ThreadActionsMenuItems({
           Delete
         </ThreadActionMenuItem>
       ) : null}
-      {viewerToggleLabel && onViewerToggleCheckedChange ? (
-        <>
-          <ThreadActionMenuSeparator surface={surface} />
-          <ThreadActionMenuCheckboxItem
-            surface={surface}
-            checked={viewerToggleChecked}
-            onCheckedChange={(checked) => {
-              onViewerToggleCheckedChange(checked === true);
-            }}
-            onSelect={(event) => {
-              if (surface === "dropdown") {
-                event.preventDefault();
-              }
-            }}
-          >
-            {viewerToggleLabel}
-          </ThreadActionMenuCheckboxItem>
-        </>
-      ) : null}
     </>
   );
 }
@@ -257,9 +175,6 @@ function ThreadActionsMenuItems({
 export function ThreadActionsMenu({
   thread,
   canDelete = true,
-  viewerToggleLabel,
-  viewerToggleChecked,
-  onViewerToggleCheckedChange,
   showManagerArchiveAll,
   onOpenChange,
   triggerClassName,
@@ -292,9 +207,6 @@ export function ThreadActionsMenu({
         <ThreadActionsMenuItems
           thread={thread}
           canDelete={canDelete}
-          viewerToggleLabel={viewerToggleLabel}
-          viewerToggleChecked={viewerToggleChecked}
-          onViewerToggleCheckedChange={onViewerToggleCheckedChange}
           showManagerArchiveAll={showManagerArchiveAll}
           surface="dropdown"
         />
@@ -307,9 +219,6 @@ export function ThreadActionsContextMenu({
   children,
   thread,
   canDelete = true,
-  viewerToggleLabel,
-  viewerToggleChecked,
-  onViewerToggleCheckedChange,
   showManagerArchiveAll,
   onOpenChange,
 }: ThreadActionsContextMenuProps) {
@@ -326,9 +235,6 @@ export function ThreadActionsContextMenu({
         <ThreadActionsMenuItems
           thread={thread}
           canDelete={canDelete}
-          viewerToggleLabel={viewerToggleLabel}
-          viewerToggleChecked={viewerToggleChecked}
-          onViewerToggleCheckedChange={onViewerToggleCheckedChange}
           showManagerArchiveAll={showManagerArchiveAll}
           surface="context"
         />

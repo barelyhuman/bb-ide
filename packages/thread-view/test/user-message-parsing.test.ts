@@ -30,14 +30,7 @@ const standardVisibilityOptions: BuildEventProjectionMessagesOptions = {
   threadStatus: "active",
 };
 
-const managerConversationVisibilityOptions: BuildEventProjectionMessagesOptions =
-  {
-    systemClientRequestVisibility: "hidden",
-    threadStatus: "active",
-    threadType: "manager",
-  };
-
-const managerStandardVisibilityOptions: BuildEventProjectionMessagesOptions = {
+const managerVisibilityOptions: BuildEventProjectionMessagesOptions = {
   systemClientRequestVisibility: "visible",
   threadStatus: "active",
   threadType: "manager",
@@ -206,7 +199,7 @@ describe("user message parsing", () => {
     const message = parseUserFromClientRequest({
       decoded: event,
       meta,
-      options: managerStandardVisibilityOptions,
+      options: managerVisibilityOptions,
     });
 
     expect(message).toMatchObject({
@@ -228,8 +221,8 @@ describe("user message parsing", () => {
         throw new Error("Expected client/turn/requested event");
       }
       const visibilityOptions =
-        event.initiator === "system"
-          ? managerStandardVisibilityOptions
+      event.initiator === "system"
+          ? managerVisibilityOptions
           : standardVisibilityOptions;
       const expectedText = event.input
         .filter((part) => part.type === "text")
@@ -276,28 +269,6 @@ describe("user message parsing", () => {
         }),
       ).toBeNull();
     }
-  });
-
-  it("hides agent-originated steers from manager conversation visibility", () => {
-    const { event, meta } = decodeThreadEventRow(agentSteerRequest());
-
-    expect(
-      parsePendingSteerFromClientRequest({
-        acceptedClientRequest: undefined,
-        decoded: event,
-        meta,
-        options: managerConversationVisibilityOptions,
-      }),
-    ).toBeNull();
-
-    expect(
-      parseAcceptedSteerFromClientRequest({
-        acceptedClientRequest: acceptedClientRequest(),
-        decoded: event,
-        meta,
-        options: managerConversationVisibilityOptions,
-      }),
-    ).toBeNull();
   });
 
   it("renders a steer accepted by a different turn as a message", () => {
@@ -356,7 +327,7 @@ describe("user message parsing", () => {
     });
   });
 
-  it("hides system-originated turns in non-manager-standard views", () => {
+  it("hides system-originated turns when system client requests are hidden", () => {
     const { event, meta } = decodeThreadEventRow(systemMessageRequest());
 
     expect(

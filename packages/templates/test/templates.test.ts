@@ -83,8 +83,9 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("agents collaborate to complete tasks");
     expect(rendered).toContain("Delegate substantive work by default");
     expect(rendered).toContain(
-      "All user-facing output goes through the user-message tool",
+      "Use the `message_user` tool for deliberate user-facing updates",
     );
+    expect(rendered).toContain("Treat plain assistant text");
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");

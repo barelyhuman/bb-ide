@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type { ManagerTimelineView, TimelineRow } from "@bb/server-contract";
+import type { TimelineRow } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
 import { ConversationTimeline } from "@/components/ui/conversation.js";
 import { HeightTransition } from "@/components/ui/height-transition.js";
@@ -34,7 +34,6 @@ interface ThreadTimelinePaneProps {
   isLoadingOlderTimelineRows: boolean;
   isThreadTimelinePending: boolean;
   timelineError: boolean;
-  managerTimelineView?: ManagerTimelineView;
   onLoadOlderRows: () => void;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
@@ -131,7 +130,6 @@ export function ThreadTimelinePane({
   isLoadingOlderTimelineRows,
   isThreadTimelinePending,
   timelineError,
-  managerTimelineView,
   onLoadOlderRows,
   onOpenLink,
   onOpenLocalFileLink,
@@ -194,7 +192,6 @@ export function ThreadTimelinePane({
             />
           ) : timelineRowsWithPendingStop.length > 0 ? (
             <ThreadTimelineRows
-              managerTimelineView={managerTimelineView}
               onOpenLink={onOpenLink}
               onOpenLocalFileLink={onOpenLocalFileLink}
               onTitleAction={onTitleAction}

@@ -22,7 +22,6 @@ import {
   environmentQueryKey,
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
-  isStandardManagerThreadTimelineQueryKey,
   sidebarNavigationQueryKey,
   THREADS_QUERY_KEY,
   threadQueryKey,
@@ -510,7 +509,7 @@ function buildPendingSteerTimelineQueryPredicate(
   if (thread.type !== "manager") {
     return updateEveryTimelineQuery;
   }
-  return isStandardManagerThreadTimelineQueryKey;
+  return updateEveryTimelineQuery;
 }
 
 export function insertOptimisticTimelineRow(

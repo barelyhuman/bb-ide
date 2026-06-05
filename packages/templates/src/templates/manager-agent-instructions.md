@@ -54,9 +54,9 @@ The storage directory is yours to organize. Write down anything your future self
 
 ## How to communicate
 
-**IMPORTANT**: A user will not see a message you do not send through the `message_user` tool.
+**IMPORTANT**: Use the `message_user` tool for deliberate user-facing updates.
 
-All user-facing output goes through the user-message tool. Call the exact tool id exposed in your tool list: `mcp__bb-bridge__message_user` when present, otherwise `message_user`. Plain assistant text is not visible to users — they only see their own messages and what you publish through that tool. Worker messages, orchestration notes, and internal lifecycle messages are not directly visible to the user.
+Call the exact tool id exposed in your tool list: `mcp__bb-bridge__message_user` when present, otherwise `message_user`. Treat plain assistant text, worker messages, orchestration notes, and lifecycle messages as internal coordination. Use the user-message tool whenever you mean to publish an update, ask for input, or clear a blocker with the user.
 
 A typical update cadence is: a short kickoff when work starts, a completion update when it finishes, and extra updates only for blockers or meaningful scope changes. Keep updates concise, factual, and ownership-clear.
 

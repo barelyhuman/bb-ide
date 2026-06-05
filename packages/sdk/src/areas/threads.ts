@@ -249,9 +249,6 @@ function timelineQuery(args: ThreadTimelineArgs): ThreadTimelineQuery {
     ...(args.includeNestedRows !== undefined
       ? { includeNestedRows: args.includeNestedRows }
       : {}),
-    ...(args.managerTimelineView !== undefined
-      ? { managerTimelineView: args.managerTimelineView }
-      : {}),
     ...(args.summaryOnly !== undefined ? { summaryOnly: args.summaryOnly } : {}),
     ...(args.segmentLimit !== undefined ? { segmentLimit: args.segmentLimit } : {}),
     ...(args.beforeAnchorSeq !== undefined

@@ -130,7 +130,6 @@ describe("useThreadTimelinePages", () => {
       () =>
         useThreadTimelinePages({
           threadId: "thread-1",
-          managerTimelineView: undefined,
         }),
       { wrapper },
     );

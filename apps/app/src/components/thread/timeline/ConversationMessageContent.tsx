@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -8,23 +7,31 @@ import {
 } from "react";
 import type {
   TimelineConversationAttachments,
-  TimelineConversationTurnRequest,
   TimelineUserConversationRow,
 } from "@bb/server-contract";
-import { fileNameFromPath } from "@bb/thread-view";
-import { ImageLightbox, getWrappedImageIndex } from "../../ui/image-lightbox.js";
 import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
-import { buildProjectAttachmentContentUrl } from "@/lib/file-content-urls";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
+import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
 import type {
   ThreadTimelineLinkHandler,
   ThreadTimelineLocalFileLinkHandler,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
+import {
+  ConversationAttachments,
+  buildAttachmentItems,
+  type ConversationAttachmentItems,
+} from "./ConversationAttachments.js";
+import {
+  GeneratedConversationMessage,
+  generatedConversationBodyText,
+} from "./GeneratedConversationMessage.js";
+import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
+import { turnRequestLabel } from "./conversation-turn-request-label.js";
 
 interface ConversationMessageContentBaseProps {
   attachments: TimelineConversationAttachments | null;
@@ -38,6 +45,9 @@ export interface ConversationMessageContentUserProps
   extends ConversationMessageContentBaseProps {
   role: "user";
   initiator: TimelineUserConversationRow["initiator"];
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
+  senderThreadId: TimelineUserConversationRow["senderThreadId"];
+  senderThreadTitle: string | null;
   turnRequest: TimelineUserConversationRow["turnRequest"];
 }
 
@@ -63,30 +73,24 @@ export type ConversationMessageContentProps =
   | ConversationMessageContentUserProps
   | ConversationMessageContentAssistantProps;
 
-interface ConversationImageItem {
-  alt: string;
-  src: string;
-}
-
-interface ConversationAttachmentItems {
-  filePaths: string[];
-  imageItems: ConversationImageItem[];
-}
-
-interface ConversationAttachmentsProps extends ConversationAttachmentItems {
-  align?: "start" | "end";
+interface UserConversationMessageProps {
+  attachmentItems: ConversationAttachmentItems;
+  initiator: TimelineUserConversationRow["initiator"];
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
+  senderThreadId: TimelineUserConversationRow["senderThreadId"];
+  senderThreadTitle: string | null;
+  text: string;
+  turnRequest: TimelineUserConversationRow["turnRequest"];
 }
 
-interface UserConversationMessageProps
-  extends Omit<ConversationMessageContentUserProps, "role"> {
+interface AssistantConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
-}
-
-interface AssistantConversationMessageProps
-  extends Omit<ConversationMessageContentAssistantProps, "role"> {
-  attachmentItems: ConversationAttachmentItems;
+  onOpenLink?: ThreadTimelineLinkHandler;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  projectId?: string;
+  text: string;
 }
 
 interface CollapsibleMessageTextProps {
@@ -94,237 +98,10 @@ interface CollapsibleMessageTextProps {
   /**
    * When set, the first `mutePrefixLength` characters of `text` are rendered
    * inside a muted, max-width-truncated pill — used for `[bb …]` prefixes on
-   * agent/system-initiated messages.
+   * system-initiated messages and non-user messages without sender metadata.
    */
   mutePrefixLength?: number;
 }
-
-interface ProjectAttachmentHrefArgs {
-  path: string;
-  projectId: string | undefined;
-}
-
-interface PathClassificationArgs {
-  path: string;
-}
-
-const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[a-zA-Z]:[\\/]/u;
-const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/u;
-
-function isAbsoluteLocalPath({ path }: PathClassificationArgs): boolean {
-  return path.startsWith("/") || WINDOWS_ABSOLUTE_PATH_PATTERN.test(path);
-}
-
-function isProjectAttachmentPath({ path }: PathClassificationArgs): boolean {
-  return (
-    path.length > 0 &&
-    !path.startsWith("\\") &&
-    !isAbsoluteLocalPath({ path }) &&
-    !URL_SCHEME_PATTERN.test(path)
-  );
-}
-
-function projectAttachmentHref({
-  path,
-  projectId,
-}: ProjectAttachmentHrefArgs): string | null {
-  if (!projectId || !isProjectAttachmentPath({ path })) {
-    return null;
-  }
-
-  return buildProjectAttachmentContentUrl(projectId, path);
-}
-
-function turnRequestLabel(
-  turnRequest: TimelineConversationTurnRequest,
-): string | null {
-  if (turnRequest.kind !== "steer") {
-    return null;
-  }
-  return turnRequest.status === "pending" ? "steer pending" : "steer";
-}
-
-function buildAttachmentItems({
-  attachments,
-  projectId,
-  resolveUserAttachmentImageSrc,
-}: Pick<
-  ConversationMessageContentProps,
-  "attachments" | "projectId" | "resolveUserAttachmentImageSrc"
->): ConversationAttachmentItems {
-  if (!attachments) {
-    return {
-      filePaths: [],
-      imageItems: [],
-    };
-  }
-
-  const imageItems: ConversationImageItem[] = [
-    ...attachments.imageUrls.map((url) => ({
-      alt: fileNameFromPath(url),
-      src: url,
-    })),
-    ...attachments.localImagePaths.map((path) => ({
-      alt: fileNameFromPath(path),
-      src: resolveUserAttachmentImageSrc
-        ? resolveUserAttachmentImageSrc(path, projectId)
-        : path,
-    })),
-  ];
-
-  return {
-    filePaths: attachments.localFilePaths,
-    imageItems,
-  };
-}
-
-function ConversationAttachments({
-  align = "start",
-  filePaths,
-  imageItems,
-  onOpenLocalFileLink,
-  projectId,
-}: ConversationAttachmentsProps) {
-  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
-    null,
-  );
-  const currentImageItem =
-    expandedImageIndex === null
-      ? null
-      : (imageItems[expandedImageIndex] ?? null);
-  const hasMultipleImages = imageItems.length > 1;
-  const justifyClassName = align === "end" ? "justify-end" : "justify-start";
-
-  useEffect(() => {
-    if (expandedImageIndex === null || expandedImageIndex < imageItems.length) {
-      return;
-    }
-    setExpandedImageIndex(null);
-  }, [expandedImageIndex, imageItems.length]);
-
-  if (filePaths.length === 0 && imageItems.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mt-2 space-y-2">
-      {imageItems.length > 0 ? (
-        <div className={cn("flex flex-wrap gap-2", justifyClassName)}>
-          {imageItems.map((imageItem, index) => (
-            <button
-              type="button"
-              key={`${imageItem.src}-${index}`}
-              className={cn(
-                "cursor-zoom-in overflow-hidden rounded-md border",
-                align === "end"
-                  ? "border-surface-selected-border bg-surface-raised"
-                  : "border-border bg-surface-recessed",
-              )}
-              onClick={() => setExpandedImageIndex(index)}
-              title={imageItem.alt}
-            >
-              <img
-                src={imageItem.src}
-                alt={imageItem.alt}
-                className={cn(
-                  "object-cover",
-                  align === "end" ? "h-20 max-w-36" : "h-16 w-24",
-                )}
-                loading="lazy"
-              />
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {filePaths.length > 0 ? (
-        <div className={cn("flex flex-wrap gap-1.5", justifyClassName)}>
-          {filePaths.map((path) => {
-            const className = cn(
-              "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs text-muted-foreground",
-              align === "end"
-                ? "border-surface-selected-border bg-surface-raised"
-                : "border-border bg-surface-recessed",
-            );
-            const label = (
-              <span className="truncate">{fileNameFromPath(path)}</span>
-            );
-            const attachmentHref = projectAttachmentHref({ path, projectId });
-
-            if (attachmentHref) {
-              return (
-                <a
-                  key={path}
-                  href={attachmentHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(className, "hover:bg-state-hover")}
-                >
-                  {label}
-                </a>
-              );
-            }
-
-            if (!onOpenLocalFileLink || !isAbsoluteLocalPath({ path })) {
-              return (
-                <span key={path} className={cn(className, "cursor-default")}>
-                  {label}
-                </span>
-              );
-            }
-
-            return (
-              <button
-                key={path}
-                type="button"
-                className={cn(className, "hover:bg-state-hover")}
-                onClick={() => {
-                  onOpenLocalFileLink({ lineNumber: null, path });
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-      <ImageLightbox
-        title="Attached image preview"
-        imageSrc={currentImageItem?.src ?? null}
-        imageAlt={currentImageItem?.alt ?? "Attached image"}
-        hasMultipleImages={hasMultipleImages}
-        onPrevious={() => {
-          setExpandedImageIndex(
-            expandedImageIndex === null || imageItems.length <= 1
-              ? expandedImageIndex
-              : getWrappedImageIndex({
-                  currentIndex: expandedImageIndex,
-                  direction: "previous",
-                  itemCount: imageItems.length,
-                }),
-          );
-        }}
-        onNext={() => {
-          setExpandedImageIndex(
-            expandedImageIndex === null || imageItems.length <= 1
-              ? expandedImageIndex
-              : getWrappedImageIndex({
-                  currentIndex: expandedImageIndex,
-                  direction: "next",
-                  itemCount: imageItems.length,
-                }),
-          );
-        }}
-        onClose={() => setExpandedImageIndex(null)}
-      />
-    </div>
-  );
-}
-
-const COLLAPSED_MESSAGE_LINE_COUNT = 15;
-// Hard upper bound on what a user message ever hands to the DOM, even fully
-// expanded. Pasting a megabyte-scale blob (logs, HARs, JSON dumps) would
-// otherwise make every window-resize frame reflow the entire string.
-const USER_MESSAGE_CHAR_CAP = 4096;
 
 function splitPreWrappedLines(text: string): string[] {
   return text.split(/\r\n|\r|\n/u);
@@ -391,14 +168,14 @@ function CollapsibleMessageText({
     ? bodyText.slice(0, USER_MESSAGE_CHAR_CAP)
     : bodyText;
   const lines = splitPreWrappedLines(cappedBody);
-  const exceedsCollapsedLineCount = lines.length > COLLAPSED_MESSAGE_LINE_COUNT;
+  const exceedsCollapsedLineCount = lines.length > 15;
   // Collapsed view hands only the visible-by-line-clamp lines to the DOM;
   // expanded view hands the (already-capped) full text. Both stay below the
   // hard char cap so a megabyte paste can't dominate window-resize reflow.
   const renderedBody =
     isExpanded || !exceedsCollapsedLineCount
       ? cappedBody
-      : lines.slice(0, COLLAPSED_MESSAGE_LINE_COUNT).join("\n");
+      : lines.slice(0, 15).join("\n");
   const isOverflowing = useIsOverflowing(textRef, !isExpanded, renderedBody);
   const showToggle =
     isExpanded || exceedsCollapsedLineCount || isOverflowing;
@@ -446,13 +223,47 @@ function UserConversationMessage({
   initiator,
   onOpenLocalFileLink,
   projectId,
+  resolveSegmentLinkHref,
+  senderThreadId,
+  senderThreadTitle,
   text,
   turnRequest,
 }: UserConversationMessageProps) {
-  const mutePrefixLength = useMemo(
-    () => computeMutedPrefixLength(initiator, text),
-    [initiator, text],
-  );
+  if (initiator === "agent" && senderThreadId !== null) {
+    const bodyText = generatedConversationBodyText({ initiator, text });
+    return (
+      <GeneratedConversationMessage
+        attachmentItems={attachmentItems}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveSegmentLinkHref={resolveSegmentLinkHref}
+        sourceKind="agent"
+        sourceName={senderThreadTitle ?? "Agent"}
+        sourceThreadId={senderThreadId}
+        text={bodyText}
+        turnRequest={turnRequest}
+      />
+    );
+  }
+
+  if (initiator === "system") {
+    const bodyText = generatedConversationBodyText({ initiator, text });
+    return (
+      <GeneratedConversationMessage
+        attachmentItems={attachmentItems}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveSegmentLinkHref={resolveSegmentLinkHref}
+        sourceKind="system"
+        sourceName="BB"
+        sourceThreadId={null}
+        text={bodyText}
+        turnRequest={turnRequest}
+      />
+    );
+  }
+
+  const mutePrefixLength = computeMutedPrefixLength(initiator, text);
   const messageText = text.trim();
   const requestLabel = turnRequestLabel(turnRequest);
   const isPendingSteer =
@@ -569,11 +380,12 @@ export function ConversationMessageContent(
     return (
       <UserConversationMessage
         attachmentItems={attachmentItems}
-        attachments={attachments}
         initiator={props.initiator}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
-        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+        resolveSegmentLinkHref={props.resolveSegmentLinkHref}
+        senderThreadId={props.senderThreadId}
+        senderThreadTitle={props.senderThreadTitle}
         text={text}
         turnRequest={props.turnRequest}
       />
@@ -583,13 +395,10 @@ export function ConversationMessageContent(
   return (
     <AssistantConversationMessage
       attachmentItems={attachmentItems}
-      attachments={attachments}
       onOpenLink={props.onOpenLink}
       onOpenLocalFileLink={onOpenLocalFileLink}
       projectId={projectId}
-      resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       text={text}
-      turnRequest={props.turnRequest}
     />
   );
 }

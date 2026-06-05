@@ -4,6 +4,7 @@ import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
 } from "../../ui/disclosure.js";
+import { Icon, type IconName } from "@/components/ui/icon.js";
 import { cn } from "@/lib/utils";
 import {
   TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME,
@@ -24,6 +25,7 @@ export interface ExpandableTimelineRowProps {
   title: TimelineTitle;
   className?: string;
   horizontalPadding?: TimelineRowHorizontalPadding;
+  leadingIcon?: IconName;
   onTitleAction?: TimelineTitleActionResolver;
   resolveSegmentLinkHref?: TimelineTitleLinkResolver;
 }
@@ -41,6 +43,7 @@ function ExpandableTimelineRowComponent({
   autoExpanded = false,
   className,
   horizontalPadding = "default",
+  leadingIcon,
   onBeforeExpand,
   onTitleAction,
   renderBody,
@@ -65,11 +68,20 @@ function ExpandableTimelineRowComponent({
       onToggle={handleToggle}
       headerToneClass={headerToneClass(title, isExpanded)}
       summaryContent={
-        <TimelineTitleView
-          title={title}
-          onTitleAction={onTitleAction}
-          resolveSegmentLinkHref={resolveSegmentLinkHref}
-        />
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+          {leadingIcon ? (
+            <Icon
+              name={leadingIcon}
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+          ) : null}
+          <TimelineTitleView
+            title={title}
+            onTitleAction={onTitleAction}
+            resolveSegmentLinkHref={resolveSegmentLinkHref}
+          />
+        </span>
       }
       summaryContentClassName={TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME}
       className={cn("w-full", className)}

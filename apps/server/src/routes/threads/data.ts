@@ -44,7 +44,6 @@ import { toThreadQueuedMessage } from "../../services/threads/thread-queued-mess
 import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
-  resolveThreadTimelineServiceViewMode,
   THREAD_TIMELINE_DEFAULT_SEGMENT_LIMIT,
   THREAD_TIMELINE_SEGMENT_LIMIT_MAX,
   type ThreadTimelinePageKind,
@@ -350,10 +349,6 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     return context.json(
       buildThreadTimeline(deps.db, thread, {
         isDevelopment: deps.config.isDevelopment,
-        timelineViewMode: resolveThreadTimelineServiceViewMode({
-          managerTimelineView: query.managerTimelineView,
-          thread,
-        }),
         includeNestedRows: query.includeNestedRows === "true",
         page: parseThreadTimelinePage(query),
         summaryOnly: query.summaryOnly === "true",
@@ -372,10 +367,6 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           turnId: query.turnId,
           sourceSeqStart: parseInteger(query.sourceSeqStart, "sourceSeqStart"),
           sourceSeqEnd: parseInteger(query.sourceSeqEnd, "sourceSeqEnd"),
-          timelineViewMode: resolveThreadTimelineServiceViewMode({
-            managerTimelineView: query.managerTimelineView,
-            thread,
-          }),
         }),
       );
     },

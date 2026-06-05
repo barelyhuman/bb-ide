@@ -44,7 +44,6 @@ import type {
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
   SystemVersionResponse,
-  ManagerTimelineView,
   TimelinePaginationCursor,
   SystemVoiceTranscriptionResponse,
   ThreadAssignedChildSummaryResponse,
@@ -105,7 +104,6 @@ interface GetThreadTimelineArgs {
   beforeCursor?: TimelinePaginationCursor;
   id: string;
   includeNestedRows?: boolean;
-  managerTimelineView?: ManagerTimelineView;
   segmentLimit?: number;
 }
 
@@ -1270,7 +1268,6 @@ export async function getThreadTimeline({
   beforeCursor,
   id,
   includeNestedRows = false,
-  managerTimelineView,
   segmentLimit,
 }: GetThreadTimelineArgs): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
@@ -1278,7 +1275,6 @@ export async function getThreadTimeline({
       param: { id },
       query: {
         ...(includeNestedRows ? { includeNestedRows: "true" } : {}),
-        ...(managerTimelineView ? { managerTimelineView } : {}),
         ...(segmentLimit !== undefined
           ? { segmentLimit: String(segmentLimit) }
           : {}),
@@ -1298,7 +1294,6 @@ export async function getThreadTimelineTurnSummaryDetails({
   turnId,
   sourceSeqStart,
   sourceSeqEnd,
-  managerTimelineView,
 }: GetThreadTimelineTurnSummaryDetailsArgs): Promise<TimelineTurnSummaryDetailsResponse> {
   return request<TimelineTurnSummaryDetailsResponse>(
     apiClient.threads[":id"].timeline["turn-summary-details"].$get({
@@ -1307,7 +1302,6 @@ export async function getThreadTimelineTurnSummaryDetails({
         turnId,
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
-        ...(managerTimelineView ? { managerTimelineView } : {}),
       },
     }),
   );

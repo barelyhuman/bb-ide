@@ -3,7 +3,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { Environment, Host, ThreadWithRuntime } from "@bb/domain";
 import type {
-  ManagerTimelineView,
   ThreadComposerBootstrapResponse,
   ThreadListResponse,
   TimelineTurnSummaryDetailsResponse,
@@ -50,7 +49,6 @@ interface TestWrapperProps {
 }
 
 interface TurnSummaryDetailsHookProps {
-  managerTimelineView: ManagerTimelineView | undefined;
   sourceSeqEnd: number;
   sourceSeqStart: number;
   threadId: string;
@@ -275,7 +273,7 @@ describe("thread query bootstraps", () => {
     expect(leanThreadRequestCount).toBe(1);
   });
 
-  it("canonicalizes standard thread timeline prefetches to the default timeline key", async () => {
+  it("prefetches thread timelines into the timeline cache", async () => {
     const thread = makeThread();
     const environment = makeEnvironment();
     const host = makeHost();
@@ -293,7 +291,6 @@ describe("thread query bootstraps", () => {
     };
     let includeThreadRequestCount = 0;
     let timelineRequestCount = 0;
-    const timelineRequestUrlRef: { current: URL | null } = { current: null };
     installFetchRoutes([
       {
         pathname: "/api/v1/threads/thread-1",
@@ -308,9 +305,8 @@ describe("thread query bootstraps", () => {
       },
       {
         pathname: "/api/v1/threads/thread-1/timeline",
-        handler: (request) => {
+        handler: () => {
           timelineRequestCount += 1;
-          timelineRequestUrlRef.current = new URL(request.url);
           return jsonResponse(timeline);
         },
       },
@@ -320,9 +316,7 @@ describe("thread query bootstraps", () => {
     const { result } = renderHook(
       () =>
         useThreadDetailBootstrap("thread-1", {
-          timelinePrefetch: {
-            managerTimelineView: "standard",
-          },
+          timelinePrefetch: true,
         }),
       { wrapper },
     );
@@ -333,14 +327,8 @@ describe("thread query bootstraps", () => {
     });
     expect(includeThreadRequestCount).toBe(1);
     expect(
-      timelineRequestUrlRef.current?.searchParams.get("managerTimelineView"),
-    ).toBeNull();
-    expect(
-      queryClient.getQueryData(threadTimelineQueryKey("thread-1", undefined)),
+      queryClient.getQueryData(threadTimelineQueryKey("thread-1")),
     ).toEqual(timeline);
-    expect(
-      queryClient.getQueryData(threadTimelineQueryKey("thread-1", "standard")),
-    ).toBeUndefined();
 
     const timelineResult = renderHook(() => useThreadTimeline("thread-1"), {
       wrapper,
@@ -352,88 +340,7 @@ describe("thread query bootstraps", () => {
     expect(timelineRequestCount).toBe(1);
   });
 
-  it("preserves manager thread standard timeline prefetches", async () => {
-    const thread = {
-      ...makeThread(),
-      type: "manager",
-    };
-    const environment = makeEnvironment();
-    const host = makeHost();
-    const timeline: ThreadTimelineResponse = {
-      activeThinking: null,
-      pendingTodos: null,
-      rows: [],
-      timelinePage: {
-        kind: "latest",
-        segmentLimit: 20,
-        returnedSegmentCount: 0,
-        hasOlderRows: false,
-        olderCursor: null,
-      },
-    };
-    let includeThreadRequestCount = 0;
-    let timelineRequestCount = 0;
-    const timelineRequestUrlRef: { current: URL | null } = { current: null };
-    installFetchRoutes([
-      {
-        pathname: "/api/v1/threads/thread-1",
-        handler: () => {
-          includeThreadRequestCount += 1;
-          return jsonResponse({
-            ...thread,
-            environment,
-            host,
-          });
-        },
-      },
-      {
-        pathname: "/api/v1/threads/thread-1/timeline",
-        handler: (request) => {
-          timelineRequestCount += 1;
-          timelineRequestUrlRef.current = new URL(request.url);
-          return jsonResponse(timeline);
-        },
-      },
-    ]);
-    const { queryClient, wrapper } = createWrapper();
-
-    const { result } = renderHook(
-      () =>
-        useThreadDetailBootstrap("thread-1", {
-          timelinePrefetch: {
-            managerTimelineView: "standard",
-          },
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.status).toBe("success");
-      expect(timelineRequestCount).toBe(1);
-    });
-    expect(includeThreadRequestCount).toBe(1);
-    expect(
-      timelineRequestUrlRef.current?.searchParams.get("managerTimelineView"),
-    ).toBe("standard");
-    expect(
-      queryClient.getQueryData(threadTimelineQueryKey("thread-1", "standard")),
-    ).toEqual(timeline);
-
-    const timelineResult = renderHook(
-      () =>
-        useThreadTimeline("thread-1", {
-          managerTimelineView: "standard",
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(timelineResult.result.current.data).toEqual(timeline);
-    });
-    expect(timelineRequestCount).toBe(1);
-  });
-
-  it("keys turn summary details by thread, manager view, turn, and source range", async () => {
+  it("keys turn summary details by thread, turn, and source range", async () => {
     const requestUrls: URL[] = [];
     const detailResponse: TimelineTurnSummaryDetailsResponse = { rows: [] };
     installFetchRoutes([
@@ -447,7 +354,6 @@ describe("thread query bootstraps", () => {
     ]);
     const { queryClient, wrapper } = createWrapper();
     const initialProps: TurnSummaryDetailsHookProps = {
-      managerTimelineView: undefined,
       sourceSeqEnd: 10,
       sourceSeqStart: 5,
       threadId: "thread-1",
@@ -466,7 +372,6 @@ describe("thread query bootstraps", () => {
       expect(result.current.data).toEqual(detailResponse);
       expect(requestUrls.length).toBe(1);
     });
-    expect(requestUrls[0]?.searchParams.get("managerTimelineView")).toBeNull();
     expect(requestUrls[0]?.searchParams.get("turnId")).toBe("turn-1");
     expect(requestUrls[0]?.searchParams.get("sourceSeqStart")).toBe("5");
     expect(requestUrls[0]?.searchParams.get("sourceSeqEnd")).toBe("10");
@@ -476,32 +381,15 @@ describe("thread query bootstraps", () => {
       ),
     ).toEqual(detailResponse);
 
-    const standardViewProps: TurnSummaryDetailsHookProps = {
-      ...initialProps,
-      managerTimelineView: "standard",
-    };
-    rerender(standardViewProps);
-    await waitFor(() => {
-      expect(requestUrls.length).toBe(2);
-    });
-    expect(requestUrls[1]?.searchParams.get("managerTimelineView")).toBe(
-      "standard",
-    );
-    expect(
-      queryClient.getQueryData(
-        threadTimelineTurnSummaryDetailsQueryKey(standardViewProps),
-      ),
-    ).toEqual(detailResponse);
-
     const nextRangeProps: TurnSummaryDetailsHookProps = {
-      ...standardViewProps,
+      ...initialProps,
       sourceSeqEnd: 20,
     };
     rerender(nextRangeProps);
     await waitFor(() => {
-      expect(requestUrls.length).toBe(3);
+      expect(requestUrls.length).toBe(2);
     });
-    expect(requestUrls[2]?.searchParams.get("sourceSeqEnd")).toBe("20");
+    expect(requestUrls[1]?.searchParams.get("sourceSeqEnd")).toBe("20");
     expect(
       queryClient.getQueryData(
         threadTimelineTurnSummaryDetailsQueryKey(nextRangeProps),

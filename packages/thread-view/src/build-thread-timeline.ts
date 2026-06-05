@@ -17,8 +17,6 @@ import {
   readTerminalOutputLines,
   type ActiveThinking,
   type Thread,
-  type ThreadEventItemType,
-  type ThreadEventType,
   type ThreadTimelinePendingTodos,
 } from "@bb/domain";
 import type {
@@ -29,7 +27,6 @@ import type {
   EventProjectionProvisioningTranscriptEntry,
   EventProjectionToolParsedIntent,
   EventProjectionTurn,
-  EventProjectionEntry,
   SystemClientRequestVisibility,
 } from "./event-projection-types.js";
 import { assertNever } from "./assert-never.js";
@@ -39,7 +36,6 @@ import {
 } from "./format-helpers.js";
 import { getFileChangeDiffStats } from "./file-change-summary.js";
 import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
-import { flattenEventProjectionMessagesDeep } from "./event-projection-flatten.js";
 import {
   buildEventProjection,
   buildEventProjectionEntries,
@@ -61,37 +57,6 @@ import { buildTimelineErrorDisplay } from "./error-display.js";
 
 export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
-export type ThreadTimelineViewMode = "standard" | "manager-conversation";
-
-export interface ThreadTimelineEventSelection {
-  eventTypes: readonly ThreadEventType[];
-  itemEventTypes: readonly ThreadEventType[];
-  itemKinds: readonly ThreadEventItemType[];
-}
-
-export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
-  eventTypes: [
-    "client/turn/requested",
-    "provider/error",
-    "provider/unhandled",
-    "provider/warning",
-    "system/error",
-    "system/manager/user_message",
-    "system/operation",
-    "system/permissionGrant/lifecycle",
-    "system/userQuestion/lifecycle",
-    "system/thread/interrupted",
-    "system/thread-provisioning",
-    "system/provider-turn-watchdog",
-    "thread/compacted",
-    "turn/completed",
-    "turn/input/accepted",
-    "turn/started",
-  ],
-  itemEventTypes: ["item/completed", "item/started"],
-  itemKinds: ["contextCompaction"],
-} as const satisfies ThreadTimelineEventSelection;
-
 interface ThreadTimelineFromEventsBaseOptions {
   includeDebugRawEvents: boolean;
   includeProviderUnhandledOperations: boolean;
@@ -112,19 +77,10 @@ interface ThreadTimelineFromEventsBaseOptions {
   workspaceRoot: string | null;
 }
 
-export interface StandardThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
+export interface ThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
   includeNestedRows: boolean;
   turnMessageDetail: ThreadTimelineTurnMessageDetail;
-  viewMode: "standard";
 }
-
-export interface ManagerConversationTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
-  viewMode: "manager-conversation";
-}
-
-export type ThreadTimelineFromEventsOptions =
-  | StandardThreadTimelineFromEventsOptions
-  | ManagerConversationTimelineFromEventsOptions;
 
 export interface BuildThreadTimelineFromEventsArgs {
   acceptedClientRequestContext: AcceptedClientRequestContext;
@@ -149,7 +105,6 @@ export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadT
   includeProviderUnhandledOperations: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
-  viewMode: ThreadTimelineViewMode;
   /** See {@link ThreadTimelineFromEventsBaseOptions.workspaceRoot}. */
   workspaceRoot: string | null;
 }
@@ -813,15 +768,11 @@ function buildPendingSteerRowsFromEvents(
   const pendingSteerRows: TimelineUserConversationRow[] = [];
 
   for (const { event, meta } of orderedEvents) {
-    const acceptedClientRequest =
-      event.type === "client/turn/requested"
-        ? acceptedClientRequestById.get(event.requestId)
-        : undefined;
-    if (acceptedClientRequest) {
-      continue;
-    }
     const pendingSteer = parsePendingSteerFromClientRequest({
-      acceptedClientRequest,
+      acceptedClientRequest:
+        event.type === "client/turn/requested"
+          ? acceptedClientRequestById.get(event.requestId)
+          : undefined,
       decoded: event,
       meta,
       options,
@@ -1031,45 +982,6 @@ function buildTurnRows({
   return [...summaryRows, ...terminalRows, ...trailingRows];
 }
 
-/**
- * For manager threads in the default (non-debug) view, only show user messages,
- * message_user output, lifecycle operations (provisioning, compaction), and
- * errors. Everything else (assistant text, delegations, other tool calls, etc.)
- * is internal manager machinery.
- */
-function isManagerConversationMessage(
-  message: EventProjectionMessage,
-): boolean {
-  if (message.kind === "user") return true;
-  if (message.kind === "operation") return true;
-  if (message.kind === "error") return true;
-  return (
-    message.kind === "assistant-text" && message.isManagerUserMessage === true
-  );
-}
-
-function buildManagerConversationRows(
-  projection: EventProjection,
-  workspaceRoot: string | null,
-): TimelineRow[] {
-  const entries: EventProjectionEntry[] = flattenEventProjectionMessagesDeep(
-    projection,
-  )
-    .filter(isManagerConversationMessage)
-    .map((message) => ({ kind: "projected-message", message }));
-  return buildTimelineRows(
-    {
-      entries,
-      state: projection.state,
-    },
-    {
-      includeNestedRows: false,
-      rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
-      workspaceRoot,
-    },
-  );
-}
-
 type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn" }>;
 
 function findMatchingTurnSummaryRow(
@@ -1131,44 +1043,30 @@ export function buildThreadTimelineFromEvents(
       args.options.includeProviderUnhandledOperations,
     systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
-    threadType:
-      args.options.viewMode === "manager-conversation" ? "manager" : "standard",
-    turnMessageDetail:
-      args.options.viewMode === "manager-conversation"
-        ? "full"
-        : args.options.turnMessageDetail,
+    threadType: "standard",
+    turnMessageDetail: args.options.turnMessageDetail,
   } satisfies Parameters<typeof buildEventProjection>[1];
-  const projection =
-    args.options.viewMode === "manager-conversation"
-      ? buildEventProjectionEntries(args.events, projectionOptions)
-      : buildEventProjection(args.events, projectionOptions);
+  const projection = buildEventProjection(args.events, projectionOptions);
 
-  const rows =
-    args.options.viewMode === "manager-conversation"
-      ? buildManagerConversationRows(projection, args.options.workspaceRoot)
-      : [
-          ...buildTimelineRows(projection, {
-            includeNestedRows: args.options.includeNestedRows,
-            rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
-            workspaceRoot: args.options.workspaceRoot,
-          }),
-          ...buildPendingSteerRowsFromEvents(
-            args.acceptedClientRequestContext,
-            args.events,
-            args.options,
-          ),
-        ];
+  const rows = [
+    ...buildTimelineRows(projection, {
+      includeNestedRows: args.options.includeNestedRows,
+      rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
+      workspaceRoot: args.options.workspaceRoot,
+    }),
+    ...buildPendingSteerRowsFromEvents(
+      args.acceptedClientRequestContext,
+      args.events,
+      args.options,
+    ),
+  ];
 
   return {
-    activeThinking:
-      args.options.viewMode === "manager-conversation"
-        ? null
-        : projection.state.activeThinking,
+    activeThinking: projection.state.activeThinking,
     contextWindowUsage: extractThreadContextWindowUsage(
       args.contextWindowEvents,
     ),
     pendingTodos:
-      args.options.viewMode === "manager-conversation" ||
       !args.options.isLatestPage
         ? null
         : extractThreadTimelinePendingTodos(
@@ -1188,8 +1086,7 @@ export function buildThreadTimelineTurnDetailsFromEvents(
       args.options.includeProviderUnhandledOperations,
     systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
-    threadType:
-      args.options.viewMode === "manager-conversation" ? "manager" : "standard",
+    threadType: "standard",
     turnMessageDetail: "full",
   });
   const nestedRows = buildTimelineRows(projection, {

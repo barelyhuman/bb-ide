@@ -18,7 +18,6 @@ type UnreadDividerThreadState = NonNullable<
 interface ThreadUnreadTimelineHarnessProps {
   thread: UnreadDividerThreadState;
   timelineRows: TimelineRow[];
-  useStandardManagerTimeline?: boolean;
 }
 
 interface ScrollMetrics {
@@ -69,12 +68,10 @@ function requireHTMLElement(element: Element | null): HTMLElement {
 function ThreadUnreadTimelineHarness({
   thread,
   timelineRows,
-  useStandardManagerTimeline = false,
 }: ThreadUnreadTimelineHarnessProps) {
   const unreadDividerState = useThreadUnreadDividerState({
     routeThreadId: thread?.id,
     thread,
-    useStandardManagerTimeline,
   });
 
   return (
@@ -115,7 +112,6 @@ describe("useThreadUnreadDividerState", () => {
       id: "thread-1",
       lastReadAt: 1_000,
       latestAttentionAt: 1_000,
-      type: "standard",
     };
     const unreadThread: UnreadDividerThreadState = {
       ...readThread,
@@ -193,7 +189,6 @@ describe("useThreadUnreadDividerState", () => {
         id: "thread-1",
         lastReadAt: 1_000,
         latestAttentionAt: 2_000,
-        type: "standard",
       };
       const timelineRows = [
         conversationRow({
@@ -267,7 +262,6 @@ describe("useThreadUnreadDividerState", () => {
         id: "thread-1",
         lastReadAt: 1_000,
         latestAttentionAt: 1_000,
-        type: "standard",
       };
       const unreadThread: UnreadDividerThreadState = {
         ...readThread,
@@ -353,7 +347,6 @@ describe("useThreadUnreadDividerState", () => {
         id: "thread-1",
         lastReadAt: 1_000,
         latestAttentionAt: 2_000,
-        type: "standard",
       };
       const bumpedUnreadThread: UnreadDividerThreadState = {
         ...unreadThread,
@@ -441,7 +434,6 @@ describe("useThreadUnreadDividerState", () => {
       id: "thread-1",
       lastReadAt: 1_500,
       latestAttentionAt: 3_000,
-      type: "standard",
     };
     const timelineRows = [
       conversationRow({
@@ -482,7 +474,6 @@ describe("useThreadUnreadDividerState", () => {
       id: "thread-1",
       lastReadAt: 1_500,
       latestAttentionAt: 2_000,
-      type: "standard",
     };
     const timelineRows = [
       conversationRow({
@@ -510,133 +501,34 @@ describe("useThreadUnreadDividerState", () => {
     const divider = await screen.findByRole("separator", {
       name: "New messages",
     });
-    expectElementBefore(divider, screen.getByText("Agent handoff"));
-  });
-
-  it("re-arms when a mounted read manager thread gets a new attention epoch", async () => {
-    const readThread: UnreadDividerThreadState = {
-      id: "thread-1",
-      lastReadAt: 1_000,
-      latestAttentionAt: 1_000,
-      type: "manager",
-    };
-    const unreadThread: UnreadDividerThreadState = {
-      ...readThread,
-      latestAttentionAt: 2_000,
-    };
-    const markedReadThread: UnreadDividerThreadState = {
-      ...unreadThread,
-      lastReadAt: 2_500,
-    };
-    const timelineRows = [
-      conversationRow({
-        id: "already-read-row",
-        sourceSeqStart: 1_000,
-        text: "Already-read manager context",
-      }),
-      conversationRow({
-        id: "new-attention-row",
-        sourceSeqStart: 2_000,
-        text: "Manager update requiring attention",
-      }),
-    ];
-    const view = render(
-      <ThreadUnreadTimelineHarness
-        thread={readThread}
-        timelineRows={timelineRows}
-      />,
-    );
-    expect(
-      screen.queryByRole("separator", { name: "New messages" }),
-    ).toBeNull();
-
-    view.rerender(
-      <ThreadUnreadTimelineHarness
-        thread={unreadThread}
-        timelineRows={timelineRows}
-      />,
-    );
-
-    const divider = await screen.findByRole("separator", {
-      name: "New messages",
-    });
-    expectElementBefore(
-      screen.getByText("Already-read manager context"),
-      divider,
-    );
     expectElementBefore(
       divider,
-      screen.getByText("Manager update requiring attention"),
-    );
-
-    view.rerender(
-      <ThreadUnreadTimelineHarness
-        thread={markedReadThread}
-        timelineRows={timelineRows}
-      />,
-    );
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("separator", { name: "New messages" }),
-      ).not.toBeNull(),
+      screen.getByRole("button", { name: /Message from Agent/u }),
     );
   });
 
-  it("places the divider before the first row when lastReadAt is null", async () => {
-    const markedUnreadThread: UnreadDividerThreadState = {
-      id: "thread-1",
-      lastReadAt: null,
-      latestAttentionAt: 2_000,
-      type: "manager",
-    };
-    render(
-      <ThreadUnreadTimelineHarness
-        thread={markedUnreadThread}
-        timelineRows={[
-          conversationRow({
-            id: "first-row",
-            sourceSeqStart: 1_000,
-            text: "First manager timeline row",
-          }),
-        ]}
-      />,
-    );
-
-    const divider = await screen.findByRole("separator", {
-      name: "New messages",
-    });
-    expectElementBefore(
-      divider,
-      screen.getByText("First manager timeline row"),
-    );
-  });
-
-  it("omits the divider for the standard manager timeline view", async () => {
+  it("places the divider for manager threads", async () => {
     const unreadManagerThread: UnreadDividerThreadState = {
       id: "thread-1",
       lastReadAt: 1_000,
       latestAttentionAt: 2_000,
-      type: "manager",
     };
     render(
       <ThreadUnreadTimelineHarness
         thread={unreadManagerThread}
         timelineRows={[
           conversationRow({
-            id: "new-manager-debug-row",
+            id: "new-manager-row",
             sourceSeqStart: 2_000,
-            text: "Manager debug timeline row",
+            text: "Manager timeline row",
           }),
         ]}
-        useStandardManagerTimeline
       />,
     );
 
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("separator", { name: "New messages" }),
-      ).toBeNull(),
-    );
+    const divider = await screen.findByRole("separator", {
+      name: "New messages",
+    });
+    expectElementBefore(divider, screen.getByText("Manager timeline row"));
   });
 });

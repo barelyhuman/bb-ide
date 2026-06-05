@@ -204,7 +204,7 @@ describe("resolveThreadPlaceholder", () => {
 });
 
 describe("resolveThreadTimelinePlaceholder", () => {
-  it("reuses previous timeline rows only while the thread and timeline view match", () => {
+  it("reuses previous timeline rows only while the thread matches", () => {
     const previousTimeline = makeThreadTimelineResponse([
       {
         id: "assistant-1",
@@ -225,27 +225,16 @@ describe("resolveThreadTimelinePlaceholder", () => {
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", "conversation"],
+        ["threadTimeline", "thread-1"],
         "thread-1",
-        "conversation",
       ),
     ).toBe(previousTimeline);
 
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", "conversation"],
-        "thread-1",
-        "standard",
-      ),
-    ).toBeUndefined();
-
-    expect(
-      resolveThreadTimelinePlaceholder(
-        previousTimeline,
-        ["threadTimeline", "thread-1", undefined],
+        ["threadTimeline", "thread-1"],
         "thread-2",
-        undefined,
       ),
     ).toBeUndefined();
   });

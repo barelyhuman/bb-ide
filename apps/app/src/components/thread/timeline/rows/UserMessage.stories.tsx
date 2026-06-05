@@ -1,4 +1,5 @@
 import type { TimelineConversationAttachments } from "@bb/server-contract";
+import type { TimelineTitleLink } from "@bb/thread-view";
 import { ConversationMessageContent } from "@/components/thread/timeline/ConversationMessageContent";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
@@ -16,6 +17,13 @@ function TimelineStage({ children }: { children: React.ReactNode }) {
 // Resolves placecats URLs (which are already absolute) and falls through for
 // project-relative paths the same way the production resolver would.
 const resolveImageSrc = (path: string) => path;
+
+function resolveThreadLink(link: TimelineTitleLink): string | null {
+  switch (link.kind) {
+    case "thread":
+      return `/projects/proj_demo/threads/${link.threadId}`;
+  }
+}
 
 const acceptedMessage = {
   kind: "message" as const,
@@ -78,6 +86,8 @@ export function Overview() {
           <ConversationMessageContent
             role="user"
             initiator="user"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text="Walk me through how ThreadDetailView wires the prompt context banner."
             attachments={null}
             turnRequest={acceptedMessage}
@@ -89,6 +99,8 @@ export function Overview() {
           <ConversationMessageContent
             role="user"
             initiator="user"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text={longMarkdownText}
             attachments={null}
             turnRequest={acceptedMessage}
@@ -103,6 +115,8 @@ export function Overview() {
           <ConversationMessageContent
             role="user"
             initiator="user"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text="Hold on — also include the queue API in that audit, please."
             attachments={null}
             turnRequest={pendingSteer}
@@ -117,6 +131,8 @@ export function Overview() {
           <ConversationMessageContent
             role="user"
             initiator="user"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text="Hold on — also include the queue API in that audit, please."
             attachments={null}
             turnRequest={acceptedSteer}
@@ -128,6 +144,8 @@ export function Overview() {
           <ConversationMessageContent
             role="user"
             initiator="user"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text="Repro of the layout regression in the prompt context banner."
             attachments={singleImageAttachments}
             turnRequest={acceptedMessage}
@@ -143,6 +161,8 @@ export function Overview() {
           <ConversationMessageContent
             role="user"
             initiator="user"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text="Three screenshots from the design review and the spec doc."
             attachments={mixedAttachments}
             turnRequest={acceptedMessage}
@@ -153,12 +173,15 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="agent-initiated"
-        hint="[bb message from thread:…] prefix renders as a muted, line-clamped header"
+        hint="collapsed activity row: Message from Frontend manager"
       >
         <TimelineStage>
           <ConversationMessageContent
             role="user"
             initiator="agent"
+            resolveSegmentLinkHref={resolveThreadLink}
+            senderThreadId="thr_sender123"
+            senderThreadTitle="Frontend manager"
             text={
               '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union.'
             }
@@ -169,12 +192,14 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="system-initiated (scheduled turn)"
-        hint="[bb system] prefix on its own line, body below"
+        hint="collapsed activity row: System Message"
       >
         <TimelineStage>
           <ConversationMessageContent
             role="user"
             initiator="system"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text={"[bb system]\n\nScheduled turn: daily-recap."}
             attachments={null}
             turnRequest={acceptedMessage}
@@ -183,12 +208,14 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="system-initiated (welcome)"
-        hint="multi-line block-form body after the [bb system] header"
+        hint="system message body is hidden until the row is expanded"
       >
         <TimelineStage>
           <ConversationMessageContent
             role="user"
             initiator="system"
+            senderThreadId={null}
+            senderThreadTitle={null}
             text={
               "[bb system]\n\nWelcome!\nStart with a short meet-and-greet via `message_user`."
             }

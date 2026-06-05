@@ -6,10 +6,12 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import type { ReactNode } from "react";
-import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type { ManagerTimelineView, TimelineRow } from "@bb/server-contract";
+import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
+import type { ThreadListEntry, ThreadRuntimeDisplayStatus } from "@bb/domain";
+import type { TimelineRow } from "@bb/server-contract";
 import {
   assertNever,
   buildTimelineActivityIntentTitles,
@@ -62,9 +64,18 @@ import {
   timelineRowRenderSignature,
   timelineRowsSignature,
 } from "./timelineRowSignatures.js";
+import { NESTED_TIMELINE_GROUP_LINE_CLASS_NAME } from "./timeline-nested-group-line.js";
 import { getThreadRoutePath } from "@/lib/app-route-paths";
 import { useThreadTimelineTurnSummaryDetails } from "@/hooks/queries/thread-queries";
-import type { ThreadTimelineTurnSummaryDetailsQueryIdentity } from "@/hooks/queries/query-keys";
+import {
+  THREADS_QUERY_KEY,
+  threadsQueryKey,
+  type ThreadTimelineTurnSummaryDetailsQueryIdentity,
+} from "@/hooks/queries/query-keys";
+import {
+  getCachedThreadLists,
+  iterateThreadListCacheEntries,
+} from "@/hooks/cache-owners/thread-list-cache-data";
 
 export interface ThreadTimelineRowsProps {
   /**
@@ -74,7 +85,6 @@ export interface ThreadTimelineRowsProps {
    * a running runtime status.
    */
   initialExpanded?: ReadonlySet<string>;
-  managerTimelineView?: ManagerTimelineView;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onTitleAction?: TimelineTitleActionResolver;
@@ -105,7 +115,6 @@ export interface ThreadTimelineRowsProps {
  */
 interface TimelineRendererStaticContextValue {
   getViewRows: GetTimelineViewRows;
-  managerTimelineView: ManagerTimelineView | undefined;
   onOpenLink: ThreadTimelineLinkHandler | undefined;
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
   onTitleAction: TimelineTitleActionResolver | undefined;
@@ -113,9 +122,27 @@ interface TimelineRendererStaticContextValue {
   resolveImageViewSrc: ThreadTimelineImageViewSrcResolver | undefined;
   resolveSegmentLinkHref: TimelineTitleLinkResolver | undefined;
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
+  senderThreadMetadataById: ReadonlyMap<string, SenderThreadMetadata>;
   themeType: ThreadTimelineTheme;
   threadId: string | undefined;
   workspaceRootPath: string | undefined;
+}
+
+interface SenderThreadMetadata {
+  title: string | null;
+}
+
+interface BuildSenderThreadMetadataByIdArgs {
+  queryClient: QueryClient | null;
+}
+
+interface UseSenderThreadMetadataByIdArgs {
+  queryClient: QueryClient | null;
+}
+
+interface SenderThreadTitleSource {
+  title: ThreadListEntry["title"];
+  titleFallback: ThreadListEntry["titleFallback"];
 }
 
 /**
@@ -215,7 +242,6 @@ interface TimelineRowTitleRenderStateCache {
 }
 
 interface BuildTurnSummaryDetailsIdentityArgs {
-  managerTimelineView: ManagerTimelineView | undefined;
   rowSourceSeqEnd: TimelineViewTurnRow["sourceSeqEnd"];
   rowSourceSeqStart: TimelineViewTurnRow["sourceSeqStart"];
   rowThreadId: TimelineViewTurnRow["threadId"];
@@ -224,7 +250,6 @@ interface BuildTurnSummaryDetailsIdentityArgs {
 }
 
 interface TimelineRowsOwnerKeyArgs {
-  managerTimelineView: ManagerTimelineView | undefined;
   threadId: string | undefined;
   timelineRows: readonly TimelineRow[];
 }
@@ -263,9 +288,6 @@ type TimelineRowsListItem =
 interface ConversationRowProps {
   row: TimelineConversationViewRow;
 }
-
-const NESTED_ROWS_GROUP_LINE_CLASS =
-  "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-border-hairline before:content-['']";
 
 const TimelineRendererStaticContext =
   createContext<TimelineRendererStaticContextValue | null>(null);
@@ -410,7 +432,6 @@ function useStableReadonlySet(
 }
 
 function buildTurnSummaryDetailsIdentity({
-  managerTimelineView,
   rowSourceSeqEnd,
   rowSourceSeqStart,
   rowThreadId,
@@ -418,7 +439,6 @@ function buildTurnSummaryDetailsIdentity({
   threadId,
 }: BuildTurnSummaryDetailsIdentityArgs): ThreadTimelineTurnSummaryDetailsQueryIdentity {
   return {
-    managerTimelineView,
     sourceSeqEnd: rowSourceSeqEnd,
     sourceSeqStart: rowSourceSeqStart,
     threadId: threadId ?? rowThreadId,
@@ -427,12 +447,81 @@ function buildTurnSummaryDetailsIdentity({
 }
 
 function timelineRowsOwnerKey({
-  managerTimelineView,
   threadId,
   timelineRows,
 }: TimelineRowsOwnerKeyArgs): string {
   const ownerThreadId = threadId ?? timelineRows[0]?.threadId ?? "";
-  return `${ownerThreadId}:${managerTimelineView ?? "default"}`;
+  return ownerThreadId;
+}
+
+function senderThreadTitle(source: SenderThreadTitleSource): string | null {
+  const title = source.title?.trim();
+  if (title && title.length > 0) {
+    return title;
+  }
+  const titleFallback = source.titleFallback?.trim();
+  if (titleFallback && titleFallback.length > 0) {
+    return titleFallback;
+  }
+  return null;
+}
+
+function buildSenderThreadMetadataById({
+  queryClient,
+}: BuildSenderThreadMetadataByIdArgs): ReadonlyMap<string, SenderThreadMetadata> {
+  const metadataById = new Map<string, SenderThreadMetadata>();
+  if (queryClient === null) {
+    return metadataById;
+  }
+
+  for (const cachedList of getCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+  })) {
+    for (const thread of iterateThreadListCacheEntries(cachedList.data)) {
+      if (metadataById.has(thread.id)) {
+        continue;
+      }
+      metadataById.set(thread.id, {
+        title: senderThreadTitle(thread),
+      });
+    }
+  }
+
+  return metadataById;
+}
+
+function useSenderThreadMetadataById({
+  queryClient,
+}: UseSenderThreadMetadataByIdArgs): ReadonlyMap<
+  string,
+  SenderThreadMetadata
+> {
+  const [metadataById, setMetadataById] = useState(() =>
+    buildSenderThreadMetadataById({ queryClient }),
+  );
+  const queryClientRef = useRef(queryClient);
+
+  useEffect(() => {
+    if (queryClientRef.current !== queryClient) {
+      queryClientRef.current = queryClient;
+      setMetadataById(buildSenderThreadMetadataById({ queryClient }));
+    }
+
+    if (queryClient === null) {
+      return;
+    }
+
+    // Sender titles are derived from the React Query thread-list cache rather
+    // than a hook query. Subscribe to thread-list cache updates so title
+    // changes still refresh rows without rebuilding a fresh Map every render.
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === THREADS_QUERY_KEY) {
+        setMetadataById(buildSenderThreadMetadataById({ queryClient }));
+      }
+    });
+  }, [queryClient]);
+
+  return metadataById;
 }
 
 function useTimelineViewRowsCache(): GetTimelineViewRows {
@@ -541,9 +630,15 @@ function ConversationRow({ row }: ConversationRowProps) {
     onOpenLink,
     onOpenLocalFileLink,
     projectId,
+    resolveSegmentLinkHref,
     resolveUserAttachmentImageSrc,
+    senderThreadMetadataById,
   } = useTimelineRendererStaticContext();
   if (row.role === "user") {
+    const senderThreadMetadata =
+      row.senderThreadId === null
+        ? null
+        : (senderThreadMetadataById.get(row.senderThreadId) ?? null);
     return (
       <ConversationMessageContent
         attachments={row.attachments}
@@ -552,6 +647,9 @@ function ConversationRow({ row }: ConversationRowProps) {
         projectId={projectId}
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         role="user"
+        resolveSegmentLinkHref={resolveSegmentLinkHref}
+        senderThreadId={row.senderThreadId}
+        senderThreadTitle={senderThreadMetadata?.title ?? null}
         text={row.text}
         turnRequest={row.turnRequest}
       />
@@ -704,7 +802,7 @@ function TimelineExpandableBody({
             size="delegation"
             streaming={delegationActive}
             contentKey={`${timelineRowsSignature(row.childRows)}|${row.output.length}`}
-            className={NESTED_ROWS_GROUP_LINE_CLASS}
+            className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}
           >
             <div className="flex flex-col gap-3">
               {row.childRows.length > 0 ? (
@@ -771,7 +869,7 @@ function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
       scopeActive={false}
       compactActivityIntents={compactActivityIntents}
       spacing="nested"
-      className={NESTED_ROWS_GROUP_LINE_CLASS}
+      className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}
       unreadDividerAutoScroll={false}
       unreadDividerPlacement={null}
     />
@@ -782,8 +880,7 @@ function LazyTurnRowBody({
   compactActivityIntents,
   row,
 }: LazyTurnRowBodyProps) {
-  const { getViewRows, managerTimelineView, threadId } =
-    useTimelineRendererStaticContext();
+  const { getViewRows, threadId } = useTimelineRendererStaticContext();
   const {
     sourceSeqEnd: rowSourceSeqEnd,
     sourceSeqStart: rowSourceSeqStart,
@@ -793,7 +890,6 @@ function LazyTurnRowBody({
   const identity = useMemo<ThreadTimelineTurnSummaryDetailsQueryIdentity>(
     () =>
       buildTurnSummaryDetailsIdentity({
-        managerTimelineView,
         rowSourceSeqEnd,
         rowSourceSeqStart,
         rowThreadId,
@@ -801,7 +897,6 @@ function LazyTurnRowBody({
         threadId,
       }),
     [
-      managerTimelineView,
       rowSourceSeqEnd,
       rowSourceSeqStart,
       rowThreadId,
@@ -848,7 +943,7 @@ function LazyTurnRowBody({
         scopeActive={false}
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
-        className={NESTED_ROWS_GROUP_LINE_CLASS}
+        className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}
         unreadDividerAutoScroll={false}
         unreadDividerPlacement={null}
       />
@@ -1081,7 +1176,6 @@ function TimelineRowsList({
 
 function ThreadTimelineRowsComponent(props: ThreadTimelineRowsProps) {
   const ownerKey = timelineRowsOwnerKey({
-    managerTimelineView: props.managerTimelineView,
     threadId: props.threadId,
     timelineRows: props.timelineRows,
   });
@@ -1089,6 +1183,7 @@ function ThreadTimelineRowsComponent(props: ThreadTimelineRowsProps) {
 }
 
 function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
+  const queryClient = useContext(QueryClientContext) ?? null;
   const getViewRows = useTimelineViewRowsCache();
   const rows = useMemo(
     () => getViewRows(props.timelineRows),
@@ -1111,6 +1206,9 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
   }, [rows, scopeActive, props.initialExpanded]);
   const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
   const projectId = props.projectId;
+  const senderThreadMetadataById = useSenderThreadMetadataById({
+    queryClient,
+  });
   const resolveSegmentLinkHref = useMemo<
     TimelineTitleLinkResolver | undefined
   >(() => {
@@ -1129,7 +1227,6 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
   const staticContextValue = useMemo<TimelineRendererStaticContextValue>(
     () => ({
       getViewRows,
-      managerTimelineView: props.managerTimelineView,
       onOpenLink: props.onOpenLink,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
@@ -1137,13 +1234,13 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       resolveImageViewSrc: props.resolveImageViewSrc,
       resolveSegmentLinkHref,
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
+      senderThreadMetadataById,
       themeType,
       threadId: props.threadId,
       workspaceRootPath: props.workspaceRootPath,
     }),
     [
       getViewRows,
-      props.managerTimelineView,
       props.onOpenLink,
       props.onOpenLocalFileLink,
       props.onTitleAction,
@@ -1151,6 +1248,7 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       props.resolveImageViewSrc,
       resolveSegmentLinkHref,
       props.resolveUserAttachmentImageSrc,
+      senderThreadMetadataById,
       props.threadId,
       props.workspaceRootPath,
       themeType,

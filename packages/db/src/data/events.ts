@@ -736,17 +736,6 @@ export interface ListRecentStoredEventRowsArgs {
   threadId: string;
 }
 
-export interface StoredEventRowTypeFilter {
-  eventTypes: readonly ThreadEventType[];
-  itemEventTypes: readonly ThreadEventType[];
-  itemKinds: readonly ThreadEventItemType[];
-}
-
-export interface ListFilteredStoredTimelineWindowEventRowsArgs
-  extends ListStoredTimelineWindowEventRowsArgs {
-  filter: StoredEventRowTypeFilter;
-}
-
 export interface ListStoredTimelineWindowEventRowsArgs {
   beforeSequence?: number;
   excludedTypes?: readonly ThreadEventType[];
@@ -1176,9 +1165,9 @@ export interface StandardTimelineSegmentAnchorRow {
 
 /**
  * Which `client/turn/requested` turns count as timeline segment anchors:
- * - `all`: every turn (standard timeline with system client requests visible)
- * - `non-system`: turns not initiated by the system (standard timeline default)
- * - `user`: user-initiated turns only (manager-conversation timeline)
+ * - `all`: every turn, including system client requests
+ * - `non-system`: turns not initiated by the system
+ * - `user`: user-initiated turns only
  */
 export type TimelineSegmentAnchorAudience = "all" | "non-system" | "user";
 
@@ -1330,58 +1319,6 @@ export function listStoredTimelineWindowEventRows(
     .where(and(...conditions))
     .orderBy(events.sequence)
     .all();
-}
-
-export function listFilteredStoredTimelineWindowEventRows(
-  db: DbConnection,
-  args: ListFilteredStoredTimelineWindowEventRowsArgs,
-): StoredEventRow[] {
-  const conditions: SQL[] = [
-    eq(events.threadId, args.threadId),
-    gte(events.sequence, args.sequenceStart),
-    buildStoredEventRowTypeFilterCondition(args.filter),
-  ];
-  if (args.beforeSequence !== undefined) {
-    conditions.push(lt(events.sequence, args.beforeSequence));
-  }
-  if (args.excludedTypes && args.excludedTypes.length > 0) {
-    conditions.push(notInArray(events.type, [...args.excludedTypes]));
-  }
-
-  return db
-    .select(storedEventRowFields)
-    .from(events)
-    .where(and(...conditions))
-    .orderBy(events.sequence)
-    .all();
-}
-
-function buildStoredEventRowTypeFilterCondition(
-  filter: StoredEventRowTypeFilter,
-): SQL {
-  const conditions: SQL[] = [];
-  if (filter.eventTypes.length > 0) {
-    conditions.push(inArray(events.type, [...filter.eventTypes]));
-  }
-
-  if (filter.itemEventTypes.length > 0 && filter.itemKinds.length > 0) {
-    const itemCondition = and(
-      inArray(events.type, [...filter.itemEventTypes]),
-      inArray(events.itemKind, [...filter.itemKinds]),
-    );
-    if (itemCondition) {
-      conditions.push(itemCondition);
-    }
-  }
-
-  const firstCondition = conditions[0];
-  if (!firstCondition) {
-    return sql`0 = 1`;
-  }
-  if (conditions.length === 1) {
-    return firstCondition;
-  }
-  return or(...conditions) ?? sql`0 = 1`;
 }
 
 function listLatestRowsForContextWindowUsage(

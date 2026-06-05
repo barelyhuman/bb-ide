@@ -36,7 +36,6 @@ function buildTimelineRows(events: ThreadEventWithMeta[]): TimelineRow[] {
       systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
       turnMessageDetail: "full",
-      viewMode: "standard",
       workspaceRoot: null,
     },
   }).rows;

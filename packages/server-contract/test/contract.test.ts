@@ -232,8 +232,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Thread listing may omit projectId to list across projects.",
   "threadListQuerySchema.type":
     "Thread listing may omit type when not filtering by thread type.",
-  "threadTimelineQuerySchema.managerTimelineView":
-    "Timeline queries may omit managerTimelineView unless explicitly requesting the standard manager timeline.",
   "threadTimelineQuerySchema.includeNestedRows":
     "Timeline queries may omit nested rows unless explicitly requested.",
   "threadTimelineQuerySchema.segmentLimit":
@@ -246,10 +244,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Timeline queries may omit summaryOnly; CLI sets it to skip row generation, web client always wants rows.",
   "threadTimelineResponseSchema.contextWindowUsage":
     "Timeline responses omit context window usage when the provider did not report it.",
-  "timelineTurnSummaryDetailsQuerySchema.managerTimelineView":
-    "Turn summary detail queries may omit managerTimelineView unless explicitly requesting the standard manager timeline.",
-  "timelineTurnSummaryDetailsRequestSchema.managerTimelineView":
-    "Turn summary detail requests may omit managerTimelineView unless explicitly requesting the standard manager timeline.",
   "updateProjectRequestSchema.name":
     "Project PATCH requests omit name when leaving it unchanged.",
   "updateProjectSourceRequestSchema.isDefault":

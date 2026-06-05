@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,7 @@ import {
 } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ThreadListEntry } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
 import {
   commandRow,
@@ -24,7 +26,10 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline/ThreadTimelineRows";
-import { threadTimelineTurnSummaryDetailsQueryKey } from "@/hooks/queries/query-keys";
+import {
+  threadListQueryKey,
+  threadTimelineTurnSummaryDetailsQueryKey,
+} from "@/hooks/queries/query-keys";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 
@@ -35,6 +40,7 @@ type ThreadTimelineRowsPropsOverrides = Partial<
 
 interface ThreadTimelineRowsFixtureArgs {
   overrides?: ThreadTimelineRowsPropsOverrides;
+  seedQueryClient?: (queryClient: QueryClient) => void;
   timelineRows: TimelineRow[];
 }
 
@@ -48,6 +54,50 @@ interface ThreadTimelineRowsRenderResult extends RenderResult {
 
 interface RequestUrlRef {
   current: URL | null;
+}
+
+interface ThreadListEntryFixtureArgs {
+  id: string;
+  projectId: string;
+  title: string | null;
+  titleFallback: string | null;
+}
+
+function threadListEntry({
+  id,
+  projectId,
+  title,
+  titleFallback,
+}: ThreadListEntryFixtureArgs): ThreadListEntry {
+  return {
+    archivedAt: null,
+    automationId: null,
+    createdAt: 1,
+    deletedAt: null,
+    environmentBranchName: null,
+    environmentHostId: null,
+    environmentId: "environment-1",
+    environmentWorkspaceDisplayKind: "other",
+    hasPendingInteraction: false,
+    id,
+    lastReadAt: null,
+    latestAttentionAt: 10,
+    parentThreadId: null,
+    pinSortKey: null,
+    pinnedAt: null,
+    projectId,
+    providerId: "provider-1",
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
+    status: "idle",
+    stopRequestedAt: null,
+    title,
+    titleFallback,
+    type: "standard",
+    updatedAt: 10,
+  };
 }
 
 function threadTimelineRowsProps({
@@ -67,6 +117,7 @@ function renderTimelineRows(
   args: ThreadTimelineRowsFixtureArgs,
 ): ThreadTimelineRowsRenderResult {
   const harness = createQueryClientTestHarness();
+  args.seedQueryClient?.(harness.queryClient);
   const view = render(
     <ThreadTimelineRows {...threadTimelineRowsProps(args)} />,
     {
@@ -138,6 +189,123 @@ afterEach(() => {
 });
 
 describe("ThreadTimelineRows", () => {
+  it("renders agent-originated user rows with compact agent-message chrome", () => {
+    renderTimelineRows({
+      overrides: {
+        projectId: "project-1",
+      },
+      seedQueryClient: (queryClient) => {
+        queryClient.setQueryData<ThreadListEntry[]>(
+          threadListQueryKey({ archived: false, projectId: "project-1" }),
+          [
+            threadListEntry({
+              id: "thr_sender123",
+              projectId: "project-1",
+              title: "Frontend manager",
+              titleFallback: "Frontend manager",
+            }),
+          ],
+        );
+      },
+      timelineRows: [
+        conversationRow({
+          role: "user",
+          initiator: "agent",
+          senderThreadId: "thr_sender123",
+          text: '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nAgent-to-agent status update.',
+        }),
+      ],
+    });
+
+    const summaryButton = screen.getByRole("button", {
+      name: /Message from Frontend manager/u,
+    });
+    fireEvent.click(summaryButton);
+
+    const senderLink = screen.getByRole("link", { name: "Frontend manager" });
+    expect(senderLink.getAttribute("href")).toBe(
+      "/projects/project-1/threads/thr_sender123",
+    );
+    expect(screen.queryByText("thr_sender123")).toBeNull();
+    expect(screen.getByText("Agent-to-agent status update.")).toBeTruthy();
+    expect(screen.queryByText(/\[bb message from thread/u)).toBeNull();
+  });
+
+  it("updates cached sender titles without replacing timeline rows", async () => {
+    const senderThreadListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
+    const view = renderTimelineRows({
+      overrides: {
+        projectId: "project-1",
+      },
+      seedQueryClient: (queryClient) => {
+        queryClient.setQueryData<ThreadListEntry[]>(senderThreadListKey, [
+          threadListEntry({
+            id: "thr_sender123",
+            projectId: "project-1",
+            title: "Frontend manager",
+            titleFallback: "Frontend manager",
+          }),
+        ]);
+      },
+      timelineRows: [
+        conversationRow({
+          role: "user",
+          initiator: "agent",
+          senderThreadId: "thr_sender123",
+          text: "Agent-to-agent status update.",
+        }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Message from Frontend manager/u }),
+    ).toBeTruthy();
+
+    act(() => {
+      view.queryClient.setQueryData<ThreadListEntry[]>(
+        senderThreadListKey,
+        [
+          threadListEntry({
+            id: "thr_sender123",
+            projectId: "project-1",
+            title: "Renamed manager",
+            titleFallback: "Renamed manager",
+          }),
+        ],
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Message from Renamed manager/u }),
+      ).toBeTruthy();
+    });
+  });
+
+  it("renders system-originated user rows with compact BB system chrome", () => {
+    renderTimelineRows({
+      timelineRows: [
+        conversationRow({
+          role: "user",
+          initiator: "system",
+          senderThreadId: null,
+          text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
+        }),
+      ],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /System Message/u }),
+    );
+    expect(
+      screen.getByText("Scheduled nudge: daily-recap. Check ASYNC.md."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/\[bb system/u)).toBeNull();
+  });
+
   it("renders an unread divider before the first row newer than the frozen read cutoff", () => {
     renderTimelineRows({
       overrides: {
@@ -408,7 +576,6 @@ describe("ThreadTimelineRows", () => {
     expect(requestUrl.searchParams.get("turnId")).toBe("turn-1");
     expect(requestUrl.searchParams.get("sourceSeqStart")).toBe("10");
     expect(requestUrl.searchParams.get("sourceSeqEnd")).toBe("10");
-    expect(requestUrl.searchParams.get("managerTimelineView")).toBeNull();
   });
 
   it("retries lazy turn details from the error state", async () => {
@@ -453,63 +620,6 @@ describe("ThreadTimelineRows", () => {
       );
     });
     expect(requestCount).toBe(2);
-  });
-
-  it("keys lazy turn details by manager timeline view", async () => {
-    const requestedViews: string[] = [];
-    installFetchRoutes([
-      {
-        pathname: "/api/v1/threads/thread-1/timeline/turn-summary-details",
-        handler: (request) => {
-          const url = new URL(request.url);
-          const requestedView =
-            url.searchParams.get("managerTimelineView") ?? "conversation";
-          requestedViews.push(requestedView);
-          return jsonResponse({
-            rows: [
-              conversationRow({
-                id: `${requestedView}-detail-message`,
-                sourceSeqStart: 11,
-                text:
-                  requestedView === "standard"
-                    ? "Standard view details"
-                    : "Conversation view details",
-              }),
-            ],
-          });
-        },
-      },
-    ]);
-    const view = renderTimelineRows({
-      timelineRows: [turnRow()],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
-    await waitFor(() => {
-      expect(view.container.textContent ?? "").toContain(
-        "Conversation view details",
-      );
-    });
-
-    rerenderTimelineRows({
-      view,
-      timelineRows: [turnRow()],
-      overrides: {
-        managerTimelineView: "standard",
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
-    await waitFor(() => {
-      expect(view.container.textContent ?? "").toContain(
-        "Standard view details",
-      );
-    });
-
-    expect(requestedViews).toEqual(["conversation", "standard"]);
-    expect(view.container.textContent ?? "").not.toContain(
-      "Conversation view details",
-    );
   });
 
   it("reloads lazy turn details after the source sequence range changes", async () => {
@@ -625,7 +735,6 @@ describe("ThreadTimelineRows", () => {
     });
     view.queryClient.setQueryData(
       threadTimelineTurnSummaryDetailsQueryKey({
-        managerTimelineView: undefined,
         sourceSeqEnd: 10,
         sourceSeqStart: 10,
         threadId: "thread-1",
