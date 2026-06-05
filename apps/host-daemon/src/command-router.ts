@@ -51,6 +51,12 @@ interface ReadWriteLaneArgs<T> {
   work: () => Promise<T>;
 }
 
+interface SerialLaneArgs<T> {
+  key: string;
+  lanes: Map<string, Promise<void>>;
+  work: () => Promise<T>;
+}
+
 interface ReadWriteLaneIdleArgs {
   key: string;
   lanes: Map<string, ReadWriteLaneState>;
@@ -396,15 +402,11 @@ export class CommandRouter {
     key: string,
     work: () => Promise<T>,
   ): Promise<T> {
-    const previousTail = this.fileWriteLaneTails.get(key) ?? Promise.resolve();
-    const next = previousTail.catch(() => undefined).then(work);
-    const done = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.fileWriteLaneTails.set(key, done);
-    this.deleteFileWriteLaneWhenIdle(key, done);
-    return next;
+    return this.runInSerialLane({
+      key,
+      lanes: this.fileWriteLaneTails,
+      work,
+    });
   }
 
   private runInProviderProcessLane<T>(
@@ -424,35 +426,31 @@ export class CommandRouter {
     key: string,
     work: () => Promise<T>,
   ): Promise<T> {
-    const previousTail =
-      this.providerSessionLaneTails.get(key) ?? Promise.resolve();
+    return this.runInSerialLane({
+      key,
+      lanes: this.providerSessionLaneTails,
+      work,
+    });
+  }
+
+  private runInSerialLane<T>({
+    key,
+    lanes,
+    work,
+  }: SerialLaneArgs<T>): Promise<T> {
+    const previousTail = lanes.get(key) ?? Promise.resolve();
     const next = previousTail.catch(() => undefined).then(work);
     const done = next.then(
       () => undefined,
       () => undefined,
     );
-    this.providerSessionLaneTails.set(key, done);
-    this.deleteProviderSessionLaneWhenIdle(key, done);
+    lanes.set(key, done);
+    void done.then(() => {
+      if (lanes.get(key) === done) {
+        lanes.delete(key);
+      }
+    });
     return next;
-  }
-
-  private deleteFileWriteLaneWhenIdle(key: string, tail: Promise<void>): void {
-    void tail.then(() => {
-      if (this.fileWriteLaneTails.get(key) === tail) {
-        this.fileWriteLaneTails.delete(key);
-      }
-    });
-  }
-
-  private deleteProviderSessionLaneWhenIdle(
-    key: string,
-    tail: Promise<void>,
-  ): void {
-    void tail.then(() => {
-      if (this.providerSessionLaneTails.get(key) === tail) {
-        this.providerSessionLaneTails.delete(key);
-      }
-    });
   }
 
   private runInReadWriteLane<T>({

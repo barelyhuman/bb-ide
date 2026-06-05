@@ -72,6 +72,13 @@ interface ThreadStorageTarget {
   threadId: string;
 }
 
+interface UpsertTrackedThreadStateArgs {
+  entry: RuntimeEntry;
+  environmentId: string;
+  state: RuntimeThreadState;
+  threadId: string;
+}
+
 interface ApplicationDataTarget {
   applicationId: ApplicationId;
   appDataPath: string;
@@ -571,17 +578,17 @@ export class RuntimeManager {
     }
 
     const current = entry.threads.get(threadId);
-    entry.threads.set(threadId, {
-      activeTurnId: current?.activeTurnId ?? null,
-      providerId: providerId ?? current?.providerId ?? null,
-      providerThreadId,
-      status: "active",
-    });
-    this.trackedThreadStorageTargets.set(threadId, {
+    this.upsertTrackedThreadState({
+      entry,
       environmentId,
+      state: {
+        activeTurnId: current?.activeTurnId ?? null,
+        providerId: providerId ?? current?.providerId ?? null,
+        providerThreadId,
+        status: "active",
+      },
       threadId,
     });
-    this.ensureThreadStorageWatcher();
   }
 
   markThreadInactive(environmentId: string, threadId: string): void {
@@ -604,17 +611,17 @@ export class RuntimeManager {
     }
 
     const current = entry.threads.get(args.threadId);
-    entry.threads.set(args.threadId, {
-      activeTurnId: current?.activeTurnId ?? null,
-      providerId: args.providerId,
-      providerThreadId: current?.providerThreadId ?? null,
-      status: current?.status ?? "idle",
-    });
-    this.trackedThreadStorageTargets.set(args.threadId, {
+    this.upsertTrackedThreadState({
+      entry,
       environmentId: args.environmentId,
+      state: {
+        activeTurnId: current?.activeTurnId ?? null,
+        providerId: args.providerId,
+        providerThreadId: current?.providerThreadId ?? null,
+        status: current?.status ?? "idle",
+      },
       threadId: args.threadId,
     });
-    this.ensureThreadStorageWatcher();
   }
 
   recordThreadProviderSession(args: RecordThreadProviderSessionArgs): void {
@@ -624,17 +631,17 @@ export class RuntimeManager {
     }
 
     const current = entry.threads.get(args.threadId);
-    entry.threads.set(args.threadId, {
-      activeTurnId: current?.activeTurnId ?? null,
-      providerId: args.providerId,
-      providerThreadId: args.providerThreadId,
-      status: current?.status ?? "idle",
-    });
-    this.trackedThreadStorageTargets.set(args.threadId, {
+    this.upsertTrackedThreadState({
+      entry,
       environmentId: args.environmentId,
+      state: {
+        activeTurnId: current?.activeTurnId ?? null,
+        providerId: args.providerId,
+        providerThreadId: args.providerThreadId,
+        status: current?.status ?? "idle",
+      },
       threadId: args.threadId,
     });
-    this.ensureThreadStorageWatcher();
   }
 
   getThreadProviderSession(
@@ -664,12 +671,26 @@ export class RuntimeManager {
     if (!entry) {
       return;
     }
-    entry.threads.set(threadId, {
-      activeTurnId: turnId,
-      providerId: entry.threads.get(threadId)?.providerId ?? null,
-      providerThreadId,
-      status: "active",
+    this.upsertTrackedThreadState({
+      entry,
+      environmentId,
+      state: {
+        activeTurnId: turnId,
+        providerId: entry.threads.get(threadId)?.providerId ?? null,
+        providerThreadId,
+        status: "active",
+      },
+      threadId,
     });
+  }
+
+  private upsertTrackedThreadState({
+    entry,
+    environmentId,
+    state,
+    threadId,
+  }: UpsertTrackedThreadStateArgs): void {
+    entry.threads.set(threadId, state);
     this.trackedThreadStorageTargets.set(threadId, {
       environmentId,
       threadId,
