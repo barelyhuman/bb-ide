@@ -83,18 +83,18 @@ interactive Pi session.
 - `instructionMode` plumbed through `PiInstructionCommand`; adapter resolves to `appendSystemPrompt` (default) or `baseInstructions` (replace).
 - `sdk-session.ts` uses `appendSystemPromptOverride` on the append path; the `noExtensions/noSkills/noPromptTemplates/noThemes` loader is reached only on explicit replace.
 
-### Phase 5: Re-capture and compare fixtures — REMAINING
+### Phase 5: Live parity comparison — REMAINING
 
-- replay at least one targeted Pi fixture under the new append-default path.
-- compare raw tool names, event shapes, and rendered output against pre-fix captures.
-- Note: `packages/agent-provider-audit` was removed; audit/replay work now lives in `packages/replay-capture` and `packages/agent-fixtures`. Retarget any "audit doc" updates there.
+- run at least one targeted Pi session under the new append-default path.
+- compare raw tool names, event shapes, and rendered output against a direct Pi run.
+- Note: the old recorded provider fixture corpus was removed. Use live captures under `packages/replay-capture` when parity needs to be inspected.
 
 ## Exit Criteria
 
 Closing this plan requires:
 
-- a Pi fixture re-captured under append-default and compared end to end (Phase 5).
-- any remaining intentional differences between bb Pi sessions and direct Pi documented in the relevant package README under `packages/replay-capture/` or `packages/agent-fixtures/` (the old `packages/agent-provider-audit/README.md` no longer exists).
+- a Pi session captured under append-default and compared end to end (Phase 5).
+- any remaining intentional differences between bb Pi sessions and direct Pi documented in the relevant package README under `packages/replay-capture/`.
 
 Already satisfied:
 
@@ -106,7 +106,6 @@ Already satisfied:
 ### Automated
 
 - `pnpm exec turbo run test --filter=@bb/agent-runtime --force`
-- (the old `@bb/agent-provider-audit` filter no longer exists)
 
 ### Manual
 

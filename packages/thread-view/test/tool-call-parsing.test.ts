@@ -50,7 +50,7 @@ describe("tool-call shell parsing", () => {
     const command =
       "git ls-tree -d main packages/ | head -30\n" +
       'echo "==="\n' +
-      "git show main:.gitignore 2>/dev/null | grep -E 'agent-provider-audit|agent-fixtures' || echo \"(no matches)\"";
+      "git show main:.gitignore 2>/dev/null | grep -E 'legacy-audit|timeline-replay' || echo \"(no matches)\"";
 
     expect(
       parseShellCommandIntents(command),
@@ -58,7 +58,7 @@ describe("tool-call shell parsing", () => {
       {
         type: "search",
         cmd: command,
-        query: "agent-provider-audit|agent-fixtures",
+        query: "legacy-audit|timeline-replay",
         path: null,
       },
     ]);

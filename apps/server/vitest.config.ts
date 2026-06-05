@@ -6,10 +6,6 @@ export default defineConfig({
     conditions: ["source"],
     alias: workspaceTestAliases,
   },
-  benchmark: {
-    include: ["test/**/*.bench.ts"],
-    exclude: ["dist/**", "node_modules/**"],
-  },
   test: {
     silent: "passed-only",
     name: "@bb/server",

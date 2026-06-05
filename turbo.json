@@ -324,9 +324,6 @@
         "$TURBO_ROOT$/packages/templates/src/**"
       ]
     },
-    "bench": {
-      "dependsOn": []
-    },
     "test:integration": {
       "dependsOn": []
     },

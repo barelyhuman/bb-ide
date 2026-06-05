@@ -178,7 +178,7 @@ describe("timeline CLI rendering snapshots", () => {
       "",
       "    Remove legacy timeline bundle renderer",
       "",
-      " apps/server/test/helpers/timeline-benchmark.ts     |   27 +-",
+      " apps/server/test/helpers/lifecycle-commands.ts     |   27 +-",
       " packages/core-ui/src/format-timeline-text.ts       |  779 +-------",
       " packages/core-ui/src/thread-detail-rows.ts         | 1030 ----------",
     ].join("\n");

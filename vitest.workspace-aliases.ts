@@ -83,14 +83,6 @@ export const workspaceTestAliases = {
   "@bb/server": path.resolve(repoRoot, "apps/server/src/index.ts"),
   "@bb/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
   "@bb/logger": path.resolve(repoRoot, "packages/logger/src/index.ts"),
-  "@bb/agent-fixtures": path.resolve(
-    repoRoot,
-    "packages/agent-fixtures/src/index.ts",
-  ),
-  "@bb/agent-fixtures/load-browser": path.resolve(
-    repoRoot,
-    "packages/agent-fixtures/src/load-browser.ts",
-  ),
   "@bb/config/server": path.resolve(repoRoot, "packages/config/src/server.ts"),
   "@bb/server-contract": path.resolve(
     repoRoot,

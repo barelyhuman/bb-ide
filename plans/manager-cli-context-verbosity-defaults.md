@@ -70,10 +70,10 @@ Existing reports and audit notes point at the same product pressure:
 - `qa/manual-manager-runbook.md` explicitly validates that managers do not poll
   repeatedly, then instructs reviewers to inspect `bb thread log ... --json`
   and search for `bb thread show`, `bb thread list`, and `bb thread log`.
-- `packages/agent-provider-audit/README.md` documents the same readability
-  principle for provider timelines: full nested agent reports and command noise
-  can overwhelm the useful steps, so compact rendered output is valuable even
-  when raw data remains available.
+- Historical provider audit notes documented the same readability principle for
+  provider timelines: full nested agent reports and command noise can overwhelm
+  the useful steps, so compact rendered output is valuable even when raw data
+  remains available.
 
 ## Scope Decisions
 
