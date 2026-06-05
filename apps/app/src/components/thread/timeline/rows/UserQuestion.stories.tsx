@@ -3,6 +3,7 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline";
+import { questionRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -11,14 +12,6 @@ export default {
 
 interface TimelineStageProps {
   children: React.ReactNode;
-}
-
-interface QuestionRowOptions {
-  answers?: TimelineQuestionRow["answers"];
-  id: string;
-  lifecycle: TimelineQuestionRow["lifecycle"];
-  status: TimelineQuestionRow["status"];
-  statusReason?: string | null;
 }
 
 type TimelineQuestionRow = Extract<TimelineRow, { workKind: "question" }>;
@@ -55,39 +48,26 @@ const questions: TimelineQuestionRow["questions"] = [
   },
 ];
 
-function questionRow({
-  answers = null,
-  id,
-  lifecycle,
-  status,
-  statusReason = null,
-}: QuestionRowOptions): TimelineQuestionRow {
-  return {
-    id,
-    threadId: "thr_question_story",
-    turnId: "turn_question_story",
-    sourceSeqStart: 10,
-    sourceSeqEnd: 10,
-    startedAt: 1777340000000,
-    createdAt: 1777340000000,
-    kind: "work",
-    workKind: "question",
-    status,
-    interactionId: "pi_question_story",
-    lifecycle,
-    questions,
-    answers,
-    statusReason,
-  };
-}
+const questionBaseArgs = {
+  threadId: "thr_question_story",
+  turnId: "turn_question_story",
+  sourceSeqStart: 10,
+  sourceSeqEnd: 10,
+  startedAt: 1777340000000,
+  createdAt: 1777340000000,
+  interactionId: "pi_question_story",
+  questions,
+};
 
 const pendingQuestion = questionRow({
+  ...questionBaseArgs,
   id: "thr_question_story:question:pending",
   lifecycle: "pending",
   status: "pending",
 });
 
 const resolvingQuestion = questionRow({
+  ...questionBaseArgs,
   id: "thr_question_story:question:resolving",
   lifecycle: "resolving",
   status: "pending",
@@ -103,6 +83,7 @@ const resolvingQuestion = questionRow({
 });
 
 const answeredQuestion = questionRow({
+  ...questionBaseArgs,
   id: "thr_question_story:question:answered",
   lifecycle: "answered",
   status: "completed",
@@ -118,6 +99,7 @@ const answeredQuestion = questionRow({
 });
 
 const interruptedQuestion = questionRow({
+  ...questionBaseArgs,
   id: "thr_question_story:question:interrupted",
   lifecycle: "interrupted",
   status: "interrupted",
@@ -125,6 +107,7 @@ const interruptedQuestion = questionRow({
 });
 
 const expiredQuestion = questionRow({
+  ...questionBaseArgs,
   id: "thr_question_story:question:expired",
   lifecycle: "expired",
   status: "completed",

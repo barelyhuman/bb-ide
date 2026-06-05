@@ -1,5 +1,11 @@
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import {
+  commandRow,
+  conversationRow,
+  fileChangeRow,
+  turnRow,
+} from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -40,7 +46,7 @@ const baseProps = {
 // `completedAt` to demonstrate running, error, and interrupted turn states.
 // ---------------------------------------------------------------------------
 
-const assistantOpener: TimelineRow = {
+const assistantOpener: TimelineRow = conversationRow({
   id: "thr_zeb7z9afmw:assistant-text:35343",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -48,14 +54,12 @@ const assistantOpener: TimelineRow = {
   sourceSeqEnd: 35343,
   startedAt: 1777337120500,
   createdAt: 1777337121200,
-  kind: "conversation",
   role: "assistant",
   text: "I’m moving the active-thinking state into the main projection pass so we stop reconstructing it from events afterward. After that I’ll short-circuit the manager path and stop recomputing active-thinking inside the turn-summary-details loop.",
   attachments: null,
-  turnRequest: null,
-};
+});
 
-const commandSedAssistantStream: TimelineRow = {
+const commandSedAssistantStream: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_YrdwFQNVKDsaBvwc98oQ9qP4",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -63,8 +67,6 @@ const commandSedAssistantStream: TimelineRow = {
   sourceSeqEnd: 35347,
   startedAt: 1777337121300,
   createdAt: 1777337121800,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_YrdwFQNVKDsaBvwc98oQ9qP4",
   command:
@@ -73,7 +75,6 @@ const commandSedAssistantStream: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337121800,
   approvalStatus: null,
   activityIntents: [
     {
@@ -83,9 +84,10 @@ const commandSedAssistantStream: TimelineRow = {
       path: "packages/core-ui/src/assistant-stream-projection.ts",
     },
   ],
-};
+  durationMs: 500,
+});
 
-const commandSedTimelineHelpers: TimelineRow = {
+const commandSedTimelineHelpers: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_XF7ZEgp9XUvdErfdDi9zKDX6",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -93,8 +95,6 @@ const commandSedTimelineHelpers: TimelineRow = {
   sourceSeqEnd: 35349,
   startedAt: 1777337121900,
   createdAt: 1777337122300,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_XF7ZEgp9XUvdErfdDi9zKDX6",
   command:
@@ -103,7 +103,6 @@ const commandSedTimelineHelpers: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337122300,
   approvalStatus: null,
   activityIntents: [
     {
@@ -113,9 +112,10 @@ const commandSedTimelineHelpers: TimelineRow = {
       path: "packages/core-ui/src/timeline-message-helpers.ts",
     },
   ],
-};
+  durationMs: 400,
+});
 
-const commandSedVisibleText: TimelineRow = {
+const commandSedVisibleText: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_AcUMKIrd6rllJWdPYubsSTjL",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -123,8 +123,6 @@ const commandSedVisibleText: TimelineRow = {
   sourceSeqEnd: 35351,
   startedAt: 1777337122400,
   createdAt: 1777337122800,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_AcUMKIrd6rllJWdPYubsSTjL",
   command:
@@ -133,7 +131,6 @@ const commandSedVisibleText: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337122800,
   approvalStatus: null,
   activityIntents: [
     {
@@ -143,9 +140,10 @@ const commandSedVisibleText: TimelineRow = {
       path: "packages/core-ui/src/visible-text-buffer.ts",
     },
   ],
-};
+  durationMs: 400,
+});
 
-const assistantPlanning: TimelineRow = {
+const assistantPlanning: TimelineRow = conversationRow({
   id: "thr_zeb7z9afmw:assistant-text:35381",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -153,14 +151,12 @@ const assistantPlanning: TimelineRow = {
   sourceSeqEnd: 35381,
   startedAt: 1777337122900,
   createdAt: 1777337123000,
-  kind: "conversation",
   role: "assistant",
   text: "I’ve got the shape of the refactor now. The key is to make the flat projection pass return both durable messages and ephemeral `activeThinking`, then use that one result everywhere instead of rebuilding lifecycle from raw events afterward.",
   attachments: null,
-  turnRequest: null,
-};
+});
 
-const fileChangeAssistantStream: TimelineRow = {
+const fileChangeAssistantStream: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35564",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -168,8 +164,6 @@ const fileChangeAssistantStream: TimelineRow = {
   sourceSeqEnd: 35564,
   startedAt: 1777337123100,
   createdAt: 1777337123900,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_fjGvl1fFJU7cAcw46FcSnbjJ",
   change: {
@@ -191,9 +185,9 @@ const fileChangeAssistantStream: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeIndex: TimelineRow = {
+const fileChangeIndex: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35573",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -201,8 +195,6 @@ const fileChangeIndex: TimelineRow = {
   sourceSeqEnd: 35573,
   startedAt: 1777337124000,
   createdAt: 1777337125300,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_BXK77XTyviYmWUVNOpPG5nwJ",
   change: {
@@ -227,9 +219,9 @@ const fileChangeIndex: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeTimelineService: TimelineRow = {
+const fileChangeTimelineService: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35595",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -237,8 +229,6 @@ const fileChangeTimelineService: TimelineRow = {
   sourceSeqEnd: 35595,
   startedAt: 1777337125400,
   createdAt: 1777337127100,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_v3QQJnCbGh2ErXIJdCf4hX4N",
   change: {
@@ -276,9 +266,9 @@ const fileChangeTimelineService: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeActiveThinkingDelete: TimelineRow = {
+const fileChangeActiveThinkingDelete: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35611",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -286,8 +276,6 @@ const fileChangeActiveThinkingDelete: TimelineRow = {
   sourceSeqEnd: 35611,
   startedAt: 1777337127200,
   createdAt: 1777337127900,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_1JWzaNZyTpVIrB8reX73YYUN",
   change: {
@@ -300,9 +288,9 @@ const fileChangeActiveThinkingDelete: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeToViewMessages: TimelineRow = {
+const fileChangeToViewMessages: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35671",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -310,8 +298,6 @@ const fileChangeToViewMessages: TimelineRow = {
   sourceSeqEnd: 35671,
   startedAt: 1777337128000,
   createdAt: 1777337129500,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_3qZxJB5I3kVdSM4pPiBCTm92",
   change: {
@@ -336,7 +322,7 @@ const fileChangeToViewMessages: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // Children that live INSIDE the turn body. Per the projection, completed
 // turns strip user messages (ungroupable) and the terminal assistant message
@@ -370,7 +356,7 @@ function buildTurnRow({
   startedAt,
   createdAt,
 }: BuildTurnRowArgs): TimelineTurnRow {
-  return {
+  return turnRow({
     id: "thr_zeb7z9afmw:019dd185-ef12-7d50-aa48-47882e9c8aaf:turn",
     threadId: "thr_zeb7z9afmw",
     turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -378,12 +364,11 @@ function buildTurnRow({
     sourceSeqEnd: 35671,
     startedAt,
     createdAt,
-    kind: "turn",
     status,
     summaryCount: turnChildren.length,
-    completedAt,
+    durationMs: completedAt === null ? null : completedAt - startedAt,
     children: turnChildren,
-  };
+  });
 }
 
 const completedTurnRow = buildTurnRow({

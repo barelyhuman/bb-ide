@@ -3,6 +3,7 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline";
+import { imageViewRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -69,7 +70,7 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-const completedImageView: TimelineRow = {
+const completedImageView: TimelineRow = imageViewRow({
   id: "thr_image_view:image-view:call_K2JwaDpg7y69AmcFsZyu3jQi",
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -77,13 +78,11 @@ const completedImageView: TimelineRow = {
   sourceSeqEnd: 43,
   startedAt: STARTED_AT,
   createdAt: STARTED_AT + 180,
-  kind: "work",
-  workKind: "image-view",
   status: "completed",
   callId: "call_K2JwaDpg7y69AmcFsZyu3jQi",
   path: "/tmp/sightglass-quote-merge-check/dashboard-main.png",
-  completedAt: STARTED_AT + 180,
-};
+  durationMs: STARTED_AT + 180 - (STARTED_AT),
+});
 
 const runningImageView: TimelineRow = {
   ...completedImageView,

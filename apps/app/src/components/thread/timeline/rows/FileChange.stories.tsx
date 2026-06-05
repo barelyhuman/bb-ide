@@ -4,6 +4,7 @@ import {
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import { fileChangeRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -45,7 +46,7 @@ function ThemedTimelineRows(props: ThemedTimelineRowsProps) {
 
 // thr_uphts6irka, sequence 436 — adds pagination cursor + page metadata
 // schemas to api-types.ts. Small unified diff, single hunk + small tail.
-const updateApiTypes: TimelineRow = {
+const updateApiTypes: TimelineRow = fileChangeRow({
   id: "thr_uphts6irka:file-change:call_tzoOVFps3qEslIAKn7T2Q3Vx:0",
   threadId: "thr_uphts6irka",
   turnId: "019df6bc-b889-73a1-8ce6-749c358a8f70",
@@ -53,8 +54,6 @@ const updateApiTypes: TimelineRow = {
   sourceSeqEnd: 436,
   startedAt: 1777961335114,
   createdAt: 1777961335129,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_tzoOVFps3qEslIAKn7T2Q3Vx",
   change: {
@@ -67,12 +66,12 @@ const updateApiTypes: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // thr_jb5xwguekp, sequence 33995 — agent created
 // packages/thread-view/test/format-helpers.test.ts. Real new-file content; no
 // `+`/`-` prefixes, so diffStats counts plain non-empty content lines.
-const addFormatHelpersTest: TimelineRow = {
+const addFormatHelpersTest: TimelineRow = fileChangeRow({
   id: "thr_jb5xwguekp:file-change:call_7OKBsczb0xrotVbyKMY39CRj:0",
   threadId: "thr_jb5xwguekp",
   turnId: "019ded48-07f6-76d3-aa26-7bc77841bf6b",
@@ -80,8 +79,6 @@ const addFormatHelpersTest: TimelineRow = {
   sourceSeqEnd: 33995,
   startedAt: 1777802451595,
   createdAt: 1777802451638,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_7OKBsczb0xrotVbyKMY39CRj",
   change: {
@@ -94,13 +91,13 @@ const addFormatHelpersTest: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // thr_zeb7z9afmw, sequence 7834 — agent deleted
 // packages/core-ui/src/active-thinking.ts. The projection stores the deleted
 // file's full prior contents (no `-` prefixes), so diffStats falls back to
 // counting plain lines as `removed`.
-const deleteActiveThinking: TimelineRow = {
+const deleteActiveThinking: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:file-change:call_gV1Y8zJp5ADwT0Rq9j4TGiqj:0",
   threadId: "thr_zeb7z9afmw",
   turnId: "019db687-acc3-7ce2-8adc-70e67c34c403",
@@ -108,8 +105,6 @@ const deleteActiveThinking: TimelineRow = {
   sourceSeqEnd: 7834,
   startedAt: 1776884335315,
   createdAt: 1776884335454,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_gV1Y8zJp5ADwT0Rq9j4TGiqj",
   change: {
@@ -122,12 +117,12 @@ const deleteActiveThinking: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // thr_4gfmxbsa64, sequence 1910 — large refactor of ThreadFollowUpComposer.tsx
 // (extract QueuedMessageItem into a memoized component). Real unified diff
 // across multiple hunks with substantial added + removed line counts.
-const largeRefactorComposer: TimelineRow = {
+const largeRefactorComposer: TimelineRow = fileChangeRow({
   id: "thr_4gfmxbsa64:file-change:call_xFKgOuQKzQxP1vthvrxyx9PS:0",
   threadId: "thr_4gfmxbsa64",
   turnId: "019ddce4-45da-70e3-bdf3-e9cd141b653a",
@@ -135,8 +130,6 @@ const largeRefactorComposer: TimelineRow = {
   sourceSeqEnd: 1910,
   startedAt: 1777528569582,
   createdAt: 1777528569827,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_xFKgOuQKzQxP1vthvrxyx9PS",
   change: {
@@ -149,7 +142,7 @@ const largeRefactorComposer: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // Lifecycle variants reuse the real updateApiTypes change. status=pending /
 // error / interrupted and the approval-gate states aren't available as

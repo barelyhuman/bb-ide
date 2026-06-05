@@ -1,5 +1,6 @@
 import type { TimelineRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import { webSearchRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -21,7 +22,7 @@ const baseProps = {
 // ---------------------------------------------------------------------------
 
 // thr_yr83zs2m7f — sequence 7467. Three editor-CLI doc queries.
-const multiQuerySearch: TimelineRow = {
+const multiQuerySearch: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:web-search:ws_0e85bcec855f8f510169eff17843408198a4a02ff7f35a29bb",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd144-eb1e-7bd1-b4a0-a966e1fb56e0",
@@ -29,8 +30,6 @@ const multiQuerySearch: TimelineRow = {
   sourceSeqEnd: 7467,
   startedAt: 1777332611885,
   createdAt: 1777332611885,
-  kind: "work",
-  workKind: "web-search",
   status: "completed",
   callId: "ws_0e85bcec855f8f510169eff17843408198a4a02ff7f35a29bb",
   queries: [
@@ -38,11 +37,11 @@ const multiQuerySearch: TimelineRow = {
     "Sublime Text command line line number official",
     "Zed editor command line line number docs",
   ],
-  completedAt: 1777332611885,
-};
+  durationMs: 0,
+});
 
 // thr_zeb7z9afmw — sequence 36100. Single short query with quoted symbol.
-const singleQuerySearch: TimelineRow = {
+const singleQuerySearch: TimelineRow = webSearchRow({
   id: "thr_zeb7z9afmw:web-search:ws_00cfb2afcbffe81a0169f0041d73e4819b8801cbc6cfc3ff66",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -50,16 +49,14 @@ const singleQuerySearch: TimelineRow = {
   sourceSeqEnd: 36100,
   startedAt: 1777337374741,
   createdAt: 1777337374741,
-  kind: "work",
-  workKind: "web-search",
   status: "completed",
   callId: "ws_00cfb2afcbffe81a0169f0041d73e4819b8801cbc6cfc3ff66",
   queries: ['"resolveTimelineTurnSummaryDetailsRows"'],
-  completedAt: 1777337374741,
-};
+  durationMs: 0,
+});
 
 // thr_p93awt656h — sequence 3739. Single longer query about TanStack Query v5.
-const tanstackSearch: TimelineRow = {
+const tanstackSearch: TimelineRow = webSearchRow({
   id: "thr_p93awt656h:web-search:ws_034f339785f02f2b0169f23ac02c9881908f9a6bc38167bcbc",
   threadId: "thr_p93awt656h",
   turnId: "019dda34-6439-7bf0-b35c-371f3d8c4946",
@@ -67,19 +64,17 @@ const tanstackSearch: TimelineRow = {
   sourceSeqEnd: 3739,
   startedAt: 1777482436862,
   createdAt: 1777482436862,
-  kind: "work",
-  workKind: "web-search",
   status: "completed",
   callId: "ws_034f339785f02f2b0169f23ac02c9881908f9a6bc38167bcbc",
   queries: [
     "TanStack Query v5 placeholderData isPlaceholderData error status isError isLoadingError official docs",
   ],
-  completedAt: 1777482436862,
-};
+  durationMs: 0,
+});
 
 // Running — based on the same thr_yr83zs2m7f search, but mid-flight: status=pending,
 // completedAt null. startedAt/createdAt = Date.now() so the "running" timing reads live.
-const runningSearch: TimelineRow = {
+const runningSearch: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:web-search:ws_running",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd144-eb1e-7bd1-b4a0-a966e1fb56e0",
@@ -87,8 +82,6 @@ const runningSearch: TimelineRow = {
   sourceSeqEnd: 7467,
   startedAt: Date.now(),
   createdAt: Date.now(),
-  kind: "work",
-  workKind: "web-search",
   status: "pending",
   callId: "ws_running",
   queries: [
@@ -96,13 +89,13 @@ const runningSearch: TimelineRow = {
     "Sublime Text command line line number official",
     "Zed editor command line line number docs",
   ],
-  completedAt: null,
-};
+  durationMs: null,
+});
 
 // Error — same shape as the multi-query search but flipped to status=error.
 // No real "errored" web-search rows exist in ~/.bb-dev/bb.db; we reuse a real
 // queries payload and surface the error state.
-const erroredSearch: TimelineRow = {
+const erroredSearch: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:web-search:ws_errored",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd144-eb1e-7bd1-b4a0-a966e1fb56e0",
@@ -110,19 +103,17 @@ const erroredSearch: TimelineRow = {
   sourceSeqEnd: 7473,
   startedAt: 1777332628546,
   createdAt: 1777332628546,
-  kind: "work",
-  workKind: "web-search",
   status: "error",
   callId: "ws_errored",
   queries: [
     "site:code.visualstudio.com command line interface --goto VS Code",
     "site:code.visualstudio.com vscode command line --goto",
   ],
-  completedAt: 1777332628546,
-};
+  durationMs: 0,
+});
 
 // Interrupted — agent cancelled mid-search.
-const interruptedSearch: TimelineRow = {
+const interruptedSearch: TimelineRow = webSearchRow({
   id: "thr_fjav9z98vu:web-search:ws_interrupted",
   threadId: "thr_fjav9z98vu",
   turnId: "019df55a-9d47-74c2-87ea-458fa28febf6",
@@ -130,16 +121,14 @@ const interruptedSearch: TimelineRow = {
   sourceSeqEnd: 1693,
   startedAt: 1777938068368,
   createdAt: 1777938068368,
-  kind: "work",
-  workKind: "web-search",
   status: "interrupted",
   callId: "ws_interrupted",
   queries: [
     "openai codex github thread archived turn/start cannot resume archived thread",
     "github openai codex app-server turn/start archived thread archive_thread.rs",
   ],
-  completedAt: null,
-};
+  durationMs: null,
+});
 
 export function Overview() {
   return (

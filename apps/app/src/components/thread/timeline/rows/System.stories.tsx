@@ -1,5 +1,6 @@
 import type { TimelineRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import { systemRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -28,7 +29,7 @@ const baseProps = {
 // thr_sjgc9pafri (env_etyr7f84cg) — provisioning still active. The detail is
 // the formatted transcript (steps with elapsed durations) the agent renders
 // while the worktree is being prepared.
-const provisioningPending: TimelineRow = {
+const provisioningPending: TimelineRow = systemRow({
   id: "thr_sjgc9pafri:op:thread-provisioning:tpv_4if68xgg7d",
   threadId: "thr_sjgc9pafri",
   turnId: null,
@@ -36,7 +37,6 @@ const provisioningPending: TimelineRow = {
   sourceSeqEnd: 28,
   startedAt: Date.now() - 9_000,
   createdAt: Date.now(),
-  kind: "system",
   systemKind: "operation",
   operationKind: "thread-provisioning",
   title: "Provisioning thread",
@@ -55,11 +55,11 @@ const provisioningPending: TimelineRow = {
     "Progress: resolved 1094, reused 1093, downloaded 0, added 877",
   status: "pending",
   completedAt: null,
-};
+});
 
 // thr_sjgc9pafri provisioning — completed shape. Title flips to "Provisioned
 // thread", detail keeps the transcript and gains the terminal duration line.
-const provisioningCompleted: TimelineRow = {
+const provisioningCompleted: TimelineRow = systemRow({
   id: "thr_sjgc9pafri:op:thread-provisioning:tpv_4if68xgg7d:completed",
   threadId: "thr_sjgc9pafri",
   turnId: null,
@@ -67,7 +67,6 @@ const provisioningCompleted: TimelineRow = {
   sourceSeqEnd: 47,
   startedAt: 1778027661741,
   createdAt: 1778027670469,
-  kind: "system",
   systemKind: "operation",
   operationKind: "thread-provisioning",
   title: "Provisioned thread",
@@ -79,14 +78,14 @@ const provisioningCompleted: TimelineRow = {
     "Provisioned thread (8.7s)",
   status: "completed",
   completedAt: 1778027670469,
-};
+});
 
 // thr_iqcz6et4rd — `thread/compacted` event. The projector inserts a
 // "Compacting context" row at compaction-begin and rewrites the title to
 // "Context compacted" once the lifecycle ends. Real `thread/compacted`
 // events carry no detail — the parser only sets a title and status. The row
 // is therefore not expandable in production.
-const compactionCompleted: TimelineRow = {
+const compactionCompleted: TimelineRow = systemRow({
   id: "thr_iqcz6et4rd:op:compaction:turn-019dab12",
   threadId: "thr_iqcz6et4rd",
   turnId: "019dab12-44f1-7c10-9af3-7a85c3f2b1d2",
@@ -94,19 +93,18 @@ const compactionCompleted: TimelineRow = {
   sourceSeqEnd: 4231,
   startedAt: 1777890113200,
   createdAt: 1777890119840,
-  kind: "system",
   systemKind: "operation",
   operationKind: "compaction",
   title: "Context compacted",
   detail: null,
   status: "completed",
   completedAt: 1777890119840,
-};
+});
 
 // "Compacting context" while the lifecycle is mid-flight. Triggered by an
 // `item/started` event with `item.type: "contextCompaction"` (see
 // `compaction-lifecycle.ts`). status=pending, detail=null in production.
-const compactionPending: TimelineRow = {
+const compactionPending: TimelineRow = systemRow({
   id: "thr_iqcz6et4rd:op:compaction:turn-019dab15",
   threadId: "thr_iqcz6et4rd",
   turnId: "019dab15-44f1-7c10-9af3-7a85c3f2b1d2",
@@ -114,20 +112,19 @@ const compactionPending: TimelineRow = {
   sourceSeqEnd: 4350,
   startedAt: Date.now(),
   createdAt: Date.now(),
-  kind: "system",
   systemKind: "operation",
   operationKind: "compaction",
   title: "Compacting context",
   detail: null,
   status: "pending",
   completedAt: null,
-};
+});
 
 // thr_m8dsv5hjpi — `system/thread/interrupted` event with reason
 // "manual-stop". `parseOperationMessage` maps the reason to a title via
 // threadInterruptedTitle() and sets status="interrupted". Detail is null:
 // the interrupted projector emits no body text.
-const threadInterruptedManualStop: TimelineRow = {
+const threadInterruptedManualStop: TimelineRow = systemRow({
   id: "thr_m8dsv5hjpi:op:thread-interrupted:1776810312",
   threadId: "thr_m8dsv5hjpi",
   turnId: null,
@@ -135,19 +132,18 @@ const threadInterruptedManualStop: TimelineRow = {
   sourceSeqEnd: 318,
   startedAt: 1776810312000,
   createdAt: 1776810312000,
-  kind: "system",
   systemKind: "operation",
   operationKind: "thread-interrupted",
   title: "Stopped manually",
   detail: null,
   status: "interrupted",
   completedAt: 1776810312000,
-};
+});
 
 // thr_m22cr9ggq7 — provider/unhandled SDK system event from claude-code.
 // Title comes from humanizeRawType("sdk/system") + provider name; detail
 // is built by buildProviderUnhandledDetail() and includes the raw payload.
-const providerUnhandled: TimelineRow = {
+const providerUnhandled: TimelineRow = systemRow({
   id: "thr_m22cr9ggq7:op:provider-unhandled:1776898870",
   threadId: "thr_m22cr9ggq7",
   turnId: null,
@@ -155,7 +151,6 @@ const providerUnhandled: TimelineRow = {
   sourceSeqEnd: 5612,
   startedAt: 1776898870858,
   createdAt: 1776898870858,
-  kind: "system",
   systemKind: "operation",
   operationKind: "provider-unhandled",
   title: "Unhandled Claude Code event",
@@ -184,12 +179,12 @@ const providerUnhandled: TimelineRow = {
     ),
   status: "completed",
   completedAt: 1776898870858,
-};
+});
 
 // provider/warning, category=general — the projector emits a generic
 // "warning" operation. We lift the human title from a real model
 // rate-limit notice the runtime surfaces alongside provider/error events.
-const providerWarning: TimelineRow = {
+const providerWarning: TimelineRow = systemRow({
   id: "thr_tjgey58466:op:warning:1777884800",
   threadId: "thr_tjgey58466",
   turnId: null,
@@ -197,7 +192,6 @@ const providerWarning: TimelineRow = {
   sourceSeqEnd: 2104,
   startedAt: 1777884800000,
   createdAt: 1777884800000,
-  kind: "system",
   systemKind: "operation",
   operationKind: "warning",
   title: "Approaching rate limit",
@@ -205,11 +199,11 @@ const providerWarning: TimelineRow = {
     "You are within 10% of your weekly usage limit. The provider will throttle requests once the limit is reached.",
   status: "completed",
   completedAt: 1777884800000,
-};
+});
 
 // provider/warning with category=deprecation — title becomes
 // "Deprecation notice" and detail joins the summary + details lines.
-const deprecationNotice: TimelineRow = {
+const deprecationNotice: TimelineRow = systemRow({
   id: "thr_tjgey58466:op:deprecation:1777885200",
   threadId: "thr_tjgey58466",
   turnId: null,
@@ -217,7 +211,6 @@ const deprecationNotice: TimelineRow = {
   sourceSeqEnd: 2156,
   startedAt: 1777885200000,
   createdAt: 1777885200000,
-  kind: "system",
   systemKind: "operation",
   operationKind: "deprecation",
   title: "Deprecation notice",
@@ -226,13 +219,13 @@ const deprecationNotice: TimelineRow = {
     "Switch to `text_editor_20250124`. The old name will stop being accepted in a future API version.",
   status: "completed",
   completedAt: 1777885200000,
-};
+});
 
 // system/operation with operation="ownership_change", action="assign". The
 // projector routes this to the manager-assignment row variant, which
 // requires `status` and a `managerAssignment` object. Real event from
 // thr_wxmxksux4w (assigned to manager thr_bj3p5vk9py "Manager").
-const managerAssignmentAssign: TimelineRow = {
+const managerAssignmentAssign: TimelineRow = systemRow({
   id: "thr_wxmxksux4w:op:manager-assignment:evt_vvidja2pjg",
   threadId: "thr_wxmxksux4w",
   turnId: null,
@@ -240,7 +233,6 @@ const managerAssignmentAssign: TimelineRow = {
   sourceSeqEnd: 14,
   startedAt: 1777680600000,
   createdAt: 1777680600000,
-  kind: "system",
   systemKind: "operation",
   operationKind: "manager-assignment",
   title: "Thread assigned to manager",
@@ -254,12 +246,12 @@ const managerAssignmentAssign: TimelineRow = {
     nextManagerThreadId: "thr_bj3p5vk9py",
     nextManagerThreadTitle: "Manager",
   },
-};
+});
 
 // Manager-assignment release. Construct a plausible row using the same
 // schema; ownership_change action="release" titles via the manager-assignment
 // title builder. The manager link points back to the previous parent thread.
-const managerAssignmentRelease: TimelineRow = {
+const managerAssignmentRelease: TimelineRow = systemRow({
   id: "thr_wxmxksux4w:op:manager-assignment:release",
   threadId: "thr_wxmxksux4w",
   turnId: null,
@@ -267,7 +259,6 @@ const managerAssignmentRelease: TimelineRow = {
   sourceSeqEnd: 9_412,
   startedAt: 1777724900000,
   createdAt: 1777724900000,
-  kind: "system",
   systemKind: "operation",
   operationKind: "manager-assignment",
   title: "Thread released from manager",
@@ -281,10 +272,10 @@ const managerAssignmentRelease: TimelineRow = {
     nextManagerThreadId: null,
     nextManagerThreadTitle: null,
   },
-};
+});
 
 // Manager-assignment transfer between two real manager threads.
-const managerAssignmentTransfer: TimelineRow = {
+const managerAssignmentTransfer: TimelineRow = systemRow({
   id: "thr_wxmxksux4w:op:manager-assignment:transfer",
   threadId: "thr_wxmxksux4w",
   turnId: null,
@@ -292,7 +283,6 @@ const managerAssignmentTransfer: TimelineRow = {
   sourceSeqEnd: 11_004,
   startedAt: 1777800100000,
   createdAt: 1777800100000,
-  kind: "system",
   systemKind: "operation",
   operationKind: "manager-assignment",
   title: "Thread transferred to new manager",
@@ -306,12 +296,12 @@ const managerAssignmentTransfer: TimelineRow = {
     nextManagerThreadId: "thr_mdg94kvcz8",
     nextManagerThreadTitle: "Frontend Manager",
   },
-};
+});
 
 // Non-operation system row, systemKind="debug". The projector emits these
 // for raw provider events when debug routing is enabled — title is the
 // rawType, detail is the JSON payload.
-const debugSystemRow: TimelineRow = {
+const debugSystemRow: TimelineRow = systemRow({
   id: "thr_m22cr9ggq7:debug:1776898812",
   threadId: "thr_m22cr9ggq7",
   turnId: null,
@@ -319,7 +309,6 @@ const debugSystemRow: TimelineRow = {
   sourceSeqEnd: 5400,
   startedAt: 1776898812000,
   createdAt: 1776898812000,
-  kind: "system",
   systemKind: "debug",
   title: "sdk/system",
   detail: JSON.stringify(
@@ -341,12 +330,12 @@ const debugSystemRow: TimelineRow = {
     2,
   ),
   status: null,
-};
+});
 
 // Non-operation system row, systemKind="error". Real provider/error
 // payload from thr_u3r2maxtsx — surfaced when the runtime emits a
 // provider-level failure. Detail is the model-not-found message.
-const errorSystemRow: TimelineRow = {
+const errorSystemRow: TimelineRow = systemRow({
   id: "thr_u3r2maxtsx:error:provider:1777640200",
   threadId: "thr_u3r2maxtsx",
   turnId: null,
@@ -354,19 +343,18 @@ const errorSystemRow: TimelineRow = {
   sourceSeqEnd: 188,
   startedAt: 1777640200000,
   createdAt: 1777640200000,
-  kind: "system",
   systemKind: "error",
   title: "Provider error",
   detail:
     "There's an issue with the selected model (opus-4.7). It may not exist or you may not have access to it. Run --model to pick a different model.",
   status: "error",
-};
+});
 
 // Non-operation system row, systemKind="reconnect". Surfaced while the client
 // reconnects to a thread after a transport drop. A reconnect row is a transient
 // informational marker, not in-progress work, so it carries no lifecycle status
 // (status=null) — it never shimmers or lingers as "pending" once superseded.
-const reconnectSystemRow: TimelineRow = {
+const reconnectSystemRow: TimelineRow = systemRow({
   id: "thr_zeb7z9afmw:reconnect:current",
   threadId: "thr_zeb7z9afmw",
   turnId: null,
@@ -374,12 +362,11 @@ const reconnectSystemRow: TimelineRow = {
   sourceSeqEnd: 36_810,
   startedAt: Date.now(),
   createdAt: Date.now(),
-  kind: "system",
   systemKind: "reconnect",
   title: "Reconnecting to thread stream",
   detail: null,
   status: null,
-};
+});
 
 export function Operations() {
   return (

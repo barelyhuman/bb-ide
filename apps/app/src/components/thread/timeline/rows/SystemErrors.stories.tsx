@@ -7,6 +7,7 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineRowsProps,
 } from "@/components/thread/timeline";
+import { systemRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -66,7 +67,7 @@ const baseProps: TimelineRowsStoryBaseProps = {
 // collapses consecutive reconnect rows in place (appendRows), so the timeline
 // shows a single reconnect row holding the latest progress ("Reconnecting...
 // 5/5"), not one row per attempt. The terminal failure is a separate error row.
-const providerStreamReconnect: TimelineNonOperationSystemRow = {
+const providerStreamReconnect: TimelineNonOperationSystemRow = systemRow({
   id: "thr_ggp8mmze2q:error:5951",
   threadId: "thr_ggp8mmze2q",
   turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
@@ -74,15 +75,14 @@ const providerStreamReconnect: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 5951,
   startedAt: 1778992975767,
   createdAt: 1778992975767,
-  kind: "system",
   systemKind: "reconnect",
   title: "Reconnecting... 5/5",
   detail:
     "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
   status: null,
-};
+});
 
-const providerStreamFinalFailure: TimelineNonOperationSystemRow = {
+const providerStreamFinalFailure: TimelineNonOperationSystemRow = systemRow({
   id: "thr_ggp8mmze2q:error:5952",
   threadId: "thr_ggp8mmze2q",
   turnId: "019e3439-7692-7691-832f-a015ebaa50f5",
@@ -90,18 +90,14 @@ const providerStreamFinalFailure: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 5952,
   startedAt: 1778992981527,
   createdAt: 1778992981527,
-  kind: "system",
   systemKind: "error",
-  // willRetry=false terminal failure. The underlying message is too long to
-  // read as a one-line title, so the projector uses a generic "Provider error"
-  // title and keeps the full message in the (expandable) body.
   title: "Provider error",
   detail:
     "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)",
   status: "error",
-};
+});
 
-const providerChildProcessTimeout: TimelineNonOperationSystemRow = {
+const providerChildProcessTimeout: TimelineNonOperationSystemRow = systemRow({
   id: "thr_5cs6d5h7gu:error:19450",
   threadId: "thr_5cs6d5h7gu",
   turnId: "019e343a-076f-7a62-ac98-fb36f984b881",
@@ -109,14 +105,13 @@ const providerChildProcessTimeout: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 19450,
   startedAt: 1778993228124,
   createdAt: 1778993228124,
-  kind: "system",
   systemKind: "reconnect",
   title: "Reconnecting... 3/5",
   detail: "timeout waiting for child process to exit",
   status: null,
-};
+});
 
-const providerOverloaded: TimelineNonOperationSystemRow = {
+const providerOverloaded: TimelineNonOperationSystemRow = systemRow({
   id: "thr_s7nr8hdsyf:error:416",
   threadId: "thr_s7nr8hdsyf",
   turnId: "turn_725060f798c8497a_1",
@@ -124,16 +119,13 @@ const providerOverloaded: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 416,
   startedAt: 1778871667729,
   createdAt: 1778871667729,
-  kind: "system",
   systemKind: "error",
-  // Short enough to read inline, so the message is the title and the duplicate
-  // body is dropped — a single non-expandable line.
   title: "API Error: Overloaded",
   detail: null,
   status: "error",
-};
+});
 
-const providerRateLimit: TimelineNonOperationSystemRow = {
+const providerRateLimit: TimelineNonOperationSystemRow = systemRow({
   id: "thr_axe9q6zfcj:error:48",
   threadId: "thr_axe9q6zfcj",
   turnId: "turn_f7e4049aca264187_1",
@@ -141,14 +133,13 @@ const providerRateLimit: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 48,
   startedAt: 1777934876290,
   createdAt: 1777934876290,
-  kind: "system",
   systemKind: "error",
   title: "You've hit your limit · resets 7:50pm (America/Los_Angeles)",
   detail: null,
   status: "error",
-};
+});
 
-const providerModelUnavailable: TimelineNonOperationSystemRow = {
+const providerModelUnavailable: TimelineNonOperationSystemRow = systemRow({
   id: "thr_u3r2maxtsx:error:10",
   threadId: "thr_u3r2maxtsx",
   turnId: "turn_bc782e4115754eb2_1",
@@ -156,18 +147,14 @@ const providerModelUnavailable: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 10,
   startedAt: 1777871877997,
   createdAt: 1777871877997,
-  kind: "system",
   systemKind: "error",
-  // The message is too long to read as a one-line title, so the projector uses
-  // a generic "Provider error" title and keeps the full text in the expandable
-  // body — the whole error stays reachable instead of being truncated away.
   title: "Provider error",
   detail:
     "There's an issue with the selected model (opus-4.7). It may not exist or you may not have access to it. Run --model to pick a different model.",
   status: "error",
-};
+});
 
-const systemTurnSubmitTooLarge: TimelineNonOperationSystemRow = {
+const systemTurnSubmitTooLarge: TimelineNonOperationSystemRow = systemRow({
   id: "thr_wu5sexdwxn:error:2307",
   threadId: "thr_wu5sexdwxn",
   turnId: null,
@@ -175,14 +162,13 @@ const systemTurnSubmitTooLarge: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 2307,
   startedAt: 1778610066610,
   createdAt: 1778610066610,
-  kind: "system",
   systemKind: "error",
   title: "Command turn.submit failed",
   detail: "Input exceeds the maximum length of 1048576 characters.",
   status: "error",
-};
+});
 
-const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = {
+const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = systemRow({
   id: "thr_2twyaj9bbg:error:5",
   threadId: "thr_2twyaj9bbg",
   turnId: null,
@@ -190,7 +176,6 @@ const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = {
   sourceSeqEnd: 5,
   startedAt: 1778565234271,
   createdAt: 1778565234271,
-  kind: "system",
   systemKind: "error",
   title: "Command thread.start failed",
   detail:
@@ -205,7 +190,7 @@ const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = {
     "    at defaultResolve (node:internal/modules/esm/resolve:983:11)\n" +
     "    at ModuleLoader.defaultReso",
   status: "error",
-};
+});
 
 const providerStreamDisconnectRows: TimelineRow[] = [
   providerStreamReconnect,

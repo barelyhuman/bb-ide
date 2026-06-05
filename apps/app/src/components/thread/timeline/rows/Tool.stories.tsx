@@ -1,5 +1,6 @@
 import type { TimelineRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import { toolRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -26,7 +27,7 @@ const baseProps = {
 // thr_yn2i6jeaca, seq 760/761, turn turn_8840389c92b04db7_1 — ToolSearch
 // resolving a deferred TodoWrite schema. Tiny arguments object, one-line
 // result. Different visual shape from TodoWrite (no arrays, scalar args).
-const toolSearchTool: TimelineRow = {
+const toolSearchTool: TimelineRow = toolRow({
   id: "thr_yn2i6jeaca:tool:toolu_0191NxebN8QhTioHDkJ3awer",
   threadId: "thr_yn2i6jeaca",
   turnId: "turn_8840389c92b04db7_1",
@@ -34,8 +35,6 @@ const toolSearchTool: TimelineRow = {
   sourceSeqEnd: 761,
   startedAt: 1776880211436,
   createdAt: 1776880211541,
-  kind: "work",
-  workKind: "tool",
   status: "completed",
   callId: "toolu_0191NxebN8QhTioHDkJ3awer",
   toolName: "ToolSearch",
@@ -44,15 +43,15 @@ const toolSearchTool: TimelineRow = {
     max_results: 1,
   },
   output: "Matched tools: TodoWrite",
-  completedAt: 1776880211541,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 105,
+});
 
 // thr_bj3p5vk9py, seq 13, turn 019de9bd-c299-7053-b11d-11b1f40e8b83 —
 // manager bb thread sending an introductory message_user. Free-form text
 // arg, "Message delivered" result.
-const messageUserShort: TimelineRow = {
+const messageUserShort: TimelineRow = toolRow({
   id: "thr_bj3p5vk9py:tool:call_MZFh9Lp2X4LkW9gQteoyDB2F",
   threadId: "thr_bj3p5vk9py",
   turnId: "019de9bd-c299-7053-b11d-11b1f40e8b83",
@@ -60,8 +59,6 @@ const messageUserShort: TimelineRow = {
   sourceSeqEnd: 13,
   startedAt: 1777743031156,
   createdAt: 1777743031156,
-  kind: "work",
-  workKind: "tool",
   status: "completed",
   callId: "call_MZFh9Lp2X4LkW9gQteoyDB2F",
   toolName: "message_user",
@@ -69,16 +66,16 @@ const messageUserShort: TimelineRow = {
     text: "Hi — I’m your bb manager for this project. I’ll coordinate work by delegating substantive coding, debugging, and investigation tasks to managed child threads in isolated worktrees, then review results and report back.\n\nA few quick preferences so I can work the way you like:\n1. What should I call you?\n2. Do you prefer heavy delegation with concise summaries, or more hands-on collaboration with more frequent check-ins?\n3. What kinds of tasks should I expect most often: implementation, debugging, planning/reviews, or something else?",
   },
   output: "Message delivered",
-  completedAt: 1777743031156,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 0,
+});
 
 // thr_bj3p5vk9py, seq 28209 — manager merge-evaluation summary. Long
 // markdown body in args.text (multi-section, tables, code-fence-ish lists).
 // Useful for the "expanded" story so we can see how long tool-arg payloads
 // render inside the row body.
-const messageUserLong: TimelineRow = {
+const messageUserLong: TimelineRow = toolRow({
   id: "thr_bj3p5vk9py:tool:call_llaogf7VfpS1YkeQ2iIPUuL7",
   threadId: "thr_bj3p5vk9py",
   turnId: "019de9bd-c299-7053-b11d-11b1f40e8b83",
@@ -86,8 +83,6 @@ const messageUserLong: TimelineRow = {
   sourceSeqEnd: 28209,
   startedAt: 1777800000000,
   createdAt: 1777800000000,
-  kind: "work",
-  workKind: "tool",
   status: "completed",
   callId: "call_llaogf7VfpS1YkeQ2iIPUuL7",
   toolName: "message_user",
@@ -95,16 +90,16 @@ const messageUserLong: TimelineRow = {
     text: "Here’s the merge-evaluation summary.\n\n## 1. `bb/daemon-protocol-phase6-cleanup`\n\n**Status:** code complete, validated by worker, Claude review active. **Not merging without your explicit go-ahead.**\n\n**Commits over `main` (`d75f390c`):**\n- `452df600` — remove daemon high-water response compatibility\n- `c1261311` — remove completed daemon cutover scaffolding\n\n**Diff:** 19 files, **+75 / -3502**, net **-3427 LOC**.\n\n| Area | Files | Diff | Responsibility |\n| --- | --- | ---: | --- |\n| One-off cutover tooling/docs | server migration script, runner, test, runbook | **-2945** | Delete post-live-migration executable scaffolding. Git history is the archive. |\n| Plans/docs cleanup | delete completed host cutover plan; update simplification/complexity plans | **-415** | Keep roadmap accurate; remove completed plan per AGENTS.md. |\n| Server runtime/tests/package | command-result route, session route, events comment, package dep/script, tests | **-62** | Remove response high-water computation and stale naming. |\n| Host daemon tests/helpers | test server/session result expectations | **-14** | Stop modeling high-water marks in daemon-facing tests. |\n| Contract package | session response schemas/tests | **+13** | Tighten contract to reject removed field. |\n| DB public surface | `packages/db/src/data/index.ts` | **-1** | Stop exporting internal `getHighWaterMarks`. |\n\n### Contract boundary changes\n- `/internal/session/open` response no longer includes `threadHighWaterMarks`.\n- `/internal/session/command-result` response is now strictly `{ ok: true }`.\n- Contract schemas are `.strict()`, so old response fields are rejected rather than silently tolerated.\n- Host daemon tests now assert the removed field is absent/rejected.\n\n### Main risk / decision\nThe big decision is whether we are comfortable deleting the one-off migration tooling now. It’s the right simplification move after successful live cutover, but it is a burn-the-bridge step; recovery would be via git history, not a current script.",
   },
   output: "Message delivered",
-  completedAt: 1777800000050,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 50,
+});
 
 // Running tool — status=pending, output empty, completedAt null. Reuses the
 // real TodoWrite arg shape from above (the agent often issues TodoWrites
 // mid-turn) and parks it as in-flight using Date.now() so the relative-time
 // formatting stays sensible whenever the storybook is rendered.
-const runningTool: TimelineRow = {
+const runningTool: TimelineRow = toolRow({
   id: "thr_yn2i6jeaca:tool:toolu_running",
   threadId: "thr_yn2i6jeaca",
   turnId: "turn_8840389c92b04db7_1",
@@ -112,8 +107,6 @@ const runningTool: TimelineRow = {
   sourceSeqEnd: 900,
   startedAt: Date.now(),
   createdAt: Date.now(),
-  kind: "work",
-  workKind: "tool",
   status: "pending",
   callId: "toolu_running",
   toolName: "TodoWrite",
@@ -128,16 +121,16 @@ const runningTool: TimelineRow = {
     ],
   },
   output: "",
-  completedAt: null,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: null,
+});
 
 // Errored tool — reuses a real ToolSearch shape but with status=error and a
 // failure result string standing in for the captured error message. Real
 // errored ToolSearch payloads are rare in the local DB, so we hold the
 // toolName/toolArgs constant from a real call and only swap the status.
-const errorTool: TimelineRow = {
+const errorTool: TimelineRow = toolRow({
   id: "thr_yn2i6jeaca:tool:toolu_error",
   threadId: "thr_yn2i6jeaca",
   turnId: "turn_8840389c92b04db7_1",
@@ -145,8 +138,6 @@ const errorTool: TimelineRow = {
   sourceSeqEnd: 902,
   startedAt: 1776880300000,
   createdAt: 1776880300100,
-  kind: "work",
-  workKind: "tool",
   status: "error",
   callId: "toolu_error",
   toolName: "ToolSearch",
@@ -155,16 +146,16 @@ const errorTool: TimelineRow = {
     max_results: 1,
   },
   output: "Tool failed: deferred tool registry unavailable",
-  completedAt: 1776880300100,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 100,
+});
 
 // Interrupted tool — reuses a real message_user shape but with
 // status=interrupted (the user steered/aborted before the message was
 // delivered). Real interrupted message_user payloads are rare; the
 // toolName/toolArgs are real, only the status is adjusted.
-const interruptedTool: TimelineRow = {
+const interruptedTool: TimelineRow = toolRow({
   id: "thr_bj3p5vk9py:tool:call_interrupted",
   threadId: "thr_bj3p5vk9py",
   turnId: "019de9bd-c299-7053-b11d-11b1f40e8b83",
@@ -172,8 +163,6 @@ const interruptedTool: TimelineRow = {
   sourceSeqEnd: 951,
   startedAt: 1777743100000,
   createdAt: 1777743100200,
-  kind: "work",
-  workKind: "tool",
   status: "interrupted",
   callId: "call_interrupted",
   toolName: "message_user",
@@ -181,15 +170,15 @@ const interruptedTool: TimelineRow = {
     text: "Got it. I’ve recorded this workflow and started the main Codex/GPT-5.5 xhigh worker in its own worktree to familiarize itself with the five change ranges before we process comments.\n\nI’ll wait for its readiness summary, then I’ll ask you for the first batch of 3–4 review comments and run the triage → fix/commit → review-check cycle you described.",
   },
   output: "",
-  completedAt: 1777743100200,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 200,
+});
 
 // Waiting for approval — ScheduleWakeup parked on the approval gate before
 // the daemon ever scheduled it. Real arg shape, status=pending,
 // approvalStatus=waiting_for_approval.
-const waitingApprovalTool: TimelineRow = {
+const waitingApprovalTool: TimelineRow = toolRow({
   id: "thr_4z2watgfgm:tool:toolu_waiting_approval",
   threadId: "thr_4z2watgfgm",
   turnId: "turn_b40752bbbd9145cb_1",
@@ -197,8 +186,6 @@ const waitingApprovalTool: TimelineRow = {
   sourceSeqEnd: 960,
   startedAt: 1777933900000,
   createdAt: 1777933900000,
-  kind: "work",
-  workKind: "tool",
   status: "pending",
   callId: "toolu_waiting_approval",
   toolName: "ScheduleWakeup",
@@ -208,14 +195,14 @@ const waitingApprovalTool: TimelineRow = {
     prompt: "resume review synthesis once subagents return",
   },
   output: "",
-  completedAt: null,
   approvalStatus: "waiting_for_approval",
   activityIntents: [],
-};
+  durationMs: null,
+});
 
 // Denied — same ScheduleWakeup, but the user rejected the approval and the
 // tool never ran.
-const deniedTool: TimelineRow = {
+const deniedTool: TimelineRow = toolRow({
   id: "thr_4z2watgfgm:tool:toolu_denied",
   threadId: "thr_4z2watgfgm",
   turnId: "turn_b40752bbbd9145cb_1",
@@ -223,8 +210,6 @@ const deniedTool: TimelineRow = {
   sourceSeqEnd: 961,
   startedAt: 1777933910000,
   createdAt: 1777933910000,
-  kind: "work",
-  workKind: "tool",
   status: "completed",
   callId: "toolu_denied",
   toolName: "ScheduleWakeup",
@@ -234,10 +219,10 @@ const deniedTool: TimelineRow = {
     prompt: "resume review synthesis once subagents return",
   },
   output: "",
-  completedAt: 1777933910500,
   approvalStatus: "denied",
   activityIntents: [],
-};
+  durationMs: 500,
+});
 
 export function Overview() {
   return (

@@ -1,5 +1,17 @@
-import type { TimelineRow } from "@bb/server-contract";
+import type {
+  TimelineRow,
+  TimelineRowStatus,
+  TimelineToolWorkRow,
+} from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import {
+  commandRow,
+  delegationRow,
+  fileChangeRow,
+  toolRow,
+  webFetchRow,
+  webSearchRow,
+} from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -35,6 +47,33 @@ function bundleId(children: readonly TimelineRow[]): string {
   ].join(":");
 }
 
+interface ExplorationToolRowArgs {
+  id: string;
+  seq: number;
+  toolName: "Read" | "Grep" | "Glob";
+  toolArgs: Record<string, string | number>;
+  intentPath: string | null;
+  intentType: "read" | "search" | "list_files";
+  output: string;
+}
+
+interface PlainToolRowArgs {
+  id: string;
+  seq: number;
+  toolName: string;
+  toolArgs: TimelineToolWorkRow["toolArgs"];
+  output: string;
+  status?: TimelineRowStatus;
+}
+
+interface DelegationFixtureRowArgs {
+  id: string;
+  seq: number;
+  description: string;
+  subagentType: string;
+  output: string;
+}
+
 // ---------------------------------------------------------------------------
 // Bundle summaries are NOT raw rows — they're produced by the @bb/thread-view
 // `buildTimelineViewRows` projection when consecutive same-workKind work rows
@@ -47,7 +86,7 @@ function bundleId(children: readonly TimelineRow[]): string {
 // ---------------------------------------------------------------------------
 
 // ---- Real consecutive build/test commands (sequences 35700-35702) ---------
-const buildDomainCoreUiCommand: TimelineRow = {
+const buildDomainCoreUiCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_buildDomainCoreUi",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -55,8 +94,6 @@ const buildDomainCoreUiCommand: TimelineRow = {
   sourceSeqEnd: 35700,
   startedAt: 1777337330000,
   createdAt: 1777337332100,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_buildDomainCoreUi",
   command:
@@ -65,12 +102,12 @@ const buildDomainCoreUiCommand: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337332100,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 2100,
+});
 
-const testServerCommand: TimelineRow = {
+const testServerCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_testServer",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -78,8 +115,6 @@ const testServerCommand: TimelineRow = {
   sourceSeqEnd: 35701,
   startedAt: 1777337332200,
   createdAt: 1777337339400,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_testServer",
   command:
@@ -88,12 +123,12 @@ const testServerCommand: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337339400,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 7200,
+});
 
-const testCoreUiCommand: TimelineRow = {
+const testCoreUiCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_testCoreUi",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -101,8 +136,6 @@ const testCoreUiCommand: TimelineRow = {
   sourceSeqEnd: 35702,
   startedAt: 1777337339500,
   createdAt: 1777337346700,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_testCoreUi",
   command:
@@ -111,12 +144,12 @@ const testCoreUiCommand: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337346700,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 7200,
+});
 
-const buildForceCommand: TimelineRow = {
+const buildForceCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_buildForce",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -124,8 +157,6 @@ const buildForceCommand: TimelineRow = {
   sourceSeqEnd: 35733,
   startedAt: 1777337346800,
   createdAt: 1777337352900,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_buildForce",
   command:
@@ -134,12 +165,12 @@ const buildForceCommand: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337352900,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 6100,
+});
 
-const testCoreUiForceCommand: TimelineRow = {
+const testCoreUiForceCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_testCoreUiForce",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -147,8 +178,6 @@ const testCoreUiForceCommand: TimelineRow = {
   sourceSeqEnd: 35734,
   startedAt: 1777337353000,
   createdAt: 1777337361500,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_testCoreUiForce",
   command:
@@ -157,14 +186,14 @@ const testCoreUiForceCommand: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337361500,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 8500,
+});
 
 // Real failing test command, used to give the mixed-status bundle one error
 // child without inventing data.
-const testServerErrorCommand: TimelineRow = {
+const testServerErrorCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_testServerError",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -172,8 +201,6 @@ const testServerErrorCommand: TimelineRow = {
   sourceSeqEnd: 35913,
   startedAt: 1777337361600,
   createdAt: 1777337372100,
-  kind: "work",
-  workKind: "command",
   status: "error",
   callId: "call_testServerError",
   command:
@@ -182,10 +209,10 @@ const testServerErrorCommand: TimelineRow = {
   source: null,
   output: "",
   exitCode: 1,
-  completedAt: 1777337372100,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 10500,
+});
 
 const commandBundleRows: TimelineRow[] = [
   buildDomainCoreUiCommand,
@@ -206,7 +233,7 @@ const commandBundleMixedStatusRows: TimelineRow[] = [
 // ---- Real consecutive file-change rows (sequences 35564..35595) -----------
 // These are all updates from the same turn — the projection groups consecutive
 // `file-change` rows into a single bundle regardless of which file they touch.
-const fileChangeAssistantStream: TimelineRow = {
+const fileChangeAssistantStream: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35564",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -214,8 +241,6 @@ const fileChangeAssistantStream: TimelineRow = {
   sourceSeqEnd: 35564,
   startedAt: 1777337123000,
   createdAt: 1777337123900,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_fjGvl1fFJU7cAcw46FcSnbjJ",
   change: {
@@ -237,9 +262,9 @@ const fileChangeAssistantStream: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeIndex: TimelineRow = {
+const fileChangeIndex: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35573",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -247,8 +272,6 @@ const fileChangeIndex: TimelineRow = {
   sourceSeqEnd: 35573,
   startedAt: 1777337124200,
   createdAt: 1777337125300,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_BXK77XTyviYmWUVNOpPG5nwJ",
   change: {
@@ -273,9 +296,9 @@ const fileChangeIndex: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeTimelineService: TimelineRow = {
+const fileChangeTimelineService: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35595",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -283,8 +306,6 @@ const fileChangeTimelineService: TimelineRow = {
   sourceSeqEnd: 35595,
   startedAt: 1777337125400,
   createdAt: 1777337127100,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_v3QQJnCbGh2ErXIJdCf4hX4N",
   change: {
@@ -322,9 +343,9 @@ const fileChangeTimelineService: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeActiveThinkingDelete: TimelineRow = {
+const fileChangeActiveThinkingDelete: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35611",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -332,8 +353,6 @@ const fileChangeActiveThinkingDelete: TimelineRow = {
   sourceSeqEnd: 35611,
   startedAt: 1777337127200,
   createdAt: 1777337127900,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_1JWzaNZyTpVIrB8reX73YYUN",
   change: {
@@ -346,9 +365,9 @@ const fileChangeActiveThinkingDelete: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeToViewMessages: TimelineRow = {
+const fileChangeToViewMessages: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35671",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -356,8 +375,6 @@ const fileChangeToViewMessages: TimelineRow = {
   sourceSeqEnd: 35671,
   startedAt: 1777337128000,
   createdAt: 1777337129500,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_3qZxJB5I3kVdSM4pPiBCTm92",
   change: {
@@ -382,11 +399,11 @@ const fileChangeToViewMessages: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // One interrupted file-change to give the mixed-status bundle a non-completed
 // child without fabricating data.
-const fileChangeInterrupted: TimelineRow = {
+const fileChangeInterrupted: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:interrupted",
   threadId: "thr_zeb7z9afmw",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -394,8 +411,6 @@ const fileChangeInterrupted: TimelineRow = {
   sourceSeqEnd: 35690,
   startedAt: 1777337129600,
   createdAt: 1777337130200,
-  kind: "work",
-  workKind: "file-change",
   status: "interrupted",
   callId: "call_fileChangeInterrupted",
   change: {
@@ -408,7 +423,7 @@ const fileChangeInterrupted: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 const fileChangeBundleRows: TimelineRow[] = [
   fileChangeAssistantStream,
@@ -432,16 +447,8 @@ const fileChangeBundleMixedStatusRows: TimelineRow[] = [
 // of underlying workKind. Real intents pulled from thr_zeb7z9afmw / turn
 // 019dd185-... — the agent reading the projection refactor.
 
-function explorationToolRow(args: {
-  id: string;
-  seq: number;
-  toolName: "Read" | "Grep" | "Glob";
-  toolArgs: Record<string, string | number>;
-  intentPath: string | null;
-  intentType: "read" | "search" | "list_files";
-  output: string;
-}): TimelineRow {
-  return {
+function explorationToolRow(args: ExplorationToolRowArgs): TimelineRow {
+  return toolRow({
     id: `thr_zeb7z9afmw:tool:${args.id}`,
     threadId: "thr_zeb7z9afmw",
     turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -449,14 +456,11 @@ function explorationToolRow(args: {
     sourceSeqEnd: args.seq,
     startedAt: 1777337100000 + args.seq,
     createdAt: 1777337100000 + args.seq + 50,
-    kind: "work",
-    workKind: "tool",
     status: "completed",
     callId: args.id,
     toolName: args.toolName,
     toolArgs: args.toolArgs,
     output: args.output,
-    completedAt: 1777337100000 + args.seq + 50,
     approvalStatus: null,
     activityIntents:
       args.intentType === "read"
@@ -487,7 +491,8 @@ function explorationToolRow(args: {
                 path: args.intentPath,
               },
             ],
-  };
+    durationMs: 50,
+  });
 }
 
 const explorationBundleRows: TimelineRow[] = [
@@ -544,15 +549,8 @@ const explorationBundleRows: TimelineRow[] = [
 // Non-exploration `tool` rows (TodoWrite / message_user / ToolSearch) bundle
 // under "tools". Real tool names + arg shapes pulled from threads in the DB.
 
-function plainToolRow(args: {
-  id: string;
-  seq: number;
-  toolName: string;
-  toolArgs: Record<string, unknown>;
-  output: string;
-  status?: TimelineRow extends { status: infer S } ? S : never;
-}): TimelineRow {
-  return {
+function plainToolRow(args: PlainToolRowArgs): TimelineRow {
+  return toolRow({
     id: `thr_zeb7z9afmw:tool:${args.id}`,
     threadId: "thr_zeb7z9afmw",
     turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -560,17 +558,15 @@ function plainToolRow(args: {
     sourceSeqEnd: args.seq,
     startedAt: 1777337200000 + args.seq,
     createdAt: 1777337200000 + args.seq + 100,
-    kind: "work",
-    workKind: "tool",
     status: args.status ?? "completed",
     callId: args.id,
     toolName: args.toolName,
-    toolArgs: args.toolArgs as Record<string, never>,
+    toolArgs: args.toolArgs,
     output: args.output,
-    completedAt: 1777337200000 + args.seq + 100,
     approvalStatus: null,
     activityIntents: [],
-  };
+    durationMs: 100,
+  });
 }
 
 const toolsBundleRows: TimelineRow[] = [
@@ -609,14 +605,8 @@ const toolsBundleRows: TimelineRow[] = [
 // Consecutive `delegation` work rows bundle under "delegations". Real Agent
 // dispatches from the DB.
 
-function delegationRow(args: {
-  id: string;
-  seq: number;
-  description: string;
-  subagentType: string;
-  output: string;
-}): TimelineRow {
-  return {
+function delegationFixtureRow(args: DelegationFixtureRowArgs): TimelineRow {
+  return delegationRow({
     id: `thr_y9q6n559fu:delegation:${args.id}`,
     threadId: "thr_y9q6n559fu",
     turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -624,21 +614,19 @@ function delegationRow(args: {
     sourceSeqEnd: args.seq,
     startedAt: 1777338000000 + args.seq,
     createdAt: 1777338000000 + args.seq + 5000,
-    kind: "work",
-    workKind: "delegation",
     status: "completed",
     callId: args.id,
     toolName: "Agent",
     subagentType: args.subagentType,
     description: args.description,
     output: args.output,
-    completedAt: 1777338000000 + args.seq + 5000,
     childRows: [],
-  };
+    durationMs: 5_000,
+  });
 }
 
 const delegationsBundleRows: TimelineRow[] = [
-  delegationRow({
+  delegationFixtureRow({
     id: "call_explore_router",
     seq: 36000,
     description: "Map command-router file fan-out",
@@ -646,7 +634,7 @@ const delegationsBundleRows: TimelineRow[] = [
     output:
       "Found 4 callers of routeCommand, all in apps/host-daemon/src. See report attached.",
   }),
-  delegationRow({
+  delegationFixtureRow({
     id: "call_explore_lifecycle",
     seq: 36010,
     description: "Trace exec-lifecycle status mappings",
@@ -654,7 +642,7 @@ const delegationsBundleRows: TimelineRow[] = [
     output:
       "exec-lifecycle.ts maps item statuses to row statuses. Approval is independent of exec status.",
   }),
-  delegationRow({
+  delegationFixtureRow({
     id: "call_review_branch",
     seq: 36020,
     description: "Review the projection-refactor branch for merge readiness",
@@ -669,7 +657,7 @@ const delegationsBundleRows: TimelineRow[] = [
 // concept switch puts them in the same bucket. Real queries/urls pulled from
 // thr_yr83zs2m7f and thr_3vw9r8igrb.
 
-const webSearchEditors: TimelineRow = {
+const webSearchEditors: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:websearch:ws_editor_cli",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -677,8 +665,6 @@ const webSearchEditors: TimelineRow = {
   sourceSeqEnd: 7467,
   startedAt: 1777400000000,
   createdAt: 1777400000000,
-  kind: "work",
-  workKind: "web-search",
   status: "completed",
   callId: "ws_0e85bcec855f8f510169eff17843408198a4a02ff7f35a29bb",
   queries: [
@@ -686,10 +672,10 @@ const webSearchEditors: TimelineRow = {
     "Sublime Text command line line number official",
     "Zed editor command line line number docs",
   ],
-  completedAt: 1777400000000,
-};
+  durationMs: 0,
+});
 
-const webFetchZed: TimelineRow = {
+const webFetchZed: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:webfetch:ws_zed_docs",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -697,17 +683,15 @@ const webFetchZed: TimelineRow = {
   sourceSeqEnd: 7470,
   startedAt: 1777400010000,
   createdAt: 1777400010000,
-  kind: "work",
-  workKind: "web-fetch",
   status: "completed",
   callId: "ws_0e85bcec855f8f510169eff1846b0c81989bfa5e67bb99a484",
   url: "https://zed.dev/docs/reference/cli.html",
   prompt: null,
   pattern: null,
-  completedAt: 1777400010000,
-};
+  durationMs: 0,
+});
 
-const webFetchTanstack: TimelineRow = {
+const webFetchTanstack: TimelineRow = webFetchRow({
   id: "thr_3vw9r8igrb:webfetch:tanstack",
   threadId: "thr_3vw9r8igrb",
   turnId: "019dd185-ef12-7d50-aa48-47882e9c8aaf",
@@ -715,16 +699,14 @@ const webFetchTanstack: TimelineRow = {
   sourceSeqEnd: 1203,
   startedAt: 1777481783565,
   createdAt: 1777481786285,
-  kind: "work",
-  workKind: "web-fetch",
   status: "completed",
   callId: "toolu_01GVztZgXKMtefajWjMwANng",
   url: "https://tanstack.com/query/latest/docs/framework/react/reference/useQuery",
   prompt:
     "How do I keep the previous query data visible while refetching with a new query key?",
   pattern: null,
-  completedAt: 1777481786285,
-};
+  durationMs: 2720,
+});
 
 const webResearchBundleRows: TimelineRow[] = [
   webSearchEditors,

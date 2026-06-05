@@ -1,6 +1,7 @@
-import type { TimelineRow, TimelineWorkflowWorkRow } from "@bb/server-contract";
+import type { TimelineRow } from "@bb/server-contract";
 import type { WorkflowProgressSnapshot } from "@bb/domain";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import { workflowRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -107,15 +108,13 @@ const failedSnapshot: WorkflowProgressSnapshot = {
   ],
 };
 
-const workflowRowBase = {
+const workflowRowBaseArgs = {
   threadId: "thr_fixture",
   turnId: "turn-1",
   sourceSeqStart: 2,
   sourceSeqEnd: 9,
   startedAt: 1780540127710,
   createdAt: 1780540131011,
-  kind: "work" as const,
-  workKind: "workflow" as const,
   itemId: "task:wu7ol9ras",
   workflowName: "fixture-mini",
   description: "Tiny fixture workflow for BB capture",
@@ -123,40 +122,40 @@ const workflowRowBase = {
   error: null,
 };
 
-const runningWorkflow: TimelineRow = {
-  ...workflowRowBase,
+const runningWorkflow: TimelineRow = workflowRow({
+  ...workflowRowBaseArgs,
   id: "thr_fixture:workflow:task:wu7ol9ras:running",
   status: "pending",
   taskStatus: "running",
   workflow: runningSnapshot,
   usage: { totalTokens: 17773, toolUses: 0, durationMs: 1772 },
-  completedAt: null,
-};
+  durationMs: null,
+});
 
-const completedWorkflow: TimelineRow = {
-  ...workflowRowBase,
+const completedWorkflow: TimelineRow = workflowRow({
+  ...workflowRowBaseArgs,
   id: "thr_fixture:workflow:task:wu7ol9ras:completed",
   status: "completed",
   taskStatus: "completed",
   workflow: completedSnapshot,
   usage: { totalTokens: 26674, toolUses: 0, durationMs: 3277 },
   summary: 'Dynamic workflow "Tiny fixture workflow for BB capture" completed',
-  completedAt: 1780540131011,
-};
+  durationMs: 3_301,
+});
 
-const failedWorkflow: TimelineRow = {
-  ...workflowRowBase,
+const failedWorkflow: TimelineRow = workflowRow({
+  ...workflowRowBaseArgs,
   id: "thr_fixture:workflow:task:wu7ol9ras:failed",
   status: "error",
   taskStatus: "failed",
   workflow: failedSnapshot,
   usage: { totalTokens: 21340, toolUses: 0, durationMs: 2810 },
   error: "agent abandoned: user requested retry on all 3 attempts",
-  completedAt: 1780540131011,
-};
+  durationMs: 3_301,
+});
 
-const interruptedWorkflow: TimelineRow = {
-  ...workflowRowBase,
+const interruptedWorkflow: TimelineRow = workflowRow({
+  ...workflowRowBaseArgs,
   id: "thr_fixture:workflow:task:wu7ol9ras:interrupted",
   status: "interrupted",
   taskStatus: "stopped",
@@ -164,11 +163,11 @@ const interruptedWorkflow: TimelineRow = {
   // renderer derives their "stopped" display state from the settled row.
   workflow: runningSnapshot,
   usage: { totalTokens: 17773, toolUses: 0, durationMs: 1772 },
-  completedAt: 1780540131011,
-};
+  durationMs: 3_301,
+});
 
-const degradedWorkflow: TimelineRow = {
-  ...workflowRowBase,
+const degradedWorkflow: TimelineRow = workflowRow({
+  ...workflowRowBaseArgs,
   id: "thr_fixture:workflow:task:wu7ol9ras:degraded",
   status: "completed",
   taskStatus: "completed",
@@ -176,11 +175,11 @@ const degradedWorkflow: TimelineRow = {
   workflow: null,
   usage: { totalTokens: 26674, toolUses: 0, durationMs: 3277 },
   summary: 'Dynamic workflow "Tiny fixture workflow for BB capture" completed',
-  completedAt: 1780540131011,
-};
+  durationMs: 3_301,
+});
 
-const noPhasesWorkflow: TimelineRow = {
-  ...workflowRowBase,
+const noPhasesWorkflow: TimelineRow = workflowRow({
+  ...workflowRowBaseArgs,
   id: "thr_fixture:workflow:task:wu7ol9ras:no-phases",
   status: "pending",
   taskStatus: "running",
@@ -192,8 +191,8 @@ const noPhasesWorkflow: TimelineRow = {
     }),
   },
   usage: { totalTokens: 17773, toolUses: 0, durationMs: 1772 },
-  completedAt: null,
-} satisfies TimelineWorkflowWorkRow;
+  durationMs: null,
+});
 
 export function Overview() {
   return (

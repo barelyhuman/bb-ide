@@ -1,5 +1,6 @@
 import type { TimelineRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import { webFetchRow } from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -22,7 +23,7 @@ const baseProps = {
 // ---------------------------------------------------------------------------
 
 // thr_yr83zs2m7f — sequence 7470. URL only (Codex provider — prompt/pattern null).
-const urlOnlyFetch: TimelineRow = {
+const urlOnlyFetch: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:web-fetch:ws_0e85bcec855f8f510169eff1846b0c81989bfa5e67bb99a484",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd144-eb1e-7bd1-b4a0-a966e1fb56e0",
@@ -30,18 +31,16 @@ const urlOnlyFetch: TimelineRow = {
   sourceSeqEnd: 7470,
   startedAt: 1777332618113,
   createdAt: 1777332618113,
-  kind: "work",
-  workKind: "web-fetch",
   status: "completed",
   callId: "ws_0e85bcec855f8f510169eff1846b0c81989bfa5e67bb99a484",
   url: "https://zed.dev/docs/reference/cli.html",
   prompt: null,
   pattern: null,
-  completedAt: 1777332618113,
-};
+  durationMs: 0,
+});
 
 // thr_p93awt656h — TanStack docs URL only.
-const tanstackFetch: TimelineRow = {
+const tanstackFetch: TimelineRow = webFetchRow({
   id: "thr_p93awt656h:web-fetch:ws_034f339785f02f2b0169f23ac4f1d8819085d6c92cbdb71e5e",
   threadId: "thr_p93awt656h",
   turnId: "019dda34-6439-7bf0-b35c-371f3d8c4946",
@@ -49,19 +48,17 @@ const tanstackFetch: TimelineRow = {
   sourceSeqEnd: 3742,
   startedAt: 1777482437867,
   createdAt: 1777482437867,
-  kind: "work",
-  workKind: "web-fetch",
   status: "completed",
   callId: "ws_034f339785f02f2b0169f23ac4f1d8819085d6c92cbdb71e5e",
   url: "https://tanstack.dev/query/v5/docs/framework/react/reference/useQuery",
   prompt: null,
   pattern: null,
-  completedAt: 1777482437867,
-};
+  durationMs: 0,
+});
 
 // thr_3vw9r8igrb — sequence 1202/1203. Anthropic web-fetch with a real prompt.
 // item/started at 1777481783565, item/completed at 1777481786285.
-const fetchWithPrompt: TimelineRow = {
+const fetchWithPrompt: TimelineRow = webFetchRow({
   id: "thr_3vw9r8igrb:web-fetch:toolu_01GVztZgXKMtefajWjMwANng",
   threadId: "thr_3vw9r8igrb",
   turnId: "turn_59e461a531904883_3",
@@ -69,19 +66,17 @@ const fetchWithPrompt: TimelineRow = {
   sourceSeqEnd: 1203,
   startedAt: 1777481783565,
   createdAt: 1777481786285,
-  kind: "work",
-  workKind: "web-fetch",
   status: "completed",
   callId: "toolu_01GVztZgXKMtefajWjMwANng",
   url: "https://trees.software/",
   prompt:
     "What is this product/library? Who makes it? Is it open source or a hosted/commercial product? What is the license? Is there an npm package? Does it support React? Is it a JavaScript layout library, an IDE, a tree-data tool, or something else? Quote any relevant tagline. Look for pricing, install instructions, GitHub link.",
   pattern: null,
-  completedAt: 1777481786285,
-};
+  durationMs: 2720,
+});
 
 // thr_fjav9z98vu — sequence 1705. Real fetch with a `pattern` (grep-style hint).
-const fetchWithPattern: TimelineRow = {
+const fetchWithPattern: TimelineRow = webFetchRow({
   id: "thr_fjav9z98vu:web-fetch:ws_006e4116502b07000169f92e9c91748191820718192d32c819",
   threadId: "thr_fjav9z98vu",
   turnId: "019df55a-9d47-74c2-87ea-458fa28febf6",
@@ -89,19 +84,17 @@ const fetchWithPattern: TimelineRow = {
   sourceSeqEnd: 1705,
   startedAt: 1777938079295,
   createdAt: 1777938079295,
-  kind: "work",
-  workKind: "web-fetch",
   status: "completed",
   callId: "ws_006e4116502b07000169f92e9c91748191820718192d32c819",
   url: "https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server/src/codex_message_processor.rs",
   prompt: null,
   pattern: "is archived",
-  completedAt: 1777938079295,
-};
+  durationMs: 0,
+});
 
 // Running — based on the same Cursor docs URL, but mid-flight: status=pending,
 // completedAt null. startedAt/createdAt = Date.now() so the "running" timing reads live.
-const runningFetch: TimelineRow = {
+const runningFetch: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:web-fetch:ws_running",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd144-eb1e-7bd1-b4a0-a966e1fb56e0",
@@ -109,20 +102,18 @@ const runningFetch: TimelineRow = {
   sourceSeqEnd: 7479,
   startedAt: Date.now(),
   createdAt: Date.now(),
-  kind: "work",
-  workKind: "web-fetch",
   status: "pending",
   callId: "ws_running",
   url: "https://docs.cursor.com/tools/cli",
   prompt: null,
   pattern: null,
-  completedAt: null,
-};
+  durationMs: null,
+});
 
 // Error — same shape as urlOnlyFetch but flipped to status=error.
 // No real "errored" web-fetch rows exist in ~/.bb-dev/bb.db; we reuse a real
 // URL payload and surface the error state.
-const erroredFetch: TimelineRow = {
+const erroredFetch: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:web-fetch:ws_errored",
   threadId: "thr_yr83zs2m7f",
   turnId: "019dd144-eb1e-7bd1-b4a0-a966e1fb56e0",
@@ -130,18 +121,16 @@ const erroredFetch: TimelineRow = {
   sourceSeqEnd: 7479,
   startedAt: 1777332653385,
   createdAt: 1777332653385,
-  kind: "work",
-  workKind: "web-fetch",
   status: "error",
   callId: "ws_errored",
   url: "https://docs.cursor.com/tools/cli",
   prompt: null,
   pattern: null,
-  completedAt: 1777332653385,
-};
+  durationMs: 0,
+});
 
 // Interrupted — agent cancelled mid-fetch.
-const interruptedFetch: TimelineRow = {
+const interruptedFetch: TimelineRow = webFetchRow({
   id: "thr_fjav9z98vu:web-fetch:ws_interrupted",
   threadId: "thr_fjav9z98vu",
   turnId: "019df55a-9d47-74c2-87ea-458fa28febf6",
@@ -149,15 +138,13 @@ const interruptedFetch: TimelineRow = {
   sourceSeqEnd: 1699,
   startedAt: 1777938073680,
   createdAt: 1777938073680,
-  kind: "work",
-  workKind: "web-fetch",
   status: "interrupted",
   callId: "ws_interrupted",
   url: "https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md",
   prompt: null,
   pattern: null,
-  completedAt: null,
-};
+  durationMs: null,
+});
 
 export function Overview() {
   return (

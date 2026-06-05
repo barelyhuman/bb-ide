@@ -12,6 +12,7 @@ import type {
   TimelineFileChangeWorkRow,
   TimelineImageViewWorkRow,
   TimelineManagerAssignment,
+  TimelineNonOperationSystemRow,
   TimelinePermissionGrantApprovalGrantScope,
   TimelineQuestionWorkRow,
   TimelineRow,
@@ -27,7 +28,13 @@ import type {
 } from "@bb/server-contract";
 import type { ThreadTurnInitiator } from "@bb/domain";
 
-export interface BaseRowArgs {
+export interface RowBaseOverrideArgs {
+  createdAt?: number;
+  startedAt?: number;
+  threadId?: string;
+}
+
+export interface BaseRowArgs extends RowBaseOverrideArgs {
   id: string;
   seq?: number;
   sourceSeqEnd?: number;
@@ -35,7 +42,7 @@ export interface BaseRowArgs {
   turnId?: string | null;
 }
 
-export interface ConversationRowArgs {
+export interface ConversationRowArgs extends RowBaseOverrideArgs {
   attachments?: TimelineConversationAttachments | null;
   id?: string;
   initiator?: ThreadTurnInitiator;
@@ -49,9 +56,10 @@ export interface ConversationRowArgs {
   turnRequest?: TimelineConversationTurnRequest;
 }
 
-export interface CommandRowArgs {
+export interface CommandRowArgs extends RowBaseOverrideArgs {
   activityIntents?: TimelineActivityIntent[];
   approvalStatus?: TimelineApprovalStatus;
+  callId?: string;
   command: string;
   cwd?: string | null;
   durationMs?: number | null;
@@ -66,9 +74,10 @@ export interface CommandRowArgs {
   turnId?: string | null;
 }
 
-export interface ToolRowArgs {
+export interface ToolRowArgs extends RowBaseOverrideArgs {
   activityIntents?: TimelineActivityIntent[];
   approvalStatus?: TimelineApprovalStatus;
+  callId?: string;
   durationMs?: number | null;
   id?: string;
   output?: string;
@@ -81,8 +90,9 @@ export interface ToolRowArgs {
   turnId?: string | null;
 }
 
-export interface FileChangeRowArgs {
+export interface FileChangeRowArgs extends RowBaseOverrideArgs {
   approvalStatus?: TimelineApprovalStatus;
+  callId?: string;
   change?: TimelineFileChange;
   diff?: string | null;
   diffStats?: TimelineDiffStats;
@@ -99,7 +109,7 @@ export interface FileChangeRowArgs {
   turnId?: string | null;
 }
 
-export interface WebSearchRowArgs {
+export interface WebSearchRowArgs extends RowBaseOverrideArgs {
   callId?: string;
   durationMs?: number | null;
   id?: string;
@@ -111,7 +121,7 @@ export interface WebSearchRowArgs {
   turnId?: string | null;
 }
 
-export interface WebFetchRowArgs {
+export interface WebFetchRowArgs extends RowBaseOverrideArgs {
   callId?: string;
   durationMs?: number | null;
   id?: string;
@@ -125,7 +135,7 @@ export interface WebFetchRowArgs {
   url?: string;
 }
 
-export interface ImageViewRowArgs {
+export interface ImageViewRowArgs extends RowBaseOverrideArgs {
   callId?: string;
   durationMs?: number | null;
   id?: string;
@@ -137,7 +147,7 @@ export interface ImageViewRowArgs {
   turnId?: string | null;
 }
 
-export interface WorkflowRowArgs {
+export interface WorkflowRowArgs extends RowBaseOverrideArgs {
   description?: string;
   durationMs?: number | null;
   error?: string | null;
@@ -155,7 +165,7 @@ export interface WorkflowRowArgs {
   workflowName?: string | null;
 }
 
-export interface ApprovalRowArgs {
+export interface ApprovalRowArgs extends RowBaseOverrideArgs {
   approvalKind?: TimelineApprovalWorkRow["approvalKind"];
   id?: string;
   interactionId?: string;
@@ -171,7 +181,7 @@ export interface ApprovalRowArgs {
   turnId?: string | null;
 }
 
-export interface QuestionRowArgs {
+export interface QuestionRowArgs extends RowBaseOverrideArgs {
   answers?: TimelineQuestionWorkRow["answers"];
   id?: string;
   interactionId?: string;
@@ -192,7 +202,7 @@ type PermissionGrantApprovalLifecycle = Extract<
 
 type QuestionLifecycle = TimelineQuestionWorkRow["lifecycle"];
 
-export interface SystemRowArgs {
+export interface SystemRowArgs extends RowBaseOverrideArgs {
   completedAt?: number | null;
   detail?: string | null;
   durationMs?: number | null;
@@ -208,6 +218,14 @@ export interface SystemRowArgs {
   turnId?: string | null;
 }
 
+export interface NonOperationSystemRowArgs
+  extends Omit<
+    SystemRowArgs,
+    "completedAt" | "durationMs" | "managerAssignment" | "operationKind" | "systemKind"
+  > {
+  systemKind: TimelineNonOperationSystemRow["systemKind"];
+}
+
 interface SystemRowBase extends TimelineRowBase {
   detail: string | null;
   kind: "system";
@@ -215,7 +233,8 @@ interface SystemRowBase extends TimelineRowBase {
   title: string;
 }
 
-export interface DelegationRowArgs {
+export interface DelegationRowArgs extends RowBaseOverrideArgs {
+  callId?: string;
   childRows?: TimelineRow[];
   description?: string | null;
   durationMs?: number | null;
@@ -230,7 +249,7 @@ export interface DelegationRowArgs {
   turnId?: string | null;
 }
 
-export interface TurnRowArgs {
+export interface TurnRowArgs extends RowBaseOverrideArgs {
   children?: TimelineRow[] | null;
   durationMs?: number | null;
   id?: string;
@@ -362,26 +381,30 @@ function commandExitCode({
 }
 
 export function baseRow({
+  createdAt,
   id,
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
+  threadId = DEFAULT_THREAD_ID,
   turnId = DEFAULT_TURN_ID,
 }: BaseRowArgs): TimelineRowBase {
   const rowSeq = rowSequence({ seq, sourceSeqStart });
   return {
     id,
-    threadId: DEFAULT_THREAD_ID,
+    threadId,
     turnId,
     sourceSeqStart: rowSeq,
     sourceSeqEnd: sourceSeqEnd ?? rowSeq,
-    startedAt: rowSeq,
-    createdAt: rowSeq,
+    startedAt: startedAt ?? rowSeq,
+    createdAt: createdAt ?? rowSeq,
   };
 }
 
 export function conversationRow({
   attachments = null,
+  createdAt,
   id = DEFAULT_CONVERSATION_ID,
   initiator,
   role = "assistant",
@@ -389,11 +412,22 @@ export function conversationRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   text,
+  threadId,
   turnId,
   turnRequest,
 }: ConversationRowArgs): TimelineConversationRow {
-  const rowBase = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const rowBase = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   if (role === "user") {
     const resolvedInitiator: ThreadTurnInitiator = initiator ?? "user";
     return {
@@ -465,7 +499,9 @@ export function unknownIntent({
 export function commandRow({
   activityIntents = [],
   approvalStatus = null,
+  callId,
   command,
+  createdAt,
   cwd = "/workspace/bb",
   durationMs = 2_300,
   exitCode,
@@ -475,16 +511,27 @@ export function commandRow({
   source = "exec_command",
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
+  threadId,
   turnId,
 }: CommandRowArgs): TimelineCommandWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
     workKind: "command",
     status,
-    callId: id,
+    callId: callId ?? id,
     command,
     cwd,
     source,
@@ -499,24 +546,37 @@ export function commandRow({
 export function toolRow({
   activityIntents = [],
   approvalStatus = null,
+  callId,
+  createdAt,
   durationMs = 2_300,
   id = DEFAULT_TOOL_ID,
   output = "",
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
+  threadId,
   toolArgs = null,
   toolName = "Read",
   turnId,
 }: ToolRowArgs = {}): TimelineToolWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
     workKind: "tool",
     status,
-    callId: id,
+    callId: callId ?? id,
     toolName,
     toolArgs,
     output,
@@ -553,6 +613,7 @@ export function fileChangeRow(
 ): TimelineFileChangeWorkRow {
   const {
     approvalStatus = null,
+    callId,
     id = DEFAULT_FILE_CHANGE_ID,
     seq,
     sourceSeqEnd,
@@ -563,11 +624,18 @@ export function fileChangeRow(
     turnId,
   } = args;
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...baseRow({
+      ...args,
+      id,
+      seq,
+      sourceSeqEnd,
+      sourceSeqStart,
+      turnId,
+    }),
     kind: "work",
     workKind: "file-change",
     status,
-    callId: id,
+    callId: callId ?? id,
     change: fileChangeFromArgs(args),
     stdout,
     stderr,
@@ -577,16 +645,28 @@ export function fileChangeRow(
 
 export function webSearchRow({
   callId,
+  createdAt,
   durationMs = null,
   id = DEFAULT_WEB_SEARCH_ID,
   queries = ["timeline renderer"],
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
+  threadId,
   turnId,
 }: WebSearchRowArgs = {}): TimelineWebSearchWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
@@ -600,6 +680,7 @@ export function webSearchRow({
 
 export function webFetchRow({
   callId,
+  createdAt,
   durationMs = null,
   id = DEFAULT_WEB_FETCH_ID,
   pattern = null,
@@ -607,11 +688,22 @@ export function webFetchRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
+  threadId,
   turnId,
   url = "https://example.com/docs",
 }: WebFetchRowArgs = {}): TimelineWebFetchWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
@@ -627,16 +719,28 @@ export function webFetchRow({
 
 export function imageViewRow({
   callId,
+  createdAt,
   durationMs = null,
   id = DEFAULT_IMAGE_VIEW_ID,
   path = "/tmp/dashboard-main.png",
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
+  threadId,
   turnId,
 }: ImageViewRowArgs = {}): TimelineImageViewWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
@@ -649,6 +753,7 @@ export function imageViewRow({
 }
 
 export function workflowRow({
+  createdAt,
   description = "Fixture workflow",
   durationMs = null,
   error = null,
@@ -657,15 +762,26 @@ export function workflowRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
   summary = null,
   taskStatus = "completed",
+  threadId,
   turnId,
   usage = null,
   workflow = null,
   workflowName = "fixture-workflow",
 }: WorkflowRowArgs = {}): TimelineWorkflowWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
@@ -685,6 +801,7 @@ export function workflowRow({
 
 export function approvalRow({
   approvalKind = "permission-grant",
+  createdAt,
   id = "approval-1",
   interactionId = "approval-interaction-1",
   itemId = "approval-item-1",
@@ -692,15 +809,26 @@ export function approvalRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   grantScope = null,
   status = "pending",
   statusReason = null,
+  threadId,
   toolName = null,
   turnId,
 }: ApprovalRowArgs): TimelineApprovalWorkRow {
   if (approvalKind === "file-edit") {
     return {
-      ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+      ...baseRow({
+        createdAt,
+        id,
+        seq,
+        sourceSeqEnd,
+        sourceSeqStart,
+        startedAt,
+        threadId,
+        turnId,
+      }),
       kind: "work",
       workKind: "approval",
       status,
@@ -719,7 +847,16 @@ export function approvalRow({
     };
   }
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...baseRow({
+      createdAt,
+      id,
+      seq,
+      sourceSeqEnd,
+      sourceSeqStart,
+      startedAt,
+      threadId,
+      turnId,
+    }),
     kind: "work",
     workKind: "approval",
     status,
@@ -745,6 +882,7 @@ export function approvalRow({
 
 export function questionRow({
   answers = null,
+  createdAt,
   id = DEFAULT_QUESTION_ID,
   interactionId = "question-interaction-1",
   lifecycle,
@@ -764,14 +902,25 @@ export function questionRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status,
   statusReason = null,
+  threadId,
   turnId,
 }: QuestionRowArgs = {}): TimelineQuestionWorkRow {
   const resolvedLifecycle =
     lifecycle ?? questionLifecycleFromStatus(status ?? "pending");
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...baseRow({
+      createdAt,
+      id,
+      seq,
+      sourceSeqEnd,
+      sourceSeqStart,
+      startedAt,
+      threadId,
+      turnId,
+    }),
     kind: "work",
     workKind: "question",
     status: status ?? questionStatusFromLifecycle(resolvedLifecycle),
@@ -783,8 +932,13 @@ export function questionRow({
   };
 }
 
+export function systemRow(
+  args: NonOperationSystemRowArgs,
+): TimelineNonOperationSystemRow;
+export function systemRow(args?: SystemRowArgs): TimelineSystemRow;
 export function systemRow({
   completedAt,
+  createdAt,
   detail = "Running setup\nProvisioned thread (2s)",
   durationMs,
   id = DEFAULT_SYSTEM_ID,
@@ -793,13 +947,24 @@ export function systemRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
   systemKind = "operation",
+  threadId,
   title = "Provisioned thread",
   turnId = null,
 }: SystemRowArgs = {}): TimelineSystemRow {
   const base: SystemRowBase = {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...baseRow({
+      createdAt,
+      id,
+      seq,
+      sourceSeqEnd,
+      sourceSeqStart,
+      startedAt,
+      threadId,
+      turnId,
+    }),
     kind: "system",
     title,
     detail,
@@ -851,6 +1016,7 @@ export function systemRow({
 }
 
 export function delegationRow({
+  callId,
   childRows = [
     commandRow({
       id: "delegation-child-command-1",
@@ -865,18 +1031,30 @@ export function delegationRow({
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  startedAt,
   status = "completed",
   subagentType = "general-purpose",
+  threadId,
   toolName = "spawnAgent",
   turnId,
+  createdAt,
 }: DelegationRowArgs = {}): TimelineDelegationWorkRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "work",
     workKind: "delegation",
     status,
-    callId: id,
+    callId: callId ?? id,
     toolName,
     subagentType,
     description,
@@ -888,16 +1066,28 @@ export function delegationRow({
 
 export function turnRow({
   children = null,
+  createdAt,
   durationMs = 4_000,
   id = DEFAULT_TURN_ROW_ID,
   seq,
   sourceSeqEnd,
   sourceSeqStart = 10,
+  startedAt,
   status = "completed",
   summaryCount = 1,
+  threadId,
   turnId = DEFAULT_TURN_ID,
 }: TurnRowArgs = {}): TimelineTurnRow {
-  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
+  const base = baseRow({
+    createdAt,
+    id,
+    seq,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+    threadId,
+    turnId,
+  });
   return {
     ...base,
     kind: "turn",

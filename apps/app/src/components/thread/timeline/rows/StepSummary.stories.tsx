@@ -1,5 +1,11 @@
 import type { TimelineRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
+import {
+  commandRow,
+  conversationRow,
+  fileChangeRow,
+  toolRow,
+} from "@/test/fixtures/thread-timeline-rows";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
 export default {
@@ -33,6 +39,16 @@ function workSummaryId(children: readonly TimelineRow[]): string {
   ].join(":");
 }
 
+interface ExplorationToolRowArgs {
+  callId: string;
+  seq: number;
+  toolName: "Read" | "Grep" | "Glob";
+  toolArgs: Record<string, string | number | boolean>;
+  intentPath: string | null;
+  intentType: "read" | "search" | "list_files";
+  output: string;
+}
+
 // ---------------------------------------------------------------------------
 // Step summaries are produced by `buildTimelineViewRows` when an
 // assistant-message boundary closes an open step that holds multiple
@@ -48,7 +64,7 @@ function workSummaryId(children: readonly TimelineRow[]): string {
 const THREAD_ID = "thr_zeb7z9afmw";
 const TURN_ID = "019dd185-ef12-7d50-aa48-47882e9c8aaf";
 
-const closingAssistantMessage: TimelineRow = {
+const closingAssistantMessage: TimelineRow = conversationRow({
   id: `${THREAD_ID}:assistant-text:35460`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -56,15 +72,13 @@ const closingAssistantMessage: TimelineRow = {
   sourceSeqEnd: 35460,
   startedAt: 1777337356000,
   createdAt: 1777337356000,
-  kind: "conversation",
   role: "assistant",
   text: "—",
   attachments: null,
-  turnRequest: null,
-};
+});
 
 // ---- Commands: real turbo build/test commands from the same turn ----------
-const commandTurboBuild: TimelineRow = {
+const commandTurboBuild: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_buildDomainCoreUi`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -72,8 +86,6 @@ const commandTurboBuild: TimelineRow = {
   sourceSeqEnd: 35700,
   startedAt: 1777337330000,
   createdAt: 1777337332100,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_buildDomainCoreUi",
   command:
@@ -82,12 +94,12 @@ const commandTurboBuild: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337332100,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 2100,
+});
 
-const commandTurboTestServer: TimelineRow = {
+const commandTurboTestServer: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_testServer`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -95,8 +107,6 @@ const commandTurboTestServer: TimelineRow = {
   sourceSeqEnd: 35701,
   startedAt: 1777337332200,
   createdAt: 1777337339400,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_testServer",
   command:
@@ -105,12 +115,12 @@ const commandTurboTestServer: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337339400,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 7200,
+});
 
-const commandTurboTestCoreUi: TimelineRow = {
+const commandTurboTestCoreUi: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_testCoreUi`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -118,8 +128,6 @@ const commandTurboTestCoreUi: TimelineRow = {
   sourceSeqEnd: 35702,
   startedAt: 1777337339500,
   createdAt: 1777337346700,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_testCoreUi",
   command:
@@ -128,12 +136,12 @@ const commandTurboTestCoreUi: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337346700,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 7200,
+});
 
-const commandTurboBuildForce: TimelineRow = {
+const commandTurboBuildForce: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_buildForce`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -141,8 +149,6 @@ const commandTurboBuildForce: TimelineRow = {
   sourceSeqEnd: 35733,
   startedAt: 1777337346800,
   createdAt: 1777337352900,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_buildForce",
   command:
@@ -151,12 +157,12 @@ const commandTurboBuildForce: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337352900,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 6100,
+});
 
-const commandGitStatus: TimelineRow = {
+const commandGitStatus: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_gitStatus`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -164,8 +170,6 @@ const commandGitStatus: TimelineRow = {
   sourceSeqEnd: 35831,
   startedAt: 1777337353000,
   createdAt: 1777337353800,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_gitStatus",
   command: "git status --short",
@@ -173,12 +177,12 @@ const commandGitStatus: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337353800,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 800,
+});
 
-const commandGitDiffStat: TimelineRow = {
+const commandGitDiffStat: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_gitDiffStat`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -186,8 +190,6 @@ const commandGitDiffStat: TimelineRow = {
   sourceSeqEnd: 36155,
   startedAt: 1777337353900,
   createdAt: 1777337354400,
-  kind: "work",
-  workKind: "command",
   status: "completed",
   callId: "call_gitDiffStat",
   command:
@@ -196,13 +198,13 @@ const commandGitDiffStat: TimelineRow = {
   source: null,
   output: "",
   exitCode: 0,
-  completedAt: 1777337354400,
   approvalStatus: null,
   activityIntents: [],
-};
+  durationMs: 500,
+});
 
 // ---- File changes: real diffs from the same turn --------------------------
-const fileChangeAssistantStream: TimelineRow = {
+const fileChangeAssistantStream: TimelineRow = fileChangeRow({
   id: `${THREAD_ID}:fileChange:35564`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -210,8 +212,6 @@ const fileChangeAssistantStream: TimelineRow = {
   sourceSeqEnd: 35564,
   startedAt: 1777337123000,
   createdAt: 1777337123900,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_fjGvl1fFJU7cAcw46FcSnbjJ",
   change: {
@@ -228,9 +228,9 @@ const fileChangeAssistantStream: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeIndex: TimelineRow = {
+const fileChangeIndex: TimelineRow = fileChangeRow({
   id: `${THREAD_ID}:fileChange:35573`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -238,8 +238,6 @@ const fileChangeIndex: TimelineRow = {
   sourceSeqEnd: 35573,
   startedAt: 1777337124200,
   createdAt: 1777337125300,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_BXK77XTyviYmWUVNOpPG5nwJ",
   change: {
@@ -258,9 +256,9 @@ const fileChangeIndex: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeActiveThinkingDelete: TimelineRow = {
+const fileChangeActiveThinkingDelete: TimelineRow = fileChangeRow({
   id: `${THREAD_ID}:fileChange:35611`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -268,8 +266,6 @@ const fileChangeActiveThinkingDelete: TimelineRow = {
   sourceSeqEnd: 35611,
   startedAt: 1777337127200,
   createdAt: 1777337127900,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_1JWzaNZyTpVIrB8reX73YYUN",
   change: {
@@ -282,9 +278,9 @@ const fileChangeActiveThinkingDelete: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
-const fileChangeToViewMessages: TimelineRow = {
+const fileChangeToViewMessages: TimelineRow = fileChangeRow({
   id: `${THREAD_ID}:fileChange:35671`,
   threadId: THREAD_ID,
   turnId: TURN_ID,
@@ -292,8 +288,6 @@ const fileChangeToViewMessages: TimelineRow = {
   sourceSeqEnd: 35671,
   startedAt: 1777337128000,
   createdAt: 1777337129500,
-  kind: "work",
-  workKind: "file-change",
   status: "completed",
   callId: "call_3qZxJB5I3kVdSM4pPiBCTm92",
   change: {
@@ -317,19 +311,11 @@ const fileChangeToViewMessages: TimelineRow = {
   stdout: null,
   stderr: null,
   approvalStatus: null,
-};
+});
 
 // ---- Exploration tools (Read / Grep / Glob with real intents) -------------
-function explorationToolRow(args: {
-  callId: string;
-  seq: number;
-  toolName: "Read" | "Grep" | "Glob";
-  toolArgs: Record<string, string | number | boolean>;
-  intentPath: string | null;
-  intentType: "read" | "search" | "list_files";
-  output: string;
-}): TimelineRow {
-  return {
+function explorationToolRow(args: ExplorationToolRowArgs): TimelineRow {
+  return toolRow({
     id: `${THREAD_ID}:tool:${args.callId}`,
     threadId: THREAD_ID,
     turnId: TURN_ID,
@@ -337,14 +323,11 @@ function explorationToolRow(args: {
     sourceSeqEnd: args.seq,
     startedAt: 1777337100000 + args.seq,
     createdAt: 1777337100000 + args.seq + 50,
-    kind: "work",
-    workKind: "tool",
     status: "completed",
     callId: args.callId,
     toolName: args.toolName,
     toolArgs: args.toolArgs,
     output: args.output,
-    completedAt: 1777337100000 + args.seq + 50,
     approvalStatus: null,
     activityIntents:
       args.intentType === "read"
@@ -375,7 +358,8 @@ function explorationToolRow(args: {
                 path: args.intentPath,
               },
             ],
-  };
+    durationMs: 50,
+  });
 }
 
 const readAssistantStream = explorationToolRow({
