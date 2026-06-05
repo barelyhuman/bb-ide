@@ -42,8 +42,6 @@ function rampSteps(block: string): Map<string, number> {
 
 // Every neutral surface/line must be derived from the anchors, not hand-set.
 const REQUIRED_RAMP_TOKENS = [
-  "card",
-  "popover",
   "secondary",
   "accent",
   "muted",
@@ -84,15 +82,21 @@ describe("theme.css neutral ramp", () => {
         }
       });
 
-      it("keeps card and popover at the same elevation", () => {
-        expect(step("card")).toBe(step("popover"));
+      it("keeps card and popover flush with the background", () => {
+        // Elevation is conveyed by border + shadow, not a surface tint, so card
+        // and popover share the page's canvas value instead of sitting on the
+        // lift ramp. Guards against anyone reintroducing a fill tint (the change
+        // that silently broke sticky overlay headers).
+        expect(steps.has("card")).toBe(false);
+        expect(steps.has("popover")).toBe(false);
+        expect(block).toMatch(/--card:\s*var\(--canvas\);/);
+        expect(block).toMatch(/--popover:\s*var\(--canvas\);/);
       });
 
       it("orders fills below borders below input", () => {
-        for (const fill of ["card", "secondary", "accent", "muted", "state-hover"]) {
+        for (const fill of ["secondary", "accent", "muted", "state-hover"]) {
           expect(step(fill)).toBeLessThan(step("border"));
         }
-        expect(step("card")).toBeLessThan(step("muted"));
         expect(step("border")).toBeLessThanOrEqual(step("input"));
       });
 
@@ -101,11 +105,13 @@ describe("theme.css neutral ramp", () => {
         expect(step("sidebar-accent")).toBeGreaterThan(step("sidebar"));
       });
 
-      it("keeps the sidebar quieter than cards in both modes", () => {
-        // Sidebar is chrome adjacent to the background; a card is a raised panel
-        // above it. This ordering must hold in light and dark so the elevation
-        // ramp stays monotonic (it used to invert between modes).
-        expect(step("sidebar")).toBeLessThan(step("card"));
+      it("keeps the sidebar a quiet chrome lift below the fills", () => {
+        // Sidebar is chrome adjacent to the page, so it should be the faintest
+        // lift — below the secondary/accent fills — and never compete with
+        // content surfaces. This must hold in light and dark (the lift used to
+        // invert between modes). Cards are now flush with the page, so the floor
+        // this is measured against is the lowest fill rather than the card.
+        expect(step("sidebar")).toBeLessThan(step("secondary"));
       });
     });
   }

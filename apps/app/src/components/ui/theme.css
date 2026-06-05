@@ -276,11 +276,14 @@
   --ink: oklch(0.3211 0 0);
   --background: var(--canvas);
   --foreground: var(--ink);
-  /* Neutral elevation ramp: var(--ink) N% over the canvas, N rising as a
-   * surface recedes (card lightest, input darkest). */
-  --card: color-mix(in oklch, var(--ink) 3.7%, var(--canvas));
+  /* Card and popover are flush with the canvas — elevation is conveyed by
+   * border + shadow, not a surface tint, so floating menus, raised cards, and
+   * the page all share one surface value (guarded in theme.test.ts). The
+   * neutral lift ramp below (var(--ink) N% over the canvas, N rising as a
+   * surface recedes) still applies to the fills, lines, and input. */
+  --card: var(--canvas);
   --card-foreground: var(--ink);
-  --popover: color-mix(in oklch, var(--ink) 3.7%, var(--canvas));
+  --popover: var(--canvas);
   --popover-foreground: var(--ink);
   --primary: oklch(0.4891 0 0);
   --primary-foreground: oklch(1 0 0);
@@ -399,11 +402,12 @@
   --ink: oklch(0.8853 0 0);
   --background: var(--canvas);
   --foreground: var(--ink);
-  /* Same ramp, darker anchors. Dark needs larger steps to read, so N runs
-   * higher than light. */
-  --card: color-mix(in oklch, var(--ink) 7%, var(--canvas));
+  /* Card and popover stay flush with the canvas here too — elevation comes from
+   * border + shadow. The lift ramp below uses larger steps than light so the
+   * neutral surfaces still read against the darker canvas. */
+  --card: var(--canvas);
   --card-foreground: var(--ink);
-  --popover: color-mix(in oklch, var(--ink) 7%, var(--canvas));
+  --popover: var(--canvas);
   --popover-foreground: var(--ink);
   --primary: oklch(0.7058 0 0);
   --primary-foreground: oklch(0.2178 0 0);

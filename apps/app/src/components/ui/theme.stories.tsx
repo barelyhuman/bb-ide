@@ -45,14 +45,18 @@ function DualTheme({ children }: { children: ReactNode }) {
   );
 }
 
-/** Renders the same sample against both the page background and a card. */
+/** Renders the same sample against the page background and the sidebar — the two
+ *  neutral surfaces that still differ (card and popover are flush with the
+ *  background now). The interactive-state fills are translucent, so this is
+ *  where to confirm they composite the same on the flat page and on the tinted
+ *  sidebar chrome, which is where sidebar rows actually use them. */
 function OnBothSurfaces({ children }: { children: ReactNode }) {
   return (
     <div className="grid w-full grid-cols-2 gap-3">
       {(
         [
           ["on background", "bg-background"],
-          ["on card", "bg-card"],
+          ["on sidebar", "bg-sidebar"],
         ] as const
       ).map(([label, surface]) => (
         <div key={label} className="flex min-w-0 flex-col gap-1.5">
@@ -125,9 +129,11 @@ function SurfaceTag({
 
 /**
  * A realistic slice of app chrome: the sidebar against the page background,
- * with a card and a floating popover. Shows the structural surfaces in the
- * relationships they actually appear in, so "sidebar vs background" or "card vs
- * popover" reads as a real elevation rather than an abstract swatch.
+ * with a card and a floating popover. Card and popover are flush with the
+ * background — they read as raised purely through their border and shadow, not
+ * a surface tint — so this is where to check that border+shadow elevation still
+ * separates a panel (and a panel-over-panel popover) from the page, especially
+ * in dark mode where shadows are faint and the border carries most of the lift.
  */
 function SurfaceWidget() {
   return (
@@ -158,13 +164,13 @@ function SurfaceWidget() {
   );
 }
 
-/** Contiguous elevation ramp — segments touch so adjacent steps are directly
- *  comparable (a collapsed step is immediately visible). */
+/** Contiguous neutral fill ramp — segments touch so adjacent steps are directly
+ *  comparable (a collapsed step is immediately visible). Card and popover are
+ *  intentionally absent: they're flush with the background now, so they belong
+ *  in SurfaceWidget (border+shadow elevation), not on the fill ramp. */
 const RAMP: readonly (readonly [string, string])[] = [
   ["background", "bg-background"],
   ["sidebar", "bg-sidebar"],
-  ["card", "bg-card"],
-  ["popover", "bg-popover"],
   ["secondary", "bg-secondary"],
   ["accent", "bg-accent"],
   ["muted", "bg-muted"],
@@ -208,7 +214,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 function Chip({ token, children }: { token: string; children: ReactNode }) {
   return (
     <div className="flex w-16 flex-col items-center gap-1">
-      <div className="flex size-11 items-center justify-center rounded-md border border-border bg-card">
+      <div className="flex size-11 items-center justify-center rounded-md border border-border bg-background">
         {children}
       </div>
       <span className="text-center text-[10px] leading-tight text-muted-foreground">
@@ -227,7 +233,8 @@ function LineChip({ token, className }: { token: string; className: string }) {
   );
 }
 
-/** A translucent overlay token, composited on the card chip (its real use). */
+/** A translucent overlay token, composited on the chip's background (its real
+ *  use is over a surface — they read the same on background and card now). */
 function OverlayChip({ token, className }: { token: string; className: string }) {
   return (
     <Chip token={token}>
@@ -276,7 +283,7 @@ export function Overview() {
     <StoryCard labelWidth="150px">
       <StoryRow
         label="Neutral surfaces"
-        hint="Structural surfaces in context, then the contiguous elevation ramp — adjacent steps should stay distinguishable."
+        hint="Card and popover sit flush with the page (elevation = border + shadow, see widget); the fill ramp below is the lift steps that remain — adjacent steps should stay distinguishable."
       >
         <DualTheme>
           <SurfaceWidget />
@@ -295,7 +302,7 @@ export function Overview() {
               <LineChip token="border" className="border-border" />
               <LineChip token="input" className="border-input" />
             </Group>
-            <Group title="Overlays (on card)">
+            <Group title="Overlays">
               <OverlayChip token="surface-raised" className="bg-surface-raised" />
               <OverlayChip
                 token="surface-recessed"
