@@ -465,17 +465,21 @@ const SidebarGroupLabel = React.forwardRef<
 });
 SidebarGroupLabel.displayName = "SidebarGroupLabel";
 
-export type SidebarStickyTierKind =
-  | "label"
-  | "project"
-  | "manager"
-  | "environment";
+export type SidebarStickyTierKind = "label" | "project" | "parent";
 
 type SidebarStickyStackProps = React.ComponentProps<"div">;
 
 interface SidebarStickyTierProps extends React.ComponentProps<"div"> {
   tier: SidebarStickyTierKind;
+  // Depth among pinned parents (0 = first parent under the project/label).
+  // Drives the CSS pin offset and z-index for the "parent" tier; the other
+  // tiers are singular and ignore it.
+  level?: number;
 }
+
+type SidebarStickyParentLevelStyle = React.CSSProperties & {
+  "--bb-sidebar-sticky-parent-level": number;
+};
 
 const SidebarStickyStack = React.forwardRef<
   HTMLDivElement,
@@ -496,11 +500,19 @@ SidebarStickyStack.displayName = "SidebarStickyStack";
 const SidebarStickyTier = React.forwardRef<
   HTMLDivElement,
   SidebarStickyTierProps
->(({ children, className, tier, ...props }, ref) => {
+>(({ children, className, tier, level, style, ...props }, ref) => {
+  const tierStyle =
+    tier === "parent" && level !== undefined
+      ? ({
+          ...style,
+          "--bb-sidebar-sticky-parent-level": level,
+        } satisfies SidebarStickyParentLevelStyle)
+      : style;
   return (
     <div
       ref={ref}
       {...props}
+      style={tierStyle}
       data-sidebar={tier === "label" ? "group-label" : undefined}
       data-sidebar-sticky-tier={tier}
       className={cn(

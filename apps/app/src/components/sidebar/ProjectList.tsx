@@ -102,7 +102,7 @@ import {
 import { buildPinnedSidebarState } from "./pinnedSidebarThreads";
 import {
   collapsedEnvironmentIdsAtom,
-  collapsedManagerIdsAtom,
+  collapsedThreadIdsAtom,
   collapsedProjectIdsAtom,
   DEFAULT_SIDEBAR_SECTION_ORDER,
   sidebarSectionOrderAtom,
@@ -866,8 +866,8 @@ function ProjectListComponent({
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(
     collapsedProjectIdsAtom,
   );
-  const [collapsedManagerIdList, setCollapsedManagerIdList] = useAtom(
-    collapsedManagerIdsAtom,
+  const [collapsedThreadIdList, setCollapsedThreadIdList] = useAtom(
+    collapsedThreadIdsAtom,
   );
   const [collapsedEnvironmentIdList, setCollapsedEnvironmentIdList] = useAtom(
     collapsedEnvironmentIdsAtom,
@@ -879,9 +879,9 @@ function ProjectListComponent({
     () => new Set(collapsedProjectIdList),
     [collapsedProjectIdList],
   );
-  const collapsedManagerIds = useMemo(
-    () => new Set(collapsedManagerIdList),
-    [collapsedManagerIdList],
+  const collapsedThreadIds = useMemo(
+    () => new Set(collapsedThreadIdList),
+    [collapsedThreadIdList],
   );
   const collapsedEnvironmentIds = useMemo(
     () => new Set(collapsedEnvironmentIdList),
@@ -907,7 +907,7 @@ function ProjectListComponent({
     () => buildPinnedSidebarState({ threads }),
     [threads],
   );
-  const hasPinnedSection = pinnedSidebarState.rootItems.length > 0;
+  const hasPinnedSection = pinnedSidebarState.rootNodes.length > 0;
   // No apps → no section: the empty Apps list adds nothing, so it stays hidden
   // (like the Pinned section) until at least one global app exists.
   const hasAppsSection = apps.length > 0;
@@ -964,13 +964,13 @@ function ProjectListComponent({
     [setCollapsedProjectIdList],
   );
 
-  const toggleManagerCollapsed = useCallback<ToggleCollapsedId>(
+  const toggleThreadCollapsed = useCallback<ToggleCollapsedId>(
     (threadId) => {
-      setCollapsedManagerIdList((current) => {
+      setCollapsedThreadIdList((current) => {
         return toggleCollapsedIdList({ current, id: threadId });
       });
     },
-    [setCollapsedManagerIdList],
+    [setCollapsedThreadIdList],
   );
 
   const toggleEnvironmentCollapsed = useCallback<ToggleCollapsedId>(
@@ -1045,12 +1045,12 @@ function ProjectListComponent({
 
   const pinnedSectionContent = (
     <PinnedThreadTree
-      rootItems={pinnedSidebarState.rootItems}
+      rootNodes={pinnedSidebarState.rootNodes}
       selectedThreadId={selectedThreadId}
-      collapsedManagerIds={collapsedManagerIds}
+      collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
       onProjectSelect={onProjectSelect}
-      onToggleManagerCollapsed={toggleManagerCollapsed}
+      onToggleThreadCollapsed={toggleThreadCollapsed}
       onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
       isPinnedReorderPending={isPinnedReorderPending}
       onReorderPinnedRoot={handleReorderPinnedRoot}
@@ -1095,14 +1095,14 @@ function ProjectListComponent({
                   selectedThreadId={selectedThreadId}
                   isActive={false}
                   isCollapsed={collapsedProjectIds.has(project.id)}
-                  collapsedManagerIds={collapsedManagerIds}
+                  collapsedThreadIds={collapsedThreadIds}
                   collapsedEnvironmentIds={collapsedEnvironmentIds}
                   isLocalPathInvalid={isLocalPathInvalid}
                   onProjectSelect={onProjectSelect}
                   onCreateProjectThread={handleCreateProjectThread}
                   onCreateProjectManager={handleCreateProjectManager}
                   onToggleProjectCollapsed={toggleProjectCollapsed}
-                  onToggleManagerCollapsed={toggleManagerCollapsed}
+                  onToggleThreadCollapsed={toggleThreadCollapsed}
                   onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
                   isManagerReorderPending={isManagerReorderPending}
                   onReorderManager={handleReorderManager}
@@ -1132,14 +1132,14 @@ function ProjectListComponent({
               selectedThreadId={selectedThreadId}
               isActive={false}
               isCollapsed={collapsedProjectIds.has(project.id)}
-              collapsedManagerIds={collapsedManagerIds}
+              collapsedThreadIds={collapsedThreadIds}
               collapsedEnvironmentIds={collapsedEnvironmentIds}
               isLocalPathInvalid={isLocalPathInvalid}
               onProjectSelect={onProjectSelect}
               onCreateProjectThread={handleCreateProjectThread}
               onCreateProjectManager={handleCreateProjectManager}
               onToggleProjectCollapsed={toggleProjectCollapsed}
-              onToggleManagerCollapsed={toggleManagerCollapsed}
+              onToggleThreadCollapsed={toggleThreadCollapsed}
               onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
               isManagerReorderPending={isManagerReorderPending}
               onReorderManager={handleReorderManager}
@@ -1168,11 +1168,11 @@ function ProjectListComponent({
       projectId={PERSONAL_PROJECT_ID}
       threadListState={projectlessThreadListState}
       selectedThreadId={selectedThreadId}
-      collapsedManagerIds={collapsedManagerIds}
+      collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
       variant="section"
       onProjectSelect={onProjectSelect}
-      onToggleManagerCollapsed={toggleManagerCollapsed}
+      onToggleThreadCollapsed={toggleThreadCollapsed}
       onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
       isManagerReorderPending={isManagerReorderPending}
       onReorderManager={handleReorderManager}

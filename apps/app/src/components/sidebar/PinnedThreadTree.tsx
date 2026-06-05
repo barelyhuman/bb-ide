@@ -26,21 +26,15 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ThreadListEntry } from "@bb/domain";
 import {
   applyNeighborReorder,
   buildNeighborReorderRequest,
   type NeighborReorderRequest,
 } from "@/lib/neighbor-reorder";
-import { cn } from "@/lib/utils";
-import {
-  ThreadRow,
-  type ThreadRowDragBindings,
-  type ThreadRowOptions,
-} from "./ThreadRow";
-import { ManagerThreadGroupRow } from "./ProjectRow";
+import { ThreadTreeNodeRow } from "./ProjectRow";
+import type { ThreadRowDragBindings } from "./ThreadRow";
 import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
-import type { PinnedSidebarRootItem } from "./pinnedSidebarThreads";
+import type { ProjectThreadNode } from "./projectThreadGroups";
 import { useDragClickSuppression } from "./useDragClickSuppression";
 
 export interface PinnedThreadRootReorderCallbacks {
@@ -48,12 +42,12 @@ export interface PinnedThreadRootReorderCallbacks {
 }
 
 export interface PinnedThreadTreeProps {
-  rootItems: readonly PinnedSidebarRootItem[];
+  rootNodes: readonly ProjectThreadNode[];
   selectedThreadId?: string;
-  collapsedManagerIds: Set<string>;
+  collapsedThreadIds: Set<string>;
   collapsedEnvironmentIds: Set<string>;
   onProjectSelect?: () => void;
-  onToggleManagerCollapsed: (threadId: string) => void;
+  onToggleThreadCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
   isPinnedReorderPending?: boolean;
   onReorderPinnedRoot?: (
@@ -66,114 +60,64 @@ interface PinnedRootOrderEntry {
   id: string;
 }
 
-type PinnedRootDragBindings = ThreadRowDragBindings;
-
-interface PinnedThreadRootRowProps {
-  dragBindings?: PinnedRootDragBindings;
-  isDragging?: boolean;
-  onProjectSelect?: () => void;
-  rootRef?: (element: HTMLDivElement | null) => void;
-  rootStyle?: CSSProperties;
-  selectedThreadId?: string;
-  thread: ThreadListEntry;
-}
-
 interface SortablePinnedRootItemProps {
   collapsedEnvironmentIds: Set<string>;
-  collapsedManagerIds: Set<string>;
+  collapsedThreadIds: Set<string>;
   disabled: boolean;
-  item: PinnedSidebarRootItem;
+  node: ProjectThreadNode;
   onProjectSelect?: () => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
-  onToggleManagerCollapsed: (threadId: string) => void;
+  onToggleThreadCollapsed: (threadId: string) => void;
   selectedThreadId?: string;
 }
 
-interface PinnedRootItemProps extends Omit<SortablePinnedRootItemProps, "disabled"> {
+interface PinnedRootItemProps
+  extends Omit<SortablePinnedRootItemProps, "disabled"> {
   consumeClickSuppression?: () => boolean;
 }
 
+type PinnedRootDragBindings = ThreadRowDragBindings;
 type PinnedThreadTreeClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
-const PINNED_THREAD_ROOT_OPTIONS: ThreadRowOptions = {
-  kind: "default",
-  indent: "root",
-};
-
-function getPinnedRootItemId(item: PinnedSidebarRootItem): string {
-  return item.kind === "thread" ? item.thread.id : item.group.managerThread.id;
+function getPinnedRootNodeId(node: ProjectThreadNode): string {
+  return node.thread.id;
 }
 
 function hasSamePinnedRootOrder(
   order: readonly PinnedRootOrderEntry[],
-  rootItems: readonly PinnedSidebarRootItem[],
+  rootNodes: readonly ProjectThreadNode[],
 ): boolean {
-  if (order.length !== rootItems.length) {
+  if (order.length !== rootNodes.length) {
     return false;
   }
-  return order.every(
-    (item, index) => item.id === getPinnedRootItemId(rootItems[index]),
-  );
-}
-
-function PinnedThreadRootRow({
-  dragBindings,
-  isDragging = false,
-  onProjectSelect,
-  rootRef,
-  rootStyle,
-  selectedThreadId,
-  thread,
-}: PinnedThreadRootRowProps) {
-  return (
-    <div
-      ref={rootRef}
-      style={rootStyle}
-      className={cn(isDragging && "relative z-20")}
-      {...dragBindings?.attributes}
-      {...(dragBindings?.listeners ?? {})}
-    >
-      <ThreadRow
-        projectId={thread.projectId}
-        thread={thread}
-        isActive={selectedThreadId === thread.id}
-        onProjectSelect={onProjectSelect}
-        options={PINNED_THREAD_ROOT_OPTIONS}
-      />
-    </div>
-  );
+  return order.every((item, index) => {
+    const node = rootNodes[index];
+    return node !== undefined && item.id === getPinnedRootNodeId(node);
+  });
 }
 
 const PinnedRootItem = memo(function PinnedRootItem({
   collapsedEnvironmentIds,
-  collapsedManagerIds,
+  collapsedThreadIds,
   consumeClickSuppression,
-  item,
+  node,
   onProjectSelect,
   onToggleEnvironmentCollapsed,
-  onToggleManagerCollapsed,
+  onToggleThreadCollapsed,
   selectedThreadId,
 }: PinnedRootItemProps) {
-  if (item.kind === "thread") {
-    return (
-      <PinnedThreadRootRow
-        thread={item.thread}
-        selectedThreadId={selectedThreadId}
-        onProjectSelect={onProjectSelect}
-      />
-    );
-  }
-
   return (
-    <ManagerThreadGroupRow
-      projectId={item.group.managerThread.projectId}
-      managerThreadGroup={item.group}
+    <ThreadTreeNodeRow
+      projectId={node.thread.projectId}
+      node={node}
+      depthOffset={0}
+      isEnvGrouped={false}
       selectedThreadId={selectedThreadId}
-      variant="section"
-      isManagerCollapsed={collapsedManagerIds.has(item.group.managerThread.id)}
+      collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
+      variant="section"
       onProjectSelect={onProjectSelect}
-      onToggleManagerCollapsed={onToggleManagerCollapsed}
+      onToggleThreadCollapsed={onToggleThreadCollapsed}
       onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
       consumeClickSuppression={consumeClickSuppression}
     />
@@ -182,15 +126,15 @@ const PinnedRootItem = memo(function PinnedRootItem({
 
 const SortablePinnedRootItem = memo(function SortablePinnedRootItem({
   collapsedEnvironmentIds,
-  collapsedManagerIds,
+  collapsedThreadIds,
   disabled,
-  item,
+  node,
   onProjectSelect,
   onToggleEnvironmentCollapsed,
-  onToggleManagerCollapsed,
+  onToggleThreadCollapsed,
   selectedThreadId,
 }: SortablePinnedRootItemProps) {
-  const itemId = getPinnedRootItemId(item);
+  const nodeId = getPinnedRootNodeId(node);
   const {
     attributes,
     isDragging,
@@ -200,7 +144,7 @@ const SortablePinnedRootItem = memo(function SortablePinnedRootItem({
     transform,
     transition,
   } = useSortable({
-    id: itemId,
+    id: nodeId,
     disabled,
     transition: SIDEBAR_SORTABLE_TRANSITION,
   });
@@ -221,30 +165,18 @@ const SortablePinnedRootItem = memo(function SortablePinnedRootItem({
     [attributes, disabled, listeners, setActivatorNodeRef],
   );
 
-  if (item.kind === "thread") {
-    return (
-      <PinnedThreadRootRow
-        dragBindings={dragBindings}
-        isDragging={isDragging}
-        onProjectSelect={onProjectSelect}
-        rootRef={setNodeRef}
-        rootStyle={style}
-        selectedThreadId={selectedThreadId}
-        thread={item.thread}
-      />
-    );
-  }
-
   return (
-    <ManagerThreadGroupRow
-      projectId={item.group.managerThread.projectId}
-      managerThreadGroup={item.group}
+    <ThreadTreeNodeRow
+      projectId={node.thread.projectId}
+      node={node}
+      depthOffset={0}
+      isEnvGrouped={false}
       selectedThreadId={selectedThreadId}
-      variant="section"
-      isManagerCollapsed={collapsedManagerIds.has(item.group.managerThread.id)}
+      collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
+      variant="section"
       onProjectSelect={onProjectSelect}
-      onToggleManagerCollapsed={onToggleManagerCollapsed}
+      onToggleThreadCollapsed={onToggleThreadCollapsed}
       onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
       dragBindings={dragBindings}
       sortableRef={setNodeRef}
@@ -255,41 +187,41 @@ const SortablePinnedRootItem = memo(function SortablePinnedRootItem({
 });
 
 export const PinnedThreadTree = memo(function PinnedThreadTree({
-  rootItems,
+  rootNodes,
   selectedThreadId,
-  collapsedManagerIds,
+  collapsedThreadIds,
   collapsedEnvironmentIds,
   onProjectSelect,
-  onToggleManagerCollapsed,
+  onToggleThreadCollapsed,
   onToggleEnvironmentCollapsed,
   isPinnedReorderPending = false,
   onReorderPinnedRoot,
 }: PinnedThreadTreeProps) {
   const [optimisticPinnedRootOrder, setOptimisticPinnedRootOrder] =
     useState<PinnedRootOrderEntry[] | null>(null);
-  const renderedRootItems = useMemo(() => {
+  const renderedRootNodes = useMemo(() => {
     if (!optimisticPinnedRootOrder) {
-      return rootItems;
+      return rootNodes;
     }
-    const itemsById = new Map(
-      rootItems.map((item) => [getPinnedRootItemId(item), item]),
+    const nodesById = new Map(
+      rootNodes.map((node) => [getPinnedRootNodeId(node), node]),
     );
-    const orderedItems: PinnedSidebarRootItem[] = [];
+    const orderedNodes: ProjectThreadNode[] = [];
     for (const item of optimisticPinnedRootOrder) {
-      const rootItem = itemsById.get(item.id);
-      if (!rootItem) {
-        return rootItems;
+      const rootNode = nodesById.get(item.id);
+      if (!rootNode) {
+        return rootNodes;
       }
-      orderedItems.push(rootItem);
+      orderedNodes.push(rootNode);
     }
-    return orderedItems;
-  }, [optimisticPinnedRootOrder, rootItems]);
-  const renderedRootItemIds = useMemo(
-    () => renderedRootItems.map(getPinnedRootItemId),
-    [renderedRootItems],
+    return orderedNodes;
+  }, [optimisticPinnedRootOrder, rootNodes]);
+  const renderedRootNodeIds = useMemo(
+    () => renderedRootNodes.map(getPinnedRootNodeId),
+    [renderedRootNodes],
   );
   const reorderDisabled =
-    isPinnedReorderPending || !onReorderPinnedRoot || renderedRootItems.length < 2;
+    isPinnedReorderPending || !onReorderPinnedRoot || renderedRootNodes.length < 2;
   const {
     beginDragClickSuppression,
     clearDragClickSuppressionSoon,
@@ -306,9 +238,12 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-  const handleDragStart = useCallback((_event: DragStartEvent) => {
-    beginDragClickSuppression();
-  }, [beginDragClickSuppression]);
+  const handleDragStart = useCallback(
+    (_event: DragStartEvent) => {
+      beginDragClickSuppression();
+    },
+    [beginDragClickSuppression],
+  );
   const handleDragCancel = useCallback(() => {
     clearDragClickSuppressionSoon();
   }, [clearDragClickSuppressionSoon]);
@@ -329,16 +264,16 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
       const request = buildNeighborReorderRequest({
         activeId: active.id,
         overId: over.id,
-        items: renderedRootItems.map((item) => ({
-          id: getPinnedRootItemId(item),
+        items: renderedRootNodes.map((node) => ({
+          id: getPinnedRootNodeId(node),
         })),
       });
       if (!request) {
         return;
       }
       const nextOrder = applyNeighborReorder({
-        items: renderedRootItems.map((item) => ({
-          id: getPinnedRootItemId(item),
+        items: renderedRootNodes.map((node) => ({
+          id: getPinnedRootNodeId(node),
         })),
         request,
       });
@@ -355,17 +290,17 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
       clearDragClickSuppressionSoon,
       isPinnedReorderPending,
       onReorderPinnedRoot,
-      renderedRootItems,
+      renderedRootNodes,
     ],
   );
   useEffect(() => {
     if (!optimisticPinnedRootOrder) {
       return;
     }
-    if (hasSamePinnedRootOrder(optimisticPinnedRootOrder, rootItems)) {
+    if (hasSamePinnedRootOrder(optimisticPinnedRootOrder, rootNodes)) {
       setOptimisticPinnedRootOrder(null);
     }
-  }, [optimisticPinnedRootOrder, rootItems]);
+  }, [optimisticPinnedRootOrder, rootNodes]);
   const handleClickCapture = useCallback<PinnedThreadTreeClickCaptureHandler>(
     (event) => {
       if (!consumeDragClickSuppression()) {
@@ -377,7 +312,7 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
     [consumeDragClickSuppression],
   );
 
-  if (renderedRootItems.length === 0) {
+  if (renderedRootNodes.length === 0) {
     return null;
   }
 
@@ -387,7 +322,7 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
       className="relative space-y-0.5 group-data-[collapsible=icon]:hidden"
       onClickCapture={handleClickCapture}
     >
-      {renderedRootItems.length > 1 ? (
+      {renderedRootNodes.length > 1 ? (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -396,34 +331,34 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={renderedRootItemIds}
+            items={renderedRootNodeIds}
             strategy={verticalListSortingStrategy}
           >
-            {renderedRootItems.map((item) => (
+            {renderedRootNodes.map((node) => (
               <SortablePinnedRootItem
-                key={getPinnedRootItemId(item)}
-                item={item}
+                key={getPinnedRootNodeId(node)}
+                node={node}
                 disabled={reorderDisabled}
                 selectedThreadId={selectedThreadId}
-                collapsedManagerIds={collapsedManagerIds}
+                collapsedThreadIds={collapsedThreadIds}
                 collapsedEnvironmentIds={collapsedEnvironmentIds}
                 onProjectSelect={onProjectSelect}
-                onToggleManagerCollapsed={onToggleManagerCollapsed}
+                onToggleThreadCollapsed={onToggleThreadCollapsed}
                 onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
               />
             ))}
           </SortableContext>
         </DndContext>
       ) : (
-        renderedRootItems.map((item) => (
+        renderedRootNodes.map((node) => (
           <PinnedRootItem
-            key={getPinnedRootItemId(item)}
-            item={item}
+            key={getPinnedRootNodeId(node)}
+            node={node}
             selectedThreadId={selectedThreadId}
-            collapsedManagerIds={collapsedManagerIds}
+            collapsedThreadIds={collapsedThreadIds}
             collapsedEnvironmentIds={collapsedEnvironmentIds}
             onProjectSelect={onProjectSelect}
-            onToggleManagerCollapsed={onToggleManagerCollapsed}
+            onToggleThreadCollapsed={onToggleThreadCollapsed}
             onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
             consumeClickSuppression={consumeDragClickSuppression}
           />

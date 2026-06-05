@@ -1,5 +1,4 @@
 import { useCallback, useState, type ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import {
@@ -27,15 +26,13 @@ export default {
 // demos).
 function SidebarStage({ children }: { children: ReactNode }) {
   return (
-    <MemoryRouter>
-      <ProjectActionsProvider>
-        <ThreadActionsProvider>
-          <div className="w-full max-w-[460px] min-w-0 rounded-md bg-sidebar p-2 text-sidebar-foreground">
-            {children}
-          </div>
-        </ThreadActionsProvider>
-      </ProjectActionsProvider>
-    </MemoryRouter>
+    <ProjectActionsProvider>
+      <ThreadActionsProvider>
+        <div className="w-full max-w-[460px] min-w-0 rounded-md bg-sidebar p-2 text-sidebar-foreground">
+          {children}
+        </div>
+      </ThreadActionsProvider>
+    </ProjectActionsProvider>
   );
 }
 
@@ -53,7 +50,7 @@ interface InteractiveProjectRowArgs {
   project?: ProjectResponse;
   threadListState: ProjectThreadListState;
   initialCollapsed?: boolean;
-  initialCollapsedManagerIds?: ReadonlySet<string>;
+  initialCollapsedThreadIds?: ReadonlySet<string>;
   initialCollapsedEnvironmentIds?: ReadonlySet<string>;
   isActive?: boolean;
   isLocalPathInvalid?: boolean;
@@ -66,14 +63,14 @@ function InteractiveProjectRow({
   project = makeProject(),
   threadListState,
   initialCollapsed = false,
-  initialCollapsedManagerIds,
+  initialCollapsedThreadIds,
   initialCollapsedEnvironmentIds,
   isActive = false,
   isLocalPathInvalid = false,
 }: InteractiveProjectRowArgs) {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
-  const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(
-    () => new Set(initialCollapsedManagerIds ?? []),
+  const [collapsedThreadIds, setCollapsedThreadIds] = useState<Set<string>>(
+    () => new Set(initialCollapsedThreadIds ?? []),
   );
   const [collapsedEnvironmentIds, setCollapsedEnvironmentIds] = useState<
     Set<string>
@@ -81,9 +78,9 @@ function InteractiveProjectRow({
   const onToggleProjectCollapsed = useCallback(() => {
     setIsCollapsed((current) => !current);
   }, []);
-  const onToggleManagerCollapsed = useCallback<ToggleStoryCollapsedId>(
+  const onToggleThreadCollapsed = useCallback<ToggleStoryCollapsedId>(
     (threadId) => {
-      setCollapsedManagerIds((current) => {
+      setCollapsedThreadIds((current) => {
         const next = new Set(current);
         if (next.has(threadId)) {
           next.delete(threadId);
@@ -115,13 +112,13 @@ function InteractiveProjectRow({
       threadListState={threadListState}
       isActive={isActive}
       isCollapsed={isCollapsed}
-      collapsedManagerIds={collapsedManagerIds}
+      collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
       isLocalPathInvalid={isLocalPathInvalid}
       onCreateProjectThread={noop}
       onCreateProjectManager={noop}
       onToggleProjectCollapsed={onToggleProjectCollapsed}
-      onToggleManagerCollapsed={onToggleManagerCollapsed}
+      onToggleThreadCollapsed={onToggleThreadCollapsed}
       onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
     />
   );
@@ -210,6 +207,62 @@ const managerChildB = makeThread({
     displayStatus: "active",
     hostReconnectGraceExpiresAt: null,
   },
+});
+const deepRootManager = makeThread({
+  id: "thr_deep_root_manager",
+  type: "manager",
+  title: "Prototype Manager",
+  titleFallback: "Prototype Manager",
+});
+const deepStandardParent = makeThread({
+  id: "thr_deep_standard_parent",
+  title: "Sidebar Parent Thread",
+  titleFallback: "Sidebar Parent Thread",
+  parentThreadId: deepRootManager.id,
+});
+const deepStandardChild = makeThread({
+  id: "thr_deep_standard_child",
+  title: "Standard Child With Its Own Children",
+  titleFallback: "Standard Child With Its Own Children",
+  parentThreadId: deepStandardParent.id,
+});
+const deepNestedManager = makeThread({
+  id: "thr_deep_nested_manager",
+  type: "manager",
+  title: "Nested Manager Marker",
+  titleFallback: "Nested Manager Marker",
+  parentThreadId: deepStandardChild.id,
+});
+// depth 4: child of the depth-3 nested manager. Its parent is the deepest row
+// that still pins (level 3 = the cap); this row itself sits one past the cap and
+// renders non-sticky, so the story exercises both the last pinned level and the
+// first unpinned one.
+const deepNestedManagerChild = makeThread({
+  id: "thr_deep_nested_manager_child",
+  title: "Beyond The Sticky Cap",
+  titleFallback: "Beyond The Sticky Cap",
+  parentThreadId: deepNestedManager.id,
+});
+const deepWorktreeA = makeThread({
+  id: "thr_deep_worktree_a",
+  title: "Worktree Thread A",
+  titleFallback: "Worktree Thread A",
+  parentThreadId: deepStandardParent.id,
+  environmentId: "env_deep_worktree",
+  environmentHostId: HOST_IDS.local,
+  environmentBranchName: "bb/sidebar-parent-child-nesting",
+  environmentWorkspaceDisplayKind: "managed-worktree",
+});
+const deepWorktreeB = makeThread({
+  id: "thr_deep_worktree_b",
+  title: "Worktree Thread B",
+  titleFallback: "Worktree Thread B",
+  parentThreadId: deepStandardParent.id,
+  environmentId: "env_deep_worktree",
+  environmentHostId: HOST_IDS.local,
+  environmentBranchName: "bb/sidebar-parent-child-nesting",
+  environmentWorkspaceDisplayKind: "managed-worktree",
+  hasPendingInteraction: true,
 });
 
 interface MultiProjectEntry extends InteractiveProjectRowArgs {
@@ -328,11 +381,30 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
+        label="deep parent nesting"
+        hint="mixed manager/standard parents past the sticky cap (4 levels), with a worktree group nested below a standard parent — scroll to see the deepest parent within the cap pin while the row past it stays loose"
+      >
+        {singleProject({
+          threadListState: {
+            status: "ready",
+            threads: [
+              deepRootManager,
+              deepStandardParent,
+              deepStandardChild,
+              deepNestedManager,
+              deepNestedManagerChild,
+              deepWorktreeA,
+              deepWorktreeB,
+            ],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
         label="manager starts collapsed"
         hint="children hidden by default"
       >
         {singleProject({
-          initialCollapsedManagerIds: new Set([manager.id]),
+          initialCollapsedThreadIds: new Set([manager.id]),
           threadListState: {
             status: "ready",
             threads: [manager, managerChildA, managerChildB],
@@ -367,7 +439,7 @@ export function Overview() {
         hint="trailing attention dot surfaces a hidden child blocked on the user"
       >
         {singleProject({
-          initialCollapsedManagerIds: new Set([manager.id]),
+          initialCollapsedThreadIds: new Set([manager.id]),
           threadListState: {
             status: "ready",
             threads: [
@@ -383,7 +455,7 @@ export function Overview() {
         hint="one child blocked, another running: attention wins, trailing slot shows the attention dot"
       >
         {singleProject({
-          initialCollapsedManagerIds: new Set([manager.id]),
+          initialCollapsedThreadIds: new Set([manager.id]),
           threadListState: {
             status: "ready",
             threads: [

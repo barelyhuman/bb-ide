@@ -39,6 +39,10 @@ function createThread(
   };
 }
 
+function rootIds(state: ReturnType<typeof buildPinnedSidebarState>): string[] {
+  return state.rootNodes.map((node) => node.thread.id);
+}
+
 describe("buildPinnedSidebarState", () => {
   it("sorts visible pinned roots by global pin sort key", () => {
     const state = buildPinnedSidebarState({
@@ -60,11 +64,7 @@ describe("buildPinnedSidebarState", () => {
       ],
     });
 
-    expect(
-      state.rootItems.map((item) =>
-        item.kind === "thread" ? item.thread.id : item.group.managerThread.id,
-      ),
-    ).toEqual(["pinned-early", "pinned-late"]);
+    expect(rootIds(state)).toEqual(["pinned-early", "pinned-late"]);
     expect([...state.effectivePinnedThreadIds].sort()).toEqual([
       "pinned-early",
       "pinned-late",
@@ -72,9 +72,6 @@ describe("buildPinnedSidebarState", () => {
   });
 
   it("orders pin sort keys by codepoint, not locale", () => {
-    // The fractional-index keys are collated by codepoint on the server and by
-    // the key generator. `localeCompare` would order "a" before "Z"; codepoint
-    // (matching the server) orders "Z" (0x5A) before "a" (0x61).
     const state = buildPinnedSidebarState({
       threads: [
         createThread({
@@ -90,25 +87,25 @@ describe("buildPinnedSidebarState", () => {
       ],
     });
 
-    expect(
-      state.rootItems.map((item) =>
-        item.kind === "thread" ? item.thread.id : item.group.managerThread.id,
-      ),
-    ).toEqual(["pinned-upper", "pinned-lower"]);
+    expect(rootIds(state)).toEqual(["pinned-upper", "pinned-lower"]);
   });
 
-  it("moves manager children with a pinned manager", () => {
+  it("moves every descendant with a pinned parent regardless of type", () => {
     const state = buildPinnedSidebarState({
       threads: [
         createThread({
-          id: "manager",
-          type: "manager",
+          id: "standard-parent",
           pinnedAt: 1_000,
           pinSortKey: "a",
         }),
         createThread({
-          id: "child",
-          parentThreadId: "manager",
+          id: "manager-child",
+          type: "manager",
+          parentThreadId: "standard-parent",
+        }),
+        createThread({
+          id: "standard-grandchild",
+          parentThreadId: "manager-child",
         }),
         createThread({
           id: "root",
@@ -117,66 +114,53 @@ describe("buildPinnedSidebarState", () => {
     });
 
     expect([...state.effectivePinnedThreadIds].sort()).toEqual([
-      "child",
-      "manager",
+      "manager-child",
+      "standard-grandchild",
+      "standard-parent",
     ]);
-    expect(state.rootItems).toHaveLength(1);
-    const item = state.rootItems[0];
-    if (!item || item.kind !== "manager") {
-      throw new Error("Expected pinned manager root item");
-    }
-    expect(item.group.managerThread.id).toBe("manager");
-    expect(item.group.stats.managedChildCount).toBe(1);
+    expect(rootIds(state)).toEqual(["standard-parent"]);
+    expect(state.rootNodes[0]?.stats.childCount).toBe(2);
   });
 
-  it("renders an explicitly pinned child as a root only when its manager is not pinned", () => {
+  it("renders an explicitly pinned child as a root when its parent is not pinned", () => {
     const state = buildPinnedSidebarState({
       threads: [
         createThread({
-          id: "manager",
-          type: "manager",
+          id: "parent",
         }),
         createThread({
           id: "child",
-          parentThreadId: "manager",
+          parentThreadId: "parent",
           pinnedAt: 1_000,
           pinSortKey: "a",
         }),
       ],
     });
 
-    expect(state.rootItems).toHaveLength(1);
-    const item = state.rootItems[0];
-    if (!item || item.kind !== "thread") {
-      throw new Error("Expected pinned child root item");
-    }
-    expect(item.thread.id).toBe("child");
+    expect(rootIds(state)).toEqual(["child"]);
   });
 
-  it("hides an explicitly pinned child under its pinned manager root", () => {
+  it("hides an explicitly pinned child under its pinned ancestor root", () => {
     const state = buildPinnedSidebarState({
       threads: [
         createThread({
-          id: "manager",
-          type: "manager",
+          id: "parent",
           pinnedAt: 2_000,
           pinSortKey: "a",
         }),
         createThread({
           id: "child",
-          parentThreadId: "manager",
+          parentThreadId: "parent",
           pinnedAt: 1_000,
           pinSortKey: "b",
         }),
       ],
     });
 
-    expect(state.rootItems).toHaveLength(1);
-    const item = state.rootItems[0];
-    if (!item || item.kind !== "manager") {
-      throw new Error("Expected pinned manager root item");
-    }
-    expect(item.group.managerThread.id).toBe("manager");
-    expect(item.group.stats.managedChildCount).toBe(1);
+    expect(rootIds(state)).toEqual(["parent"]);
+    expect(state.rootNodes[0]?.children[0]).toMatchObject({
+      kind: "thread",
+    });
+    expect(state.rootNodes[0]?.stats.childCount).toBe(1);
   });
 });

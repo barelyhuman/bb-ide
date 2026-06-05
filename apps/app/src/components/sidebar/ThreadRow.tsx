@@ -1,4 +1,11 @@
-import { memo, useCallback, useState, type MouseEventHandler } from "react";
+import {
+  memo,
+  useCallback,
+  useState,
+  type CSSProperties,
+  type MouseEventHandler,
+  type ReactNode,
+} from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import type {
   DraggableAttributes,
@@ -49,38 +56,32 @@ import {
   SIDEBAR_ROW_GLYPH_SLOT_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   SIDEBAR_UNREAD_DOT_CLASS,
-  getSidebarThreadRowPaddingClass,
-  type SidebarThreadRowIndent,
+  getSidebarThreadRowPaddingLeft,
 } from "./sidebarRowClasses";
 import type { ConsumeDragClickSuppression } from "./useDragClickSuppression";
 
+interface ThreadRowBaseOptions {
+  depth: number;
+  isCompact: boolean;
+  isEnvGrouped: boolean;
+}
+
 export type ThreadRowOptions =
-  | {
+  | (ThreadRowBaseOptions & {
       kind: "default";
-      indent: SidebarThreadRowIndent;
-    }
-  | {
-      kind: "managed-child";
-      indent: SidebarThreadRowIndent;
-    }
-  | {
-      kind: "env-grouped-child";
-      indent: SidebarThreadRowIndent;
-    }
-  | {
-      kind: "env-grouped-managed-child";
-      indent: SidebarThreadRowIndent;
-    }
-  | {
-      kind: "manager";
-      indent: SidebarThreadRowIndent;
+    })
+  | (ThreadRowBaseOptions & {
+      kind: "parent";
       isCollapsed: boolean;
-      nestedChildCount: number;
-      managedChildActivity: CollapsedChildActivity;
+      childCount: number;
+      childActivity: CollapsedChildActivity;
+      // Depth among pinned parents when this row is sticky; absent = not pinned
+      // (deeper than the sticky cap, or not a sticky parent role).
+      stickyLevel?: number;
       onToggleCollapsed: (threadId: string) => void;
       consumeClickSuppression?: ConsumeDragClickSuppression;
       dragBindings?: ThreadRowDragBindings;
-    };
+    });
 
 export interface ThreadRowDragBindings {
   attributes: DraggableAttributes;
@@ -97,19 +98,36 @@ interface ThreadRowProps {
   options: ThreadRowOptions;
 }
 
-interface ManagerChevronProps {
+interface ThreadParentChevronProps {
   isCollapsed: boolean;
   onToggle: () => void;
+  showManagerIcon: boolean;
   threadTitle: string;
 }
 
 type ThreadRowClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
-function ManagerChevron({
+interface ThreadRowContainerArgs {
+  children: ReactNode;
+  className: string;
+  dragBindings?: ThreadRowDragBindings;
+  onClickCapture?: ThreadRowClickCaptureHandler;
+  stickyLevel?: number;
+  style: CSSProperties;
+}
+
+function ThreadParentChevron({
   isCollapsed,
   onToggle,
+  showManagerIcon,
   threadTitle,
-}: ManagerChevronProps) {
+}: ThreadParentChevronProps) {
+  const chevronClassName = cn(
+    "inline-flex items-center justify-center transition-all duration-150",
+    COARSE_POINTER_ICON_SIZE_CLASS,
+    !isCollapsed && "rotate-90",
+  );
+
   return (
     <button
       type="button"
@@ -119,9 +137,7 @@ function ManagerChevron({
           ? `Expand ${threadTitle} threads`
           : `Collapse ${threadTitle} threads`
       }
-      title={
-        isCollapsed ? "Expand managed threads" : "Collapse managed threads"
-      }
+      title={isCollapsed ? "Expand child threads" : "Collapse child threads"}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -139,35 +155,46 @@ function ManagerChevron({
           COARSE_POINTER_ICON_SIZE_CLASS,
         )}
       >
-        <span
-          data-manager-leading-icon=""
-          className={cn(
-            "absolute inline-flex items-center justify-center opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 group-has-[:focus-visible]/thread-row:opacity-0",
-            COARSE_POINTER_ICON_SIZE_CLASS,
-          )}
-          aria-hidden="true"
-        >
-          <Icon
-            name="UserRound"
-            className={COARSE_POINTER_ICON_SIZE_CLASS}
-            aria-hidden="true"
-          />
-        </span>
-        <span
-          data-manager-collapse-indicator=""
-          className={cn(
-            "absolute inline-flex items-center justify-center opacity-0 transition-all duration-150 group-hover/thread-row:opacity-100 group-has-[:focus-visible]/thread-row:opacity-100",
-            COARSE_POINTER_ICON_SIZE_CLASS,
-            !isCollapsed && "rotate-90",
-          )}
-          aria-hidden="true"
-        >
-          <Icon
-            name="ChevronRight"
-            className={COARSE_POINTER_ICON_SIZE_CLASS}
-            aria-hidden="true"
-          />
-        </span>
+        {showManagerIcon ? (
+          <>
+            <span
+              data-manager-leading-icon=""
+              className={cn(
+                "absolute inline-flex items-center justify-center opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 group-has-[:focus-visible]/thread-row:opacity-0",
+                COARSE_POINTER_ICON_SIZE_CLASS,
+              )}
+              aria-hidden="true"
+            >
+              <Icon
+                name="UserRound"
+                className={COARSE_POINTER_ICON_SIZE_CLASS}
+                aria-hidden="true"
+              />
+            </span>
+            <span
+              data-thread-collapse-indicator=""
+              className={cn(
+                "absolute opacity-0 group-hover/thread-row:opacity-100 group-has-[:focus-visible]/thread-row:opacity-100",
+                chevronClassName,
+              )}
+              aria-hidden="true"
+            >
+              <Icon
+                name="ChevronRight"
+                className={COARSE_POINTER_ICON_SIZE_CLASS}
+                aria-hidden="true"
+              />
+            </span>
+          </>
+        ) : (
+          <span className={chevronClassName} aria-hidden="true">
+            <Icon
+              name="ChevronRight"
+              className={COARSE_POINTER_ICON_SIZE_CLASS}
+              aria-hidden="true"
+            />
+          </span>
+        )}
       </span>
     </button>
   );
@@ -186,6 +213,44 @@ function ManagerLeadingIcon() {
         aria-hidden="true"
       />
     </span>
+  );
+}
+
+function getThreadRowStyle(depth: number): CSSProperties {
+  return {
+    paddingLeft: getSidebarThreadRowPaddingLeft(depth),
+  };
+}
+
+function renderThreadRowContainer({
+  children,
+  className,
+  dragBindings,
+  onClickCapture,
+  stickyLevel,
+  style,
+}: ThreadRowContainerArgs) {
+  if (stickyLevel !== undefined) {
+    return (
+      <SidebarStickyTier
+        ref={dragBindings?.setActivatorNodeRef}
+        tier="parent"
+        level={stickyLevel}
+        className={className}
+        style={style}
+        {...dragBindings?.attributes}
+        {...(dragBindings?.listeners ?? {})}
+        onClickCapture={onClickCapture}
+      >
+        {children}
+      </SidebarStickyTier>
+    );
+  }
+
+  return (
+    <div className={className} style={style} onClickCapture={onClickCapture}>
+      {children}
+    </div>
   );
 }
 
@@ -327,70 +392,67 @@ function ThreadRowComponent({
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction;
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread);
   const threadTitle = getThreadDisplayTitle(thread);
-  const managerOptions = options.kind === "manager" ? options : null;
-  const isManager = managerOptions !== null;
-  const isManagedChild = options.kind === "managed-child";
-  const isEnvGroupedChild = options.kind === "env-grouped-child";
-  const isEnvGroupedManagedChild = options.kind === "env-grouped-managed-child";
-  const isCompactChild =
-    isManagedChild || isEnvGroupedChild || isEnvGroupedManagedChild;
-  const isUnderEnvHeader = isEnvGroupedChild || isEnvGroupedManagedChild;
-  const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
-  const nestedChildCount = managerOptions?.nestedChildCount ?? 0;
-  const managedChildActivity =
-    managerOptions?.managedChildActivity ?? NO_COLLAPSED_CHILD_ACTIVITY;
-  const hasNestedChildren = nestedChildCount > 0;
-  // A collapsed manager hides both itself and its children behind one glyph, so
-  // it must surface its own status combined with the rolled-up child activity;
-  // an expanded manager (and any leaf row) shows its own status, since the
-  // children are then visible with their own glyphs.
+  const parentOptions = options.kind === "parent" ? options : null;
+  const isManager = thread.type === "manager";
+  const isParentRow = parentOptions !== null;
+  const isParentCollapsed = parentOptions?.isCollapsed ?? false;
+  const childCount = parentOptions?.childCount ?? 0;
+  const childActivity =
+    parentOptions?.childActivity ?? NO_COLLAPSED_CHILD_ACTIVITY;
+  const hasChildren = childCount > 0;
+  // A collapsed parent hides its descendants behind one glyph, so it must
+  // surface its own status combined with the rolled-up child activity. Expanded
+  // parents and leaves show only their own status.
   const hasHiddenChildren =
-    isManager && isManagerCollapsed && hasNestedChildren;
+    isParentRow && isParentCollapsed && hasChildren;
   const trailingHasPendingInteraction = hasHiddenChildren
-    ? hasPendingInteraction || managedChildActivity.pending
+    ? hasPendingInteraction || childActivity.pending
     : hasPendingInteraction;
   const trailingIsBusy = hasHiddenChildren
-    ? threadIsBusy || managedChildActivity.working
+    ? threadIsBusy || childActivity.working
     : threadIsBusy;
   const trailingShowUnreadBadge = hasHiddenChildren
-    ? showUnreadBadge || managedChildActivity.unread
+    ? showUnreadBadge || childActivity.unread
     : showUnreadBadge;
   // Env-grouped children sit under a header that already shows the
   // worktree branch + icon, so suppress the redundant trailing icon.
-  const environmentIcon = isUnderEnvHeader
+  const environmentIcon = options.isEnvGrouped
     ? null
     : getEnvironmentWorkspaceDisplayIconName(
         thread.environmentWorkspaceDisplayKind,
       );
-  const environmentIconLabel = isUnderEnvHeader
+  const environmentIconLabel = options.isEnvGrouped
     ? null
     : getEnvironmentWorkspaceDisplayIconLabel(
         thread.environmentWorkspaceDisplayKind,
       );
+  const parentDragBindings = parentOptions?.dragBindings;
   const rowClassName = cn(
     SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
     "group/thread-row",
     SIDEBAR_ROW_BASE_CLASS,
-    !isManager && "relative",
-    isCompactChild
+    parentOptions?.stickyLevel === undefined && "relative",
+    options.isCompact
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    getSidebarThreadRowPaddingClass(options.indent),
     showActive
       ? "bg-sidebar-border text-sidebar-foreground"
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+    parentDragBindings &&
+      !parentDragBindings.disabled &&
+      "select-none cursor-grab active:cursor-grabbing",
   );
+  const rowStyle = getThreadRowStyle(options.depth);
   const isActionsOpen = isDropdownActionsOpen || isContextActionsOpen;
-  const managerDragBindings = managerOptions?.dragBindings;
-  const handleManagerClickCapture = useCallback<ThreadRowClickCaptureHandler>(
+  const handleParentClickCapture = useCallback<ThreadRowClickCaptureHandler>(
     (event) => {
-      if (!managerOptions?.consumeClickSuppression?.()) {
+      if (!parentOptions?.consumeClickSuppression?.()) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
     },
-    [managerOptions],
+    [parentOptions],
   );
 
   const rowContent = (
@@ -410,12 +472,13 @@ function ThreadRowComponent({
         title={`Open ${threadTitle}`}
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
       />
-      {managerOptions && hasNestedChildren ? (
-        <ManagerChevron
-          isCollapsed={isManagerCollapsed}
+      {parentOptions && hasChildren ? (
+        <ThreadParentChevron
+          isCollapsed={isParentCollapsed}
           onToggle={() => {
-            managerOptions.onToggleCollapsed(thread.id);
+            parentOptions.onToggleCollapsed(thread.id);
           }}
+          showManagerIcon={isManager}
           threadTitle={threadTitle}
         />
       ) : isManager ? (
@@ -460,7 +523,7 @@ function ThreadRowComponent({
           >
             <ThreadActionsMenu
               thread={thread}
-              showManagerArchiveAll={isManager && nestedChildCount > 0}
+              showManagerArchiveAll={isManager && hasChildren}
               triggerClassName={cn(
                 "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
@@ -473,30 +536,19 @@ function ThreadRowComponent({
     </>
   );
 
-  const row = isManager ? (
-    <SidebarStickyTier
-      ref={managerDragBindings?.setActivatorNodeRef}
-      tier="manager"
-      className={cn(
-        rowClassName,
-        managerDragBindings &&
-          !managerDragBindings.disabled &&
-          "select-none cursor-grab active:cursor-grabbing",
-      )}
-      {...managerDragBindings?.attributes}
-      {...(managerDragBindings?.listeners ?? {})}
-      onClickCapture={handleManagerClickCapture}
-    >
-      {rowContent}
-    </SidebarStickyTier>
-  ) : (
-    <div className={rowClassName}>{rowContent}</div>
-  );
+  const row = renderThreadRowContainer({
+    children: rowContent,
+    className: rowClassName,
+    dragBindings: parentDragBindings,
+    onClickCapture: parentOptions ? handleParentClickCapture : undefined,
+    stickyLevel: parentOptions?.stickyLevel,
+    style: rowStyle,
+  });
 
   return (
     <ThreadActionsContextMenu
       thread={thread}
-      showManagerArchiveAll={isManager && nestedChildCount > 0}
+      showManagerArchiveAll={isManager && hasChildren}
       onOpenChange={setIsContextActionsOpen}
     >
       {row}

@@ -121,15 +121,20 @@
         var(--bb-sidebar-sticky-label-height) +
         var(--bb-sidebar-sticky-label-gap)
     );
-    --bb-sidebar-sticky-manager-top: calc(
+    /* The first pinned parent level (a manager, parent thread, or worktree
+       group header) sits directly below the project row. Deeper levels stack
+       from this base via --bb-sidebar-sticky-parent-level (set inline per row),
+       capped in JS so a deep chain can't pin more ancestors than the viewport
+       affords. The section variant (no project row) overrides the base below. */
+    --bb-sidebar-sticky-parent-base-top: calc(
       var(--bb-sidebar-sticky-project-top) +
         var(--bb-sidebar-sticky-row-height) + var(--bb-sidebar-sticky-row-gap)
     );
-    --bb-sidebar-sticky-environment-top: calc(
-      var(--bb-sidebar-sticky-manager-top) +
-        var(--bb-sidebar-sticky-row-height) +
+    --bb-sidebar-sticky-parent-stride: calc(
+      var(--bb-sidebar-sticky-row-height) +
         var(--bb-sidebar-sticky-child-row-gap)
     );
+    --bb-sidebar-sticky-parent-base-z: 40;
 
     padding: var(--bb-sidebar-sticky-stack-padding-top)
       var(--bb-sidebar-sticky-stack-padding)
@@ -219,21 +224,24 @@
     );
   }
 
-  [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="manager"] {
-    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-manager-top);
-    --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
-    --bb-sidebar-sticky-tier-z-index: 40;
-    /* Manager rows and top-level env rows have a compact child gap. The 4px
-       project row gap would overshoot and clip the next row's top. */
-    --bb-sidebar-sticky-tier-shield-bottom-height: var(
-      --bb-sidebar-sticky-child-row-gap
+  [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="parent"] {
+    /* Depth-driven: each level pins one row-stride below the previous, so a
+       chain of nested parents stacks without per-level CSS. The level is set
+       inline per row (see SidebarStickyTier); JS caps how many levels get the
+       tier at all. */
+    --bb-sidebar-sticky-tier-top: calc(
+      var(--bb-sidebar-sticky-parent-base-top) +
+        var(--bb-sidebar-sticky-parent-level, 0) *
+        var(--bb-sidebar-sticky-parent-stride)
     );
-  }
-
-  [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="environment"] {
-    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-environment-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
-    --bb-sidebar-sticky-tier-z-index: 35;
+    /* Shallower ancestors win the overlap, so z-index descends with depth. */
+    --bb-sidebar-sticky-tier-z-index: calc(
+      var(--bb-sidebar-sticky-parent-base-z) -
+        var(--bb-sidebar-sticky-parent-level, 0)
+    );
+    /* Parent rows and worktree group headers butt against their first child
+       with the compact child gap; the wider project row gap would clip it. */
     --bb-sidebar-sticky-tier-shield-bottom-height: var(
       --bb-sidebar-sticky-child-row-gap
     );
@@ -247,19 +255,11 @@
   }
 
   /* Section-variant trees (Pinned, projectless Threads) have no project tier:
-     the hierarchy is label -> manager -> managed-env. Shift the manager and
-     environment sticky offsets up one level so a manager pins directly under
-     the section label instead of reserving an empty project-row slot. */
-  [data-sidebar-sticky-stack]
-    [data-sidebar-sticky-section]
-    [data-sidebar-sticky-tier="manager"] {
-    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-project-top);
-  }
-
-  [data-sidebar-sticky-stack]
-    [data-sidebar-sticky-section]
-    [data-sidebar-sticky-tier="environment"] {
-    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-manager-top);
+     the hierarchy is label -> parents. Drop the parent base up one level so the
+     first parent pins directly under the section label instead of reserving an
+     empty project-row slot. One base override covers every depth. */
+  [data-sidebar-sticky-stack] [data-sidebar-sticky-section] {
+    --bb-sidebar-sticky-parent-base-top: var(--bb-sidebar-sticky-project-top);
   }
 
   @media (max-width: 767px) and (pointer: coarse) {

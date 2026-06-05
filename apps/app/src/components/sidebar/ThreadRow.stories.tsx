@@ -41,21 +41,27 @@ const noop = () => {};
 
 const defaultOption: ThreadRowOptions = {
   kind: "default",
-  indent: "project-child",
+  depth: 1,
+  isCompact: false,
+  isEnvGrouped: false,
 };
-const managedChildOption: ThreadRowOptions = {
-  kind: "managed-child",
-  indent: "nested-child",
+const childOption: ThreadRowOptions = {
+  kind: "default",
+  depth: 2,
+  isCompact: true,
+  isEnvGrouped: false,
 };
 function managerOption(
-  overrides: Partial<Extract<ThreadRowOptions, { kind: "manager" }>> = {},
+  overrides: Partial<Extract<ThreadRowOptions, { kind: "parent" }>> = {},
 ): ThreadRowOptions {
   return {
-    kind: "manager",
-    indent: "project-child",
+    kind: "parent",
+    depth: 1,
+    isCompact: false,
+    isEnvGrouped: false,
     isCollapsed: false,
-    nestedChildCount: 0,
-    managedChildActivity: NO_COLLAPSED_CHILD_ACTIVITY,
+    childCount: 0,
+    childActivity: NO_COLLAPSED_CHILD_ACTIVITY,
     onToggleCollapsed: noop,
     ...overrides,
   };
@@ -220,7 +226,7 @@ export function Overview() {
             projectId="proj_demo"
             thread={managerThread}
             isActive={false}
-            options={managerOption({ nestedChildCount: 0 })}
+            options={managerOption({ childCount: 0 })}
           />
         </SidebarStage>
       </StoryRow>
@@ -235,14 +241,14 @@ export function Overview() {
             isActive={false}
             options={managerOption({
               isCollapsed: false,
-              nestedChildCount: 4,
+              childCount: 4,
             })}
           />
           <ThreadRow
             projectId="proj_demo"
             thread={childThread}
             isActive={false}
-            options={managedChildOption}
+            options={childOption}
           />
         </SidebarStage>
       </StoryRow>
@@ -257,7 +263,7 @@ export function Overview() {
             isActive={false}
             options={managerOption({
               isCollapsed: true,
-              nestedChildCount: 4,
+              childCount: 4,
             })}
           />
         </SidebarStage>
@@ -273,8 +279,8 @@ export function Overview() {
             isActive={false}
             options={managerOption({
               isCollapsed: true,
-              nestedChildCount: 4,
-              managedChildActivity: childActivity({ working: true }),
+              childCount: 4,
+              childActivity: childActivity({ working: true }),
             })}
           />
         </SidebarStage>
@@ -290,8 +296,8 @@ export function Overview() {
             isActive={false}
             options={managerOption({
               isCollapsed: true,
-              nestedChildCount: 4,
-              managedChildActivity: childActivity({ pending: true }),
+              childCount: 4,
+              childActivity: childActivity({ pending: true }),
             })}
           />
         </SidebarStage>
@@ -307,8 +313,8 @@ export function Overview() {
             isActive={false}
             options={managerOption({
               isCollapsed: true,
-              nestedChildCount: 4,
-              managedChildActivity: childActivity({
+              childCount: 4,
+              childActivity: childActivity({
                 pending: true,
                 working: true,
               }),
@@ -332,7 +338,7 @@ export function Overview() {
               },
             })}
             isActive={false}
-            options={managedChildOption}
+            options={childOption}
           />
         </SidebarStage>
       </StoryRow>
@@ -348,7 +354,7 @@ export function Overview() {
               hasPendingInteraction: true,
             })}
             isActive={false}
-            options={managedChildOption}
+            options={childOption}
           />
         </SidebarStage>
       </StoryRow>

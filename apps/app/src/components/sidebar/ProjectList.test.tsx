@@ -1410,16 +1410,155 @@ describe("ProjectList", () => {
     ).closest("div");
     const managerRow = screen
       .getByText("Projectless Manager")
-      .closest("[data-sidebar-sticky-tier='manager']");
+      .closest("[data-sidebar-sticky-tier='parent']");
     const childRow = screen
       .getByText("Projectless Managed Child")
       .closest("div");
 
-    expect(standardRow?.classList.contains("pl-2")).toBe(true);
-    expect(standardRow?.classList.contains("pl-8")).toBe(false);
-    expect(managerRow?.classList.contains("pl-2")).toBe(true);
-    expect(managerRow?.classList.contains("pl-8")).toBe(false);
-    expect(childRow?.classList.contains("pl-8")).toBe(true);
+    expect(
+      standardRow instanceof HTMLElement ? standardRow.style.paddingLeft : null,
+    ).toBe("8px");
+    expect(
+      managerRow instanceof HTMLElement ? managerRow.style.paddingLeft : null,
+    ).toBe("8px");
+    expect(
+      childRow instanceof HTMLElement ? childRow.style.paddingLeft : null,
+    ).toBe("32px");
+  });
+
+  it("preserves accumulated depth for environment groups nested inside environment groups", async () => {
+    const project = makeProjectResponse({
+      id: "project-1",
+      name: "Project One",
+    });
+    const outerA = makeThreadListEntry(project.id, 10, {
+      id: "outer-a",
+      title: "Outer A",
+      titleFallback: "Outer A",
+      environmentId: "env-outer",
+      environmentBranchName: "outer",
+      environmentWorkspaceDisplayKind: "managed-worktree",
+      latestAttentionAt: 100,
+    });
+    const outerB = makeThreadListEntry(project.id, 9, {
+      id: "outer-b",
+      title: "Outer B",
+      titleFallback: "Outer B",
+      environmentId: "env-outer",
+      environmentBranchName: "outer",
+      environmentWorkspaceDisplayKind: "managed-worktree",
+      latestAttentionAt: 90,
+    });
+    const innerA = makeThreadListEntry(project.id, 8, {
+      id: "inner-a",
+      title: "Inner A",
+      titleFallback: "Inner A",
+      parentThreadId: outerA.id,
+      environmentId: "env-inner",
+      environmentBranchName: "inner",
+      environmentWorkspaceDisplayKind: "managed-worktree",
+      latestAttentionAt: 80,
+    });
+    const innerB = makeThreadListEntry(project.id, 7, {
+      id: "inner-b",
+      title: "Inner B",
+      titleFallback: "Inner B",
+      parentThreadId: outerA.id,
+      environmentId: "env-inner",
+      environmentBranchName: "inner",
+      environmentWorkspaceDisplayKind: "managed-worktree",
+      latestAttentionAt: 70,
+    });
+    const personalProject = makeProjectWithThreadsResponse({
+      id: PERSONAL_PROJECT_ID,
+      kind: "personal",
+      name: "Personal",
+      threads: [],
+    });
+    installProjectListFetchRoutes([
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            buildSidebarNavigationResponse({
+              personalProject,
+              projects: [project],
+              threadsByProjectId: new Map([
+                [project.id, [outerA, outerB, innerA, innerB]],
+              ]),
+            }),
+          ),
+      },
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([project]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    const outerHeader = (
+      await screen.findByRole("button", {
+        name: "Collapse Worktree: outer threads",
+      })
+    ).closest("[data-sidebar-sticky-tier='parent']");
+    const outerThreadRow = screen
+      .getByRole("link", { name: "Open Outer A" })
+      .closest("[data-sidebar-sticky-tier='parent']");
+    const innerHeader = screen
+      .getByRole("button", { name: "Collapse Worktree: inner threads" })
+      .closest("[data-sidebar-sticky-tier='parent']");
+    const innerThreadRow = screen
+      .getByRole("link", { name: "Open Inner A" })
+      .closest("div");
+
+    expect(
+      outerHeader instanceof HTMLElement ? outerHeader.style.paddingLeft : null,
+    ).toBe("32px");
+    expect(
+      outerThreadRow instanceof HTMLElement
+        ? outerThreadRow.style.paddingLeft
+        : null,
+    ).toBe("56px");
+    expect(
+      innerHeader instanceof HTMLElement ? innerHeader.style.paddingLeft : null,
+    ).toBe("80px");
+    expect(
+      innerThreadRow instanceof HTMLElement ? innerThreadRow.style.paddingLeft : null,
+    ).toBe("104px");
+    expect(
+      outerHeader instanceof HTMLElement
+        ? outerHeader.style.getPropertyValue("--bb-sidebar-sticky-parent-level")
+        : null,
+    ).toBe("0");
+    expect(
+      outerThreadRow instanceof HTMLElement
+        ? outerThreadRow.style.getPropertyValue(
+            "--bb-sidebar-sticky-parent-level",
+          )
+        : null,
+    ).toBe("1");
+    expect(
+      innerHeader instanceof HTMLElement
+        ? innerHeader.style.getPropertyValue("--bb-sidebar-sticky-parent-level")
+        : null,
+    ).toBe("2");
   });
 
   it("renders the projectless Threads section as a non-selectable header", async () => {
