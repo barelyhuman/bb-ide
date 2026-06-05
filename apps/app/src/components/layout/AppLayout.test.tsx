@@ -305,6 +305,18 @@ describe("AppLayout desktop chrome", () => {
     );
   });
 
+  it("uses the subtle seam token for the bordered top-nav divider", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/settings" });
+
+    const headerRow = await screen.findByTestId("app-page-header-content-row");
+    const header = headerRow.parentElement;
+
+    // The top-nav divider is drawn with the dedicated subtle seam token, not the
+    // stronger content border.
+    expect(header?.className).toContain("border-b");
+    expect(header?.className).toContain("border-border-seam");
+  });
+
   it("renders root with project-style header spacing in browser layout", async () => {
     await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
 

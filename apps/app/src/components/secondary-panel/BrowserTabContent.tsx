@@ -183,7 +183,7 @@ function BrowserChrome({
   const addressValue = isEditing ? addressDraft : currentUrl;
 
   return (
-    <div className="relative flex items-center gap-1 border-b border-border bg-card px-2 py-1.5">
+    <div className="relative flex items-center gap-1 border-b border-border-seam bg-card px-2 py-1.5">
       <NavButton
         icon="ChevronLeft"
         label="Go back"

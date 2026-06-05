@@ -243,6 +243,41 @@ describe("ThreadSecondaryPanel", () => {
     },
   );
 
+  it("keeps the New Tab button immediately after the tab strip's last tab", () => {
+    renderPanel({
+      fileTabs: [
+        buildActiveFileTab({
+          id: "workspace:a.ts",
+          filename: "a.ts",
+          isPinned: false,
+        }),
+      ],
+      renderAsDrawer: false,
+    });
+
+    const strip = screen.getByTestId("secondary-panel-tab-strip");
+    const newTab = screen.getByRole("button", { name: "Open a new tab" });
+
+    // Browser-style: the + sits right after the last tab. It is the strip's
+    // immediate next sibling, and the strip is sized to its tabs (no flex-grow),
+    // so leftover panel width cannot push the + to the far edge.
+    expect(strip.nextElementSibling).toBe(newTab);
+    expect(strip.className).not.toContain("flex-1");
+  });
+
+  it("uses the subtle seam token for the panel resize-handle hairline", () => {
+    renderPanel({ renderAsDrawer: false });
+
+    const handle = screen.getByRole("separator", {
+      name: "Resize thread and secondary panels",
+    });
+    const hairline = handle.querySelector("span");
+
+    // The resting hairline uses the subtle seam token rather than the stronger
+    // content `bg-border`.
+    expect(hairline?.className).toContain("bg-border-seam");
+  });
+
   it.each<ResizeDragEndScenario>([
     {
       name: "pointerup",

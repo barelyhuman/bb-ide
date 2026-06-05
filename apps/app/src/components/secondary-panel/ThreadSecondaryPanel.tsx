@@ -540,7 +540,7 @@ function SecondaryPanelResizeHandle({
     >
       <span
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors",
+          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border-seam transition-colors",
           isResizing
             ? "bg-accent-foreground/50"
             : "group-hover:bg-accent-foreground/35",

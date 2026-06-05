@@ -43,7 +43,7 @@ export function AppPageHeader({
         CHROME_ROW_HEIGHT_CLASS,
         "relative shrink-0 bg-surface-scrim px-4 backdrop-blur-sm",
         usesDesktopChrome && MACOS_WINDOW_DRAG_CLASS,
-        bordered && "border-b border-border",
+        bordered && "border-b border-border-seam",
         className,
       )}
     >
