@@ -10,11 +10,17 @@ import { useAtomValue } from "jotai";
 import { Icon } from "@/components/ui/icon.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover.js";
 import { cn } from "@/lib/utils";
 import {
   PANEL_COLLAPSE_TRANSITION_CLASS,
   PANEL_RESIZE_HIT_AREA_MARGINS,
 } from "./panelTransitionTokens";
+import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import { resolveConversationCollapseControl } from "./panelToggleControlState";
 import { SecondaryPanelTabStrip } from "./SecondaryPanelTabStrip";
 import type { SecondaryPanelFileTab } from "./secondaryPanelFileTab";
@@ -63,6 +69,12 @@ const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
   pointerEvents: "auto",
 };
 
+export interface NewTabMenuRenderProps {
+  closeMenu: () => void;
+}
+
+export type NewTabMenuRenderer = (props: NewTabMenuRenderProps) => ReactNode;
+
 export interface ThreadSecondaryPanelProps {
   activePanel: ThreadSecondaryPanelTab | null;
   canUseGitUi: boolean;
@@ -90,7 +102,7 @@ export interface ThreadSecondaryPanelProps {
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   onCollapse: () => void;
   onClose: () => void;
-  onOpenNewTab: () => void;
+  renderNewTabMenu: NewTabMenuRenderer;
   workspaceRootPath?: string | null;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
@@ -141,7 +153,7 @@ export function ThreadSecondaryPanel({
   onPanelChange,
   onCollapse,
   onClose,
-  onOpenNewTab,
+  renderNewTabMenu,
   workspaceRootPath,
   onOpenFileInEditor,
   onOpenFilePreview,
@@ -268,7 +280,7 @@ export function ThreadSecondaryPanel({
       )}
     >
       <IframeDragGuardOverlay active={isSecondaryPanelResizing} />
-      <div className="bg-background">
+      <div className={SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS}>
         <div
           data-testid="thread-secondary-panel-top-chrome"
           className={cn(
@@ -323,7 +335,7 @@ export function ThreadSecondaryPanel({
               />
             ) : null}
             <NewTabButton
-              onOpenNewTab={onOpenNewTab}
+              renderNewTabMenu={renderNewTabMenu}
               usesDesktopChrome={usesDesktopChrome}
             />
           </div>
@@ -479,26 +491,46 @@ export function ThreadSecondaryPanel({
 }
 
 interface NewTabButtonProps {
-  onOpenNewTab: () => void;
+  renderNewTabMenu: NewTabMenuRenderer;
   usesDesktopChrome: boolean;
 }
 
-function NewTabButton({ onOpenNewTab, usesDesktopChrome }: NewTabButtonProps) {
+function NewTabButton({
+  renderNewTabMenu,
+  usesDesktopChrome,
+}: NewTabButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const closeMenu = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className={cn(
-        "h-7 w-7 shrink-0 rounded-md p-0",
-        usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
-      )}
-      onClick={onOpenNewTab}
-      aria-label="Open a new tab"
-      title="New tab"
-    >
-      <Icon name="Plus" />
-    </Button>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-7 w-7 shrink-0 rounded-md p-0",
+            usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+          )}
+          aria-label="Open tab menu"
+          title="New tab"
+        >
+          <Icon name="Plus" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        className="w-auto min-w-40 p-1 focus-visible:ring-0"
+        mobileTitle="New tab menu"
+      >
+        {renderNewTabMenu({ closeMenu })}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -540,7 +572,7 @@ function SecondaryPanelResizeHandle({
     >
       <span
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border-seam transition-colors",
+          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border-seam-vertical transition-colors",
           isResizing
             ? "bg-accent-foreground/50"
             : "group-hover:bg-accent-foreground/35",

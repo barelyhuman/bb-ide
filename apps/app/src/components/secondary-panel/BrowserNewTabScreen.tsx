@@ -66,43 +66,40 @@ export function BrowserNewTabScreen({
 }: BrowserNewTabScreenProps) {
   const now = Date.now();
 
+  if (recent.length === 0) {
+    return null;
+  }
+
   return (
     <div className="flex h-full flex-col overflow-y-auto px-4 pb-6 pt-8">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
-        {recent.length > 0 ? (
-          <section>
-            <LauncherSectionHeader
-              label="Recently visited"
-              count={recent.length}
-              action={
-                <button
-                  type="button"
-                  onClick={onClearRecent}
-                  aria-label="Clear recently visited"
-                  className="rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  Clear
-                </button>
-              }
-            />
-            <ul aria-label="Recently visited" className="flex flex-col gap-px">
-              {recent.map((entry) => (
-                <li key={entry.url}>
-                  <BrowserRecentRow
-                    entry={entry}
-                    now={now}
-                    onNavigate={onNavigateInput}
-                  />
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : (
-          <p className="rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-xs text-muted-foreground">
-            Pages you visit appear here. Type a URL or search in the address bar
-            above to get started.
-          </p>
-        )}
+        <section>
+          <LauncherSectionHeader
+            label="Recently visited"
+            count={recent.length}
+            action={
+              <button
+                type="button"
+                onClick={onClearRecent}
+                aria-label="Clear recently visited"
+                className="rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                Clear
+              </button>
+            }
+          />
+          <ul aria-label="Recently visited" className="flex flex-col gap-px">
+            {recent.map((entry) => (
+              <li key={entry.url}>
+                <BrowserRecentRow
+                  entry={entry}
+                  now={now}
+                  onNavigate={onNavigateInput}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     </div>
   );

@@ -6,14 +6,16 @@ import { cn } from "@/lib/utils";
 // results in the New tab page and the browser tab's recently-visited list — so
 // density, hover, and the trailing open-affordance stay identical across both
 // surfaces rather than drifting in two parallel class bundles.
-export const LAUNCHER_ROW_BASE_CLASS =
-  "group flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+const LAUNCHER_ROW_SHELL_CLASS =
+  "group flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none";
+export const LAUNCHER_ROW_BASE_CLASS = `${LAUNCHER_ROW_SHELL_CLASS} focus-visible:ring-1 focus-visible:ring-ring`;
+export const LAUNCHER_MENU_ROW_BASE_CLASS = LAUNCHER_ROW_SHELL_CLASS;
 export const LAUNCHER_ROW_ICON_CLASS =
   "flex size-4 shrink-0 items-center justify-center overflow-hidden text-muted-foreground";
 
-// Section labels above launcher row groups (Apps / Open / Files / Recent in the
-// New tab page, "Recently visited" in the browser tab). Mirrors the detail-card
-// key style — a plain muted label — rather than a loud uppercase, tracked header.
+// Section labels above launcher row groups (the + menu, file search, recents,
+// and the browser tab's recently-visited list). Mirrors the detail-card key
+// style rather than a loud uppercase, tracked header.
 const LAUNCHER_SECTION_LABEL_CLASS = "text-xs leading-5 text-muted-foreground";
 
 interface LauncherRowTrailingProps {
@@ -30,7 +32,10 @@ interface LauncherRowTrailingProps {
  * The trailing cell of a launcher row: shows {@link LauncherRowTrailingProps.idle}
  * at rest and an "open" affordance when the row is hovered or keyboard-active.
  */
-export function LauncherRowTrailing({ idle, isActive }: LauncherRowTrailingProps) {
+export function LauncherRowTrailing({
+  idle,
+  isActive,
+}: LauncherRowTrailingProps) {
   return (
     <span className="ml-auto flex shrink-0 items-center justify-end">
       <span
@@ -98,7 +103,9 @@ export function LauncherSectionHeader({
           {count}
         </span>
       ) : null}
-      {action ? <div className="ml-auto flex items-center">{action}</div> : null}
+      {action ? (
+        <div className="ml-auto flex items-center">{action}</div>
+      ) : null}
     </div>
   );
 }

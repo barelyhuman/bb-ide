@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrowserHistoryEntry } from "@/lib/browser-history";
 import { BrowserNewTabScreen } from "./BrowserNewTabScreen";
@@ -68,11 +74,14 @@ describe("BrowserNewTabScreen", () => {
     renderScreen({ recent: [] });
 
     expect(screen.queryByText("Recently visited")).toBeNull();
+    expect(screen.queryByText(/Pages you visit appear here/u)).toBeNull();
   });
 
   it("drops the isolated-session tag", () => {
     renderScreen({
-      recent: [{ url: "https://example.com", title: "Example", visitedAt: Date.now() }],
+      recent: [
+        { url: "https://example.com", title: "Example", visitedAt: Date.now() },
+      ],
     });
 
     expect(screen.queryByText(/isolated session/iu)).toBeNull();

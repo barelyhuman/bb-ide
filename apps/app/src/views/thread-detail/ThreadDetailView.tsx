@@ -89,6 +89,7 @@ import {
 } from "@/components/secondary-panel/ThreadSecondaryPanelTabContent";
 import { AppTabContent } from "@/components/secondary-panel/AppTabContent";
 import { BrowserTabDeck } from "@/components/secondary-panel/BrowserTabDeck";
+import { NewTabActionMenu } from "@/components/secondary-panel/NewTabFileSearch";
 import { NewTabPage } from "@/components/secondary-panel/NewTabPage";
 import { Icon } from "@/components/ui/icon.js";
 import {
@@ -103,7 +104,10 @@ import { getBrowserUrlHost } from "@/lib/browser-url";
 import { ResolvedAppIcon } from "@/components/secondary-panel/AppIcon";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
-import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import type {
+  NewTabMenuRenderer,
+  SecondaryPanelFileTab,
+} from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
@@ -521,7 +525,7 @@ export function ThreadDetailView() {
   const handleSecondaryPanelFocus = useCallback(() => {
     touchFixedPanelTabsState();
   }, [touchFixedPanelTabsState]);
-  const handleOpenNewTab = useCallback(() => {
+  const handleOpenFileSearch = useCallback(() => {
     openNewTab();
     setNewTabFocusRequest((current) => current + 1);
   }, [openNewTab]);
@@ -530,6 +534,29 @@ export function ThreadDetailView() {
     closeSecondaryPanel();
     focusThreadDetailComposer();
   }, [closeNewTab, closeSecondaryPanel]);
+  const renderNewTabMenu = useCallback<NewTabMenuRenderer>(
+    ({ closeMenu }) => (
+      <NewTabActionMenu
+        projectId={projectId ?? undefined}
+        currentThreadId={threadId ?? ""}
+        currentThreadType={thread?.type}
+        onSelect={selectFileSearchResult}
+        onOpenFileSearch={handleOpenFileSearch}
+        onCreateAppPromptPrefill={handleCreateAppPromptPrefill}
+        onOpenBrowser={() => openBrowserTab()}
+        onCloseMenu={closeMenu}
+      />
+    ),
+    [
+      handleCreateAppPromptPrefill,
+      handleOpenFileSearch,
+      openBrowserTab,
+      projectId,
+      selectFileSearchResult,
+      thread?.type,
+      threadId,
+    ],
+  );
   const handleTerminalPanelResize = useCallback(
     (sizePercent: number) => {
       const panelHeightPercent = Math.round(sizePercent);
@@ -1192,8 +1219,6 @@ export function ThreadDetailView() {
       currentThreadId={thread.id}
       currentThreadType={thread.type}
       focusRequest={newTabFocusRequest}
-      onCreateAppPromptPrefill={handleCreateAppPromptPrefill}
-      onOpenBrowser={() => openBrowserTab()}
       onSelect={selectFileSearchResult}
     />
   ) : activeAppId ? (
@@ -1291,7 +1316,7 @@ export function ThreadDetailView() {
           onClose: closeSecondaryPanel,
           onCollapse: closeSecondaryPanel,
           onOpenFileInEditor: handleOpenFileInEditor,
-          onOpenNewTab: handleOpenNewTab,
+          renderNewTabMenu,
           onOpenFilePreview: (relativePath: string) => {
             openWorkspaceFile({
               lineNumber: null,

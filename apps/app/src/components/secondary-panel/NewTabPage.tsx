@@ -1,11 +1,14 @@
-import { NewTabFileSearch, type NewTabFileSearchProps } from "./NewTabFileSearch";
+import {
+  NewTabFileSearch,
+  type NewTabFileSearchProps,
+} from "./NewTabFileSearch";
 
 export type NewTabPageProps = NewTabFileSearchProps;
 
 /**
- * Browser-style "New Tab" landing page for the secondary panel. It hosts the
- * unified app and file launcher so future entry points can sit beside it
- * without reshaping the tab.
+ * Browser-style "New Tab" landing page for the secondary panel. The tab body
+ * is the in-place file search surface; the panel `+` menu owns app/create and
+ * open actions.
  */
 export function NewTabPage(props: NewTabPageProps) {
   return (

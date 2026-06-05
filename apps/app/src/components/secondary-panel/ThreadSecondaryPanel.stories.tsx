@@ -74,7 +74,7 @@ function ShellRow({
             onPanelChange={noop}
             onCollapse={noop}
             onClose={noop}
-            onOpenNewTab={noop}
+            renderNewTabMenu={() => <div>New tab actions</div>}
             isConversationCollapsed={false}
             onToggleConversationCollapse={noop}
             reserveLeftForDesktopTrafficLights={false}
@@ -152,7 +152,7 @@ function FileTabsShellInner({
         }}
         onCollapse={noop}
         onClose={noop}
-        onOpenNewTab={noop}
+        renderNewTabMenu={() => <div>New tab actions</div>}
         isConversationCollapsed={false}
         onToggleConversationCollapse={noop}
         reserveLeftForDesktopTrafficLights={false}

@@ -123,9 +123,7 @@ async function renderAppLayout(args: RenderAppLayoutArgs): Promise<void> {
         <Route
           path="*"
           element={
-            <AppLayout>
-              {args.children ?? <div>Layout content</div>}
-            </AppLayout>
+            <AppLayout>{args.children ?? <div>Layout content</div>}</AppLayout>
           }
         />
       </Routes>,
@@ -317,6 +315,18 @@ describe("AppLayout desktop chrome", () => {
     expect(header?.className).toContain("border-border-seam");
   });
 
+  it("draws the sidebar/content panel edge with the vertical seam token", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    await screen.findByRole("button", { name: "Toggle Sidebar" });
+    const panel = document.querySelector("[data-sidebar='panel']");
+
+    // The sidebar's right edge is a vertical panel divider; it uses the
+    // dedicated vertical seam token instead of the default content border color.
+    expect(panel?.className).toContain("md:border-border-seam-vertical");
+    expect(panel?.className).toContain("md:group-data-[side=left]:border-r");
+  });
+
   it("renders root with project-style header spacing in browser layout", async () => {
     await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
 
@@ -348,9 +358,7 @@ describe("AppLayout desktop chrome", () => {
 
     await screen.findByRole("button", { name: "Toggle Sidebar" });
     const contentShell = screen.getByTestId("app-layout-content-shell");
-    const topReserveRow = screen.getByTestId(
-      "app-sidebar-top-reserve-row",
-    );
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
     const primaryActions = screen.getByTestId("app-sidebar-primary-actions");
     const sidebarPanel = document.querySelector("[data-sidebar='panel']");
     const overlay = screen.getByTestId("app-desktop-sidebar-trigger");
@@ -421,9 +429,7 @@ describe("AppLayout desktop chrome", () => {
     const sidebarTrigger = within(overlay).getByRole("button", {
       name: "Toggle Sidebar",
     });
-    const topReserveRow = screen.getByTestId(
-      "app-sidebar-top-reserve-row",
-    );
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
     const sidebarTriggers = screen.getAllByRole("button", {
       name: "Toggle Sidebar",
     });
@@ -486,17 +492,15 @@ describe("AppLayout desktop chrome", () => {
     });
     const overlay = screen.getByTestId("app-sidebar-trigger-overlay");
     const headerRow = screen.getByTestId("app-page-header-content-row");
-    const topReserveRow = screen.getByTestId(
-      "app-sidebar-top-reserve-row",
-    );
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
 
     // The pinned overlay is the only toggle; neither the header nor the
     // sidebar's top reserve hosts one, so toggling can't make a button
     // mount/unmount in the header (the source of the old jump).
     expect(screen.queryByTestId("app-desktop-sidebar-trigger")).toBeNull();
-    expect(within(overlay).getByRole("button", { name: "Toggle Sidebar" })).toBe(
-      trigger,
-    );
+    expect(
+      within(overlay).getByRole("button", { name: "Toggle Sidebar" }),
+    ).toBe(trigger);
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
     ).toHaveLength(1);
@@ -517,7 +521,9 @@ describe("AppLayout desktop chrome", () => {
 
     fireEvent.click(trigger);
 
-    expect(headerRow.className).toContain(BROWSER_COLLAPSED_HEADER_RESERVE_CLASS);
+    expect(headerRow.className).toContain(
+      BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+    );
     // Still exactly one toggle after collapsing — the same pinned overlay.
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),

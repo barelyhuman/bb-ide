@@ -17,6 +17,7 @@ import {
 } from "@/hooks/queries/query-keys";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import type { SecondaryPanelFileTab } from "./ThreadSecondaryPanel";
+import { NewTabActionMenu } from "./NewTabFileSearch";
 import { NewTabPage } from "./NewTabPage";
 import type { FileSearchSelection } from "./useThreadFileTabs";
 import {
@@ -185,7 +186,6 @@ interface SeededNewTabPageProps {
   currentThreadId: string;
   currentThreadType: ThreadType | undefined;
   initialQuery: string;
-  onOpenBrowser: (() => void) | undefined;
   onSelect: (selection: FileSearchSelection) => void;
   projectId: string | undefined;
   recentItems: readonly ThreadRecentItem[];
@@ -226,7 +226,9 @@ function seedThreadRecentItems({
     return;
   }
 
-  const storageKey = getThreadRecentItemsStorageKey({ threadId: currentThreadId });
+  const storageKey = getThreadRecentItemsStorageKey({
+    threadId: currentThreadId,
+  });
   if (recentItems.length === 0) {
     window.localStorage.removeItem(storageKey);
     return;
@@ -293,7 +295,6 @@ function SeededNewTabPage({
   currentThreadId,
   currentThreadType,
   initialQuery,
-  onOpenBrowser,
   onSelect,
   projectId,
   recentItems,
@@ -309,7 +310,6 @@ function SeededNewTabPage({
       currentThreadType={currentThreadType}
       focusRequest={0}
       initialQuery={initialQuery}
-      onOpenBrowser={onOpenBrowser}
       onSelect={onSelect}
     />
   );
@@ -340,6 +340,9 @@ function NewTabPanelStory({
   }, []);
   const handleOpenBrowser = useCallback(() => {
     setOutcome({ kind: "browser" });
+  }, []);
+  const handleOpenFileSearch = useCallback(() => {
+    setOutcome(null);
   }, []);
   const fileTabs = useMemo<SecondaryPanelFileTab[]>(() => {
     if (outcome === null) {
@@ -384,7 +387,6 @@ function NewTabPanelStory({
           initialQuery={initialQuery}
           projectId={projectId}
           recentItems={recentItems}
-          onOpenBrowser={showOpenBrowser ? handleOpenBrowser : undefined}
           onSelect={handleSelect}
         />
       </QueryClientProvider>
@@ -427,7 +429,20 @@ function NewTabPanelStory({
         metadataContent={null}
         onCollapse={noop}
         onClose={noop}
-        onOpenNewTab={() => setOutcome(null)}
+        renderNewTabMenu={({ closeMenu }) => (
+          <QueryClientProvider client={queryClient}>
+            <NewTabActionMenu
+              projectId={projectId}
+              currentThreadId={currentThreadId}
+              currentThreadType={currentThreadType}
+              onSelect={handleSelect}
+              onOpenFileSearch={handleOpenFileSearch}
+              onCreateAppPromptPrefill={noop}
+              onOpenBrowser={showOpenBrowser ? handleOpenBrowser : undefined}
+              onCloseMenu={closeMenu}
+            />
+          </QueryClientProvider>
+        )}
         onPanelChange={noop}
         onPanelFocus={noop}
         isConversationCollapsed={false}
@@ -459,10 +474,7 @@ export function NewTab() {
           workspacePaths={[]}
         />
       </StoryRow>
-      <StoryRow
-        label="apps"
-        hint="app launcher results with built-in app icons and Create App"
-      >
+      <StoryRow label="apps" hint="apps and Create App in the panel + menu">
         <NewTabPanelStory
           apps={APPS_ROW_APPS}
           currentThreadId={APPS_THREAD_ID}
@@ -509,7 +521,7 @@ export function NewTab() {
       </StoryRow>
       <StoryRow
         label="open browser"
-        hint="desktop-only Open browser action in the launcher's Open section"
+        hint="desktop-only Open browser action in the panel + menu"
       >
         <WithDesktopBrowser>
           <NewTabPanelStory

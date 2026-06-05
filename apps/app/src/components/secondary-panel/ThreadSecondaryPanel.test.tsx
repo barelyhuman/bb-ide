@@ -18,9 +18,11 @@ import { createNoopDesktopBrowserApi } from "@/test/bb-desktop-test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
+  type NewTabMenuRenderer,
   type SecondaryPanelFileTab,
   ThreadSecondaryPanel,
 } from "./ThreadSecondaryPanel";
+import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import {
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
@@ -38,6 +40,7 @@ interface RenderPanelArgs {
   isConversationCollapsed?: boolean;
   onToggleConversationCollapse?: () => void;
   reserveLeftForDesktopTrafficLights?: boolean;
+  renderNewTabMenu?: NewTabMenuRenderer;
 }
 
 interface ResizeDragEndScenario {
@@ -59,6 +62,7 @@ interface BuildActiveFileTabArgs {
 }
 
 const noop = () => {};
+const renderEmptyNewTabMenu: NewTabMenuRenderer = () => <div>New tab menu</div>;
 const IFRAME_DRAG_GUARD_OVERLAY_TESTID = "iframe-drag-guard-overlay";
 // The class that used to disable iframe pointer-events during resize — asserted
 // absent so the regression that broke wheel-scroll can't be reintroduced.
@@ -140,7 +144,8 @@ function renderPanel({
   isConversationCollapsed = false,
   onToggleConversationCollapse = noop,
   reserveLeftForDesktopTrafficLights = false,
-}: RenderPanelArgs) {
+  renderNewTabMenu = renderEmptyNewTabMenu,
+}: RenderPanelArgs = {}) {
   const { wrapper } = createQueryClientTestHarness();
   const panel = (
     <ThreadSecondaryPanel
@@ -155,7 +160,7 @@ function renderPanel({
       metadataContent={<div>Thread details</div>}
       onCollapse={noop}
       onClose={noop}
-      onOpenNewTab={noop}
+      renderNewTabMenu={renderNewTabMenu}
       onPanelChange={noop}
       onPanelFocus={noop}
       isConversationCollapsed={isConversationCollapsed}
@@ -226,7 +231,7 @@ describe("ThreadSecondaryPanel", () => {
         screen.getByRole("button", { name: "Show thread info panel" }),
       );
       expectNoDragRegionOnElementOrAncestor(
-        screen.getByRole("button", { name: "Open a new tab" }),
+        screen.getByRole("button", { name: "Open tab menu" }),
       );
       expectNoDragRegionOnElementOrAncestor(
         screen.getByRole("button", { name: "Hide secondary panel" }),
@@ -256,7 +261,7 @@ describe("ThreadSecondaryPanel", () => {
     });
 
     const strip = screen.getByTestId("secondary-panel-tab-strip");
-    const newTab = screen.getByRole("button", { name: "Open a new tab" });
+    const newTab = screen.getByRole("button", { name: "Open tab menu" });
 
     // Browser-style: the + sits right after the last tab. It is the strip's
     // immediate next sibling, and the strip is sized to its tabs (no flex-grow),
@@ -265,7 +270,48 @@ describe("ThreadSecondaryPanel", () => {
     expect(strip.className).not.toContain("flex-1");
   });
 
-  it("uses the subtle seam token for the panel resize-handle hairline", () => {
+  it("opens the new-tab action popout from the plus button", () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open tab menu" }));
+
+    const menu = screen.getByText("New tab menu");
+    const surface = menu.parentElement;
+
+    expect(menu).toBeTruthy();
+    expect(surface?.className).toContain("w-auto");
+    expect(surface?.className).toContain("min-w-40");
+    expect(surface?.className).toContain("focus-visible:ring-0");
+    expect(surface?.className).not.toContain("w-80");
+    expect(surface?.className).not.toContain("w-96");
+  });
+
+  it("closes the new-tab action popout after a menu action", async () => {
+    const onOpenFile = vi.fn();
+    renderPanel({
+      renderNewTabMenu: ({ closeMenu }) => (
+        <button
+          type="button"
+          onClick={() => {
+            closeMenu();
+            onOpenFile();
+          }}
+        >
+          Open file
+        </button>
+      ),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open tab menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+
+    expect(onOpenFile).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Open file" })).toBeNull();
+    });
+  });
+
+  it("uses the vertical seam token for the panel resize-handle hairline", () => {
     renderPanel({ renderAsDrawer: false });
 
     const handle = screen.getByRole("separator", {
@@ -273,9 +319,19 @@ describe("ThreadSecondaryPanel", () => {
     });
     const hairline = handle.querySelector("span");
 
-    // The resting hairline uses the subtle seam token rather than the stronger
-    // content `bg-border`.
-    expect(hairline?.className).toContain("bg-border-seam");
+    // The resting hairline uses the dedicated vertical seam token rather than
+    // the stronger content `bg-border`.
+    expect(hairline?.className).toContain("bg-border-seam-vertical");
+  });
+
+  it("uses the shared top chrome background on the panel top nav", () => {
+    renderPanel({ renderAsDrawer: false });
+
+    const topChrome = screen.getByTestId("thread-secondary-panel-top-chrome");
+
+    expect(topChrome.parentElement?.className).toContain(
+      SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS,
+    );
   });
 
   it.each<ResizeDragEndScenario>([

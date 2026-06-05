@@ -36,6 +36,7 @@
   --color-border: var(--border);
   --color-border-hairline: var(--border-hairline);
   --color-border-seam: var(--border-seam);
+  --color-border-seam-vertical: var(--border-seam-vertical);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-surface-recessed: var(--surface-recessed);
@@ -320,20 +321,34 @@
   --diff-removed: oklch(0.4 0.17 28);
   --border: oklch(0.8576 0 0);
   --border-hairline: oklch(0.85 0 0);
-  /* App-shell seam: the divider between the top nav and panels. Tuned ~halfway
-     toward the background (0.9551) so the seam reads quieter than a content
-     `--border` without disappearing. Light mode moves lighter; the dark block
-     moves darker, since "subtle" is toward the panel background in each theme. */
-  --border-seam: oklch(0.91 0 0);
+  /* App-shell horizontal seam: top nav and browser/panel top bars. Tuned close
+     to the shell backgrounds so horizontal rules read quieter than vertical
+     panel separators while staying visible. */
+  --border-seam: oklch(0.935 0 0);
+  /* App-shell vertical seam: sidebar/content and resizable panel separators.
+     Stronger than the horizontal seam, softer than the default content border. */
+  --border-seam-vertical: oklch(0.922 0 0);
   --input: oklch(0.75 0 0);
   --ring: oklch(0.4891 0 0);
   --surface-recessed: color-mix(in oklch, oklch(0.8853 0 0) 30%, transparent);
   --surface-raised: color-mix(in oklch, oklch(0.955 0 0) 70%, transparent);
   --surface-scrim: color-mix(in oklch, oklch(0.955 0 0) 92%, transparent);
-  --surface-destructive: color-mix(in oklch, var(--destructive) 6%, transparent);
-  --surface-destructive-border: color-mix(in oklch, var(--destructive) 25%, transparent);
+  --surface-destructive: color-mix(
+    in oklch,
+    var(--destructive) 6%,
+    transparent
+  );
+  --surface-destructive-border: color-mix(
+    in oklch,
+    var(--destructive) 25%,
+    transparent
+  );
   --surface-selected: color-mix(in oklch, var(--primary) 10%, transparent);
-  --surface-selected-border: color-mix(in oklch, var(--primary) 35%, transparent);
+  --surface-selected-border: color-mix(
+    in oklch,
+    var(--primary) 35%,
+    transparent
+  );
   --chart-1: oklch(0.4891 0 0);
   --chart-2: oklch(0.4863 0.0361 196.0278);
   --chart-3: oklch(0.6534 0 0);
@@ -451,19 +466,33 @@
   --diff-removed: oklch(0.72 0.19 22);
   --border: oklch(0.329 0 0);
   --border-hairline: oklch(0.34 0 0);
-  /* App-shell seam (dark): toward the dark background (0.195) so the seam sits
-     quieter than `--border` — note this moves DARKER, unlike `--border-hairline`
-     which is slightly lighter than `--border` here. */
-  --border-seam: oklch(0.27 0 0);
+  /* App-shell horizontal seam (dark): close to the dark backgrounds so top bars
+     stay quieter than vertical panel separators. */
+  --border-seam: oklch(0.25 0 0);
+  /* App-shell vertical seam (dark): stronger than the horizontal seam, softer
+     than the default content border. */
+  --border-seam-vertical: oklch(0.285 0 0);
   --input: oklch(0.42 0 0);
   --ring: oklch(0.7058 0 0);
   --surface-recessed: color-mix(in oklch, oklch(0.285 0 0) 30%, transparent);
   --surface-raised: color-mix(in oklch, oklch(0.195 0 0) 70%, transparent);
   --surface-scrim: color-mix(in oklch, oklch(0.195 0 0) 92%, transparent);
-  --surface-destructive: color-mix(in oklch, var(--destructive) 8%, transparent);
-  --surface-destructive-border: color-mix(in oklch, var(--destructive) 30%, transparent);
+  --surface-destructive: color-mix(
+    in oklch,
+    var(--destructive) 8%,
+    transparent
+  );
+  --surface-destructive-border: color-mix(
+    in oklch,
+    var(--destructive) 30%,
+    transparent
+  );
   --surface-selected: color-mix(in oklch, var(--primary) 12%, transparent);
-  --surface-selected-border: color-mix(in oklch, var(--primary) 35%, transparent);
+  --surface-selected-border: color-mix(
+    in oklch,
+    var(--primary) 35%,
+    transparent
+  );
   --chart-1: oklch(0.7058 0 0);
   --chart-2: oklch(0.6714 0.0339 206.3482);
   --chart-3: oklch(0.5452 0 0);

@@ -31,6 +31,7 @@ import {
   registerBrowserView,
   type BrowserViewVisibilityCoordinator,
 } from "./browserViewVisibilityCoordinator";
+import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
 import type { UpdateBrowserTabArgs } from "./useThreadFileTabs";
 
 export interface BrowserTabContentProps {
@@ -183,7 +184,10 @@ function BrowserChrome({
   const addressValue = isEditing ? addressDraft : currentUrl;
 
   return (
-    <div className="relative flex items-center gap-1 border-b border-border-seam bg-card px-2 py-1.5">
+    <div
+      data-testid="browser-tab-nav-bar"
+      className={`relative flex items-center gap-1 border-b border-border-seam ${SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS} px-2 py-1.5`}
+    >
       <NavButton
         icon="ChevronLeft"
         label="Go back"
@@ -228,7 +232,7 @@ function BrowserChrome({
             onChange={(event) => onAddressChange(event.target.value)}
             onFocus={onAddressFocus}
             onBlur={onAddressBlur}
-            placeholder="Search or enter address"
+            placeholder="Enter a URL"
             aria-label="Address and search bar"
             autoComplete="off"
             spellCheck={false}
@@ -255,8 +259,8 @@ function BrowserUnavailable() {
         Browser tabs need the desktop app
       </div>
       <p className="max-w-xs text-xs text-muted-foreground">
-        The in-app web browser runs in the bb desktop app. Open this thread there
-        to browse the web.
+        The in-app web browser runs in the bb desktop app. Open this thread
+        there to browse the web.
       </p>
     </div>
   );
@@ -276,8 +280,11 @@ export function BrowserTabContent({
     [],
   );
   const contentRef = useRef<HTMLDivElement>(null);
-  const { entries: recent, recordVisit, clear: clearRecent } =
-    useBrowserHistory(threadId);
+  const {
+    entries: recent,
+    recordVisit,
+    clear: clearRecent,
+  } = useBrowserHistory(threadId);
 
   const [state, setState] = useState<BbDesktopBrowserState | null>(null);
   const [currentUrl, setCurrentUrl] = useState(initialUrl);
