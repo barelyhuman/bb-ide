@@ -244,8 +244,8 @@ describe("workspace provisioning", () => {
       [
         "set -euo pipefail",
         `marker_dir=${shellSingleQuote(markerDir)}`,
-        'touch "$marker_dir/started-setup"',
         'trap "touch \\"$marker_dir/started-terminated\\"; exit 0" TERM',
+        'touch "$marker_dir/started-setup"',
         "while true; do sleep 0.05; done",
       ].join("\n") + "\n",
       "utf8",
@@ -311,8 +311,8 @@ describe("workspace provisioning", () => {
       [
         "set -euo pipefail",
         `marker_dir=${shellSingleQuote(markerDir)}`,
-        'touch "$marker_dir/started-setup"',
         'trap "touch \\"$marker_dir/started-terminated\\"; exit 0" TERM',
+        'touch "$marker_dir/started-setup"',
         "while true; do sleep 0.05; done",
       ].join("\n") + "\n",
     );
