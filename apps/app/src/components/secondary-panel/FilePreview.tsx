@@ -9,6 +9,7 @@ import { File as PierreFile } from "@pierre/diffs/react";
 import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
 import type { UrlTransform } from "react-markdown";
 import { Button } from "@/components/ui/button.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { CopyButton } from "@/components/ui/copy-button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
@@ -474,12 +475,9 @@ function FilePreviewLoading() {
 
 function FilePreviewMessage({ message, role }: FilePreviewMessageProps) {
   return (
-    <p
-      role={role}
-      className="mx-4 mt-4 rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground"
-    >
+    <EmptyStatePanel role={role} className="mx-4 mt-4 rounded-lg">
       {message}
-    </p>
+    </EmptyStatePanel>
   );
 }
 

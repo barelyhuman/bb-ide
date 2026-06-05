@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { ThreadType } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Input } from "@/components/ui/input.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { ResolvedAppIcon } from "./AppIcon";
@@ -384,7 +385,7 @@ function FileSearchMessage({
   message,
 }: FileSearchMessageProps) {
   return (
-    <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
+    <EmptyStatePanel className="flex min-h-24 items-center justify-center">
       <div className="flex max-w-64 items-center justify-center gap-1.5">
         <Icon
           name={iconName}
@@ -392,7 +393,7 @@ function FileSearchMessage({
         />
         <p>{message}</p>
       </div>
-    </div>
+    </EmptyStatePanel>
   );
 }
 
@@ -1186,10 +1187,10 @@ function NewTabResults({
               })}
             </div>
           ) : (
-            <p className="rounded-md border border-dashed border-border bg-surface-raised px-3 py-4 text-center text-xs text-muted-foreground">
+            <EmptyStatePanel className="py-4 text-xs">
               Nothing referenced yet — plans, mockups, and files you open will
               show up here.
-            </p>
+            </EmptyStatePanel>
           )}
           {recent.toggleVisible ? (
             <button

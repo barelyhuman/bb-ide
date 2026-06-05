@@ -1,4 +1,5 @@
 import { Icon } from "@/components/ui/icon.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { cn } from "@/lib/utils";
 import { getBrowserUrlHost } from "@/lib/browser-url";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -98,10 +99,10 @@ export function BrowserNewTabScreen({
             </ul>
           </section>
         ) : (
-          <p className="rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-xs text-muted-foreground">
+          <EmptyStatePanel className="text-xs">
             Pages you visit appear here. Type a URL or search in the address bar
             above to get started.
-          </p>
+          </EmptyStatePanel>
         )}
       </div>
     </div>
