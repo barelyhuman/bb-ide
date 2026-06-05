@@ -54,6 +54,19 @@ export const CHROME_ROW_HEIGHT_CLASS = "h-12";
 // row and vertically centered so its contents share the titlebar axis.
 export const CHROME_ROW_CLASS = `flex ${CHROME_ROW_HEIGHT_CLASS} items-center`;
 
+// Optical correction for the sidebar-toggle glyph (the `PanelLeft` icon) on the
+// chrome row. Its button box, SVG box, and getBBox path-union all center on the
+// y=24 chrome axis, yet the rendered artwork's dark-pixel centroid samples
+// ~0.6–0.9 device px (~0.3–0.45 CSS px) BELOW the chevron nav arrows — an
+// optical/rasterization bias of the glyph itself, not container placement. This
+// nudges the glyph up by a matching sub-pixel amount so its VISIBLE center lands
+// on the shared axis with the arrows, traffic lights, and page-title bar. Scoped
+// to this glyph because the bias is specific to its artwork; the arrows are the
+// reference and must not move. Uses an explicit `transform` so the amount is
+// unambiguous and independent of Tailwind's negative-translate scale handling.
+export const CHROME_TOGGLE_ICON_OPTICAL_NUDGE_CLASS =
+  "[transform:translateY(-0.4px)]";
+
 export type BbDesktopInfoResult = BbDesktopApi | null;
 
 export function getBbDesktopInfo(): BbDesktopInfoResult {

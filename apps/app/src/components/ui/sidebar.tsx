@@ -5,6 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { useIsCompactViewport } from "./hooks/use-compact-viewport.js";
 import { cn } from "@/lib/utils";
+import { CHROME_TOGGLE_ICON_OPTICAL_NUDGE_CLASS } from "@/lib/bb-desktop";
 import { Button } from "./button.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
 import { Input } from "./input.js";
@@ -292,7 +293,13 @@ const SidebarTrigger = React.forwardRef<
       }}
       {...props}
     >
-      <Icon name="PanelLeft" className="max-md:pointer-coarse:hidden" />
+      <Icon
+        name="PanelLeft"
+        className={cn(
+          "max-md:pointer-coarse:hidden",
+          CHROME_TOGGLE_ICON_OPTICAL_NUDGE_CLASS,
+        )}
+      />
       <Icon name="AlignLeft" className="hidden max-md:pointer-coarse:block" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
