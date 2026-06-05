@@ -448,7 +448,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
     const firstCatalogHash = firstEntry.skillCatalogHash;
-    manager.markThreadActive("env-skills", "thread-1", "provider-1");
+    manager.markThreadActive("env-skills", "thread-1", "provider-1", null);
     await writeInjectedSkillSource({
       dataDir,
       name: "release-notes",
@@ -502,7 +502,7 @@ describe("RuntimeManager", () => {
       injectedSkillSources: [source],
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-skills", "thread-1", "provider-1");
+    manager.markThreadActive("env-skills", "thread-1", "provider-1", null);
     manager.markThreadInactive("env-skills", "thread-1");
     await writeInjectedSkillSource({
       dataDir,
@@ -558,7 +558,7 @@ describe("RuntimeManager", () => {
       injectedSkillSources: [source],
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-skills", "other-thread", "provider-1");
+    manager.markThreadActive("env-skills", "other-thread", "provider-1", null);
     await writeInjectedSkillSource({
       dataDir,
       name: "release-notes",
@@ -633,7 +633,7 @@ describe("RuntimeManager", () => {
       injectedSkillSources: [source],
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-skills", "thread-1", "provider-1");
+    manager.markThreadActive("env-skills", "thread-1", "provider-1", null);
     await writeInjectedSkillSource({
       dataDir,
       name: "release-notes",

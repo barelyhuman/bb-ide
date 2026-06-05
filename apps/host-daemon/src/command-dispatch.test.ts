@@ -101,7 +101,12 @@ async function setupBusySkillCatalogEnvironment(args: {
     injectedSkillSources: [source],
     workspacePath: WORKSPACE_PATH,
   });
-  manager.markThreadActive("env-1", args.activeThreadId, "provider-thread-1");
+  manager.markThreadActive(
+    "env-1",
+    args.activeThreadId,
+    "provider-thread-1",
+    null,
+  );
   await writeInjectedSkillSource({ dataDir, token: "second-token" });
   return {
     createRuntimeSpy,
