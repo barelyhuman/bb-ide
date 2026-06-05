@@ -1,28 +1,27 @@
 import pRetry, { AbortError } from "p-retry";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
-  hostDaemonAppDataChangeRequestSchema,
-  hostDaemonAppDataResyncRequestSchema,
-  hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
-  hostDaemonProjectAttachmentContentQuerySchema,
-  hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
-  hostDaemonInteractiveRequestSchema,
-  hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
-  hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
   type HostDaemonInteractiveInterruptResponse,
   type HostDaemonInteractiveRequestResponse,
   type HostDaemonActiveThread,
   type HostDaemonAppDataChangePayload,
+  type HostDaemonAppDataChangeRequest,
   type HostDaemonAppDataResyncPayload,
+  type HostDaemonAppDataResyncRequest,
+  type HostDaemonEventBatchRequest,
   type HostDaemonEventEnvelope,
+  type HostDaemonInteractiveInterruptRequest,
+  type HostDaemonInteractiveRequest,
   type HostDaemonLoadedEnvironment,
+  type HostDaemonProjectAttachmentContentQuery,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
+  type HostDaemonToolCallRequest,
   type HostDaemonToolCallResponse,
 } from "@bb/host-daemon-contract";
 import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
@@ -331,7 +330,7 @@ export function createServerClient(
     async openSession(
       args: OpenSessionArgs,
     ): Promise<HostDaemonSessionOpenResponse> {
-      const payload = hostDaemonSessionOpenRequestSchema.parse({
+      const payload: HostDaemonSessionOpenRequest = {
         hostId: args.hostId,
         instanceId: args.instanceId,
         hostName: args.hostName,
@@ -340,7 +339,7 @@ export function createServerClient(
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: await args.activeThreads,
         loadedEnvironments: await args.loadedEnvironments,
-      });
+      };
       const response = await fetchFn(buildInternalUrl("/session/open"), {
         method: "POST",
         headers: headers(),
@@ -363,12 +362,12 @@ export function createServerClient(
         );
       }
 
-      const query = hostDaemonProjectAttachmentContentQuerySchema.parse({
+      const query: HostDaemonProjectAttachmentContentQuery = {
         sessionId: requireSessionId(),
         threadId: args.threadId,
         projectId: args.projectId,
         path: args.path,
-      });
+      };
       const response = await fetchFn(
         buildInternalUrl("/session/project-attachment-content", query),
         {
@@ -395,10 +394,10 @@ export function createServerClient(
     },
 
     async postAppDataChange(args): Promise<void> {
-      const payload = hostDaemonAppDataChangeRequestSchema.parse({
+      const payload: HostDaemonAppDataChangeRequest = {
         sessionId: requireSessionId(),
         ...args,
-      });
+      };
       const response = await fetchFn(
         buildInternalUrl("/session/app-data-change"),
         {
@@ -414,10 +413,10 @@ export function createServerClient(
     },
 
     async postAppDataResync(args): Promise<void> {
-      const payload = hostDaemonAppDataResyncRequestSchema.parse({
+      const payload: HostDaemonAppDataResyncRequest = {
         sessionId: requireSessionId(),
         ...args,
-      });
+      };
       const response = await fetchFn(
         buildInternalUrl("/session/app-data-resync"),
         {
@@ -435,10 +434,10 @@ export function createServerClient(
     async postEvents(
       events: HostDaemonEventEnvelope[],
     ): Promise<EventPostResult> {
-      const payload = hostDaemonEventBatchRequestSchema.parse({
+      const payload: HostDaemonEventBatchRequest = {
         sessionId: requireSessionId(),
         events,
-      });
+      };
       const response = await fetchFn(buildInternalUrl("/session/events"), {
         method: "POST",
         headers: headers(),
@@ -461,10 +460,17 @@ export function createServerClient(
     async callTool(
       request: ToolCallRequest,
     ): Promise<HostDaemonToolCallResponse> {
-      const payload = hostDaemonToolCallRequestSchema.parse({
-        ...request,
+      const payload: HostDaemonToolCallRequest = {
+        threadId: request.threadId,
+        providerThreadId: request.providerThreadId,
+        turnId: request.turnId,
+        callId: request.callId,
+        tool: request.tool,
+        ...(request.arguments !== undefined
+          ? { arguments: request.arguments }
+          : {}),
         sessionId: requireSessionId(),
-      });
+      };
       const response = await fetchFn(buildInternalUrl("/session/tool-call"), {
         method: "POST",
         headers: headers(),
@@ -484,10 +490,10 @@ export function createServerClient(
       return pRetry(
         async () => {
           await options.beforeInteractiveRequestRegistrationAttempt?.();
-          const payload = hostDaemonInteractiveRequestSchema.parse({
+          const payload: HostDaemonInteractiveRequest = {
             sessionId: requireSessionId(),
             interaction: request,
-          });
+          };
           const response = await fetchFn(
             buildInternalUrl("/session/interactive-request"),
             {
@@ -532,12 +538,12 @@ export function createServerClient(
     async interruptInteractiveRequests(
       args,
     ): Promise<HostDaemonInteractiveInterruptResponse> {
-      const payload = hostDaemonInteractiveInterruptRequestSchema.parse({
+      const payload: HostDaemonInteractiveInterruptRequest = {
         sessionId: requireSessionId(),
         providerId: args.providerId,
-        threadIds: args.threadIds,
+        threadIds: [...args.threadIds],
         reason: args.reason,
-      });
+      };
       const response = await fetchFn(
         buildInternalUrl("/session/interactive-request/interrupt"),
         {
