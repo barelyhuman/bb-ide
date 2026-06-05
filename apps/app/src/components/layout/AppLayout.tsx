@@ -40,6 +40,7 @@ import {
   BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,
   CHROME_ROW_CLASS,
   getBbDesktopInfo,
+  MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
@@ -187,10 +188,16 @@ function SidebarTriggerOverlay({
           MACOS_WINDOW_DRAG_CLASS,
         )}
       >
-        {/* No per-button vertical nudge: the overlay's CHROME_ROW_CLASS centers
-            the trigger on the shared chrome axis (the traffic-light / page-title
-            row), so it lines up with the sidebar arrows and lights at y=24. */}
-        <SidebarTrigger className={MACOS_WINDOW_NO_DRAG_CLASS} />
+        {/* The overlay's CHROME_ROW_CLASS box-centers the trigger; the shared
+            traffic-light axis nudge then drops it onto the native lights' axis
+            (which renders ~2 CSS px below the row center), matching the sidebar
+            arrows and page-title header in desktop chrome. */}
+        <SidebarTrigger
+          className={cn(
+            MACOS_WINDOW_NO_DRAG_CLASS,
+            MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+          )}
+        />
       </div>
     );
   }

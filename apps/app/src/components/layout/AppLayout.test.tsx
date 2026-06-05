@@ -27,6 +27,7 @@ import {
   BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
   CHROME_ROW_HEIGHT_CLASS,
   MACOS_APP_REGION_NO_DRAG_CLASS,
+  MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
@@ -242,6 +243,66 @@ describe("AppLayout desktop chrome", () => {
     // register instead of dragging the window.
     expect(topReserveRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(controlsRow?.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
+  });
+
+  it("drops the collapse trigger, history arrows, and header onto the traffic-light axis in desktop chrome", async () => {
+    await renderAppLayout({
+      desktopInfo: createBbDesktopApi({
+        lastCheckedAt: null,
+        latestVersion: null,
+        pendingVersion: null,
+        platform: "macos",
+        updateAvailable: false,
+        updateDownloaded: false,
+        version: "0.0.1",
+      }),
+      initialEntry: "/",
+    });
+
+    const overlay = await screen.findByTestId("app-desktop-sidebar-trigger");
+    const trigger = within(overlay).getByRole("button", {
+      name: "Toggle Sidebar",
+    });
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
+    const arrowsRow = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    }).parentElement;
+    const headerRow = screen.getByTestId("app-page-header-content-row");
+
+    // The native lights render ~2 CSS px below the row center; the shared axis
+    // token moves all three top-chrome surfaces onto that axis together.
+    expect(trigger.className).toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(arrowsRow?.className).toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(headerRow.className).toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+  });
+
+  it("keeps the top chrome row-centered in the browser layout (no traffic lights)", async () => {
+    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
+
+    const trigger = await screen.findByRole("button", {
+      name: "Toggle Sidebar",
+    });
+    const topReserveRow = screen.getByTestId("app-sidebar-top-reserve-row");
+    const arrowsRow = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    }).parentElement;
+    const headerRow = screen.getByTestId("app-page-header-content-row");
+
+    expect(trigger.className).not.toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(arrowsRow?.className ?? "").not.toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
+    expect(headerRow.className).not.toContain(
+      MACOS_CHROME_TRAFFIC_LIGHT_AXIS_NUDGE_CLASS,
+    );
   });
 
   it("renders root with project-style header spacing in browser layout", async () => {
