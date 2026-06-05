@@ -93,18 +93,24 @@ function reduceHistory(
       return { entries, index: state.index };
     }
     case "POP": {
+      // Match on key AND normalized URL. BrowserRouter labels unkeyed
+      // document-history entries `"default"`, so a POP can share the mounted
+      // entry's key while pointing at a different URL; matching by key alone
+      // would reconcile to a recorded slot and leave the stack pointing at a
+      // stale URL.
       const matchedIndex = state.entries.findIndex(
-        (candidate) => candidate.key === entry.key,
+        (candidate) =>
+          candidate.key === entry.key && candidate.url === entry.url,
       );
       if (matchedIndex >= 0) {
         // Native/router Back/Forward into a slot we recorded: reconcile to it
         // and keep the surrounding entries so movement stays reversible.
         return { entries: state.entries, index: matchedIndex };
       }
-      // POP to an unrecorded key landed outside the app-owned session (e.g. a
-      // restored off-app history position). Treat the current route as the
-      // history boundary rather than offering navigation into history we did
-      // not record.
+      // POP to an unrecorded entry landed outside the app-owned session (e.g. a
+      // restored off-app history position, or a `"default"`-key collision).
+      // Treat the current route as the history boundary rather than offering
+      // navigation into history we did not record.
       return { entries: [entry], index: 0 };
     }
   }
@@ -127,20 +133,22 @@ export function useAppRouteHistoryNavigation(): AppRouteHistoryNavigation {
     index: 0,
   }));
 
-  // The current key is processed at init, so the effect only reacts to later
-  // navigations. Without this guard the same transition could be re-applied
-  // (e.g. effect re-runs) and double-push an entry.
-  const lastKeyRef = useRef(location.key);
+  // The mounted location is recorded at init, so the effect only reacts to
+  // later navigations. Dedupe on the location object identity (React Router
+  // hands out a fresh location per navigation) rather than `location.key`: keys
+  // can collide on `"default"`, which would otherwise drop a real POP and leave
+  // the stack stale.
+  const lastLocationRef = useRef(location);
   // Mirror the committed state so the click handlers read the latest stack and
   // index without being re-created on every navigation.
   const stateRef = useRef(state);
   stateRef.current = state;
 
   useEffect(() => {
-    if (lastKeyRef.current === location.key) {
+    if (lastLocationRef.current === location) {
       return;
     }
-    lastKeyRef.current = location.key;
+    lastLocationRef.current = location;
     setState((previous) =>
       reduceHistory(previous, navigationType, {
         key: location.key,

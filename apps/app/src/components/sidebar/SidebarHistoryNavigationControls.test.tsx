@@ -6,12 +6,13 @@ import {
   MemoryRouter,
   useLocation,
   useNavigate,
+  type InitialEntry,
   type NavigateFunction,
 } from "react-router-dom";
 import { SidebarHistoryNavigationControls } from "./SidebarHistoryNavigationControls";
 
 interface RenderControlsArgs {
-  initialEntries?: string[];
+  initialEntries?: InitialEntry[];
   initialIndex?: number;
   onNavigate?: () => void;
 }
@@ -217,6 +218,40 @@ describe("SidebarHistoryNavigationControls", () => {
     // history.
     expect(backButton()).toHaveProperty("disabled", true);
     expect(forwardButton()).toHaveProperty("disabled", true);
+  });
+
+  it("treats a same-key POP to a different URL as the history boundary", () => {
+    // BrowserRouter labels unkeyed document-history entries "default", so two
+    // routes can share that key. The hook mounts on the second one and only
+    // records it.
+    renderControls({
+      initialEntries: [
+        { pathname: "/", key: "default" },
+        { pathname: "/settings", key: "default" },
+      ],
+      initialIndex: 1,
+    });
+
+    expect(currentLocation()).toBe("/settings");
+    expect(backButton()).toHaveProperty("disabled", true);
+
+    // POP onto "/" shares the recorded entry's "default" key but is a different
+    // route. It must become the boundary, not reconcile to the stale /settings
+    // slot.
+    navigateByDelta(-1);
+    expect(currentLocation()).toBe("/");
+    expect(backButton()).toHaveProperty("disabled", true);
+    expect(forwardButton()).toHaveProperty("disabled", true);
+
+    // A later push must enable Back to "/". If the boundary had kept the stale
+    // "/settings" URL, the recorded current URL would equal the pushed URL and
+    // Back would wrongly stay disabled.
+    navigateTo("/settings");
+    expect(currentLocation()).toBe("/settings");
+    expect(backButton()).toHaveProperty("disabled", false);
+
+    fireEvent.click(backButton());
+    expect(currentLocation()).toBe("/");
   });
 
   it("invokes onNavigate after an enabled press and not while disabled", () => {
