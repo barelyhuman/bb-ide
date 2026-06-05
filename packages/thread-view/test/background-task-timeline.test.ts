@@ -8,7 +8,7 @@ import type { TimelineRow, TimelineWorkflowWorkRow } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import {
   buildThreadTimelineFromEvents,
-  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+  EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
   type ThreadEventWithMeta,
 } from "../src/index.js";
 
@@ -25,7 +25,7 @@ function withMeta(event: ThreadEvent, seq: number): ThreadEventWithMeta {
 
 function buildTimelineRows(events: ThreadEventWithMeta[]): TimelineRow[] {
   return buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
     contextWindowEvents: [],
     events,
     options: {

@@ -227,7 +227,6 @@ async function queueReadyManagerSystemMessage(
     },
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
-    managerTemplateName: null,
   });
   let transitioned = false;
   deps.db.transaction(

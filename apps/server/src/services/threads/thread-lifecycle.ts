@@ -1370,38 +1370,6 @@ export async function advanceThreadStart(
   return queuedCommand.id;
 }
 
-export async function queueReadyThreadTurnCommand(
-  deps: LoggedWorkSessionDeps,
-  args: QueueReadyThreadTurnCommandArgs,
-): Promise<QueueReadyThreadTurnCommandResult> {
-  const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
-  if (providerThreadId) {
-    await queueTurnSubmitCommand(deps, {
-      thread: args.thread,
-      input: args.input,
-      requestId: args.requestId,
-      execution: args.execution,
-      permissionEscalation: args.permissionEscalation,
-      environment: args.environment,
-      providerThreadId,
-      target: { mode: "start" },
-    });
-    return "turn.submit";
-  }
-
-  await requestThreadStart(deps, {
-    thread: args.thread,
-    environment: args.environment,
-    input: args.input,
-    requestId: args.requestId,
-    execution: args.execution,
-    permissionEscalation: args.permissionEscalation,
-    projectId: args.thread.projectId,
-    providerId: args.thread.providerId,
-  });
-  return "thread.start";
-}
-
 export function requestThreadStop(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadStopArgs,

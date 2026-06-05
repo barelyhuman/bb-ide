@@ -591,7 +591,6 @@ describe("thread lifecycle interruption", () => {
           serviceTier: "default",
           source: "client/turn/requested",
         },
-        managerTemplateName: null,
         permissionEscalation: "ask",
         projectId: staleThread.projectId,
         providerId: staleThread.providerId,

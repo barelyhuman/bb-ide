@@ -424,7 +424,6 @@ export async function sendThreadMessage(
         },
         projectId: thread.projectId,
         providerId: thread.providerId,
-        managerTemplateName: null,
       });
       const queuedRequest = appendAndQueueSendThreadMessageInTransaction({
         beforeAppendInTransaction: ({ tx }) => {
