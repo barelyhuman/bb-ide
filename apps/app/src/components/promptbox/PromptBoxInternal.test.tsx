@@ -10,10 +10,7 @@ import {
 import { useState } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PromptDraftState } from "@/lib/prompt-draft";
-import type {
-  PromptMentionSuggestion,
-  ThreadMentionSectionMode,
-} from "@/components/promptbox/mentions/types";
+import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 import { PromptBoxInternal } from "./PromptBoxInternal";
 
 vi.mock("@/hooks/useAutoGrow", () => ({
@@ -32,7 +29,6 @@ interface PromptBoxHarnessProps {
   historyEntries: PromptDraftState[];
   initialDraft: PromptDraftState;
   mentionSuggestions?: PromptMentionSuggestion[];
-  threadSectionMode?: ThreadMentionSectionMode;
   resetKey?: string | number;
 }
 
@@ -70,7 +66,6 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
       }}
       mentions={{
         suggestions: args.mentionSuggestions ?? [],
-        threadSectionMode: args.threadSectionMode ?? "threads",
         isLoading: false,
         isError: false,
         onQueryChange: () => {},
@@ -179,12 +174,12 @@ describe("PromptBoxInternal mentions", () => {
           attachments: [],
         }}
         historyEntries={[]}
-        threadSectionMode="all"
         mentionSuggestions={[
           {
             kind: "thread",
             path: "thread:thr_project",
             replacement: "thread:thr_project",
+            projectId: "proj_current",
             threadId: "thr_project",
             title: "Project planning",
             threadType: "manager",
@@ -193,6 +188,8 @@ describe("PromptBoxInternal mentions", () => {
             kind: "thread",
             path: "thread:thr_standard_project",
             replacement: "thread:thr_standard_project",
+            projectId: "proj_other",
+            projectName: "Marketing Site",
             threadId: "thr_standard_project",
             title: "Project implementation",
             threadType: "standard",
@@ -230,15 +227,16 @@ describe("PromptBoxInternal mentions", () => {
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     fireEvent.click(textarea);
 
-    expect(await screen.findByText("Managers & threads")).toBeTruthy();
+    expect(await screen.findByText("Threads")).toBeTruthy();
     expect(screen.getByText("Workspace")).toBeTruthy();
-    expect(screen.getByText("Manager Storage")).toBeTruthy();
+    expect(screen.getByText("Thread storage")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: /Project planning/ }),
+      screen.getByRole("button", { name: /^Project planning$/ }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /Project implementation/ }),
     ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Marketing Site/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /project\.ts/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /projects/ })).toBeTruthy();
     expect(container.querySelector('[data-icon="UserRound"]')).not.toBeNull();
@@ -248,7 +246,6 @@ describe("PromptBoxInternal mentions", () => {
     expect(container.querySelector('[data-icon="File"]')).not.toBeNull();
     expect(container.querySelector('[data-icon="Folder"]')).not.toBeNull();
     expect(screen.queryByText("Paths")).toBeNull();
-    expect(screen.queryByText("Thread storage")).toBeNull();
     expect(screen.queryByText("Folder")).toBeNull();
   });
 

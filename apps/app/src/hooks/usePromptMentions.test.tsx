@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { ThreadListResponse } from "@bb/server-contract";
+import type {
+  SidebarBootstrapResponse,
+  ThreadListResponse,
+} from "@bb/server-contract";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { threadListQueryKey } from "./queries/query-keys";
+import { THREAD_MENTION_CANDIDATE_LIMIT } from "./queries/thread-queries";
 import { usePromptMentions } from "./usePromptMentions";
 
 interface TestWrapperProps {
@@ -15,6 +19,14 @@ interface TestWrapperProps {
 
 type ThreadListEntryFixture = ThreadListResponse[number];
 type ThreadListEntryFixtureOverrides = Partial<ThreadListEntryFixture>;
+type SidebarProjectFixture = SidebarBootstrapResponse["projects"][number];
+
+interface ProjectFixtureOptions {
+  id: string;
+  kind?: SidebarProjectFixture["kind"];
+  name: string;
+  threads?: ThreadListResponse;
+}
 
 function makeThreadListEntry(
   overrides: ThreadListEntryFixtureOverrides = {},
@@ -51,6 +63,33 @@ function makeThreadListEntry(
   };
 }
 
+function makeProjectFixture(
+  options: ProjectFixtureOptions,
+): SidebarProjectFixture {
+  return {
+    createdAt: 1,
+    id: options.id,
+    kind: options.kind ?? "standard",
+    name: options.name,
+    sources: [],
+    threads: options.threads ?? [],
+    updatedAt: 1,
+  };
+}
+
+function makeSidebarBootstrapResponse(
+  projects: readonly SidebarProjectFixture[],
+): SidebarBootstrapResponse {
+  return {
+    personalProject: makeProjectFixture({
+      id: "proj_personal",
+      kind: "personal",
+      name: "Personal",
+    }),
+    projects: [...projects],
+  };
+}
+
 function createWrapper() {
   const harness = createQueryClientTestHarness();
 
@@ -71,7 +110,7 @@ afterEach(() => {
 });
 
 describe("usePromptMentions", () => {
-  it("returns project thread title matches in all mode", async () => {
+  it("returns global active thread title matches in all mode", async () => {
     const projectId = "proj_code";
     const threads: ThreadListResponse = [
       makeThreadListEntry({
@@ -80,6 +119,13 @@ describe("usePromptMentions", () => {
         title: "Frontend Manager",
         titleFallback: "Frontend Manager",
         type: "manager",
+      }),
+      makeThreadListEntry({
+        id: "thr_other_project_frontend",
+        projectId: "proj_other",
+        title: "Frontend notes",
+        titleFallback: "Frontend notes",
+        type: "standard",
       }),
       makeThreadListEntry({
         id: "thr_parser_refactor",
@@ -92,18 +138,32 @@ describe("usePromptMentions", () => {
     installFetchRoutes([
       {
         pathname: "/api/v1/threads",
-        handler: () => jsonResponse(threads),
+        handler: (request) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("archived")).toBe("false");
+          expect(url.searchParams.get("limit")).toBe(
+            String(THREAD_MENTION_CANDIDATE_LIMIT),
+          );
+          expect(url.searchParams.has("projectId")).toBe(false);
+          return jsonResponse(threads);
+        },
       },
       {
         pathname: `/api/v1/projects/${projectId}/paths`,
         handler: () => jsonResponse({ paths: [], truncated: false }),
       },
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            makeSidebarBootstrapResponse([
+              makeProjectFixture({ id: projectId, name: "Code" }),
+              makeProjectFixture({ id: "proj_other", name: "Other Project" }),
+            ]),
+          ),
+      },
     ]);
-    const { queryClient, wrapper } = createWrapper();
-    queryClient.setQueryData<ThreadListResponse>(
-      threadListQueryKey({ archived: false, projectId }),
-      threads,
-    );
+    const { wrapper } = createWrapper();
 
     const { result } = renderHook(
       () =>
@@ -127,9 +187,172 @@ describe("usePromptMentions", () => {
         "Expected first prompt mention suggestion to be a thread",
       );
     }
-    expect(result.current.threadSectionMode).toBe("all");
     expect(firstSuggestion.threadId).toBe("thr_frontend_manager");
     expect(firstSuggestion.title).toBe("Frontend Manager");
     expect(firstSuggestion.replacement).toBe("thread:thr_frontend_manager");
+
+    await waitFor(() => {
+      const crossProjectSuggestion = result.current.suggestions.find(
+        (suggestion) =>
+          suggestion.kind === "thread" &&
+          suggestion.threadId === "thr_other_project_frontend",
+      );
+      expect(crossProjectSuggestion).toMatchObject({
+        kind: "thread",
+        projectName: "Other Project",
+      });
+    });
+  });
+
+  it("ranks same-project thread matches ahead of equally relevant cross-project matches", async () => {
+    const projectId = "proj_code";
+    const threads: ThreadListResponse = [
+      makeThreadListEntry({
+        id: "thr_other_project_shared",
+        projectId: "proj_other",
+        title: "Shared context",
+        titleFallback: "Shared context",
+        type: "manager",
+      }),
+      makeThreadListEntry({
+        id: "thr_current_project_shared",
+        projectId,
+        title: "Shared context",
+        titleFallback: "Shared context",
+        type: "standard",
+      }),
+    ];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads",
+        handler: (request) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("archived")).toBe("false");
+          expect(url.searchParams.get("limit")).toBe(
+            String(THREAD_MENTION_CANDIDATE_LIMIT),
+          );
+          expect(url.searchParams.has("projectId")).toBe(false);
+          return jsonResponse(threads);
+        },
+      },
+      {
+        pathname: `/api/v1/projects/${projectId}/paths`,
+        handler: () => jsonResponse({ paths: [], truncated: false }),
+      },
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            makeSidebarBootstrapResponse([
+              makeProjectFixture({ id: projectId, name: "Code" }),
+              makeProjectFixture({ id: "proj_other", name: "Other Project" }),
+            ]),
+          ),
+      },
+    ]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () =>
+        usePromptMentions(projectId, {
+          threadSuggestionMode: "all",
+          environmentId: null,
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.setQuery("shared");
+    });
+
+    await waitFor(() => {
+      expect(result.current.suggestions.length).toBeGreaterThan(0);
+    });
+    const firstSuggestion = result.current.suggestions[0];
+    if (!firstSuggestion || firstSuggestion.kind !== "thread") {
+      throw new Error(
+        "Expected first prompt mention suggestion to be a thread",
+      );
+    }
+    expect(firstSuggestion.threadId).toBe("thr_current_project_shared");
+  });
+
+  it("uses cached thread lists as placeholder candidates while the capped global request is pending", async () => {
+    const projectId = "proj_code";
+    const cachedThreads: ThreadListResponse = [
+      makeThreadListEntry({
+        id: "thr_cached_frontend",
+        projectId,
+        title: "Cached frontend notes",
+        titleFallback: "Cached frontend notes",
+        type: "standard",
+      }),
+    ];
+    let resolveThreadRequest: (response: Response) => void = () => {};
+    const pendingThreadResponse = new Promise<Response>((resolve) => {
+      resolveThreadRequest = resolve;
+    });
+    let threadRequestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads",
+        handler: (request) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("archived")).toBe("false");
+          expect(url.searchParams.get("limit")).toBe(
+            String(THREAD_MENTION_CANDIDATE_LIMIT),
+          );
+          expect(url.searchParams.has("projectId")).toBe(false);
+          threadRequestCount += 1;
+          return pendingThreadResponse;
+        },
+      },
+      {
+        pathname: `/api/v1/projects/${projectId}/paths`,
+        handler: () => jsonResponse({ paths: [], truncated: false }),
+      },
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            makeSidebarBootstrapResponse([
+              makeProjectFixture({
+                id: projectId,
+                name: "Code",
+                threads: cachedThreads,
+              }),
+            ]),
+          ),
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData<ThreadListResponse>(
+      threadListQueryKey({ archived: false, projectId }),
+      cachedThreads,
+    );
+
+    const { result } = renderHook(
+      () =>
+        usePromptMentions(projectId, {
+          threadSuggestionMode: "all",
+          environmentId: null,
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.setQuery("cached frontend");
+    });
+
+    await waitFor(() => {
+      expect(threadRequestCount).toBe(1);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.suggestions[0]).toMatchObject({
+        kind: "thread",
+        threadId: "thr_cached_frontend",
+      });
+    });
+
+    resolveThreadRequest(jsonResponse(cachedThreads));
   });
 });

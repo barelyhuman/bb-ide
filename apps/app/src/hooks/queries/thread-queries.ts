@@ -2,6 +2,7 @@ import {
   useInfiniteQuery,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type {
@@ -32,7 +33,14 @@ import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
 import { fetchAndHydrateThreadComposerBootstrap } from "../cache-owners/composer-cache-owner";
-import { getCachedThreadListPlaceholder } from "../cache-owners/query-cache";
+import {
+  getCachedSidebarNavigationThreads,
+  getCachedThreadListPlaceholder,
+} from "../cache-owners/query-cache";
+import {
+  getCachedThreadLists,
+  iterateThreadListCacheEntries,
+} from "../cache-owners/thread-list-cache-data";
 import {
   resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
@@ -60,6 +68,7 @@ import {
   threadHostFilePreviewQueryKey,
   threadTimelineQueryKey,
   threadTimelineTurnSummaryDetailsQueryKey,
+  threadsQueryKey,
   type ThreadTimelineTurnSummaryDetailsQueryIdentity,
   type ArchivedThreadsKindFilter,
 } from "./query-keys";
@@ -75,6 +84,7 @@ interface QueryOptions {
 const THREAD_LIST_STALE_TIME_MS = 10_000;
 const THREAD_COMPOSER_BOOTSTRAP_STALE_TIME_MS = 10_000;
 const THREAD_COMPOSER_BOOTSTRAP_GC_TIME_MS = 30_000;
+export const THREAD_MENTION_CANDIDATE_LIMIT = 200;
 
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
@@ -124,12 +134,33 @@ export interface UseProjectThreadSubsetResult {
   isLoading: boolean;
 }
 
+export interface UseThreadMentionCandidatesResult {
+  data: ThreadListResponse | undefined;
+  isError: boolean;
+  isFetching: boolean;
+  isLoading: boolean;
+}
+
 interface BuildThreadSubsetListFiltersArgs {
   filters: ProjectThreadSubsetFilters;
   projectId: string | undefined;
 }
 
+export interface UseThreadMentionCandidatesArgs {
+  enabled?: boolean;
+}
+
 type ThreadListItem = ThreadListResponse[number];
+
+interface GetThreadMentionCandidatePlaceholderArgs {
+  limit: number;
+  queryClient: QueryClient;
+}
+
+const THREAD_MENTION_CANDIDATE_FILTERS = {
+  archived: false,
+  limit: THREAD_MENTION_CANDIDATE_LIMIT,
+} satisfies UseThreadsFilters;
 
 function requireThreadId(id: string, hookName: string): string {
   if (!id) {
@@ -145,9 +176,11 @@ function buildThreadSubsetListFilters({
 }: BuildThreadSubsetListFiltersArgs): UseThreadsFilters {
   const listFilters: UseThreadsFilters = {
     archived: false,
-    projectId,
   };
 
+  if (projectId !== undefined) {
+    listFilters.projectId = projectId;
+  }
   if (filters.parentThreadId !== undefined) {
     listFilters.parentThreadId = filters.parentThreadId;
   }
@@ -181,6 +214,38 @@ function filterProjectThreadSubset(
   return threads.filter((thread) =>
     threadMatchesProjectThreadSubset(thread, filters),
   );
+}
+
+function addThreadMentionCandidate(
+  candidatesById: Map<string, ThreadListItem>,
+  thread: ThreadListItem,
+): void {
+  if (thread.archivedAt !== null || thread.deletedAt !== null) {
+    return;
+  }
+  if (!candidatesById.has(thread.id)) {
+    candidatesById.set(thread.id, thread);
+  }
+}
+
+function getThreadMentionCandidatePlaceholder({
+  limit,
+  queryClient,
+}: GetThreadMentionCandidatePlaceholderArgs): ThreadListResponse | undefined {
+  const candidatesById = new Map<string, ThreadListItem>();
+  for (const thread of getCachedSidebarNavigationThreads(queryClient)) {
+    addThreadMentionCandidate(candidatesById, thread);
+  }
+  for (const { data } of getCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+  })) {
+    for (const thread of iterateThreadListCacheEntries(data)) {
+      addThreadMentionCandidate(candidatesById, thread);
+    }
+  }
+
+  const candidates = Array.from(candidatesById.values()).slice(0, limit);
+  return candidates.length > 0 ? candidates : undefined;
 }
 
 export interface UseArchivedThreadsFilters {
@@ -330,6 +395,36 @@ export function useProjectThreadSubset({
     isLoading: hasActiveProjectThreadList
       ? activeProjectThreadsQuery.isLoading
       : targetedThreadsQuery.isLoading,
+  };
+}
+
+export function useThreadMentionCandidates({
+  enabled: enabledOption,
+}: UseThreadMentionCandidatesArgs): UseThreadMentionCandidatesResult {
+  const queryClient = useQueryClient();
+  const enabled = enabledOption ?? true;
+  const queryKey = enabled
+    ? threadListQueryKey(THREAD_MENTION_CANDIDATE_FILTERS)
+    : disabledThreadListQueryKey(THREAD_MENTION_CANDIDATE_FILTERS);
+  const threadsQuery = useQuery<ThreadListResponse>({
+    queryKey,
+    queryFn: ({ signal }) =>
+      api.listThreads(THREAD_MENTION_CANDIDATE_FILTERS, signal),
+    enabled,
+    placeholderData: (previousData) =>
+      previousData ??
+      getThreadMentionCandidatePlaceholder({
+        limit: THREAD_MENTION_CANDIDATE_LIMIT,
+        queryClient,
+      }),
+    staleTime: THREAD_LIST_STALE_TIME_MS,
+  });
+
+  return {
+    data: threadsQuery.data,
+    isError: threadsQuery.isError,
+    isFetching: threadsQuery.isFetching,
+    isLoading: threadsQuery.isLoading,
   };
 }
 

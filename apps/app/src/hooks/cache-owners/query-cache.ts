@@ -55,6 +55,10 @@ export interface ProjectThreadListInvalidationParams {
   queryClient: QueryClient;
 }
 
+export interface CachedGlobalThreadListInvalidationParams {
+  queryClient: QueryClient;
+}
+
 type SidebarNavigationProject = SidebarBootstrapResponse["projects"][number];
 type SidebarNavigationThreadMapper = (
   threads: ThreadListEntry[],
@@ -124,6 +128,13 @@ function isThreadListQueryFilters(
   ) {
     return false;
   }
+  if (
+    "limit" in candidate &&
+    candidate.limit !== undefined &&
+    typeof candidate.limit !== "number"
+  ) {
+    return false;
+  }
 
   return true;
 }
@@ -181,6 +192,21 @@ export function getCachedProjectThreadListInvalidationQueryKeys({
     queryKey: threadsQueryKey(),
   })) {
     if (getThreadListProjectIdFromQueryKey(queryKey) === projectId) {
+      queryKeys.push(queryKey);
+    }
+  }
+  return queryKeys;
+}
+
+export function getCachedGlobalThreadListInvalidationQueryKeys({
+  queryClient,
+}: CachedGlobalThreadListInvalidationParams): QueryKey[] {
+  const queryKeys: QueryKey[] = [];
+  for (const [queryKey] of queryClient.getQueriesData({
+    queryKey: threadsQueryKey(),
+  })) {
+    const filters = getThreadListFiltersFromQueryKey(queryKey);
+    if (filters !== undefined && filters.projectId === undefined) {
       queryKeys.push(queryKey);
     }
   }

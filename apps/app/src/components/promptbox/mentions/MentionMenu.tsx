@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import type {
   MentionMenuState,
   PromptMentionSuggestion,
-  ThreadMentionSectionMode,
 } from "@/components/promptbox/mentions/types";
 
 interface MentionMenuProps {
@@ -20,14 +19,15 @@ interface MentionSectionItem {
   index: number;
 }
 
-type PathMentionSectionKind = "workspace" | "manager-storage";
+type PathMentionSectionKind = "workspace" | "thread-storage";
 type MentionSectionKind = "threads" | PathMentionSectionKind;
 type PathMentionSuggestion = Extract<PromptMentionSuggestion, { kind: "path" }>;
+type SecondaryContextKind = "path" | "project";
 
 const MENTION_SECTION_ORDER: readonly MentionSectionKind[] = [
   "threads",
   "workspace",
-  "manager-storage",
+  "thread-storage",
 ];
 
 interface MentionSection {
@@ -54,7 +54,6 @@ function splitPath(path: string): SplitPathResult {
 
 function groupSections(
   suggestions: readonly PromptMentionSuggestion[],
-  threadSectionMode: ThreadMentionSectionMode,
 ): MentionSection[] {
   const sectionsByKind = new Map<MentionSectionKind, MentionSection>();
   for (const [index, item] of suggestions.entries()) {
@@ -67,7 +66,7 @@ function groupSections(
 
     sectionsByKind.set(kind, {
       kind,
-      label: getSectionLabel(kind, threadSectionMode),
+      label: getSectionLabel(kind),
       items: [{ item, index }],
     });
   }
@@ -88,32 +87,19 @@ function getSectionKind(item: PromptMentionSuggestion): MentionSectionKind {
 function getPathSectionKind(
   item: PathMentionSuggestion,
 ): PathMentionSectionKind {
-  return item.source === "thread-storage" ? "manager-storage" : "workspace";
+  return item.source === "thread-storage" ? "thread-storage" : "workspace";
 }
 
-function getSectionLabel(
-  kind: MentionSectionKind,
-  threadSectionMode: ThreadMentionSectionMode,
-): string {
+function getSectionLabel(kind: MentionSectionKind): string {
   if (kind === "threads") {
-    return getThreadSectionLabel(threadSectionMode);
+    return "Threads";
   }
   return getPathSectionLabel(kind);
 }
 
-function getThreadSectionLabel(mode: ThreadMentionSectionMode): string {
-  if (mode === "all") {
-    return "Managers & threads";
-  }
-  if (mode === "managers") {
-    return "Managers";
-  }
-  return "Threads";
-}
-
 function getPathSectionLabel(kind: PathMentionSectionKind): string {
-  if (kind === "manager-storage") {
-    return "Manager Storage";
+  if (kind === "thread-storage") {
+    return "Thread storage";
   }
   return "Workspace";
 }
@@ -127,7 +113,8 @@ function getMentionIconName(item: PromptMentionSuggestion): IconName {
 
 function getMentionTitle(item: PromptMentionSuggestion): string {
   if (item.kind === "thread") {
-    return item.title || item.path;
+    const title = item.title || item.path;
+    return item.projectName ? `${title} · ${item.projectName}` : title;
   }
 
   return `${getPathSectionLabel(getPathSectionKind(item))}: ${item.path}`;
@@ -162,10 +149,7 @@ export function MentionMenu({
   }, [resultsLength, selectedIndex, state.kind, state]);
 
   const sections = useMemo(
-    () =>
-      state.kind === "results"
-        ? groupSections(state.suggestions, state.threadSectionMode)
-        : [],
+    () => (state.kind === "results" ? groupSections(state.suggestions) : []),
     [state],
   );
 
@@ -197,15 +181,21 @@ export function MentionMenu({
                     const isSelected = index === selectedIndex;
 
                     let primary: string;
-                    let secondaryDirectory: string | null = null;
+                    let secondaryContext: string | null = null;
+                    let secondaryContextKind: SecondaryContextKind | null =
+                      null;
                     const iconName = getMentionIconName(item);
 
                     if (item.kind === "thread") {
                       primary = item.title || "Untitled thread";
+                      secondaryContext = item.projectName ?? null;
+                      secondaryContextKind =
+                        item.projectName === undefined ? null : "project";
                     } else {
                       const { directory } = splitPath(item.path);
                       primary = item.name;
-                      secondaryDirectory = directory || null;
+                      secondaryContext = directory || null;
+                      secondaryContextKind = directory ? "path" : null;
                     }
 
                     return (
@@ -235,14 +225,20 @@ export function MentionMenu({
                             className="size-3.5 shrink-0 text-muted-foreground"
                             aria-hidden
                           />
-                          <span className="truncate">{primary}</span>
-                          {secondaryDirectory !== null ? (
-                            // Path directory: shrink it before the basename
-                            // so long paths never crowd out the filename in the
-                            // row.
-                            <TruncateStart className="text-muted-foreground [flex-shrink:9999]">
-                              {secondaryDirectory}
+                          <span className="truncate text-foreground">
+                            {primary}
+                          </span>
+                          {secondaryContext !== null &&
+                          secondaryContextKind === "path" ? (
+                            <TruncateStart className="text-subtle-foreground [flex-shrink:9999]">
+                              {secondaryContext}
                             </TruncateStart>
+                          ) : null}
+                          {secondaryContext !== null &&
+                          secondaryContextKind === "project" ? (
+                            <span className="truncate text-subtle-foreground [flex-shrink:9999]">
+                              {secondaryContext}
+                            </span>
                           ) : null}
                         </div>
                       </button>

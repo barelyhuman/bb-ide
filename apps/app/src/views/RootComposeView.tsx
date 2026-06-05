@@ -216,7 +216,7 @@ export function RootComposeView() {
   const promptMentions = usePromptMentions(
     isProjectless ? undefined : projectId,
     {
-      threadSuggestionMode: mode === "manager" ? "all" : "none",
+      threadSuggestionMode: "all",
       environmentId: null,
     },
   );
@@ -693,7 +693,6 @@ export function RootComposeView() {
   const mentionsConfig = useMemo(
     () => ({
       suggestions: promptMentions.suggestions,
-      threadSectionMode: promptMentions.threadSectionMode,
       isLoading: promptMentions.isLoading,
       isError: promptMentions.isError,
       onQueryChange: promptMentions.setQuery,
@@ -703,7 +702,6 @@ export function RootComposeView() {
       promptMentions.isLoading,
       promptMentions.setQuery,
       promptMentions.suggestions,
-      promptMentions.threadSectionMode,
     ],
   );
   const attachmentsConfig = useMemo(

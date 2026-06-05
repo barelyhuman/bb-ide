@@ -117,6 +117,7 @@ const SEGMENT_SCORE = {
   consecutiveSegment: 5_000,
   typoDistancePenalty: 1_000,
 };
+const EXACT_PREFIX_SCORE = SEGMENT_SCORE.leafSegment + SEGMENT_SCORE.exact;
 
 function byPathStartAsc<T>(
   left: FzfResultItem<T>,
@@ -468,7 +469,7 @@ function getPrefixMatches<T>(
       path: match.path,
       positions: prefixPositions,
       tier: MatchTier.ExactPrefix,
-      score: 0,
+      score: EXACT_PREFIX_SCORE,
       start: 0,
     }));
   }
@@ -496,6 +497,7 @@ function getPrefixMatches<T>(
     ),
     tier: MatchTier.ExactPrefix,
     score:
+      EXACT_PREFIX_SCORE +
       match.score +
       getPathRelevanceBonus(
         match.item.path.slice(queryParts.directoryPrefix.length),

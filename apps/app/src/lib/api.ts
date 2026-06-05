@@ -712,7 +712,7 @@ export async function createThread(
 }
 
 export interface ThreadListFilters {
-  projectId: string;
+  projectId?: string;
   type?: ThreadType;
   parentThreadId?: string;
   /** App callers must choose active or archived; server omission intentionally means both. */
@@ -735,7 +735,7 @@ export async function listThreads(
     apiClient.threads.$get(
       {
         query: {
-          projectId: filters.projectId,
+          ...(filters.projectId ? { projectId: filters.projectId } : {}),
           ...(filters.type ? { type: filters.type } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }

@@ -2,7 +2,6 @@ import { MentionMenu } from "@/components/promptbox/mentions/MentionMenu";
 import type {
   MentionMenuState,
   PromptMentionSuggestion,
-  ThreadMentionSectionMode,
 } from "@/components/promptbox/mentions/types";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
@@ -84,6 +83,7 @@ const threadSuggestions: PromptMentionSuggestion[] = [
     kind: "thread",
     path: "thread:thr_qfk8ksbxkk",
     replacement: "thread:thr_qfk8ksbxkk",
+    projectId: "proj_bb",
     threadId: "thr_qfk8ksbxkk",
     title: "Wire up promptbox stories and trim FollowUp API",
     threadType: "standard",
@@ -92,6 +92,7 @@ const threadSuggestions: PromptMentionSuggestion[] = [
     kind: "thread",
     path: "thread:thr_mgr_kj4n2x",
     replacement: "thread:thr_mgr_kj4n2x",
+    projectId: "proj_bb",
     threadId: "thr_mgr_kj4n2x",
     title: "Manager: app/timeline cleanup sprint",
     threadType: "manager",
@@ -100,6 +101,8 @@ const threadSuggestions: PromptMentionSuggestion[] = [
     kind: "thread",
     path: "thread:thr_untitled_3",
     replacement: "thread:thr_untitled_3",
+    projectId: "proj_docs",
+    projectName: "Docs Site",
     threadId: "thr_untitled_3",
     title: undefined,
     threadType: "standard",
@@ -131,14 +134,12 @@ interface RowConfig {
 
 interface ResultsStateConfig {
   suggestions: readonly PromptMentionSuggestion[];
-  threadSectionMode?: ThreadMentionSectionMode;
 }
 
 function makeResultsState(args: ResultsStateConfig): MentionMenuState {
   return {
     kind: "results",
     suggestions: args.suggestions,
-    threadSectionMode: args.threadSectionMode ?? "all",
   };
 }
 
@@ -165,7 +166,7 @@ export function Overview() {
       <StoryRow label="no matches" hint="query returned zero results">
         <Row state={makeResultsState({ suggestions: [] })} />
       </StoryRow>
-      <StoryRow label="path matches" hint="workspace and manager storage paths">
+      <StoryRow label="path matches" hint="workspace and thread storage paths">
         <Row state={makeResultsState({ suggestions: pathSuggestions })} />
       </StoryRow>
       <StoryRow
@@ -179,7 +180,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="thread matches"
-        hint="manager + standard threads with leading row icons"
+        hint="manager + standard threads; cross-project rows include project"
       >
         <Row state={makeResultsState({ suggestions: threadSuggestions })} />
       </StoryRow>

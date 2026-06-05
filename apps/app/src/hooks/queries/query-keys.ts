@@ -63,6 +63,7 @@ export interface ThreadListQueryFilters {
   type?: ThreadListFilters["type"];
   parentThreadId?: string;
   archived: boolean;
+  limit?: number;
 }
 
 export type ArchivedThreadsKindFilter =

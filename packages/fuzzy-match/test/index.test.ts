@@ -117,6 +117,25 @@ describe("fuzzyMatchPaths", () => {
     ]);
   });
 
+  it("scores exact directory-prefix matches above unrelated slash fuzzy matches", () => {
+    const exactPrefixMatch = fuzzyMatchPaths({
+      items: ["plans/code-quality-follow-ups.md"],
+      query: "plans/",
+      getPath: (path) => path,
+      limit: 1,
+    })[0];
+    const unrelatedSlashMatch = fuzzyMatchPaths({
+      items: ["plans-local/local.pak"],
+      query: "plans/",
+      getPath: (path) => path,
+      limit: 1,
+    })[0];
+
+    expect(exactPrefixMatch?.score).toBeGreaterThan(
+      unrelatedSlashMatch?.score ?? 0,
+    );
+  });
+
   it("fuzzy matches the leaf inside an exact directory prefix", () => {
     const matches = fuzzyMatchPaths({
       items: [

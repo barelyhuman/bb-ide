@@ -17,11 +17,15 @@ import {
 import type {
   MentionMenuState,
   PromptMentionSuggestion,
-  ThreadMentionSectionMode,
 } from "@/components/promptbox/mentions/types";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
-import { COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS, COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS, COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS, COARSE_POINTER_TEXT_BASE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
+  COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS,
+  COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS,
+  COARSE_POINTER_TEXT_BASE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 import {
@@ -72,7 +76,6 @@ export interface PromptBoxSubmissionConfig {
 
 export interface MentionsConfig {
   suggestions: readonly PromptMentionSuggestion[];
-  threadSectionMode: ThreadMentionSectionMode;
   isLoading: boolean;
   isError: boolean;
   /** Called whenever the active @-mention query changes; null when no mention is active. */
@@ -102,11 +105,7 @@ export interface HistoryConfig {
   resetKey?: string | number;
 }
 
-export type PromptVoiceState =
-  | "idle"
-  | "recording"
-  | "transcribing"
-  | "error";
+export type PromptVoiceState = "idle" | "recording" | "transcribing" | "error";
 
 export interface PromptVoiceConfig {
   state: PromptVoiceState;
@@ -221,7 +220,6 @@ export function PromptBoxInternal({
   } = submission;
   const {
     suggestions: mentionSuggestions,
-    threadSectionMode,
     isLoading: mentionLoading,
     isError: mentionError,
     onQueryChange: onMentionQueryChange,
@@ -481,7 +479,6 @@ export function PromptBoxInternal({
           : {
               kind: "results",
               suggestions: mentionSuggestions,
-              threadSectionMode,
             };
 
   useEffect(() => {
@@ -616,7 +613,9 @@ export function PromptBoxInternal({
   const isVoiceProcessing = voice?.state === "transcribing";
   const isVoiceBusy = isVoiceRecording || isVoiceProcessing;
   const voiceErrorMessage =
-    voice?.state === "error" ? voice.errorMessage ?? "Voice input failed." : null;
+    voice?.state === "error"
+      ? (voice.errorMessage ?? "Voice input failed.")
+      : null;
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
   const canSubmit =
     (hasSubmittableInput || allowEmptyInput) &&
@@ -920,12 +919,7 @@ export function PromptBoxInternal({
         // mode also gets more top room since the card fills the viewport.
         <div className="pl-4 pr-14 pt-3">{header}</div>
       ) : null}
-      <div
-        className={cn(
-          "relative",
-          isZenMode && "flex flex-1 flex-col",
-        )}
-      >
+      <div className={cn("relative", isZenMode && "flex flex-1 flex-col")}>
         <Button
           type="button"
           size="icon"
@@ -949,69 +943,69 @@ export function PromptBoxInternal({
           )}
         </Button>
         <textarea
-        ref={textareaRef}
-        id={id}
-        value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          if (isZenMode) {
-            event.target.style.height = "100%";
-          } else {
-            resizeTextarea(event.target);
-          }
-          syncMentionState(event.target);
-        }}
-        onClick={(event) => {
-          syncMentionState(event.currentTarget);
-        }}
-        onSelect={(event) => {
-          syncMentionState(event.currentTarget);
-        }}
-        onBlur={() => {
-          mentionKeyRef.current = "";
-          if (dismissedMentionRef.current) {
-            dismissedMentionRef.current = {
-              ...dismissedMentionRef.current,
-              hasLeftRange: true,
-            };
-          }
-          setActiveMention(null);
-          onMentionQueryChange(null);
-        }}
-        onPaste={(event) => {
-          if (!onAttachFiles) return;
-          const clipboardItems = Array.from(event.clipboardData?.items ?? []);
-          const pastedFiles = clipboardItems
-            .filter((item) => item.kind === "file")
-            .map((item) => item.getAsFile())
-            .filter((file): file is File => file !== null);
+          ref={textareaRef}
+          id={id}
+          value={value}
+          onChange={(event) => {
+            onChange(event.target.value);
+            if (isZenMode) {
+              event.target.style.height = "100%";
+            } else {
+              resizeTextarea(event.target);
+            }
+            syncMentionState(event.target);
+          }}
+          onClick={(event) => {
+            syncMentionState(event.currentTarget);
+          }}
+          onSelect={(event) => {
+            syncMentionState(event.currentTarget);
+          }}
+          onBlur={() => {
+            mentionKeyRef.current = "";
+            if (dismissedMentionRef.current) {
+              dismissedMentionRef.current = {
+                ...dismissedMentionRef.current,
+                hasLeftRange: true,
+              };
+            }
+            setActiveMention(null);
+            onMentionQueryChange(null);
+          }}
+          onPaste={(event) => {
+            if (!onAttachFiles) return;
+            const clipboardItems = Array.from(event.clipboardData?.items ?? []);
+            const pastedFiles = clipboardItems
+              .filter((item) => item.kind === "file")
+              .map((item) => item.getAsFile())
+              .filter((file): file is File => file !== null);
 
-          if (pastedFiles.length === 0) return;
-          event.preventDefault();
-          emitAttachmentFiles(pastedFiles);
-        }}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        rows={1}
-        autoFocus={autoFocus}
-        autoComplete="off"
-        aria-keyshortcuts={onModifierSubmit ? "Meta+Enter" : undefined}
-        enterKeyHint="send"
-        className={cn(
-          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-subtle-foreground",
-          COARSE_POINTER_TEXT_BASE_CLASS,
-          // Zen mode only adds the flex-fill behavior so the textarea
-          // stretches to the dvh-sized form. Inset padding (px / pt / pb)
-          // is identical between modes — toggling shouldn't shift the
-          // placeholder position.
-          isZenMode && "min-h-0 flex-1",
-        )}
-        style={{
-          minHeight: isZenMode ? "0px" : `${minHeight}px`,
-          height: isZenMode ? "100%" : undefined,
-          maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
-        }}
-      />
+            if (pastedFiles.length === 0) return;
+            event.preventDefault();
+            emitAttachmentFiles(pastedFiles);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          autoFocus={autoFocus}
+          autoComplete="off"
+          aria-keyshortcuts={onModifierSubmit ? "Meta+Enter" : undefined}
+          enterKeyHint="send"
+          className={cn(
+            "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-subtle-foreground",
+            COARSE_POINTER_TEXT_BASE_CLASS,
+            // Zen mode only adds the flex-fill behavior so the textarea
+            // stretches to the dvh-sized form. Inset padding (px / pt / pb)
+            // is identical between modes — toggling shouldn't shift the
+            // placeholder position.
+            isZenMode && "min-h-0 flex-1",
+          )}
+          style={{
+            minHeight: isZenMode ? "0px" : `${minHeight}px`,
+            height: isZenMode ? "100%" : undefined,
+            maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
+          }}
+        />
       </div>
 
       {showMentionMenu ? (

@@ -145,7 +145,7 @@ describe("NewTabPage", () => {
     expect(await screen.findByText("Files")).toBeTruthy();
     expect(await screen.findByText("app.ts")).toBeTruthy();
     expect(await screen.findByText(/src/u)).toBeTruthy();
-    expect(screen.queryByText("Manager Storage")).toBeNull();
+    expect(screen.queryByText("Thread storage")).toBeNull();
     fireEvent.click(await screen.findByRole("option", { name: /app\.ts/u }));
 
     expect(onSelect).toHaveBeenCalledWith({

@@ -202,7 +202,7 @@ export function ThreadDetailPromptArea({
     threadId: thread.id,
   });
   const promptMentions = usePromptMentions(projectId, {
-    threadSuggestionMode: thread.type === "manager" ? "all" : "managers",
+    threadSuggestionMode: "all",
     currentThreadId: thread.id,
     currentThreadType: thread.type,
     environmentId: thread.environmentId ?? null,
@@ -752,7 +752,6 @@ export function ThreadDetailPromptArea({
   const mentionsConfig = useMemo(
     () => ({
       suggestions: promptMentions.suggestions,
-      threadSectionMode: promptMentions.threadSectionMode,
       isLoading: promptMentions.isLoading,
       isError: promptMentions.isError,
       onQueryChange: promptMentions.setQuery,
@@ -762,7 +761,6 @@ export function ThreadDetailPromptArea({
       promptMentions.isLoading,
       promptMentions.setQuery,
       promptMentions.suggestions,
-      promptMentions.threadSectionMode,
     ],
   );
 

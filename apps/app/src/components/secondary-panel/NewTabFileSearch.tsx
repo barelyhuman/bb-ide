@@ -221,7 +221,7 @@ const FILE_SEARCH_SECTION_LABELS = {
 const FILE_SEARCH_SOURCE_LABELS = {
   app: "App",
   workspace: "Workspace",
-  "thread-storage": "Manager Storage",
+  "thread-storage": "Thread storage",
 } satisfies Record<FileSearchSource, string>;
 
 const CREATE_APP_ENTRY_ID = "file-search-result-create-app";

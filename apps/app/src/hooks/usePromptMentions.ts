@@ -1,27 +1,18 @@
 import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { ThreadType } from "@bb/domain";
+import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { buildPathMentionSuggestions } from "./pathMentionSuggestions";
-import {
-  useProjectThreadSubset,
-  type ProjectThreadSubsetFilters,
-} from "./queries/thread-queries";
+import { useSidebarNavigation } from "./queries/project-queries";
+import { useThreadMentionCandidates } from "./queries/thread-queries";
 import {
   buildThreadMentionSuggestions,
-  getThreadMentionSectionMode,
   type ThreadSuggestionMode,
 } from "./threadMentionSuggestions";
 import { usePathSuggestions } from "./usePathSuggestions";
-import type {
-  PromptMentionSuggestion,
-  ThreadMentionSectionMode,
-} from "@/components/promptbox/mentions/types";
+import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 
 const PROMPT_MENTION_LIMIT = 8;
-const EMPTY_THREAD_SUBSET_FILTERS = {} satisfies ProjectThreadSubsetFilters;
-const MANAGER_THREAD_SUBSET_FILTERS = {
-  type: "manager",
-} satisfies ProjectThreadSubsetFilters;
 
 export interface UsePromptMentionsOptions {
   threadSuggestionMode?: ThreadSuggestionMode;
@@ -34,9 +25,42 @@ export interface UsePromptMentionsResult {
   query: string | null;
   setQuery: Dispatch<SetStateAction<string | null>>;
   suggestions: PromptMentionSuggestion[];
-  threadSectionMode: ThreadMentionSectionMode;
   isLoading: boolean;
   isError: boolean;
+}
+
+interface BuildPromptMentionSuggestionsArgs {
+  pathSuggestions: readonly PromptMentionSuggestion[];
+  threadSuggestions: readonly PromptMentionSuggestion[];
+  trimmedQuery: string;
+}
+
+function buildPromptMentionSuggestions(
+  args: BuildPromptMentionSuggestionsArgs,
+): PromptMentionSuggestion[] {
+  const orderedSuggestions = args.trimmedQuery.includes("/")
+    ? [...args.pathSuggestions, ...args.threadSuggestions]
+    : [...args.threadSuggestions, ...args.pathSuggestions];
+
+  return orderedSuggestions.slice(0, PROMPT_MENTION_LIMIT);
+}
+
+function buildProjectNamesById(
+  sidebarNavigation: SidebarBootstrapResponse | undefined,
+): ReadonlyMap<string, string> {
+  const projectNamesById = new Map<string, string>();
+  if (!sidebarNavigation) {
+    return projectNamesById;
+  }
+
+  projectNamesById.set(
+    sidebarNavigation.personalProject.id,
+    sidebarNavigation.personalProject.name,
+  );
+  for (const project of sidebarNavigation.projects) {
+    projectNamesById.set(project.id, project.name);
+  }
+  return projectNamesById;
 }
 
 export function usePromptMentions(
@@ -44,6 +68,8 @@ export function usePromptMentions(
   options: UsePromptMentionsOptions,
 ): UsePromptMentionsResult {
   const [query, setQuery] = useState<string | null>(null);
+  const hasQuery = (query?.trim().length ?? 0) > 0;
+  const trimmedQuery = query?.trim() ?? "";
 
   const pathSearch = usePathSuggestions({
     projectId,
@@ -55,19 +81,17 @@ export function usePromptMentions(
     includeDirectories: true,
   });
   const threadSuggestionMode = options.threadSuggestionMode ?? "none";
-  const threadSectionMode = getThreadMentionSectionMode(threadSuggestionMode);
-  const threadSubsetFilters =
-    threadSuggestionMode === "managers"
-      ? MANAGER_THREAD_SUBSET_FILTERS
-      : EMPTY_THREAD_SUBSET_FILTERS;
-  const threadsQuery = useProjectThreadSubset({
-    enabled: threadSuggestionMode !== "none",
-    filters: threadSubsetFilters,
-    projectId,
+  const projectNamesQuery = useSidebarNavigation({
+    enabled: threadSuggestionMode === "all" && hasQuery,
   });
+  const threadsQuery = useThreadMentionCandidates({
+    enabled: threadSuggestionMode === "all" && hasQuery,
+  });
+  const projectNamesById = useMemo(
+    () => buildProjectNamesById(projectNamesQuery.data),
+    [projectNamesQuery.data],
+  );
 
-  const hasQuery = (query?.trim().length ?? 0) > 0;
-  const trimmedQuery = query?.trim() ?? "";
   const currentThreadId = options.currentThreadId;
   const pathSuggestions = useMemo(
     () =>
@@ -81,19 +105,29 @@ export function usePromptMentions(
       threads: threadsQuery.data ?? [],
       query: trimmedQuery,
       mode: threadSuggestionMode,
+      currentProjectId: projectId,
       currentThreadId,
+      projectNamesById,
       limit: PROMPT_MENTION_LIMIT,
     });
-  }, [currentThreadId, threadSuggestionMode, threadsQuery.data, trimmedQuery]);
+  }, [
+    currentThreadId,
+    projectId,
+    projectNamesById,
+    threadSuggestionMode,
+    threadsQuery.data,
+    trimmedQuery,
+  ]);
   const suggestions = useMemo(
     () =>
       hasQuery
-        ? [...threadSuggestions, ...pathSuggestions].slice(
-            0,
-            PROMPT_MENTION_LIMIT,
-          )
+        ? buildPromptMentionSuggestions({
+            pathSuggestions,
+            threadSuggestions,
+            trimmedQuery,
+          })
         : [],
-    [hasQuery, pathSuggestions, threadSuggestions],
+    [hasQuery, pathSuggestions, threadSuggestions, trimmedQuery],
   );
 
   // Loading flips on only when there are zero suggestions to show. Once the
@@ -113,7 +147,6 @@ export function usePromptMentions(
     query,
     setQuery,
     suggestions,
-    threadSectionMode,
     isLoading,
     isError,
   };

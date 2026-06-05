@@ -11,6 +11,7 @@ import type {
 } from "@bb/domain";
 import {
   getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
+  getCachedGlobalThreadListInvalidationQueryKeys,
   getCachedProjectThreadListInvalidationQueryKeys,
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
@@ -160,7 +161,7 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
   "order-changed": {
     flush: "debounced",
     dirty: [
-      dirtyManagerOrderThreadListQueries, // Manager reorder only affects active manager ordering.
+      dirtyManagerOrderThreadListQueries, // Manager reorder affects manager lists and global mention candidates.
     ],
   },
   "terminals-changed": {
@@ -433,6 +434,13 @@ function dirtyThreadListQueries({
   projectId,
   queryClient,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
+  if (projectId) {
+    for (const queryKey of getCachedGlobalThreadListInvalidationQueryKeys({
+      queryClient,
+    })) {
+      queryClient.invalidateQueries({ exact: true, queryKey });
+    }
+  }
   return getThreadListInvalidationQueryKeys({ projectId, queryClient });
 }
 
@@ -458,6 +466,11 @@ function dirtyManagerOrderThreadListQueries({
       type: "manager",
     }),
   });
+  for (const queryKey of getCachedGlobalThreadListInvalidationQueryKeys({
+    queryClient,
+  })) {
+    queryClient.invalidateQueries({ exact: true, queryKey });
+  }
 }
 
 function dirtyThreadDetailQueries({
@@ -541,6 +554,15 @@ function markThreadListQueriesStale({
     queryClient,
   })) {
     queryClient.invalidateQueries({
+      queryKey,
+      refetchType: "none",
+    });
+  }
+  for (const queryKey of getCachedGlobalThreadListInvalidationQueryKeys({
+    queryClient,
+  })) {
+    queryClient.invalidateQueries({
+      exact: true,
       queryKey,
       refetchType: "none",
     });

@@ -112,7 +112,6 @@ function renderNewThreadPrompt(modeConfig: NewThreadModeConfig): void {
       }}
       mentions={{
         suggestions: [],
-        threadSectionMode: "threads",
         isLoading: false,
         isError: false,
         onQueryChange: noop,

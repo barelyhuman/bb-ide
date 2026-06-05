@@ -2,7 +2,6 @@ import type { ThreadType } from "@bb/domain";
 
 export type PromptPathMentionSource = "workspace" | "thread-storage";
 export type PromptPathMentionEntryKind = "file" | "directory";
-export type ThreadMentionSectionMode = "all" | "managers" | "threads";
 
 /**
  * One row in the mention menu. The `replacement` field is the literal text
@@ -24,6 +23,8 @@ export type PromptMentionSuggestion =
       kind: "thread";
       path: string;
       replacement: string;
+      projectId: string;
+      projectName?: string;
       threadId: string;
       title?: string;
       threadType: ThreadType;
@@ -47,5 +48,4 @@ export type MentionMenuState =
   | {
       kind: "results";
       suggestions: readonly PromptMentionSuggestion[];
-      threadSectionMode: ThreadMentionSectionMode;
     };
