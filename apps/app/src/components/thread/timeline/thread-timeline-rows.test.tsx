@@ -535,6 +535,95 @@ describe("ThreadTimelineRows", () => {
     ).toBeTruthy();
   });
 
+  it("keeps an auto-opened terminal system error expanded when a follow-up appends", () => {
+    const terminalError = systemRow({
+      id: "provider-rate-limit",
+      detail: "Usage limit detail",
+      status: "error",
+      systemKind: "error",
+      title: "Provider rate limit reached",
+      sourceSeqStart: 1,
+    });
+    const view = renderTimelineRows({
+      timelineRows: [terminalError],
+    });
+
+    const errorButton = screen.getByRole("button", {
+      name: /Provider rate limit reached/u,
+    });
+    expect(errorButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("Usage limit detail");
+
+    rerenderTimelineRows({
+      overrides: {
+        threadRuntimeDisplayStatus: "active",
+      },
+      view,
+      timelineRows: [
+        terminalError,
+        conversationRow({
+          id: "follow-up",
+          role: "user",
+          text: "please keep going",
+          sourceSeqStart: 2,
+          turnRequest: { kind: "message", status: "accepted" },
+        }),
+      ],
+    });
+
+    const appendedErrorButton = screen.getByRole("button", {
+      name: /Provider rate limit reached/u,
+    });
+    expect(appendedErrorButton).toBe(errorButton);
+    expect(appendedErrorButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("Usage limit detail");
+  });
+
+  it("keeps a manually collapsed terminal system error collapsed when a follow-up appends", () => {
+    const terminalError = systemRow({
+      id: "provider-rate-limit",
+      detail: "Usage limit detail",
+      status: "error",
+      systemKind: "error",
+      title: "Provider rate limit reached",
+      sourceSeqStart: 1,
+    });
+    const view = renderTimelineRows({
+      timelineRows: [terminalError],
+    });
+
+    const errorButton = screen.getByRole("button", {
+      name: /Provider rate limit reached/u,
+    });
+    expect(errorButton.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(errorButton);
+    expect(errorButton.getAttribute("aria-expanded")).toBe("false");
+
+    rerenderTimelineRows({
+      overrides: {
+        threadRuntimeDisplayStatus: "active",
+      },
+      view,
+      timelineRows: [
+        terminalError,
+        conversationRow({
+          id: "follow-up",
+          role: "user",
+          text: "please keep going",
+          sourceSeqStart: 2,
+          turnRequest: { kind: "message", status: "accepted" },
+        }),
+      ],
+    });
+
+    const appendedErrorButton = screen.getByRole("button", {
+      name: /Provider rate limit reached/u,
+    });
+    expect(appendedErrorButton).toBe(errorButton);
+    expect(appendedErrorButton.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("requests lazy turn details when expanding a turn summary", async () => {
     let requestCount = 0;
     const requestUrlRef: RequestUrlRef = { current: null };

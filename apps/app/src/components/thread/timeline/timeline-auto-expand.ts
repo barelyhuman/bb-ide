@@ -6,9 +6,14 @@ import {
   type TimelineViewWorkRow,
 } from "@bb/thread-view";
 
-interface CollectTimelineAutoExpandedRowIdsArgs {
+interface CollectTimelineAutoExpansionRowIdsArgs {
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
+}
+
+export interface TimelineAutoExpansionRowIds {
+  liveFrontierRowIds: ReadonlySet<string>;
+  terminalFrontierRowIds: ReadonlySet<string>;
 }
 
 export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
@@ -78,12 +83,13 @@ export function isNonExpandableSummary(
   );
 }
 
-function shouldAutoExpandFrontierRow(row: ThreadTimelineViewRow): boolean {
+function shouldAutoExpandLiveFrontierRow(row: ThreadTimelineViewRow): boolean {
   if (!isRowExpandable(row)) {
     return false;
   }
   switch (row.kind) {
     case "system":
+      return row.status === "pending";
     case "bundle-summary":
       return true;
     case "work":
@@ -102,26 +108,55 @@ function shouldAutoExpandFrontierRow(row: ThreadTimelineViewRow): boolean {
   }
 }
 
-// Auto-expand rule (single rule, applied uniformly):
+function shouldAutoExpandTerminalFrontierRow(
+  row: ThreadTimelineViewRow,
+): boolean {
+  return (
+    isRowExpandable(row) && row.kind === "system" && row.status === "error"
+  );
+}
+
+function visitForTerminalFrontierAutoExpand(
+  rows: readonly ThreadTimelineViewRow[],
+  ids: Set<string>,
+): void {
+  const tail = rows[rows.length - 1];
+  if (tail && shouldAutoExpandTerminalFrontierRow(tail)) {
+    ids.add(tail.id);
+  }
+
+  for (const row of rows) {
+    if (
+      row.kind === "work" &&
+      row.workKind === "delegation" &&
+      row.status === "pending"
+    ) {
+      visitForTerminalFrontierAutoExpand(row.childRows, ids);
+    }
+  }
+}
+
+// Auto-expand rule:
 //
-//   In an active container, find the trailing row that the agent produced
-//   (skipping over user-role conversation rows — initial messages,
-//   follow-ups, accepted or pending steers — since those are inputs to
-//   the agent rather than events on the activity timeline). If that
-//   frontier row is expandable and is a system row, bundle summary, or
-//   delegation, auto-expand it. Otherwise, nothing in the container
-//   auto-expands. We do not search backward past a non-qualifying
-//   frontier.
+//   1. Terminal frontier: the literal tail row in a scope. Selected terminal
+//      rows, currently system errors with detail, open when they arrive. The
+//      terminal pass descends into pending delegation childRows as nested
+//      scopes. The row component preserves that visible disclosure state after
+//      later appends; the collector does not keep old terminal rows
+//      auto-expanded.
+//
+//   2. Live frontier: only while the scope is active, find the trailing row
+//      that the agent produced (skipping user input rows). Selected live rows
+//      open while they are the current active frontier, then stop being
+//      auto-expanded when newer agent/system/work output supersedes them.
 //
 // Active containers are the timeline's top-level row list (when the thread
 // is active) and the childRows of pending delegations *inside an active
 // container*. A completed delegation closes its scope, so a pending
 // sub-delegation buried inside a completed parent does NOT auto-expand —
 // the active scope must propagate from the top-level thread runtime down
-// through every enclosing container. The rule does not apply to
-// bundle-summary, step-summary, or turn-summary children — those represent
-// grouped or archived work whose interior is not the current frontier.
-function visitForAutoExpand(
+// through every enclosing container.
+function visitForLiveFrontierAutoExpand(
   rows: readonly ThreadTimelineViewRow[],
   scopeActive: boolean,
   ids: Set<string>,
@@ -130,7 +165,7 @@ function visitForAutoExpand(
     return;
   }
   const frontier = findTimelineFrontierRow(rows);
-  if (frontier && shouldAutoExpandFrontierRow(frontier)) {
+  if (frontier && shouldAutoExpandLiveFrontierRow(frontier)) {
     ids.add(frontier.id);
   }
   for (const row of rows) {
@@ -139,16 +174,21 @@ function visitForAutoExpand(
       row.workKind === "delegation" &&
       row.status === "pending"
     ) {
-      visitForAutoExpand(row.childRows, true, ids);
+      visitForLiveFrontierAutoExpand(row.childRows, true, ids);
     }
   }
 }
 
-export function collectTimelineAutoExpandedRowIds({
+export function collectTimelineAutoExpansionRowIds({
   rows,
   scopeActive,
-}: CollectTimelineAutoExpandedRowIdsArgs): ReadonlySet<string> {
-  const ids = new Set<string>();
-  visitForAutoExpand(rows, scopeActive, ids);
-  return ids;
+}: CollectTimelineAutoExpansionRowIdsArgs): TimelineAutoExpansionRowIds {
+  const terminalFrontierRowIds = new Set<string>();
+  const liveFrontierRowIds = new Set<string>();
+  visitForTerminalFrontierAutoExpand(rows, terminalFrontierRowIds);
+  visitForLiveFrontierAutoExpand(rows, scopeActive, liveFrontierRowIds);
+  return {
+    liveFrontierRowIds,
+    terminalFrontierRowIds,
+  };
 }

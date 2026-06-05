@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useState, type ReactNode } from "react";
 import type { TimelineTitle } from "@bb/thread-view";
 import {
   ExpandablePanel,
@@ -20,6 +20,11 @@ import {
 
 export interface ExpandableTimelineRowProps {
   autoExpanded?: boolean;
+  /**
+   * Opens terminal frontier rows when they arrive, then latches that visible
+   * state until the user toggles the row or the row unmounts.
+   */
+  terminalAutoExpanded?: boolean;
   onBeforeExpand?: () => void;
   renderBody: () => ReactNode;
   title: TimelineTitle;
@@ -48,11 +53,21 @@ function ExpandableTimelineRowComponent({
   onTitleAction,
   renderBody,
   resolveSegmentLinkHref,
+  terminalAutoExpanded = false,
   title,
 }: ExpandableTimelineRowProps) {
   const [manualExpansionOverride, setManualExpansionOverride] =
     useState<ManualExpansionOverride>(null);
-  const isExpanded = manualExpansionOverride ?? autoExpanded;
+  const [terminalAutoExpandedLatch, setTerminalAutoExpandedLatch] =
+    useState(terminalAutoExpanded);
+  useEffect(() => {
+    if (terminalAutoExpanded) {
+      setTerminalAutoExpandedLatch(true);
+    }
+  }, [terminalAutoExpanded]);
+  const isExpanded =
+    manualExpansionOverride ??
+    (autoExpanded || terminalAutoExpanded || terminalAutoExpandedLatch);
   const horizontalPaddingClass =
     timelineRowHorizontalPaddingClassName(horizontalPadding);
   const handleToggle = useCallback((): void => {

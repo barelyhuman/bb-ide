@@ -9,9 +9,26 @@ import {
   workflowRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import {
-  collectTimelineAutoExpandedRowIds,
+  collectTimelineAutoExpansionRowIds,
   isWorkRowExpandable,
 } from "./timeline-auto-expand";
+
+interface CollectAutoExpandedIdsArgs {
+  rows: ReturnType<typeof buildTimelineViewRows>;
+  scopeActive: boolean;
+}
+
+function collectAutoExpandedIds({
+  rows,
+  scopeActive,
+}: CollectAutoExpandedIdsArgs): Set<string> {
+  const { liveFrontierRowIds, terminalFrontierRowIds } =
+    collectTimelineAutoExpansionRowIds({
+      rows,
+      scopeActive,
+    });
+  return new Set([...liveFrontierRowIds, ...terminalFrontierRowIds]);
+}
 
 describe("isWorkRowExpandable", () => {
   it("marks an error-only degraded workflow row expandable so the error is reachable", () => {
@@ -33,7 +50,7 @@ describe("isWorkRowExpandable", () => {
   });
 });
 
-describe("collectTimelineAutoExpandedRowIds", () => {
+describe("collectTimelineAutoExpansionRowIds", () => {
   it("returns no auto-expanded ids when the scope is inactive", () => {
     const rows = buildTimelineViewRows([
       commandRow({
@@ -45,7 +62,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: false,
     });
@@ -78,7 +95,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       throw new Error("expected the trailing row to be a bundle-summary");
     }
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -90,7 +107,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
     }
   });
 
-  it("auto-expands a trailing system row with detail in an active scope", () => {
+  it("auto-expands a trailing pending system row with detail in an active scope", () => {
     const rows = buildTimelineViewRows([
       systemRow({
         id: "system-with-detail",
@@ -99,12 +116,115 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
 
     expect(Array.from(ids)).toEqual(["system-with-detail"]);
+  });
+
+  it("does not live-auto-expand a completed system row with detail in an active scope", () => {
+    const rows = buildTimelineViewRows([
+      systemRow({
+        id: "completed-system-with-detail",
+        detail: "completed transcript",
+        status: "completed",
+      }),
+    ]);
+
+    const { liveFrontierRowIds, terminalFrontierRowIds } =
+      collectTimelineAutoExpansionRowIds({
+        rows,
+        scopeActive: true,
+      });
+
+    expect(Array.from(liveFrontierRowIds)).toEqual([]);
+    expect(Array.from(terminalFrontierRowIds)).toEqual([]);
+  });
+
+  it("does not auto-expand a terminal system error after a follow-up makes the scope active", () => {
+    const rows = buildTimelineViewRows([
+      systemRow({
+        id: "provider-rate-limit",
+        detail:
+          "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again later.",
+        status: "error",
+        systemKind: "error",
+        title: "Provider rate limit reached",
+        sourceSeqStart: 1,
+      }),
+      conversationRow({
+        id: "follow-up",
+        role: "user",
+        text: "please keep going",
+        sourceSeqStart: 2,
+        turnRequest: { kind: "message", status: "accepted" },
+      }),
+    ]);
+
+    const ids = collectAutoExpandedIds({
+      rows,
+      scopeActive: true,
+    });
+
+    expect(Array.from(ids)).toEqual([]);
+  });
+
+  it("auto-expands a terminal system error when it is the tail row after the turn ends", () => {
+    const rows = buildTimelineViewRows([
+      systemRow({
+        id: "provider-rate-limit",
+        detail:
+          "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again later.",
+        status: "error",
+        systemKind: "error",
+        title: "Provider rate limit reached",
+      }),
+    ]);
+
+    const ids = collectAutoExpandedIds({
+      rows,
+      scopeActive: false,
+    });
+
+    expect(Array.from(ids)).toEqual(["provider-rate-limit"]);
+  });
+
+  it("auto-expands a pending delegation child terminal system error as a terminal frontier", () => {
+    const rows = buildTimelineViewRows([
+      delegationRow({
+        id: "pending-delegation-with-terminal-error",
+        status: "pending",
+        childRows: [
+          commandRow({
+            id: "nested-command",
+            command: "pnpm test",
+            output: "command output",
+            sourceSeqStart: 1,
+          }),
+          systemRow({
+            id: "nested-provider-error",
+            detail: "Provider rate limit reached",
+            status: "error",
+            systemKind: "error",
+            title: "Provider error",
+            sourceSeqStart: 2,
+          }),
+        ],
+      }),
+    ]);
+
+    const { liveFrontierRowIds, terminalFrontierRowIds } =
+      collectTimelineAutoExpansionRowIds({
+        rows,
+        scopeActive: false,
+      });
+
+    expect(Array.from(terminalFrontierRowIds)).toEqual([
+      "nested-provider-error",
+    ]);
+    expect(Array.from(liveFrontierRowIds)).toEqual([]);
   });
 
   it("does not auto-expand a trailing command row in an active scope", () => {
@@ -118,7 +238,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -135,7 +255,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -153,7 +273,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -214,7 +334,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       throw new Error("expected the trailing row to be a bundle-summary");
     }
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -247,7 +367,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -286,7 +406,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       throw new Error("expected a bundle-summary row in the view");
     }
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });
@@ -314,7 +434,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: false,
     });
@@ -343,7 +463,7 @@ describe("collectTimelineAutoExpandedRowIds", () => {
       }),
     ]);
 
-    const ids = collectTimelineAutoExpandedRowIds({
+    const ids = collectAutoExpandedIds({
       rows,
       scopeActive: true,
     });

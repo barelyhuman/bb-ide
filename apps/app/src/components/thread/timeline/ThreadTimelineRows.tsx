@@ -29,7 +29,7 @@ import {
 } from "@bb/thread-view";
 import { cn } from "@/lib/utils";
 import {
-  collectTimelineAutoExpandedRowIds,
+  collectTimelineAutoExpansionRowIds,
   isNonExpandableSummary,
   isRowExpandable,
 } from "./timeline-auto-expand.js";
@@ -151,7 +151,9 @@ interface SenderThreadTitleSource {
  * on unrelated turn updates.
  */
 interface TimelineTurnStateContextValue {
-  autoExpandedRowIds: ReadonlySet<string>;
+  initialAutoExpandedRowIds: ReadonlySet<string>;
+  liveAutoExpandedRowIds: ReadonlySet<string>;
+  terminalAutoExpandedRowIds: ReadonlySet<string>;
 }
 
 interface TimelineRowsListProps {
@@ -1031,7 +1033,11 @@ function TimelineExpandableRowView({
 }: TimelineExpandableRowViewProps) {
   const { onTitleAction, resolveSegmentLinkHref } =
     useTimelineRendererStaticContext();
-  const { autoExpandedRowIds } = useTimelineTurnStateContext();
+  const {
+    initialAutoExpandedRowIds,
+    liveAutoExpandedRowIds,
+    terminalAutoExpandedRowIds,
+  } = useTimelineTurnStateContext();
   const renderBody = useCallback(
     () => (
       <TimelineExpandableBody
@@ -1047,7 +1053,11 @@ function TimelineExpandableRowView({
     <ExpandableTimelineRow
       title={title}
       horizontalPadding={horizontalPadding}
-      autoExpanded={autoExpandedRowIds.has(row.id)}
+      autoExpanded={
+        liveAutoExpandedRowIds.has(row.id) ||
+        initialAutoExpandedRowIds.has(row.id)
+      }
+      terminalAutoExpanded={terminalAutoExpandedRowIds.has(row.id)}
       onTitleAction={onTitleAction}
       resolveSegmentLinkHref={resolveSegmentLinkHref}
       renderBody={renderBody}
@@ -1193,18 +1203,19 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
     props.threadRuntimeDisplayStatus,
   );
   const themeType = props.themeType ?? "light";
-  const computedAutoExpandedRowIds = useMemo(() => {
-    const ids = new Set<string>(
-      collectTimelineAutoExpandedRowIds({ rows, scopeActive }),
-    );
-    if (props.initialExpanded) {
-      for (const id of props.initialExpanded) {
-        ids.add(id);
-      }
-    }
-    return ids;
-  }, [rows, scopeActive, props.initialExpanded]);
-  const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
+  const computedAutoExpansionRowIds = useMemo(
+    () => collectTimelineAutoExpansionRowIds({ rows, scopeActive }),
+    [rows, scopeActive],
+  );
+  const liveAutoExpandedRowIds = useStableReadonlySet(
+    computedAutoExpansionRowIds.liveFrontierRowIds,
+  );
+  const terminalAutoExpandedRowIds = useStableReadonlySet(
+    computedAutoExpansionRowIds.terminalFrontierRowIds,
+  );
+  const initialAutoExpandedRowIds = useStableReadonlySet(
+    props.initialExpanded ?? new Set<string>(),
+  );
   const projectId = props.projectId;
   const senderThreadMetadataById = useSenderThreadMetadataById({
     queryClient,
@@ -1256,9 +1267,15 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
   );
   const turnStateContextValue = useMemo<TimelineTurnStateContextValue>(
     () => ({
-      autoExpandedRowIds,
+      initialAutoExpandedRowIds,
+      liveAutoExpandedRowIds,
+      terminalAutoExpandedRowIds,
     }),
-    [autoExpandedRowIds],
+    [
+      initialAutoExpandedRowIds,
+      liveAutoExpandedRowIds,
+      terminalAutoExpandedRowIds,
+    ],
   );
 
   return (

@@ -97,6 +97,31 @@ describe("ExpandableTimelineRow", () => {
     );
   });
 
+  it("preserves terminal auto-expansion after the terminal frontier moves on", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        terminalAutoExpanded
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+
+    view.rerender(
+      <ExpandableTimelineRow
+        title={TITLE}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+  });
+
   it("runs before-expand work only when opening locally", () => {
     const onBeforeExpand = vi.fn();
     render(
