@@ -8,11 +8,19 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PERSONAL_PROJECT_ID,
   type Host,
+  type ProjectSource,
+  type ThreadListEntry,
   type ThreadWithRuntime,
 } from "@bb/domain";
 import type {
@@ -30,6 +38,7 @@ import { RootComposeRoute } from "./RootComposeView";
 
 type HostIdCandidate = string | null | undefined;
 type ThreadOverrides = Partial<ThreadWithRuntime>;
+type ThreadListEntryOverrides = Partial<ThreadListEntry>;
 type ProjectWithThreadsOverrides = Partial<ProjectWithThreadsResponse>;
 
 vi.mock("@/hooks/useHostDaemon", () => ({
@@ -43,14 +52,15 @@ vi.mock("@/hooks/useHostDaemon", () => ({
   }),
 }));
 
-const ROOT_COMPOSE_DRAFT_STORAGE_KEY =
-  "bb.promptbox.contents-proj_personal-draft-3";
 const ROOT_COMPOSE_MODE_STORAGE_KEY = "bb.promptbox.new-thread-mode";
+const STANDARD_PROJECT_ID = "proj_standard";
 
 interface RootComposeFetchRoutesOptions {
   createThreadShouldFail?: boolean;
   createdThread?: ThreadWithRuntime;
   hiredManager?: ThreadWithRuntime;
+  sidebarNavigation?: SidebarBootstrapResponse;
+  threads?: readonly ThreadListEntry[];
 }
 
 interface RootComposeFetchRequests {
@@ -66,6 +76,17 @@ const localHost: Host = {
   lastSeenAt: 100,
   createdAt: 0,
   updatedAt: 100,
+};
+
+const standardProjectSource: ProjectSource = {
+  id: "src_standard",
+  projectId: STANDARD_PROJECT_ID,
+  type: "local_path",
+  hostId: "host_local",
+  path: "/tmp/bb-standard-project",
+  isDefault: true,
+  createdAt: 1,
+  updatedAt: 1,
 };
 
 const systemExecutionOptions = {
@@ -120,6 +141,18 @@ function RootComposeWithLocation() {
   );
 }
 
+function ThreadRouteWithReturnToCompose() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <LocationCapture />
+      <button type="button" onClick={() => navigate("/")}>
+        New thread
+      </button>
+    </>
+  );
+}
+
 function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
   return {
     archivedAt: null,
@@ -148,6 +181,26 @@ function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
   };
 }
 
+function makeThreadListEntry(
+  overrides: ThreadListEntryOverrides = {},
+): ThreadListEntry {
+  return {
+    ...makeThread({
+      environmentId: "env_reuse",
+      id: "thr_reuse_source",
+      projectId: STANDARD_PROJECT_ID,
+      title: "Reusable worktree",
+      titleFallback: "Reusable worktree",
+    }),
+    pinSortKey: null,
+    hasPendingInteraction: false,
+    environmentHostId: "host_local",
+    environmentBranchName: "bb/reuse-worktree",
+    environmentWorkspaceDisplayKind: "managed-worktree",
+    ...overrides,
+  };
+}
+
 function makeProjectWithThreadsResponse(
   overrides: ProjectWithThreadsOverrides = {},
 ): ProjectWithThreadsResponse {
@@ -163,16 +216,36 @@ function makeProjectWithThreadsResponse(
   };
 }
 
-function buildSidebarNavigationResponse(): SidebarBootstrapResponse {
+function buildSidebarNavigationResponse(
+  projects: readonly ProjectWithThreadsResponse[] = [],
+): SidebarBootstrapResponse {
   return {
-    projects: [],
+    projects: [...projects],
     personalProject: makeProjectWithThreadsResponse(),
   };
 }
 
+function makeStandardProjectWithThreadsResponse(): ProjectWithThreadsResponse {
+  return makeProjectWithThreadsResponse({
+    id: STANDARD_PROJECT_ID,
+    kind: "standard",
+    name: "Standard Project",
+    sources: [standardProjectSource],
+    threads: [],
+  });
+}
+
 function seedRootComposeDraft(text: string): void {
+  seedProjectRootComposeDraft(PERSONAL_PROJECT_ID, text);
+}
+
+function getRootComposeDraftStorageKey(projectId: string): string {
+  return `bb.promptbox.contents-${encodeURIComponent(projectId.trim())}-draft-3`;
+}
+
+function seedProjectRootComposeDraft(projectId: string, text: string): void {
   window.localStorage.setItem(
-    ROOT_COMPOSE_DRAFT_STORAGE_KEY,
+    getRootComposeDraftStorageKey(projectId),
     JSON.stringify({ text, attachments: [] }),
   );
 }
@@ -188,26 +261,57 @@ function installRootComposeFetchRoutes(
     createThread: [],
     hireManager: [],
   };
+  const sidebarNavigation =
+    options.sidebarNavigation ?? buildSidebarNavigationResponse();
+  const projectIds = [
+    sidebarNavigation.personalProject.id,
+    ...sidebarNavigation.projects.map((project) => project.id),
+  ];
   installFetchRoutes([
     {
       pathname: "/api/v1/sidebar-bootstrap",
-      handler: () => jsonResponse(buildSidebarNavigationResponse()),
+      handler: () => jsonResponse(sidebarNavigation),
     },
     {
       pathname: "/api/v1/projects",
-      handler: () => jsonResponse([]),
+      handler: () => jsonResponse(sidebarNavigation.projects),
     },
-    {
-      pathname: `/api/v1/projects/${PERSONAL_PROJECT_ID}/prompt-history`,
-      handler: () => jsonResponse([]),
-    },
-    {
-      pathname: `/api/v1/projects/${PERSONAL_PROJECT_ID}/default-execution-options`,
-      handler: () => jsonResponse(null),
-    },
+    ...projectIds.flatMap((projectId) => [
+      {
+        pathname: `/api/v1/projects/${projectId}/prompt-history`,
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: `/api/v1/projects/${projectId}/default-execution-options`,
+        handler: () => jsonResponse(null),
+      },
+      {
+        pathname: `/api/v1/projects/${projectId}/branches`,
+        handler: () =>
+          jsonResponse({
+            branches: ["main"],
+            branchesTruncated: false,
+            checkout: { kind: "branch", branchName: "main" },
+            defaultBranch: "main",
+            hasUncommittedChanges: false,
+            operation: { kind: "none" },
+            remoteBranches: [],
+            remoteBranchesTruncated: false,
+            selectedBranch: null,
+          }),
+      },
+    ]),
     {
       pathname: "/api/v1/threads",
-      handler: () => jsonResponse([]),
+      handler: (request) => {
+        const url = new URL(request.url);
+        const projectId = url.searchParams.get("projectId");
+        return jsonResponse(
+          (options.threads ?? []).filter(
+            (thread) => thread.projectId === projectId,
+          ),
+        );
+      },
     },
     {
       method: "POST",
@@ -255,20 +359,30 @@ function installRootComposeFetchRoutes(
   return requests;
 }
 
-function renderRootComposeRoute(): void {
+interface RenderRootComposeRouteOptions {
+  initialEntry?: string | { pathname: string; state?: unknown };
+}
+
+function renderRootComposeRoute(
+  options: RenderRootComposeRouteOptions = {},
+): void {
   const { wrapper: QueryClientWrapper } = createQueryClientTestHarness();
+  const initialEntry = options.initialEntry ?? "/";
 
   render(
     <QueryClientWrapper>
       <Suspense fallback={null}>
-        <MemoryRouter initialEntries={["/"]}>
+        <MemoryRouter initialEntries={[initialEntry]}>
           <QuickCreateProjectProvider>
             <Routes>
               <Route path="/" element={<RootComposeWithLocation />} />
-              <Route path="/threads/:threadId" element={<LocationCapture />} />
+              <Route
+                path="/threads/:threadId"
+                element={<ThreadRouteWithReturnToCompose />}
+              />
               <Route
                 path="/projects/:projectId/threads/:threadId"
-                element={<LocationCapture />}
+                element={<ThreadRouteWithReturnToCompose />}
               />
             </Routes>
           </QuickCreateProjectProvider>
@@ -326,6 +440,78 @@ describe("RootComposeRoute", () => {
           threadId: thread.id,
         }),
       );
+    });
+  });
+
+  it("does not keep reuse-environment selection after creating a thread", async () => {
+    const standardProject = makeStandardProjectWithThreadsResponse();
+    const createdThread = makeThread({
+      id: "thr_standard_created",
+      projectId: STANDARD_PROJECT_ID,
+    });
+    const requests = installRootComposeFetchRoutes({
+      createdThread,
+      sidebarNavigation: buildSidebarNavigationResponse([standardProject]),
+      threads: [makeThreadListEntry()],
+    });
+    window.localStorage.setItem(
+      "bb.root-compose.project-id",
+      STANDARD_PROJECT_ID,
+    );
+    seedProjectRootComposeDraft(
+      STANDARD_PROJECT_ID,
+      "Review the existing worktree",
+    );
+    renderRootComposeRoute({
+      initialEntry: {
+        pathname: "/",
+        state: { reuseEnvironmentId: "env_reuse" },
+      },
+    });
+
+    await screen.findByRole("button", { name: "Stop reusing worktree" });
+    const firstSubmitButton = screen.getByTitle("Submit (Enter)");
+    await waitFor(() => {
+      expect(isEnabledButton(firstSubmitButton)).toBe(true);
+    });
+
+    fireEvent.click(firstSubmitButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pathname").textContent).toBe(
+        getThreadRoutePath({
+          projectId: STANDARD_PROJECT_ID,
+          threadId: createdThread.id,
+        }),
+      );
+    });
+    expect(requests.createThread).toHaveLength(1);
+    const firstCreateBody = await requests.createThread[0]?.json();
+    expect(firstCreateBody.environment).toEqual({
+      type: "reuse",
+      environmentId: "env_reuse",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+
+    const textbox = await screen.findByRole("textbox");
+    fireEvent.change(textbox, {
+      target: { value: "Start a regular new thread" },
+    });
+    const secondSubmitButton = screen.getByTitle("Submit (Enter)");
+    await waitFor(() => {
+      expect(isEnabledButton(secondSubmitButton)).toBe(true);
+    });
+
+    fireEvent.click(secondSubmitButton);
+
+    await waitFor(() => {
+      expect(requests.createThread).toHaveLength(2);
+    });
+    const secondCreateBody = await requests.createThread[1]?.json();
+    expect(secondCreateBody.environment).toMatchObject({
+      type: "host",
+      hostId: "host_local",
     });
   });
 

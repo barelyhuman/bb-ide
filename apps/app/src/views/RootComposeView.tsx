@@ -684,6 +684,7 @@ export function RootComposeView() {
         executionInputSources: standardExecutionInputSources,
         environment: selectedEnvironment,
       });
+      clearReuseEnvironment();
       promptDraft.clearIfCurrentMatches(submittedDraft);
       navigate(
         getThreadRoutePath({
@@ -695,6 +696,7 @@ export function RootComposeView() {
       // Global mutation error handling already surfaced the failure.
     }
   }, [
+    clearReuseEnvironment,
     createThread,
     effectiveManagerHostId,
     hireProjectManager,
