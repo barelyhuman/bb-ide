@@ -24,10 +24,15 @@ function modeBlock(scheme: "light" | "dark"): string {
   return css.slice(css.lastIndexOf("{", at) + 1, css.indexOf("}", at));
 }
 
-/** token -> ink mix percentage, for tokens derived from the anchors. */
+/**
+ * token -> ink mix percentage, for tokens derived from the anchors. The base is
+ * either the canvas (opaque steps) or `transparent` (translucent interactive/
+ * overlay steps); over the canvas both resolve to the same step, so the mix
+ * percentage is the comparable "contrast from canvas" either way.
+ */
 function rampSteps(block: string): Map<string, number> {
   const re =
-    /--([a-z-]+):\s*color-mix\(in oklch, var\(--ink\) ([\d.]+)%, var\(--canvas\)\);/g;
+    /--([a-z-]+):\s*color-mix\(in oklch, var\(--ink\) ([\d.]+)%, (?:var\(--canvas\)|transparent)\);/g;
   const steps = new Map<string, number>();
   for (const match of block.matchAll(re)) {
     steps.set(match[1], Number(match[2]));
@@ -94,6 +99,13 @@ describe("theme.css neutral ramp", () => {
       it("makes the pressed/selected fill stronger than hover", () => {
         expect(step("state-active")).toBeGreaterThan(step("state-hover"));
         expect(step("sidebar-accent")).toBeGreaterThan(step("sidebar"));
+      });
+
+      it("keeps the sidebar quieter than cards in both modes", () => {
+        // Sidebar is chrome adjacent to the background; a card is a raised panel
+        // above it. This ordering must hold in light and dark so the elevation
+        // ramp stays monotonic (it used to invert between modes).
+        expect(step("sidebar")).toBeLessThan(step("card"));
       });
     });
   }
