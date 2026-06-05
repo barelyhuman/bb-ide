@@ -2,6 +2,7 @@ import {
   FilePreview as FilePreviewSurface,
   type FilePreviewFile,
 } from "./FilePreview";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { HttpError } from "@/lib/api";
 import { buildThreadStorageRawContentUrl } from "@/lib/file-content-urls";
 import type {
@@ -23,6 +24,7 @@ interface FilePreviewBaseProps {
   filePreview: FilePreview | undefined;
   isLoading: boolean;
   lineNumber?: number | null;
+  markdownLinkRouting?: MarkdownLinkRouting;
   onOpenInEditor?: (path: string) => void;
 }
 
@@ -58,6 +60,7 @@ export function SecondaryPanelFilePreview({
   htmlPreviewUrl = null,
   isLoading,
   lineNumber = null,
+  markdownLinkRouting,
   onOpenInEditor,
   statusLabel = null,
 }: SecondaryPanelFilePreviewProps) {
@@ -141,6 +144,7 @@ export function SecondaryPanelFilePreview({
         path={activePath}
         copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
+        markdownLinkRouting={markdownLinkRouting}
         statusLabel={statusLabel}
         state={{
           kind: "ready",
@@ -185,6 +189,7 @@ export function ThreadStorageFilePreview({
   filePreview,
   isLoading,
   lineNumber,
+  markdownLinkRouting,
   onOpenInEditor,
   threadId,
 }: ThreadStorageFilePreviewProps) {
@@ -197,6 +202,7 @@ export function ThreadStorageFilePreview({
       htmlPreviewUrl={buildThreadStorageRawContentUrl(threadId, activePath)}
       isLoading={isLoading}
       lineNumber={lineNumber}
+      markdownLinkRouting={markdownLinkRouting}
       onOpenInEditor={onOpenInEditor}
     />
   );

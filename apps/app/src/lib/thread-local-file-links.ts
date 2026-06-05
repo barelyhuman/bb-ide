@@ -1,5 +1,9 @@
 import type { ThreadTimelineLocalFileLink } from "@/components/thread/timeline";
 import { matchPath } from "react-router-dom";
+import {
+  isAbsoluteFilePathWithinRoot,
+  normalizeAbsoluteFilePath,
+} from "./absolute-file-path";
 import { APP_ROUTE_PATTERNS } from "./app-route-paths";
 
 const THREAD_LOCAL_FILE_LINK_UNAVAILABLE_DESCRIPTION =
@@ -57,11 +61,6 @@ interface ThreadStorageFileLinkOpenResolution {
   request: ThreadStorageFileLinkOpenRequest;
 }
 
-interface PathWithinRootArgs {
-  candidatePath: string;
-  rootPath: string;
-}
-
 interface NormalizeLocalFilePathWithinRootArgs {
   linkPath: string;
   rootPath: string;
@@ -86,45 +85,21 @@ function isAppRoutePath(path: string): boolean {
   );
 }
 
-function normalizeAbsolutePath(candidatePath: string): string | null {
-  if (!candidatePath.startsWith("/")) {
-    return null;
-  }
-
-  const normalizedSegments: string[] = [];
-  for (const segment of candidatePath.split("/")) {
-    if (segment.length === 0 || segment === ".") {
-      continue;
-    }
-    if (segment === "..") {
-      if (normalizedSegments.length > 0) {
-        normalizedSegments.pop();
-      }
-      continue;
-    }
-    normalizedSegments.push(segment);
-  }
-
-  return normalizedSegments.length === 0
-    ? "/"
-    : `/${normalizedSegments.join("/")}`;
-}
-
 function normalizeLocalFilePathWithinRoot(
   args: NormalizeLocalFilePathWithinRootArgs,
 ): NormalizedLocalFilePathWithinRoot | null {
-  const normalizedRootPath = normalizeAbsolutePath(args.rootPath);
+  const normalizedRootPath = normalizeAbsoluteFilePath({ path: args.rootPath });
   if (!normalizedRootPath) {
     return null;
   }
 
-  const normalizedPath = normalizeAbsolutePath(args.linkPath);
+  const normalizedPath = normalizeAbsoluteFilePath({ path: args.linkPath });
   if (!normalizedPath) {
     return null;
   }
 
   if (
-    !isPathWithinRoot({
+    !isAbsoluteFilePathWithinRoot({
       candidatePath: normalizedPath,
       rootPath: normalizedRootPath,
     }) ||
@@ -145,17 +120,6 @@ function normalizeLocalFilePathWithinRoot(
   };
 }
 
-function isPathWithinRoot(args: PathWithinRootArgs): boolean {
-  if (args.rootPath === "/") {
-    return args.candidatePath.startsWith("/");
-  }
-
-  return (
-    args.candidatePath === args.rootPath ||
-    args.candidatePath.startsWith(`${args.rootPath}/`)
-  );
-}
-
 export function resolveThreadLocalFileLink(
   args: ResolveThreadLocalFileLinkArgs,
 ): ThreadLocalFileLinkResolution {
@@ -165,7 +129,7 @@ export function resolveThreadLocalFileLink(
     };
   }
 
-  const normalizedPath = normalizeAbsolutePath(args.link.path);
+  const normalizedPath = normalizeAbsoluteFilePath({ path: args.link.path });
   if (!normalizedPath) {
     return {
       description: THREAD_LOCAL_FILE_LINK_INVALID_PATH_DESCRIPTION,

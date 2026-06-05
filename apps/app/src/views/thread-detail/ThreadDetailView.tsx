@@ -3,6 +3,7 @@ import { useAtom, useAtomValue } from "jotai";
 import type {
   ThreadTimelineLinkHandler,
   ThreadTimelineLocalFileLink,
+  ThreadTimelineLocalFileLinkHandler,
   TimelineTitleActionResolver,
 } from "@/components/thread/timeline";
 import {
@@ -53,7 +54,11 @@ import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-q
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { useThreadTerminals } from "@/hooks/queries/thread-terminal-queries";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
-import { resolveAbsoluteFilePath } from "@/lib/absolute-file-path";
+import {
+  getAbsoluteDirname,
+  isAbsoluteFilePathWithinRoot,
+  resolveAbsoluteFilePath,
+} from "@/lib/absolute-file-path";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import {
@@ -123,6 +128,10 @@ import {
   resolveThreadLocalFileLink,
   type ThreadLocalFileLinkResolution,
 } from "@/lib/thread-local-file-links";
+import type {
+  MarkdownLinkRouting,
+  MarkdownLocalFileLinkRouting,
+} from "@/components/ui/markdown-link-routing";
 import {
   useFixedPanelTabsSecondaryPanelUrlSync,
   useFixedPanelTabsState,
@@ -157,6 +166,19 @@ type MergeBasePickerOpenChangeHandler = NonNullable<
 >;
 type SecondaryPanelChangeHandler = (panel: ThreadSecondaryPanelTab) => void;
 
+interface BuildMarkdownPreviewLinkRoutingArgs {
+  baseDir: string | undefined;
+  onOpenLink: ThreadTimelineLinkHandler;
+  onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler;
+  rootPath: string | null | undefined;
+}
+
+export interface ResolveHostFilePreviewLinkRootPathArgs {
+  baseDir: string | undefined;
+  threadStorageRootPath: string | null;
+  workspaceRootPath: string | null;
+}
+
 function focusThreadDetailComposer(): void {
   window.requestAnimationFrame(() => {
     const composer = document.getElementById(
@@ -190,6 +212,70 @@ function buildHostConnectionNotice(
         : "Host disconnected",
     tone: displayStatus === "host-reconnecting" ? "pending" : "error",
   };
+}
+
+function buildMarkdownPreviewLinkRouting({
+  baseDir,
+  onOpenLink,
+  onOpenLocalFileLink,
+  rootPath,
+}: BuildMarkdownPreviewLinkRoutingArgs): MarkdownLinkRouting {
+  if (rootPath === null || rootPath === undefined) {
+    return {
+      onOpenLink,
+    };
+  }
+
+  const localFileRouting: MarkdownLocalFileLinkRouting = {
+    absoluteLinks: {
+      kind: "contained",
+      rootPath,
+    },
+    onOpenLink: onOpenLocalFileLink,
+  };
+  if (baseDir !== undefined) {
+    localFileRouting.relativeLinks = {
+      baseDir,
+      rootPath,
+    };
+  }
+
+  return {
+    localFile: localFileRouting,
+    onOpenLink,
+  };
+}
+
+export function resolveHostFilePreviewLinkRootPath({
+  baseDir,
+  threadStorageRootPath,
+  workspaceRootPath,
+}: ResolveHostFilePreviewLinkRootPathArgs): string | null {
+  if (baseDir === undefined) {
+    return null;
+  }
+
+  if (
+    workspaceRootPath !== null &&
+    isAbsoluteFilePathWithinRoot({
+      candidatePath: baseDir,
+      rootPath: workspaceRootPath,
+    })
+  ) {
+    return workspaceRootPath;
+  }
+
+  if (
+    threadStorageRootPath !== null &&
+    isAbsoluteFilePathWithinRoot({
+      candidatePath: baseDir,
+      rootPath: threadStorageRootPath,
+    })
+  ) {
+    return threadStorageRootPath;
+  }
+
+  return null;
 }
 
 export function ThreadDetailView() {
@@ -1212,6 +1298,40 @@ export function ThreadDetailView() {
         rootPath: threadStorageRootPath,
       })
     : null;
+  // Relative links inside a previewed markdown file resolve against the file's
+  // own directory, mirroring how the file's links would resolve on disk.
+  const workspaceFileLinkBaseDir = workspaceFileCopyPath
+    ? getAbsoluteDirname({ path: workspaceFileCopyPath })
+    : undefined;
+  const storageFileLinkBaseDir = storageFileCopyPath
+    ? getAbsoluteDirname({ path: storageFileCopyPath })
+    : undefined;
+  const hostFileLinkBaseDir = activeHostFilePath
+    ? getAbsoluteDirname({ path: activeHostFilePath })
+    : undefined;
+  const hostFileLinkRootPath = resolveHostFilePreviewLinkRootPath({
+    baseDir: hostFileLinkBaseDir,
+    threadStorageRootPath,
+    workspaceRootPath: localWorkspaceRootPath,
+  });
+  const workspaceMarkdownLinkRouting = buildMarkdownPreviewLinkRouting({
+    baseDir: workspaceFileLinkBaseDir,
+    onOpenLink: handleOpenTimelineLink,
+    onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
+    rootPath: environment?.path,
+  });
+  const hostMarkdownLinkRouting = buildMarkdownPreviewLinkRouting({
+    baseDir: hostFileLinkBaseDir,
+    onOpenLink: handleOpenTimelineLink,
+    onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
+    rootPath: hostFileLinkRootPath,
+  });
+  const storageMarkdownLinkRouting = buildMarkdownPreviewLinkRouting({
+    baseDir: storageFileLinkBaseDir,
+    onOpenLink: handleOpenTimelineLink,
+    onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
+    rootPath: threadStorageRootPath,
+  });
   const fileTabContent = isNewTabActive ? (
     <NewTabPage
       projectId={projectId ?? undefined}
@@ -1229,6 +1349,7 @@ export function ThreadDetailView() {
       copyPath={workspaceFileCopyPath}
       environmentId={thread.environmentId}
       lineNumber={activeWorkspaceFileLineNumber}
+      markdownLinkRouting={workspaceMarkdownLinkRouting}
       onOpenInEditor={handleOpenFileInEditor}
       source={activeWorkspaceFileSource}
       statusLabel={activeWorkspaceFileStatusLabel}
@@ -1239,6 +1360,7 @@ export function ThreadDetailView() {
       activePath={activeHostFilePath}
       environmentId={thread.environmentId}
       lineNumber={activeHostFileLineNumber}
+      markdownLinkRouting={hostMarkdownLinkRouting}
       onOpenInEditor={handleOpenHostFileInEditor}
       threadId={thread.id}
     />
@@ -1246,6 +1368,7 @@ export function ThreadDetailView() {
     <ThreadStorageFilePreviewTabContent
       activePath={activeStorageFilePath}
       copyPath={storageFileCopyPath}
+      markdownLinkRouting={storageMarkdownLinkRouting}
       onOpenInEditor={handleOpenStorageFileInEditor}
       threadId={thread.id}
     />

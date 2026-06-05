@@ -120,6 +120,43 @@ describe("ThreadStorageFilePreview", () => {
     expect(screen.queryByText("Empty file.")).toBeNull();
   });
 
+  it("routes markdown preview local file links through the provided handler", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <SecondaryPanelFilePreview
+        activePath="notes/current.md"
+        filePreview={makeTextPreview({
+          content: "[Plan](../plan.md)",
+          path: "notes/current.md",
+        })}
+        isLoading={false}
+        markdownLinkRouting={{
+          localFile: {
+            absoluteLinks: {
+              kind: "contained",
+              rootPath: "/storage/thr_1",
+            },
+            onOpenLink: onOpenLocalFileLink,
+            relativeLinks: {
+              baseDir: "/storage/thr_1/notes",
+              rootPath: "/storage/thr_1",
+            },
+          },
+        }}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Plan" });
+    expect(link.getAttribute("href")).toBe("file:///storage/thr_1/plan.md");
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: "/storage/thr_1/plan.md",
+    });
+  });
+
   it("renders generic storage HTML files through a sandboxed raw iframe", () => {
     const { container } = render(
       <ThreadStorageFilePreview

@@ -1,4 +1,7 @@
-import { parseLocalFileHref } from "./markdown-local-file-link.js";
+import {
+  parseLocalFileHref,
+  type MarkdownAbsoluteLocalFileLinkRouting,
+} from "./markdown-local-file-link.js";
 
 interface MarkdownFence {
   character: MarkdownFenceCharacter;
@@ -30,6 +33,9 @@ const MARKDOWN_LINK_DESTINATION_OPEN = "](";
 const MARKDOWN_WHITESPACE_PATTERN = /[ \t]/u;
 const MARKDOWN_ESCAPABLE_CHARACTER_PATTERN =
   /^[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]$/u;
+const TRUSTED_HOST_ABSOLUTE_LINKS = {
+  kind: "trusted-host",
+} satisfies MarkdownAbsoluteLocalFileLinkRouting;
 
 function splitMarkdownLines(content: string): string[] {
   const lines: string[] = [];
@@ -397,7 +403,10 @@ function buildLocalFileMarkdownLinkRepair(
     destination.includes("<") ||
     destination.includes(">") ||
     !isLocalFileMarkdownDestination(destination) ||
-    !parseLocalFileHref(destination)
+    !parseLocalFileHref({
+      absoluteLinks: TRUSTED_HOST_ABSOLUTE_LINKS,
+      href: destination,
+    })
   ) {
     return null;
   }

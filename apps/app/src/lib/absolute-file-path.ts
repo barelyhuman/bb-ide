@@ -8,6 +8,19 @@ export interface BuildAbsoluteFilePathArgs {
   rootPath: string;
 }
 
+export interface GetAbsoluteDirnameArgs {
+  path: string;
+}
+
+export interface IsAbsoluteFilePathWithinRootArgs {
+  candidatePath: string;
+  rootPath: string;
+}
+
+export interface NormalizeAbsoluteFilePathArgs {
+  path: string;
+}
+
 function trimTrailingSlash(path: string): string {
   if (path === "/") {
     return path;
@@ -21,6 +34,54 @@ function trimLeadingSlash(path: string): string {
 
 function isAbsoluteFilePath(path: string): boolean {
   return path.startsWith("/");
+}
+
+export function normalizeAbsoluteFilePath({
+  path,
+}: NormalizeAbsoluteFilePathArgs): string | null {
+  if (!isAbsoluteFilePath(path)) {
+    return null;
+  }
+
+  const normalizedSegments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (segment.length === 0 || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      if (normalizedSegments.length > 0) {
+        normalizedSegments.pop();
+      }
+      continue;
+    }
+    normalizedSegments.push(segment);
+  }
+
+  return normalizedSegments.length === 0
+    ? "/"
+    : `/${normalizedSegments.join("/")}`;
+}
+
+export function isAbsoluteFilePathWithinRoot({
+  candidatePath,
+  rootPath,
+}: IsAbsoluteFilePathWithinRootArgs): boolean {
+  const normalizedCandidatePath = normalizeAbsoluteFilePath({
+    path: candidatePath,
+  });
+  const normalizedRootPath = normalizeAbsoluteFilePath({ path: rootPath });
+  if (normalizedCandidatePath === null || normalizedRootPath === null) {
+    return false;
+  }
+
+  if (normalizedRootPath === "/") {
+    return normalizedCandidatePath.startsWith("/");
+  }
+
+  return (
+    normalizedCandidatePath === normalizedRootPath ||
+    normalizedCandidatePath.startsWith(`${normalizedRootPath}/`)
+  );
 }
 
 export function buildAbsoluteFilePath({
@@ -50,4 +111,14 @@ export function resolveAbsoluteFilePath({
     return null;
   }
   return buildAbsoluteFilePath({ path, rootPath });
+}
+
+/**
+ * Parent directory of an absolute path, used as the base for resolving relative
+ * links inside a previewed file. Returns the filesystem root for top-level paths.
+ */
+export function getAbsoluteDirname({ path }: GetAbsoluteDirnameArgs): string {
+  const trimmed = trimTrailingSlash(path);
+  const lastSlashIndex = trimmed.lastIndexOf("/");
+  return lastSlashIndex <= 0 ? "/" : trimmed.slice(0, lastSlashIndex);
 }

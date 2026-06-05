@@ -26,9 +26,12 @@ import { normalizeLocalFileMarkdownLinks } from "./markdown-local-file-link-norm
 import {
   buildLocalFileAnchorHref,
   parseLocalFileHref,
-  type MarkdownPreviewLocalFileLinkHandler,
+  resolveRelativeLocalFileHref,
 } from "./markdown-local-file-link.js";
-import type { MarkdownPreviewLinkHandler } from "./markdown-link.js";
+import type {
+  MarkdownLinkRouting,
+  MarkdownLocalFileLinkRouting,
+} from "./markdown-link-routing.js";
 import { usePreferredTheme, type Theme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 
@@ -38,27 +41,24 @@ export interface MarkdownPreviewProps {
   content: string;
   expandedImageAlt?: string;
   imageLightboxTitle?: string;
-  /**
-   * Repairs malformed local absolute path links before CommonMark parsing.
-   * Use with local-file-capable message surfaces, not general markdown content.
-   */
-  normalizeLocalFileLinks?: boolean;
-  onOpenLink?: MarkdownPreviewLinkHandler;
-  onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
+  linkRouting?: MarkdownLinkRouting;
   urlTransform?: UrlTransform;
 }
 
 interface MarkdownAnchorProps
   extends ComponentPropsWithoutRef<"a">, ExtraProps {
-  onOpenLink?: MarkdownPreviewLinkHandler;
-  onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
+  linkRouting?: MarkdownLinkRouting;
 }
 
 interface BuildMarkdownComponentsArgs {
+  linkRouting?: MarkdownLinkRouting;
   preferredTheme: Theme;
   setExpandedImageUrl: ExpandedImageUrlSetter;
-  onOpenLink?: MarkdownPreviewLinkHandler;
-  onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
+}
+
+interface BuildLocalFileAwareUrlTransformArgs {
+  fallbackUrlTransform: UrlTransform | undefined;
+  localFileRouting: MarkdownLocalFileLinkRouting;
 }
 
 interface MarkdownImageRendererArgs {
@@ -114,22 +114,56 @@ const MARKDOWN_HTML_REHYPE_PLUGINS: MarkdownRehypePlugins = [
   rehypeSanitize,
 ];
 
-const localFileAwareUrlTransform: UrlTransform = (value, key) => {
-  if (key === "href" && parseLocalFileHref(value)) {
-    return value;
-  }
+function buildLocalFileAwareUrlTransform({
+  fallbackUrlTransform,
+  localFileRouting,
+}: BuildLocalFileAwareUrlTransformArgs): UrlTransform {
+  return (value, key, node) => {
+    if (key === "href") {
+      if (
+        parseLocalFileHref({
+          absoluteLinks: localFileRouting.absoluteLinks,
+          href: value,
+        })
+      ) {
+        return value;
+      }
 
-  return defaultUrlTransform(value);
-};
+      if (localFileRouting.relativeLinks !== undefined) {
+        const resolvedHref = resolveRelativeLocalFileHref({
+          href: value,
+          ...localFileRouting.relativeLinks,
+        });
+        if (
+          resolvedHref !== null &&
+          parseLocalFileHref({
+            absoluteLinks: localFileRouting.absoluteLinks,
+            href: resolvedHref,
+          })
+        ) {
+          return resolvedHref;
+        }
+      }
+    }
+
+    return (fallbackUrlTransform ?? defaultUrlTransform)(value, key, node);
+  };
+}
 
 function MarkdownAnchor({
   children,
   href,
-  onOpenLink,
-  onOpenLocalFileLink,
+  linkRouting,
   ...anchorProps
 }: MarkdownAnchorProps) {
-  const localFileLink = onOpenLocalFileLink ? parseLocalFileHref(href) : null;
+  const localFileRouting = linkRouting?.localFile;
+  const onOpenLocalFileLink = localFileRouting?.onOpenLink;
+  const localFileLink = localFileRouting
+    ? parseLocalFileHref({
+        absoluteLinks: localFileRouting.absoluteLinks,
+        href,
+      })
+    : null;
   const anchorHref = buildLocalFileAnchorHref(localFileLink, href);
   const handleAnchorClick = (event: MarkdownAnchorEvent) => {
     if (localFileLink && onOpenLocalFileLink) {
@@ -141,7 +175,7 @@ function MarkdownAnchor({
 
     // Defer ordinary web-link routing (e.g. opening in the in-app browser) to
     // the handler, which prevents default only when it takes over the open.
-    if (onOpenLink && href && onOpenLink({ href })) {
+    if (linkRouting?.onOpenLink && href && linkRouting.onOpenLink({ href })) {
       event.preventDefault();
     }
   };
@@ -388,19 +422,12 @@ function resolveMarkdownSourceMedia({
 }
 
 function buildMarkdownComponents({
-  onOpenLink,
-  onOpenLocalFileLink,
+  linkRouting,
   preferredTheme,
   setExpandedImageUrl,
 }: BuildMarkdownComponentsArgs): Components {
   function MarkdownLink(props: MarkdownAnchorProps) {
-    return (
-      <MarkdownAnchor
-        {...props}
-        onOpenLink={onOpenLink}
-        onOpenLocalFileLink={onOpenLocalFileLink}
-      />
-    );
+    return <MarkdownAnchor {...props} linkRouting={linkRouting} />;
   }
 
   function MarkdownImage({
@@ -507,14 +534,14 @@ function MarkdownPreviewComponent({
   content,
   expandedImageAlt = "Expanded image",
   imageLightboxTitle = "Expanded image preview",
-  normalizeLocalFileLinks = false,
-  onOpenLink,
-  onOpenLocalFileLink,
+  linkRouting,
   urlTransform,
 }: MarkdownPreviewProps) {
   const preferredTheme = usePreferredTheme();
   const contentRef = useMarkdownContentWidthVariable();
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const localFileRouting = linkRouting?.localFile;
+  const normalizeLocalFileLinks = localFileRouting !== undefined;
   const markdownContent = useMemo(
     () =>
       normalizeLocalFileLinks
@@ -525,12 +552,21 @@ function MarkdownPreviewComponent({
   const markdownComponents = useMemo(
     () =>
       buildMarkdownComponents({
-        onOpenLink,
-        onOpenLocalFileLink,
+        linkRouting,
         preferredTheme,
         setExpandedImageUrl,
       }),
-    [onOpenLink, onOpenLocalFileLink, preferredTheme],
+    [linkRouting, preferredTheme],
+  );
+  const resolvedUrlTransform = useMemo(
+    () =>
+      localFileRouting
+        ? buildLocalFileAwareUrlTransform({
+            fallbackUrlTransform: urlTransform,
+            localFileRouting,
+          })
+        : urlTransform,
+    [localFileRouting, urlTransform],
   );
 
   return (
@@ -546,9 +582,7 @@ function MarkdownPreviewComponent({
           rehypePlugins={allowHtml ? MARKDOWN_HTML_REHYPE_PLUGINS : undefined}
           remarkPlugins={[remarkGfm]}
           components={markdownComponents}
-          urlTransform={
-            onOpenLocalFileLink ? localFileAwareUrlTransform : urlTransform
-          }
+          urlTransform={resolvedUrlTransform}
         >
           {markdownContent}
         </ReactMarkdown>

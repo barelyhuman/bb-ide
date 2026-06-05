@@ -1,5 +1,6 @@
 import { memo, useCallback, type ReactNode } from "react";
 import type { ThreadGitDiffResponse } from "@bb/domain";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { useEnvironmentFilePreview } from "@/hooks/queries/environment-queries";
@@ -84,6 +85,7 @@ export interface WorkspaceFilePreviewTabContentProps {
   copyPath?: string | null;
   environmentId?: string | null;
   lineNumber: number | null;
+  markdownLinkRouting?: MarkdownLinkRouting;
   onOpenInEditor?: (path: string) => void;
   source: EnvironmentFilePreviewSource | null;
   statusLabel: WorkspaceFilePreviewStatusLabel | null;
@@ -94,6 +96,7 @@ export interface HostFilePreviewTabContentProps {
   activePath: string;
   environmentId?: string | null;
   lineNumber: number | null;
+  markdownLinkRouting?: MarkdownLinkRouting;
   onOpenInEditor?: (path: string) => void;
   threadId: string;
 }
@@ -101,6 +104,7 @@ export interface HostFilePreviewTabContentProps {
 export interface ThreadStorageFilePreviewTabContentProps {
   activePath: string;
   copyPath?: string | null;
+  markdownLinkRouting?: MarkdownLinkRouting;
   onOpenInEditor?: (path: string) => void;
   threadId: string;
 }
@@ -307,6 +311,7 @@ export function WorkspaceFilePreviewTabContent({
   copyPath = null,
   environmentId,
   lineNumber,
+  markdownLinkRouting,
   onOpenInEditor,
   source,
   statusLabel,
@@ -331,6 +336,7 @@ export function WorkspaceFilePreviewTabContent({
       }
       isLoading={isWorkspaceFilePreviewLoading}
       lineNumber={lineNumber}
+      markdownLinkRouting={markdownLinkRouting}
       onOpenInEditor={onOpenInEditor}
       statusLabel={statusLabel}
     />
@@ -341,6 +347,7 @@ export function HostFilePreviewTabContent({
   activePath,
   environmentId,
   lineNumber,
+  markdownLinkRouting,
   onOpenInEditor,
   threadId,
 }: HostFilePreviewTabContentProps) {
@@ -358,6 +365,7 @@ export function HostFilePreviewTabContent({
       htmlPreviewUrl={buildRawFilesystemHtmlContentUrl(threadId, activePath)}
       isLoading={isHostFilePreviewLoading}
       lineNumber={lineNumber}
+      markdownLinkRouting={markdownLinkRouting}
       onOpenInEditor={onOpenInEditor}
       statusLabel={null}
     />
@@ -367,6 +375,7 @@ export function HostFilePreviewTabContent({
 export function ThreadStorageFilePreviewTabContent({
   activePath,
   copyPath = null,
+  markdownLinkRouting,
   onOpenInEditor,
   threadId,
 }: ThreadStorageFilePreviewTabContentProps) {
@@ -383,6 +392,7 @@ export function ThreadStorageFilePreviewTabContent({
       error={threadStorageFilePreviewError}
       filePreview={threadStorageFilePreview}
       isLoading={isThreadStorageFilePreviewLoading}
+      markdownLinkRouting={markdownLinkRouting}
       onOpenInEditor={onOpenInEditor}
       threadId={threadId}
     />

@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { UrlTransform } from "react-markdown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing";
+import type { MarkdownPreviewLinkHandler } from "@/components/ui/markdown-link";
+import type {
+  MarkdownAbsoluteLocalFileLinkRouting,
+  MarkdownPreviewLocalFileLinkHandler,
+  MarkdownRelativeLocalFileLinkRouting,
+} from "@/components/ui/markdown-local-file-link";
 import { MarkdownPreview } from "@/components/ui/markdown-preview";
 import {
   restoreMatchMedia,
@@ -10,6 +18,44 @@ import {
 import { setPreferredTheme } from "@/hooks/useTheme";
 
 type ClipboardWriteText = (text: string) => Promise<void>;
+
+interface BuildMarkdownLinkRoutingArgs {
+  absoluteLinks?: MarkdownAbsoluteLocalFileLinkRouting;
+  onOpenLink?: MarkdownPreviewLinkHandler;
+  onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
+  relativeLinks?: MarkdownRelativeLocalFileLinkRouting;
+}
+
+function buildMarkdownLinkRouting({
+  absoluteLinks,
+  onOpenLink,
+  onOpenLocalFileLink,
+  relativeLinks,
+}: BuildMarkdownLinkRoutingArgs): MarkdownLinkRouting {
+  const routing: MarkdownLinkRouting = {};
+  if (onOpenLink) {
+    routing.onOpenLink = onOpenLink;
+  }
+  if (onOpenLocalFileLink) {
+    routing.localFile = {
+      absoluteLinks:
+        absoluteLinks ??
+        (relativeLinks
+          ? {
+              kind: "contained",
+              rootPath: relativeLinks.rootPath,
+            }
+          : {
+              kind: "trusted-host",
+            }),
+      onOpenLink: onOpenLocalFileLink,
+    };
+    if (relativeLinks !== undefined) {
+      routing.localFile.relativeLinks = relativeLinks;
+    }
+  }
+  return routing;
+}
 
 function installClipboardWriteTextMock() {
   const writeText = vi.fn<ClipboardWriteText>();
@@ -125,7 +171,7 @@ describe("MarkdownPreview", () => {
     render(
       <MarkdownPreview
         content="[Open absolute](/workspace/src/app.ts:12)"
-        onOpenLocalFileLink={onOpenLocalFileLink}
+        linkRouting={buildMarkdownLinkRouting({ onOpenLocalFileLink })}
       />,
     );
 
@@ -134,6 +180,41 @@ describe("MarkdownPreview", () => {
     expect(onOpenLocalFileLink).toHaveBeenCalledTimes(1);
     expect(onOpenLocalFileLink).toHaveBeenCalledWith({
       lineNumber: 12,
+      path: "/workspace/src/app.ts",
+    });
+  });
+
+  it("contains absolute local file links before routing preview markdown", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content={[
+          "[Allowed](file:///workspace/src/app.ts#L4)",
+          "[Plain secret](/etc/shadow)",
+          "[File secret](file:///etc/shadow)",
+        ].join("\n\n")}
+        linkRouting={buildMarkdownLinkRouting({
+          absoluteLinks: {
+            kind: "contained",
+            rootPath: "/workspace",
+          },
+          onOpenLocalFileLink,
+        })}
+      />,
+    );
+
+    const allowedLink = screen.getByRole("link", { name: "Allowed" });
+    expect(allowedLink.getAttribute("href")).toBe(
+      "file:///workspace/src/app.ts#L4",
+    );
+
+    fireEvent.click(allowedLink);
+    fireEvent.click(screen.getByRole("link", { name: "Plain secret" }));
+    fireEvent.click(screen.getByText("File secret"));
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledTimes(1);
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: 4,
       path: "/workspace/src/app.ts",
     });
   });
@@ -152,8 +233,7 @@ describe("MarkdownPreview", () => {
     render(
       <MarkdownPreview
         content={markdown}
-        normalizeLocalFileLinks
-        onOpenLocalFileLink={onOpenLocalFileLink}
+        linkRouting={buildMarkdownLinkRouting({ onOpenLocalFileLink })}
       />,
     );
 
@@ -185,8 +265,7 @@ describe("MarkdownPreview", () => {
     render(
       <MarkdownPreview
         content={'[Notes](/Users/me/My Notes/app.md "My doc")'}
-        normalizeLocalFileLinks
-        onOpenLocalFileLink={onOpenLocalFileLink}
+        linkRouting={buildMarkdownLinkRouting({ onOpenLocalFileLink })}
       />,
     );
 
@@ -204,19 +283,18 @@ describe("MarkdownPreview", () => {
     });
   });
 
-  it("renders local file links with section fragments as local file links", () => {
+  it("omits unsupported section fragments from rendered local file hrefs", () => {
     const onOpenLocalFileLink = vi.fn(() => true);
     render(
       <MarkdownPreview
         content="[Notes](/Users/me/My Notes/app.md#section)"
-        normalizeLocalFileLinks
-        onOpenLocalFileLink={onOpenLocalFileLink}
+        linkRouting={buildMarkdownLinkRouting({ onOpenLocalFileLink })}
       />,
     );
 
     const link = screen.getByRole("link", { name: "Notes" });
     expect(link.getAttribute("href")).toBe(
-      "file:///Users/me/My%20Notes/app.md#section",
+      "file:///Users/me/My%20Notes/app.md",
     );
 
     fireEvent.click(link);
@@ -225,6 +303,234 @@ describe("MarkdownPreview", () => {
       lineNumber: null,
       path: "/Users/me/My Notes/app.md",
     });
+  });
+
+  it("resolves relative links against the base dir as local file links", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content="[Summary](current/branch-summary.md#L7)"
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/storage/thr_1",
+            rootPath: "/storage/thr_1",
+          },
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Summary" });
+    expect(link.getAttribute("href")).toBe(
+      "file:///storage/thr_1/current/branch-summary.md#L7",
+    );
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: 7,
+      path: "/storage/thr_1/current/branch-summary.md",
+    });
+  });
+
+  it("resolves relative links from a root base dir", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content="[Intro](intro.md)"
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/",
+            rootPath: "/",
+          },
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Intro" });
+    expect(link.getAttribute("href")).toBe("file:///intro.md");
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: "/intro.md",
+    });
+  });
+
+  it("routes relative filename line suffix links inside the allowed root", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content={[
+          "[Lockfile](Cargo.lock:14:33)",
+          "[Markdown](foo.md:5)",
+          "[Extensionless](foo:5)",
+        ].join("\n\n")}
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/workspace",
+            rootPath: "/workspace",
+          },
+        })}
+      />,
+    );
+
+    const lockfileLink = screen.getByRole("link", { name: "Lockfile" });
+    const markdownLink = screen.getByRole("link", { name: "Markdown" });
+    const extensionlessLink = screen.getByRole("link", {
+      name: "Extensionless",
+    });
+    expect(lockfileLink.getAttribute("href")).toBe(
+      "file:///workspace/Cargo.lock#L14",
+    );
+    expect(markdownLink.getAttribute("href")).toBe(
+      "file:///workspace/foo.md#L5",
+    );
+    expect(extensionlessLink.getAttribute("href")).toBe(
+      "file:///workspace/foo#L5",
+    );
+
+    fireEvent.click(lockfileLink);
+    fireEvent.click(markdownLink);
+    fireEvent.click(extensionlessLink);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledTimes(3);
+    expect(onOpenLocalFileLink).toHaveBeenNthCalledWith(1, {
+      lineNumber: 14,
+      path: "/workspace/Cargo.lock",
+    });
+    expect(onOpenLocalFileLink).toHaveBeenNthCalledWith(2, {
+      lineNumber: 5,
+      path: "/workspace/foo.md",
+    });
+    expect(onOpenLocalFileLink).toHaveBeenNthCalledWith(3, {
+      lineNumber: 5,
+      path: "/workspace/foo",
+    });
+  });
+
+  it("normalizes parent-relative links that stay inside the allowed root", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content="[Status](../status.md)"
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/storage/thr_1/current",
+            rootPath: "/storage/thr_1",
+          },
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Status" });
+    expect(link.getAttribute("href")).toBe("file:///storage/thr_1/status.md");
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: "/storage/thr_1/status.md",
+    });
+  });
+
+  it("does not route preview-relative links that escape the allowed root", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content="[Secret](../../../secret.md)"
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/storage/thr_1/current/docs",
+            rootPath: "/storage/thr_1",
+          },
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Secret" });
+    expect(link.getAttribute("href")).toBe("../../../secret.md");
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).not.toHaveBeenCalled();
+  });
+
+  it("leaves relative links untouched without a base dir", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content="[Summary](current/branch-summary.md)"
+        linkRouting={buildMarkdownLinkRouting({ onOpenLocalFileLink })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Summary" });
+    expect(link.getAttribute("href")).toBe("current/branch-summary.md");
+
+    fireEvent.click(link);
+
+    expect(onOpenLocalFileLink).not.toHaveBeenCalled();
+  });
+
+  it("does not treat web links or in-document anchors as relative file links", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    render(
+      <MarkdownPreview
+        content={["[Docs](https://example.com/docs)", "[Top](#heading)"].join(
+          "\n\n",
+        )}
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/storage/thr_1",
+            rootPath: "/storage/thr_1",
+          },
+        })}
+      />,
+    );
+
+    const docsLink = screen.getByRole("link", { name: "Docs" });
+    const topLink = screen.getByRole("link", { name: "Top" });
+    expect(docsLink.getAttribute("href")).toBe("https://example.com/docs");
+    expect(topLink.getAttribute("href")).toBe("#heading");
+
+    fireEvent.click(docsLink);
+    fireEvent.click(topLink);
+
+    expect(onOpenLocalFileLink).not.toHaveBeenCalled();
+  });
+
+  it("preserves custom URL transforms while local file handling is enabled", () => {
+    const onOpenLocalFileLink = vi.fn(() => true);
+    const rewriteDocsUrl: UrlTransform = (value) =>
+      value === "https://example.com/docs"
+        ? "https://docs.example.test/internal"
+        : value;
+
+    render(
+      <MarkdownPreview
+        content="[Docs](https://example.com/docs)"
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink,
+          relativeLinks: {
+            baseDir: "/storage/thr_1",
+            rootPath: "/storage/thr_1",
+          },
+        })}
+        urlTransform={rewriteDocsUrl}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Docs" }).getAttribute("href")).toBe(
+      "https://docs.example.test/internal",
+    );
+    expect(onOpenLocalFileLink).not.toHaveBeenCalled();
   });
 
   it("renders external links as blank-target anchors for desktop handling", () => {
@@ -242,7 +548,7 @@ describe("MarkdownPreview", () => {
     render(
       <MarkdownPreview
         content="[Docs](https://example.com/docs)"
-        onOpenLink={onOpenLink}
+        linkRouting={buildMarkdownLinkRouting({ onOpenLink })}
       />,
     );
 
@@ -261,7 +567,7 @@ describe("MarkdownPreview", () => {
     render(
       <MarkdownPreview
         content="[Docs](https://example.com/docs)"
-        onOpenLink={onOpenLink}
+        linkRouting={buildMarkdownLinkRouting({ onOpenLink })}
       />,
     );
 
@@ -282,8 +588,10 @@ describe("MarkdownPreview", () => {
     render(
       <MarkdownPreview
         content="[Open absolute](/workspace/src/app.ts:12)"
-        onOpenLink={onOpenLink}
-        onOpenLocalFileLink={onOpenLocalFileLink}
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLink,
+          onOpenLocalFileLink,
+        })}
       />,
     );
 
@@ -293,7 +601,7 @@ describe("MarkdownPreview", () => {
     expect(onOpenLink).not.toHaveBeenCalled();
   });
 
-  it("normalizes local file links only when explicitly requested", () => {
+  it("normalizes local file links only when local file routing is enabled", () => {
     const content = "[Notes](/Users/me/My Notes/app.md)";
     const withoutNormalization = render(<MarkdownPreview content={content} />);
     expect(
@@ -301,7 +609,14 @@ describe("MarkdownPreview", () => {
     ).toBeNull();
     withoutNormalization.unmount();
 
-    render(<MarkdownPreview content={content} normalizeLocalFileLinks />);
+    render(
+      <MarkdownPreview
+        content={content}
+        linkRouting={buildMarkdownLinkRouting({
+          onOpenLocalFileLink: vi.fn(() => true),
+        })}
+      />,
+    );
 
     expect(screen.getByRole("link", { name: "Notes" })).toBeTruthy();
   });

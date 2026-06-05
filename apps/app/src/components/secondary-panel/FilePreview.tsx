@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { CopyButton } from "@/components/ui/copy-button.js";
 import { Icon } from "@/components/ui/icon.js";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
@@ -59,6 +60,7 @@ export interface FilePreviewProps {
   copyPath?: string | null;
   headerMode?: FilePreviewHeaderMode;
   onOpenInEditor?: (path: string) => void;
+  markdownLinkRouting?: MarkdownLinkRouting;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
 
@@ -66,6 +68,7 @@ interface FilePreviewBodyProps {
   state: FilePreviewState;
   path: string;
   viewMode: FilePreviewViewMode;
+  markdownLinkRouting?: MarkdownLinkRouting;
 }
 
 interface FilePreviewHeaderProps {
@@ -81,6 +84,7 @@ interface FilePreviewHeaderProps {
 interface MarkdownFilePreviewProps {
   file: FilePreviewFile;
   urlTransform?: UrlTransform;
+  markdownLinkRouting?: MarkdownLinkRouting;
 }
 
 interface FilePreviewImageProps {
@@ -168,6 +172,7 @@ export function FilePreview({
   copyPath = null,
   headerMode = "file",
   onOpenInEditor,
+  markdownLinkRouting,
   statusLabel = null,
 }: FilePreviewProps) {
   const toggleKind = getFilePreviewToggleKind(state);
@@ -208,12 +213,18 @@ export function FilePreview({
         state={state}
         path={path}
         viewMode={toggleKind === null ? "preview" : viewMode}
+        markdownLinkRouting={markdownLinkRouting}
       />
     </div>
   );
 }
 
-function FilePreviewBody({ state, path, viewMode }: FilePreviewBodyProps) {
+function FilePreviewBody({
+  state,
+  path,
+  viewMode,
+  markdownLinkRouting,
+}: FilePreviewBodyProps) {
   if (state.kind === "loading") {
     return <FilePreviewLoading />;
   }
@@ -260,6 +271,7 @@ function FilePreviewBody({ state, path, viewMode }: FilePreviewBodyProps) {
       <MarkdownFilePreview
         file={state.file}
         urlTransform={state.markdownUrlTransform}
+        markdownLinkRouting={markdownLinkRouting}
       />
     );
   }
@@ -354,13 +366,18 @@ function FilePreviewHeader({
   );
 }
 
-function MarkdownFilePreview({ file, urlTransform }: MarkdownFilePreviewProps) {
+function MarkdownFilePreview({
+  file,
+  urlTransform,
+  markdownLinkRouting,
+}: MarkdownFilePreviewProps) {
   return (
     <div className="px-4 pt-4">
       <MarkdownPreview
         allowHtml
         content={file.contents}
         urlTransform={urlTransform}
+        linkRouting={markdownLinkRouting}
       />
     </div>
   );

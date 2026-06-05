@@ -108,8 +108,14 @@ function MarkdownHtmlPreviewHarness({
     <>
       <MarkdownPreview
         content={`[file](${markdownPath})`}
-        normalizeLocalFileLinks
-        onOpenLocalFileLink={handleOpenLocalFileLink}
+        linkRouting={{
+          localFile: {
+            absoluteLinks: {
+              kind: "trusted-host",
+            },
+            onOpenLink: handleOpenLocalFileLink,
+          },
+        }}
       />
       {openedFile?.kind === "host" ? (
         <HostFilePreviewTabContent
@@ -208,8 +214,14 @@ function PanelClosedThreadStorageMarkdownLinkHarness({
     <>
       <MarkdownPreview
         content={`[file](${markdownPath})`}
-        normalizeLocalFileLinks
-        onOpenLocalFileLink={handleOpenLocalFileLink}
+        linkRouting={{
+          localFile: {
+            absoluteLinks: {
+              kind: "trusted-host",
+            },
+            onOpenLink: handleOpenLocalFileLink,
+          },
+        }}
       />
       {openedFile?.kind === "host" ? (
         <HostFilePreviewTabContent

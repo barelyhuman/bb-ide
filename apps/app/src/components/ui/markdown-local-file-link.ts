@@ -1,3 +1,8 @@
+import {
+  isAbsoluteFilePathWithinRoot,
+  normalizeAbsoluteFilePath,
+} from "@/lib/absolute-file-path";
+
 export interface MarkdownPreviewLocalFileLink {
   lineNumber: number | null;
   /**
@@ -15,6 +20,32 @@ export type MarkdownPreviewLocalFileLinkHandler = (
   link: MarkdownPreviewLocalFileLink,
 ) => boolean;
 
+export interface MarkdownTrustedAbsoluteLocalFileLinkRouting {
+  kind: "trusted-host";
+}
+
+export interface MarkdownContainedAbsoluteLocalFileLinkRouting {
+  kind: "contained";
+  rootPath: string;
+}
+
+export type MarkdownAbsoluteLocalFileLinkRouting =
+  | MarkdownTrustedAbsoluteLocalFileLinkRouting
+  | MarkdownContainedAbsoluteLocalFileLinkRouting;
+
+export interface MarkdownRelativeLocalFileLinkRouting {
+  /**
+   * Absolute directory of the previewed markdown file. Relative links resolve
+   * against this directory before root containment is checked.
+   */
+  baseDir: string;
+  /**
+   * Absolute containing root for preview-relative links. Targets outside this
+   * root are left as ordinary markdown links.
+   */
+  rootPath: string;
+}
+
 interface LocalFileHrefParts {
   lineNumber: number | null;
   path: string;
@@ -23,6 +54,21 @@ interface LocalFileHrefParts {
 interface LocalFilePathValidationArgs {
   requireLikelyFileBasename: boolean;
   path: string;
+}
+
+export interface ResolveRelativeLocalFileHrefArgs
+  extends MarkdownRelativeLocalFileLinkRouting {
+  href: string | undefined;
+}
+
+export interface ParseLocalFileHrefArgs {
+  absoluteLinks: MarkdownAbsoluteLocalFileLinkRouting;
+  href: string | undefined;
+}
+
+interface IsLinkContainedInRootArgs {
+  link: MarkdownPreviewLocalFileLink;
+  rootPath: string;
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -168,13 +214,108 @@ function parseAbsoluteLocalFileHref(
   return parsed;
 }
 
-export function parseLocalFileHref(
-  href: string | undefined,
+// Apply scheme detection after file line suffix parsing so references such as
+// `Cargo.lock:14:33` and `foo.md:5` remain relative file links.
+const URI_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/u;
+
+/**
+ * Resolves a relative markdown link against the previewed file's directory so
+ * links authored relative to a file on disk become absolute paths the local
+ * file link machinery understands. Returns `null` for links that are not
+ * relative file references (absolute paths, schemes, in-document fragments,
+ * queries), leaving them to default anchor handling.
+ */
+export function resolveRelativeLocalFileHref({
+  baseDir,
+  href,
+  rootPath,
+}: ResolveRelativeLocalFileHrefArgs): string | null {
+  if (!href) {
+    return null;
+  }
+
+  const decodedHref = safeDecodeURIComponent(href);
+  const parsedHref = parseLineSuffix(decodedHref);
+  if (
+    href.trim() !== href ||
+    decodedHref.trim() !== decodedHref ||
+    parsedHref === null ||
+    parsedHref.path.length === 0 ||
+    parsedHref.path.startsWith("/") ||
+    parsedHref.path.startsWith("#") ||
+    parsedHref.path.startsWith("?") ||
+    URI_SCHEME_PATTERN.test(parsedHref.path)
+  ) {
+    return null;
+  }
+
+  const normalizedBaseDir = normalizeAbsoluteFilePath({ path: baseDir });
+  const normalizedRootPath = normalizeAbsoluteFilePath({ path: rootPath });
+  if (
+    normalizedBaseDir === null ||
+    normalizedRootPath === null ||
+    !isAbsoluteFilePathWithinRoot({
+      candidatePath: normalizedBaseDir,
+      rootPath: normalizedRootPath,
+    })
+  ) {
+    return null;
+  }
+
+  const joinedPath =
+    normalizedBaseDir === "/"
+      ? `/${parsedHref.path}`
+      : `${normalizedBaseDir}/${parsedHref.path}`;
+  const normalizedHrefPath = normalizeAbsoluteFilePath({ path: joinedPath });
+  if (
+    normalizedHrefPath === null ||
+    !isAbsoluteFilePathWithinRoot({
+      candidatePath: normalizedHrefPath,
+      rootPath: normalizedRootPath,
+    })
+  ) {
+    return null;
+  }
+
+  return `${normalizedHrefPath}${decodedHref.slice(parsedHref.path.length)}`;
+}
+
+function isLinkContainedInRoot({
+  link,
+  rootPath,
+}: IsLinkContainedInRootArgs): MarkdownPreviewLocalFileLink | null {
+  const normalizedPath = normalizeAbsoluteFilePath({ path: link.path });
+  if (normalizedPath === null) {
+    return null;
+  }
+
+  if (
+    !isAbsoluteFilePathWithinRoot({
+      candidatePath: normalizedPath,
+      rootPath,
+    })
+  ) {
+    return null;
+  }
+
+  return {
+    ...link,
+    path: normalizedPath,
+  };
+}
+
+export function parseLocalFileHref({
+  absoluteLinks,
+  href,
+}: ParseLocalFileHrefArgs,
 ): MarkdownPreviewLocalFileLink | null {
   if (!href) {
     return null;
   }
 
+  const requireLikelyFileBasename =
+    absoluteLinks.kind === "trusted-host" && !href.startsWith("file://");
+  let link: MarkdownPreviewLocalFileLink | null;
   if (href.startsWith("file://")) {
     try {
       const url = new URL(href);
@@ -184,54 +325,29 @@ export function parseLocalFileHref(
       if (url.search.length > 0) {
         return null;
       }
-      return parseAbsoluteLocalFileHref(url.pathname + url.hash, false);
-    } catch {
-      return null;
-    }
-  }
-
-  return parseAbsoluteLocalFileHref(href, true);
-}
-
-function encodeFileUrlPath(path: string): string {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
-function parseLocalFileHrefFragment(href: string | undefined): string | null {
-  if (!href) {
-    return null;
-  }
-
-  let hash: string;
-  if (href.startsWith("file://")) {
-    try {
-      hash = new URL(href).hash;
+      link = parseAbsoluteLocalFileHref(
+        url.pathname + url.hash,
+        requireLikelyFileBasename,
+      );
     } catch {
       return null;
     }
   } else {
-    const hashIndex = href.indexOf("#");
-    if (hashIndex === -1) {
-      return null;
-    }
-    hash = href.slice(hashIndex);
+    link = parseAbsoluteLocalFileHref(href, requireLikelyFileBasename);
   }
 
-  const decodedHash = safeDecodeURIComponent(hash);
-  if (
-    decodedHash.length <= 1 ||
-    /^#L[0-9]+$/u.test(decodedHash) ||
-    decodedHash.includes("\n") ||
-    decodedHash.includes("\r")
-  ) {
-    return null;
+  if (link === null || absoluteLinks.kind === "trusted-host") {
+    return link;
   }
 
-  return decodedHash.slice(1);
+  return isLinkContainedInRoot({
+    link,
+    rootPath: absoluteLinks.rootPath,
+  });
 }
 
-function encodeFileUrlFragment(fragment: string): string {
-  return encodeURIComponent(fragment);
+function encodeFileUrlPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 
 export function buildLocalFileAnchorHref(
@@ -242,13 +358,7 @@ export function buildLocalFileAnchorHref(
     return originalHref;
   }
 
-  const fragment =
-    link.lineNumber === null ? parseLocalFileHrefFragment(originalHref) : null;
   return `file://${encodeFileUrlPath(link.path)}${
-    link.lineNumber !== null
-      ? `#L${link.lineNumber}`
-      : fragment === null
-        ? ""
-        : `#${encodeFileUrlFragment(fragment)}`
+    link.lineNumber !== null ? `#L${link.lineNumber}` : ""
   }`;
 }

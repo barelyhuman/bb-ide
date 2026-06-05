@@ -17,6 +17,7 @@ import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
 import { buildProjectAttachmentContentUrl } from "@/lib/file-content-urls";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
 import type {
@@ -508,13 +509,31 @@ function AssistantConversationMessage({
   projectId,
   text,
 }: AssistantConversationMessageProps) {
+  const linkRouting = useMemo<MarkdownLinkRouting | undefined>(() => {
+    if (!onOpenLink && !onOpenLocalFileLink) {
+      return undefined;
+    }
+
+    const routing: MarkdownLinkRouting = {};
+    if (onOpenLink) {
+      routing.onOpenLink = onOpenLink;
+    }
+    if (onOpenLocalFileLink) {
+      routing.localFile = {
+        absoluteLinks: {
+          kind: "trusted-host",
+        },
+        onOpenLink: onOpenLocalFileLink,
+      };
+    }
+    return routing;
+  }, [onOpenLink, onOpenLocalFileLink]);
+
   return (
     <div className="group w-full px-2 text-sm leading-relaxed">
       <MarkdownPreview
         content={text}
-        normalizeLocalFileLinks={onOpenLocalFileLink !== undefined}
-        onOpenLink={onOpenLink}
-        onOpenLocalFileLink={onOpenLocalFileLink}
+        linkRouting={linkRouting}
       />
       <ConversationAttachments
         filePaths={attachmentItems.filePaths}
