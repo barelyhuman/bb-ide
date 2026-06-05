@@ -198,11 +198,11 @@ describe("@bb/templates", () => {
     expect(rendered).toContain(
       "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap",
     );
-    expect(rendered).toContain("--background: oklch(0.9551 0 0);");
+    expect(rendered).toContain("--background: oklch(1 0 0);");
     expect(rendered).toContain(
       "@media (prefers-color-scheme: dark) {\n  :root {",
     );
-    expect(rendered).toContain("--background: oklch(0.2178 0 0);");
+    expect(rendered).toContain("--background: oklch(0.195 0 0);");
   });
 
   it("renders bbGuideAsync", () => {
