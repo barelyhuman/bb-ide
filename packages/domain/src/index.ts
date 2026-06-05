@@ -419,18 +419,6 @@ export type {
 } from "./thread-events.js";
 
 export {
-  providerTurnWatchdogActivityEventTypeSchema,
-  providerTurnWatchdogActivityEventTypeValues,
-  providerTurnWatchdogReasonSchema,
-  providerTurnWatchdogReasonValues,
-  providerTurnWatchdogThreadScopedActivityEventTypeValues,
-} from "./provider-turn-watchdog.js";
-export type {
-  ProviderTurnWatchdogActivityEventType,
-  ProviderTurnWatchdogThreadScopedActivityEventType,
-} from "./provider-turn-watchdog.js";
-
-export {
   buildThreadEvent,
   buildThreadEventRow,
   parseStoredThreadEvent,

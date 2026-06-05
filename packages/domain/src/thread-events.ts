@@ -12,8 +12,6 @@ import {
 } from "./shared-types.js";
 import { jsonValueSchema } from "./json-value.js";
 import { clientTurnRequestIdSchema } from "./protocol-ids.js";
-import { systemProviderTurnWatchdogEventDataSchema } from "./provider-turn-watchdog.js";
-import type { SystemProviderTurnWatchdogEventData } from "./provider-turn-watchdog.js";
 
 export const systemEventTypeValues = [
   "client/thread/start",
@@ -26,6 +24,8 @@ export const systemEventTypeValues = [
   "system/permissionGrant/lifecycle",
   "system/userQuestion/lifecycle",
   "system/thread-provisioning",
+  // Legacy persisted watchdog diagnostic; retained for read/decode/render
+  // only, with no current producer.
   "system/provider-turn-watchdog",
 ] as const;
 export const systemEventTypeSchema = z.enum(systemEventTypeValues);
@@ -208,6 +208,8 @@ export type SystemUserQuestionLifecycleEventData = z.infer<
 export const systemThreadInterruptedReasonValues = [
   "manual-stop",
   "host-daemon-restarted",
+  // Legacy persisted watchdog interruption; retained for read/replay only,
+  // with no current producer.
   "provider-turn-idle",
 ] as const;
 export const systemThreadInterruptedReasonSchema = z.enum(
@@ -273,6 +275,28 @@ export const turnLifecycleEventDataSchema = z.object({
   input: z.array(promptInputSchema).optional(),
 });
 
+export const systemProviderTurnWatchdogEventDataSchema = z.object({
+  reason: z.literal("provider-turn-idle"),
+  thresholdMs: z.number().int().positive(),
+  elapsedMs: z.number().int().nonnegative(),
+  activeTurnId: z.string().min(1),
+  activeTurnStartedAt: z.number().int().nonnegative(),
+  lastActivityEventSequence: z.number().int().positive(),
+  /**
+   * Diagnostic label only (the UI interpolates it verbatim). A plain string —
+   * not the activity enum — so editing event classifications never makes
+   * previously persisted watchdog events unparseable.
+   */
+  lastActivityEventType: z.string().min(1),
+  lastActivityEventAt: z.number().int().nonnegative(),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1).nullable(),
+  firedAt: z.number().int().nonnegative(),
+});
+export type SystemProviderTurnWatchdogEventData = z.infer<
+  typeof systemProviderTurnWatchdogEventDataSchema
+>;
+
 export type ThreadEventDataByType = {
   "client/thread/start": ClientTurnLifecycleEventData;
   "client/turn/requested": TurnRequestEventData;
@@ -286,6 +310,3 @@ export type ThreadEventDataByType = {
   "system/thread-provisioning": SystemThreadProvisioningEventData;
   "system/provider-turn-watchdog": SystemProviderTurnWatchdogEventData;
 };
-
-export { systemProviderTurnWatchdogEventDataSchema };
-export type { SystemProviderTurnWatchdogEventData };

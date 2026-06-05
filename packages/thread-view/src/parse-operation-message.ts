@@ -108,6 +108,7 @@ function threadInterruptedTitle(reason: SystemThreadInterruptedReason): string {
       return "Stopped manually";
     case "host-daemon-restarted":
       return "Host daemon restarted";
+    // Legacy persisted watchdog interruption; no current producer.
     case "provider-turn-idle":
       return "Provider turn stopped responding";
     default:
@@ -435,6 +436,7 @@ export function parseOperationMessage(
   }
 
   if (decoded.type === "system/provider-turn-watchdog") {
+    // Legacy persisted watchdog diagnostic; no current producer.
     return op(decoded, meta, "provider-turn-watchdog", {
       opType: "operation",
       title: "Provider turn stopped responding",

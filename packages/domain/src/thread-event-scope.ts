@@ -172,7 +172,7 @@ export const threadEventScopeDefinitionByType = {
   "system/provider-turn-watchdog": {
     policy: "thread",
     rationale:
-      "Provider turn watchdog diagnostics describe server lifecycle ownership for the whole thread.",
+      "Legacy persisted watchdog diagnostics are decoded for old timelines only; there is no current producer.",
   },
 } as const satisfies ThreadEventScopePolicyDefinitionByType;
 

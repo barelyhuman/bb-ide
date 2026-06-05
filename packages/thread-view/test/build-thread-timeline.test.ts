@@ -4,7 +4,6 @@ import type {
   JsonObject,
   OwnershipChangeOperationAction,
   ProviderErrorInfo,
-  ProviderTurnWatchdogActivityEventType,
   ThreadEventFileChange,
   ThreadEventItemStatus,
   UserQuestionPendingInteractionResolution,
@@ -106,7 +105,7 @@ interface SystemProviderTurnWatchdogEventArgs {
   firedAt?: number;
   lastActivityEventAt?: number;
   lastActivityEventSequence?: number;
-  lastActivityEventType?: ProviderTurnWatchdogActivityEventType;
+  lastActivityEventType?: string;
   providerId?: string;
   providerThreadId?: string | null;
   seq: number;

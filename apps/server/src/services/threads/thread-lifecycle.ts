@@ -260,6 +260,8 @@ function nextStatusForInterruptedThread(
     case "manual-stop":
       return "idle";
     case "host-daemon-restarted":
+      return "error";
+    // Legacy persisted watchdog interruption; no current producer.
     case "provider-turn-idle":
       return "error";
     default:
@@ -275,6 +277,7 @@ function pendingInteractionStopReason(
       return "Thread stopped by user request";
     case "host-daemon-restarted":
       return "Host daemon restarted while awaiting user interaction";
+    // Legacy persisted watchdog interruption; no current producer.
     case "provider-turn-idle":
       return "Thread stopped after the provider stopped sending progress";
     default:
@@ -290,6 +293,7 @@ function threadCommandFailureMessageForInterruption(
       return null;
     case "host-daemon-restarted":
       return "Live runtime work failed because the host daemon disconnected";
+    // Legacy persisted watchdog interruption; no current producer.
     case "provider-turn-idle":
       return "Live runtime work failed because the provider stopped sending progress";
     default:

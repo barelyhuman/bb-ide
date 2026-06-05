@@ -50,7 +50,6 @@ import {
 } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
 import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
-import { runProviderTurnWatchdogSweep } from "../threads/provider-turn-watchdog.js";
 
 export type DatabaseMaintenanceSweepDeps = Pick<AppDeps, "db" | "logger">;
 
@@ -353,7 +352,6 @@ export async function runPeriodicSweeps(
     await sweepDueAutomations(deps);
     await sweepDueThreadSchedules(deps);
     await runEnvironmentProvisioningSweep(deps);
-    runProviderTurnWatchdogSweep(deps, { now });
     await runThreadLifecycleSweep(deps);
     await runQueuedMessageAutoSendSweep(deps);
     await runManagedEnvironmentArchiveCleanupRecoverySweep(deps, now);

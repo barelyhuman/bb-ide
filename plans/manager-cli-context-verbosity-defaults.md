@@ -59,11 +59,11 @@ Current code paths:
 
 Existing reports and audit notes point at the same product pressure:
 
-- `plans/provider-turn-watchdog.md` records a May 3, 2026 manager incident where
-  the stalled provider turn had issued `bb thread output thr_jb5xwguekp` and
-  `bb thread show thr_jb5xwguekp --json`. That plan remains about stalled
-  provider execution and is out of scope here, but it shows these inspection
-  commands are in the manager's hot path.
+- A May 3, 2026 manager incident involved a stalled provider turn that had
+  issued `bb thread output thr_jb5xwguekp` and
+  `bb thread show thr_jb5xwguekp --json`. Provider stall auto-stopping has since
+  been removed, but the incident still shows these inspection commands are in
+  the manager's hot path.
 - `qa/manual-pass-log.md` notes that manager completion handling moved away from
   polling loops, but live logs still showed occasional `bb thread show --json`
   inspections while reviewing completed child results.
@@ -630,8 +630,8 @@ Exit criteria:
   for long prompts.
 - Existing runbooks that ask reviewers to inspect manager logs mention the new
   verbosity controls.
-- Cross-plan notes state that provider stall detection remains owned by
-  `plans/provider-turn-watchdog.md`.
+- Cross-plan notes do not depend on provider stall auto-stopping, which has
+  been removed.
 
 ### Phase 7: JSON Default Flip
 
