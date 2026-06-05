@@ -12,7 +12,6 @@ import {
 
 type InsertMigrationParameters = [string, number];
 type DeleteMigrationParameters = [number];
-type DeleteTwoMigrationsParameters = [number, number];
 type TableNameParameters = [string];
 type QueuedMessageMigrationInsertParameters = [string, string, number, number];
 type ProjectSortKeyMigrationInsertParameters = [string, string, number, number];
@@ -832,6 +831,13 @@ describe("migrate", () => {
       migrate(db);
 
       db.$client.prepare("DROP TABLE thread_schedules").run();
+      db.$client.prepare("DROP INDEX projects_deleted_idx").run();
+      db.$client.prepare("ALTER TABLE projects DROP COLUMN deleted_at").run();
+      db.$client
+        .prepare(
+          "ALTER TABLE hosts ADD command_cursor integer DEFAULT 0 NOT NULL",
+        )
+        .run();
       db.$client
         .prepare(
           `
@@ -853,17 +859,46 @@ describe("migrate", () => {
           `,
         )
         .run();
+      db.$client.exec(`
+        CREATE TABLE host_daemon_commands (
+          id text PRIMARY KEY NOT NULL
+        );
+        CREATE TABLE host_daemon_command_attempts (
+          id text PRIMARY KEY NOT NULL
+        );
+        CREATE TABLE client_turn_requests (
+          id text PRIMARY KEY NOT NULL
+        );
+        CREATE TABLE environment_operations (
+          id text PRIMARY KEY NOT NULL,
+          environment_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL
+        );
+        CREATE TABLE project_operations (
+          id text PRIMARY KEY NOT NULL,
+          project_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          requested_at integer NOT NULL
+        );
+        CREATE TABLE thread_operations (
+          id text PRIMARY KEY NOT NULL,
+          thread_id text NOT NULL,
+          kind text NOT NULL,
+          state text NOT NULL,
+          payload text NOT NULL,
+          requested_at integer NOT NULL
+        );
+      `);
       db.$client
-        .prepare<DeleteTwoMigrationsParameters>(
+        .prepare<DeleteMigrationParameters>(
           `
             DELETE FROM __drizzle_migrations
-            WHERE created_at IN (?, ?)
+            WHERE created_at >= ?
           `,
         )
-        .run(
-          threadSchedulesMigrationWhen,
-          threadScheduleKindDefaultMigrationWhen,
-        );
+        .run(threadSchedulesMigrationWhen);
       db.$client
         .prepare(
           `
