@@ -6,6 +6,7 @@ import { createCliBbSdk } from "../../client.js";
 import {
   resolveProjectId,
   resolveEnvironmentId,
+  resolveExplicitIdFlag,
   resolveThreadId,
 } from "../../context-env.js";
 import { fetchLocalHostId } from "../../daemon.js";
@@ -189,8 +190,12 @@ export function registerSpawnCommand(
         const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
         const serviceTier = parseServiceTier(opts.serviceTier);
         const permissionMode = parsePermissionMode(opts.permissionMode);
+        const explicitParentThreadId = resolveExplicitIdFlag({
+          flagName: "--parent-thread",
+          value: opts.parentThread,
+        });
         const parentThreadId =
-          opts.parentThread ??
+          explicitParentThreadId ??
           (opts.contextParentThread === false ? undefined : resolveThreadId());
 
         let thread: Thread;

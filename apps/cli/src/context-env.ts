@@ -10,6 +10,11 @@ export interface CreateCliRuntimeContextArgs {
   cliConfig?: CliConfig;
 }
 
+export interface ResolveExplicitIdFlagArgs {
+  flagName: string;
+  value?: string;
+}
+
 export function createCliRuntimeContext(
   args: CreateCliRuntimeContextArgs = {},
 ): CliRuntimeContext {
@@ -52,6 +57,14 @@ export function resolveThreadId(flagValue?: string): string | undefined {
   if (fromFlag) return validateId(fromFlag, "--thread flag");
   const fromEnv = trimToUndefined(process.env.BB_THREAD_ID);
   if (fromEnv) return validateId(fromEnv, "BB_THREAD_ID");
+  return undefined;
+}
+
+export function resolveExplicitIdFlag(
+  args: ResolveExplicitIdFlagArgs,
+): string | undefined {
+  const fromFlag = trimToUndefined(args.value);
+  if (fromFlag) return validateId(fromFlag, args.flagName);
   return undefined;
 }
 

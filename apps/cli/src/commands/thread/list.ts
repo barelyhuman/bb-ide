@@ -3,8 +3,8 @@ import { PERSONAL_PROJECT_ID, type Thread } from "@bb/domain";
 import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
 import {
+  resolveExplicitIdFlag,
   resolveProjectIdWithLabel,
-  resolveThreadId,
 } from "../../context-env.js";
 import { renderBorderlessTable } from "../../table.js";
 import { outputJson } from "../helpers.js";
@@ -35,7 +35,10 @@ export function registerListCommand(
       action(async (opts: ThreadListCommandOptions) => {
         const sdk = createCliBbSdk(getUrl());
         const resolvedProject = resolveProjectIdWithLabel(opts.project);
-        const parentThreadId = resolveThreadId(opts.parentThread);
+        const parentThreadId = resolveExplicitIdFlag({
+          flagName: "--parent-thread",
+          value: opts.parentThread,
+        });
         const threads = await sdk.threads.list({
           ...(resolvedProject ? { projectId: resolvedProject.id } : {}),
           ...(parentThreadId ? { parentThreadId } : {}),

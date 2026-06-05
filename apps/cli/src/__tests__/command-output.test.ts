@@ -2063,6 +2063,40 @@ describe("CLI command output contracts", () => {
     });
   });
 
+  it("bb thread list rejects invalid parent-thread values", async () => {
+    const list = vi.fn(async () => []);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "list",
+          "--project",
+          "proj-1",
+          "--parent-thread",
+          "thread/invalid",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(console.error).toHaveBeenCalledWith(
+      'Error: Invalid ID from --parent-thread: "thread/invalid". IDs must contain only letters, digits, hyphens, and underscores.',
+    );
+    expect(list).not.toHaveBeenCalled();
+  });
+
   it("bb thread list renders archived status in the shared borderless table", async () => {
     const list = vi.fn(async () => [
       makeThread({
@@ -2190,6 +2224,33 @@ describe("CLI command output contracts", () => {
     );
 
     vi.stubEnv("BB_PROJECT_ID", "proj-env");
+    await runCommand(["thread", "list"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(list).toHaveBeenCalledWith({
+      query: {
+        projectId: "proj-env",
+      },
+    });
+  });
+
+  it("bb thread list does not infer parent-thread from BB_THREAD_ID", async () => {
+    const list = vi.fn(async () => []);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
+          },
+        },
+      }),
+    );
+
+    vi.stubEnv("BB_PROJECT_ID", "proj-env");
+    vi.stubEnv("BB_THREAD_ID", "thread-current");
     await runCommand(["thread", "list"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
@@ -2522,6 +2583,101 @@ describe("CLI command output contracts", () => {
         },
       },
     });
+  });
+
+  it("bb thread spawn defaults parent thread id from BB_THREAD_ID", async () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    vi.stubEnv("BB_THREAD_ID", "thread-context-parent");
+    const thread: Thread = makeThread({
+      id: "thread-2",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      parentThreadId: "thread-context-parent",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "spawn",
+        "--project",
+        "proj-1",
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: expect.objectContaining({
+        parentThreadId: "thread-context-parent",
+      }),
+    });
+  });
+
+  it("bb thread spawn rejects invalid parent-thread values", async () => {
+    const post = vi.fn(async () =>
+      makeThread({
+        id: "thread-invalid-parent",
+        projectId: "proj-1",
+        providerId: "codex",
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "spawn",
+          "--project",
+          "proj-1",
+          "--parent-thread",
+          "thread/invalid",
+          "--prompt",
+          "hello",
+          "--provider",
+          "codex",
+          "--model",
+          "gpt-5",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(console.error).toHaveBeenCalledWith(
+      'Error: Invalid ID from --parent-thread: "thread/invalid". IDs must contain only letters, digits, hyphens, and underscores.',
+    );
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("bb thread spawn forwards --environment", async () => {
@@ -3604,6 +3760,47 @@ describe("CLI JSON output contracts", () => {
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Managed by thread-manager-1",
     );
+  });
+
+  it("bb thread update rejects invalid parent-thread values", async () => {
+    const patch = vi.fn(async () =>
+      makeThread({
+        id: "thread-update-invalid-parent",
+        projectId: "proj-1",
+        providerId: "codex",
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $patch: patch,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "update",
+          "thread-update-invalid-parent",
+          "--parent-thread",
+          "thread/invalid",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(console.error).toHaveBeenCalledWith(
+      'Error: Invalid ID from --parent-thread: "thread/invalid". IDs must contain only letters, digits, hyphens, and underscores.',
+    );
+    expect(patch).not.toHaveBeenCalled();
   });
 
   it("bb thread update clears the parent thread id", async () => {

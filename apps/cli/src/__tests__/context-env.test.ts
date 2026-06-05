@@ -5,6 +5,7 @@ import {
   requireThreadId,
   requireThreadIdWithLabelOrSelf,
   resolveContextSnapshot,
+  resolveExplicitIdFlag,
   resolveProjectId,
   resolveServerUrl,
   resolveThreadId,
@@ -50,6 +51,38 @@ describe("context-env", () => {
 
     expect(resolveProjectId(undefined)).toBeUndefined();
     expect(resolveThreadId(undefined)).toBeUndefined();
+  });
+
+  it("resolves explicit ID flags without environment fallback", () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-env");
+
+    expect(
+      resolveExplicitIdFlag({
+        flagName: "--parent-thread",
+        value: " thread-parent ",
+      }),
+    ).toBe("thread-parent");
+    expect(
+      resolveExplicitIdFlag({
+        flagName: "--parent-thread",
+        value: "   ",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveExplicitIdFlag({
+        flagName: "--parent-thread",
+        value: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects invalid explicit ID flags", () => {
+    expect(() =>
+      resolveExplicitIdFlag({
+        flagName: "--parent-thread",
+        value: "thread/invalid",
+      }),
+    ).toThrow('Invalid ID from --parent-thread: "thread/invalid".');
   });
 
   it("captures a consistent context snapshot", () => {

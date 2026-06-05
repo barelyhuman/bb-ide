@@ -13,7 +13,10 @@ import {
   prependErrorContext,
   requireThreadIdOrSelf,
 } from "../helpers.js";
-import { resolveThreadId } from "../../context-env.js";
+import {
+  resolveExplicitIdFlag,
+  resolveThreadId,
+} from "../../context-env.js";
 import {
   parsePermissionMode,
   parseServiceTier,
@@ -126,12 +129,16 @@ export function registerActionsCommands(
           }
 
           const threadId = requireThreadIdOrSelf(id, opts);
+          const parentThreadId = resolveExplicitIdFlag({
+            flagName: "--parent-thread",
+            value: opts.parentThread,
+          });
           const body: ThreadUpdateBody = {};
           if (opts.title) {
             body.title = opts.title;
           }
-          if (opts.parentThread) {
-            body.parentThreadId = opts.parentThread;
+          if (parentThreadId) {
+            body.parentThreadId = parentThreadId;
           } else if (opts.clearParentThread) {
             body.parentThreadId = null;
           }
