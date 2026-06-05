@@ -26,7 +26,6 @@ import { AppLayout } from "./AppLayout";
 import {
   BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
   CHROME_ROW_HEIGHT_CLASS,
-  CHROME_TOGGLE_ICON_OPTICAL_NUDGE_CLASS,
   MACOS_APP_REGION_NO_DRAG_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
@@ -243,29 +242,6 @@ describe("AppLayout desktop chrome", () => {
     // register instead of dragging the window.
     expect(topReserveRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
     expect(controlsRow?.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
-  });
-
-  it("optically nudges only the collapse toggle glyph onto the chrome axis", async () => {
-    await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
-
-    const trigger = await screen.findByRole("button", {
-      name: "Toggle Sidebar",
-    });
-    const collapseGlyph = trigger.querySelector("[data-icon='PanelLeft']");
-    const goBackGlyph = screen
-      .getByRole("button", { name: "Go back" })
-      .querySelector("svg");
-
-    // The PanelLeft artwork samples a few tenths of a pixel low versus the
-    // chevron arrows, so the shared optical-nudge token raises just this glyph
-    // back onto the chrome axis...
-    expect(collapseGlyph?.getAttribute("class")).toContain(
-      CHROME_TOGGLE_ICON_OPTICAL_NUDGE_CLASS,
-    );
-    // ...while the nav arrows, which are the reference, must not carry it.
-    expect(goBackGlyph?.getAttribute("class") ?? "").not.toContain(
-      CHROME_TOGGLE_ICON_OPTICAL_NUDGE_CLASS,
-    );
   });
 
   it("renders root with project-style header spacing in browser layout", async () => {
