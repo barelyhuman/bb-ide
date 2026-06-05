@@ -45,6 +45,7 @@ import {
 } from "../services/system/event-pruning.js";
 import {
   requestEnvironmentCleanup,
+  requestEnvironmentCleanupAdvance,
   wouldCleanupEnvironment,
 } from "../services/environments/environment-cleanup-internal.js";
 import { queueAsyncMdMigrationReminderIfPresent } from "../services/scheduling/async-md-compatibility.js";
@@ -290,6 +291,9 @@ async function archiveCompletedAutomationThreadIfNeeded(
     });
     if (shouldRequestCleanup) {
       requestEnvironmentCleanup(deps, {
+        environmentId: args.latestThread.environmentId,
+      });
+      requestEnvironmentCleanupAdvance(deps, {
         environmentId: args.latestThread.environmentId,
       });
     }

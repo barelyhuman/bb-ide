@@ -1,9 +1,19 @@
 import { eq } from "drizzle-orm";
-import { events, threads } from "@bb/db";
+import {
+  createAutomation,
+  createEnvironment,
+  createThread,
+  events,
+  getEnvironment,
+  threads,
+} from "@bb/db";
 import { turnScope } from "@bb/domain";
 import type { HostDaemonEventEnvelope } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  createTestDaemonEventEnvelope,
+  internalAuthHeaders,
+} from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEvent,
@@ -262,6 +272,91 @@ describe("internal event and tool-call routes", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
       ).toBe("idle");
+    });
+  });
+
+  it("immediately advances cleanup after auto-archiving an automation thread", async () => {
+    await withTestHarness(async (harness) => {
+      const { session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: session.hostId,
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Run automation" }],
+            environment: {
+              type: "host",
+              hostId: session.hostId,
+              workspace: {
+                type: "managed-worktree",
+                baseBranch: { kind: "default" },
+              },
+            },
+          },
+        }),
+        autoArchive: true,
+        enabled: true,
+        name: "Auto archive cleanup",
+        nextRunAt: null,
+        projectId: project.id,
+        triggerConfig: JSON.stringify({
+          cron: "0 8 * * *",
+          timezone: "UTC",
+          triggerType: "schedule",
+        }),
+        triggerType: "schedule",
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: session.hostId,
+        managed: true,
+        projectId: project.id,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = createThread(harness.db, harness.hub, {
+        automationId: automation.id,
+        environmentId: environment.id,
+        projectId: project.id,
+        providerId: "codex",
+        status: "active",
+      });
+
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          createTestDaemonEventEnvelope({
+            producerEventIdValue: 1_001,
+            event: {
+              type: "turn/started",
+              threadId: thread.id,
+              providerThreadId: "provider-thread",
+              scope: turnScope("turn-automation-cleanup"),
+            },
+          }),
+          createTestDaemonEventEnvelope({
+            producerEventIdValue: 1_002,
+            event: {
+              type: "turn/completed",
+              threadId: thread.id,
+              providerThreadId: "provider-thread",
+              scope: turnScope("turn-automation-cleanup"),
+              status: "completed",
+            },
+          }),
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      await vi.waitFor(() => {
+        expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+          "destroyed",
+        );
+      });
     });
   });
 

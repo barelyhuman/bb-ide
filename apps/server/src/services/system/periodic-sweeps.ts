@@ -52,19 +52,59 @@ import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
 import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
 import { runProviderTurnWatchdogSweep } from "../threads/provider-turn-watchdog.js";
 
-export type EvaluateManagedEnvironmentArchiveCleanupFn =
-  typeof advanceEnvironmentCleanup;
 export type DatabaseMaintenanceSweepDeps = Pick<AppDeps, "db" | "logger">;
 
 const DATABASE_MAINTENANCE_CHECK_INTERVAL_MS = 60 * 60_000;
+// Archive cleanup paths schedule immediate advances; this bounds only fallback
+// recovery from polling blocked workspaces while the app is idle.
+export const MANAGED_ENVIRONMENT_ARCHIVE_CLEANUP_RECOVERY_INTERVAL_MS =
+  15 * 60_000;
 const STOP_REQUESTED_THREAD_SWEEP_BATCH_SIZE = 50;
 
 let lastDatabaseMaintenanceCheckAt = 0;
 let databaseMaintenanceRunning = false;
+let lastManagedEnvironmentArchiveCleanupRecoveryAt = 0;
+
+async function evaluateManagedEnvironmentArchiveCleanupCandidates(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  now: number,
+): Promise<void> {
+  const environmentsToClean = sweepManagedEnvironments(deps.db);
+  if (environmentsToClean.length === 0) {
+    return;
+  }
+
+  lastManagedEnvironmentArchiveCleanupRecoveryAt = now;
+  for (const environment of environmentsToClean) {
+    try {
+      await advanceEnvironmentCleanup(deps, {
+        environmentId: environment.id,
+      });
+    } catch (error) {
+      if (isCommandTimeoutError(error)) {
+        deps.logger.debug(
+          {
+            environmentId: environment.id,
+            ...runtimeErrorLogFields(deps.config, error),
+          },
+          "Managed environment archive cleanup deferred by host timeout",
+        );
+        continue;
+      }
+      deps.logger.warn(
+        {
+          environmentId: environment.id,
+          err: error,
+        },
+        "Managed environment archive cleanup sweep failed",
+      );
+    }
+  }
+}
 
 export function runDatabaseMaintenanceSweep(
   deps: DatabaseMaintenanceSweepDeps,
-  now: number = Date.now(),
+  now: number,
 ): void {
   if (databaseMaintenanceRunning) {
     return;
@@ -153,35 +193,18 @@ export function runDatabaseMaintenanceSweep(
   }
 }
 
-export async function runManagedEnvironmentArchiveCleanupSweep(
+export async function runManagedEnvironmentArchiveCleanupRecoverySweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
-  evaluateCleanup: EvaluateManagedEnvironmentArchiveCleanupFn,
+  now: number,
 ): Promise<void> {
-  for (const environment of sweepManagedEnvironments(deps.db)) {
-    try {
-      await evaluateCleanup(deps, {
-        environmentId: environment.id,
-      });
-    } catch (error) {
-      if (isCommandTimeoutError(error)) {
-        deps.logger.debug(
-          {
-            environmentId: environment.id,
-            ...runtimeErrorLogFields(deps.config, error),
-          },
-          "Managed environment archive cleanup deferred by host timeout",
-        );
-        continue;
-      }
-      deps.logger.warn(
-        {
-          environmentId: environment.id,
-          err: error,
-        },
-        "Managed environment archive cleanup sweep failed",
-      );
-    }
+  if (
+    now - lastManagedEnvironmentArchiveCleanupRecoveryAt <
+    MANAGED_ENVIRONMENT_ARCHIVE_CLEANUP_RECOVERY_INTERVAL_MS
+  ) {
+    return;
   }
+
+  await evaluateManagedEnvironmentArchiveCleanupCandidates(deps, now);
 }
 
 export async function runProjectDeletionSweep(
@@ -333,10 +356,7 @@ export async function runPeriodicSweeps(
     runProviderTurnWatchdogSweep(deps, { now });
     await runThreadLifecycleSweep(deps);
     await runQueuedMessageAutoSendSweep(deps);
-    await runManagedEnvironmentArchiveCleanupSweep(
-      deps,
-      advanceEnvironmentCleanup,
-    );
+    await runManagedEnvironmentArchiveCleanupRecoverySweep(deps, now);
     await runProjectDeletionSweep(deps);
     runDatabaseMaintenanceSweep(deps, now);
   } catch (error) {
