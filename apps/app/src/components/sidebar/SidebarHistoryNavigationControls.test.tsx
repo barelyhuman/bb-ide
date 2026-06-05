@@ -16,6 +16,10 @@ interface RenderControlsArgs {
   onNavigate?: () => void;
 }
 
+interface NavigateToOptions {
+  replace?: boolean;
+}
+
 // Captured from inside the router so tests can drive PUSH/REPLACE/POP
 // navigations the same way the rest of the app does, without reaching into
 // React Router internals.
@@ -61,7 +65,7 @@ function currentLocation(): string | null {
   return screen.getByTestId("current-location").textContent;
 }
 
-function navigateTo(to: string, options?: { replace?: boolean }) {
+function navigateTo(to: string, options?: NavigateToOptions) {
   act(() => {
     capturedNavigate?.(to, options);
   });

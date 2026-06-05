@@ -32,6 +32,9 @@ export interface AppRouteHistoryNavigation {
   goForward: () => void;
 }
 
+/** The navigation kinds React Router reports for a location change. */
+type AppRouteNavigationType = "POP" | "PUSH" | "REPLACE";
+
 function getNormalizedUrl(location: Location): string {
   return `${location.pathname}${location.search}${location.hash}`;
 }
@@ -74,7 +77,7 @@ function findForwardTargetIndex(state: AppRouteHistoryState): number | null {
 
 function reduceHistory(
   state: AppRouteHistoryState,
-  navigationType: "POP" | "PUSH" | "REPLACE",
+  navigationType: AppRouteNavigationType,
   entry: AppRouteHistoryEntry,
 ): AppRouteHistoryState {
   switch (navigationType) {
