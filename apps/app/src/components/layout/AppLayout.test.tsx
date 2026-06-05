@@ -25,6 +25,7 @@ import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { AppLayout } from "./AppLayout";
 import {
   BROWSER_COLLAPSED_HEADER_RESERVE_CLASS,
+  CHROME_ROW_HEIGHT_CLASS,
   MACOS_APP_REGION_NO_DRAG_CLASS,
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
@@ -171,36 +172,42 @@ describe("AppLayout desktop chrome", () => {
     );
   });
 
-  it("renders the sidebar history controls above the primary actions without adding sidebar toggles", async () => {
+  it("renders the sidebar history controls in the top chrome row, not the primary actions", async () => {
     await renderAppLayout({ desktopInfo: null, initialEntry: "/" });
 
-    const primaryActions = await screen.findByTestId(
-      "app-sidebar-primary-actions",
+    const topReserveRow = await screen.findByTestId(
+      "app-sidebar-top-reserve-row",
     );
-    const goBack = within(primaryActions).getByRole("button", {
+    const primaryActions = screen.getByTestId("app-sidebar-primary-actions");
+    const goBack = within(topReserveRow).getByRole("button", {
       name: "Go back",
     });
-    const goForward = within(primaryActions).getByRole("button", {
+    const goForward = within(topReserveRow).getByRole("button", {
       name: "Go forward",
     });
-    const newThread = within(primaryActions).getByRole("button", {
-      name: "New thread",
-    });
 
-    // History controls sit above the New Thread / New Manager actions, with
-    // Back before Forward.
+    // The arrows live on the top chrome row (the traffic-light / collapse-trigger
+    // axis), right-aligned, with Back before Forward. The row height comes from
+    // the shared chrome-row token, not a local value.
+    expect(topReserveRow.className).toContain("justify-end");
+    expect(topReserveRow.className).toContain(CHROME_ROW_HEIGHT_CLASS);
     expect(
       Boolean(
         goBack.compareDocumentPosition(goForward) &
         Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
+
+    // They are no longer in the primary actions above New Thread / New Manager.
     expect(
-      Boolean(
-        goForward.compareDocumentPosition(newThread) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true);
+      within(primaryActions).queryByRole("button", { name: "Go back" }),
+    ).toBeNull();
+    expect(
+      within(primaryActions).queryByRole("button", { name: "Go forward" }),
+    ).toBeNull();
+    expect(
+      within(primaryActions).getByRole("button", { name: "New thread" }),
+    ).toBeTruthy();
 
     // At the app root with no recorded history both controls are inert, and the
     // sidebar chrome still hosts exactly one toggle.
@@ -209,6 +216,33 @@ describe("AppLayout desktop chrome", () => {
     expect(
       screen.getAllByRole("button", { name: "Toggle Sidebar" }),
     ).toHaveLength(1);
+  });
+
+  it("keeps the desktop history arrows clickable inside the window-drag chrome row", async () => {
+    await renderAppLayout({
+      desktopInfo: createBbDesktopApi({
+        lastCheckedAt: null,
+        latestVersion: null,
+        pendingVersion: null,
+        platform: "macos",
+        updateAvailable: false,
+        updateDownloaded: false,
+        version: "0.0.1",
+      }),
+      initialEntry: "/",
+    });
+
+    const topReserveRow = await screen.findByTestId(
+      "app-sidebar-top-reserve-row",
+    );
+    const controlsRow = within(topReserveRow).getByRole("button", {
+      name: "Go back",
+    }).parentElement;
+
+    // The chrome row stays a window-drag strip, but the arrows opt out so clicks
+    // register instead of dragging the window.
+    expect(topReserveRow.className).toContain(MACOS_WINDOW_DRAG_CLASS);
+    expect(controlsRow?.className).toContain(MACOS_WINDOW_NO_DRAG_CLASS);
   });
 
   it("renders root with project-style header spacing in browser layout", async () => {

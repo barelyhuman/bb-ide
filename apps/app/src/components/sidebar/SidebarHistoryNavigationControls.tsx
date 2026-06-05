@@ -11,6 +11,8 @@ interface SidebarHistoryNavigationControlsProps {
    * sidebar can close the mobile drawer. Not called for disabled buttons.
    */
   onNavigate?: () => void;
+  /** Extra classes for the row, letting the sidebar own placement/visibility. */
+  className?: string;
 }
 
 interface SidebarHistoryNavButtonProps {
@@ -49,11 +51,12 @@ function SidebarHistoryNavButton({
 
 /**
  * Back/Forward controls for the left sidebar, moving through the app-shell
- * route history like browser navigation. Owns its own row spacing so the
- * sidebar only decides placement.
+ * route history like browser navigation. Renders a compact icon-button row; the
+ * sidebar decides where it sits via `className`.
  */
 export function SidebarHistoryNavigationControls({
   onNavigate,
+  className,
 }: SidebarHistoryNavigationControlsProps) {
   const { canGoBack, canGoForward, goBack, goForward } =
     useAppRouteHistoryNavigation();
@@ -75,7 +78,7 @@ export function SidebarHistoryNavigationControls({
   }, [canGoForward, goForward, onNavigate]);
 
   return (
-    <div className="mb-1 flex items-center gap-1">
+    <div className={cn("flex items-center gap-1", className)}>
       <SidebarHistoryNavButton
         icon="ChevronLeft"
         label="Go back"

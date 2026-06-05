@@ -42,6 +42,19 @@ export const MACOS_APP_REGION_NO_DRAG_CLASS =
 export const MACOS_WINDOW_NO_DRAG_CLASS = `relative z-50 ${MACOS_APP_REGION_NO_DRAG_CLASS}`;
 export const MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS = "mt-px";
 
+// Single source of truth for the top chrome row — the titlebar axis shared by
+// the macOS traffic lights, the pinned sidebar collapse trigger, and the
+// sidebar's route-history arrows. The native traffic-light inset
+// (`MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET` in apps/desktop's window factory) is
+// tuned to vertically center the lights within this height and to sit on the
+// sidebar icon column's left rail. Electron main and the renderer are separate
+// bundles, so they cannot share one runtime value — keep this height and that
+// inset in sync as a paired geometry contract.
+export const CHROME_ROW_HEIGHT_CLASS = "h-12";
+// Base layout for an in-flow chrome row: the shared height, laid out as a flex
+// row and vertically centered so its contents share the titlebar axis.
+export const CHROME_ROW_CLASS = `flex ${CHROME_ROW_HEIGHT_CLASS} items-center`;
+
 export type BbDesktopInfoResult = BbDesktopApi | null;
 
 export function getBbDesktopInfo(): BbDesktopInfoResult {

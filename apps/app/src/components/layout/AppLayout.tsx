@@ -38,6 +38,7 @@ import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
 import {
   BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,
+  CHROME_ROW_CLASS,
   getBbDesktopInfo,
   MACOS_SIDEBAR_TRIGGER_OFFSET_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
@@ -181,7 +182,8 @@ function SidebarTriggerOverlay({
       <div
         data-testid="app-desktop-sidebar-trigger"
         className={cn(
-          "fixed top-0 z-50 flex h-12 items-center",
+          "fixed top-0 z-50",
+          CHROME_ROW_CLASS,
           MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
           MACOS_WINDOW_DRAG_CLASS,
         )}
@@ -199,7 +201,8 @@ function SidebarTriggerOverlay({
     <div
       data-testid="app-sidebar-trigger-overlay"
       className={cn(
-        "fixed left-0 top-0 z-50 flex h-12 items-center",
+        "fixed left-0 top-0 z-50",
+        CHROME_ROW_CLASS,
         BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,
       )}
     >

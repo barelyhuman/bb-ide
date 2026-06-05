@@ -17,8 +17,10 @@ import { ProjectList, ProjectListActionButtons } from "./ProjectList";
 import { SidebarHistoryNavigationControls } from "./SidebarHistoryNavigationControls";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import {
+  CHROME_ROW_CLASS,
   getBbDesktopInfo,
   MACOS_WINDOW_DRAG_CLASS,
+  MACOS_WINDOW_NO_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
 import { getRootComposeRoutePath } from "@/lib/app-route-paths";
@@ -79,20 +81,32 @@ export function AppSidebar({
              stays mounted in every sidebar state, including while the panel
              collapses off-canvas, so the content holds its vertical position
              instead of riding up under the pinned toggle during the animation.
-             On desktop it doubles as the window-drag strip. */
+             On desktop it doubles as the window-drag strip. The Back/Forward
+             route-history controls live on the right of this chrome row, clear
+             of the pinned toggle/traffic lights on the left and the resize
+             handle on the right; they opt out of the desktop drag region so
+             clicks register. */
           <div
             data-testid="app-sidebar-top-reserve-row"
             className={cn(
-              "flex h-12 shrink-0 items-center",
-              usesDesktopChrome ? MACOS_WINDOW_DRAG_CLASS : "px-2",
+              CHROME_ROW_CLASS,
+              "shrink-0 justify-end px-2",
+              usesDesktopChrome && MACOS_WINDOW_DRAG_CLASS,
             )}
-          />
+          >
+            <SidebarHistoryNavigationControls
+              onNavigate={closeOnMobile}
+              className={cn(
+                "group-data-[collapsible=icon]:hidden",
+                usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+              )}
+            />
+          </div>
         ) : null}
         <div
           data-testid="app-sidebar-primary-actions"
           className="shrink-0 px-2 py-2 group-data-[collapsible=icon]:hidden"
         >
-          <SidebarHistoryNavigationControls onNavigate={closeOnMobile} />
           <ProjectListActionButtons
             onNewChat={handleNewChat}
             onNewManager={handleNewManager}

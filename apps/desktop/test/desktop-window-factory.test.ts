@@ -203,8 +203,10 @@ describe("desktop window factory", () => {
     expect(createdWindows[0]?.options.minHeight).toBe(MIN_WINDOW_HEIGHT);
     expect(createdWindows[0]?.options.minWidth).toBe(MIN_WINDOW_WIDTH);
     expect(createdWindows[0]?.options.titleBarStyle).toBe("hiddenInset");
+    // Equal x/y inset places the traffic lights on a 45° diagonal from the
+    // window's top-left corner (see MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET).
     expect(createdWindows[0]?.options.trafficLightPosition).toEqual({
-      x: 12,
+      x: 18,
       y: 18,
     });
     expect(createdWindows[0]?.loadedUrls).toEqual(["http://127.0.0.1:38886"]);
