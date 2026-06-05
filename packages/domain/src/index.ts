@@ -651,6 +651,12 @@ export type {
 } from "./thread-timeline-pending-todos.js";
 
 export {
+  threadScheduleKindSchema,
+  threadScheduleKindValues,
+} from "./thread-schedules.js";
+export type { ThreadScheduleKind } from "./thread-schedules.js";
+
+export {
   REALTIME_ENTITIES,
   THREAD_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,

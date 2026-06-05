@@ -143,16 +143,16 @@ Validated:
   - backend child used `providerId: codex`
   - frontend child used `providerId: claude-code`
 - Pi manager smoke passed with `anthropic/claude-opus-4-7` / `medium`; the Pi manager reached `idle` and produced a visible hatch message.
-- Reminder scheduling passed after tightening the manager instructions:
-  - `ASYNC.md` contained `cron: "17 0 * * *"`
-  - `manager_thread_nudges` contained `thr_c9gaer9gz4|backend-port-cleanup-check|17 0 * * *|America/Los_Angeles|1775546220000`
+- Legacy reminder scheduling passed after tightening the manager instructions:
+  - the legacy schedule source contained `cron: "17 0 * * *"`
+  - the legacy schedule table contained `thr_c9gaer9gz4|backend-port-cleanup-check|17 0 * * *|America/Los_Angeles|1775546220000`
 
 Critical issues fixed during the pass:
 
 - dynamic `message_user` forwarding used provider thread ids instead of BB thread ids
 - manager completion / ownership control messages were not wired on the server
 - `bb thread output` dropped manager-visible messages when a later assistant item was empty
-- manager reminder generation could produce unsupported date-specific cron in `ASYNC.md`
+- manager reminder generation could produce unsupported date-specific cron in the legacy schedule source
 
 Residual notes:
 
@@ -189,15 +189,15 @@ Validated:
   - frontend child used `providerId: claude-code`
 - When `claude-code` failed because the local OAuth token was expired, the Pi manager recovered by retrying the affected work with codex rather than stalling.
 - Ownership transfer via `bb thread update --parent-thread` and `--clear-parent-thread` triggered the expected Pi-manager follow-up turns and user-visible updates.
-- Reminder scheduling passed after the local-timezone fix:
-  - `ASYNC.md` contained `timezone: America/Los_Angeles`
-  - `manager_thread_nudges` rows for `thr_xdd955ybte` used `America/Los_Angeles`
+- Legacy reminder scheduling passed after the local-timezone fix:
+  - the legacy schedule source contained `timezone: America/Los_Angeles`
+  - the legacy schedule table rows for `thr_xdd955ybte` used `America/Los_Angeles`
 - Archive judgment passed in a focused helper-thread flow: Pi manager `thr_xt5yisgw67` summarized a one-off codex research thread and archived `thr_ydwh24qkxp` afterward.
 
 Critical issues fixed during the Pi rerun:
 
 - Pi managers could guess unsupported worker model ids like `o4-mini` instead of using current CLI-valid defaults
-- Pi managers could default reminder-style `ASYNC.md` schedules to `UTC` instead of the local reminder timezone
+- Pi managers could default reminder-style legacy schedules to `UTC` instead of the local reminder timezone
 
 Residual notes:
 

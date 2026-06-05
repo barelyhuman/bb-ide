@@ -27,6 +27,7 @@ import type {
   ThreadDynamicContextFileStatus,
   ThreadOperationKind,
   ThreadProvisioningStage,
+  ThreadScheduleKind,
   ThreadType,
   ThreadEventItemType,
   ThreadEventScopeKind,
@@ -336,8 +337,8 @@ export const threads = sqliteTable(
   ],
 );
 
-export const managerThreadNudges = sqliteTable(
-  "manager_thread_nudges",
+export const threadSchedules = sqliteTable(
+  "thread_schedules",
   {
     id: text("id").primaryKey(),
     projectId: text("project_id")
@@ -347,19 +348,22 @@ export const managerThreadNudges = sqliteTable(
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    // Intentionally single-valued today; persisted as the discriminator for
+    // future non-cron schedule kinds.
+    kind: text("kind").$type<ThreadScheduleKind>().notNull(),
     cron: text("cron").notNull(),
     timezone: text("timezone").notNull(),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    prompt: text("prompt").notNull(),
     nextFireAt: integer("next_fire_at").notNull(),
     lastFiredAt: integer("last_fired_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    index("manager_thread_nudges_due_idx").on(table.enabled, table.nextFireAt),
-    index("manager_thread_nudges_project_idx").on(table.projectId),
-    uniqueIndex("manager_thread_nudges_sync_key_idx").on(
-      table.projectId,
+    index("thread_schedules_due_idx").on(table.enabled, table.nextFireAt),
+    index("thread_schedules_project_idx").on(table.projectId),
+    uniqueIndex("thread_schedules_thread_name_idx").on(
       table.threadId,
       table.name,
     ),

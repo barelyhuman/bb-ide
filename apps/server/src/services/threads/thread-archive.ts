@@ -1,4 +1,5 @@
 import {
+  disableThreadSchedulesByThread,
   listLiveThreadsInEnvironment,
   listUnarchivedAssignedChildThreads,
 } from "@bb/db";
@@ -46,6 +47,14 @@ export function archiveThreadWithLifecycleEffects(
   if (!archivedThread) {
     return null;
   }
+
+  // Archiving pauses scheduled work. Unarchive keeps schedules disabled until
+  // the user intentionally re-enables them.
+  disableThreadSchedulesByThread(deps.db, deps.hub, {
+    now: Date.now(),
+    projectId: archivedThread.projectId,
+    threadId: archivedThread.id,
+  });
 
   deps.terminalSessions.closeArchivedThreadTerminals({
     threadId: archivedThread.id,

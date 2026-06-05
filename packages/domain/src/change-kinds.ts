@@ -42,7 +42,7 @@ export const PROJECT_CHANGE_KINDS = [
   "threads-changed",
   "project-order-changed",
   "automations-changed",
-  "nudges-changed",
+  "thread-schedules-changed",
 ] as const;
 export type ProjectChangeKind = (typeof PROJECT_CHANGE_KINDS)[number];
 

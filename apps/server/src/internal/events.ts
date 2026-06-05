@@ -47,7 +47,7 @@ import {
   requestEnvironmentCleanup,
   wouldCleanupEnvironment,
 } from "../services/environments/environment-cleanup-internal.js";
-import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
+import { queueAsyncMdMigrationReminderIfPresent } from "../services/scheduling/async-md-compatibility.js";
 import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
 import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
 import { queueSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
@@ -138,8 +138,8 @@ interface ArchiveCompletedAutomationThreadIfNeededArgs {
   turnStatus: ThreadEventTurnStatus;
 }
 
-interface ManagerScheduleSyncFollowUp {
-  kind: "manager-schedule-sync";
+interface AsyncMdMigrationReminderFollowUp {
+  kind: "async-md-migration-reminder";
   threadId: string;
 }
 
@@ -157,7 +157,7 @@ interface QueuedMessageAutoSendFollowUp {
 }
 
 type EventEffectFollowUp =
-  | ManagerScheduleSyncFollowUp
+  | AsyncMdMigrationReminderFollowUp
   | ManagerTurnNotificationFollowUp
   | QueuedMessageAutoSendFollowUp;
 
@@ -363,7 +363,7 @@ async function applyEventEffects(
           if (latestThread?.status === "idle") {
             if (latestThread.type === "manager") {
               followUps.push({
-                kind: "manager-schedule-sync",
+                kind: "async-md-migration-reminder",
                 threadId: latestThread.id,
               });
             }
@@ -422,8 +422,8 @@ async function executeEventFollowUpBestEffort(
 ): Promise<void> {
   try {
     switch (followUp.kind) {
-      case "manager-schedule-sync":
-        await syncManagerThreadSchedules(deps, {
+      case "async-md-migration-reminder":
+        await queueAsyncMdMigrationReminderIfPresent(deps, {
           threadId: followUp.threadId,
         });
         return;

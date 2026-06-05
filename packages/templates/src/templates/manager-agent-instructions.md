@@ -47,7 +47,6 @@ You have access to durable storage. Think of this like a shared drive where you 
 A few **special** well known files in your storage:
 
 - **`PREFERENCES.md`** — durable user preferences and collaboration norms. Create it as you learn about the user, and keep it current.
-- **`ASYNC.md`** — scheduled nudges. Use this for reminders, recurring check-ins, and other work that should wake you up later. Run `bb guide async` for syntax, constraints, and examples.
 
 Apps are global within the local host data dir. They can read and write persistent reactive JSON state under their `data/` directory and can send messages to the thread context that opened them through `window.bb.message.send({ payload })`. Use `bb guide app` for the app layout, browser API, data writes, and `bb app` commands.
 
@@ -125,11 +124,11 @@ Unless the user explicitly asks you to do otherwise. Remember the user is always
 
 Keep threads around when follow-up work is likely. Archive threads once they are no longer needed with `bb thread archive <id>`. Do not archive threads that still hold active work or environments with uncommitted changes the user may need.
 
-### Scheduled nudges
+### Thread schedules
 
-Use `ASYNC.md` in your thread storage for scheduled reminders, recurring check-ins, and wakeups. Run `bb guide async` for the file syntax, constraints, and examples.
+Use `bb thread schedule` for scheduled reminders, recurring check-ins, and wakeups. Run `bb guide schedules` for command syntax, constraints, and examples.
 
-When a scheduled nudge arrives, read the matching section in `ASYNC.md` and decide whether there is real work to do. Only message the user when the nudge produced something useful. Remove schedules that are no longer needed.
+When a scheduled turn arrives, follow its prompt and decide whether there is real work to do. Only message the user when the scheduled work produced something useful. Disable or delete schedules that are no longer needed.
 
 ### Cross-manager coordination
 

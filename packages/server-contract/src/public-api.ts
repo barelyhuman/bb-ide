@@ -17,6 +17,7 @@ import type {
   PathProjectAutomationId,
   PathProjectId,
   PathThreadAndQueuedMessage,
+  PathThreadScheduleId,
   PathThreadAndTerminal,
 } from "./common.js";
 import type {
@@ -39,6 +40,7 @@ import type {
   CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
+  CreateThreadScheduleRequest,
   CreateThreadTerminalRequest,
   CreateThreadRequest,
   CloseThreadTerminalRequest,
@@ -100,6 +102,7 @@ import type {
   ThreadListResponse,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
+  ThreadSchedule,
   ThreadWithIncludesResponse,
   ThreadTerminalListResponse,
   ThreadTimelineQuery,
@@ -111,6 +114,7 @@ import type {
   UpdateHostRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
+  UpdateThreadScheduleRequest,
   UpdateThreadTerminalRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
@@ -498,6 +502,24 @@ export type PublicApiSchema = {
   "/threads/:id/assigned-child-summary": {
     /** Count non-deleted threads assigned to a manager thread via parentThreadId. Archived child threads are included. */
     $get: Endpoint<PathId, ThreadAssignedChildSummaryResponse>;
+  };
+  "/threads/:id/schedules": {
+    /** List schedules that wake this existing thread later. */
+    $get: Endpoint<PathId, ThreadSchedule[]>;
+    /** Create a cron schedule that submits its prompt to this existing thread when due. */
+    $post: Endpoint<
+      PathId & { json: CreateThreadScheduleRequest },
+      ThreadSchedule,
+      201
+    >;
+  };
+  "/threads/:id/schedules/:scheduleId": {
+    /** Update schedule config or enabled state. */
+    $patch: Endpoint<
+      PathThreadScheduleId & { json: UpdateThreadScheduleRequest },
+      ThreadSchedule
+    >;
+    $delete: Endpoint<PathThreadScheduleId, { ok: true }>;
   };
   "/threads/:id/send": {
     /**

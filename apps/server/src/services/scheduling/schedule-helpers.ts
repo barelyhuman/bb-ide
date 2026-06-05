@@ -21,12 +21,6 @@ interface ScheduleAtTimeArgs {
   timezone: string;
 }
 
-interface ScheduleExpressionSetArgs {
-  expressionSet: string;
-  now: number;
-  timezone: string;
-}
-
 interface CronScheduleArgs {
   cron: string;
   timezone: string;
@@ -510,42 +504,6 @@ export function serializeScheduleDefinitionAsCron(
   }
 }
 
-function parseScheduleExpressionSet(expressionSet: string): string[] {
-  return expressionSet
-    .split("\n")
-    .map((expression) => expression.trim())
-    .filter((expression) => expression.length > 0);
-}
-
-function computeNextScheduledTimeFromExpressions(args: {
-  expressions: readonly string[];
-  now: number;
-  timezone: string;
-}): number {
-  let nextRunAt: number | null = null;
-
-  for (const expression of args.expressions) {
-    const candidate = parseExpression({
-      cron: expression,
-      now: args.now,
-      timezone: args.timezone,
-    })
-      .next()
-      .getTime();
-    if (nextRunAt === null || candidate < nextRunAt) {
-      nextRunAt = candidate;
-    }
-  }
-
-  if (nextRunAt === null) {
-    throw new ScheduleValidationError(
-      "Schedule must include at least one occurrence",
-    );
-  }
-
-  return nextRunAt;
-}
-
 export function validateScheduleDefinition(args: CronScheduleArgs): void {
   assertValidTimezone(args.timezone);
   validateParsedScheduleDefinition(parseCronScheduleDefinition(args));
@@ -563,14 +521,4 @@ export function computeNextScheduledTime(args: ScheduleAtTimeArgs): number {
   })
     .next()
     .getTime();
-}
-
-export function computeNextScheduledTimeForExpressionSet(
-  args: ScheduleExpressionSetArgs,
-): number {
-  return computeNextScheduledTimeFromExpressions({
-    expressions: parseScheduleExpressionSet(args.expressionSet),
-    now: args.now,
-    timezone: args.timezone,
-  });
 }

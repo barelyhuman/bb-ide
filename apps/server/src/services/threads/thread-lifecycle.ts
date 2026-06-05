@@ -107,6 +107,7 @@ import {
   queueArchivedThreadProviderArchiveCommand,
   queueThreadDeletedCommandInTransaction,
   queueThreadRenameCommandInTransaction,
+  queueTurnSubmitCommand,
   queueTurnSubmitCommandInTransaction,
   type QueueThreadStartCommandArgs,
   type QueueThreadStopCommandArgs,
@@ -156,6 +157,11 @@ export interface PreparedReadyTurnSubmitCommand {
 export type PreparedReadyThreadTurnCommand =
   | PreparedThreadStartCommand
   | PreparedReadyTurnSubmitCommand;
+
+export interface QueueReadyThreadTurnCommandArgs
+  extends QueueThreadStartCommandArgs {
+  requestEventSequence: number | null;
+}
 
 export interface QueuePreparedReadyThreadTurnCommandInTransactionArgs {
   command: PreparedReadyThreadTurnCommand;
@@ -1368,6 +1374,39 @@ export async function advanceThreadStart(
   );
   deps.hub.notifyCommand(args.hostId);
   return queuedCommand.id;
+}
+
+export async function queueReadyThreadTurnCommand(
+  deps: LoggedWorkSessionDeps,
+  args: QueueReadyThreadTurnCommandArgs,
+): Promise<QueueReadyThreadTurnCommandResult> {
+  const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
+  if (providerThreadId) {
+    await queueTurnSubmitCommand(deps, {
+      thread: args.thread,
+      input: args.input,
+      requestId: args.requestId,
+      execution: args.execution,
+      permissionEscalation: args.permissionEscalation,
+      environment: args.environment,
+      providerThreadId,
+      requestEventSequence: args.requestEventSequence,
+      target: { mode: "start" },
+    });
+    return "turn.submit";
+  }
+
+  await requestThreadStart(deps, {
+    thread: args.thread,
+    environment: args.environment,
+    input: args.input,
+    requestId: args.requestId,
+    execution: args.execution,
+    permissionEscalation: args.permissionEscalation,
+    projectId: args.thread.projectId,
+    providerId: args.thread.providerId,
+  });
+  return "thread.start";
 }
 
 export function requestThreadStop(

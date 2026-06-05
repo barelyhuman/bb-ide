@@ -7,9 +7,9 @@ import {
   getQueuedThreadMessage,
   getEnvironment,
   getThread,
+  getThreadDynamicContextFileState,
   hostDaemonCommands,
   listQueuedThreadMessages,
-  listManagerThreadNudgesByThread,
   markThreadDeleted,
   markThreadStopRequested,
   queueCommand,
@@ -48,6 +48,7 @@ import { queueManagerSystemMessage } from "../../src/services/threads/manager-sy
 import { sendNextQueuedMessageIfPresent } from "../../src/services/threads/queued-messages.js";
 import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import { MANAGER_PREFERENCES_FILE_KEY } from "../../src/services/threads/manager-dynamic-file-delivery.js";
+import { ASYNC_MD_MIGRATION_REMINDER_FILE_KEY } from "../../src/services/scheduling/async-md-compatibility.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 function managerToolReminderInput() {
@@ -1494,90 +1495,6 @@ describe("internal event side effects", () => {
     });
   });
 
-  it("syncs ASYNC.md when a manager thread goes idle", async () => {
-    await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-event-manager-sync",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/manager-sync-environment",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-        type: "manager",
-      });
-      seedTurnStarted(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        turnId: "turn-manager-sync",
-        providerThreadId: "provider-manager-sync",
-      });
-
-      const responsePromise = harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            createTestDaemonEventEnvelope({
-              producerEventIdValue: 1,
-              event: {
-                type: "turn/completed",
-                threadId: thread.id,
-                providerThreadId: "provider-manager-sync",
-                scope: turnScope("turn-manager-sync"),
-                status: "completed",
-              },
-            }),
-          ],
-        }),
-      });
-
-      const asyncPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/ASYNC.md`;
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "host.read_file" && command.path === asyncPath,
-      );
-      const readResponse = await reportQueuedCommandSuccess(harness, queued, {
-        path: asyncPath,
-        content: [
-          "---",
-          "timezone: America/Los_Angeles",
-          "schedules:",
-          "  - name: daily-recap",
-          '    cron: "0 8 * * 1-5"',
-          "---",
-          "",
-          "## daily-recap",
-          "Summarize yesterday's work.",
-        ].join("\n"),
-        contentEncoding: "utf8",
-        mimeType: "text/markdown",
-        sizeBytes: 111,
-      });
-      expect(readResponse.status).toBe(200);
-
-      await vi.waitFor(() => {
-        expect(
-          listManagerThreadNudgesByThread(harness.db, thread.id).map(
-            (nudge) => nudge.name,
-          ),
-        ).toEqual(["daily-recap"]);
-      });
-    });
-  });
-
   it("auto-archives completed automation threads when enabled", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1802,6 +1719,128 @@ describe("internal event side effects", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.archivedAt,
       ).toBeNull();
+    });
+  });
+
+  it("queues an ASYNC.md migration reminder when a manager turn settles idle", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-async-md-reminder",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/event-async-md-reminder",
+      });
+      const manager = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        type: "manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: manager.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-event-async-md-reminder",
+        inputText: "Initial manager task",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: manager.id,
+        environmentId: environment.id,
+        turnId: "turn-event-async-md-reminder",
+        providerThreadId: "provider-event-async-md-reminder",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
+              event: {
+                type: "turn/completed",
+                threadId: manager.id,
+                providerThreadId: "provider-event-async-md-reminder",
+                scope: turnScope("turn-event-async-md-reminder"),
+                status: "completed",
+              },
+            }),
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+
+      const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${manager.id}`;
+      const asyncMdMetadataCommand = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.state === "pending" &&
+          command.type === "host.file_metadata" &&
+          command.path === `${threadStoragePath}/ASYNC.md`,
+      );
+      const metadataResponse = await reportQueuedCommandSuccess(
+        harness,
+        asyncMdMetadataCommand,
+        {
+          path: `${threadStoragePath}/ASYNC.md`,
+          modifiedAtMs: 1770000000000,
+          sizeBytes: 321,
+        },
+      );
+      expect(metadataResponse.status).toBe(200);
+
+      const preferencesReadCommand = await waitForQueuedCommandAfter(
+        harness,
+        asyncMdMetadataCommand.row.cursor,
+        ({ command, row }) =>
+          row.state === "pending" &&
+          command.type === "host.read_file" &&
+          command.path === `${threadStoragePath}/PREFERENCES.md`,
+      );
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(preferencesResponse.status).toBe(200);
+
+      const queuedCommand = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === manager.id,
+      );
+      if (queuedCommand.command.type !== "turn.submit") {
+        throw new Error(
+          `Expected turn.submit, got ${queuedCommand.command.type}`,
+        );
+      }
+      expect(
+        queuedCommand.command.input.some(
+          (input) =>
+            input.type === "text" &&
+            input.text.includes("`ASYNC.md` is deprecated") &&
+            input.text.includes("bb thread schedule create"),
+        ),
+      ).toBe(true);
+      expect(
+        getThreadDynamicContextFileState(harness.db, {
+          fileKey: ASYNC_MD_MIGRATION_REMINDER_FILE_KEY,
+          threadId: manager.id,
+        }),
+      ).toMatchObject({
+        contentStatus: "present",
+        threadId: manager.id,
+      });
     });
   });
 

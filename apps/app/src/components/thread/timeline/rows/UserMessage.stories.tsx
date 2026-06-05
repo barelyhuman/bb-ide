@@ -168,16 +168,14 @@ export function Overview() {
         </TimelineStage>
       </StoryRow>
       <StoryRow
-        label="system-initiated (scheduled nudge)"
+        label="system-initiated (scheduled turn)"
         hint="[bb system] prefix on its own line, body below"
       >
         <TimelineStage>
           <ConversationMessageContent
             role="user"
             initiator="system"
-            text={
-              "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md."
-            }
+            text={"[bb system]\n\nScheduled turn: daily-recap."}
             attachments={null}
             turnRequest={acceptedMessage}
           />

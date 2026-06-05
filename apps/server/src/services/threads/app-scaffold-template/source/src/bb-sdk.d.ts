@@ -17,7 +17,7 @@ declare global {
 
   type ThreadChangeKind = "thread-created" | "thread-deleted" | "events-appended" | "interactions-changed" | "status-changed" | "title-changed" | "queue-changed" | "archived-changed" | "pin-state-changed" | "parent-changed" | "read-state-changed" | "manager-assignment-changed" | "order-changed" | "terminals-changed";
 
-  type ProjectChangeKind = "project-created" | "project-updated" | "project-deleted" | "project-sources-changed" | "threads-changed" | "project-order-changed" | "automations-changed" | "nudges-changed";
+  type ProjectChangeKind = "project-created" | "project-updated" | "project-deleted" | "project-sources-changed" | "threads-changed" | "project-order-changed" | "automations-changed" | "thread-schedules-changed";
 
   type EnvironmentChangeKind = "status-changed" | "environment-created" | "environment-deleted" | "metadata-changed" | "work-status-changed" | "git-refs-changed" | "thread-storage-changed";
 

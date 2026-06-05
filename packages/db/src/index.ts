@@ -21,17 +21,18 @@ export {
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
-  createManagerThreadNudgeId,
   createPendingInteractionId,
   createProjectId,
   createPromptHistoryEntryId,
   createProjectSourceId,
   createTerminalSessionId,
+  createThreadScheduleId,
   createThreadId,
   createThreadProvisioningId,
 } from "./ids.js";
 
 export { migrate } from "./migrate.js";
+export { isSqliteUniqueConstraintOnColumns } from "./sqlite-errors.js";
 export type {
   FutureAppliedMigration,
   FutureAppliedMigrationWarningFields,

@@ -35,18 +35,6 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("hooks/pre-commit exited with status 1");
   });
 
-  it("renders scheduled nudges in block form so the [bb system] prefix sits on its own line", () => {
-    const rendered = renderTemplate("systemMessageScheduledNudge", {
-      name: "daily-recap",
-    });
-
-    expect(rendered).toBe(
-      ["[bb system]", "", "Scheduled nudge: daily-recap. Check ASYNC.md."].join(
-        "\n",
-      ),
-    );
-  });
-
   it("renders agent thread messages with inline reply guidance", () => {
     const rendered = renderTemplate("agentThreadMessage", {
       senderThreadId: "thr_sender",
@@ -104,8 +92,9 @@ describe("@bb/templates", () => {
       "Apps are global within the local host data dir",
     );
     expect(rendered).toContain("bb guide app");
-    expect(rendered).toContain("bb guide async");
+    expect(rendered).toContain("bb guide schedules");
     expect(rendered).not.toContain("Structure `ASYNC.md`");
+    expect(rendered).toContain("bb thread schedule");
     expect(rendered).not.toContain("--background: oklch(0.9551 0 0);");
     expect(rendered).not.toContain("starter/no-preferences content");
     expect(rendered).not.toContain("/Users/sawyerhood/.bb/thread-storage");
@@ -157,10 +146,8 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("starter/no-preferences");
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("name, vibe, or other identity details");
-    // Storage seeding from user templates was removed; the welcome message
-    // must not reference it.
-    expect(rendered).not.toContain("may already exist from user");
-    expect(rendered).not.toContain("Preserve any seeded structure");
+    expect(rendered).toContain("may already exist from user");
+    expect(rendered).toContain("Preserve any seeded structure");
 
     // Anchors the two opening asks: scope + landing mode.
     expect(rendered).toContain(
@@ -175,6 +162,19 @@ describe("@bb/templates", () => {
     expect(rendered).toContain(
       "open a PR per worker, or merge into a local branch",
     );
+  });
+
+  it("renders systemMessageManagerAsyncMdMigrationReminder", () => {
+    const rendered = renderTemplate(
+      "systemMessageManagerAsyncMdMigrationReminder",
+      {},
+    );
+
+    expect(rendered).toContain("[bb system]");
+    expect(rendered).toContain("`ASYNC.md` is deprecated");
+    expect(rendered).toContain("bb thread schedule create");
+    expect(rendered).toContain("bb guide schedules");
+    expect(rendered).toContain("delete or rename `ASYNC.md`");
   });
 
   it("renders bbGuideApp", () => {
@@ -205,18 +205,18 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("--background: oklch(0.195 0 0);");
   });
 
-  it("renders bbGuideAsync", () => {
+  it("renders bbGuideSchedules", () => {
     const templates = listTemplates();
-    expect(templates.some((template) => template.id === "bbGuideAsync")).toBe(
-      true,
-    );
+    expect(
+      templates.some((template) => template.id === "bbGuideSchedules"),
+    ).toBe(true);
 
-    const rendered = renderTemplate("bbGuideAsync", {});
+    const rendered = renderTemplate("bbGuideSchedules", {});
 
-    expect(rendered).toContain("Async scheduled nudges");
-    expect(rendered).toContain("Use `ASYNC.md` in thread storage");
-    expect(rendered).toContain("timezone: America/Los_Angeles");
-    expect(rendered).toContain("No more than 20 schedules.");
+    expect(rendered).toContain("Thread schedules");
+    expect(rendered).toContain("bb thread schedule create");
+    expect(rendered).toContain("--timezone America/Los_Angeles");
+    expect(rendered).toContain("Schedule names are unique per thread.");
     expect(rendered).toContain("The cron month field must stay `*`.");
   });
 

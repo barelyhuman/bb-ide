@@ -185,24 +185,27 @@ export type {
 } from "./thread-operations.js";
 
 export {
-  advanceManagerThreadNudgeAfterFire,
-  advanceManagerThreadNudgeAfterFireInTransaction,
-  createManagerThreadNudge,
-  deleteManagerThreadNudge,
-  getManagerThreadNudge,
-  listDueManagerThreadNudges,
-  listManagerThreadNudgesByThread,
-  replaceManagerThreadNudges,
-  updateManagerThreadNudge,
-} from "./manager-thread-nudges.js";
+  advanceThreadScheduleAfterFireInTransaction,
+  advanceThreadScheduleAfterSkip,
+  advanceThreadScheduleAfterSkipInTransaction,
+  createThreadSchedule,
+  deleteThreadSchedule,
+  disableThreadSchedulesByThread,
+  getThreadSchedule,
+  listDueThreadSchedules,
+  listThreadSchedulesByThread,
+  updateThreadSchedule,
+} from "./thread-schedules.js";
 export type {
-  CreateManagerThreadNudgeInput,
-  DueManagerThreadNudgeCursor,
-  ListDueManagerThreadNudgesArgs,
-  ReplaceManagerThreadNudgeInput,
-  ReplaceManagerThreadNudgesArgs,
-  UpdateManagerThreadNudgeInput,
-} from "./manager-thread-nudges.js";
+  AdvanceThreadScheduleAfterFireArgs,
+  AdvanceThreadScheduleAfterSkipArgs,
+  CreateThreadScheduleInput,
+  DisableThreadSchedulesByThreadArgs,
+  DueThreadScheduleCursor,
+  ListDueThreadSchedulesArgs,
+  ThreadScheduleRow,
+  UpdateThreadScheduleInput,
+} from "./thread-schedules.js";
 
 export {
   getThreadDynamicContextFileState,

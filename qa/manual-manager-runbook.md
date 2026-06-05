@@ -35,7 +35,7 @@ Core behaviors under test:
 - multiple child threads and provider routing preferences
 - archive judgment for quick research vs still-useful implementation threads
 - same-environment implementation + review workflows
-- `ASYNC.md` schedule creation and sync
+- thread schedule creation and scheduled wakeups
 
 ## Prerequisites
 
@@ -155,7 +155,7 @@ bb thread log "$MANAGER_ID" --json --limit 200 | jq
 bb thread show "$THREAD_ID" --json | jq
 bb environment show "$ENV_ID" --json | jq
 bb thread output "$THREAD_ID"
-sqlite3 "$SERVER_DB" "select thread_id,name,cron,timezone,next_fire_at from manager_thread_nudges order by thread_id,name;"
+sqlite3 "$SERVER_DB" "select thread_id,name,enabled,cron,timezone,next_fire_at,prompt from thread_schedules order by thread_id,name;"
 find "$BB_ROOT/thread-storage" -maxdepth 2 -type f | sort
 ```
 
@@ -409,7 +409,7 @@ Expected:
 - the manager does not archive active or likely-to-be-reused implementation
   threads prematurely
 
-## Scenario 9: `ASYNC.md` Scheduling
+## Scenario 9: Thread Scheduling
 
 Ask for reminder-style scheduled work:
 
@@ -424,20 +424,18 @@ bb thread tell "$CODEX_MANAGER_ID" "Also add a daily 9am reminder to summarize a
 bb thread wait "$CODEX_MANAGER_ID" --status idle --timeout 240
 ```
 
-Inspect the file and synced nudges:
+Inspect the created schedules:
 
 ```bash
-MANAGER_STORAGE_DIR="$BB_ROOT/thread-storage/$CODEX_MANAGER_ID"
-sed -n '1,220p' "$MANAGER_STORAGE_DIR/ASYNC.md"
-sqlite3 "$SERVER_DB" "select thread_id,name,cron,timezone from manager_thread_nudges where thread_id = '$CODEX_MANAGER_ID' order by name;"
+bb thread schedule list "$CODEX_MANAGER_ID"
+sqlite3 "$SERVER_DB" "select thread_id,name,cron,timezone,prompt,next_fire_at from thread_schedules where thread_id = '$CODEX_MANAGER_ID' order by name;"
 bb thread log "$CODEX_MANAGER_ID" --format verbose
 ```
 
 Expected:
 
-- the manager writes `ASYNC.md` in its thread storage
-- the file contains named schedules with aligned sections
-- manager-thread nudges are synced for the manager after it goes idle
+- the manager creates named thread schedules with prompts
+- schedules are persisted in `thread_schedules`
 - the manager treats reminder requests as scheduling work, not as transient chat
 
 ## Scenario 10: Pi Manager Smoke
@@ -503,7 +501,7 @@ This run is green only if all of the following are true:
 - assignment and unassignment behavior works for a monitored thread
 - multi-thread delegation works
 - same-environment review workflows work
-- `ASYNC.md` scheduling results in synced nudges
+- thread scheduling creates persisted schedules
 - archive behavior reflects likely future value instead of archiving everything
 
 ## Failure Notes
@@ -518,7 +516,7 @@ Record at least:
 - any archived child thread IDs
 - relevant snippets from `bb thread log <manager-id>`
 - the final manager outputs
-- any scheduling rows from `manager_thread_nudges`
+- any scheduling rows from `thread_schedules`
 
 ## Teardown
 

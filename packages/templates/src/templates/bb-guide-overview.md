@@ -42,4 +42,5 @@ Run `bb guide <chapter>` for command details:
   projects       Project CRUD and sources
   hosts          Listing and understanding hosts
   styling        Alias for app
-  async          Defining scheduled nudges with ASYNC.md
+  schedules      Managing recurring thread schedules
+  async          Alias for schedules

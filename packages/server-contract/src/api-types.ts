@@ -29,6 +29,7 @@ import {
   threadListEntrySchema,
   threadGitDiffResponseSchema,
   threadTimelinePendingTodosSchema,
+  threadScheduleKindSchema,
   threadTypeSchema,
   threadWithRuntimeSchema,
   threadQueuedMessageSchema,
@@ -67,6 +68,7 @@ export const AUTOMATION_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_CRON_MAX_LENGTH = 100;
 export const SCHEDULE_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_TIMEZONE_MAX_LENGTH = 100;
+export const THREAD_SCHEDULE_PROMPT_MAX_LENGTH = 8_000;
 
 interface IncludeQueryValidationArgs {
   allowedValues: readonly string[];
@@ -586,6 +588,10 @@ export const scheduleTimezoneSchema = z
   .string()
   .min(1)
   .max(SCHEDULE_TIMEZONE_MAX_LENGTH);
+export const threadSchedulePromptSchema = z
+  .string()
+  .min(1)
+  .max(THREAD_SCHEDULE_PROMPT_MAX_LENGTH);
 export const automationScheduleTriggerSchema = z.object({
   triggerType: z.literal("schedule"),
   cron: scheduleCronSchema,
@@ -634,6 +640,74 @@ export const automationSchema = z.object({
   updatedAt: z.number(),
 });
 export type Automation = z.infer<typeof automationSchema>;
+
+export const threadScheduleSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  threadId: z.string().min(1),
+  name: scheduleNameSchema,
+  enabled: z.boolean(),
+  kind: threadScheduleKindSchema,
+  cron: scheduleCronSchema,
+  timezone: scheduleTimezoneSchema,
+  prompt: threadSchedulePromptSchema,
+  nextFireAt: z.number(),
+  lastFiredAt: z.number().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type ThreadSchedule = z.infer<typeof threadScheduleSchema>;
+
+export const createThreadScheduleRequestSchema = z
+  .object({
+    name: scheduleNameSchema,
+    enabled: z.boolean().optional(),
+    cron: scheduleCronSchema,
+    timezone: scheduleTimezoneSchema,
+    prompt: threadSchedulePromptSchema,
+  })
+  .strict();
+export type CreateThreadScheduleRequest = z.infer<
+  typeof createThreadScheduleRequestSchema
+>;
+
+export const updateThreadScheduleEnabledRequestSchema = z
+  .object({
+    enabled: z.boolean(),
+  })
+  .strict();
+export type UpdateThreadScheduleEnabledRequest = z.infer<
+  typeof updateThreadScheduleEnabledRequestSchema
+>;
+
+export const updateThreadScheduleConfigRequestSchema = z
+  .object({
+    name: scheduleNameSchema,
+    cron: scheduleCronSchema,
+    timezone: scheduleTimezoneSchema,
+    prompt: threadSchedulePromptSchema,
+  })
+  .partial()
+  .strict()
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.cron !== undefined ||
+      value.timezone !== undefined ||
+      value.prompt !== undefined,
+    "At least one field must be provided",
+  );
+export type UpdateThreadScheduleConfigRequest = z.infer<
+  typeof updateThreadScheduleConfigRequestSchema
+>;
+
+export const updateThreadScheduleRequestSchema = z.union([
+  updateThreadScheduleEnabledRequestSchema,
+  updateThreadScheduleConfigRequestSchema,
+]);
+export type UpdateThreadScheduleRequest = z.infer<
+  typeof updateThreadScheduleRequestSchema
+>;
 
 export const createAutomationRequestSchema = z.object({
   name: automationNameSchema,

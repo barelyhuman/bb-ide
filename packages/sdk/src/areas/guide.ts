@@ -1,7 +1,4 @@
-import {
-  templateDefinitions,
-  type TemplateId,
-} from "@bb/templates/generated";
+import { templateDefinitions, type TemplateId } from "@bb/templates/generated";
 
 export interface GuideRenderArgs {
   chapter?: string;
@@ -25,7 +22,8 @@ const guideChapters: Record<string, TemplateId> = {
   projects: "bbGuideProjects",
   hosts: "bbGuideHosts",
   styling: "bbGuideApp",
-  async: "bbGuideAsync",
+  schedules: "bbGuideSchedules",
+  async: "bbGuideSchedules",
 };
 
 const templateBodyById = new Map(

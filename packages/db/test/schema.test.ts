@@ -11,23 +11,23 @@ import {
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
-  createManagerThreadNudgeId,
   createProjectId,
   createPromptHistoryEntryId,
   createProjectSourceId,
+  createThreadScheduleId,
   createThreadId,
   environments,
   events,
   hostDaemonCommands,
   hostDaemonSessions,
   hosts,
-  managerThreadNudges,
   migrate,
   promptHistoryEntries,
   projectSources,
   projects,
   queuedThreadMessages,
   threadDynamicContextFileStates,
+  threadSchedules,
   threads,
 } from "../src/index.js";
 
@@ -99,7 +99,7 @@ describe("db rebuild schema", () => {
     const environmentId = createEnvironmentId();
     const automationId = createAutomationId();
     const threadId = createThreadId();
-    const nudgeId = createManagerThreadNudgeId();
+    const scheduleId = createThreadScheduleId();
     const sessionId = createHostDaemonSessionId();
     const commandId = createHostDaemonCommandId();
     const eventId = createEventId();
@@ -181,14 +181,16 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
-    db.insert(managerThreadNudges)
+    db.insert(threadSchedules)
       .values({
-        id: nudgeId,
+        id: scheduleId,
         projectId,
         threadId,
-        name: "check-async",
+        name: "status-check",
+        kind: "cron",
         cron: "0 * * * *",
         timezone: "UTC",
+        prompt: "Check status.",
         enabled: true,
         nextFireAt: now + 30_000,
         createdAt: now,
@@ -287,8 +289,8 @@ describe("db rebuild schema", () => {
       triggerType: "schedule",
       autoArchive: false,
     });
-    expect(db.select().from(managerThreadNudges).get()).toMatchObject({
-      name: "check-async",
+    expect(db.select().from(threadSchedules).get()).toMatchObject({
+      name: "status-check",
       timezone: "UTC",
     });
     expect(db.select().from(threadDynamicContextFileStates).get()).toMatchObject(
@@ -491,7 +493,7 @@ describe("db rebuild schema", () => {
     closeConnection(db);
   });
 
-  it("cascades thread deletion to manager thread-owned rows", () => {
+  it("cascades thread deletion to thread-owned rows", () => {
     const db = createConnection(":memory:");
     migrate(db);
 
@@ -499,7 +501,7 @@ describe("db rebuild schema", () => {
     const hostId = createHostId();
     const projectId = createProjectId();
     const threadId = createThreadId();
-    const nudgeId = createManagerThreadNudgeId();
+    const scheduleId = createThreadScheduleId();
 
     db.insert(hosts)
       .values({
@@ -531,14 +533,16 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
-    db.insert(managerThreadNudges)
+    db.insert(threadSchedules)
       .values({
-        id: nudgeId,
+        id: scheduleId,
         projectId,
         threadId,
         name: "morning-check",
+        kind: "cron",
         cron: "0 9 * * *",
         timezone: "UTC",
+        prompt: "Run the morning check.",
         enabled: true,
         nextFireAt: now + 60_000,
         createdAt: now,
@@ -559,7 +563,7 @@ describe("db rebuild schema", () => {
 
     db.delete(threads).where(eq(threads.id, threadId)).run();
 
-    expect(db.select().from(managerThreadNudges).all()).toHaveLength(0);
+    expect(db.select().from(threadSchedules).all()).toHaveLength(0);
     expect(db.select().from(threadDynamicContextFileStates).all()).toHaveLength(
       0,
     );
@@ -929,7 +933,7 @@ describe("db rebuild schema", () => {
     expect(createEnvironmentProvisioningId()).toMatch(/^epv_/u);
     expect(createThreadId()).toMatch(/^thr_/u);
     expect(createAutomationId()).toMatch(/^auto_/u);
-    expect(createManagerThreadNudgeId()).toMatch(/^mnge_/u);
+    expect(createThreadScheduleId()).toMatch(/^tsched_/u);
     expect(createEventId()).toMatch(/^evt_/u);
     expect(createPromptHistoryEntryId()).toMatch(/^phist_/u);
     expect(createQueuedThreadMessageId()).toMatch(/^qmsg_/u);

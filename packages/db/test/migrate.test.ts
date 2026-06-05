@@ -12,10 +12,24 @@ import {
 
 type InsertMigrationParameters = [string, number];
 type DeleteMigrationParameters = [number];
+type DeleteTwoMigrationsParameters = [number, number];
 type TableNameParameters = [string];
 type QueuedMessageMigrationInsertParameters = [string, string, number, number];
 type ProjectSortKeyMigrationInsertParameters = [string, string, number, number];
 type ThreadSortKeyMigrationInsertParameters = [string, string, string, number];
+type LegacyNudgeMigrationInsertParameters = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  number,
+  number,
+  number | null,
+  number,
+  number,
+];
 
 interface IndexNameRow {
   name: string;
@@ -43,6 +57,22 @@ interface MigratedProjectRow {
 interface MigratedThreadSortKeyRow {
   id: string;
   sortKey: string | null;
+}
+
+interface MigratedThreadScheduleRow {
+  createdAt: number;
+  cron: string;
+  enabled: number;
+  id: string;
+  kind: string;
+  lastFiredAt: number | null;
+  name: string;
+  nextFireAt: number;
+  projectId: string;
+  prompt: string;
+  threadId: string;
+  timezone: string;
+  updatedAt: number;
 }
 
 interface PersonalProjectMigrationRow {
@@ -86,6 +116,8 @@ const closedSessionPruneIndexesWhen = requirePublishedMigrationWhen(
 const threadDynamicContextFileStatesWhen = 1779139400002;
 const commandLookupIndexesWhen = 1779943370189;
 const threadPinningMigrationWhen = 1779990051923;
+const threadSchedulesMigrationWhen = 1780614650350;
+const threadScheduleKindDefaultMigrationWhen = 1780687798956;
 const queuedMessageSortKeyMigrationPath = resolve(
   __dirname,
   "..",
@@ -303,6 +335,28 @@ describe("migrate", () => {
         .prepare("DROP INDEX host_daemon_commands_type_state_idx")
         .run();
       db.$client.prepare("DROP INDEX threads_pin_sort_idx").run();
+      db.$client.prepare("DROP TABLE thread_schedules").run();
+      db.$client
+        .prepare(
+          `
+            CREATE TABLE manager_thread_nudges (
+              id text PRIMARY KEY NOT NULL,
+              project_id text NOT NULL,
+              thread_id text NOT NULL,
+              name text NOT NULL,
+              cron text NOT NULL,
+              timezone text NOT NULL,
+              enabled integer DEFAULT true NOT NULL,
+              next_fire_at integer NOT NULL,
+              last_fired_at integer,
+              created_at integer NOT NULL,
+              updated_at integer NOT NULL,
+              FOREIGN KEY (project_id) REFERENCES projects(id) ON UPDATE no action ON DELETE cascade,
+              FOREIGN KEY (thread_id) REFERENCES threads(id) ON UPDATE no action ON DELETE cascade
+            )
+          `,
+        )
+        .run();
       db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
       db.$client.prepare("DROP TABLE client_turn_requests").run();
       db.$client.prepare("DELETE FROM projects WHERE kind = 'personal'").run();
@@ -366,6 +420,215 @@ describe("migrate", () => {
       expect(migrationCreatedAts).toContain(threadDynamicContextFileStatesWhen);
       expect(migrationCreatedAts).toContain(commandLookupIndexesWhen);
       expect(migrationCreatedAts).toContain(threadPinningMigrationWhen);
+    } finally {
+      closeConnection(db);
+    }
+  });
+
+  it("copies legacy manager nudges into thread schedules", () => {
+    const db = createConnection(":memory:");
+
+    try {
+      migrate(db);
+
+      db.$client.prepare("DROP TABLE thread_schedules").run();
+      db.$client
+        .prepare(
+          `
+            CREATE TABLE manager_thread_nudges (
+              id text PRIMARY KEY NOT NULL,
+              project_id text NOT NULL,
+              thread_id text NOT NULL,
+              name text NOT NULL,
+              cron text NOT NULL,
+              timezone text NOT NULL,
+              enabled integer DEFAULT true NOT NULL,
+              next_fire_at integer NOT NULL,
+              last_fired_at integer,
+              created_at integer NOT NULL,
+              updated_at integer NOT NULL,
+              FOREIGN KEY (project_id) REFERENCES projects(id) ON UPDATE no action ON DELETE cascade,
+              FOREIGN KEY (thread_id) REFERENCES threads(id) ON UPDATE no action ON DELETE cascade
+            )
+          `,
+        )
+        .run();
+      db.$client
+        .prepare<DeleteTwoMigrationsParameters>(
+          `
+            DELETE FROM __drizzle_migrations
+            WHERE created_at IN (?, ?)
+          `,
+        )
+        .run(
+          threadSchedulesMigrationWhen,
+          threadScheduleKindDefaultMigrationWhen,
+        );
+      db.$client
+        .prepare(
+          `
+            INSERT INTO projects (
+              id,
+              kind,
+              name,
+              sort_key,
+              created_at,
+              updated_at
+            )
+            VALUES (
+              'proj_legacy_nudges',
+              'standard',
+              'Legacy nudges',
+              'V',
+              1770000000000,
+              1770000000000
+            )
+          `,
+        )
+        .run();
+      db.$client
+        .prepare(
+          `
+            INSERT INTO threads (
+              id,
+              project_id,
+              provider_id,
+              type,
+              status,
+              latest_attention_at,
+              created_at,
+              updated_at
+            )
+            VALUES (
+              'thr_legacy_manager',
+              'proj_legacy_nudges',
+              'codex',
+              'manager',
+              'idle',
+              1770000000000,
+              1770000000000,
+              1770000000000
+            )
+          `,
+        )
+        .run();
+      const insertLegacyNudge =
+        db.$client.prepare<LegacyNudgeMigrationInsertParameters>(
+          `
+            INSERT INTO manager_thread_nudges (
+              id,
+              project_id,
+              thread_id,
+              name,
+              cron,
+              timezone,
+              enabled,
+              next_fire_at,
+              last_fired_at,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+        );
+      insertLegacyNudge.run(
+        "mnge_daily_review",
+        "proj_legacy_nudges",
+        "thr_legacy_manager",
+        "Daily review",
+        "0 9 * * *",
+        "America/Los_Angeles",
+        1,
+        1770100000000,
+        null,
+        1770000001000,
+        1770000002000,
+      );
+      insertLegacyNudge.run(
+        "mnge_weekly_report",
+        "proj_legacy_nudges",
+        "thr_legacy_manager",
+        "Weekly report",
+        "30 16 * * 5",
+        "UTC",
+        0,
+        1770200000000,
+        1770150000000,
+        1770000003000,
+        1770000004000,
+      );
+
+      migrate(db);
+
+      expect(
+        db.$client
+          .prepare<[], MigratedThreadScheduleRow>(
+            `
+              SELECT
+                id,
+                project_id AS projectId,
+                thread_id AS threadId,
+                name,
+                enabled,
+                kind,
+                cron,
+                timezone,
+                prompt,
+                next_fire_at AS nextFireAt,
+                last_fired_at AS lastFiredAt,
+                created_at AS createdAt,
+                updated_at AS updatedAt
+              FROM thread_schedules
+              ORDER BY id
+            `,
+          )
+          .all(),
+      ).toEqual([
+        {
+          id: "tsched_daily_review",
+          projectId: "proj_legacy_nudges",
+          threadId: "thr_legacy_manager",
+          name: "Daily review",
+          enabled: 1,
+          kind: "cron",
+          cron: "0 9 * * *",
+          timezone: "America/Los_Angeles",
+          prompt:
+            "Scheduled follow-up: Daily review. Review the thread context and storage, then continue only if there is useful work to do.",
+          nextFireAt: 1770100000000,
+          lastFiredAt: null,
+          createdAt: 1770000001000,
+          updatedAt: 1770000002000,
+        },
+        {
+          id: "tsched_weekly_report",
+          projectId: "proj_legacy_nudges",
+          threadId: "thr_legacy_manager",
+          name: "Weekly report",
+          enabled: 0,
+          kind: "cron",
+          cron: "30 16 * * 5",
+          timezone: "UTC",
+          prompt:
+            "Scheduled follow-up: Weekly report. Review the thread context and storage, then continue only if there is useful work to do.",
+          nextFireAt: 1770200000000,
+          lastFiredAt: 1770150000000,
+          createdAt: 1770000003000,
+          updatedAt: 1770000004000,
+        },
+      ]);
+      expect(
+        db.$client
+          .prepare<TableNameParameters, IndexNameRow>(
+            `
+              SELECT name
+              FROM sqlite_master
+              WHERE type = 'table'
+                AND name = ?
+            `,
+          )
+          .get("manager_thread_nudges"),
+      ).toBeUndefined();
     } finally {
       closeConnection(db);
     }

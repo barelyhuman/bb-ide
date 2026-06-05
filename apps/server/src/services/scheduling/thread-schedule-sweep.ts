@@ -1,15 +1,19 @@
 import {
-  advanceManagerThreadNudgeAfterFire,
-  advanceManagerThreadNudgeAfterFireInTransaction,
+  advanceThreadScheduleAfterFireInTransaction,
+  advanceThreadScheduleAfterSkip,
+  advanceThreadScheduleAfterSkipInTransaction,
   type DbConnection,
   type DbTransaction,
-  deleteManagerThreadNudge,
-  type DueManagerThreadNudgeCursor,
+  deleteThreadSchedule,
+  type DueThreadScheduleCursor,
   getActiveStoredTurnId,
   getEnvironment,
   getThread,
   hasPendingHostCommandForThread,
-  listDueManagerThreadNudges,
+  listDueThreadSchedules,
+  transitionThreadStatusInTransaction,
+  type ThreadScheduleRow,
+  updateThreadSchedule,
 } from "@bb/db";
 import type {
   PromptInput,
@@ -34,179 +38,205 @@ import {
 import { resolvePermissionEscalation } from "../threads/thread-runtime-config.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
-  computeNextScheduledTimeForExpressionSet,
+  computeNextScheduledTime,
   ScheduleValidationError,
 } from "./schedule-helpers.js";
-import { tryTransition } from "../threads/thread-transitions.js";
-import { renderTemplate } from "@bb/templates";
-import {
-  type ManagerDynamicFileDeliveryStateUpdate,
-  prependManagerPreferencesSystemMessageIfChanged,
-  recordManagerDynamicFileDeliveryInTransaction,
-  withManagerPreferencesDeliveryThreadIdLock,
-} from "../threads/manager-dynamic-file-delivery.js";
 
-const DUE_NUDGE_BATCH_SIZE = 100;
-export type DueManagerThreadNudgeRow = ReturnType<
-  typeof listDueManagerThreadNudges
->[number];
+const DUE_THREAD_SCHEDULE_BATCH_SIZE = 100;
+
+type ScheduledThread = NonNullable<ReturnType<typeof getThread>>;
+type ScheduledThreadEnvironment = NonNullable<ReturnType<typeof getEnvironment>>;
 
 interface PendingTurnSubmitCommandArgs {
   hostId: string;
   threadId: string;
 }
 
-export interface NudgeSweepCache {
+export interface ThreadScheduleSweepCache {
   environmentById: Map<string, ReturnType<typeof getEnvironment>>;
   pendingTurnSubmitByThreadId: Map<string, boolean>;
   providerThreadIdByThreadId: Map<string, string | null>;
 }
 
-type NudgeThread = NonNullable<ReturnType<typeof getThread>>;
-type NudgeEnvironment = NonNullable<ReturnType<typeof getEnvironment>>;
-
-interface DeleteDueNudgePreparation {
+interface DeleteDueThreadSchedulePreparation {
   kind: "delete";
 }
 
-interface SkipDueNudgePreparation {
+interface SkipDueThreadSchedulePreparation {
   kind: "skip";
   reason: string;
 }
 
-interface QueueDueNudgePreparation {
-  environment: NudgeEnvironment;
+interface DisableDueThreadSchedulePreparation {
+  kind: "disable";
+  reason: string;
+}
+
+interface QueueDueThreadSchedulePreparation {
+  environment: ScheduledThreadEnvironment;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   kind: "queue";
   preparedCommand: PreparedTurnSubmitCommandPayload;
   sessionId: string;
-  stateUpdate: ManagerDynamicFileDeliveryStateUpdate | null;
-  targetIntent: NudgeTurnTargetIntent;
-  thread: NudgeThread;
+  targetIntent: ThreadScheduleTurnTargetIntent;
+  thread: ScheduledThread;
 }
 
-type DueNudgePreparation =
-  | DeleteDueNudgePreparation
-  | SkipDueNudgePreparation
-  | QueueDueNudgePreparation;
+type DueThreadSchedulePreparation =
+  | DeleteDueThreadSchedulePreparation
+  | DisableDueThreadSchedulePreparation
+  | QueueDueThreadSchedulePreparation
+  | SkipDueThreadSchedulePreparation;
 
-interface StartNudgeTurnTargetIntent {
+interface StartThreadScheduleTurnTargetIntent {
   kind: "start";
 }
 
-interface AutoNudgeTurnTargetIntent {
+interface AutoThreadScheduleTurnTargetIntent {
   expectedTurnId: string | null;
   kind: "auto";
 }
 
-type NudgeTurnTargetIntent =
-  | AutoNudgeTurnTargetIntent
-  | StartNudgeTurnTargetIntent;
+type ThreadScheduleTurnTargetIntent =
+  | AutoThreadScheduleTurnTargetIntent
+  | StartThreadScheduleTurnTargetIntent;
 
-interface BuildNudgeTurnTargetIntentArgs {
+interface BuildThreadScheduleTurnTargetIntentArgs {
   expectedTurnId: string | null;
-  thread: NudgeThread;
+  thread: ScheduledThread;
 }
 
-interface IsNudgePreparationCurrentArgs {
-  preparation: QueueDueNudgePreparation;
+interface IsThreadSchedulePreparationCurrentArgs {
+  preparation: QueueDueThreadSchedulePreparation;
 }
 
-interface PendingTurnSubmitNudgeResult {
+interface DisableThreadScheduleFromSweepArgs {
+  reason: string;
+  schedule: ThreadScheduleRow;
+  validationError: string | null;
+}
+
+interface PendingTurnSubmitScheduleResult {
   kind: "pending-turn-submit";
 }
 
-interface QueuedNudgeResult {
+interface QueuedScheduleResult {
   kind: "queued";
+  transitionedToActive: boolean;
 }
 
-interface LostRaceNudgeResult {
+interface LostRaceScheduleResult {
   kind: "lost-race";
 }
 
-type QueueDueNudgeResult =
-  | LostRaceNudgeResult
-  | PendingTurnSubmitNudgeResult
-  | QueuedNudgeResult;
+type QueueDueThreadScheduleResult =
+  | LostRaceScheduleResult
+  | PendingTurnSubmitScheduleResult
+  | QueuedScheduleResult;
 
-function buildScheduledNudgeInput(name: string): PromptInput[] {
+function buildThreadScheduleInput(schedule: ThreadScheduleRow): PromptInput[] {
   return [
     {
       type: "text",
-      text: renderTemplate("systemMessageScheduledNudge", { name }),
+      text: schedule.prompt,
     },
   ];
 }
 
-function advanceSkippedNudge(
+function computeNextFireAt(
+  schedule: ThreadScheduleRow,
+  now: number,
+): number {
+  return computeNextScheduledTime({
+    cron: schedule.cron,
+    now,
+    timezone: schedule.timezone,
+  });
+}
+
+function isEnvironmentReadyForScheduleQueue(
+  environment: ScheduledThreadEnvironment,
+): boolean {
+  return environment.status === "ready" && Boolean(environment.path);
+}
+
+function disableThreadScheduleFromSweep(
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  args: DisableThreadScheduleFromSweepArgs,
+): void {
+  const disabled = updateThreadSchedule(deps.db, deps.hub, args.schedule.id, {
+    enabled: false,
+  });
+  if (!disabled) {
+    return;
+  }
+
+  deps.logger.warn(
+    {
+      cron: args.schedule.cron,
+      name: args.schedule.name,
+      projectId: args.schedule.projectId,
+      scheduleId: args.schedule.id,
+      threadId: args.schedule.threadId,
+      timezone: args.schedule.timezone,
+      validationError: args.validationError,
+      reason: args.reason,
+    },
+    "Disabled thread schedule during due schedule sweep",
+  );
+}
+
+function advanceSkippedThreadSchedule(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
   args: {
     now: number;
-    nudge: DueManagerThreadNudgeRow;
     reason: string;
+    schedule: ThreadScheduleRow;
   },
 ): void {
   let nextFireAt: number;
   try {
-    nextFireAt = computeNextScheduledTimeForExpressionSet({
-      expressionSet: args.nudge.cron,
-      now: args.now,
-      timezone: args.nudge.timezone,
-    });
+    nextFireAt = computeNextFireAt(args.schedule, args.now);
   } catch (error) {
     if (error instanceof ScheduleValidationError) {
-      deleteManagerThreadNudge(deps.db, deps.hub, args.nudge.id);
-      deps.logger.warn(
-        {
-          nudgeId: args.nudge.id,
-          reason: error.message,
-          threadId: args.nudge.threadId,
-        },
-        "Deleted manager nudge with invalid stored schedule",
-      );
+      disableThreadScheduleFromSweep(deps, {
+        reason: args.reason,
+        schedule: args.schedule,
+        validationError: error.message,
+      });
       return;
     }
     throw error;
   }
-  const advanced = advanceManagerThreadNudgeAfterFire(deps.db, deps.hub, {
-    nudgeId: args.nudge.id,
-    expectedNextFireAt: args.nudge.nextFireAt,
+
+  const advanced = advanceThreadScheduleAfterSkip(deps.db, deps.hub, {
+    scheduleId: args.schedule.id,
+    expectedNextFireAt: args.schedule.nextFireAt,
     nextFireAt,
-    projectId: args.nudge.projectId,
+    projectId: args.schedule.projectId,
     now: args.now,
   });
 
   if (advanced) {
     deps.logger.info(
       {
-        nudgeId: args.nudge.id,
+        scheduleId: args.schedule.id,
         reason: args.reason,
-        threadId: args.nudge.threadId,
+        threadId: args.schedule.threadId,
       },
-      "Skipped due manager nudge",
+      "Skipped due thread schedule",
     );
   }
 }
 
-function computeNextFireAt(
-  nudge: DueManagerThreadNudgeRow,
-  now: number,
-): number {
-  return computeNextScheduledTimeForExpressionSet({
-    expressionSet: nudge.cron,
-    now,
-    timezone: nudge.timezone,
-  });
-}
-
-function canQueueNudgeForThread(thread: NudgeThread): boolean {
+function canQueueScheduleForThread(thread: ScheduledThread): boolean {
   return thread.status === "idle" || thread.status === "active";
 }
 
-function buildNudgeTurnTargetIntent(
-  args: BuildNudgeTurnTargetIntentArgs,
-): NudgeTurnTargetIntent {
+function buildThreadScheduleTurnTargetIntent(
+  args: BuildThreadScheduleTurnTargetIntentArgs,
+): ThreadScheduleTurnTargetIntent {
   if (args.thread.status === "active") {
     return {
       kind: "auto",
@@ -217,8 +247,8 @@ function buildNudgeTurnTargetIntent(
   return { kind: "start" };
 }
 
-function renderNudgeTurnSubmitTarget(
-  intent: NudgeTurnTargetIntent,
+function renderThreadScheduleTurnSubmitTarget(
+  intent: ThreadScheduleTurnTargetIntent,
 ): TurnSubmitTarget {
   switch (intent.kind) {
     case "start":
@@ -231,8 +261,8 @@ function renderNudgeTurnSubmitTarget(
   }
 }
 
-function renderNudgeTurnRequestTarget(
-  intent: NudgeTurnTargetIntent,
+function renderThreadScheduleTurnRequestTarget(
+  intent: ThreadScheduleTurnTargetIntent,
 ): TurnRequestTarget {
   switch (intent.kind) {
     case "start":
@@ -245,9 +275,9 @@ function renderNudgeTurnRequestTarget(
   }
 }
 
-function nudgeTurnTargetIntentsEqual(
-  left: NudgeTurnTargetIntent,
-  right: NudgeTurnTargetIntent,
+function threadScheduleTurnTargetIntentsEqual(
+  left: ThreadScheduleTurnTargetIntent,
+  right: ThreadScheduleTurnTargetIntent,
 ): boolean {
   switch (left.kind) {
     case "start":
@@ -259,17 +289,29 @@ function nudgeTurnTargetIntentsEqual(
   }
 }
 
-function isNudgePreparationCurrent(
+function isThreadSchedulePreparationCurrent(
   tx: DbTransaction,
-  args: IsNudgePreparationCurrentArgs,
+  args: IsThreadSchedulePreparationCurrentArgs,
 ): boolean {
+  const latestEnvironment = getEnvironment(tx, args.preparation.environment.id);
+  if (
+    !latestEnvironment ||
+    !isEnvironmentReadyForScheduleQueue(latestEnvironment) ||
+    latestEnvironment.hostId !== args.preparation.environment.hostId ||
+    latestEnvironment.path !== args.preparation.environment.path ||
+    latestEnvironment.workspaceProvisionType !==
+      args.preparation.environment.workspaceProvisionType
+  ) {
+    return false;
+  }
+
   const latestThread = getThread(tx, args.preparation.thread.id);
   if (
     !latestThread ||
     latestThread.archivedAt !== null ||
     latestThread.deletedAt !== null ||
     latestThread.environmentId !== args.preparation.environment.id ||
-    !canQueueNudgeForThread(latestThread)
+    !canQueueScheduleForThread(latestThread)
   ) {
     return false;
   }
@@ -278,18 +320,18 @@ function isNudgePreparationCurrent(
     latestThread.status === "active"
       ? getActiveStoredTurnId(tx, latestThread.id)
       : null;
-  const currentTargetIntent = buildNudgeTurnTargetIntent({
+  const currentTargetIntent = buildThreadScheduleTurnTargetIntent({
     expectedTurnId,
     thread: latestThread,
   });
 
-  return nudgeTurnTargetIntentsEqual(
+  return threadScheduleTurnTargetIntentsEqual(
     args.preparation.targetIntent,
     currentTargetIntent,
   );
 }
 
-function createNudgeSweepCache(): NudgeSweepCache {
+function createThreadScheduleSweepCache(): ThreadScheduleSweepCache {
   return {
     environmentById: new Map(),
     pendingTurnSubmitByThreadId: new Map(),
@@ -297,14 +339,16 @@ function createNudgeSweepCache(): NudgeSweepCache {
   };
 }
 
-function resetNudgeSweepBatchCache(cache: NudgeSweepCache): void {
+function resetThreadScheduleSweepBatchCache(
+  cache: ThreadScheduleSweepCache,
+): void {
   cache.pendingTurnSubmitByThreadId.clear();
 }
 
 function hasPendingTurnSubmitCommand(
   db: DbConnection | DbTransaction,
   args: PendingTurnSubmitCommandArgs,
-  cache?: NudgeSweepCache,
+  cache?: ThreadScheduleSweepCache,
 ): boolean {
   const cached = cache?.pendingTurnSubmitByThreadId.get(args.threadId);
   if (cached !== undefined) {
@@ -322,9 +366,9 @@ function hasPendingTurnSubmitCommand(
 
 function getCachedEnvironment(
   db: DbConnection,
-  cache: NudgeSweepCache,
+  cache: ThreadScheduleSweepCache,
   environmentId: string,
-) {
+): ReturnType<typeof getEnvironment> {
   if (cache.environmentById.has(environmentId)) {
     return cache.environmentById.get(environmentId) ?? null;
   }
@@ -335,9 +379,9 @@ function getCachedEnvironment(
 
 function getCachedProviderThreadId(
   deps: Pick<AppDeps, "db">,
-  cache: NudgeSweepCache,
+  cache: ThreadScheduleSweepCache,
   threadId: string,
-) {
+): string | null {
   if (cache.providerThreadIdByThreadId.has(threadId)) {
     return cache.providerThreadIdByThreadId.get(threadId) ?? null;
   }
@@ -346,28 +390,34 @@ function getCachedProviderThreadId(
   return providerThreadId;
 }
 
-function toDueManagerThreadNudgeCursor(
-  nudge: DueManagerThreadNudgeRow,
-): DueManagerThreadNudgeCursor {
+function toDueThreadScheduleCursor(
+  schedule: ThreadScheduleRow,
+): DueThreadScheduleCursor {
   return {
-    createdAt: nudge.createdAt,
-    id: nudge.id,
-    nextFireAt: nudge.nextFireAt,
+    createdAt: schedule.createdAt,
+    id: schedule.id,
+    nextFireAt: schedule.nextFireAt,
   };
 }
 
-async function prepareDueNudge(
+async function prepareDueThreadSchedule(
   deps: LoggedWorkSessionDeps,
-  cache: NudgeSweepCache,
-  nudge: DueManagerThreadNudgeRow,
-  now: number,
-): Promise<DueNudgePreparation> {
-  const thread = getThread(deps.db, nudge.threadId);
-  if (!thread || thread.archivedAt !== null || thread.deletedAt !== null) {
+  cache: ThreadScheduleSweepCache,
+  schedule: ThreadScheduleRow,
+): Promise<DueThreadSchedulePreparation> {
+  const thread = getThread(deps.db, schedule.threadId);
+  if (!thread || thread.deletedAt !== null) {
     return { kind: "delete" };
   }
 
-  if (!canQueueNudgeForThread(thread)) {
+  if (thread.archivedAt !== null) {
+    return {
+      kind: "disable",
+      reason: "thread-archived",
+    };
+  }
+
+  if (!canQueueScheduleForThread(thread)) {
     return {
       kind: "skip",
       reason: "thread-not-runnable",
@@ -386,14 +436,13 @@ async function prepareDueNudge(
     cache,
     thread.environmentId,
   );
-  if (!environment || environment.status !== "ready" || !environment.path) {
+  if (!environment || !isEnvironmentReadyForScheduleQueue(environment)) {
     return {
       kind: "skip",
       reason: "environment-not-ready",
     };
   }
 
-  const input = buildScheduledNudgeInput(nudge.name);
   const providerThreadId = getCachedProviderThreadId(deps, cache, thread.id);
   if (!providerThreadId) {
     return {
@@ -443,18 +492,11 @@ async function prepareDueNudge(
     );
     const expectedTurnId =
       thread.status === "active" ? getActiveTurnId(deps, thread.id) : null;
-    const targetIntent = buildNudgeTurnTargetIntent({
+    const targetIntent = buildThreadScheduleTurnTargetIntent({
       expectedTurnId,
       thread,
     });
-    const preparedInput = await prependManagerPreferencesSystemMessageIfChanged(
-      deps,
-      {
-        hostId: environment.hostId,
-        input,
-        thread,
-      },
-    );
+    const input = buildThreadScheduleInput(schedule);
     const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
       environment: {
         id: environment.id,
@@ -469,31 +511,30 @@ async function prepareDueNudge(
         thread,
         initiator: "system",
       }),
-      input: preparedInput.input,
+      input,
       providerThreadId,
-      target: renderNudgeTurnSubmitTarget(targetIntent),
+      target: renderThreadScheduleTurnSubmitTarget(targetIntent),
       thread,
     });
 
     return {
       environment,
       execution,
-      input: preparedInput.input,
+      input,
       kind: "queue",
       preparedCommand,
       sessionId: session.id,
-      stateUpdate: preparedInput.stateUpdate,
       targetIntent,
       thread,
     };
   } catch (error) {
     deps.logger.warn(
       {
-        nudgeId: nudge.id,
+        scheduleId: schedule.id,
         threadId: thread.id,
         ...runtimeErrorLogFields(deps.config, error),
       },
-      "Skipping due manager nudge after runtime preparation failed",
+      "Skipping due thread schedule after runtime preparation failed",
     );
     return {
       kind: "skip",
@@ -502,32 +543,36 @@ async function prepareDueNudge(
   }
 }
 
-function queueDueNudgeInTransaction(
+function queueDueThreadScheduleInTransaction(
   tx: DbTransaction,
   args: {
-    nudge: DueManagerThreadNudgeRow;
-    now: number;
     nextFireAt: number;
-    preparation: QueueDueNudgePreparation;
+    now: number;
+    preparation: QueueDueThreadSchedulePreparation;
+    schedule: ThreadScheduleRow;
   },
-): QueueDueNudgeResult {
+): QueueDueThreadScheduleResult {
   if (
     hasPendingTurnSubmitCommand(tx, {
       hostId: args.preparation.environment.hostId,
       threadId: args.preparation.thread.id,
     })
   ) {
-    const advanced = advanceManagerThreadNudgeAfterFireInTransaction(tx, {
-      expectedNextFireAt: args.nudge.nextFireAt,
+    const advanced = advanceThreadScheduleAfterSkipInTransaction(tx, {
+      expectedNextFireAt: args.schedule.nextFireAt,
       nextFireAt: args.nextFireAt,
-      nudgeId: args.nudge.id,
+      scheduleId: args.schedule.id,
       now: args.now,
     });
 
     return advanced ? { kind: "pending-turn-submit" } : { kind: "lost-race" };
   }
 
-  if (!isNudgePreparationCurrent(tx, { preparation: args.preparation })) {
+  if (
+    !isThreadSchedulePreparationCurrent(tx, {
+      preparation: args.preparation,
+    })
+  ) {
     return { kind: "lost-race" };
   }
 
@@ -542,10 +587,10 @@ function queueDueNudgeInTransaction(
   }
 
   if (
-    !advanceManagerThreadNudgeAfterFireInTransaction(tx, {
-      expectedNextFireAt: args.nudge.nextFireAt,
+    !advanceThreadScheduleAfterFireInTransaction(tx, {
+      expectedNextFireAt: args.schedule.nextFireAt,
       nextFireAt: args.nextFireAt,
-      nudgeId: args.nudge.id,
+      scheduleId: args.schedule.id,
       now: args.now,
     })
   ) {
@@ -562,12 +607,10 @@ function queueDueNudgeInTransaction(
     senderThreadId: null,
     requestMethod: "turn/start",
     source: "tell",
-    target: renderNudgeTurnRequestTarget(args.preparation.targetIntent),
+    target: renderThreadScheduleTurnRequestTarget(
+      args.preparation.targetIntent,
+    ),
   });
-  recordManagerDynamicFileDeliveryInTransaction(
-    tx,
-    args.preparation.stateUpdate,
-  );
 
   queueTurnSubmitCommandInTransaction(tx, {
     command: addRequestIdToTurnSubmitCommandPayload({
@@ -579,25 +622,42 @@ function queueDueNudgeInTransaction(
     sessionId: args.preparation.sessionId,
   });
 
-  return { kind: "queued" };
+  if (args.preparation.targetIntent.kind === "start") {
+    transitionThreadStatusInTransaction(tx, {
+      id: args.preparation.thread.id,
+      newStatus: "active",
+    });
+    return { kind: "queued", transitionedToActive: true };
+  }
+
+  return { kind: "queued", transitionedToActive: false };
 }
 
-async function runDueNudgeWithPreferencesLockHeld(
+async function runDueThreadSchedule(
   deps: LoggedWorkSessionDeps,
-  cache: NudgeSweepCache,
-  nudge: DueManagerThreadNudgeRow,
+  cache: ThreadScheduleSweepCache,
+  schedule: ThreadScheduleRow,
   now: number,
 ): Promise<void> {
-  const preparation = await prepareDueNudge(deps, cache, nudge, now);
+  const preparation = await prepareDueThreadSchedule(deps, cache, schedule);
   if (preparation.kind === "delete") {
-    deleteManagerThreadNudge(deps.db, deps.hub, nudge.id);
+    deleteThreadSchedule(deps.db, deps.hub, schedule.id);
+    return;
+  }
+
+  if (preparation.kind === "disable") {
+    disableThreadScheduleFromSweep(deps, {
+      reason: preparation.reason,
+      schedule,
+      validationError: null,
+    });
     return;
   }
 
   if (preparation.kind === "skip") {
-    advanceSkippedNudge(deps, {
+    advanceSkippedThreadSchedule(deps, {
       now,
-      nudge,
+      schedule,
       reason: preparation.reason,
     });
     return;
@@ -605,18 +665,14 @@ async function runDueNudgeWithPreferencesLockHeld(
 
   let nextFireAt: number;
   try {
-    nextFireAt = computeNextFireAt(nudge, now);
+    nextFireAt = computeNextFireAt(schedule, now);
   } catch (error) {
     if (error instanceof ScheduleValidationError) {
-      deleteManagerThreadNudge(deps.db, deps.hub, nudge.id);
-      deps.logger.warn(
-        {
-          nudgeId: nudge.id,
-          reason: error.message,
-          threadId: nudge.threadId,
-        },
-        "Deleted manager nudge with invalid stored schedule",
-      );
+      disableThreadScheduleFromSweep(deps, {
+        reason: "invalid-stored-schedule",
+        schedule,
+        validationError: error.message,
+      });
       return;
     }
     throw error;
@@ -624,8 +680,8 @@ async function runDueNudgeWithPreferencesLockHeld(
 
   const transactionResult = deps.db.transaction(
     (tx) =>
-      queueDueNudgeInTransaction(tx, {
-        nudge,
+      queueDueThreadScheduleInTransaction(tx, {
+        schedule,
         now,
         nextFireAt,
         preparation,
@@ -639,76 +695,70 @@ async function runDueNudgeWithPreferencesLockHeld(
 
   if (transactionResult.kind === "pending-turn-submit") {
     cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
-    deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
+    deps.hub.notifyProject(schedule.projectId, ["thread-schedules-changed"]);
     deps.logger.info(
       {
-        nudgeId: nudge.id,
+        scheduleId: schedule.id,
         reason: "pending-turn-submit",
         threadId: preparation.thread.id,
       },
-      "Skipped due manager nudge",
+      "Skipped due thread schedule",
     );
     return;
   }
 
   cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
-  deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
+  deps.hub.notifyProject(schedule.projectId, ["thread-schedules-changed"]);
   deps.hub.notifyThread(preparation.thread.id, ["events-appended"], {
     eventTypes: ["client/turn/requested"],
   });
   deps.hub.notifyCommand(preparation.environment.hostId);
-  tryTransition(deps.db, deps.hub, preparation.thread.id, "active");
+  if (transactionResult.transitionedToActive) {
+    deps.hub.notifyThread(preparation.thread.id, ["status-changed"], {
+      projectId: schedule.projectId,
+    });
+  }
 }
 
-async function runDueNudge(
-  deps: LoggedWorkSessionDeps,
-  cache: NudgeSweepCache,
-  nudge: DueManagerThreadNudgeRow,
-  now: number,
-): Promise<void> {
-  await withManagerPreferencesDeliveryThreadIdLock(
-    { threadId: nudge.threadId },
-    () => runDueNudgeWithPreferencesLockHeld(deps, cache, nudge, now),
-  );
-}
-
-interface SweepDueNudgesArgs {
+interface SweepDueThreadSchedulesArgs {
   now?: number;
 }
 
-export async function sweepDueNudges(
+export async function sweepDueThreadSchedules(
   deps: LoggedWorkSessionDeps,
-  args: SweepDueNudgesArgs = {},
+  args: SweepDueThreadSchedulesArgs = {},
 ): Promise<void> {
   const now = args.now ?? Date.now();
-  const cache = createNudgeSweepCache();
-  let after: DueManagerThreadNudgeCursor | undefined;
+  const cache = createThreadScheduleSweepCache();
+  let after: DueThreadScheduleCursor | undefined;
 
   while (true) {
-    const dueNudges = listDueManagerThreadNudges(deps.db, {
+    const dueSchedules = listDueThreadSchedules(deps.db, {
       now,
       after,
-      limit: DUE_NUDGE_BATCH_SIZE,
+      limit: DUE_THREAD_SCHEDULE_BATCH_SIZE,
     });
-    for (const nudge of dueNudges) {
+    for (const schedule of dueSchedules) {
       try {
-        await runDueNudge(deps, cache, nudge, now);
+        await runDueThreadSchedule(deps, cache, schedule, now);
       } catch (error) {
         deps.logger.error(
           {
-            nudgeId: nudge.id,
-            threadId: nudge.threadId,
+            scheduleId: schedule.id,
+            threadId: schedule.threadId,
             err: error,
           },
-          "Failed to process a due manager nudge",
+          "Failed to process a due thread schedule",
         );
       }
     }
-    if (dueNudges.length < DUE_NUDGE_BATCH_SIZE) {
+    if (dueSchedules.length < DUE_THREAD_SCHEDULE_BATCH_SIZE) {
       return;
     }
-    const lastNudge = dueNudges[dueNudges.length - 1];
-    after = lastNudge ? toDueManagerThreadNudgeCursor(lastNudge) : undefined;
-    resetNudgeSweepBatchCache(cache);
+    const lastSchedule = dueSchedules[dueSchedules.length - 1];
+    after = lastSchedule
+      ? toDueThreadScheduleCursor(lastSchedule)
+      : undefined;
+    resetThreadScheduleSweepBatchCache(cache);
   }
 }

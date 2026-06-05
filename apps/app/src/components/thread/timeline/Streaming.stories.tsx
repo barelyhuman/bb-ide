@@ -175,7 +175,7 @@ const COMMAND_OUTPUT_CHUNKS: readonly string[] = [
   "@bb/server:test:  ✓ test/host-join-enroll.test.ts (16 tests) 451ms\n",
   "@bb/server:test:  ✓ test/internal/internal-command-result-idempotency.test.ts (16 tests) 451ms\n",
   "@bb/server:test:  ✓ test/internal/internal-event-side-effects.test.ts (16 tests) 508ms\n",
-  "@bb/server:test:  ✓ test/scheduling/nudge-sweep.test.ts (22 tests) 595ms\n",
+  "@bb/server:test:  ✓ test/scheduling/thread-schedule-sweep.test.ts (4 tests) 595ms\n",
   "@bb/server:test:  ✓ test/public/public-thread-lifecycle-regressions.test.ts (12 tests) 580ms\n",
   "@bb/server:test:  ✓ test/services/pending-interactions.test.ts (15 tests) 510ms\n",
   "@bb/server:test:  ✓ test/public/public-projects-hosts.test.ts (23 tests) 654ms\n",

@@ -52,12 +52,12 @@ export function createAutomationId(): string {
   return createId("auto");
 }
 
-export function createProjectOperationId(): string {
-  return createId("pop");
+export function createThreadScheduleId(): string {
+  return createId("tsched");
 }
 
-export function createManagerThreadNudgeId(): string {
-  return createId("mnge");
+export function createProjectOperationId(): string {
+  return createId("pop");
 }
 
 export function createEventId(): string {

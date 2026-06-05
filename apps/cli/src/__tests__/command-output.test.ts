@@ -14,6 +14,7 @@ import {
   createApiClient,
   type ApiClient,
   type EnvironmentDiffResponse,
+  type ThreadSchedule,
   type ThreadTimelineResponse,
   type TimelineRow,
   type TimelineRowBase,
@@ -117,6 +118,20 @@ interface TimelineBaseArgs {
   createdAt?: number;
 }
 
+interface ScheduleEnabledPatchJson {
+  enabled: boolean;
+}
+
+interface ScheduleEnabledPatchRequest {
+  json: ScheduleEnabledPatchJson;
+}
+
+interface MakeThreadScheduleArgs extends Partial<ThreadSchedule> {
+  id: string;
+  projectId: string;
+  threadId: string;
+}
+
 function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
   return {
     id: args.id,
@@ -193,6 +208,22 @@ function makeThread(
     latestAttentionAt: Date.now(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    ...overrides,
+  };
+}
+
+function makeThreadSchedule(overrides: MakeThreadScheduleArgs): ThreadSchedule {
+  return {
+    name: "Daily recap",
+    enabled: true,
+    kind: "cron",
+    cron: "0 8 * * 1-5",
+    timezone: "UTC",
+    prompt: "Review current work.",
+    nextFireAt: 1_800_000_000_000,
+    lastFiredAt: null,
+    createdAt: 1,
+    updatedAt: 2,
     ...overrides,
   };
 }
@@ -461,14 +492,22 @@ describe("CLI command output contracts", () => {
     expect(output).toContain("@media (prefers-color-scheme: dark)");
   });
 
-  it("bb guide async prints the async chapter", async () => {
-    await runCommand(["guide", "async"], registerGuideCommand);
+  it("bb guide schedules prints the thread schedules chapter", async () => {
+    await runCommand(["guide", "schedules"], registerGuideCommand);
 
     const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
     expect(output.trim().length).toBeGreaterThan(0);
-    expect(output).toContain("Async scheduled nudges");
-    expect(output).toContain("Use `ASYNC.md` in thread storage");
-    expect(output).toContain("No more than 20 schedules.");
+    expect(output).toContain("Thread schedules");
+    expect(output).toContain("bb thread schedule create");
+    expect(output).toContain("Schedule names are unique per thread.");
+  });
+
+  it("bb guide async aliases to the thread schedules chapter", async () => {
+    await runCommand(["guide", "async"], registerGuideCommand);
+
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output).toContain("Thread schedules");
+    expect(output).toContain("bb thread schedule create");
   });
 
   it("bb guide app prints the app chapter", async () => {
@@ -494,7 +533,7 @@ describe("CLI command output contracts", () => {
     const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
     expect(errorOutput).toContain("Unknown guide chapter 'missing'");
     expect(errorOutput).toContain(
-      "Available: threads, environments, managers, app, providers, projects, hosts, styling, async.",
+      "Available: threads, environments, managers, app, providers, projects, hosts, styling, schedules, async.",
     );
   });
 
@@ -2237,6 +2276,7 @@ describe("CLI command output contracts", () => {
 
   it("bb thread list does not infer parent-thread from BB_THREAD_ID", async () => {
     const list = vi.fn(async () => []);
+
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -2259,6 +2299,373 @@ describe("CLI command output contracts", () => {
       query: {
         projectId: "proj-env",
       },
+    });
+  });
+
+  it("bb thread schedule list calls the schedules endpoint and renders the table", async () => {
+    const schedule = makeThreadSchedule({
+      id: "tsched_list",
+      projectId: "proj-1",
+      threadId: "thread-schedule-list",
+      name: "Morning recap",
+    });
+    const get = vi.fn(async () => [schedule]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  $get: get,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "schedule", "list", "thread-schedule-list"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      param: { id: "thread-schedule-list" },
+    });
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output).toContain("tsched_list");
+    expect(output).toContain("Morning recap");
+    expect(output).toContain("0 8 * * 1-5");
+  });
+
+  it("bb thread schedule list --self --json prints raw schedules", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-schedule-self");
+    const schedule = makeThreadSchedule({
+      id: "tsched_self",
+      projectId: "proj-1",
+      threadId: "thread-schedule-self",
+    });
+    const get = vi.fn(async () => [schedule]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  $get: get,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "schedule", "list", "--self", "--json"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      param: { id: "thread-schedule-self" },
+    });
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual([schedule]);
+  });
+
+  it("bb thread schedule create omits enabled by default", async () => {
+    const schedule = makeThreadSchedule({
+      id: "tsched_create",
+      projectId: "proj-1",
+      threadId: "thread-schedule-create",
+      name: "Daily recap",
+      prompt: "Summarize useful progress.",
+    });
+    const post = vi.fn(async () => schedule);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "schedule",
+        "create",
+        "thread-schedule-create",
+        "--name",
+        "Daily recap",
+        "--cron",
+        "0 8 * * 1-5",
+        "--timezone",
+        "UTC",
+        "--prompt",
+        "Summarize useful progress.",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-schedule-create" },
+      json: {
+        name: "Daily recap",
+        cron: "0 8 * * 1-5",
+        timezone: "UTC",
+        prompt: "Summarize useful progress.",
+      },
+    });
+    const output = collectLogLines(vi.mocked(console.log)).join("\n");
+    expect(output).toContain("Schedule tsched_create");
+    expect(output).toContain("Enabled:   yes");
+  });
+
+  it("bb thread schedule create --self --disabled --json sends enabled false", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-schedule-create-self");
+    const schedule = makeThreadSchedule({
+      id: "tsched_disabled",
+      projectId: "proj-1",
+      threadId: "thread-schedule-create-self",
+      enabled: false,
+    });
+    const post = vi.fn(async () => schedule);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "schedule",
+        "create",
+        "--self",
+        "--name",
+        "Paused recap",
+        "--cron",
+        "0 8 * * *",
+        "--timezone",
+        "UTC",
+        "--prompt",
+        "Stay paused.",
+        "--disabled",
+        "--json",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-schedule-create-self" },
+      json: {
+        name: "Paused recap",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        prompt: "Stay paused.",
+        enabled: false,
+      },
+    });
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(schedule);
+  });
+
+  it("bb thread schedule update sends config patch fields", async () => {
+    const schedule = makeThreadSchedule({
+      id: "tsched_update",
+      projectId: "proj-1",
+      threadId: "thread-schedule-update",
+      name: "Updated recap",
+      cron: "0 9 * * *",
+      prompt: "Check deployment follow-up.",
+    });
+    const patch = vi.fn(async () => schedule);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  ":scheduleId": {
+                    $patch: patch,
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "schedule",
+        "update",
+        "thread-schedule-update",
+        "tsched_update",
+        "--name",
+        "Updated recap",
+        "--cron",
+        "0 9 * * *",
+        "--timezone",
+        "UTC",
+        "--prompt",
+        "Check deployment follow-up.",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: {
+        id: "thread-schedule-update",
+        scheduleId: "tsched_update",
+      },
+      json: {
+        name: "Updated recap",
+        cron: "0 9 * * *",
+        timezone: "UTC",
+        prompt: "Check deployment follow-up.",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log)).join("\n")).toContain(
+      "Schedule tsched_update",
+    );
+  });
+
+  it("bb thread schedule enable and disable send enabled patch payloads", async () => {
+    const patch = vi.fn(async (request: ScheduleEnabledPatchRequest) =>
+      makeThreadSchedule({
+        id: "tsched_toggle",
+        projectId: "proj-1",
+        threadId: "thread-schedule-toggle",
+        enabled: request.json.enabled,
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  ":scheduleId": {
+                    $patch: patch,
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "schedule",
+        "enable",
+        "thread-schedule-toggle",
+        "tsched_toggle",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+    await runCommand(
+      [
+        "thread",
+        "schedule",
+        "disable",
+        "thread-schedule-toggle",
+        "tsched_toggle",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenNthCalledWith(1, {
+      param: {
+        id: "thread-schedule-toggle",
+        scheduleId: "tsched_toggle",
+      },
+      json: { enabled: true },
+    });
+    expect(patch).toHaveBeenNthCalledWith(2, {
+      param: {
+        id: "thread-schedule-toggle",
+        scheduleId: "tsched_toggle",
+      },
+      json: { enabled: false },
+    });
+  });
+
+  it("bb thread schedule delete calls delete endpoint and supports json output", async () => {
+    const del = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                schedules: {
+                  ":scheduleId": {
+                    $delete: del,
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "schedule",
+        "delete",
+        "thread-schedule-delete",
+        "tsched_delete",
+        "--json",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(del).toHaveBeenCalledWith({
+      param: {
+        id: "thread-schedule-delete",
+        scheduleId: "tsched_delete",
+      },
+    });
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual({
+      ok: true,
+      threadId: "thread-schedule-delete",
+      scheduleId: "tsched_delete",
     });
   });
 

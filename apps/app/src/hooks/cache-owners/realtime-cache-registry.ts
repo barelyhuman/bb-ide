@@ -250,9 +250,9 @@ export const REALTIME_PROJECT_CHANGE_REGISTRY = {
       dirtyProjectListQueries, // Split once automations have dedicated query keys.
     ],
   },
-  "nudges-changed": {
+  "thread-schedules-changed": {
     dirty: [
-      dirtyProjectListQueries, // Split once nudges have dedicated query keys.
+      dirtyProjectListQueries, // Split once thread schedules have dedicated query keys.
     ],
   },
 } satisfies ProjectChangeRegistry;

@@ -55,7 +55,7 @@ import {
   settleLegacyTerminalizedExpiredLifecycleCommands,
 } from "../hosts/expired-commands.js";
 import { handleExpiredHostSessionLeases } from "../../internal/session-owner-side-effects.js";
-import { sweepDueNudges } from "../scheduling/nudge-sweep-runner.js";
+import { sweepDueThreadSchedules } from "../scheduling/thread-schedule-sweep.js";
 import {
   advanceProjectDeletion,
   listProjectsPendingDeletion,
@@ -437,7 +437,7 @@ export async function runPeriodicSweeps(
     handleExpiredHostSessionLeases(deps, { expiredLeases });
     sweepDestroyingEnvironments(deps.db, deps.hub);
     await sweepDueAutomations(deps);
-    await sweepDueNudges(deps);
+    await sweepDueThreadSchedules(deps);
     await runEnvironmentProvisioningSweep(deps);
     runProviderTurnWatchdogSweep(deps, { now });
     await runThreadLifecycleSweep(deps);

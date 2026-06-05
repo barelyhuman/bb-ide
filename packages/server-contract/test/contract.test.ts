@@ -96,6 +96,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Queued message source metadata omits reasoningLevel when no caller-owned reasoning value is being supplied.",
   "createQueuedMessageRequestSchema.executionInputSources.serviceTier":
     "Queued message source metadata omits serviceTier when no caller-owned tier value is being supplied.",
+  "createThreadScheduleRequestSchema.enabled":
+    "Schedule creation may omit enabled and use the server default.",
   "updateAutomationRequestSchema.action":
     "Automation PATCH requests omit action when leaving it unchanged.",
   "updateAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
@@ -262,6 +264,22 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Thread PATCH requests omit reasoningLevel when leaving the sticky reasoning override unchanged or use null to clear it.",
   "updateThreadRequestSchema.title":
     "Thread PATCH requests omit title when leaving it unchanged or use null to clear it.",
+  "updateThreadScheduleConfigRequestSchema.cron":
+    "Schedule config PATCH requests omit cron when leaving it unchanged.",
+  "updateThreadScheduleConfigRequestSchema.name":
+    "Schedule config PATCH requests omit name when leaving it unchanged.",
+  "updateThreadScheduleConfigRequestSchema.prompt":
+    "Schedule config PATCH requests omit prompt when leaving it unchanged.",
+  "updateThreadScheduleConfigRequestSchema.timezone":
+    "Schedule config PATCH requests omit timezone when leaving it unchanged.",
+  "updateThreadScheduleRequestSchema.cron":
+    "Schedule PATCH requests omit cron when leaving it unchanged.",
+  "updateThreadScheduleRequestSchema.name":
+    "Schedule PATCH requests omit name when leaving it unchanged.",
+  "updateThreadScheduleRequestSchema.prompt":
+    "Schedule PATCH requests omit prompt when leaving it unchanged.",
+  "updateThreadScheduleRequestSchema.timezone":
+    "Schedule PATCH requests omit timezone when leaving it unchanged.",
   "uploadedPromptAttachmentSchema.mimeType":
     "Uploaded attachments may omit mime type when the client could not determine one.",
 };
@@ -1239,7 +1257,7 @@ describe("server-contract canonical schemas", () => {
       "threads-changed",
       "project-order-changed",
       "automations-changed",
-      "nudges-changed",
+      "thread-schedules-changed",
     ]);
     expect(SYSTEM_CHANGE_KINDS).toEqual(["config-changed", "apps-changed"]);
   });
@@ -1575,6 +1593,8 @@ describe("server-contract clients", () => {
       createHostJoinRequestSchema: contract.createHostJoinRequestSchema,
       createManagerThreadRequestSchema:
         contract.createManagerThreadRequestSchema,
+      createThreadScheduleRequestSchema:
+        contract.createThreadScheduleRequestSchema,
       createThreadRequestSchema: contract.createThreadRequestSchema,
       environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
@@ -1610,7 +1630,14 @@ describe("server-contract clients", () => {
       updateProjectRequestSchema: contract.updateProjectRequestSchema,
       updateProjectSourceRequestSchema:
         contract.updateProjectSourceRequestSchema,
+      updateThreadScheduleConfigRequestSchema:
+        contract.updateThreadScheduleConfigRequestSchema,
+      updateThreadScheduleEnabledRequestSchema:
+        contract.updateThreadScheduleEnabledRequestSchema,
+      updateThreadScheduleRequestSchema:
+        contract.updateThreadScheduleRequestSchema,
       updateThreadRequestSchema: contract.updateThreadRequestSchema,
+      threadScheduleSchema: contract.threadScheduleSchema,
       uploadedPromptAttachmentSchema: contract.uploadedPromptAttachmentSchema,
     });
 
