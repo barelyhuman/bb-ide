@@ -14,7 +14,6 @@ import type {
   PendingInteractionApprovalSubject,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionUserQuestionQuestion,
-  ProviderCapabilities,
   ThreadEvent,
   ThreadEventItem,
   UserQuestionPendingInteractionPayload,
@@ -781,12 +780,7 @@ function buildClaudeCodeConfig(
 // Adapter factory
 // ---------------------------------------------------------------------------
 
-/** Options for overriding claude-code adapter defaults. Used by test infrastructure. */
 export interface CreateClaudeCodeProviderAdapterOptions extends ProviderAdapterFactoryOptions {
-  /** Override the bridge binary. */
-  processCommand?: string;
-  /** Override the bridge binary args. */
-  processArgs?: string[];
   /** Override the directory containing bundled bridge files. */
   bridgeBundleDir?: string;
   /** Prefix for bb-owned turn ids emitted by this adapter instance. */
@@ -815,14 +809,7 @@ export function createClaudeCodeProviderAdapter(
   const additionalWorkspaceWriteRoots =
     opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("claude-code");
-  const capabilities: ProviderCapabilities = {
-    supportsArchive: providerInfo.capabilities.supportsArchive,
-    supportsRename: providerInfo.capabilities.supportsRename,
-    supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
-    supportsUserQuestion: providerInfo.capabilities.supportsUserQuestion,
-    supportedPermissionModes:
-      providerInfo.capabilities.supportedPermissionModes,
-  };
+  const capabilities = providerInfo.capabilities;
 
   const turnState = createProviderTurnStateRegistry<ClaudeTurnState>({
     createState: () => ({
@@ -1008,15 +995,13 @@ export function createClaudeCodeProviderAdapter(
     displayName: providerInfo.displayName,
     capabilities,
     process: {
-      command: opts?.processCommand ?? "node",
-      args:
-        opts?.processArgs ??
-        resolveBridgeProcessArgs({
-          bridgeBundleDir: opts?.bridgeBundleDir,
-          bundleFileName: "bb-claude-code-bridge.mjs",
-          importMetaUrl: import.meta.url,
-          bridgeRelativePath: "bridge/bridge.js",
-        }),
+      command: "node",
+      args: resolveBridgeProcessArgs({
+        bridgeBundleDir: opts?.bridgeBundleDir,
+        bundleFileName: "bb-claude-code-bridge.mjs",
+        importMetaUrl: import.meta.url,
+        bridgeRelativePath: "bridge/bridge.js",
+      }),
     },
 
     // -- Unified command builder -------------------------------------------

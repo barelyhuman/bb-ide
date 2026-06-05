@@ -12,7 +12,6 @@ import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type {
-  ProviderCapabilities,
   ThreadEvent,
   ThreadEventContextWindowUsage,
   ThreadEventItem,
@@ -654,12 +653,7 @@ function createPiModelContextWindowResolver(): PiModelContextWindowResolver {
 // Adapter factory
 // ---------------------------------------------------------------------------
 
-/** Options for overriding pi adapter defaults. Used by test infrastructure. */
 export interface CreatePiProviderAdapterOptions {
-  /** Override the bridge binary. */
-  processCommand?: string;
-  /** Override the bridge binary args. */
-  processArgs?: string[];
   /** Override the directory containing bundled bridge files. */
   bridgeBundleDir?: string;
   /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
@@ -735,14 +729,7 @@ export function createPiProviderAdapter(
   opts?: CreatePiProviderAdapterOptions,
 ): ProviderAdapter {
   const providerInfo = getBuiltInAgentProviderInfo("pi");
-  const capabilities: ProviderCapabilities = {
-    supportsArchive: providerInfo.capabilities.supportsArchive,
-    supportsRename: providerInfo.capabilities.supportsRename,
-    supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
-    supportsUserQuestion: providerInfo.capabilities.supportsUserQuestion,
-    supportedPermissionModes:
-      providerInfo.capabilities.supportedPermissionModes,
-  };
+  const capabilities = providerInfo.capabilities;
   const resolveModelContextWindow =
     opts?.resolveModelContextWindow ?? createPiModelContextWindowResolver();
 
@@ -1230,15 +1217,13 @@ export function createPiProviderAdapter(
     displayName: providerInfo.displayName,
     capabilities,
     process: {
-      command: opts?.processCommand ?? "node",
-      args:
-        opts?.processArgs ??
-        resolveBridgeProcessArgs({
-          bridgeBundleDir: opts?.bridgeBundleDir,
-          bundleFileName: "bb-pi-bridge.mjs",
-          importMetaUrl: import.meta.url,
-          bridgeRelativePath: "bridge/bridge.js",
-        }),
+      command: "node",
+      args: resolveBridgeProcessArgs({
+        bridgeBundleDir: opts?.bridgeBundleDir,
+        bundleFileName: "bb-pi-bridge.mjs",
+        importMetaUrl: import.meta.url,
+        bridgeRelativePath: "bridge/bridge.js",
+      }),
     },
 
     // -- Unified command builder -------------------------------------------

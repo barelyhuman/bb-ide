@@ -20,7 +20,6 @@ import type {
   ClientTurnRequestId,
   PermissionEscalation,
   PromptInput,
-  ProviderCapabilities,
   ReasoningLevel,
   ServiceTier,
   ThreadEvent,
@@ -900,14 +899,7 @@ export function createCodexProviderAdapter(
   const additionalWorkspaceWriteRoots =
     opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("codex");
-  const capabilities: ProviderCapabilities = {
-    supportsArchive: providerInfo.capabilities.supportsArchive,
-    supportsRename: providerInfo.capabilities.supportsRename,
-    supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
-    supportsUserQuestion: providerInfo.capabilities.supportsUserQuestion,
-    supportedPermissionModes:
-      providerInfo.capabilities.supportedPermissionModes,
-  };
+  const capabilities = providerInfo.capabilities;
   const nativeTurnStartClientRequestIdsByProviderThreadId = new Map<
     string,
     ClientTurnRequestId[]

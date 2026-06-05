@@ -159,7 +159,6 @@ interface OpenSessionArgs {
   loadedEnvironments:
     | HostDaemonLoadedEnvironment[]
     | Promise<HostDaemonLoadedEnvironment[]>;
-  protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
 }
 
 export interface ServerClient {
@@ -338,7 +337,7 @@ export function createServerClient(
         hostName: args.hostName,
         hostType: args.hostType,
         dataDir: args.dataDir,
-        protocolVersion: args.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: await args.activeThreads,
         loadedEnvironments: await args.loadedEnvironments,
       });

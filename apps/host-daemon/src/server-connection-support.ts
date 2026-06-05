@@ -1,6 +1,5 @@
 import ReconnectingWebSocket from "partysocket/ws";
 import {
-  HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonActiveThread,
   type HostDaemonLoadedEnvironment,
   type HostDaemonOnlineRpcRequestMessage,
@@ -73,7 +72,6 @@ export interface ServerConnectionOptions {
   onSessionOpened?: (
     session: HostDaemonSessionOpenResponse,
   ) => void | Promise<void>;
-  protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
   createWebSocket?: CreateReconnectingWebSocket;
   minReconnectionDelay?: number;
   maxReconnectionDelay?: number;
