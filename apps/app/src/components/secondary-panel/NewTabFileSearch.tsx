@@ -410,10 +410,9 @@ function FileSearchMessage({
 }
 
 /**
- * Shared button shell for the Apps-section launcher tiles (app rows and the
- * Create App action). Centralizing it keeps the listbox option/keyboard
- * contract — `role="option"`, `aria-selected`, `id`, hover-to-activate —
- * identical across every navigable tile.
+ * Shared button shell for launcher rows. File-search result rows use listbox
+ * option semantics; rows in the + popout keep native button semantics because
+ * the popout is a simple action list rather than a composite widget.
  */
 function LauncherTile({
   id,
@@ -431,8 +430,8 @@ function LauncherTile({
     <button
       type="button"
       id={id}
-      role="option"
-      aria-selected={isActive}
+      role={variant === "result" ? "option" : undefined}
+      aria-selected={variant === "result" ? isActive : undefined}
       onClick={onSelect}
       onMouseEnter={onActivate}
       title={title}

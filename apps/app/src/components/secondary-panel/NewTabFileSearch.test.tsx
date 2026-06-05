@@ -228,7 +228,7 @@ describe("NewTabActionMenu", () => {
   it("omits the Apps header when Create App is the only app-related row", () => {
     renderActionMenu();
 
-    expect(screen.getByRole("option", { name: "Create App..." })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create App..." })).toBeTruthy();
     expect(screen.queryByText("Apps")).toBeNull();
   });
 
@@ -238,7 +238,7 @@ describe("NewTabActionMenu", () => {
     renderActionMenu();
 
     expect(screen.getByText("Apps")).toBeTruthy();
-    expect(screen.getByRole("option", { name: /Review Board/u })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Review Board/u })).toBeTruthy();
   });
 
   it("shows Open browser as a headerless action row on the desktop build", () => {
@@ -246,7 +246,7 @@ describe("NewTabActionMenu", () => {
 
     renderActionMenu({ onOpenBrowser: vi.fn() });
 
-    expect(screen.getByRole("option", { name: /Open browser/u })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Open browser/u })).toBeTruthy();
     expect(screen.queryByText("Open")).toBeNull();
   });
 
@@ -256,11 +256,11 @@ describe("NewTabActionMenu", () => {
     renderActionMenu({ onOpenBrowser: vi.fn() });
 
     expect(
-      screen.getAllByRole("option").map((option) => option.textContent ?? ""),
+      screen.getAllByRole("button").map((button) => button.textContent ?? ""),
     ).toEqual(["Open file", "Open browser", "Create App..."]);
   });
 
-  it("keeps menu actions compact without explainer text or visible ring classes", () => {
+  it("keeps menu actions compact with native button semantics and non-ring focus", () => {
     window.bbDesktop = createDesktopApiStub();
 
     renderActionMenu({ onOpenBrowser: vi.fn() });
@@ -271,8 +271,11 @@ describe("NewTabActionMenu", () => {
     expect(
       within(menu).queryByText(/Search workspace and thread files/u),
     ).toBeNull();
-    for (const option of within(menu).getAllByRole("option")) {
-      expect(option.className).not.toContain("focus-visible:ring");
+    expect(within(menu).queryAllByRole("option")).toHaveLength(0);
+    for (const button of within(menu).getAllByRole("button")) {
+      expect(button.getAttribute("aria-selected")).toBeNull();
+      expect(button.className).not.toContain("focus-visible:ring");
+      expect(button.className).toContain("focus-visible:bg-state-hover");
     }
   });
 
@@ -289,7 +292,7 @@ describe("NewTabActionMenu", () => {
       onOpenFileSearch: () => calls.push("open-file"),
     });
 
-    fireEvent.click(screen.getByRole("option", { name: /Open file/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Open file/u }));
 
     expect(calls).toEqual(["close", "open-file"]);
   });
@@ -302,7 +305,7 @@ describe("NewTabActionMenu", () => {
       onOpenBrowser: () => calls.push("open-browser"),
     });
 
-    fireEvent.click(screen.getByRole("option", { name: /Open browser/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Open browser/u }));
 
     expect(calls).toEqual(["close", "open-browser"]);
   });
@@ -314,7 +317,7 @@ describe("NewTabActionMenu", () => {
       onCreateAppPromptPrefill: () => calls.push("create-app"),
     });
 
-    fireEvent.click(screen.getByRole("option", { name: "Create App..." }));
+    fireEvent.click(screen.getByRole("button", { name: "Create App..." }));
 
     expect(calls).toEqual(["close", "create-app"]);
   });

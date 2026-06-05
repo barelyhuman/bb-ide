@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const LAUNCHER_ROW_SHELL_CLASS =
   "group flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none";
 export const LAUNCHER_ROW_BASE_CLASS = `${LAUNCHER_ROW_SHELL_CLASS} focus-visible:ring-1 focus-visible:ring-ring`;
-export const LAUNCHER_MENU_ROW_BASE_CLASS = LAUNCHER_ROW_SHELL_CLASS;
+export const LAUNCHER_MENU_ROW_BASE_CLASS = `${LAUNCHER_ROW_SHELL_CLASS} focus-visible:bg-state-hover focus-visible:text-foreground`;
 export const LAUNCHER_ROW_ICON_CLASS =
   "flex size-4 shrink-0 items-center justify-center overflow-hidden text-muted-foreground";
 
