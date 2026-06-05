@@ -461,8 +461,8 @@ export function Overview() {
         />
       </StoryRow>
       <StoryRow
-        label="env: remote host"
-        hint="Working remotely · host-name with connection dot"
+        label="env: secondary host"
+        hint="Host-scoped environment · host-name with connection dot"
       >
         <Row
           submitMode={{ kind: "ready" }}

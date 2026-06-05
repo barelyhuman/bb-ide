@@ -3,9 +3,10 @@
 You can run bb on one machine — your desktop, laptop, or workstation — and use
 it from a browser on any other device on the same private network. Phones,
 tablets, other laptops; anything with a browser can be a control surface for
-the same projects, threads, and connected hosts.
+the same projects, threads, and local host.
 
-The machine running bb does the work. Other devices are just browsers.
+The machine running bb does the work. Other devices are just browsers; they do
+not become execution hosts.
 
 ## What you'll need
 

@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   createEnvironment,
   createQueuedThreadMessage,
@@ -10,7 +12,10 @@ import {
   openSession,
   upsertHost,
 } from "@bb/db";
-import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+import {
+  HOST_DAEMON_PROTOCOL_VERSION,
+  HOST_ID_FILE_NAME,
+} from "@bb/host-daemon-contract";
 import {
   encodeClientTurnRequestIdNumber,
   parseStoredThreadEvent,
@@ -80,6 +85,13 @@ export function seedHostSession(
   const host = seedHost(deps, args);
   const session = seedSession(deps, host.id);
   return { host, session };
+}
+
+export function seedPrimaryHost(
+  deps: Pick<AppDeps, "config">,
+  hostId: string,
+): void {
+  writeFileSync(join(deps.config.dataDir, HOST_ID_FILE_NAME), hostId);
 }
 
 export function seedSession(deps: Pick<AppDeps, "db" | "hub">, hostId: string) {

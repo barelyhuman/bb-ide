@@ -7,8 +7,8 @@ import { complete, getModel, validateToolCall } from "@mariozechner/pi-ai";
 import type { Static, TSchema, Tool, ToolCall } from "@mariozechner/pi-ai";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { requireDefaultConnectedPersistentHostId } from "../lib/entity-lookup.js";
 import { runLiveCommandAndWait } from "../hosts/live-command-wait.js";
+import { requireConnectedPrimaryHostId } from "../hosts/primary-host.js";
 
 type BaseInferenceDeps = Pick<AppDeps, "config" | "logger">;
 type InferenceCompleteDeps = LoggedWorkSessionDeps;
@@ -106,7 +106,7 @@ async function completeWithCodexHostDaemon<T extends TSchema>(
   modelInfo: ProviderModelInfo,
   args: InferenceCompleteArgs<T>,
 ): Promise<Static<T> | null> {
-  const hostId = requireDefaultConnectedPersistentHostId(deps.db);
+  const hostId = requireConnectedPrimaryHostId(deps);
   const timeoutMs = args.timeoutMs ?? DEFAULT_INFERENCE_TIMEOUT_MS;
   try {
     const result = await runLiveCommandAndWait(deps, {

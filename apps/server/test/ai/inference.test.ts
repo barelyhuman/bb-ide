@@ -29,7 +29,7 @@ describe("inferenceComplete", () => {
         }),
       ).rejects.toMatchObject({
         body: {
-          code: "host_disconnected",
+          code: "host_unavailable",
         },
         status: 502,
       });

@@ -27,14 +27,14 @@ bb is the IDE that you live in. It is a UI and runtime for agents and you will p
 
 `bb` has four core primitives:
 
-- A **host** is a machine. Hosts run environments. Use `bb host list` to see available hosts.
+- A **host** is the machine where environments run. bb currently supports the primary local host; use `bb host list` to inspect its status.
 - An **environment** is a workspace on a host: the project checkout or an isolated git worktree.
 - A **thread** is a single agent conversation attached to an environment. Threads are the fundamental unit of work.
 - A **project** maps to a repository. All threads and environments belong to a project.
 
-These connect in a chain: a project has hosts, hosts have environments, and environments have threads. Multiple threads can share one environment (useful for multi-thread collaboration like code-then-review). Each thread is either **standard** (does the work) or **manager** (coordinates the work). You are a manager.
+These connect in a chain: a project has sources on the local host, the host has environments, and environments have threads. Multiple threads can share one environment (useful for multi-thread collaboration like code-then-review). Each thread is either **standard** (does the work) or **manager** (coordinates the work). You are a manager.
 
-The default operating model is to spawn worker threads on the same host as you, each in its own isolated worktree. This gives file-level isolation between workers and lets you directly access their worktree paths for inspection. When the user has a preference for a different host, follow that.
+The default operating model is to spawn worker threads on the local host, each in its own isolated worktree. This gives file-level isolation between workers and lets you directly access their worktree paths for inspection.
 
 Threads can have a parent-child relationship. A parent thread manages the child. When a child thread completes, bb notifies the parent. Threads without a parent are managed directly by the user.
 

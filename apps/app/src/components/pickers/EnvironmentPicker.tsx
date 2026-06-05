@@ -147,9 +147,9 @@ export function EnvironmentPickerUI({
         ? "New worktree"
         : isLocal
           ? "Work locally"
-          : "Work remotely";
+          : "Work on host";
     const compactModeLabel =
-      parsed.mode === "worktree" ? "Worktree" : isLocal ? "Local" : "Remote";
+      parsed.mode === "worktree" ? "Worktree" : isLocal ? "Local" : "Host";
     const icon = getEnvironmentWorkspaceLabelIconName(
       parsed.mode === "worktree" ? "managed-worktree" : "other",
     );
@@ -265,13 +265,17 @@ export function EnvironmentPicker({
 }: EnvironmentPickerProps) {
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useEffectiveHosts();
+  const localHosts = useMemo(
+    () => hosts.filter((host) => isLocalHost(host.id)),
+    [hosts, isLocalHost],
+  );
 
   return (
     <EnvironmentPickerUI
       value={value}
       onChange={onChange}
       sources={sources}
-      hosts={hosts}
+      hosts={localHosts}
       isLocalHost={isLocalHost}
       reuseDisabled={reuseDisabled}
       muted={muted}
@@ -366,7 +370,7 @@ function HostSectionGroup({
       {enabled ? (
         <>
           <EnvironmentMenuItem
-            label={section.isLocal ? "Work locally" : "Work remotely"}
+            label={section.isLocal ? "Work locally" : "Work on host"}
             icon={getEnvironmentWorkspaceLabelIconName("other")}
             itemValue={localValue}
             selectedValue={value}

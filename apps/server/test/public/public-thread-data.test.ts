@@ -45,6 +45,7 @@ import {
   seedEvent,
   seedHost,
   seedHostSession,
+  seedPrimaryHost,
   seedProjectWithSource,
   seedStoredEvent,
   seedThread,
@@ -1247,6 +1248,7 @@ describe("public thread data routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-composer-thread",
       });
+      seedPrimaryHost(harness.deps, host.id);
       const providerResponder = registerProviderHostRpcResponder(harness, {
         hostId: host.id,
         sessionId: session.id,

@@ -39,7 +39,7 @@ export function Overview() {
           isLocalHost={isLocalHost}
         />
       </StoryRow>
-      <StoryRow label={`${HOST_NAMES.local}, remote host selected`}>
+      <StoryRow label={`${HOST_NAMES.local}, secondary host selected`}>
         <HostPicker
           hosts={multipleHosts}
           eligibleHosts={multipleHosts}

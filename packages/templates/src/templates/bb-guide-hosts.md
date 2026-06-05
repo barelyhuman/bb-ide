@@ -9,8 +9,10 @@ Host commands
 
 Hosts are where environments run.
 
-- Persistent hosts are long-lived machines (your laptop, a remote server).
+- The supported host is the primary local daemon on the machine running bb.
+- Host IDs remain part of the environment and project-source model so bb can
+  keep that boundary clean for future expansion.
 
-  bb host list                            List persistent hosts with status
+  bb host list                            List registered hosts with status
 
 Host status values: connected, disconnected.

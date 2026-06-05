@@ -112,5 +112,4 @@ behavior, see the
 - [Platform support](https://github.com/ymichael/bb/blob/main/docs/platform-support.md)
 - [Configuration](https://github.com/ymichael/bb/blob/main/docs/configuration.md)
 - [Using bb on multiple devices](https://github.com/ymichael/bb/blob/main/docs/multiple-devices.md)
-- [Adding another host](https://github.com/ymichael/bb/blob/main/docs/additional-hosts.md)
 - [Worktrees and setup scripts](https://github.com/ymichael/bb/blob/main/docs/worktrees.md)

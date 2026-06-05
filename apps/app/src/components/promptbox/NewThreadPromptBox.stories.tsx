@@ -297,7 +297,6 @@ function ProjectlessThreadRow() {
           branch: baseBranch,
           worktree: baseWorktree,
           permission: basePermission,
-          projectlessHost: baseHost,
         }}
         onModeChange={noop}
         project={{

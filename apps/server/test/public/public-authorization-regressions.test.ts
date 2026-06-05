@@ -12,6 +12,7 @@ import {
   seedQueuedMessage,
   seedEnvironment,
   seedHostSession,
+  seedPrimaryHost,
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
@@ -102,6 +103,7 @@ describe("public authorization regressions", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-managed-check",
       });
+      seedPrimaryHost(harness.deps, host.id);
       const { host: sourceHost } = seedHostSession(harness.deps, {
         id: "host-managed-check-source",
       });

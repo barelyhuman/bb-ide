@@ -13,7 +13,6 @@ import type {
 } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
-  CreateHostJoinResponse,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateQueuedMessageRequest,
@@ -1432,20 +1431,6 @@ export async function getSystemConfig(): Promise<SystemConfigResponse> {
 
 export async function listHosts(): Promise<Host[]> {
   return request<Host[]>(apiClient.hosts.$get());
-}
-
-export async function createHostJoin(): Promise<CreateHostJoinResponse> {
-  return request<CreateHostJoinResponse>(
-    apiClient.hosts.join.$post({
-      json: {
-        hostType: "persistent",
-      },
-    }),
-  );
-}
-
-export async function cancelHostJoin(id: string): Promise<void> {
-  await requestVoid(apiClient.hosts[":id"].join.$delete({ param: { id } }));
 }
 
 export async function getHost(id: string): Promise<Host> {

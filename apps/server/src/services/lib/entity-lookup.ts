@@ -3,7 +3,6 @@ import {
   getEnvironment,
   getHost,
   getNonDestroyedHost,
-  getMostRecentlyUpdatedConnectedHostId,
   getProject,
   getThread,
   listConnectedHostIds,
@@ -272,22 +271,6 @@ export function requirePublicThreadEnvironment(
   const result = requirePublicThreadEnvironmentAllowingDestroyed(db, threadId);
   ensureThreadEnvironmentAvailable(result.environment);
   return result;
-}
-
-export function requireDefaultConnectedPersistentHostId(
-  db: DbConnection,
-): string {
-  const hostId = getMostRecentlyUpdatedConnectedHostId(db, {
-    hostType: "persistent",
-  });
-  if (!hostId) {
-    throw new ApiError(
-      502,
-      "host_disconnected",
-      "Persistent host is not connected",
-    );
-  }
-  return hostId;
 }
 
 export function listHostThreadIds(db: DbConnection, hostId: string): string[] {

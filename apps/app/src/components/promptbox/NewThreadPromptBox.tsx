@@ -92,7 +92,7 @@ export interface NewThreadBranchConfig {
   onCreateBaseChange?: (value: string) => void;
   /**
    * When provided, the picker exposes a "Create new branch" item. Only set
-   * for `host:local` (work locally / remotely). Managed-worktree mode uses
+   * for `host:local` (work locally / on host). Managed-worktree mode uses
    * the picked branch as the branch source instead.
    */
   onCreate?: () => void;
@@ -150,16 +150,11 @@ export type NewThreadModeConfig =
       /** Slot rendered inside the prompt box card, above the text area.
        * Used by RootComposeView to surface the reuse-worktree pill. */
       header?: ReactNode;
-      /** Projectless threads choose only a host. When set, this replaces the
-       * project environment / branch / worktree pickers below the prompt. */
-      projectlessHost?: NewThreadHostConfig;
     }
   | {
       mode: "manager";
-      /** Host picker shown beside the project selector. Managers need a
-       * host because the manager thread runs on it; thread mode picks one
-       * via the env picker, which manager mode lacks. */
-      host: NewThreadHostConfig;
+      /** Optional host picker seam for future multi-host manager creation. */
+      host?: NewThreadHostConfig;
     };
 
 export interface NewThreadPromptBoxUIProps {
@@ -245,9 +240,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
 }: NewThreadPromptBoxUIProps) {
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
-  const isProjectlessPrompt =
-    project?.value === null ||
-    (modeConfig.mode === "thread" && modeConfig.projectlessHost !== undefined);
+  const isProjectlessPrompt = project?.value === null;
   const placeholder = getNewThreadPromptPlaceholder({
     mode: modeConfig.mode,
     isProjectless: isProjectlessPrompt,
@@ -307,16 +300,15 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
               createProject={project.createProject}
             />
           ) : null}
-          {modeConfig.mode === "manager" ? (
+          {modeConfig.mode === "manager" && modeConfig.host ? (
             <HostSlot host={modeConfig.host} />
-          ) : (
+          ) : modeConfig.mode === "thread" && project?.value !== null ? (
             <ThreadEnvSlot
               environment={modeConfig.environment}
               branch={modeConfig.branch}
               worktree={modeConfig.worktree}
-              projectlessHost={modeConfig.projectlessHost}
             />
-          )}
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {modeConfig.mode === "thread" ? (
@@ -355,23 +347,18 @@ interface ThreadEnvSlotProps {
   environment: NewThreadEnvironmentConfig;
   branch: NewThreadBranchConfig;
   worktree: NewThreadWorktreeConfig;
-  projectlessHost: NewThreadHostConfig | undefined;
 }
 
 function ThreadEnvSlot({
   environment,
   branch,
   worktree,
-  projectlessHost,
 }: ThreadEnvSlotProps) {
   const parsedEnvironment = useMemo(
     () => parseEnvironmentValue(environment.value),
     [environment.value],
   );
   const branchMenuKind = getBranchPickerMenuKind({ parsedEnvironment });
-  if (projectlessHost) {
-    return <HostSlot host={projectlessHost} />;
-  }
   const showBranchPicker = parsedEnvironment?.type === "host";
   const showWorktreePicker = parsedEnvironment?.type === "reuse";
   return (
@@ -549,11 +536,10 @@ export type NewThreadConnectedModeConfig =
       worktree: NewThreadWorktreeConfig;
       permission: ExecutionPermissionConfig;
       header?: ReactNode;
-      projectlessHost?: NewThreadHostConfig;
     }
   | {
       mode: "manager";
-      host: NewThreadHostConfig;
+      host?: NewThreadHostConfig;
     };
 
 export interface NewThreadPromptBoxProps extends Omit<
@@ -586,7 +572,7 @@ export function NewThreadPromptBox({
         {...rest}
         modeConfig={{
           mode: "manager",
-          host: modeConfig.host,
+          ...(modeConfig.host ? { host: modeConfig.host } : {}),
         }}
       />
     );
@@ -604,20 +590,24 @@ function ConnectedThreadModeBranch({
 }: ConnectedThreadModeBranchProps) {
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useEffectiveHosts();
+  const localHosts = useMemo(
+    () => hosts.filter((host) => isLocalHost(host.id)),
+    [hosts, isLocalHost],
+  );
 
   const parsedEnvironment = parseEnvironmentValue(
     threadConfig.environment.value,
   );
   const isHostMode = parsedEnvironment?.type === "host";
   // Create-new-branch is only meaningful for host:local (work locally /
-  // remotely) — the server checks out a fresh branch in the primary checkout
+  // on host) — the server checks out a fresh branch in the primary checkout
   // before the thread starts. Worktree mode uses the picked branch as the
   // branch source instead, so we omit onCreate there.
   const allowCreate = isHostMode && parsedEnvironment.mode === "local";
 
   const uiEnvironment = useMemo(
-    () => ({ ...threadConfig.environment, hosts, isLocalHost }),
-    [threadConfig.environment, hosts, isLocalHost],
+    () => ({ ...threadConfig.environment, hosts: localHosts, isLocalHost }),
+    [threadConfig.environment, localHosts, isLocalHost],
   );
   const uiBranch = useMemo<NewThreadBranchConfig>(() => {
     const branch = threadConfig.branch;
@@ -657,7 +647,6 @@ function ConnectedThreadModeBranch({
         worktree: threadConfig.worktree,
         permission: threadConfig.permission,
         header: threadConfig.header,
-        projectlessHost: threadConfig.projectlessHost,
       }}
     />
   );

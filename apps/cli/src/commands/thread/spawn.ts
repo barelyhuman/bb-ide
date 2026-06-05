@@ -9,7 +9,7 @@ import {
   resolveExplicitIdFlag,
   resolveThreadId,
 } from "../../context-env.js";
-import { fetchLocalHostId } from "../../daemon.js";
+import { resolveLocalHostId } from "../../daemon.js";
 import {
   outputJson,
   parseReasoningLevel,
@@ -35,7 +35,6 @@ interface ThreadSpawnCommandOptions {
   reasoningLevel?: string;
   title?: string;
   serviceTier?: string;
-  host?: string;
   permissionMode?: string;
   contextParentThread?: boolean;
 }
@@ -153,7 +152,6 @@ export function registerSpawnCommand(
     .option("--title <title>", "Thread title")
     .option("--service-tier <tier>", "Service tier: fast or default")
     .option("--permission-mode <mode>", PERMISSION_MODE_HELP)
-    .option("--host <id>", "Host ID (defaults to local host)")
     .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
@@ -168,18 +166,15 @@ export function registerSpawnCommand(
 
         const projectId = resolveProjectId(opts.project) ?? PERSONAL_PROJECT_ID;
         const environmentValue = resolveEnvironmentId(opts.environment);
-        let hostId: string | null = opts.host ?? null;
         const defaultPersonalWorkspace =
           projectId === PERSONAL_PROJECT_ID &&
           !environmentValue &&
           !opts.newEnvironment;
         const needsHostId =
-          !defaultPersonalWorkspace &&
-          !hostId &&
-          (!environmentValue || looksLikePath(environmentValue));
-        if (needsHostId) {
-          hostId = await fetchLocalHostId();
-        }
+          Boolean(opts.newEnvironment) ||
+          (!defaultPersonalWorkspace &&
+            (!environmentValue || looksLikePath(environmentValue)));
+        const hostId = needsHostId ? await resolveLocalHostId() : null;
         const environment = buildSpawnEnvironment({
           defaultPersonalWorkspace,
           environmentValue,

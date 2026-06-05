@@ -7,7 +7,7 @@ import {
 import type { LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { runLiveCommandAndWait } from "../hosts/live-command-wait.js";
-import { requireDefaultConnectedPersistentHostId } from "../lib/entity-lookup.js";
+import { requireConnectedPrimaryHostId } from "../hosts/primary-host.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 
 interface TranscribeVoiceInputArgs {
@@ -33,7 +33,7 @@ function isCodexVoiceTranscriptionAvailable(
   deps: LoggedWorkSessionDeps,
 ): boolean {
   try {
-    requireDefaultConnectedPersistentHostId(deps.db);
+    requireConnectedPrimaryHostId(deps);
     return true;
   } catch {
     return false;
@@ -114,7 +114,7 @@ async function transcribeWithCodexHostDaemon(
   modelInfo: ProviderModelInfo,
   args: TranscribeVoiceInputArgs,
 ): Promise<string> {
-  const hostId = requireDefaultConnectedPersistentHostId(deps.db);
+  const hostId = requireConnectedPrimaryHostId(deps);
   const audioBase64 = Buffer.from(await args.file.arrayBuffer()).toString(
     "base64",
   );

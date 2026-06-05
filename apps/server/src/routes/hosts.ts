@@ -20,6 +20,10 @@ import { ApiError } from "../errors.js";
 import { assertMatchingExistingHostType } from "../services/hosts/host-type-guard.js";
 import { resolveHostJoinServerUrl } from "../services/hosts/host-join-server-url.js";
 import {
+  assertPrimaryHostNotDeleted,
+  rejectAdditionalHostJoin,
+} from "../services/hosts/primary-host.js";
+import {
   listPublicHostsWithStatus,
   requireNonDestroyedHostWithStatus,
 } from "../services/lib/entity-lookup.js";
@@ -69,9 +73,11 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
 
   post("/hosts/join", createHostJoinRequestSchema, async (context, payload) => {
     const isLocalJoin = isLocalHostJoinRequest(payload);
+    if (!isLocalJoin) {
+      rejectAdditionalHostJoin();
+    }
     const serverUrl = resolveHostJoinServerUrl({
       appUrl: deps.config.appUrl,
-      isLocalJoin,
       remoteAddress: getTrustedRemoteAddress(context),
       serverPort: deps.config.serverPort,
     });
@@ -139,6 +145,7 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   del("/hosts/:id", (context) => {
     const id = context.req.param("id");
     requireNonDestroyedHostWithStatus(deps.db, id);
+    assertPrimaryHostNotDeleted(deps, id);
     const deleted = deleteHost(deps.db, deps.hub, id);
     if (!deleted) {
       throw new ApiError(404, "host_not_found", "Host not found");

@@ -33,7 +33,7 @@ function createHostRouteApp(args: CreateHostRouteAppArgs): Hono {
 }
 
 describe("host join and enroll routes", () => {
-  it("creates join material for an additional host", async () => {
+  it("rejects non-local host join requests", async () => {
     await withTestHarness(async (harness) => {
       const response = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
@@ -45,21 +45,9 @@ describe("host join and enroll routes", () => {
         }),
       });
 
-      expect(response.status).toBe(201);
-      const body = await parseHostJoinResponse(response);
-      expect(body.hostId).toMatch(/^host_/u);
-      expect(body.joinCode).toMatch(/^bbde_/u);
-      expect(body.joinCommand).toContain("npx bb-app");
-      expect(body.joinCommand).toContain("host-daemon");
-      expect(body.joinCommand).toContain(
-        "--server-url 'https://bb.example.test'",
-      );
-      expect(body.joinCommand).toContain(body.hostId);
-      expect(body.joinCommand).toContain(body.joinCode);
-      expect(body.expiresAt).toBeGreaterThan(Date.now());
-      expect(getHost(harness.db, body.hostId)).toMatchObject({
-        id: body.hostId,
-        type: "persistent",
+      expect(response.status).toBe(400);
+      expect(await readJson(response)).toMatchObject({
+        code: "unsupported_host",
       });
     });
   });
@@ -103,7 +91,7 @@ describe("host join and enroll routes", () => {
     }
   });
 
-  it("rejects join with app_url_required and no side effects when BB_APP_URL is unset", async () => {
+  it("rejects non-local join without app url side effects", async () => {
     await withTestHarness({ appUrl: undefined }, async (harness) => {
       const response = await harness.app.request("/api/v1/hosts/join", {
         method: "POST",
@@ -116,9 +104,9 @@ describe("host join and enroll routes", () => {
         }),
       });
 
-      expect(response.status).toBe(422);
+      expect(response.status).toBe(400);
       expect(await readJson(response)).toMatchObject({
-        code: "app_url_required",
+        code: "unsupported_host",
       });
       expect(getHost(harness.db, "host_app_url_required")).toBeNull();
     });
@@ -200,6 +188,7 @@ describe("host join and enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_cancel_pending_join",
           hostType: "persistent",
+          joinMode: "local",
         }),
       });
       const joinBody = await parseHostJoinResponse(joinResponse);
@@ -245,6 +234,7 @@ describe("host join and enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_cancel_connected_join",
           hostType: "persistent",
+          joinMode: "local",
         }),
       });
       const joinBody = await parseHostJoinResponse(joinResponse);
@@ -294,6 +284,7 @@ describe("host join and enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_cancel_active_join",
           hostType: "persistent",
+          joinMode: "local",
         }),
       });
       const joinBody = await parseHostJoinResponse(joinResponse);
@@ -342,6 +333,7 @@ describe("host join and enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_join_once",
           hostType: "persistent",
+          joinMode: "local",
         }),
       });
       const joinBody = await parseHostJoinResponse(joinResponse);
@@ -405,6 +397,7 @@ describe("host join and enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_expected",
           hostType: "persistent",
+          joinMode: "local",
         }),
       });
       const joinBody = await parseHostJoinResponse(joinResponse);
@@ -438,6 +431,7 @@ describe("host join and enroll routes", () => {
           body: JSON.stringify({
             hostId: "host_reissue_join",
             hostType: "persistent",
+            joinMode: "local",
           }),
         },
       );
@@ -453,6 +447,7 @@ describe("host join and enroll routes", () => {
           body: JSON.stringify({
             hostId: "host_reissue_join",
             hostType: "persistent",
+            joinMode: "local",
           }),
         },
       );
@@ -508,6 +503,7 @@ describe("host join and enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_expired_join",
           hostType: "persistent",
+          joinMode: "local",
         }),
       });
       const joinBody = await parseHostJoinResponse(joinResponse);

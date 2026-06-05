@@ -13,7 +13,6 @@ A project maps to a code repository. All threads belong to a project.
   bb project create --name "..." [options]
     --root <path>                         Project root path
     --repo-url <url>                      Repository URL
-    --host <id>                           Default host
 
   bb project show <id>                    Show project details
   bb project update <id>                  Update a project
@@ -29,7 +28,6 @@ Sources:
   bb project source add <projectId>       Add a source
     --path <path>                         Local path
     --repo-url <url>                      Repository URL
-    --host <id>                           Host for this source
     --default                             Set as default source
 
   bb project source update <projectId> <sourceId>

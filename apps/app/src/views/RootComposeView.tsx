@@ -7,7 +7,6 @@ import {
 } from "@bb/domain";
 import {
   NewThreadPromptBox,
-  type NewThreadHostConfig,
   type NewThreadProjectConfig,
   type ThreadCreationMode,
 } from "@/components/promptbox/NewThreadPromptBox";
@@ -32,7 +31,6 @@ import {
   useSidebarNavigation,
   stripProjectThreads,
 } from "@/hooks/queries/project-queries";
-import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
@@ -65,7 +63,6 @@ const ROOT_COMPOSE_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.root-compose";
 const ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS = "pt-2";
 
 type ProjectSelectionChangeHandler = NewThreadProjectConfig["onChange"];
-type HostSelectionChangeHandler = NewThreadHostConfig["onChange"];
 
 interface LegacyProjectComposeRedirectProps {
   projectId: string;
@@ -210,9 +207,7 @@ export function RootComposeView() {
   }, [projectId, projects, rootComposeProjectId, setRootComposeProjectId]);
   const createThread = useCreateThread();
   const hireProjectManager = useHireProjectManager();
-  const { isLocalHost, localHostId } = useHostDaemon();
-  const hostsQuery = useEffectiveHosts();
-  const hosts = useMemo(() => hostsQuery.data ?? [], [hostsQuery.data]);
+  const { localHostId } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const { data: projectPromptHistory = [] } =
@@ -226,10 +221,6 @@ export function RootComposeView() {
     },
   );
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  // Manager-mode host selection. Held as a raw user choice; the effective
-  // value resolved against the loaded hosts is computed below so a stale
-  // selection (host disconnects) falls back to a safe default without an effect.
-  const [managerHostSelection, setManagerHostSelection] = useState<string>("");
   const prompt = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -357,43 +348,15 @@ export function RootComposeView() {
     [threadsQuery.data],
   );
 
-  // Standard-project managers need a local-path source on the host. Projectless
-  // managers only need a connected host.
-  const eligibleManagerHosts = useMemo(
-    () =>
-      hosts.filter(
-        (host) =>
-          host.status === "connected" &&
-          (isProjectless ||
-            findLocalPathProjectSourceForHost(projectSources, host.id) !==
-              undefined),
-      ),
-    [hosts, isProjectless, projectSources],
-  );
-  const defaultManagerHostId = useMemo(() => {
-    const local = eligibleManagerHosts.find((host) => isLocalHost(host.id));
-    return local?.id ?? eligibleManagerHosts[0]?.id ?? "";
-  }, [eligibleManagerHosts, isLocalHost]);
   const effectiveManagerHostId = useMemo(() => {
-    const isEligible = eligibleManagerHosts.some(
-      (host) => host.id === managerHostSelection,
+    if (!localHostId) return "";
+    if (isProjectless) return localHostId;
+    const localSource = findLocalPathProjectSourceForHost(
+      projectSources,
+      localHostId,
     );
-    return managerHostSelection && isEligible
-      ? managerHostSelection
-      : defaultManagerHostId;
-  }, [defaultManagerHostId, eligibleManagerHosts, managerHostSelection]);
-  const eligibleProjectlessThreadHosts = useMemo(
-    () => hosts.filter((host) => host.status === "connected"),
-    [hosts],
-  );
-  const defaultProjectlessThreadHostId = useMemo(() => {
-    const local = eligibleProjectlessThreadHosts.find((host) =>
-      isLocalHost(host.id),
-    );
-    return (
-      local?.id ?? eligibleProjectlessThreadHosts[0]?.id ?? localHostId ?? ""
-    );
-  }, [eligibleProjectlessThreadHosts, isLocalHost, localHostId]);
+    return localSource ? localHostId : "";
+  }, [isProjectless, localHostId, projectSources]);
 
   // Projectless threads choose a host directly, not an environment mode. Keep
   // the underlying persisted value host-shaped for the create-thread contract,
@@ -401,35 +364,19 @@ export function RootComposeView() {
   const effectiveEnvironmentValue = useMemo(() => {
     const parsedSelection = parseEnvironmentValue(environmentSelectionValue);
     if (isProjectless) {
-      if (parsedSelection?.type === "host") {
-        const selectedHostIsEligible =
-          eligibleProjectlessThreadHosts.length === 0 ||
-          eligibleProjectlessThreadHosts.some(
-            (host) => host.id === parsedSelection.hostId,
-          );
-        if (selectedHostIsEligible) {
-          return encodeHostValue(parsedSelection.hostId, "local");
-        }
-      }
-      if (defaultProjectlessThreadHostId) {
-        return encodeHostValue(defaultProjectlessThreadHostId, "local");
-      }
-      return "";
+      return localHostId ? encodeHostValue(localHostId, "local") : "";
     }
-    if (environmentSelectionValue && parsedSelection) {
+    if (parsedSelection?.type === "reuse") {
       return environmentSelectionValue;
     }
     if (localHostId) {
-      return encodeHostValue(localHostId, "local");
+      return encodeHostValue(
+        localHostId,
+        parsedSelection?.type === "host" ? parsedSelection.mode : "local",
+      );
     }
     return "";
-  }, [
-    defaultProjectlessThreadHostId,
-    eligibleProjectlessThreadHosts,
-    environmentSelectionValue,
-    isProjectless,
-    localHostId,
-  ]);
+  }, [environmentSelectionValue, isProjectless, localHostId]);
   const parsedEnvironment = useMemo(
     () => parseEnvironmentValue(effectiveEnvironmentValue),
     [effectiveEnvironmentValue],
@@ -565,14 +512,6 @@ export function RootComposeView() {
     },
     [projectId, setRootComposeProjectId],
   );
-  const handleProjectlessThreadHostChange =
-    useCallback<HostSelectionChangeHandler>(
-      (hostId) => {
-        setEnvironmentSelectionValue(encodeHostValue(hostId, "local"));
-      },
-      [setEnvironmentSelectionValue],
-    );
-
   const shouldFocusPrompt =
     typeof location.state === "object" &&
     location.state !== null &&
@@ -631,8 +570,9 @@ export function RootComposeView() {
 
     if (mode === "manager") {
       // Managers don't require a prompt — submitting with empty text just
-      // falls back to the server's welcome-message template. Host comes
-      // from the manager-mode host picker.
+      // falls back to the server's welcome-message template. While multi-host
+      // is disabled, managers run on the local host when the project has a
+      // local source.
       if (
         hireProjectManager.isPending ||
         managerDefaultExecutionOptionsQuery.isLoading ||
@@ -844,26 +784,6 @@ export function RootComposeView() {
       setEnvironmentSelectionValue,
     ],
   );
-  const projectlessThreadHostConfig = useMemo(
-    (): NewThreadHostConfig => ({
-      hosts,
-      eligibleHosts: eligibleProjectlessThreadHosts,
-      value:
-        parsedEnvironment?.type === "host"
-          ? parsedEnvironment.hostId
-          : defaultProjectlessThreadHostId,
-      onChange: handleProjectlessThreadHostChange,
-      isLocalHost,
-    }),
-    [
-      defaultProjectlessThreadHostId,
-      eligibleProjectlessThreadHosts,
-      handleProjectlessThreadHostChange,
-      hosts,
-      isLocalHost,
-      parsedEnvironment,
-    ],
-  );
   const worktreeConfig = useMemo(() => {
     const handleWorktreeChange = (environmentId: string) => {
       setEnvironmentSelectionValue(encodeReuseValue(environmentId));
@@ -1023,13 +943,6 @@ export function RootComposeView() {
           mode === "manager"
             ? {
                 mode: "manager",
-                host: {
-                  hosts,
-                  eligibleHosts: eligibleManagerHosts,
-                  value: effectiveManagerHostId,
-                  onChange: setManagerHostSelection,
-                  isLocalHost,
-                },
               }
             : {
                 mode: "thread",
@@ -1038,9 +951,6 @@ export function RootComposeView() {
                 worktree: worktreeConfig,
                 permission: permissionConfig,
                 header: reuseHeader,
-                ...(isProjectless
-                  ? { projectlessHost: projectlessThreadHostConfig }
-                  : {}),
               }
         }
         onModeChange={setMode}

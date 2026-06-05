@@ -74,7 +74,7 @@ export function Overview() {
         />
       </StoryRow>
       <StoryRow
-        label="remote host direct"
+        label="secondary host direct"
         hint="host: mac-mini-studio + mode: local"
       >
         <EnvironmentPickerUI
@@ -86,7 +86,7 @@ export function Overview() {
         />
       </StoryRow>
       <StoryRow
-        label="remote host worktree"
+        label="secondary host worktree"
         hint="host: mac-mini-studio + mode: worktree"
       >
         <EnvironmentPickerUI

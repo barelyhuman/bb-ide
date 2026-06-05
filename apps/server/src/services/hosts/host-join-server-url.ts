@@ -3,7 +3,6 @@ import { ApiError } from "../../errors.js";
 
 export interface ResolveHostJoinServerUrlArgs {
   appUrl: string | undefined;
-  isLocalJoin: boolean;
   remoteAddress: string | undefined;
   serverPort: number;
 }
@@ -16,7 +15,6 @@ export function resolveHostJoinServerUrl(
   args: ResolveHostJoinServerUrlArgs,
 ): string {
   if (
-    args.isLocalJoin &&
     args.remoteAddress !== undefined &&
     isLoopbackAddress(args.remoteAddress)
   ) {

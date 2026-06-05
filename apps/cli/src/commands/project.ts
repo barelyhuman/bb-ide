@@ -7,7 +7,7 @@ import type {
 } from "@bb/server-contract";
 import { action } from "../action.js";
 import { createCliBbSdk } from "../client.js";
-import { fetchLocalHostId } from "../daemon.js";
+import { fetchLocalHostId, resolveLocalHostId } from "../daemon.js";
 import { renderBorderlessTable } from "../table.js";
 import { confirmDestructiveAction, outputJson } from "./helpers.js";
 
@@ -18,7 +18,6 @@ interface ProjectListCommandOptions {
 interface ProjectCreateCommandOptions {
   name: string;
   root?: string;
-  host?: string;
   json?: boolean;
 }
 
@@ -38,7 +37,6 @@ interface ProjectDeleteCommandOptions {
 
 interface ProjectSourceAddCommandOptions {
   default?: boolean;
-  host?: string;
   json?: boolean;
   path?: string;
 }
@@ -55,32 +53,17 @@ interface ProjectSourceDeleteCommandOptions {
 }
 
 interface ProjectSourceInputOptions {
-  host?: string;
   path?: string;
 }
 
 type ProjectSource = ProjectResponse["sources"][number];
-
-async function requireHostId(hostId: string | undefined): Promise<string> {
-  if (hostId) {
-    return hostId;
-  }
-
-  const detectedHostId = await fetchLocalHostId();
-  if (!detectedHostId) {
-    throw new Error(
-      "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
-    );
-  }
-  return detectedHostId;
-}
 
 async function buildProjectSourceFromOptions(
   args: ProjectSourceInputOptions,
 ): Promise<CreateProjectSourceRequest> {
   if (args.path) {
     return {
-      hostId: await requireHostId(args.host),
+      hostId: await resolveLocalHostId(),
       path: args.path,
       type: "local_path",
     };
@@ -166,16 +149,11 @@ export function registerProjectCommands(
     .description("Create a project")
     .requiredOption("--name <name>", "Project name")
     .option("--root <path>", "Project source path")
-    .option(
-      "--host <id>",
-      "Host ID for the project source (auto-detected from daemon if omitted)",
-    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (opts: ProjectCreateCommandOptions) => {
         const sdk = createCliBbSdk(getUrl());
         const source = await buildProjectSourceFromOptions({
-          host: opts.host,
           path: opts.root,
         });
         const created = await sdk.projects.create({
@@ -252,10 +230,6 @@ export function registerProjectCommands(
     .command("add <projectId>")
     .description("Add a source to a project")
     .option("--path <path>", "Local path source")
-    .option(
-      "--host <id>",
-      "Host ID for a local path source (auto-detected from daemon if omitted)",
-    )
     .option("--default", "Mark the new source as default")
     .option("--json", "Print machine-readable JSON output")
     .action(
@@ -263,7 +237,6 @@ export function registerProjectCommands(
         async (projectId: string, opts: ProjectSourceAddCommandOptions) => {
           const sdk = createCliBbSdk(getUrl());
           const createPayload = await buildProjectSourceFromOptions({
-            host: opts.host,
             path: opts.path,
           });
           const created = await sdk.projects.sources.add({

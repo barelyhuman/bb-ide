@@ -12,7 +12,6 @@ import {
 const noop = vi.fn();
 
 type HostIdCandidate = string | null | undefined;
-type EligibleHosts = readonly Host[];
 
 interface TestProviderIconProps {
   className?: string;
@@ -21,16 +20,6 @@ interface TestProviderIconProps {
 const localHost: Host = {
   id: "host_local",
   name: "This Mac",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: 100,
-  createdAt: 0,
-  updatedAt: 100,
-};
-
-const remoteHost: Host = {
-  id: "host_remote",
-  name: "Build box",
   type: "persistent",
   status: "connected",
   lastSeenAt: 100,
@@ -67,16 +56,14 @@ function isLocalHost(hostId: HostIdCandidate): boolean {
   return hostId === localHost.id;
 }
 
-function buildThreadModeConfig(
-  eligibleHosts: EligibleHosts,
-): NewThreadModeConfig {
+function buildThreadModeConfig(): NewThreadModeConfig {
   return {
     mode: "thread",
     environment: {
       value: `host:${localHost.id}:local`,
       onChange: noop,
       sources: projectSources,
-      hosts: [localHost, remoteHost],
+      hosts: [localHost],
       isLocalHost,
     },
     branch: {
@@ -98,26 +85,12 @@ function buildThreadModeConfig(
       onChange: noop,
       supported: true,
     },
-    projectlessHost: {
-      hosts: [localHost, remoteHost],
-      eligibleHosts,
-      value: localHost.id,
-      onChange: noop,
-      isLocalHost,
-    },
   };
 }
 
 function buildManagerModeConfig(): NewThreadModeConfig {
   return {
     mode: "manager",
-    host: {
-      hosts: [localHost, remoteHost],
-      eligibleHosts: [localHost],
-      value: localHost.id,
-      onChange: noop,
-      isLocalHost,
-    },
   };
 }
 
@@ -178,7 +151,7 @@ afterEach(() => {
 
 describe("NewThreadPromptBoxUI", () => {
   it("omits file mention copy from the projectless thread placeholder", () => {
-    renderNewThreadPrompt(buildThreadModeConfig([localHost]));
+    renderNewThreadPrompt(buildThreadModeConfig());
 
     expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(
       "Ask anything.",
@@ -201,22 +174,15 @@ describe("NewThreadPromptBoxUI", () => {
     ).toBeNull();
   });
 
-  it("uses a host picker instead of the environment picker for projectless threads", () => {
-    renderNewThreadPrompt(buildThreadModeConfig([localHost, remoteHost]));
-
-    expect(screen.getByRole("button", { name: "Host" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Environment" })).toBeNull();
-  });
-
-  it("hides the projectless host picker when only one host is eligible", () => {
-    renderNewThreadPrompt(buildThreadModeConfig([localHost]));
+  it("hides environment controls for projectless threads", () => {
+    renderNewThreadPrompt(buildThreadModeConfig());
 
     expect(screen.queryByRole("button", { name: "Host" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Environment" })).toBeNull();
   });
 
   it("uses shared promptbox selector dimensions for mode, model, and project controls", () => {
-    renderNewThreadPrompt(buildThreadModeConfig([localHost]));
+    renderNewThreadPrompt(buildThreadModeConfig());
 
     const selectorButtons = [
       screen.getByRole("button", { name: "Thread creation mode" }),

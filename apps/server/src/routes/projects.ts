@@ -4,7 +4,6 @@ import {
   getPersonalProject,
   createProjectSource,
   deleteProjectSource,
-  getDefaultProjectSource,
   getProjectSourceByHost,
   getProjectSourceForProject,
   listPublicProjects,
@@ -80,6 +79,10 @@ import {
   parseBranchListLimit,
 } from "./branch-list-query.js";
 import { parseFileListLimit } from "./file-list-query.js";
+import {
+  assertPrimaryHostId,
+  requirePrimaryHostId,
+} from "../services/hosts/primary-host.js";
 
 type ProjectResponseProjectFields = Omit<ProjectResponse, "sources">;
 type ProjectResponseRow = ProjectResponseProjectFields;
@@ -309,6 +312,16 @@ interface ResolvedHostPath {
   path: string;
 }
 
+interface ResolveEnvironmentPathArgs {
+  environmentId: string;
+  projectId: string;
+}
+
+interface ResolveProjectSourcePathArgs {
+  hostId: string | null;
+  projectId: string;
+}
+
 /**
  * Resolve `(hostId, path)` from an existing project-bound environment.
  * Pure DB lookup — no provisioning, no daemon roundtrip. Use this when a
@@ -317,13 +330,14 @@ interface ResolvedHostPath {
  * environment's path.
  */
 function resolveEnvironmentPath(
-  deps: Pick<AppDeps, "db">,
-  args: { projectId: string; environmentId: string },
+  deps: Pick<AppDeps, "config" | "db">,
+  args: ResolveEnvironmentPathArgs,
 ): ResolvedHostPath {
   const environment = requireReadyEnvironment(deps.db, args.environmentId);
   if (environment.projectId !== args.projectId) {
     throw new ApiError(404, "environment_not_found", "Environment not found");
   }
+  assertPrimaryHostId(deps, { hostId: environment.hostId });
   return { hostId: environment.hostId, path: environment.path };
 }
 
@@ -336,22 +350,23 @@ function resolveEnvironmentPath(
  *
  * - When `hostId` is provided, returns the project's local-path source on
  *   that host (404 if the project has no local-path source for that host).
- * - When `hostId` is null, returns the project's default local-path source.
+ * - When `hostId` is null, returns the project's local-path source on the
+ *   primary local host.
  */
 function resolveProjectSourcePath(
-  deps: Pick<AppDeps, "db">,
-  args: { projectId: string; hostId: string | null },
+  deps: Pick<AppDeps, "config" | "db">,
+  args: ResolveProjectSourcePathArgs,
 ): ResolvedHostPath {
-  const source = args.hostId
-    ? getProjectSourceByHost(deps.db, args.projectId, args.hostId)
-    : getDefaultProjectSource(deps.db, args.projectId);
+  const hostId = args.hostId ?? requirePrimaryHostId(deps);
+  assertPrimaryHostId(deps, { hostId });
+  const source = getProjectSourceByHost(deps.db, args.projectId, hostId);
   if (!source || source.type !== "local_path") {
     throw new ApiError(
       args.hostId ? 404 : 409,
       "invalid_request",
       args.hostId
         ? "Project has no local-path source for host"
-        : "Project has no default source",
+        : "Project has no local-path source for the local host",
     );
   }
   return { hostId: source.hostId, path: source.path };
@@ -378,6 +393,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     const { source } = payload;
     if (source.type === "local_path") {
       requireNonDestroyedHostWithStatus(deps.db, source.hostId);
+      assertPrimaryHostId(deps, { hostId: source.hostId });
     }
     const { project } = createProject(deps.db, deps.hub, {
       name: payload.name,
@@ -487,6 +503,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       requirePublicStandardProject(deps.db, context.req.param("id"));
       if (payload.type === "local_path") {
         requireNonDestroyedHostWithStatus(deps.db, payload.hostId);
+        assertPrimaryHostId(deps, { hostId: payload.hostId });
       }
       const source = createProjectSource(deps.db, deps.hub, {
         projectId: context.req.param("id"),
@@ -505,6 +522,9 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         projectId: context.req.param("id"),
         sourceId: context.req.param("sourceId"),
       });
+      if (existing.type === "local_path") {
+        assertPrimaryHostId(deps, { hostId: existing.hostId });
+      }
       if (payload.type !== existing.type) {
         throw new ApiError(
           400,
@@ -693,6 +713,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
       const { hostId } = payload.environment;
       requireNonDestroyedHostWithStatus(deps.db, hostId);
+      assertPrimaryHostId(deps, { hostId });
       let environment: EnvironmentArgs;
       if (project.kind === "personal") {
         environment = {

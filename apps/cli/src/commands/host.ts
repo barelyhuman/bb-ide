@@ -13,11 +13,11 @@ export function registerHostCommands(
   program: Command,
   getUrl: () => string,
 ): void {
-  const host = program.command("host").description("Inspect available hosts");
+  const host = program.command("host").description("Inspect local host state");
 
   host
     .command("list")
-    .description("List persistent hosts")
+    .description("List registered persistent hosts")
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (opts: HostListCommandOptions) => {

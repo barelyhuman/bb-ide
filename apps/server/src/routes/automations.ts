@@ -70,6 +70,8 @@ interface ResolveAutomationActionForProjectArgs {
   project: Project;
 }
 
+type AutomationRouteDeps = Pick<AppDeps, "config" | "db">;
+
 function requireProjectAutomation(
   deps: Pick<AppDeps, "db">,
   args: {
@@ -156,7 +158,7 @@ function requireUpdatedAction(
 }
 
 function buildAutomationEnabledUpdateInput(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationRouteDeps,
   args: BuildAutomationEnabledUpdateInputArgs,
 ) {
   if (!args.payload.enabled) {
@@ -187,7 +189,7 @@ function buildAutomationEnabledUpdateInput(
 }
 
 function validateAutomationActionProjectScope(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationRouteDeps,
   args: ValidateAutomationActionProjectScopeArgs,
 ): void {
   resolveStableThreadRequestEnvironment(deps, {
@@ -197,7 +199,7 @@ function validateAutomationActionProjectScope(
 }
 
 function resolveAutomationActionForProject(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationRouteDeps,
   args: ResolveAutomationActionForProjectArgs,
 ): AutomationAction {
   validateAutomationActionProjectScope(deps, args);

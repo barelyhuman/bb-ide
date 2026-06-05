@@ -25,7 +25,7 @@ const longNameTarget: HostDeleteDialogTarget = {
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow label="default" hint="persistent remote host">
+      <StoryRow label="default" hint="persistent secondary host">
         <DialogStage>
           <HostDeleteDialogContent
             target={target}

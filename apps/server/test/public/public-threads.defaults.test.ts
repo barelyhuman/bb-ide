@@ -4,6 +4,7 @@ import {
 } from "./public-thread-test-harness.js";
 
 import {
+  createProjectSource,
   getProjectExecutionDefaults,
   listThreads,
   upsertProjectExecutionDefaults,
@@ -14,6 +15,7 @@ import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
+  seedPrimaryHost,
   seedProjectWithSource,
   seedThreadRuntimeState,
   seedThread,
@@ -98,6 +100,60 @@ describe("public thread default routes", () => {
         reasoningLevel: "high",
         permissionMode: "workspace-write",
       });
+    });
+  });
+
+  it("rejects managed-worktree threads on a secondary host", async () => {
+    await withTestHarness(async (harness) => {
+      const { host: localHost } = seedHostSession(harness.deps, {
+        id: "host-managed-default",
+      });
+      seedPrimaryHost(harness.deps, localHost.id);
+      const { host: secondaryHost } = seedHostSession(harness.deps, {
+        id: "host-managed-secondary",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: localHost.id,
+        path: "/tmp/default-managed-source",
+      });
+      const secondarySource = createProjectSource(harness.db, harness.hub, {
+        projectId: project.id,
+        type: "local_path",
+        hostId: secondaryHost.id,
+        path: "/tmp/secondary-managed-source",
+      });
+      if (secondarySource.type !== "local_path") {
+        throw new Error("Expected local_path project source");
+      }
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          title: "Secondary host thread",
+          input: [{ type: "text", text: "Build it on the secondary host" }],
+          environment: {
+            type: "host",
+            hostId: secondaryHost.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "unsupported_host",
+      });
+      expect(secondarySource.path).toBe("/tmp/secondary-managed-source");
     });
   });
 

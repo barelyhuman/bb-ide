@@ -1,10 +1,13 @@
 import type { SystemProvidersQuery } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import {
-  requireDefaultConnectedPersistentHostId,
   requireEnvironment,
   requireNonDestroyedHostWithStatus,
 } from "../lib/entity-lookup.js";
+import {
+  assertPrimaryHostId,
+  requireConnectedPrimaryHostId,
+} from "../hosts/primary-host.js";
 
 export type SystemHostLookupQuery = Pick<
   SystemProvidersQuery,
@@ -18,11 +21,13 @@ export function resolveSystemLookupHostId(
   if (query.environmentId) {
     const environment = requireEnvironment(deps.db, query.environmentId);
     requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
+    assertPrimaryHostId(deps, { hostId: environment.hostId });
     return environment.hostId;
   }
   if (query.hostId) {
     requireNonDestroyedHostWithStatus(deps.db, query.hostId);
+    assertPrimaryHostId(deps, { hostId: query.hostId });
     return query.hostId;
   }
-  return requireDefaultConnectedPersistentHostId(deps.db);
+  return requireConnectedPrimaryHostId(deps);
 }

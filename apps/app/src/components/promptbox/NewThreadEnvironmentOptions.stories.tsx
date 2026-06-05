@@ -288,16 +288,16 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="remote host · checkout"
-          hint="remote host, primary checkout"
+          label="secondary host · checkout"
+          hint="secondary host, primary checkout"
         >
           <EnvironmentOptionsStrip
             environment={{ value: `host:${HOST_IDS.remote}:local` }}
           />
         </StoryRow>
         <StoryRow
-          label="remote host · worktree"
-          hint="remote host, new worktree"
+          label="secondary host · worktree"
+          hint="secondary host, new worktree"
         >
           <EnvironmentOptionsStrip
             environment={{ value: `host:${HOST_IDS.remote}:worktree` }}

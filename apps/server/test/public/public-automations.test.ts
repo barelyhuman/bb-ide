@@ -15,6 +15,7 @@ import {
 import {
   seedEnvironment,
   seedHostSession,
+  seedPrimaryHost,
   seedProjectWithSource,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -601,6 +602,7 @@ describe("public automation routes", () => {
       const { host: primaryHost } = seedHostSession(harness.deps, {
         id: "host-automation-project-scope-primary",
       });
+      seedPrimaryHost(harness.deps, primaryHost.id);
       const { host: foreignHost } = seedHostSession(harness.deps, {
         id: "host-automation-project-scope-foreign",
       });
@@ -672,7 +674,10 @@ describe("public automation routes", () => {
           }),
         },
       );
-      expect(hostResponse.status).toBe(409);
+      expect(hostResponse.status).toBe(400);
+      await expect(readJson(hostResponse)).resolves.toMatchObject({
+        code: "unsupported_host",
+      });
 
       const createResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/automations`,
@@ -751,6 +756,7 @@ describe("public automation routes", () => {
       const { host: explicitPathHost } = seedHostSession(harness.deps, {
         id: "host-automation-unmanaged-explicit",
       });
+      seedPrimaryHost(harness.deps, explicitPathHost.id);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: defaultHost.id,
       });

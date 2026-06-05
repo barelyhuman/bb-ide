@@ -1,7 +1,4 @@
-import {
-  getMostRecentlyUpdatedConnectedHostId,
-  getProjectSourceByHost,
-} from "@bb/db";
+import { getProjectSourceByHost } from "@bb/db";
 import {
   type Environment,
   type LocalPathProjectSource,
@@ -15,8 +12,13 @@ import {
   requireEnvironment,
   requireNonDestroyedHostWithStatus,
 } from "../lib/entity-lookup.js";
+import {
+  assertPrimaryHostId,
+  requireConnectedPrimaryHostId,
+} from "../hosts/primary-host.js";
 
 type ThreadRequestEnvironment = EnvironmentArgs;
+type ThreadRequestEnvironmentDeps = Pick<AppDeps, "config" | "db">;
 type HostThreadRequestEnvironment = Extract<
   ThreadRequestEnvironment,
   { type: "host" }
@@ -37,6 +39,7 @@ export interface ResolveStableThreadRequestEnvironmentArgs {
 export interface StableThreadRequestProjectData {
   environmentsById: ReadonlyMap<string, Environment>;
   existingHostIds: ReadonlySet<string>;
+  primaryHostId: string | null;
   projectId: string;
   projectSources: readonly ProjectSource[];
 }
@@ -70,6 +73,33 @@ function requireExistingProjectHost(
 ): void {
   if (!data.existingHostIds.has(hostId)) {
     throw new ApiError(404, "host_not_found", "Host not found");
+  }
+}
+
+function requireProjectDataPrimaryHostId(
+  data: StableThreadRequestProjectData,
+): string {
+  if (data.primaryHostId === null) {
+    throw new ApiError(
+      502,
+      "host_unavailable",
+      "Local host daemon is not initialized",
+    );
+  }
+  return data.primaryHostId;
+}
+
+function assertProjectDataPrimaryHostId(
+  data: StableThreadRequestProjectData,
+  hostId: string,
+): void {
+  const primaryHostId = requireProjectDataPrimaryHostId(data);
+  if (hostId !== primaryHostId) {
+    throw new ApiError(
+      400,
+      "unsupported_host",
+      "Only the local host daemon is supported",
+    );
   }
 }
 
@@ -127,10 +157,10 @@ function resolveStableHostThreadRequestEnvironmentFromProjectData(
   | ResolvedPersonalThreadRequestEnvironment {
   if (environment.workspace.type === "personal") {
     assertPersonalWorkspaceProjectCompatibility(data.projectId);
-    const hostId = environment.hostId ?? null;
-    if (hostId !== null) {
-      requireExistingProjectHost(data, hostId);
-    }
+    const hostId =
+      environment.hostId ?? requireProjectDataPrimaryHostId(data);
+    assertProjectDataPrimaryHostId(data, hostId);
+    requireExistingProjectHost(data, hostId);
     return {
       hostId,
       type: "personal",
@@ -139,6 +169,7 @@ function resolveStableHostThreadRequestEnvironmentFromProjectData(
 
   const hostId = requireHostEnvironmentId(environment);
   requireExistingProjectHost(data, hostId);
+  assertProjectDataPrimaryHostId(data, hostId);
 
   if (
     environment.workspace.type === "unmanaged" &&
@@ -194,6 +225,7 @@ function resolveStableReuseThreadRequestEnvironmentFromProjectData(
     );
   }
   assertReuseWorkspaceProjectCompatibility(data.projectId, reusedEnvironment);
+  assertProjectDataPrimaryHostId(data, reusedEnvironment.hostId);
 
   return {
     environment: reusedEnvironment,
@@ -226,7 +258,7 @@ export function resolveStableThreadRequestEnvironmentFromProjectData(
 }
 
 function resolveHostThreadRequestEnvironment(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadRequestEnvironmentDeps,
   environment: HostThreadRequestEnvironment,
   projectId: string,
 ):
@@ -235,17 +267,8 @@ function resolveHostThreadRequestEnvironment(
   if (environment.workspace.type === "personal") {
     assertPersonalWorkspaceProjectCompatibility(projectId);
     const hostId =
-      environment.hostId ??
-      getMostRecentlyUpdatedConnectedHostId(deps.db, {
-        hostType: "persistent",
-      });
-    if (!hostId) {
-      throw new ApiError(
-        502,
-        "host_unavailable",
-        "No connected host is available",
-      );
-    }
+      environment.hostId ?? requireConnectedPrimaryHostId(deps);
+    assertPrimaryHostId(deps, { hostId });
     requireNonDestroyedHostWithStatus(deps.db, hostId);
     return {
       hostId,
@@ -255,6 +278,7 @@ function resolveHostThreadRequestEnvironment(
 
   const hostId = requireHostEnvironmentId(environment);
   requireNonDestroyedHostWithStatus(deps.db, hostId);
+  assertPrimaryHostId(deps, { hostId });
 
   if (
     environment.workspace.type === "unmanaged" &&
@@ -289,7 +313,7 @@ function resolveHostThreadRequestEnvironment(
 }
 
 function resolveReuseThreadRequestEnvironment(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadRequestEnvironmentDeps,
   environment: ReuseThreadRequestEnvironment,
   projectId: string,
 ): ResolvedReuseThreadRequestEnvironment {
@@ -305,6 +329,8 @@ function resolveReuseThreadRequestEnvironment(
     );
   }
   assertReuseWorkspaceProjectCompatibility(projectId, reusedEnvironment);
+  requireNonDestroyedHostWithStatus(deps.db, reusedEnvironment.hostId);
+  assertPrimaryHostId(deps, { hostId: reusedEnvironment.hostId });
   return {
     environment: reusedEnvironment,
     type: "reuse",
@@ -312,7 +338,7 @@ function resolveReuseThreadRequestEnvironment(
 }
 
 export function resolveStableThreadRequestEnvironment(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadRequestEnvironmentDeps,
   args: ResolveStableThreadRequestEnvironmentArgs,
 ): ResolvedStableThreadRequestEnvironment {
   switch (args.environment.type) {

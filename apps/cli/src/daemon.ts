@@ -9,3 +9,11 @@ export async function fetchLocalHostId(): Promise<string | null> {
   cachedHostId = await fetchSdkLocalHostId();
   return cachedHostId;
 }
+
+export async function resolveLocalHostId(): Promise<string> {
+  const localHostId = await fetchLocalHostId();
+  if (!localHostId) {
+    throw new Error("Cannot reach local host daemon. Is it running?");
+  }
+  return localHostId;
+}

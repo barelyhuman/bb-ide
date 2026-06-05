@@ -77,9 +77,10 @@ vi.mock("node:readline/promises", () => ({
 
 vi.mock("../daemon.js", () => ({
   fetchLocalHostId: vi.fn(async () => "host-test-001"),
+  resolveLocalHostId: vi.fn(async () => "host-test-001"),
 }));
 
-import { fetchLocalHostId } from "../daemon.js";
+import { fetchLocalHostId, resolveLocalHostId } from "../daemon.js";
 import { registerAppCommands } from "../commands/app.js";
 import { registerEnvironmentCommands } from "../commands/environment.js";
 import { registerGuideCommand } from "../commands/guide.js";
@@ -441,6 +442,7 @@ async function getHelpOutput(
 describe("CLI command output contracts", () => {
   const createClientMock = serverClientState.createClient;
   const fetchLocalHostIdMock = vi.mocked(fetchLocalHostId);
+  const resolveLocalHostIdMock = vi.mocked(resolveLocalHostId);
 
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -461,6 +463,8 @@ describe("CLI command output contracts", () => {
     createClientMock.mockReset();
     fetchLocalHostIdMock.mockClear();
     fetchLocalHostIdMock.mockResolvedValue("host-test-001");
+    resolveLocalHostIdMock.mockClear();
+    resolveLocalHostIdMock.mockResolvedValue("host-test-001");
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
       configurable: true,
@@ -632,8 +636,6 @@ describe("CLI command output contracts", () => {
         "Alpha",
         "--root",
         "/tmp/alpha",
-        "--host",
-        "host-1",
         "--json",
       ],
       (program) => registerProjectCommands(program, () => "http://server"),
@@ -1903,6 +1905,7 @@ describe("CLI command output contracts", () => {
     );
 
     expect(fetchLocalHostIdMock).not.toHaveBeenCalled();
+    expect(resolveLocalHostIdMock).not.toHaveBeenCalled();
     expect(post).toHaveBeenCalledWith({
       json: {
         origin: "cli",
@@ -1945,7 +1948,7 @@ describe("CLI command output contracts", () => {
       registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(fetchLocalHostIdMock).toHaveBeenCalled();
+    expect(resolveLocalHostIdMock).toHaveBeenCalled();
     expect(post).toHaveBeenCalledWith({
       json: {
         origin: "cli",

@@ -28,8 +28,10 @@ import {
   resolveStableThreadRequestEnvironmentFromProjectData,
   type StableThreadRequestProjectData,
 } from "../threads/thread-request-eligibility.js";
+import { resolvePrimaryHostId } from "../hosts/primary-host.js";
 
 export type AutomationRow = typeof automations.$inferSelect;
+type AutomationConfigDeps = Pick<AppDeps, "config" | "db">;
 const MALFORMED_AUTOMATION_CONFIGURATION_MESSAGE =
   "Automation configuration is malformed and must be edited before it can run.";
 
@@ -130,7 +132,7 @@ function parseAutomationDefinition(
 }
 
 function computeAutomationValidation(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationConfigDeps,
   args: ComputeAutomationValidationArgs,
 ): AutomationValidation {
   const validationIssues: string[] = [];
@@ -169,13 +171,18 @@ function computeAutomationValidation(
 }
 
 export function buildStableThreadRequestProjectData(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationConfigDeps,
   args: {
     environmentIds: readonly string[];
     hostIds: readonly string[];
     projectId: string;
   },
 ): StableThreadRequestProjectData {
+  const primaryHostId = resolvePrimaryHostId(deps);
+  const hostIds =
+    primaryHostId === null
+      ? args.hostIds
+      : [...new Set([...args.hostIds, primaryHostId])];
   return {
     environmentsById: new Map(
       listEnvironmentsByIds(deps.db, args.environmentIds).map((environment) => [
@@ -184,8 +191,9 @@ export function buildStableThreadRequestProjectData(
       ]),
     ),
     existingHostIds: new Set(
-      listNonDestroyedHostsByIds(deps.db, args.hostIds).map((host) => host.id),
+      listNonDestroyedHostsByIds(deps.db, hostIds).map((host) => host.id),
     ),
+    primaryHostId,
     projectId: args.projectId,
     projectSources: listProjectSources(deps.db, args.projectId),
   };
@@ -275,7 +283,7 @@ export function safeParseAutomationDefinition(
 }
 
 export function validateStoredAutomationDefinition(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationConfigDeps,
   row: Pick<AutomationRow, "action" | "projectId" | "triggerConfig">,
 ): StoredAutomationValidationResult {
   try {
@@ -307,7 +315,7 @@ export function validateStoredAutomationDefinition(
 }
 
 export function toAutomationResponse(
-  deps: Pick<AppDeps, "db">,
+  deps: AutomationConfigDeps,
   row: AutomationRow,
 ) {
   const { action, trigger } = parseAutomationDefinition(row);

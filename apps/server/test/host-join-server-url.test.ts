@@ -6,7 +6,6 @@ describe("host join server URL resolution", () => {
     expect(
       resolveHostJoinServerUrl({
         appUrl: undefined,
-        isLocalJoin: true,
         remoteAddress: "::ffff:127.0.0.1",
         serverPort: 3334,
       }),
@@ -17,7 +16,6 @@ describe("host join server URL resolution", () => {
     expect(
       resolveHostJoinServerUrl({
         appUrl: "https://stale.example.test",
-        isLocalJoin: true,
         remoteAddress: "127.0.0.1",
         serverPort: 3334,
       }),
@@ -28,7 +26,6 @@ describe("host join server URL resolution", () => {
     expect(() =>
       resolveHostJoinServerUrl({
         appUrl: undefined,
-        isLocalJoin: true,
         remoteAddress: "192.168.1.50",
         serverPort: 3334,
       }),
@@ -39,7 +36,6 @@ describe("host join server URL resolution", () => {
     expect(
       resolveHostJoinServerUrl({
         appUrl: "https://bb.example.test",
-        isLocalJoin: true,
         remoteAddress: "192.168.1.50",
         serverPort: 3334,
       }),
