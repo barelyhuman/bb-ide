@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/icon.js";
 import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
+import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
   Popover,
   PopoverContent,
@@ -70,6 +71,8 @@ const PANEL_SCROLL_SLOT_CLASS =
 const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
   pointerEvents: "auto",
 };
+const SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS =
+  `h-7 w-7 shrink-0 rounded-md p-0 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
 
 export interface NewTabMenuRenderProps {
   closeMenu: () => void;
@@ -308,7 +311,7 @@ export function ThreadSecondaryPanel({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-7 w-7 shrink-0 rounded-md p-0",
+                SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
                 usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
               )}
               onClick={() => onPanelChange("thread-info")}
@@ -324,7 +327,7 @@ export function ThreadSecondaryPanel({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-7 w-7 shrink-0 rounded-md p-0",
+                  SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
                   usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
                 )}
                 onClick={() => onPanelChange("git-diff")}
@@ -529,7 +532,7 @@ function NewTabButton({
           variant="ghost"
           size="sm"
           className={cn(
-            "h-7 w-7 shrink-0 rounded-md p-0",
+            SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
             usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
           )}
           aria-label="Open tab menu"

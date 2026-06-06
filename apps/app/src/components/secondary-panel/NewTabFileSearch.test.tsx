@@ -28,6 +28,7 @@ import {
   type NewTabFileSearchProps,
 } from "./NewTabFileSearch";
 import { createNoopDesktopBrowserApi } from "@/test/bb-desktop-test-utils";
+import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 
 interface ProviderWrapperProps {
   children: ReactNode;
@@ -282,6 +283,9 @@ describe("NewTabActionMenu", () => {
     // Apps get their own divided, titled section after Open browser.
     const divider = screen.getByRole("separator");
     const appsTitle = screen.getByText("Apps");
+    expect(appsTitle.parentElement?.className).toContain(
+      CHROME_SECTION_LABEL_CLASS,
+    );
     expect(divider.className).toContain("mx-2");
     expect(divider.className).toContain("w-auto");
     expect(divider.className).toContain("bg-border-seam");

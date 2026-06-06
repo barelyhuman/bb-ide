@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Icon } from "@/components/ui/icon.js";
+import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
 import { cn } from "@/lib/utils";
 
 // Shared shell for the secondary-panel launcher rows — the app/file/recent
@@ -16,7 +17,7 @@ export const LAUNCHER_ROW_ICON_CLASS =
 // Section labels above launcher row groups (the + menu, file search, recents,
 // and the browser tab's recently-visited list). Mirrors the detail-card key
 // style rather than a loud uppercase, tracked header.
-const LAUNCHER_SECTION_LABEL_CLASS = "text-xs leading-5 text-muted-foreground";
+const LAUNCHER_SECTION_LABEL_CLASS = CHROME_SECTION_LABEL_CLASS;
 
 interface LauncherRowTrailingProps {
   /** Resting content (e.g. a relative timestamp) shown until the row is highlighted. */

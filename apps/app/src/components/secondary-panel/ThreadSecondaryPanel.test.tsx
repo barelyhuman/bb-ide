@@ -23,6 +23,7 @@ import {
   ThreadSecondaryPanel,
 } from "./ThreadSecondaryPanel";
 import { SECONDARY_PANEL_TOP_CHROME_BACKGROUND_CLASS } from "./panelChromeClasses";
+import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@/components/ui/chromeStyleTokens";
 import {
   MACOS_COLLAPSED_HEADER_RESERVE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_CLASS,
@@ -286,7 +287,18 @@ describe("ThreadSecondaryPanel", () => {
   it("opens the new-tab action popout from the plus button", () => {
     renderPanel();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open tab menu" }));
+    const infoButton = screen.getByRole("button", {
+      name: "Show thread info panel",
+    });
+    const newTabButton = screen.getByRole("button", { name: "Open tab menu" });
+    expect(infoButton.className).toContain(
+      CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+    );
+    expect(newTabButton.className).toContain(
+      CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+    );
+
+    fireEvent.click(newTabButton);
 
     const menu = screen.getByText("New tab menu");
     const surface = menu.parentElement;
