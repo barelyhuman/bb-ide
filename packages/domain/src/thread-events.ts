@@ -240,6 +240,7 @@ export const systemThreadProvisioningStatusValues = [
   "active",
   "completed",
   "failed",
+  "cancelled",
 ] as const;
 export const systemThreadProvisioningStatusSchema = z.enum(
   systemThreadProvisioningStatusValues,

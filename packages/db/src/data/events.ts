@@ -35,6 +35,7 @@ import type { DbNotifier } from "../notifier.js";
 import { environments, events, threads } from "../schema.js";
 import { createEventId } from "../ids.js";
 import { deriveStoredEventItemFieldsFromSource } from "../stored-event-item-fields.js";
+import { markClientTurnRequestAcceptedInTransaction } from "./client-turn-requests.js";
 
 const STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE = 250;
 
@@ -349,6 +350,31 @@ function assertDaemonTurnStartedForInput(
   });
 }
 
+function parseAcceptedInputClientRequestIdFromInput(
+  input: AppendDaemonEventInput,
+): ClientTurnRequestId | null {
+  if (input.type !== "turn/input/accepted") {
+    return null;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(input.data);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  if (!("clientRequestId" in data)) {
+    return null;
+  }
+  const result = clientTurnRequestIdSchema.safeParse(data.clientRequestId);
+  if (!result.success) {
+    return null;
+  }
+  return result.data;
+}
+
 export function appendDaemonEventsInTransaction(
   db: DbTransaction,
   eventInputs: readonly AppendDaemonEventInput[],
@@ -461,6 +487,15 @@ export function appendDaemonEventsInTransaction(
           buildThreadTurnKey({ threadId: input.threadId, turnId }),
         );
       }
+    }
+    const acceptedClientRequestId =
+      parseAcceptedInputClientRequestIdFromInput(input);
+    if (acceptedClientRequestId !== null) {
+      markClientTurnRequestAcceptedInTransaction(db, {
+        requestId: acceptedClientRequestId,
+        settledAt: now,
+        threadId: input.threadId,
+      });
     }
     nextSequencesByThreadId.set(input.threadId, sequence + 1);
   }
@@ -659,6 +694,11 @@ export interface ListStoredTurnInputAcceptedRowsByClientRequestIdsArgs {
 export interface ListStoredClientTurnRequestIdsInRangeArgs {
   seqEnd: number;
   seqStart: number;
+  threadId: string;
+}
+
+export interface FindStoredClientTurnRequestSequenceByRequestIdArgs {
+  requestId: ClientTurnRequestId;
   threadId: string;
 }
 
@@ -865,6 +905,28 @@ export function listStoredClientTurnRequestIdsInRange(
     .all();
 
   return rows.map((row) => clientTurnRequestIdSchema.parse(row.requestId));
+}
+
+export function findStoredClientTurnRequestSequenceByRequestId(
+  db: DbQueryConnection,
+  args: FindStoredClientTurnRequestSequenceByRequestIdArgs,
+): number | null {
+  const row =
+    db
+      .select({
+        sequence: events.sequence,
+      })
+      .from(events)
+      .where(
+        and(
+          eq(events.threadId, args.threadId),
+          eq(events.type, "client/turn/requested"),
+          sql`json_extract(${events.data}, '$.requestId') = ${args.requestId}`,
+        ),
+      )
+      .limit(1)
+      .get() ?? null;
+  return row?.sequence ?? null;
 }
 
 export function listStoredTurnInputAcceptedRowsByClientRequestIds(

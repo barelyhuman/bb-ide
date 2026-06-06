@@ -410,11 +410,11 @@ export function Overview() {
         <Row submitMode={{ kind: "blocked", reason: "pending-interaction" }} />
       </StoryRow>
       <StoryRow
-        label="blocked: provisioning"
-        hint="environment still spinning up — 'Provisioning' label, no branch yet"
+        label="stop-only: provisioning"
+        hint="environment still spinning up — follow-up locked; only Stop available"
       >
         <Row
-          submitMode={{ kind: "blocked", reason: "provisioning" }}
+          submitMode={{ kind: "stop-only", onStop: noop }}
           threadRuntimeDisplayStatus="provisioning"
           environmentSummary={provisioningEnvironmentSummary}
         />

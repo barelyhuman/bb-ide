@@ -49,6 +49,18 @@ interface EventSpoolHasEventArgs {
   threadId: string;
 }
 
+interface SetupDaemonHarnessArgs {
+  adapterFactory?: () => ProviderAdapter;
+  serverOptions?: CreateTestServerOptions;
+}
+
+interface StartTestHostDaemonArgs {
+  adapterFactory?: () => ProviderAdapter;
+  dataDir: string;
+  enrollKey: string;
+  serverUrl: string;
+}
+
 type EventSpoolLookupParams = [threadId: string, eventType: string];
 
 function parseInteractiveRequestParams(
@@ -543,12 +555,23 @@ function createTurnSubmitCommand(args: {
   };
 }
 
-async function setupDaemonHarness(
-  args: {
-    adapterFactory?: () => ProviderAdapter;
-    serverOptions?: CreateTestServerOptions;
-  } = {},
-) {
+async function startTestHostDaemon(args: StartTestHostDaemonArgs) {
+  return startHostDaemon({
+    dataDir: args.dataDir,
+    enrollKey: args.enrollKey,
+    serverUrl: args.serverUrl,
+    enableLocalApi: false,
+    logger: createTestLogger(),
+    createInstanceId: () => "instance-1",
+    createRuntime: (options) =>
+      createAgentRuntimeWithAdapters({
+        ...options,
+        adapterFactory: args.adapterFactory ?? (() => createFakeAdapter()),
+      }),
+  });
+}
+
+async function setupDaemonHarness(args: SetupDaemonHarnessArgs = {}) {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
   const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
 
@@ -558,18 +581,11 @@ async function setupDaemonHarness(
   await fs.mkdir(envBPath, { recursive: true });
 
   const server = await createTestServer(args.serverOptions);
-  const daemon = await startHostDaemon({
+  const daemon = await startTestHostDaemon({
     dataDir,
     enrollKey: server.enrollKey,
     serverUrl: server.baseUrl,
-    enableLocalApi: false,
-    logger: createTestLogger(),
-    createInstanceId: () => "instance-1",
-    createRuntime: (options) =>
-      createAgentRuntimeWithAdapters({
-        ...options,
-        adapterFactory: args.adapterFactory ?? (() => createFakeAdapter()),
-      }),
+    adapterFactory: args.adapterFactory,
   });
 
   await waitFor(() => server.sessionOpenCalls.length === 1);
@@ -758,6 +774,102 @@ describe("host daemon integration", () => {
       ).toBe(startEvents.length + followUpEvents.length);
     } finally {
       await harness.daemon.shutdown("test");
+      await harness.server.close();
+    }
+  });
+
+  it("resumes a forgotten provider thread before turn.submit after daemon restart", async () => {
+    const harness = await setupDaemonHarness();
+    let activeDaemon = harness.daemon;
+    let activeDaemonClosed = false;
+
+    try {
+      const startCommand = harness.server.queueCommand({
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          requestId: "creq_23456789ab",
+          input: [{ type: "text", text: "start before restart" }],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+      await waitFor(() =>
+        harness.server.commandResults.some(
+          (result) => result.commandId === startCommand.id,
+        ),
+      );
+      const startResult = harness.server.commandResults.find(
+        (result) => result.commandId === startCommand.id,
+      );
+      if (!startResult || startResult.type !== "thread.start") {
+        throw new Error("Expected thread.start result");
+      }
+      if (!startResult.ok) {
+        throw new Error("Expected thread.start to succeed");
+      }
+
+      await activeDaemon.shutdown("test restart");
+      activeDaemonClosed = true;
+      await waitFor(() => harness.server.socketCount() === 0);
+
+      activeDaemon = await startTestHostDaemon({
+        dataDir: harness.dataDir,
+        enrollKey: harness.server.enrollKey,
+        serverUrl: harness.server.baseUrl,
+      });
+      activeDaemonClosed = false;
+      await waitFor(
+        () =>
+          harness.server.sessionOpenCalls.length === 2 &&
+          harness.server.socketCount() === 1,
+      );
+
+      const eventCountBeforeFollowUp = harness.server.events.length;
+      const followUpCommand = harness.server.queueCommand({
+        ...createTurnSubmitCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: startResult.result.providerThreadId,
+          requestId: "creq_23456789ac",
+          input: [{ type: "text", text: "follow up after restart" }],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+      await waitFor(() =>
+        harness.server.commandResults.some(
+          (result) => result.commandId === followUpCommand.id,
+        ),
+      );
+      const followUpResult = harness.server.commandResults.find(
+        (result) => result.commandId === followUpCommand.id,
+      );
+      expect(followUpResult).toMatchObject({
+        commandId: followUpCommand.id,
+        ok: true,
+        result: { appliedAs: "new-turn" },
+        type: "turn.submit",
+      });
+      await waitFor(() =>
+        harness.server.events
+          .slice(eventCountBeforeFollowUp)
+          .some(
+            (event) =>
+              event.threadId === "thread-a" &&
+              event.event.type === "turn/completed",
+          ),
+      );
+    } finally {
+      if (!activeDaemonClosed) {
+        await activeDaemon.shutdown("test");
+      }
       await harness.server.close();
     }
   });

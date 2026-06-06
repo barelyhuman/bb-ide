@@ -1,9 +1,11 @@
 import { eq } from "drizzle-orm";
 import {
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+  createPendingClientTurnRequestInTransaction,
   createPendingInteraction,
   getEnvironment,
   getEnvironmentOperation,
+  getClientTurnRequest,
   getPendingInteraction,
   getThread,
   getThreadOperation,
@@ -579,6 +581,7 @@ describe("expired commands", () => {
         environmentId: environment.id,
         status: "active",
       });
+      const requestId = "creq_23456789ad";
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
         sessionId: null,
@@ -587,7 +590,7 @@ describe("expired commands", () => {
           type: "turn.submit",
           environmentId: environment.id,
           threadId: thread.id,
-          requestId: "creq_23456789ad",
+          requestId,
           target: { mode: "auto", expectedTurnId: null },
           input: [{ type: "text", text: "hello" }],
           options: {
@@ -613,6 +616,16 @@ describe("expired commands", () => {
           },
         }),
       });
+      harness.db.transaction((tx) => {
+        createPendingClientTurnRequestInTransaction(tx, {
+          commandId: command.id,
+          commandType: "turn.submit",
+          environmentId: environment.id,
+          requestEventSequence: 88,
+          requestId,
+          threadId: thread.id,
+        });
+      });
       const expired = deliverExpiredCommand(harness, {
         commandId: command.id,
         hostId: host.id,
@@ -623,6 +636,13 @@ describe("expired commands", () => {
       });
 
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      expect(getClientTurnRequest(harness.db, { requestId })).toMatchObject({
+        commandCompletedAt: expect.any(Number),
+        message: "Command expired after retry",
+        reasonCode: "command_expired",
+        settledAt: expect.any(Number),
+        status: "expired",
+      });
     });
   });
 

@@ -16,17 +16,20 @@ export interface ProcessLocalQueuedLockTimeoutArgs {
 
 export type WithProcessLocalQueuedLocksArgs<T> = {
   locks: ProcessLocalQueuedLockSpec[];
+  signal?: AbortSignal;
   work: ProcessLocalQueuedLockWork<T>;
 };
 
 type WithProcessLocalQueuedLocksAtIndexArgs<T> = {
   locks: ProcessLocalQueuedLockSpec[];
   index: number;
+  signal: AbortSignal | undefined;
   work: ProcessLocalQueuedLockWork<T>;
 };
 
 type WithProcessLocalQueuedLockArgs<T> = {
   lock: ProcessLocalQueuedLockSpec;
+  signal: AbortSignal | undefined;
   work: ProcessLocalQueuedLockWork<T>;
 };
 
@@ -53,6 +56,7 @@ export async function withProcessLocalQueuedLocks<T>(
   return withProcessLocalQueuedLocksAtIndex({
     locks,
     index: 0,
+    signal: args.signal,
     work: args.work,
   });
 }
@@ -88,8 +92,10 @@ function withProcessLocalQueuedLocksAtIndex<T>(
       withProcessLocalQueuedLocksAtIndex({
         locks: args.locks,
         index: args.index + 1,
+        signal: args.signal,
         work: args.work,
       }),
+    signal: args.signal,
   });
 }
 
@@ -105,14 +111,27 @@ function withProcessLocalQueuedLock<T>(
     args.lock.key,
     () => heldLocks.run(new Set([...(held ?? []), args.lock.key]), args.work),
     args.lock.timeoutMs ?? DEFAULT_PROCESS_LOCAL_LOCK_TIMEOUT_MS,
+    args.signal,
   );
+}
+
+function lockAbortError(key: string, signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason;
+  }
+  return new Error(`Aborted waiting for process-local lock ${key}`);
 }
 
 function runInProcessQueue<T>(
   key: string,
   work: ProcessLocalQueuedLockWork<T>,
   timeoutMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<T> {
+  if (signal?.aborted) {
+    return Promise.reject(lockAbortError(key, signal));
+  }
+
   const previous = lockQueues.get(key) ?? Promise.resolve();
   // Queue nodes stay in the chain even when their public promise times out.
   // When the timed-out node reaches the head, it observes timedOut and skips
@@ -121,14 +140,23 @@ function runInProcessQueue<T>(
   // no longer cancels it; ownership has transferred to the caller's critical
   // section, and cancellation would leave the protected git operation midway.
   let started = false;
+  let aborted = false;
   let timedOut = false;
   let timeout: NodeJS.Timeout | undefined;
+  let removeAbortListener: (() => void) | undefined;
   const next = previous
     .catch(() => undefined)
     .then(async () => {
       if (timeout) {
         clearTimeout(timeout);
         timeout = undefined;
+      }
+      if (removeAbortListener) {
+        removeAbortListener();
+        removeAbortListener = undefined;
+      }
+      if (aborted && signal) {
+        throw lockAbortError(key, signal);
       }
       if (timedOut) {
         throw new ProcessLocalQueuedLockTimeoutError({ key, timeoutMs });
@@ -167,11 +195,29 @@ function runInProcessQueue<T>(
       );
     }, timeoutMs);
 
+    if (signal) {
+      const onAbort = () => {
+        if (started) {
+          return;
+        }
+        aborted = true;
+        reject(lockAbortError(key, signal));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      removeAbortListener = () => {
+        signal.removeEventListener("abort", onAbort);
+      };
+    }
+
     next.then(
       (value) => {
         if (timeout) {
           clearTimeout(timeout);
           timeout = undefined;
+        }
+        if (removeAbortListener) {
+          removeAbortListener();
+          removeAbortListener = undefined;
         }
         resolve(value);
       },
@@ -179,6 +225,10 @@ function runInProcessQueue<T>(
         if (timeout) {
           clearTimeout(timeout);
           timeout = undefined;
+        }
+        if (removeAbortListener) {
+          removeAbortListener();
+          removeAbortListener = undefined;
         }
         reject(error);
       },

@@ -514,6 +514,10 @@ export interface ListTrackedThreadStorageTargetsOnHostArgs {
   hostId: string;
 }
 
+export interface ListStopRequestedThreadsArgs {
+  limit: number;
+}
+
 export interface ThreadEnvironmentAssignmentRow {
   environmentId: string;
   threadId: string;
@@ -921,6 +925,7 @@ export function listTrackedThreadStorageTargetsOnHost(
 
 export function listStopRequestedThreads(
   db: DbConnection,
+  args: ListStopRequestedThreadsArgs,
 ): StopRequestedThreadRow[] {
   return db
     .select({
@@ -933,6 +938,8 @@ export function listStopRequestedThreads(
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(isNotNull(threads.stopRequestedAt))
+    .orderBy(asc(threads.stopRequestedAt), asc(threads.id))
+    .limit(args.limit)
     .all();
 }
 

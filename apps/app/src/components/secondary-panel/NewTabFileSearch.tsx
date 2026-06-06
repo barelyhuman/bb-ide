@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { ThreadType } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Input } from "@/components/ui/input.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { ResolvedAppIcon } from "./AppIcon";
@@ -231,7 +232,7 @@ const LAUNCHER_TILE_ICON_CLASS_DASHED =
 // File-type identity comes from the glyph alone so recent rows stay as compact
 // as file-search results without per-type row coloring.
 const RECENT_CHIP_ICON_NAME = {
-  md: "FileText",
+  md: "File",
   html: "AppWindow",
   report: "ChartColumn",
   code: "Code",
@@ -397,7 +398,7 @@ function FileSearchMessage({
   message,
 }: FileSearchMessageProps) {
   return (
-    <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
+    <EmptyStatePanel className="flex min-h-24 items-center justify-center">
       <div className="flex max-w-64 items-center justify-center gap-1.5">
         <Icon
           name={iconName}
@@ -405,7 +406,7 @@ function FileSearchMessage({
         />
         <p>{message}</p>
       </div>
-    </div>
+    </EmptyStatePanel>
   );
 }
 

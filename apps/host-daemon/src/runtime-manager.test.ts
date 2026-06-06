@@ -371,7 +371,6 @@ describe("RuntimeManager", () => {
           "global-skills",
           entry.skillCatalogHash ?? "",
         ),
-        skillNames: ["release-notes"],
       },
     ]);
   });
@@ -449,7 +448,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
     const firstCatalogHash = firstEntry.skillCatalogHash;
-    manager.markThreadActive("env-skills", "thread-1", "provider-1");
+    manager.markThreadActive("env-skills", "thread-1", "provider-1", null);
     await writeInjectedSkillSource({
       dataDir,
       name: "release-notes",
@@ -503,7 +502,7 @@ describe("RuntimeManager", () => {
       injectedSkillSources: [source],
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-skills", "thread-1", "provider-1");
+    manager.markThreadActive("env-skills", "thread-1", "provider-1", null);
     manager.markThreadInactive("env-skills", "thread-1");
     await writeInjectedSkillSource({
       dataDir,
@@ -559,7 +558,7 @@ describe("RuntimeManager", () => {
       injectedSkillSources: [source],
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-skills", "other-thread", "provider-1");
+    manager.markThreadActive("env-skills", "other-thread", "provider-1", null);
     await writeInjectedSkillSource({
       dataDir,
       name: "release-notes",
@@ -634,7 +633,7 @@ describe("RuntimeManager", () => {
       injectedSkillSources: [source],
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-skills", "thread-1", "provider-1");
+    manager.markThreadActive("env-skills", "thread-1", "provider-1", null);
     await writeInjectedSkillSource({
       dataDir,
       name: "release-notes",
@@ -678,15 +677,131 @@ describe("RuntimeManager", () => {
     expect(secondEntry).toBe(firstEntry);
     expect(createRuntime).toHaveBeenCalledTimes(1);
     expect(provisionWorkspace).toHaveBeenCalledTimes(2);
-    expect(provisionWorkspace).toHaveBeenNthCalledWith(2, {
-      workspaceProvisionType: "unmanaged",
-      path: "/tmp/env-1",
-      checkout: { kind: "existing", name: "feature-existing" },
-    });
+    expect(provisionWorkspace).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/env-1",
+        checkout: { kind: "existing", name: "feature-existing" },
+      }),
+    );
     expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
       environmentId: "env-1",
       changeKinds: ["work-status-changed", "git-refs-changed"],
     });
+  });
+
+  it("registers existing environment provisioning before invoking work", async () => {
+    let manager: RuntimeManager;
+    let callCount = 0;
+    let cancelDuringWork: Promise<{ aborted: boolean }> | null = null;
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const provisionWorkspace = vi.fn(
+      async (options: ProvisionWorkspaceArgs) => {
+        callCount += 1;
+        if (callCount === 1) {
+          return workspace;
+        }
+
+        cancelDuringWork = manager.cancelEnvironmentProvision({
+          environmentId: "env-1",
+        });
+        if (!options.signal?.aborted) {
+          throw new Error("Expected provision signal to be aborted");
+        }
+        throw options.signal.reason;
+      },
+    );
+    manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    await expect(
+      manager.ensureEnvironment({
+        environmentId: "env-1",
+        provision: {
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/env-1",
+          checkout: { kind: "existing", name: "feature-existing" },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "provision_cancelled" });
+    if (!cancelDuringWork) {
+      throw new Error("Expected cancellation to be requested during provision");
+    }
+    await expect(cancelDuringWork).resolves.toEqual({ aborted: true });
+  });
+
+  it("shares existing environment provisioning cancellation across concurrent callers", async () => {
+    const provisionStarted = createDeferred<void>();
+    const provisionSignals: AbortSignal[] = [];
+    let callCount = 0;
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const provisionWorkspace = vi.fn(
+      async (options: ProvisionWorkspaceArgs) => {
+        callCount += 1;
+        if (callCount === 1) {
+          return workspace;
+        }
+        if (!options.signal) {
+          throw new Error("Expected provision signal");
+        }
+        provisionSignals.push(options.signal);
+        provisionStarted.resolve();
+        return new Promise<HostWorkspace>((_resolve, reject) => {
+          options.signal?.addEventListener(
+            "abort",
+            () => reject(options.signal?.reason),
+            { once: true },
+          );
+        });
+      },
+    );
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+    const provision: ProvisionWorkspaceArgs = {
+      workspaceProvisionType: "unmanaged",
+      path: "/tmp/env-1",
+      checkout: { kind: "existing", name: "feature-existing" },
+    };
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    const first = manager.ensureEnvironment({
+      environmentId: "env-1",
+      provision,
+    });
+    await provisionStarted.promise;
+    const second = manager.ensureEnvironment({
+      environmentId: "env-1",
+      provision,
+    });
+    const firstCancelled = expect(first).rejects.toMatchObject({
+      code: "provision_cancelled",
+    });
+    const secondCancelled = expect(second).rejects.toMatchObject({
+      code: "provision_cancelled",
+    });
+
+    await expect(
+      manager.cancelEnvironmentProvision({
+        environmentId: "env-1",
+      }),
+    ).resolves.toEqual({ aborted: true });
+    await firstCancelled;
+    await secondCancelled;
+    expect(provisionWorkspace).toHaveBeenCalledTimes(2);
+    expect(provisionSignals).toHaveLength(1);
+    expect(provisionSignals[0]?.aborted).toBe(true);
   });
 
   it("passes managed worktree git metadata roots to created runtimes", async () => {
@@ -914,6 +1029,7 @@ describe("RuntimeManager", () => {
       "env-active",
       "thr-active",
       "provider-thread-active",
+      null,
     );
 
     await expect(manager.evictIdleEnvironments()).resolves.toEqual([
@@ -1399,7 +1515,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     expect(manager.listActiveThreads()).toEqual([
       {
         threadId: "thread-1",
@@ -1421,13 +1537,13 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     manager.markThreadInactive("env-1", "thread-1");
 
     expect(manager.hasThread("env-1", "thread-1")).toBe(true);
     expect(manager.listActiveThreads()).toEqual([]);
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     expect(manager.listActiveThreads()).toEqual([
       {
         threadId: "thread-1",
@@ -1446,7 +1562,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1", null);
     manager.forgetThread("env-1", "thread-1");
 
     expect(manager.hasThread("env-1", "thread-1")).toBe(false);
@@ -1476,8 +1592,8 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-storage",
     });
 
-    manager.markThreadActive("env-storage", "thread-1", "provider-1");
-    manager.markThreadActive("env-storage", "thread-2", "provider-2");
+    manager.markThreadActive("env-storage", "thread-1", "provider-1", null);
+    manager.markThreadActive("env-storage", "thread-2", "provider-2", null);
     watchThreadStorageRootArgs?.onChange({
       kind: "thread-storage-changed",
       environmentId: "env-storage",
@@ -1652,7 +1768,7 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-storage",
     });
 
-    manager.markThreadActive("env-storage", "thread-1", "provider-1");
+    manager.markThreadActive("env-storage", "thread-1", "provider-1", null);
     watchThreadStorageRootArgs?.onWatchError({
       kind: "thread-storage-watch-error",
       message: "watch failed",
@@ -1693,8 +1809,8 @@ describe("RuntimeManager", () => {
       workspacePath: "/tmp/env-b",
     });
 
-    manager.markThreadActive("env-a", "thread-a", "provider-a");
-    manager.markThreadActive("env-b", "thread-b", "provider-b");
+    manager.markThreadActive("env-a", "thread-a", "provider-a", null);
+    manager.markThreadActive("env-b", "thread-b", "provider-b", null);
 
     await manager.destroyEnvironment("env-a");
     expect(stopWatchingPathChanges).not.toHaveBeenCalled();
@@ -1729,7 +1845,7 @@ describe("RuntimeManager", () => {
       environmentId: "env-exit",
       workspacePath: "/tmp/env-exit",
     });
-    manager.markThreadActive("env-exit", "thread-1", "provider-1");
+    manager.markThreadActive("env-exit", "thread-1", "provider-1", null);
 
     onProcessExit?.({
       providerId: "fake",
@@ -1774,8 +1890,8 @@ describe("RuntimeManager", () => {
       environmentId: "env-shared",
       workspacePath: "/tmp/env-shared",
     });
-    manager.markThreadActive("env-shared", "thread-a", "provider-a");
-    manager.markThreadActive("env-shared", "thread-b", "provider-b");
+    manager.markThreadActive("env-shared", "thread-a", "provider-a", null);
+    manager.markThreadActive("env-shared", "thread-b", "provider-b", null);
 
     runningProviders = ["fake-beta"];
     onProcessExit?.({

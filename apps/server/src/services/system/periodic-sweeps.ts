@@ -64,7 +64,7 @@ import {
   advanceThreadStart,
   completeThreadStart,
   finalizeStoppedThreadAndAdvanceCleanup,
-  requestThreadStop,
+  requestThreadStopForCurrentState,
 } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
 import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
@@ -75,6 +75,7 @@ export type EvaluateManagedEnvironmentArchiveCleanupFn =
 export type DatabaseMaintenanceSweepDeps = Pick<AppDeps, "db" | "logger">;
 
 const DATABASE_MAINTENANCE_CHECK_INTERVAL_MS = 60 * 60_000;
+const STOP_REQUESTED_THREAD_SWEEP_BATCH_SIZE = 50;
 
 let lastDatabaseMaintenanceCheckAt = 0;
 let databaseMaintenanceRunning = false;
@@ -232,12 +233,7 @@ export async function runProjectDeletionSweep(
 export async function runEnvironmentProvisioningSweep(
   deps: Pick<
     AppDeps,
-    | "config"
-    | "db"
-    | "hub"
-    | "lifecycleDedupers"
-    | "logger"
-    | "machineAuth"
+    "config" | "db" | "hub" | "lifecycleDedupers" | "logger" | "machineAuth"
   >,
 ): Promise<void> {
   const seenEnvironmentIds = new Set<string>();
@@ -341,18 +337,30 @@ export async function runThreadLifecycleSweep(
     }
   }
 
-  const stopRequestedThreads = listStopRequestedThreads(deps.db);
+  const stopRequestedThreads = listStopRequestedThreads(deps.db, {
+    limit: STOP_REQUESTED_THREAD_SWEEP_BATCH_SIZE,
+  });
 
   for (const thread of stopRequestedThreads) {
     try {
-      if (thread.status === "active") {
-        requestThreadStop(deps, {
-          environmentId: thread.environmentId,
-          hostId: thread.hostId,
-          interruptionReason: "manual-stop",
-          stopRequestedAt: thread.stopRequestedAt,
-          threadId: thread.threadId,
-        });
+      if (
+        thread.status === "active" ||
+        thread.status === "created" ||
+        thread.status === "provisioning"
+      ) {
+        requestThreadStopForCurrentState(
+          deps,
+          {
+            environmentId: thread.environmentId,
+            id: thread.threadId,
+            status: thread.status,
+            stopRequestedAt: thread.stopRequestedAt,
+          },
+          {
+            hostId: thread.hostId,
+            id: thread.environmentId,
+          },
+        );
         continue;
       }
 

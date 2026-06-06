@@ -47,7 +47,7 @@ function GitDiffSelector({
       <DropdownMenuTrigger asChild disabled={disabled}>
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           disabled={disabled}
           className={cn(

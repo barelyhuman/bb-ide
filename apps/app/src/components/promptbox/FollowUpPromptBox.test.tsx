@@ -116,6 +116,27 @@ describe("FollowUpPromptBox", () => {
     expect(onModifierSubmit).not.toHaveBeenCalled();
   });
 
+  it("renders only the stop action in stop-only mode", () => {
+    const props = makeFollowUpPromptBoxProps();
+    const onStop = vi.fn();
+    const onSubmit = vi.fn();
+    props.composer = {
+      ...props.composer,
+      onSubmit,
+      promptPlaceholder: "Provisioning workspace...",
+      submitMode: { kind: "stop-only", onStop },
+      threadRuntimeDisplayStatus: "provisioning",
+    };
+
+    render(<FollowUpPromptBox {...props} />);
+
+    expect(screen.queryByTitle("Submit (Enter)")).toBeNull();
+    fireEvent.click(screen.getByTitle("Stop run"));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("preserves ordinary Enter submit behavior", () => {
     const props = makeFollowUpPromptBoxProps();
     const onModifierSubmit = vi.fn();

@@ -42,6 +42,23 @@ async function initRepoWithOptionalSetup(
   return repoPath;
 }
 
+class AbortAtSetupListenerSignal extends EventTarget implements AbortSignal {
+  onabort: ((this: AbortSignal, event: Event) => void) | null = null;
+  readonly reason = new Error("test abort");
+  private abortedReadCount = 0;
+
+  get aborted(): boolean {
+    this.abortedReadCount += 1;
+    return this.abortedReadCount >= 3;
+  }
+
+  throwIfAborted(): void {
+    if (this.aborted) {
+      throw this.reason;
+    }
+  }
+}
+
 afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
@@ -217,6 +234,120 @@ describe("workspace provisioning", () => {
         timeoutMs: 50,
       }),
     ).rejects.toThrow(/timed out/u);
+  });
+
+  it("aborts setup scripts and emits cancellation progress", async () => {
+    const workspacePath = await makeTempDir("bb-setup-abort-");
+    const markerDir = await makeTempDir("bb-setup-abort-markers-");
+    await fs.writeFile(
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      [
+        "set -euo pipefail",
+        `marker_dir=${shellSingleQuote(markerDir)}`,
+        'trap "touch \\"$marker_dir/started-terminated\\"; exit 0" TERM',
+        'touch "$marker_dir/started-setup"',
+        "while true; do sleep 0.05; done",
+      ].join("\n") + "\n",
+      "utf8",
+    );
+    const abortController = new AbortController();
+    const entries: string[] = [];
+    const run = runSetupScript({
+      workspacePath,
+      timeoutMs: 900000,
+      signal: abortController.signal,
+      onProgress: (entry) => entries.push(`${entry.key}:${entry.text}`),
+    });
+
+    await waitForSetupMarkerCount({
+      expectedCount: 1,
+      markerDir,
+      timeoutMs: 2_000,
+    });
+    abortController.abort(new Error("test abort"));
+
+    await expect(run).rejects.toMatchObject({ code: "provision_cancelled" });
+    await waitForSetupMarkerCount({
+      expectedCount: 2,
+      markerDir,
+      timeoutMs: 2_000,
+    });
+    expect(entries).toContain("setup-cancelled:.bb-env-setup.sh cancelled");
+  });
+
+  it("aborts setup scripts when the signal is aborted at listener registration", async () => {
+    const workspacePath = await makeTempDir("bb-setup-listener-abort-");
+    const markerDir = await makeTempDir("bb-setup-listener-abort-markers-");
+    const completedMarker = path.join(markerDir, "completed-setup");
+    await fs.writeFile(
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      [
+        "set -euo pipefail",
+        `marker_dir=${shellSingleQuote(markerDir)}`,
+        'trap "exit 0" TERM',
+        "sleep 0.2",
+        'touch "$marker_dir/completed-setup"',
+      ].join("\n") + "\n",
+      "utf8",
+    );
+    const entries: string[] = [];
+
+    await expect(
+      runSetupScript({
+        workspacePath,
+        timeoutMs: 900000,
+        signal: new AbortAtSetupListenerSignal(),
+        onProgress: (entry) => entries.push(`${entry.key}:${entry.text}`),
+      }),
+    ).rejects.toMatchObject({ code: "provision_cancelled" });
+
+    await expect(fs.stat(completedMarker)).rejects.toThrow();
+    expect(entries).toContain("setup-cancelled:.bb-env-setup.sh cancelled");
+  });
+
+  it("removes managed worktrees after setup script cancellation", async () => {
+    const markerDir = await makeTempDir("bb-worktree-abort-markers-");
+    const sourceRepo = await initRepoWithOptionalSetup(
+      [
+        "set -euo pipefail",
+        `marker_dir=${shellSingleQuote(markerDir)}`,
+        'trap "touch \\"$marker_dir/started-terminated\\"; exit 0" TERM',
+        'touch "$marker_dir/started-setup"',
+        "while true; do sleep 0.05; done",
+      ].join("\n") + "\n",
+    );
+    const parentDir = await makeTempDir("bb-worktree-abort-parent-");
+    const targetPath = path.join(parentDir, "cancelled");
+    const abortController = new AbortController();
+    const provision = createWorktree({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName: "cancelled",
+      baseBranch: "main",
+      timeoutMs: 900000,
+      signal: abortController.signal,
+    });
+
+    await waitForSetupMarkerCount({
+      expectedCount: 1,
+      markerDir,
+      timeoutMs: 2_000,
+    });
+    abortController.abort(new Error("test abort"));
+
+    await expect(provision).rejects.toMatchObject({
+      code: "provision_cancelled",
+    });
+    await waitForSetupMarkerCount({
+      expectedCount: 2,
+      markerDir,
+      timeoutMs: 2_000,
+    });
+    await expect(fs.stat(targetPath)).rejects.toThrow();
+    const worktrees = await runGit(["worktree", "list", "--porcelain"], {
+      cwd: sourceRepo,
+    });
+    expect(worktrees.stdout).not.toContain(targetPath);
   });
 
   it("compacts carriage-return setup script progress in transcript output", async () => {

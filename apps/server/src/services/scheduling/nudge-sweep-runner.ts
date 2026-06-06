@@ -575,6 +575,7 @@ function queueDueNudgeInTransaction(
       preparedCommand: args.preparation.preparedCommand,
     }),
     hostId: args.preparation.environment.hostId,
+    requestEventSequence: request.sequence,
     sessionId: args.preparation.sessionId,
   });
 

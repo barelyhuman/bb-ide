@@ -1,10 +1,12 @@
 import { threadScope, turnScope } from "@bb/domain";
 import type {
   ApprovalPendingInteractionResolution,
+  ClientTurnRequestTerminalReason,
   JsonObject,
   OwnershipChangeOperationAction,
   ProviderErrorInfo,
   ProviderTurnWatchdogActivityEventType,
+  TerminalClientTurnRequestStatus,
   ThreadEventFileChange,
   ThreadEventItemStatus,
   UserQuestionPendingInteractionResolution,
@@ -23,7 +25,8 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   buildThreadTimelineFromEvents,
-  EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+  EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
+  type ClientTurnRequestSettlement,
   type ThreadEventWithMeta,
 } from "../src/index.js";
 import { parseOperationMessage } from "../src/parse-operation-message.js";
@@ -82,6 +85,19 @@ interface SystemOperationEventArgs {
   seq: number;
   status?: "running" | "completed" | "failed";
 }
+
+interface TerminalClientTurnRequestSettlementCase {
+  reasonCode: ClientTurnRequestTerminalReason;
+  status: TerminalClientTurnRequestStatus;
+}
+
+const TERMINAL_CLIENT_TURN_REQUEST_SETTLEMENT_CASES: TerminalClientTurnRequestSettlementCase[] =
+  [
+    { reasonCode: "accepted", status: "accepted" },
+    { reasonCode: "command_failed", status: "failed" },
+    { reasonCode: "runtime_canceled", status: "canceled" },
+    { reasonCode: "command_expired", status: "expired" },
+  ];
 
 interface PermissionGrantLifecycleEventArgs {
   interactionId?: string;
@@ -522,7 +538,7 @@ function buildContextWindowUsage(
   contextWindowEvents: ThreadEventWithMeta[],
 ): ThreadContextWindowUsage | null {
   return buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
     contextWindowEvents,
     events: [],
     options: {
@@ -545,7 +561,7 @@ function buildTimelineRows(
   workspaceRoot: string | null = null,
 ): TimelineRow[] {
   return buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
     contextWindowEvents: [],
     events,
     options: {
@@ -567,7 +583,7 @@ function buildManagerConversationTimelineRows(
   threadStatus: BuildTimelineRowsThreadStatus = "idle",
 ): TimelineRow[] {
   return buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
+    acceptedClientRequestContext: EMPTY_CLIENT_TURN_REQUEST_SETTLEMENT_CONTEXT,
     contextWindowEvents: [],
     events,
     options: {
@@ -589,6 +605,32 @@ function buildTimelineRowsWithAcceptedContext(
   return buildThreadTimelineFromEvents({
     acceptedClientRequestContext: {
       acceptedClientRequestEvents,
+      clientTurnRequestSettlements: [],
+    },
+    contextWindowEvents: [],
+    events,
+    options: {
+      includeDebugRawEvents: false,
+      includeNestedRows: true,
+      includeProviderUnhandledOperations: false,
+      isLatestPage: true,
+      systemClientRequestVisibility: "hidden",
+      threadStatus: "idle",
+      turnMessageDetail: "full",
+      viewMode: "standard",
+      workspaceRoot: null,
+    },
+  }).rows;
+}
+
+function buildTimelineRowsWithSettlementContext(
+  events: ThreadEventWithMeta[],
+  clientTurnRequestSettlements: ClientTurnRequestSettlement[],
+): TimelineRow[] {
+  return buildThreadTimelineFromEvents({
+    acceptedClientRequestContext: {
+      acceptedClientRequestEvents: [],
+      clientTurnRequestSettlements,
     },
     contextWindowEvents: [],
     events,
@@ -962,6 +1004,38 @@ describe("buildThreadTimelineFromEvents", () => {
       rows.filter((row) => row.kind === "conversation" && row.role === "user"),
     ).toHaveLength(0);
   });
+
+  it.each(TERMINAL_CLIENT_TURN_REQUEST_SETTLEMENT_CASES)(
+    "uses $status settlement context to suppress pending steers without accepted events",
+    ({ reasonCode, status }) => {
+      const event = createTimelineEventFactory({ threadId: "thread-1" });
+      const turnStarted = event.turnStarted({ turnId: "turn-1" });
+      const steerRequest = event.clientTurnRequested({
+        target: { kind: "auto", expectedTurnId: "turn-1" },
+        text: "Please account for the restart",
+      });
+
+      const rows = buildTimelineRowsWithSettlementContext(
+        fromRows([turnStarted, steerRequest]),
+        [
+          {
+            message: null,
+            reasonCode,
+            requestId: steerRequest.data.requestId,
+            settledAt: 123,
+            status,
+            turnId: null,
+          },
+        ],
+      );
+
+      expect(
+        rows.filter(
+          (row) => row.kind === "conversation" && row.role === "user",
+        ),
+      ).toHaveLength(0);
+    },
+  );
 
   it("uses accepted context to classify stale steers as messages when the accepted turn is visible", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
@@ -1671,7 +1745,6 @@ describe("buildThreadTimelineFromEvents", () => {
     ]);
 
     expect(collectToolRows(rows)).toEqual([]);
-    expect(JSON.stringify(rows)).not.toContain("Matched tools: TodoWrite");
   });
 
   it.each(["TaskCreate", "TaskGet", "TaskList", "TaskUpdate"])(

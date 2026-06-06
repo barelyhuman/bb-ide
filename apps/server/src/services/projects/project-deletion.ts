@@ -23,7 +23,7 @@ import {
 import { scheduleAfterDaemonIngressResponse } from "../hosts/daemon-ingress-scheduler.js";
 import {
   finalizeStoppedThread,
-  requestThreadStopIfNeeded,
+  requestActiveRuntimeThreadStopIfNeeded,
 } from "../threads/thread-lifecycle.js";
 import { NotificationBuffer } from "../lib/notification-buffer.js";
 
@@ -135,7 +135,9 @@ export function beginProjectDeletion(
       ? (environmentsById.get(thread.environmentId) ?? null)
       : null;
     if (environment) {
-      requestThreadStopIfNeeded(deps, thread, environment);
+      // Project deletion finalization owns non-runtime cleanup; only active
+      // runtime work needs a daemon stop request here.
+      requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     }
   }
 }
@@ -186,7 +188,9 @@ export async function advanceProjectDeletion(
     }
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     if (environment) {
-      requestThreadStopIfNeeded(deps, thread, environment);
+      // Project deletion finalization owns non-runtime cleanup; only active
+      // runtime work needs a daemon stop request here.
+      requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     }
     finalizeStoppedThread(deps, {
       cancelPendingCommand: false,

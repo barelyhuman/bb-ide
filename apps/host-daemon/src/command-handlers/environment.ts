@@ -95,6 +95,15 @@ export async function provisionEnvironment(
   }
 }
 
+export function cancelEnvironmentProvision(
+  command: CommandOf<"environment.provision.cancel">,
+  options: CommandDispatchOptions,
+): Promise<HostDaemonCommandResult<"environment.provision.cancel">> {
+  return options.runtimeManager.cancelEnvironmentProvision({
+    environmentId: command.environmentId,
+  });
+}
+
 function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
   const { command, options, transcript } = args;
   const initiator = command.initiator;

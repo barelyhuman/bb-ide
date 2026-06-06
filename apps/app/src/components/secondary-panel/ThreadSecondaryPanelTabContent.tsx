@@ -1,6 +1,7 @@
 import { memo, useCallback, type ReactNode } from "react";
 import type { ThreadGitDiffResponse } from "@bb/domain";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { useEnvironmentFilePreview } from "@/hooks/queries/environment-queries";
 import {
   useThreadHostFilePreview,
@@ -283,9 +284,9 @@ export function GitDiffTabContent({
           ) : null}
         </>
       ) : (
-        <p className="rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
+        <EmptyStatePanel className="rounded-lg">
           No diff to display.
-        </p>
+        </EmptyStatePanel>
       )}
     </div>
   );

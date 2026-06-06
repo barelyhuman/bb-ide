@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
-import type { StoredThreadEventDataForType, Thread } from "@bb/domain";
-import type { DbConnection } from "@bb/db";
+import type {
+  ClientTurnRequestTerminalReason,
+  StoredThreadEventDataForType,
+  TerminalClientTurnRequestStatus,
+  Thread,
+} from "@bb/domain";
+import {
+  createPendingClientTurnRequest,
+  markClientTurnRequestAcceptedInTransaction,
+  settleClientTurnRequestsForCommandInTransaction,
+  type DbConnection,
+} from "@bb/db";
 import type { TimelineRow } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
@@ -19,6 +29,19 @@ import {
   type ThreadTimelineServiceViewMode,
 } from "../../src/services/threads/timeline.js";
 import { ApiError } from "../../src/errors.js";
+
+interface TerminalClientTurnRequestSettlementCase {
+  reasonCode: ClientTurnRequestTerminalReason;
+  status: TerminalClientTurnRequestStatus;
+}
+
+const TERMINAL_CLIENT_TURN_REQUEST_SETTLEMENT_CASES: TerminalClientTurnRequestSettlementCase[] =
+  [
+    { reasonCode: "accepted", status: "accepted" },
+    { reasonCode: "command_failed", status: "failed" },
+    { reasonCode: "runtime_canceled", status: "canceled" },
+    { reasonCode: "command_expired", status: "expired" },
+  ];
 
 const UNPAGINATED_TIMELINE_SEGMENT_LIMIT = Number.MAX_SAFE_INTEGER;
 
@@ -4177,6 +4200,107 @@ describe("buildThreadTimeline", () => {
       }),
     );
   });
+
+  it.each(TERMINAL_CLIENT_TURN_REQUEST_SETTLEMENT_CASES)(
+    "suppresses manager standard pending steers with $status lifecycle settlement",
+    async ({ reasonCode, status }) => {
+      const harness = await createTestAppHarness();
+      harnesses.push(harness);
+
+      const host = seedHost(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        type: "manager",
+      });
+      const requestId = "creq_23456789ab";
+      const commandId = "hcmd_settled_system_steer";
+
+      seedEvent(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-1",
+        scope: turnScope("turn-1"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        scope: threadScope(),
+        data: {
+          direction: "outbound",
+          requestId,
+          source: "tell",
+          initiator: "system",
+          senderThreadId: null,
+          input: [{ type: "text", text: "settled-system-steer" }],
+          target: { kind: "auto", expectedTurnId: "turn-1" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
+          },
+        },
+      });
+      createPendingClientTurnRequest(harness.db, {
+        commandId,
+        commandType: "turn.submit",
+        environmentId: environment.id,
+        requestEventSequence: 2,
+        requestId,
+        threadId: managerThread.id,
+      });
+      harness.db.transaction((tx) => {
+        if (status === "accepted") {
+          markClientTurnRequestAcceptedInTransaction(tx, {
+            requestId,
+            settledAt: 500,
+            threadId: managerThread.id,
+          });
+          return;
+        }
+        settleClientTurnRequestsForCommandInTransaction(tx, {
+          commandId,
+          reasonCode,
+          settledAt: 500,
+          status,
+        });
+      });
+
+      const managerStandardTimeline = buildThreadTimeline(
+        harness.db,
+        managerThread,
+        {
+          isDevelopment: false,
+        },
+      );
+      expect(managerStandardTimeline.rows).not.toContainEqual(
+        expect.objectContaining({
+          role: "user",
+          text: "settled-system-steer",
+          turnRequest: {
+            kind: "steer",
+            status: "pending",
+          },
+        }),
+      );
+    },
+  );
 
   it("keeps manager-visible messages that would otherwise be buried in turn summaries", async () => {
     const harness = await createTestAppHarness();

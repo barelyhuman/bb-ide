@@ -266,16 +266,16 @@ remote images, and stylesheets load normally.
 <style>
 :root {
   color-scheme: light;
-  --background: oklch(0.9551 0 0);
+  --background: oklch(1 0 0);
   --foreground: oklch(0.3211 0 0);
-  --card: oklch(0.9702 0 0);
-  --muted: oklch(0.8853 0 0);
-  --muted-foreground: oklch(0.5103 0 0);
-  --border: oklch(0.8576 0 0);
-  --accent: oklch(0.9 0 0);
+  --card: oklch(0.985 0 0);
+  --muted: oklch(0.93 0 0);
+  --muted-foreground: oklch(0.44 0 0);
+  --border: oklch(0.905 0 0);
+  --accent: oklch(0.945 0 0);
   --success: oklch(0.7 0.15 155);
   --warning: oklch(0.7 0.16 50);
-  --destructive: oklch(0.5594 0.19 25.8625);
+  --destructive: oklch(0.45 0.19 25.8625);
   --radius: 0.5rem;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Fira Code", ui-monospace, SFMono-Regular, monospace;
@@ -283,13 +283,13 @@ remote images, and stylesheets load normally.
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --background: oklch(0.2178 0 0);
+    --background: oklch(0.195 0 0);
     --foreground: oklch(0.8853 0 0);
     --card: oklch(0.2435 0 0);
-    --muted: oklch(0.31 0 0);
-    --muted-foreground: oklch(0.7058 0 0);
-    --border: oklch(0.34 0 0);
-    --accent: oklch(0.32 0 0);
+    --muted: oklch(0.285 0 0);
+    --muted-foreground: oklch(0.78 0 0);
+    --border: oklch(0.329 0 0);
+    --accent: oklch(0.285 0 0);
   }
 }
 body {

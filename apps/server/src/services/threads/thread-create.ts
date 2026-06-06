@@ -3,10 +3,11 @@ import {
   findEnvironmentByHostPath,
   hasNonTerminalThreadInEnvironment,
 } from "@bb/db";
-import type { Project } from "@bb/domain";
+import type { Environment, Project } from "@bb/domain";
 import type { UnmanagedBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
+import { hasActiveEnvironmentProvisionCancelCommand } from "../environments/environment-provisioning-cancellation.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
 import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import { throwEnvironmentNotReady } from "../lib/lifecycle-api-errors.js";
@@ -50,6 +51,10 @@ interface ExistingUnmanagedEnvironmentIntentResult {
   intent:
     | Extract<ThreadProvisionEnvironmentIntent, { type: "reuse" }>
     | Extract<ThreadProvisionEnvironmentIntent, { type: "checkout-unmanaged" }>;
+}
+
+interface AssertProvisioningEnvironmentNotCancellingArgs {
+  environment: Environment;
 }
 
 interface CreateProvisioningThreadArgs {
@@ -117,6 +122,19 @@ function assertProjectWorkspaceCompatibility(
   }
 }
 
+function assertProvisioningEnvironmentNotCancelling(
+  deps: ThreadCreateDeps,
+  args: AssertProvisioningEnvironmentNotCancellingArgs,
+): void {
+  if (args.environment.status !== "provisioning") {
+    return;
+  }
+
+  if (hasActiveEnvironmentProvisionCancelCommand(deps, args.environment.id)) {
+    throwEnvironmentNotReady(args.environment);
+  }
+}
+
 function existingUnmanagedEnvironmentIntentByHostPath(
   deps: ThreadCreateDeps,
   args: ExistingUnmanagedEnvironmentIntentByHostPathArgs,
@@ -136,6 +154,9 @@ function existingUnmanagedEnvironmentIntentByHostPath(
 
   if (!args.branch) {
     if (existing.status === "ready" || existing.status === "provisioning") {
+      assertProvisioningEnvironmentNotCancelling(deps, {
+        environment: existing,
+      });
       return {
         environmentId: existing.id,
         intent: {
@@ -287,6 +308,9 @@ export async function createThreadFromRequest(
         throwEnvironmentNotReady(environment);
       }
       if (environment.status === "provisioning") {
+        assertProvisioningEnvironmentNotCancelling(deps, {
+          environment,
+        });
         requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
       }
       environmentId = environment.id;

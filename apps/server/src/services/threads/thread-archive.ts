@@ -15,7 +15,7 @@ import {
 } from "../system/event-pruning.js";
 import {
   queueSettledArchivedThreadProviderArchiveCommand,
-  requestThreadStopIfNeeded,
+  requestActiveRuntimeThreadStopIfNeeded,
 } from "./thread-lifecycle.js";
 import { archiveThreadAndReleaseChildren } from "./thread-ownership.js";
 import { requireThreadHostCommandEnvironment } from "./thread-command-environment.js";
@@ -50,7 +50,9 @@ export function archiveThreadWithLifecycleEffects(
   deps.terminalSessions.closeArchivedThreadTerminals({
     threadId: archivedThread.id,
   });
-  requestThreadStopIfNeeded(deps, archivedThread, args.environment);
+  // Archive only stops active runtime work; manual stop is the pre-start
+  // provisioning cancellation entrypoint.
+  requestActiveRuntimeThreadStopIfNeeded(deps, archivedThread, args.environment);
   queueSettledArchivedThreadProviderArchiveCommand(deps, {
     threadId: archivedThread.id,
   });

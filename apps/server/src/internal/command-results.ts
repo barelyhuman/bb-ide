@@ -23,7 +23,10 @@ import {
   type CommandResultWaiterResponse,
 } from "./command-result-side-effects.js";
 import { settleEnvironmentDestroyCommandResult } from "../services/environments/environment-cleanup-internal.js";
-import { settleEnvironmentProvisionCommandResult } from "../services/environments/environment-provisioning-internal.js";
+import {
+  settleEnvironmentProvisionCancelCommandResult,
+  settleEnvironmentProvisionCommandResult,
+} from "../services/environments/environment-provisioning-internal.js";
 import {
   settleThreadStartCommandResult,
   settleThreadStopCommandResult,
@@ -79,6 +82,9 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   },
   "environment.provision": {
     applySideEffects: settleEnvironmentProvisionCommandResult,
+  },
+  "environment.provision.cancel": {
+    applySideEffects: settleEnvironmentProvisionCancelCommandResult,
   },
   "host.write_file_relative": null,
   "host.delete_file_relative": null,

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useAtomValue } from "jotai";
 import { Icon } from "@/components/ui/icon.js";
+import { EmptyStatePanel } from "@/components/ui/empty-state.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -407,9 +408,9 @@ export function ThreadSecondaryPanel({
         {isBrowserTabActive ? null : hasActiveFileTab ? (
           <div className={cn(PANEL_SCROLL_SLOT_CLASS, "pb-3")}>
             {fileTabContent ?? (
-              <p className="mx-4 rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
+              <EmptyStatePanel className="mx-4 rounded-lg">
                 No file preview content provided.
-              </p>
+              </EmptyStatePanel>
             )}
           </div>
         ) : isDiffPanelActive ? (

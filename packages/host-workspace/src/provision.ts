@@ -38,6 +38,7 @@ type ProvisionProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
 interface ProvisionBase {
   /** Progress callback for provisioning steps/output */
   onProgress?: ProvisionProgressCallback;
+  signal?: AbortSignal;
 }
 
 export type UnmanagedCheckoutOpts =
@@ -339,11 +340,13 @@ interface ApplyUnmanagedCheckoutArgs {
   cwd: string;
   checkout: UnmanagedCheckoutOpts;
   onProgress: ProvisionProgressCallback | undefined;
+  signal: AbortSignal | undefined;
 }
 
 interface ValidateUnmanagedCheckoutArgs {
   cwd: string;
   checkout: UnmanagedCheckoutOpts;
+  signal: AbortSignal | undefined;
 }
 
 interface CheckoutCompletedTextArgs {
@@ -375,10 +378,25 @@ function getCheckoutCompletedText(args: CheckoutCompletedTextArgs): string {
   return `Switched to branch ${checkout.name}`;
 }
 
+function createProvisionCancelledError(cause?: unknown): WorkspaceError {
+  return new WorkspaceError(
+    "provision_cancelled",
+    "Workspace provisioning was cancelled",
+    { cause },
+  );
+}
+
+function throwIfProvisionAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw createProvisionCancelledError(signal.reason);
+  }
+}
+
 async function validateUnmanagedCheckout(
   args: ValidateUnmanagedCheckoutArgs,
 ): Promise<UnmanagedCheckoutPreflightResult> {
   const { cwd, checkout } = args;
+  throwIfProvisionAborted(args.signal);
   const checkoutRef = await getCheckoutRef(cwd);
   if (
     checkoutRef.kind === "branch" &&
@@ -454,7 +472,8 @@ async function validateUnmanagedCheckout(
 async function applyUnmanagedCheckout(
   args: ApplyUnmanagedCheckoutArgs,
 ): Promise<void> {
-  const { cwd, checkout, onProgress } = args;
+  const { cwd, checkout, onProgress, signal } = args;
+  throwIfProvisionAborted(signal);
   // `switch -C` for new (create-or-reset from base) and `switch` for existing.
   const switchArgs =
     checkout.kind === "new"
@@ -475,56 +494,67 @@ async function applyUnmanagedCheckout(
   let waitingCompleted = false;
   let alreadyOnTarget = false;
   try {
-    await withCheckoutMutationAdmission(cwd, async () => {
-      if (!(await pathExists(cwd))) {
-        throw new WorkspaceError(
-          "path_not_found",
-          `Unmanaged workspace path does not exist: ${cwd}`,
-        );
-      }
-      if (!(await detectGitRepo(cwd))) {
-        throw new WorkspaceError(
-          "not_git_repo",
-          `Cannot checkout branch on non-git workspace: ${cwd}`,
-        );
-      }
-
-      await withCheckoutMutationLock(cwd, async () => {
-        const lockAcquiredAt = Date.now();
-        onProgress?.({
-          type: "step",
-          key: "git-checkout-waiting",
-          text:
-            checkout.kind === "new"
-              ? `Ready to create branch ${checkout.name}`
-              : `Ready to switch to branch ${checkout.name}`,
-          status: "completed",
-          startedAt: waitingStartedAt,
-          metadata: { durationMs: lockAcquiredAt - waitingStartedAt },
-        });
-        waitingCompleted = true;
-        startedAt = lockAcquiredAt;
-        const preflightResult = await validateUnmanagedCheckout({
-          cwd,
-          checkout,
-        });
-        if (preflightResult.kind === "already-current") {
-          alreadyOnTarget = true;
-          return;
+    await withCheckoutMutationAdmission(
+      cwd,
+      async () => {
+        throwIfProvisionAborted(signal);
+        if (!(await pathExists(cwd))) {
+          throw new WorkspaceError(
+            "path_not_found",
+            `Unmanaged workspace path does not exist: ${cwd}`,
+          );
         }
-        onProgress?.({
-          type: "step",
-          key: "git-checkout-started",
-          text:
-            checkout.kind === "new"
-              ? `Creating branch ${checkout.name}`
-              : `Switching to branch ${checkout.name}`,
-          status: "started",
-          startedAt,
-        });
-        await runGit(switchArgs, { cwd });
-      });
-    });
+        if (!(await detectGitRepo(cwd))) {
+          throw new WorkspaceError(
+            "not_git_repo",
+            `Cannot checkout branch on non-git workspace: ${cwd}`,
+          );
+        }
+
+        await withCheckoutMutationLock(
+          cwd,
+          async () => {
+            throwIfProvisionAborted(signal);
+            const lockAcquiredAt = Date.now();
+            onProgress?.({
+              type: "step",
+              key: "git-checkout-waiting",
+              text:
+                checkout.kind === "new"
+                  ? `Ready to create branch ${checkout.name}`
+                  : `Ready to switch to branch ${checkout.name}`,
+              status: "completed",
+              startedAt: waitingStartedAt,
+              metadata: { durationMs: lockAcquiredAt - waitingStartedAt },
+            });
+            waitingCompleted = true;
+            startedAt = lockAcquiredAt;
+            const preflightResult = await validateUnmanagedCheckout({
+              cwd,
+              checkout,
+              signal,
+            });
+            if (preflightResult.kind === "already-current") {
+              alreadyOnTarget = true;
+              return;
+            }
+            onProgress?.({
+              type: "step",
+              key: "git-checkout-started",
+              text:
+                checkout.kind === "new"
+                  ? `Creating branch ${checkout.name}`
+                  : `Switching to branch ${checkout.name}`,
+              status: "started",
+              startedAt,
+            });
+            await runGit(switchArgs, { cwd, signal });
+          },
+          signal,
+        );
+      },
+      signal,
+    );
     waitingCompleted = true;
     onProgress?.({
       type: "step",
@@ -568,14 +598,17 @@ async function provisionUnmanaged(
   opts: UnmanagedWorkspaceOpts,
 ): Promise<HostWorkspace> {
   let isGitRepo: boolean;
+  throwIfProvisionAborted(opts.signal);
   if (opts.checkout) {
     await applyUnmanagedCheckout({
       cwd: opts.path,
       checkout: opts.checkout,
       onProgress: opts.onProgress,
+      signal: opts.signal,
     });
     isGitRepo = true;
   } else {
+    throwIfProvisionAborted(opts.signal);
     if (!(await pathExists(opts.path))) {
       throw new WorkspaceError(
         "path_not_found",
@@ -600,6 +633,7 @@ async function provisionUnmanaged(
 async function provisionWorktree(
   opts: ManagedWorktreeOpts,
 ): Promise<HostWorkspace> {
+  throwIfProvisionAborted(opts.signal);
   const { path: wsPath } = await createWorktree({
     sourcePath: opts.sourcePath,
     targetPath: opts.targetPath,
@@ -608,6 +642,7 @@ async function provisionWorktree(
     timeoutMs: opts.timeoutMs,
     onProgress: opts.onProgress,
     pruneEmptyParent: true,
+    signal: opts.signal,
   });
 
   return new ProvisionedHostWorkspace({
@@ -623,8 +658,18 @@ async function provisionWorktree(
 async function provisionPersonalWorkspace(
   opts: PersonalWorkspaceOpts,
 ): Promise<HostWorkspace> {
+  throwIfProvisionAborted(opts.signal);
   const targetPath = validatePersonalWorkspaceTargetPath(opts);
+  const targetExisted = await pathExists(targetPath);
   await mkdir(targetPath, { recursive: true });
+  try {
+    throwIfProvisionAborted(opts.signal);
+  } catch (error) {
+    if (!targetExisted) {
+      await rm(targetPath, { recursive: true, force: true });
+    }
+    throw error;
+  }
 
   return new ProvisionedHostWorkspace({
     path: targetPath,
@@ -638,7 +683,9 @@ async function provisionPersonalWorkspace(
 async function reconnectManaged(
   wsPath: string,
   destroyFn: () => Promise<void>,
+  signal: AbortSignal | undefined,
 ): Promise<HostWorkspace> {
+  throwIfProvisionAborted(signal);
   if (!(await pathExists(wsPath))) {
     throw new WorkspaceError(
       "path_not_found",
@@ -661,7 +708,10 @@ async function reconnectManaged(
 async function reconnectManagedWorktree(
   opts: ReconnectManagedWorktreeOpts,
 ): Promise<HostWorkspace> {
-  return reconnectManaged(opts.path, () =>
-    removeWorktree({ path: opts.path, force: true, pruneEmptyParent: true }),
+  return reconnectManaged(
+    opts.path,
+    () =>
+      removeWorktree({ path: opts.path, force: true, pruneEmptyParent: true }),
+    opts.signal,
   );
 }

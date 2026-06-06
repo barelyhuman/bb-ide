@@ -1,7 +1,10 @@
-import { getThread } from "@bb/db";
+import { getThread, transitionThreadStatusInTransaction } from "@bb/db";
+import type { DbConnection, DbTransaction } from "@bb/db";
 import type {
+  ClientTurnRequestId,
   Environment,
   PromptInput,
+  ResolvedThreadExecutionOptions,
   Thread,
   ThreadTurnInitiator,
   TurnRequestTarget,
@@ -14,14 +17,22 @@ import type {
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
+  addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
   ensureThreadNativeArchiveSettled,
-  queueTurnSubmitCommand,
+  prepareTurnSubmitCommandPayload,
+  queueTurnSubmitCommandInTransaction,
 } from "./thread-commands.js";
-import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
+import {
+  appendPreparedClientTurnRequestedEventWithNotificationInTransaction,
+  type AppendedClientTurnRequestWithNotification,
+  createClientTurnRequestId,
+  getActiveTurnId,
+} from "./thread-events.js";
 import {
   ensureThreadCanQueueStartRequest,
-  queueReadyThreadTurnCommand,
+  prepareReadyThreadTurnCommand,
+  queuePreparedReadyThreadTurnCommandInTransaction,
 } from "./thread-lifecycle.js";
 import {
   queueTurnDuringReprovision,
@@ -30,12 +41,14 @@ import {
 import {
   prependManagerPreferencesSystemMessageIfChanged,
   recordManagerDynamicFileDelivery,
+  recordManagerDynamicFileDeliveryInTransaction,
+  type ManagerDynamicFileDeliveryStateUpdate,
   withManagerPreferencesDeliveryLock,
 } from "./manager-dynamic-file-delivery.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
-import { tryTransition } from "./thread-transitions.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   disconnectedHostUnavailableDetails,
   threadNotWritableReasonForStatus,
@@ -68,6 +81,47 @@ interface FormatAgentThreadInputArgs {
 interface BuildAgentThreadMessageTextArgs {
   messageText: string;
   senderThreadId: string;
+}
+
+interface SendThreadMessageTransactionPreflightArgs {
+  tx: DbTransaction;
+}
+
+interface SendThreadMessageQueueRequestArgs {
+  requestEventSequence: number;
+  tx: DbTransaction;
+}
+
+interface SendThreadMessageQueueRequestResult {
+  threadBecameActive: boolean;
+}
+
+interface SendThreadMessageTransactionPreflight {
+  (args: SendThreadMessageTransactionPreflightArgs): void;
+}
+
+interface SendThreadMessageQueueRequest {
+  (args: SendThreadMessageQueueRequestArgs): SendThreadMessageQueueRequestResult;
+}
+
+interface AppendAndQueueSendThreadMessageArgs {
+  beforeAppendInTransaction?: SendThreadMessageTransactionPreflight;
+  db: DbConnection;
+  environmentId: string | null;
+  execution: ResolvedThreadExecutionOptions;
+  initiator: ThreadTurnInitiator;
+  input: PromptInput[];
+  queueInTransaction: SendThreadMessageQueueRequest;
+  requestId: ClientTurnRequestId;
+  senderThreadId: string | null;
+  stateUpdate: ManagerDynamicFileDeliveryStateUpdate | null;
+  target: TurnRequestTarget;
+  thread: Thread;
+}
+
+interface AppendAndQueueSendThreadMessageResult {
+  request: AppendedClientTurnRequestWithNotification;
+  threadBecameActive: boolean;
 }
 
 export function ensureThreadIsNotAwaitingUserInteraction(
@@ -210,6 +264,67 @@ function formatAgentThreadInput(
   });
 }
 
+function appendAndQueueSendThreadMessageInTransaction({
+  beforeAppendInTransaction,
+  db,
+  environmentId,
+  execution,
+  initiator,
+  input,
+  queueInTransaction,
+  requestId,
+  senderThreadId,
+  stateUpdate,
+  target,
+  thread,
+}: AppendAndQueueSendThreadMessageArgs): AppendAndQueueSendThreadMessageResult {
+  let threadBecameActive = false;
+  const request = db.transaction(
+    (tx) => {
+      beforeAppendInTransaction?.({ tx });
+      const appended =
+        appendPreparedClientTurnRequestedEventWithNotificationInTransaction(
+          tx,
+          {
+            threadId: thread.id,
+            environmentId,
+            type: "client/turn/requested",
+            input,
+            execution,
+            initiator,
+            senderThreadId,
+            requestMethod: "turn/start",
+            source: "tell",
+            target,
+            requestId,
+          },
+        );
+      recordAcceptedPromptHistoryEntry(
+        { db: tx },
+        {
+          thread,
+          input,
+          initiator,
+          target,
+          requestSequence: appended.sequence,
+        },
+      );
+      const queueResult = queueInTransaction({
+        requestEventSequence: appended.sequence,
+        tx,
+      });
+      threadBecameActive = queueResult.threadBecameActive;
+      recordManagerDynamicFileDeliveryInTransaction(tx, stateUpdate);
+      return appended;
+    },
+    { behavior: "immediate" },
+  );
+  return {
+    request,
+    threadBecameActive,
+  };
+}
+
 export async function sendThreadMessage(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendThreadMessageArgs,
@@ -290,31 +405,13 @@ export async function sendThreadMessage(
       };
     }
 
-    const request = appendClientTurnEvent(deps, {
-      threadId: thread.id,
-      environmentId: thread.environmentId,
-      type: "client/turn/requested",
-      input: preparedInput.input,
-      execution,
-      initiator,
-      senderThreadId,
-      requestMethod: "turn/start",
-      source: "tell",
-      target,
-    });
-    recordAcceptedPromptHistoryEntry(deps, {
-      thread,
-      input: preparedInput.input,
-      initiator,
-      target,
-      requestSequence: request.sequence,
-    });
+    const requestId = createClientTurnRequestId();
 
     if (mode === "start") {
-      const queuedMode = await queueReadyThreadTurnCommand(deps, {
+      const command = await prepareReadyThreadTurnCommand(deps, {
         thread,
         input: preparedInput.input,
-        requestId: request.requestId,
+        requestId,
         execution,
         permissionEscalation,
         environment: {
@@ -325,18 +422,63 @@ export async function sendThreadMessage(
           status: readyEnvironment.status,
           workspaceProvisionType: readyEnvironment.workspaceProvisionType,
         },
+        projectId: thread.projectId,
+        providerId: thread.providerId,
       });
-      if (queuedMode === "turn.submit") {
-        tryTransition(deps.db, deps.hub, thread.id, "active");
+      const queuedRequest = appendAndQueueSendThreadMessageInTransaction({
+        beforeAppendInTransaction: ({ tx }) => {
+          ensureThreadCanQueueStartRequest({ db: tx }, thread);
+        },
+        db: deps.db,
+        environmentId: thread.environmentId,
+        execution,
+        initiator,
+        input: preparedInput.input,
+        queueInTransaction: ({ requestEventSequence, tx }) => {
+          const queuedMode = queuePreparedReadyThreadTurnCommandInTransaction(
+            tx,
+            {
+              command,
+              hostId: readyEnvironment.hostId,
+              requestEventSequence,
+              thread,
+            },
+          );
+          if (queuedMode === "turn.submit") {
+            transitionThreadStatusInTransaction(tx, {
+              id: thread.id,
+              newStatus: "active",
+            });
+            return { threadBecameActive: true };
+          }
+          return { threadBecameActive: false };
+        },
+        requestId,
+        senderThreadId,
+        stateUpdate: preparedInput.stateUpdate,
+        target,
+        thread,
+      });
+      deps.hub.notifyThread(
+        thread.id,
+        queuedRequest.request.notificationChanges,
+        queuedRequest.request.notificationMetadata,
+      );
+      deps.hub.notifyCommand(readyEnvironment.hostId);
+      if (queuedRequest.threadBecameActive) {
+        deps.hub.notifyThread(thread.id, ["status-changed"], {
+          projectId: thread.projectId,
+        });
       }
-      recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
       return;
     }
 
-    await queueTurnSubmitCommand(deps, {
+    const session = await ensureHostSessionReadyForWork(deps, {
+      hostId: readyEnvironment.hostId,
+    });
+    const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
       thread,
       input: preparedInput.input,
-      requestId: request.requestId,
       execution,
       permissionEscalation,
       target: {
@@ -352,6 +494,36 @@ export async function sendThreadMessage(
         workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
-    recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
+    const command = addRequestIdToTurnSubmitCommandPayload({
+      preparedCommand,
+      requestId,
+    });
+    const queuedRequest = appendAndQueueSendThreadMessageInTransaction({
+      db: deps.db,
+      environmentId: thread.environmentId,
+      execution,
+      initiator,
+      input: preparedInput.input,
+      queueInTransaction: ({ requestEventSequence, tx }) => {
+        queueTurnSubmitCommandInTransaction(tx, {
+          command,
+          hostId: readyEnvironment.hostId,
+          requestEventSequence,
+          sessionId: session.id,
+        });
+        return { threadBecameActive: false };
+      },
+      requestId,
+      senderThreadId,
+      stateUpdate: preparedInput.stateUpdate,
+      target,
+      thread,
+    });
+    deps.hub.notifyThread(
+      thread.id,
+      queuedRequest.request.notificationChanges,
+      queuedRequest.request.notificationMetadata,
+    );
+    deps.hub.notifyCommand(readyEnvironment.hostId);
   });
 }

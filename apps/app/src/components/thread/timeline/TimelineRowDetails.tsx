@@ -7,6 +7,7 @@ import {
 } from "@bb/thread-view";
 import { EventCodeBlock } from "../../ui/event-code-block.js";
 import { ImageLightbox } from "../../ui/image-lightbox.js";
+import { EmptyStatePanel } from "../../ui/empty-state.js";
 import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { TimelineFileDiffBlock } from "./TimelineFileDiffBlock.js";
@@ -72,10 +73,10 @@ function ImageViewWorkRowBody({
 
   if (loadError) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
+      <EmptyStatePanel className="rounded-lg">
         <div>Image preview unavailable.</div>
         <div className="mt-1 break-all font-mono text-xs">{row.path}</div>
-      </div>
+      </EmptyStatePanel>
     );
   }
 

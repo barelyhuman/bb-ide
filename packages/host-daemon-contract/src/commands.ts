@@ -54,6 +54,7 @@ export const HOST_DAEMON_DURABLE_COMMAND_TYPES = [
   "host.delete_file_relative",
   "host.delete_path_relative",
   "environment.provision",
+  "environment.provision.cancel",
   "environment.cleanup_preflight",
   "environment.destroy",
   "workspace.commit",
@@ -231,12 +232,13 @@ const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
   title: z.string().min(1),
 });
 
-const threadArchiveCommandSchema =
-  hostDaemonThreadWorkspaceTargetSchema.extend({
+const threadArchiveCommandSchema = hostDaemonThreadWorkspaceTargetSchema.extend(
+  {
     type: z.literal("thread.archive"),
     providerId: z.string().min(1),
     providerThreadId: z.string().min(1),
-  });
+  },
+);
 
 // Carries environmentId (not just threadId) so the host daemon can serialize
 // it in the same per-environment write lane as thread.archive; otherwise a
@@ -530,6 +532,14 @@ export type EnvironmentProvisionCommand = z.infer<
   typeof environmentProvisionCommandSchema
 >;
 
+export const environmentProvisionCancelCommandSchema =
+  hostDaemonEnvironmentTargetSchema.extend({
+    type: z.literal("environment.provision.cancel"),
+  });
+export type EnvironmentProvisionCancelCommand = z.infer<
+  typeof environmentProvisionCancelCommandSchema
+>;
+
 const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("environment.destroy"),
 });
@@ -576,40 +586,37 @@ const developmentReplaySpeedSchema = z.union([
   z.literal(5),
   z.literal(10),
 ]);
-const developmentReplayCommandSchema = z.discriminatedUnion(
-  "operation",
-  [
-    z
-      .object({
-        type: z.literal("development.replay"),
-        operation: z.literal("capture-list"),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal("development.replay"),
-        operation: z.literal("capture-get"),
-        captureId: z.string().min(1),
-      })
-      .strict(),
-    z
-      .object({
-        type: z.literal("development.replay"),
-        operation: z.literal("capture-delete"),
-        captureId: z.string().min(1),
-      })
-      .strict(),
-    hostDaemonThreadTargetSchema
-      .extend({
-        type: z.literal("development.replay"),
-        operation: z.literal("run"),
-        captureId: z.string().min(1),
-        requestId: clientTurnRequestIdSchema,
-        speed: developmentReplaySpeedSchema,
-      })
-      .strict(),
-  ],
-);
+const developmentReplayCommandSchema = z.discriminatedUnion("operation", [
+  z
+    .object({
+      type: z.literal("development.replay"),
+      operation: z.literal("capture-list"),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("development.replay"),
+      operation: z.literal("capture-get"),
+      captureId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("development.replay"),
+      operation: z.literal("capture-delete"),
+      captureId: z.string().min(1),
+    })
+    .strict(),
+  hostDaemonThreadTargetSchema
+    .extend({
+      type: z.literal("development.replay"),
+      operation: z.literal("run"),
+      captureId: z.string().min(1),
+      requestId: clientTurnRequestIdSchema,
+      speed: developmentReplaySpeedSchema,
+    })
+    .strict(),
+]);
 type DevelopmentReplayCommand = z.infer<typeof developmentReplayCommandSchema>;
 export const hostDaemonOnlineRpcCommandSchema = z.union([
   developmentReplayCommandSchema,
@@ -653,8 +660,8 @@ const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   message: z.string().min(1),
 });
 
-const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend(
-  {
+const workspaceSquashMergeCommandSchema =
+  hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("workspace.squash_merge"),
     targetBranch: gitBranchNameSchema,
     commitMessage: z.string().min(1),
@@ -674,6 +681,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostWriteFileRelativeCommandSchema,
   hostDeleteFileRelativeCommandSchema,
   hostDeletePathRelativeCommandSchema,
+  environmentProvisionCancelCommandSchema,
   environmentCleanupPreflightCommandSchema,
   environmentDestroyCommandSchema,
   workspaceCommitCommandSchema,
@@ -696,6 +704,8 @@ export function shouldFlushEventsBeforeReportingCommandResult(
       return true;
     case "environment.provision":
       return command.initiator !== null;
+    case "environment.provision.cancel":
+      return true;
     case "environment.cleanup_preflight":
     case "environment.destroy":
     case "host.write_file_relative":
@@ -852,6 +862,9 @@ export const hostDaemonCommandResultSchemaByType = {
   "host.delete_path_relative": pathDeleteResultSchema,
   "environment.provision": discoveredWorkspacePropertiesSchema.extend({
     transcript: z.array(provisioningTranscriptEntrySchema),
+  }),
+  "environment.provision.cancel": z.object({
+    aborted: z.boolean(),
   }),
   "environment.cleanup_preflight": environmentCleanupPreflightResultSchema,
   "environment.destroy": z.object({}),

@@ -189,7 +189,7 @@ export function MentionMenu({
           <div className="pb-1">
             {sections.map((section) => (
               <div key={section.kind}>
-                <div className="sticky top-0 z-10 bg-popover px-3 pb-1 pt-1.5 text-xs text-muted-foreground">
+                <div className="sticky top-0 z-10 bg-background px-3 pb-1 pt-1.5 text-xs text-muted-foreground">
                   {section.label}
                 </div>
                 <div className="flex flex-col gap-px px-1">

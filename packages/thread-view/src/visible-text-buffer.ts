@@ -40,19 +40,14 @@ function buildFullText(buffer: VisibleTextBuffer): string {
   return `${visibleText}${buffer.pendingChunks.join("")}`;
 }
 
-export function createVisibleTextBuffer(
-  text = "",
-  flushTrailingPartial = false,
-): VisibleTextBuffer {
-  const buffer: VisibleTextBuffer = {
+export function createVisibleTextBuffer(): VisibleTextBuffer {
+  return {
     pendingChunks: [],
     pendingLength: 0,
     visibleChunks: [],
     visibleLength: 0,
     visibleTextCache: null,
   };
-  setVisibleTextBuffer(buffer, text, flushTrailingPartial);
-  return buffer;
 }
 
 export function appendVisibleTextBuffer(

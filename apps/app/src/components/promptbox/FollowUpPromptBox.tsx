@@ -86,7 +86,6 @@ const FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT =
 export type FollowUpBlockedReason =
   | "loading-execution-options"
   | "pending-interaction"
-  | "provisioning"
   | "stopping";
 
 export type FollowUpSubmitMode =
@@ -94,7 +93,7 @@ export type FollowUpSubmitMode =
   | { kind: "ready" }
   /** Runtime is active or host-reconnecting — submit queues the message; stop the runtime. */
   | { kind: "queue"; onStop: () => void }
-  /** Runtime is waiting on the host — can't send/queue, but can stop. */
+  /** Runtime is pre-start or waiting on the host — can't send/queue, but can stop. */
   | { kind: "stop-only"; onStop: () => void }
   /** Can't submit and can't stop — show why. */
   | { kind: "blocked"; reason: FollowUpBlockedReason };

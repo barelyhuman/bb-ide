@@ -5,6 +5,10 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
+  createPendingClientTurnRequestInTransaction,
+  getClientTurnRequest,
+} from "../../src/data/client-turn-requests.js";
+import {
   appendDaemonEventsInTransaction,
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
@@ -674,6 +678,105 @@ describe("events", () => {
       ),
     ).toThrow(ProducerEventPayloadMismatchError);
     expect(listEvents(db, { threadId: thread.id })).toHaveLength(1);
+  });
+
+  it("persists neighboring daemon events when accepted input data is malformed", () => {
+    const { db, thread } = setup();
+
+    db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            producerEventPayloadHash: "hash-turn-started",
+            threadId: thread.id,
+            type: "turn/started",
+            ...daemonThreadEventFields,
+            scope: turnScope("turn-1"),
+            providerThreadId: "provider-thread-1",
+            data: JSON.stringify({ providerThreadId: "provider-thread-1" }),
+          },
+          {
+            producerEventId: "hdevt_3456789abcdefghijkmn",
+            producerEventPayloadHash: "hash-input-accepted",
+            threadId: thread.id,
+            type: "turn/input/accepted",
+            ...daemonThreadEventFields,
+            scope: turnScope("turn-1"),
+            providerThreadId: "provider-thread-1",
+            data: "{malformed-json",
+          },
+          {
+            producerEventId: "hdevt_456789abcdefghijkmnp",
+            producerEventPayloadHash: "hash-system-error",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "neighbor persisted" }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.type))
+      .toEqual(["turn/started", "turn/input/accepted", "system/error"]);
+  });
+
+  it("does not settle another thread's request from accepted input data", () => {
+    const { db, project, thread } = setup();
+    const otherThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const requestId = "creq_23456789ab";
+
+    db.transaction((tx) =>
+      createPendingClientTurnRequestInTransaction(tx, {
+        commandId: "hcmd_cross_thread_request",
+        commandType: "turn.submit",
+        environmentId: null,
+        requestEventSequence: 7,
+        requestId,
+        threadId: thread.id,
+      }),
+    );
+
+    db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_56789abcdefghijkmnpq",
+            producerEventPayloadHash: "hash-other-turn-started",
+            threadId: otherThread.id,
+            type: "turn/started",
+            ...daemonThreadEventFields,
+            scope: turnScope("turn-2"),
+            providerThreadId: "provider-thread-2",
+            data: JSON.stringify({ providerThreadId: "provider-thread-2" }),
+          },
+          {
+            producerEventId: "hdevt_6789abcdefghijkmnpqr",
+            producerEventPayloadHash: "hash-other-input-accepted",
+            threadId: otherThread.id,
+            type: "turn/input/accepted",
+            ...daemonThreadEventFields,
+            scope: turnScope("turn-2"),
+            providerThreadId: "provider-thread-2",
+            data: JSON.stringify({ clientRequestId: requestId }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(
+      listEvents(db, { threadId: otherThread.id }).map((event) => event.type),
+    ).toEqual(["turn/started", "turn/input/accepted"]);
+    expect(getClientTurnRequest(db, { requestId })).toMatchObject({
+      reasonCode: null,
+      settledAt: null,
+      status: "pending",
+      threadId: thread.id,
+    });
   });
 
   it("stores the provided createdAt timestamp", () => {

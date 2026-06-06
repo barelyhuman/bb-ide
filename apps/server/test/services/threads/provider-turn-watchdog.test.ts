@@ -1,5 +1,7 @@
 import {
+  createPendingClientTurnRequestInTransaction,
   createPendingInteraction,
+  getClientTurnRequest,
   getThread,
   listEvents,
   hostDaemonCommands,
@@ -184,6 +186,17 @@ describe("provider turn watchdog", () => {
         startedAt: lastActivityAt - 10_000,
         acceptedAt: lastActivityAt,
       });
+      const requestId = encodeClientTurnRequestIdNumber({ value: 50 });
+      context.harness.db.transaction((tx) => {
+        createPendingClientTurnRequestInTransaction(tx, {
+          commandId: "hcmd_provider_turn_idle_pending",
+          commandType: "turn.submit",
+          environmentId: context.environmentId,
+          requestEventSequence: 50,
+          requestId,
+          threadId: context.threadId,
+        });
+      });
 
       const result = runProviderTurnWatchdogSweep(context.harness.deps, {
         now: WATCHDOG_NOW,
@@ -222,6 +235,13 @@ describe("provider turn watchdog", () => {
       expect(getThread(context.harness.db, context.threadId)?.status).toBe(
         "error",
       );
+      expect(
+        getClientTurnRequest(context.harness.db, { requestId }),
+      ).toMatchObject({
+        message: "Provider stopped sending progress before accepting the request",
+        reasonCode: "provider_detached",
+        status: "failed",
+      });
       expect(latestInterruptedReason(context)).toBe("provider-turn-idle");
     } finally {
       await context.harness.cleanup();

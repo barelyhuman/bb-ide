@@ -313,7 +313,7 @@ export function registerActionsCommands(
 
   parent
     .command("stop [id]")
-    .description("Stop an active thread")
+    .description("Stop an active or provisioning thread")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(

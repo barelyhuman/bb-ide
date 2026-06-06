@@ -188,8 +188,8 @@ function provisioningOperationStatus(
       return "completed";
     case "failed":
       return "error";
-    default:
-      return "pending";
+    case "cancelled":
+      return "interrupted";
   }
 }
 
@@ -456,6 +456,8 @@ export function parseOperationMessage(
           return "Provisioned thread";
         case "failed":
           return "Provisioning thread failed";
+        case "cancelled":
+          return "Provisioning stopped";
         default:
           return "Provisioning thread";
       }

@@ -23,6 +23,7 @@ export interface RunGitOptions {
   timeoutMs?: number;
   allowFailure?: boolean;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 }
 
 interface ResolveGitProcessEnvArgs {
@@ -36,6 +37,7 @@ export interface GitTimeoutOptions {
 export interface RunShellPipelineOptions extends GitTimeoutOptions {
   cwd: string;
   allowFailure?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface GitCommandResult {
@@ -170,6 +172,17 @@ function createGitCommandTimedOutError(
   );
 }
 
+function createGitCommandCancelledError(
+  args: string[],
+  cause?: unknown,
+): WorkspaceError {
+  return new WorkspaceError(
+    "provision_cancelled",
+    `git ${args.join(" ")} was cancelled`,
+    { cause },
+  );
+}
+
 function createShellPipelineTimedOutError(
   timeoutMs: number,
   cause?: unknown,
@@ -178,6 +191,16 @@ function createShellPipelineTimedOutError(
     "shell_pipeline_timeout",
     `shell pipeline timed out after ${timeoutMs}ms`,
     { cause },
+  );
+}
+
+function createShellPipelineCancelledError(cause?: unknown): WorkspaceError {
+  return new WorkspaceError(
+    "provision_cancelled",
+    "Shell pipeline was cancelled",
+    {
+      cause,
+    },
   );
 }
 
@@ -198,12 +221,16 @@ export async function runGit(
   args: string[],
   options: RunGitOptions,
 ): Promise<GitCommandResult> {
+  if (options.signal?.aborted) {
+    throw createGitCommandCancelledError(args, options.signal.reason);
+  }
   try {
     const result = await execFileAsync("git", args, {
       cwd: options.cwd,
       encoding: "utf8",
       env: resolveGitProcessEnv({ env: options.env }),
       maxBuffer: DEFAULT_BUFFER_BYTES,
+      signal: options.signal,
       timeout: options.timeoutMs,
     });
     return {
@@ -212,6 +239,9 @@ export async function runGit(
       exitCode: 0,
     };
   } catch (error) {
+    if (options.signal?.aborted) {
+      throw createGitCommandCancelledError(args, error);
+    }
     const execError = toExecError(error);
     const timeoutMs = readCommandTimeoutMs(execError, options.timeoutMs);
     if (timeoutMs !== null) {
@@ -276,6 +306,9 @@ export async function runShellPipeline(
   positionalArgs: string[],
   options: RunShellPipelineOptions,
 ): Promise<GitCommandResult> {
+  if (options.signal?.aborted) {
+    throw createShellPipelineCancelledError(options.signal.reason);
+  }
   try {
     const result = await execFileAsync(
       "sh",
@@ -285,11 +318,15 @@ export async function runShellPipeline(
         encoding: "utf8",
         env: resolveGitProcessEnv({ env: undefined }),
         maxBuffer: DEFAULT_BUFFER_BYTES,
+        signal: options.signal,
         timeout: options.timeoutMs,
       },
     );
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (error) {
+    if (options.signal?.aborted) {
+      throw createShellPipelineCancelledError(error);
+    }
     const execError = toExecError(error);
     const timeoutMs = readCommandTimeoutMs(execError, options.timeoutMs);
     if (timeoutMs !== null) {
