@@ -7,6 +7,7 @@ import {
 } from "./timeline-test-harness.js";
 
 type TimelineWorkRow = Extract<TimelineRow, { kind: "work" }>;
+type TimelineSystemRow = Extract<TimelineRow, { kind: "system" }>;
 
 function getNestedRows(row: TimelineRow): readonly TimelineRow[] {
   if (row.kind === "turn") {
@@ -36,9 +37,7 @@ function getOnlyWorkRowByCallId(
 ): TimelineWorkRow {
   const matches = flattenTimelineRows(rows).filter(
     (row): row is TimelineWorkRow =>
-      row.kind === "work" &&
-      "callId" in row &&
-      row.callId === callId,
+      row.kind === "work" && "callId" in row && row.callId === callId,
   );
   expect(matches).toHaveLength(1);
   const row = matches[0];
@@ -46,6 +45,12 @@ function getOnlyWorkRowByCallId(
     throw new Error(`Expected work row for ${callId}`);
   }
   return row;
+}
+
+function getTopLevelSystemRows(
+  rows: readonly TimelineRow[],
+): TimelineSystemRow[] {
+  return rows.filter((row): row is TimelineSystemRow => row.kind === "system");
 }
 
 function renderIdleTimeline(events: ThreadEventRow[]) {
@@ -130,5 +135,40 @@ describe("timeline interruption projection", () => {
       startedAt: 2_000,
       completedAt: 5_000,
     });
+  });
+
+  it("omits an interruption operation row when the preceding error already explains the failed turn", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderIdleTimeline([
+      event.turnStarted({ createdAt: 0 }),
+      event.commandStarted({
+        itemId: "cmd-1",
+        command: "pnpm test",
+        createdAt: 1_000,
+      }),
+      event.turnCompleted({
+        status: "interrupted",
+        createdAt: 6_000,
+      }),
+      event.systemError({
+        code: "thread_command_failed",
+        message:
+          "Live runtime work failed because the host daemon disconnected",
+        detail: "Host daemon restarted while the thread was running",
+        createdAt: 6_000,
+      }),
+      event.systemThreadInterrupted({
+        reason: "host-daemon-restarted",
+        createdAt: 6_000,
+      }),
+    ]);
+
+    expect(getTopLevelSystemRows(timeline.rows)).toEqual([
+      expect.objectContaining({
+        systemKind: "error",
+        title: "Live runtime work failed because the host daemon disconnected",
+        detail: "Host daemon restarted while the thread was running",
+      }),
+    ]);
   });
 });

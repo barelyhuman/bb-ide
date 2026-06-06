@@ -481,6 +481,7 @@ describe("active thread disconnect reconciliation triggers", () => {
       });
       expect(JSON.parse(rows[1]!.data)).toMatchObject({
         code: "thread_command_failed",
+        detail: "Host daemon restarted while the thread was running",
       });
       expect(JSON.parse(rows[2]!.data)).toEqual({
         reason: "host-daemon-restarted",
@@ -510,11 +511,25 @@ describe("active thread disconnect reconciliation triggers", () => {
       expect(
         listEvents(harness.deps.db, { threadId: thread.id })
           .filter((row) => row.type !== "turn/started")
-          .map((row) => row.type),
+          .map((row) => ({
+            data: JSON.parse(row.data),
+            type: row.type,
+          })),
       ).toEqual([
-        "turn/completed",
-        "system/error",
-        "system/thread/interrupted",
+        expect.objectContaining({
+          type: "turn/completed",
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({
+            code: "thread_command_failed",
+            detail: "Host daemon restarted while the thread was running",
+          }),
+          type: "system/error",
+        }),
+        expect.objectContaining({
+          data: { reason: "host-daemon-restarted" },
+          type: "system/thread/interrupted",
+        }),
       ]);
     });
   });

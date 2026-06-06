@@ -794,6 +794,32 @@ function isReconnectSystemRow(row: TimelineRow): boolean {
   return row.kind === "system" && row.systemKind === "reconnect";
 }
 
+function isErrorSystemRow(row: TimelineRow): boolean {
+  return row.kind === "system" && row.systemKind === "error";
+}
+
+function isThreadInterruptedOperationRow(row: TimelineRow): boolean {
+  return (
+    row.kind === "system" &&
+    row.systemKind === "operation" &&
+    row.operationKind === "thread-interrupted"
+  );
+}
+
+function isCompanionThreadInterruptedRow(
+  previous: TimelineRow,
+  row: TimelineRow,
+): boolean {
+  return (
+    isErrorSystemRow(previous) &&
+    isThreadInterruptedOperationRow(row) &&
+    previous.threadId === row.threadId &&
+    previous.createdAt === row.createdAt &&
+    previous.startedAt === row.startedAt &&
+    previous.sourceSeqEnd + 1 === row.sourceSeqStart
+  );
+}
+
 function appendRows(target: TimelineRow[], rows: readonly TimelineRow[]): void {
   for (const row of rows) {
     const previous = target[target.length - 1];
@@ -805,6 +831,9 @@ function appendRows(target: TimelineRow[], rows: readonly TimelineRow[]): void {
       // Reconnect attempts are one transient status, so update the progress row
       // in place instead of flooding the timeline with every retry attempt.
       target[target.length - 1] = row;
+      continue;
+    }
+    if (previous && isCompanionThreadInterruptedRow(previous, row)) {
       continue;
     }
     target.push(row);

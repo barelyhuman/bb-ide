@@ -301,6 +301,22 @@ function threadCommandFailureMessageForInterruption(
   }
 }
 
+function threadCommandFailureDetailForInterruption(
+  reason: SystemThreadInterruptedReason,
+): string {
+  switch (reason) {
+    case "manual-stop":
+      return "Thread stopped by user request";
+    case "host-daemon-restarted":
+      return "Host daemon restarted while the thread was running";
+    // Legacy persisted watchdog interruption; no current producer.
+    case "provider-turn-idle":
+      return "Provider stopped sending progress while the thread was running";
+    default:
+      return assertNever(reason);
+  }
+}
+
 interface DispatchThreadStartFromRequestArgs {
   command: ThreadStartCommand;
   hostId: string;
@@ -1141,7 +1157,7 @@ export function interruptActiveThreads(
             data: buildSystemErrorEventData({
               code: "thread_command_failed",
               message: failureMessage,
-              detail: pendingInteractionStopReason(args.reason),
+              detail: threadCommandFailureDetailForInterruption(args.reason),
             }),
           });
         }
