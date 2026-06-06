@@ -90,6 +90,7 @@ const REPLAY_CAPTURE_MANIFEST_RESULT: JsonObject = {
         {
           type: "text",
           text: "Run the test",
+          mentions: [],
         },
       ],
       createdAt: 1_700_000_000_010,
@@ -1099,7 +1100,7 @@ describe("host-daemon command schemas", () => {
         injectedSkillSources: [],
         instructionMode: "append",
         requestId: CLIENT_REQUEST_ID,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
       }),
     ).toThrow();
 
@@ -1108,7 +1109,7 @@ describe("host-daemon command schemas", () => {
         type: "turn.submit",
         threadId: "thr_123",
         requestId: CLIENT_REQUEST_ID,
-        input: [{ type: "text", text: "follow up" }],
+        input: [{ type: "text", text: "follow up", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1148,7 +1149,7 @@ describe("host-daemon command schemas", () => {
         projectId: "proj_123",
         providerId: "codex",
         requestId: CLIENT_REQUEST_ID,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1263,7 +1264,7 @@ describe("host-daemon command schemas", () => {
         environmentId: "env_123",
         threadId: "thr_123",
         requestId: CLIENT_REQUEST_ID,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1305,7 +1306,7 @@ describe("host-daemon command schemas", () => {
         environmentId: "env_123",
         threadId: "thr_123",
         requestId: CLIENT_REQUEST_ID,
-        input: [{ type: "text", text: "adjust" }],
+        input: [{ type: "text", text: "adjust", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1340,7 +1341,7 @@ describe("host-daemon command schemas", () => {
         type: "turn.submit",
         environmentId: "env_123",
         threadId: "thr_123",
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1375,7 +1376,7 @@ describe("host-daemon command schemas", () => {
         projectId: "proj_123",
         providerId: "codex",
         requestId: CLIENT_REQUEST_ID,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1404,7 +1405,7 @@ describe("host-daemon command schemas", () => {
         providerId: "codex",
         requestId: CLIENT_REQUEST_ID,
         eventSequence: 1,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1427,7 +1428,7 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         requestId: CLIENT_REQUEST_ID,
         eventSequence: 2,
-        input: [{ type: "text", text: "hello" }],
+        input: [{ type: "text", text: "hello", mentions: [] }],
         options: {
           model: "gpt-5",
           serviceTier: "default",

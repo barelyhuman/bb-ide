@@ -55,7 +55,7 @@ function baseManifest(captureId: string): ReplayCaptureManifest {
     turns: [
       {
         turnId: "turn-1",
-        userInput: [{ type: "text", text: "Original prompt" }],
+        userInput: [{ type: "text", text: "Original prompt", mentions: [] }],
         createdAt: 1_000,
       },
     ],

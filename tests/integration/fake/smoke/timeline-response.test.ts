@@ -31,6 +31,7 @@ const USER_ROW = {
   createdAt: 2,
   role: "user",
   text: "Hello",
+  mentions: [],
   attachments: null,
   initiator: "user",
   senderThreadId: null,

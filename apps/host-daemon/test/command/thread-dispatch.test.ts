@@ -6,6 +6,7 @@ import {
   encodeClientTurnRequestIdNumber,
   turnScope,
   type ClientTurnRequestId,
+  type PromptInput,
 } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -29,6 +30,12 @@ afterEach(cleanupTempDirs);
 let nextClientRequestIdValue = 1;
 const IMAGE_ATTACHMENT_LIMIT_BYTES = 10 * 1024 * 1024;
 const FILE_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024;
+
+type TextPromptInput = Extract<PromptInput, { type: "text" }>;
+
+function textPromptInput(text: string): TextPromptInput {
+  return { type: "text", text, mentions: [] };
+}
 
 function nextClientRequestId(): ClientTurnRequestId {
   const requestId = encodeClientTurnRequestIdNumber({
@@ -57,7 +64,7 @@ describe("thread command dispatch", () => {
       projectId: "project-stale-start",
       providerId: "fake",
       requestId: nextClientRequestId(),
-      input: [{ type: "text", text: "start" }],
+      input: [textPromptInput("start")],
       options: {
         model: "gpt-5",
         serviceTier: "default",
@@ -109,7 +116,7 @@ describe("thread command dispatch", () => {
           environmentId: "env-loaded",
           threadId: "thread-stale-turn",
           requestId: nextClientRequestId(),
-          input: [{ type: "text", text: "continue" }],
+          input: [textPromptInput("continue")],
           options: {
             model: "gpt-5",
             serviceTier: "default",
@@ -168,7 +175,7 @@ describe("thread command dispatch", () => {
         providerId: "fake",
         requestId,
         input: [
-          { type: "text", text: "inspect these" },
+          textPromptInput("inspect these"),
           {
             type: "localFile",
             path: "notes-uploaded.txt",
@@ -710,7 +717,7 @@ describe("thread command dispatch", () => {
         projectId: "project-1",
         providerId: "fake",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -841,7 +848,7 @@ describe("thread command dispatch", () => {
         projectId: "project-1",
         providerId: "fake",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -885,7 +892,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-resume-after-archive",
         threadId: "thread-resume-after-archive",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "follow up" }],
+        input: [textPromptInput("follow up")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -968,7 +975,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId: runRequestId,
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1000,7 +1007,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId: steerRequestId,
-        input: [{ type: "text", text: "adjust" }],
+        input: [textPromptInput("adjust")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1078,7 +1085,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "finish this" }],
+        input: [textPromptInput("finish this")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1113,7 +1120,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "resume work" }],
+        input: [textPromptInput("resume work")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1165,7 +1172,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "adjust course" }],
+        input: [textPromptInput("adjust course")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1224,7 +1231,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId,
-        input: [{ type: "text", text: "send anyway" }],
+        input: [textPromptInput("send anyway")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1277,7 +1284,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId,
-        input: [{ type: "text", text: "strict steer" }],
+        input: [textPromptInput("strict steer")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1324,7 +1331,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
         requestId,
-        input: [{ type: "text", text: "send without active turn" }],
+        input: [textPromptInput("send without active turn")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1366,7 +1373,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-lazy",
         threadId: "thread-1",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1440,7 +1447,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-exit",
         threadId: "thread-1",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "after exit" }],
+        input: [textPromptInput("after exit")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1602,7 +1609,7 @@ describe("thread command dispatch", () => {
         projectId: "project-1",
         providerId: "fake",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "claude-opus-4-7",
           serviceTier: "default",
@@ -1658,7 +1665,7 @@ describe("thread command dispatch", () => {
         projectId: "project-1",
         providerId: "fake",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1695,7 +1702,7 @@ describe("thread command dispatch", () => {
         projectId: "project-1",
         providerId: "fake",
         requestId: nextClientRequestId(),
-        input: [{ type: "text", text: "hello" }],
+        input: [textPromptInput("hello")],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -1806,7 +1813,7 @@ describe("thread command dispatch", () => {
           projectId: "project-1",
           providerId: "fake",
           requestId: nextClientRequestId(),
-          input: [{ type: "text", text: "hello" }],
+          input: [textPromptInput("hello")],
           options: {
             model: "gpt-5",
             serviceTier: "default",

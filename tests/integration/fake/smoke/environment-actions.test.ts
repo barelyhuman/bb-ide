@@ -145,7 +145,7 @@ describe.sequential("fake provider smoke environment integration", () => {
       const archivedSendResponse = await harness.api.threads[":id"].send.$post({
         param: { id: thread.id },
         json: {
-          input: [{ type: "text", text: "should fail" }],
+          input: [{ type: "text", text: "should fail", mentions: [] }],
           mode: "auto",
         },
       });

@@ -199,7 +199,7 @@ describe.sequential("fake provider smoke reuse integration", () => {
       const firstSendResponse = await harness.api.threads[":id"].send.$post({
         param: { id: thread.id },
         json: {
-          input: [{ type: "text", text: "start reprovision" }],
+          input: [{ type: "text", text: "start reprovision", mentions: [] }],
           mode: "auto",
         },
       });
@@ -220,7 +220,9 @@ describe.sequential("fake provider smoke reuse integration", () => {
       const secondSendResponse = await harness.api.threads[":id"].send.$post({
         param: { id: thread.id },
         json: {
-          input: [{ type: "text", text: "duplicate reprovision" }],
+          input: [
+            { type: "text", text: "duplicate reprovision", mentions: [] },
+          ],
           mode: "auto",
         },
       });
@@ -273,7 +275,9 @@ describe.sequential("fake provider smoke reuse integration", () => {
       const response = await harness.api.threads[":id"].send.$post({
         param: { id: thread.id },
         json: {
-          input: [{ type: "text", text: "try unmanaged reprovision" }],
+          input: [
+            { type: "text", text: "try unmanaged reprovision", mentions: [] },
+          ],
           mode: "auto",
         },
       });

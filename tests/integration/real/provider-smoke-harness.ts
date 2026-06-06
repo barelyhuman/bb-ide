@@ -485,7 +485,9 @@ export async function createRealThread(args: CreateRealThreadArgs) {
       harness,
       providerId: args.providerId,
     }),
-    input: [{ type: "text", text: REAL_PROVIDER_BOOTSTRAP_TEXT }],
+    input: [
+      { type: "text", text: REAL_PROVIDER_BOOTSTRAP_TEXT, mentions: [] },
+    ],
     projectId: project.id,
     providerId: args.providerId,
     timeoutMs: TURN_TIMEOUT_MS,

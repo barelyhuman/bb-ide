@@ -499,6 +499,7 @@ describe("internal interactive request lifecycle", () => {
               threadId: childThread.id,
               titleSuffix: " (Backend port validation cleanup)",
             }),
+            mentions: [],
           },
         ]),
       );

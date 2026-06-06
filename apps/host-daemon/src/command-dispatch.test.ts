@@ -310,7 +310,7 @@ describe("dispatchCommand", () => {
       projectId: "proj_1",
       providerId: "codex",
       requestId: "creq_2345678923",
-      input: [{ type: "text", text: "hello" }],
+      input: [{ type: "text", text: "hello", mentions: [] }],
       options: {
         model: "gpt-5",
         serviceTier: "default",
@@ -361,7 +361,7 @@ describe("dispatchCommand", () => {
       environmentId: "env-1",
       threadId: "thread-1",
       requestId: "creq_2345678923",
-      input: [{ type: "text", text: "follow up" }],
+      input: [{ type: "text", text: "follow up", mentions: [] }],
       options: {
         model: "gpt-5",
         serviceTier: "default",

@@ -62,14 +62,18 @@ describe.sequential(
         const [firstThread, secondThread] = await Promise.all([
           createHostThread(harness.api, {
             hostId: harness.hostId,
-            input: [{ type: "text", text: "first concurrent setup" }],
+            input: [
+              { type: "text", text: "first concurrent setup", mentions: [] },
+            ],
             projectId: project.id,
             providerId: "codex",
             workspace: { type: "managed-worktree" },
           }),
           createHostThread(harness.api, {
             hostId: harness.hostId,
-            input: [{ type: "text", text: "second concurrent setup" }],
+            input: [
+              { type: "text", text: "second concurrent setup", mentions: [] },
+            ],
             projectId: project.id,
             providerId: "claude-code",
             workspace: { type: "managed-worktree" },
@@ -135,7 +139,7 @@ describe.sequential(
               const token = `${request.providerId}-fresh-${request.index}`;
               const thread = await createHostThread(harness.api, {
                 hostId: harness.hostId,
-                input: [{ type: "text", text: token }],
+                input: [{ type: "text", text: token, mentions: [] }],
                 projectId: project.id,
                 providerId: request.providerId,
                 workspace: { type: "managed-worktree" },

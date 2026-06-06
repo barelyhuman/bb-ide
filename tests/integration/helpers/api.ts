@@ -124,7 +124,7 @@ async function expectStatus(
 }
 
 function defaultThreadInput(text: string): CreateThreadRequest["input"] {
-  return [{ type: "text", text }];
+  return [{ type: "text", text, mentions: [] }];
 }
 
 function defaultModelForProvider(providerId: string): string {
@@ -458,7 +458,7 @@ export async function sendTextMessage(
   options: SendTextMessageOptions,
 ): Promise<void> {
   const request: SendMessageRequest = {
-    input: [{ type: "text", text: options.text }],
+    input: [{ type: "text", text: options.text, mentions: [] }],
     mode: options.mode ?? "auto",
     ...(options.execution ?? {}),
   };
