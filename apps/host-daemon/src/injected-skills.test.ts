@@ -1,4 +1,12 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,7 +16,10 @@ import type {
   AgentRuntimeSkillRoot,
 } from "@bb/agent-runtime";
 import type { HostDaemonInjectedSkillSource } from "@bb/host-daemon-contract";
-import { stageInjectedSkillSources } from "./injected-skills.js";
+import {
+  ensureDataDirSkillsRootPath,
+  stageInjectedSkillSources,
+} from "./injected-skills.js";
 
 interface WriteSkillArgs {
   body?: string;
@@ -89,6 +100,19 @@ function createDataDirSource(args: StageSourceArgs): HostDaemonInjectedSkillSour
     skillFilePath: path.join(args.skillRootPath, "SKILL.md"),
   };
 }
+
+describe("data-dir skills root", () => {
+  it("creates the global skills root so the watcher can subscribe", async () => {
+    const dataDir = await makeTempDir();
+
+    const skillsRootPath = await ensureDataDirSkillsRootPath(dataDir);
+
+    expect(skillsRootPath).toBe(path.join(dataDir, "skills"));
+    await expect(
+      lstat(skillsRootPath).then((stats) => stats.isDirectory()),
+    ).resolves.toBe(true);
+  });
+});
 
 describe("injected skill staging", () => {
   it("creates a shared staged snapshot for Codex and Claude Code", async () => {

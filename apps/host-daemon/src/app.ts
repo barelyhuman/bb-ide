@@ -30,13 +30,15 @@ import {
 import { createReplayCaptureService } from "@bb/replay-capture/writer";
 import { createServerClient } from "./server-client.js";
 import { AppDataChangeReporter } from "./app-data-change-reporter.js";
-import { resolveDataDirSkillsRootPath } from "@bb/config/app-storage-paths";
 import {
   ensureAppDataRootPath,
   ensureAppsRootPath,
   listApplicationDataTargetsFromRoot,
 } from "./app-data-files.js";
-import { cleanupInjectedSkillStagingDirs } from "./injected-skills.js";
+import {
+  cleanupInjectedSkillStagingDirs,
+  ensureDataDirSkillsRootPath,
+} from "./injected-skills.js";
 import {
   ServerConnection,
   type CreateReconnectingWebSocket,
@@ -109,7 +111,9 @@ export async function createHostDaemonApp(
   );
   const appsRootPath = await ensureAppsRootPath(options.dataDir);
   const appDataRootPath = await ensureAppDataRootPath(options.dataDir);
-  const dataDirSkillsRootPath = resolveDataDirSkillsRootPath(options.dataDir);
+  const dataDirSkillsRootPath = await ensureDataDirSkillsRootPath(
+    options.dataDir,
+  );
   await cleanupInjectedSkillStagingDirs({
     dataDir: options.dataDir,
     keepCatalogHashes: [],

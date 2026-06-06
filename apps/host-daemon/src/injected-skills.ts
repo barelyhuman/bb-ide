@@ -144,6 +144,14 @@ function resolveStageRootPath(dataDir: string, catalogHash: string): string {
   return path.join(resolveStagingRootPath(dataDir), catalogHash);
 }
 
+export async function ensureDataDirSkillsRootPath(
+  dataDir: string,
+): Promise<string> {
+  const dataDirSkillsRootPath = resolveDataDirSkillsRootPath(dataDir);
+  await fs.mkdir(dataDirSkillsRootPath, { recursive: true });
+  return dataDirSkillsRootPath;
+}
+
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
