@@ -1,14 +1,12 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type CSSProperties,
   type MouseEventHandler,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
 import {
   closestCenter,
   DndContext,
@@ -68,11 +66,7 @@ import type { CollapsedChildActivity } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { getProjectSettingsRoutePath } from "@/lib/app-route-paths";
-import {
-  applyNeighborReorder,
-  buildNeighborReorderRequest,
-  type NeighborReorderRequest,
-} from "@/lib/neighbor-reorder";
+import type { NeighborReorderRequest } from "@/lib/neighbor-reorder";
 import { appToast } from "@/components/ui/app-toast";
 import {
   ThreadRow,
@@ -98,6 +92,10 @@ import {
   useDragClickSuppression,
   type ConsumeDragClickSuppression,
 } from "./useDragClickSuppression";
+import {
+  useNeighborReorderSortable,
+  type UseNeighborReorderSortableArgs,
+} from "./useNeighborReorderSortable";
 
 // Pin the project row plus this many parent levels (managers, parent threads,
 // worktree group headers); rows deeper than the cap render non-sticky so a deep
@@ -186,10 +184,6 @@ interface ProjectThreadTreeGroupProps {
   children: ReactNode;
   variant: ProjectThreadTreeVariant;
   onClickCapture?: ProjectThreadListClickCaptureHandler;
-}
-
-interface RootThreadOrderEntry {
-  id: string;
 }
 
 interface ThreadTreeNodeRowProps {
@@ -290,16 +284,6 @@ interface UseArchiveEnvironmentThreadGroupActionResult {
 
 function getRootThreadNodeId(node: ProjectThreadNode): string {
   return node.thread.id;
-}
-
-function hasSameRootThreadOrder(
-  order: readonly RootThreadOrderEntry[],
-  nodes: readonly ProjectThreadNode[],
-): boolean {
-  if (order.length !== nodes.length) {
-    return false;
-  }
-  return order.every((item, index) => item.id === nodes[index]?.thread.id);
 }
 
 function getProjectThreadTreeEmptyStateIcon(
@@ -1073,33 +1057,28 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
       ),
     [rootItems],
   );
-  const [optimisticRootManagerOrder, setOptimisticRootManagerOrder] =
-    useState<RootThreadOrderEntry[] | null>(null);
-  const renderedRootManagerNodes = useMemo(() => {
-    if (!optimisticRootManagerOrder) {
-      return rootManagerNodes;
-    }
-    const nodesById = new Map(
-      rootManagerNodes.map((node) => [getRootThreadNodeId(node), node]),
-    );
-    const orderedNodes: ProjectThreadNode[] = [];
-    for (const item of optimisticRootManagerOrder) {
-      const node = nodesById.get(item.id);
-      if (!node) {
-        return rootManagerNodes;
-      }
-      orderedNodes.push(node);
-    }
-    return orderedNodes;
-  }, [optimisticRootManagerOrder, rootManagerNodes]);
-  const renderedRootManagerThreadIds = useMemo(
-    () => renderedRootManagerNodes.map(getRootThreadNodeId),
-    [renderedRootManagerNodes],
+  const handleReorderManager = useCallback<
+    UseNeighborReorderSortableArgs<ProjectThreadNode>["onReorder"]
+  >(
+    (request, callbacks) => {
+      onReorderManager?.(projectId, request, callbacks);
+    },
+    [onReorderManager, projectId],
   );
   const managerReorderDisabled =
     isManagerReorderPending ||
     !onReorderManager ||
-    renderedRootManagerNodes.length < 2;
+    rootManagerNodes.length < 2;
+  const {
+    handleDragEnd: handleSortableManagerDragEnd,
+    itemIds: renderedRootManagerThreadIds,
+    renderedItems: renderedRootManagerNodes,
+  } = useNeighborReorderSortable({
+    disabled: managerReorderDisabled,
+    getId: getRootThreadNodeId,
+    items: rootManagerNodes,
+    onReorder: handleReorderManager,
+  });
   const {
     beginDragClickSuppression: beginManagerDragClickSuppression,
     clearDragClickSuppressionSoon: clearManagerDragClickSuppressionSoon,
@@ -1128,58 +1107,10 @@ export const ProjectThreadTree = memo(function ProjectThreadTree({
   const handleManagerDragEnd = useCallback(
     (event: DragEndEvent) => {
       clearManagerDragClickSuppressionSoon();
-      if (isManagerReorderPending) {
-        return;
-      }
-      const { active, over } = event;
-      if (
-        !over ||
-        typeof active.id !== "string" ||
-        typeof over.id !== "string"
-      ) {
-        return;
-      }
-      const request = buildNeighborReorderRequest({
-        activeId: active.id,
-        overId: over.id,
-        items: renderedRootManagerNodes.map((node) => node.thread),
-      });
-      if (!request) {
-        return;
-      }
-      const nextOrder = applyNeighborReorder({
-        items: renderedRootManagerNodes.map((node) => ({
-          id: node.thread.id,
-        })),
-        request,
-      });
-      flushSync(() => {
-        setOptimisticRootManagerOrder(nextOrder);
-      });
-      onReorderManager?.(projectId, request, {
-        onSettled: () => {
-          setOptimisticRootManagerOrder(null);
-        },
-      });
+      handleSortableManagerDragEnd(event);
     },
-    [
-      clearManagerDragClickSuppressionSoon,
-      isManagerReorderPending,
-      onReorderManager,
-      projectId,
-      renderedRootManagerNodes,
-    ],
+    [clearManagerDragClickSuppressionSoon, handleSortableManagerDragEnd],
   );
-  useEffect(() => {
-    if (!optimisticRootManagerOrder) {
-      return;
-    }
-    if (
-      hasSameRootThreadOrder(optimisticRootManagerOrder, rootManagerNodes)
-    ) {
-      setOptimisticRootManagerOrder(null);
-    }
-  }, [optimisticRootManagerOrder, rootManagerNodes]);
   const handleManagerListClickCapture =
     useCallback<ProjectThreadListClickCaptureHandler>(
       (event) => {

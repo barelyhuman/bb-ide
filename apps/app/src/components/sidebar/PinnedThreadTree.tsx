@@ -1,13 +1,10 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
-  useState,
   type CSSProperties,
   type MouseEventHandler,
 } from "react";
-import { flushSync } from "react-dom";
 import {
   closestCenter,
   DndContext,
@@ -26,16 +23,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  applyNeighborReorder,
-  buildNeighborReorderRequest,
-  type NeighborReorderRequest,
-} from "@/lib/neighbor-reorder";
+import type { NeighborReorderRequest } from "@/lib/neighbor-reorder";
 import { ThreadTreeNodeRow } from "./ProjectRow";
 import type { ThreadRowDragBindings } from "./ThreadRow";
 import { SIDEBAR_SORTABLE_TRANSITION } from "./sortableMotion";
 import type { ProjectThreadNode } from "./projectThreadGroups";
 import { useDragClickSuppression } from "./useDragClickSuppression";
+import {
+  useNeighborReorderSortable,
+  type UseNeighborReorderSortableArgs,
+} from "./useNeighborReorderSortable";
 
 export interface PinnedThreadRootReorderCallbacks {
   onSettled: () => void;
@@ -54,10 +51,6 @@ export interface PinnedThreadTreeProps {
     request: NeighborReorderRequest,
     callbacks: PinnedThreadRootReorderCallbacks,
   ) => void;
-}
-
-interface PinnedRootOrderEntry {
-  id: string;
 }
 
 interface SortablePinnedRootItemProps {
@@ -81,19 +74,6 @@ type PinnedThreadTreeClickCaptureHandler = MouseEventHandler<HTMLDivElement>;
 
 function getPinnedRootNodeId(node: ProjectThreadNode): string {
   return node.thread.id;
-}
-
-function hasSamePinnedRootOrder(
-  order: readonly PinnedRootOrderEntry[],
-  rootNodes: readonly ProjectThreadNode[],
-): boolean {
-  if (order.length !== rootNodes.length) {
-    return false;
-  }
-  return order.every((item, index) => {
-    const node = rootNodes[index];
-    return node !== undefined && item.id === getPinnedRootNodeId(node);
-  });
 }
 
 const PinnedRootItem = memo(function PinnedRootItem({
@@ -197,31 +177,26 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
   isPinnedReorderPending = false,
   onReorderPinnedRoot,
 }: PinnedThreadTreeProps) {
-  const [optimisticPinnedRootOrder, setOptimisticPinnedRootOrder] =
-    useState<PinnedRootOrderEntry[] | null>(null);
-  const renderedRootNodes = useMemo(() => {
-    if (!optimisticPinnedRootOrder) {
-      return rootNodes;
-    }
-    const nodesById = new Map(
-      rootNodes.map((node) => [getPinnedRootNodeId(node), node]),
-    );
-    const orderedNodes: ProjectThreadNode[] = [];
-    for (const item of optimisticPinnedRootOrder) {
-      const rootNode = nodesById.get(item.id);
-      if (!rootNode) {
-        return rootNodes;
-      }
-      orderedNodes.push(rootNode);
-    }
-    return orderedNodes;
-  }, [optimisticPinnedRootOrder, rootNodes]);
-  const renderedRootNodeIds = useMemo(
-    () => renderedRootNodes.map(getPinnedRootNodeId),
-    [renderedRootNodes],
+  const handleReorderPinnedRoot = useCallback<
+    UseNeighborReorderSortableArgs<ProjectThreadNode>["onReorder"]
+  >(
+    (request, callbacks) => {
+      onReorderPinnedRoot?.(request, callbacks);
+    },
+    [onReorderPinnedRoot],
   );
   const reorderDisabled =
-    isPinnedReorderPending || !onReorderPinnedRoot || renderedRootNodes.length < 2;
+    isPinnedReorderPending || !onReorderPinnedRoot || rootNodes.length < 2;
+  const {
+    handleDragEnd: handleSortableDragEnd,
+    itemIds: renderedRootNodeIds,
+    renderedItems: renderedRootNodes,
+  } = useNeighborReorderSortable({
+    disabled: reorderDisabled,
+    getId: getPinnedRootNodeId,
+    items: rootNodes,
+    onReorder: handleReorderPinnedRoot,
+  });
   const {
     beginDragClickSuppression,
     clearDragClickSuppressionSoon,
@@ -250,57 +225,10 @@ export const PinnedThreadTree = memo(function PinnedThreadTree({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       clearDragClickSuppressionSoon();
-      if (isPinnedReorderPending) {
-        return;
-      }
-      const { active, over } = event;
-      if (
-        !over ||
-        typeof active.id !== "string" ||
-        typeof over.id !== "string"
-      ) {
-        return;
-      }
-      const request = buildNeighborReorderRequest({
-        activeId: active.id,
-        overId: over.id,
-        items: renderedRootNodes.map((node) => ({
-          id: getPinnedRootNodeId(node),
-        })),
-      });
-      if (!request) {
-        return;
-      }
-      const nextOrder = applyNeighborReorder({
-        items: renderedRootNodes.map((node) => ({
-          id: getPinnedRootNodeId(node),
-        })),
-        request,
-      });
-      flushSync(() => {
-        setOptimisticPinnedRootOrder(nextOrder);
-      });
-      onReorderPinnedRoot?.(request, {
-        onSettled: () => {
-          setOptimisticPinnedRootOrder(null);
-        },
-      });
+      handleSortableDragEnd(event);
     },
-    [
-      clearDragClickSuppressionSoon,
-      isPinnedReorderPending,
-      onReorderPinnedRoot,
-      renderedRootNodes,
-    ],
+    [clearDragClickSuppressionSoon, handleSortableDragEnd],
   );
-  useEffect(() => {
-    if (!optimisticPinnedRootOrder) {
-      return;
-    }
-    if (hasSamePinnedRootOrder(optimisticPinnedRootOrder, rootNodes)) {
-      setOptimisticPinnedRootOrder(null);
-    }
-  }, [optimisticPinnedRootOrder, rootNodes]);
   const handleClickCapture = useCallback<PinnedThreadTreeClickCaptureHandler>(
     (event) => {
       if (!consumeDragClickSuppression()) {

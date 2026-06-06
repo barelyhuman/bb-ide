@@ -3,12 +3,10 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useState,
   type CSSProperties,
   type MouseEventHandler,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAtom } from "jotai";
 import {
@@ -122,6 +120,10 @@ import {
   useDragClickSuppression,
   type ConsumeDragClickSuppression,
 } from "./useDragClickSuppression";
+import {
+  useNeighborReorderSortable,
+  type UseNeighborReorderSortableArgs,
+} from "./useNeighborReorderSortable";
 
 interface ProjectListProps {
   onNewProject?: () => void;
@@ -224,20 +226,6 @@ interface SortableSidebarSectionProps extends TopLevelSidebarSectionProps {
   disabled: boolean;
 }
 
-interface ItemOrderEntry {
-  id: string;
-}
-
-function hasSameItemOrder(
-  left: readonly ItemOrderEntry[],
-  right: readonly ItemOrderEntry[],
-): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((item, index) => item.id === right[index]?.id);
-}
-
 function hasSameSidebarSectionOrder(
   left: readonly SidebarSectionId[],
   right: readonly SidebarSectionId[],
@@ -287,6 +275,11 @@ const EMPTY_PROJECT_THREAD_LIST_STATE: ProjectThreadListState = {
 };
 
 const EMPTY_APPS: readonly AppSummary[] = [];
+const EMPTY_PROJECTS: readonly ProjectResponse[] = [];
+
+function getProjectId(project: ProjectResponse): string {
+  return project.id;
+}
 
 function getProjectThreadListState({
   status,
@@ -715,16 +708,36 @@ function ProjectListComponent({
     isPending: isPinnedReorderPending,
     mutate: reorderPinnedThreadMutate,
   } = useReorderPinnedThread();
-  const [optimisticProjectOrder, setOptimisticProjectOrder] = useState<
-    ProjectResponse[] | null
-  >(null);
-  const renderedProjects = optimisticProjectOrder ?? projects;
-  const renderedProjectIds = useMemo(
-    () => (renderedProjects ?? []).map((project) => project.id),
-    [renderedProjects],
+  const projectItems = projects ?? EMPTY_PROJECTS;
+  const handleReorderProject = useCallback<
+    UseNeighborReorderSortableArgs<ProjectResponse>["onReorder"]
+  >(
+    (request, callbacks) => {
+      reorderProjectMutate(
+        {
+          projectId: request.itemId,
+          previousProjectId: request.previousItemId,
+          nextProjectId: request.nextItemId,
+        },
+        {
+          onSettled: callbacks.onSettled,
+        },
+      );
+    },
+    [reorderProjectMutate],
   );
   const projectReorderDisabled =
-    isProjectReorderPending || (renderedProjects?.length ?? 0) < 2;
+    isProjectReorderPending || projectItems.length < 2;
+  const {
+    handleDragEnd: handleSortableProjectDragEnd,
+    itemIds: renderedProjectIds,
+    renderedItems: renderedProjects,
+  } = useNeighborReorderSortable({
+    disabled: projectReorderDisabled,
+    getId: getProjectId,
+    items: projectItems,
+    onReorder: handleReorderProject,
+  });
   const {
     beginDragClickSuppression: beginProjectDragClickSuppression,
     clearDragClickSuppressionSoon: clearProjectDragClickSuppressionSoon,
@@ -758,51 +771,9 @@ function ProjectListComponent({
   const handleProjectDragEnd = useCallback(
     (event: DragEndEvent) => {
       clearProjectDragClickSuppressionSoon();
-      if (!renderedProjects || isProjectReorderPending) {
-        return;
-      }
-      const { active, over } = event;
-      if (
-        !over ||
-        typeof active.id !== "string" ||
-        typeof over.id !== "string"
-      ) {
-        return;
-      }
-      const request = buildNeighborReorderRequest({
-        activeId: active.id,
-        overId: over.id,
-        items: renderedProjects,
-      });
-      if (!request) {
-        return;
-      }
-      const nextProjects = applyNeighborReorder({
-        items: renderedProjects,
-        request,
-      });
-      flushSync(() => {
-        setOptimisticProjectOrder(nextProjects);
-      });
-      reorderProjectMutate(
-        {
-          projectId: request.itemId,
-          previousProjectId: request.previousItemId,
-          nextProjectId: request.nextItemId,
-        },
-        {
-          onSettled: () => {
-            setOptimisticProjectOrder(null);
-          },
-        },
-      );
+      handleSortableProjectDragEnd(event);
     },
-    [
-      clearProjectDragClickSuppressionSoon,
-      isProjectReorderPending,
-      renderedProjects,
-      reorderProjectMutate,
-    ],
+    [clearProjectDragClickSuppressionSoon, handleSortableProjectDragEnd],
   );
   const handleReorderManager = useCallback<
     NonNullable<ProjectRowProps["onReorderManager"]>
@@ -874,14 +845,6 @@ function ProjectListComponent({
       mode: "manager",
     });
   }, [openRootComposeForProject]);
-  useEffect(() => {
-    if (!optimisticProjectOrder || !projects) {
-      return;
-    }
-    if (hasSameItemOrder(optimisticProjectOrder, projects)) {
-      setOptimisticProjectOrder(null);
-    }
-  }, [optimisticProjectOrder, projects]);
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(
     collapsedProjectIdsAtom,
   );
@@ -961,7 +924,7 @@ function ProjectListComponent({
   // bail out of memo when none of its data changed.
   const threadListStatesByProjectId = useMemo(() => {
     const map = new Map<string, ProjectThreadListState>();
-    for (const project of renderedProjects ?? []) {
+    for (const project of renderedProjects) {
       const projectThreads = threadsByProject.get(project.id);
       map.set(
         project.id,
@@ -1082,7 +1045,7 @@ function ProjectListComponent({
           <SidebarMenuSkeleton />
           <SidebarMenuSkeleton />
         </>
-      ) : renderedProjects && renderedProjects.length > 1 ? (
+      ) : renderedProjects.length > 1 ? (
         <DndContext
           sensors={projectSensors}
           collisionDetection={closestCenter}
@@ -1133,7 +1096,7 @@ function ProjectListComponent({
             })}
           </SortableContext>
         </DndContext>
-      ) : renderedProjects && renderedProjects.length > 0 ? (
+      ) : renderedProjects.length > 0 ? (
         renderedProjects.map((project) => {
           const threadListState =
             threadListStatesByProjectId.get(project.id) ??
@@ -1205,7 +1168,7 @@ function ProjectListComponent({
     />
   ) : undefined;
   const projectsSectionActionsAlwaysVisible =
-    projectsState.status === "ready" && (renderedProjects?.length ?? 0) === 0;
+    projectsState.status === "ready" && renderedProjects.length === 0;
   const threadsSectionActions = (
     <ProjectListThreadsSectionActions
       onNewThread={handleCreateProjectlessThread}
