@@ -1,11 +1,9 @@
-import type { ReactNode } from "react";
 import type {
   AutomationsOverviewProject,
   AutomationsOverviewThread,
   AutomationsOverviewThreadSchedule,
   ThreadSchedule,
 } from "@bb/server-contract";
-import { StoryCard, StoryRow } from "../../.ladle/story-card";
 import {
   PROJECT_IDS,
   PROJECT_NAMES,
@@ -14,12 +12,10 @@ import {
 import { AutomationsOverview } from "./AutomationsView";
 
 export default {
-  title: "automations/Overview",
+  title: "Automations",
 };
 
-interface StageProps {
-  children: ReactNode;
-}
+type OverviewThreadOverrides = Partial<AutomationsOverviewThread>;
 
 const projectBb: AutomationsOverviewProject = {
   id: PROJECT_IDS.bb,
@@ -30,9 +26,7 @@ const projectPierre: AutomationsOverviewProject = {
   name: PROJECT_NAMES.pierre,
 };
 
-function makeOverviewThread(
-  overrides: Partial<AutomationsOverviewThread> = {},
-): AutomationsOverviewThread {
+function makeOverviewThread(overrides: OverviewThreadOverrides = {}) {
   const base: AutomationsOverviewThread = {
     id: "thr_demo",
     projectId: PROJECT_IDS.bb,
@@ -83,56 +77,14 @@ const threadSchedules: AutomationsOverviewThreadSchedule[] = [
   ),
 ];
 
-// PageShell fills its parent's height, so each state needs a bounded-height
-// flex column to render its scroll area.
-function Stage({ children }: StageProps) {
-  return (
-    <div className="flex h-[460px] w-full min-w-0 flex-col">{children}</div>
-  );
-}
-
 export function Overview() {
   return (
-    <StoryCard labelWidth="160px" className="max-w-5xl">
-      <StoryRow
-        label="populated"
-        hint="thread schedules grouped by thread; includes disabled rows"
-      >
-        <Stage>
-          <AutomationsOverview
-            hasInitialLoadError={false}
-            schedules={threadSchedules}
-            isLoading={false}
-          />
-        </Stage>
-      </StoryRow>
-      <StoryRow label="empty" hint="no thread schedules yet">
-        <Stage>
-          <AutomationsOverview
-            hasInitialLoadError={false}
-            schedules={[]}
-            isLoading={false}
-          />
-        </Stage>
-      </StoryRow>
-      <StoryRow label="loading" hint="initial fetch, no cached data">
-        <Stage>
-          <AutomationsOverview
-            hasInitialLoadError={false}
-            schedules={[]}
-            isLoading
-          />
-        </Stage>
-      </StoryRow>
-      <StoryRow label="error" hint="initial fetch failed, no cached data">
-        <Stage>
-          <AutomationsOverview
-            hasInitialLoadError
-            schedules={[]}
-            isLoading={false}
-          />
-        </Stage>
-      </StoryRow>
-    </StoryCard>
+    <main className="flex h-screen min-w-0 flex-col p-4 md:p-5">
+      <AutomationsOverview
+        hasInitialLoadError={false}
+        schedules={threadSchedules}
+        isLoading={false}
+      />
+    </main>
   );
 }
