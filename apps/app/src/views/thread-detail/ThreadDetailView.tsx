@@ -155,6 +155,7 @@ import {
 } from "./threadSecondaryPanelSelection";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { threadDetailBootstrapResolvedMissingEnvironmentHost } from "./threadDetailBootstrapHostGate";
+import { resolveThreadComposerBootstrapReady } from "./threadDetailComposerBootstrapState";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 const EMPTY_PROJECT_THREAD_SUBSET_FILTERS =
@@ -348,21 +349,25 @@ export function ThreadDetailView() {
       providerId: thread?.providerId,
     },
   );
-  const hasThreadComposerBootstrapSettled =
-    !threadComposerBootstrapQuery.isFetching &&
-    (threadComposerBootstrapQuery.isSuccess ||
-      threadComposerBootstrapQuery.isError);
-  const composerQueryThreadId = hasThreadComposerBootstrapSettled
+  const hasThreadComposerBootstrapData =
+    threadComposerBootstrapQuery.data !== undefined;
+  const hasThreadComposerBootstrapReady = resolveThreadComposerBootstrapReady({
+    hasData: hasThreadComposerBootstrapData,
+    isError: threadComposerBootstrapQuery.isError,
+    isFetching: threadComposerBootstrapQuery.isFetching,
+    isSuccess: threadComposerBootstrapQuery.isSuccess,
+  });
+  const composerQueryThreadId = hasThreadComposerBootstrapReady
     ? (thread?.id ?? "")
     : "";
-  const composerHydratedDataStaleTime = threadComposerBootstrapQuery.isSuccess
+  const composerHydratedDataStaleTime = hasThreadComposerBootstrapData
     ? 10_000
     : undefined;
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: pendingInteractions = [] } = useThreadPendingInteractions(
     composerQueryThreadId,
     {
-      enabled: hasThreadComposerBootstrapSettled,
+      enabled: hasThreadComposerBootstrapReady,
       staleTime: composerHydratedDataStaleTime,
     },
   );
@@ -1244,7 +1249,7 @@ export function ThreadDetailView() {
       }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
-      composerQueriesEnabled={hasThreadComposerBootstrapSettled}
+      composerQueriesEnabled={hasThreadComposerBootstrapReady}
       composerQueriesStaleTime={composerHydratedDataStaleTime}
       onChangedFileClick={handleChangedFileClick}
       openThreadDiffPanel={openSecondaryPanelDiffPanel}
