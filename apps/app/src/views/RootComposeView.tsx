@@ -575,9 +575,8 @@ export function RootComposeView() {
 
     if (mode === "manager") {
       // Managers don't require a prompt — submitting with empty text just
-      // falls back to the server's welcome-message template. While multi-host
-      // is disabled, managers run on the local host when the project has a
-      // local source.
+      // falls back to the server's welcome-message template. Managers run on
+      // the local host when the project has a local source.
       if (
         hireProjectManager.isPending ||
         managerDefaultExecutionOptionsQuery.isLoading ||

@@ -482,10 +482,8 @@ function excludeCollisions(
  * User (data-dir/global-app) skills override same-named built-ins; name
  * collisions among user sources drop all colliding user sources.
  *
- * All source paths are server-machine paths that the host daemon reads from
- * its local filesystem. On additional hosts on other machines the paths do
- * not resolve and the daemon skips the skill with a staging warning — a
- * pre-existing limitation shared with data-dir and app skills.
+ * All source paths are server-machine paths that the local host daemon reads
+ * from its filesystem.
  */
 export function resolveInjectedSkillSources(
   logger: ServerLogger,

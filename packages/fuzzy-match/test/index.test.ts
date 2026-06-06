@@ -186,7 +186,7 @@ describe("fuzzyMatchPaths", () => {
   it("boosts basename matches for the final path segment", () => {
     const matches = fuzzyMatchPaths({
       items: [
-        "apps/app/src/components/promptbox/HostPicker.tsx",
+        "apps/app/src/components/pickers/EnvironmentPicker.tsx",
         "apps/app/src/views/PromptBox.tsx",
         "apps/app/src/components/promptbox/PromptBox.tsx",
       ],

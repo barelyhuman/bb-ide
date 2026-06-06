@@ -4,7 +4,6 @@ import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { authApiKeys, authUsers, type DbConnection } from "@bb/db";
-import { normalizeServerUrl } from "@bb/host-daemon-contract";
 import { hostTypeSchema, type HostType } from "@bb/domain";
 import { readOrCreateSecretFile } from "@bb/secret-storage";
 import { z } from "zod";
@@ -33,13 +32,6 @@ const machineCredentialMetadataSchema = z
 export type MachineCredentialMetadata = z.infer<
   typeof machineCredentialMetadataSchema
 >;
-
-export interface BuildJoinCommandArgs {
-  hostId: string;
-  hostType: HostType;
-  joinCode: string;
-  serverUrl: string;
-}
 
 export interface IssueHostEnrollKeyArgs {
   hostId: string;
@@ -99,7 +91,6 @@ export interface CreateMachineAuthServiceArgs {
 }
 
 export interface MachineAuthService {
-  buildJoinCommand(args: BuildJoinCommandArgs): string;
   disableMachineKey(args: DisableMachineKeyArgs): Promise<void>;
   ensureReady(): Promise<void>;
   enrollHost(args: EnrollHostArgs): Promise<EnrollHostResult | null>;
@@ -121,10 +112,6 @@ interface ApiKeyVerificationArgs {
 interface ApiKeyVerificationResult {
   keyId: string;
   metadata: MachineCredentialMetadata;
-}
-
-function quoteShellValue(value: string): string {
-  return `'${value.replace(/'/gu, `'\"'\"'`)}'`;
 }
 
 function parseCredentialMetadata(
@@ -334,21 +321,6 @@ export async function createMachineAuthService(
   }
 
   return {
-    buildJoinCommand({
-      hostId,
-      hostType,
-      joinCode,
-      serverUrl,
-    }: BuildJoinCommandArgs): string {
-      return [
-        "npx bb-app",
-        `--server-url ${quoteShellValue(normalizeServerUrl(serverUrl))}`,
-        `--host-id ${quoteShellValue(hostId)}`,
-        `--host-type ${quoteShellValue(hostType)}`,
-        `--enroll-key ${quoteShellValue(joinCode)}`,
-        "host-daemon",
-      ].join(" ");
-    },
     async disableMachineKey(disableArgs: DisableMachineKeyArgs): Promise<void> {
       await disableMachineKey(disableArgs);
     },

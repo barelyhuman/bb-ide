@@ -271,28 +271,6 @@ export function Overview() {
           />
         </StoryRow>
         <StoryRow
-          label="secondary host · checkout"
-          hint="secondary host, primary checkout"
-        >
-          <EnvironmentOptionsStrip
-            environment={{ value: `host:${HOST_IDS.remote}:local` }}
-          />
-        </StoryRow>
-        <StoryRow
-          label="secondary host · worktree"
-          hint="secondary host, new worktree"
-        >
-          <EnvironmentOptionsStrip
-            environment={{ value: `host:${HOST_IDS.remote}:worktree` }}
-            branch={{
-              currentOptionLabel: "main",
-              triggerLabel: "Branch from: main",
-              triggerTitle: "Branch from: main",
-              onCreate: undefined,
-            }}
-          />
-        </StoryRow>
-        <StoryRow
           label="no project · allowed"
           hint="allowNoProject flag on, no project chosen — trigger reads 'Work in a project'"
         >

@@ -418,17 +418,6 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     },
   },
   {
-    id: "host-join-error",
-    group: "Mutation errors",
-    label: "host join error",
-    source: "AppSettingsView",
-    usage: ["Settings host join fails", "App URL required opens dialog"],
-    current: {
-      tone: "error",
-      title: "Failed to create host join command",
-    },
-  },
-  {
     id: "merge-base-error",
     group: "Merge base",
     label: "merge base error",

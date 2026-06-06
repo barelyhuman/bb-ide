@@ -66,21 +66,6 @@ describe("machine auth service", () => {
     expect(storedKey?.key).not.toContain("bbdh_");
   });
 
-  it("shell-quotes join commands safely", async () => {
-    const harness = await createMachineAuthHarness();
-
-    const joinCommand = harness.machineAuth.buildJoinCommand({
-      hostId: "host'quoted",
-      hostType: "persistent",
-      joinCode: "bbde_'quoted",
-      serverUrl: "https://server.example.test/",
-    });
-
-    expect(joinCommand).toBe(
-      "npx bb-app --server-url 'https://server.example.test' --host-id 'host'\"'\"'quoted' --host-type 'persistent' --enroll-key 'bbde_'\"'\"'quoted' host-daemon",
-    );
-  });
-
   it("rotates daemon host keys and invalidates the previous key", async () => {
     const harness = await createMachineAuthHarness();
     const hostId = "host_rotate";
