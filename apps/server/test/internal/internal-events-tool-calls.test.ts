@@ -7,7 +7,7 @@ import {
   getEnvironment,
   threads,
 } from "@bb/db";
-import { turnScope } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import type { HostDaemonEventEnvelope } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -21,6 +21,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
@@ -193,6 +194,64 @@ describe("internal event and tool-call routes", () => {
               providerThreadId: "provider-thread",
               scope: turnScope("turn-1"),
               status: "completed",
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.status,
+      ).toBe("idle");
+    });
+  });
+
+  it("does not reactivate a stopped thread when provider turn start arrives after interruption", async () => {
+    await withTestHarness(async (harness) => {
+      const { session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: session.hostId,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: session.hostId,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        environmentId: environment.id,
+        inputText: "Run this command and wait before replying: sleep 60",
+        providerThreadId: "provider-stop-race",
+        sequenceStart: 1,
+        threadId: thread.id,
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: null,
+        sequence: 3,
+        type: "system/thread/interrupted",
+        scope: threadScope(),
+        data: {
+          reason: "manual-stop",
+        },
+      });
+
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            threadId: thread.id,
+            event: {
+              type: "turn/started",
+              threadId: thread.id,
+              providerThreadId: "provider-stop-race",
+              scope: turnScope("turn-stop-race"),
             },
           },
         ],

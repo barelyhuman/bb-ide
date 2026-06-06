@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   createAgentRuntime,
   type AgentRuntime,
@@ -70,6 +71,15 @@ interface RuntimeThreadState {
 interface ThreadStorageTarget {
   environmentId: string;
   threadId: string;
+}
+
+interface ThreadRuntimeTargetArgs {
+  environmentId: string;
+  threadId: string;
+}
+
+interface WaitForThreadActiveTurnArgs extends ThreadRuntimeTargetArgs {
+  timeoutMs: number;
 }
 
 interface UpsertTrackedThreadStateArgs {
@@ -566,6 +576,32 @@ export class RuntimeManager {
     return this.entries.get(environmentId)?.threads.has(threadId) ?? false;
   }
 
+  getThreadActiveTurnId(args: ThreadRuntimeTargetArgs): string | null {
+    return (
+      this.entries.get(args.environmentId)?.threads.get(args.threadId)
+        ?.activeTurnId ?? null
+    );
+  }
+
+  async waitForThreadActiveTurn(
+    args: WaitForThreadActiveTurnArgs,
+  ): Promise<string | null> {
+    const deadline = Date.now() + args.timeoutMs;
+    while (Date.now() < deadline) {
+      const thread = this.entries
+        .get(args.environmentId)
+        ?.threads.get(args.threadId);
+      if (!thread || thread.status === "idle") {
+        return null;
+      }
+      if (thread.activeTurnId !== null) {
+        return thread.activeTurnId;
+      }
+      await delay(Math.min(25, Math.max(0, deadline - Date.now())));
+    }
+    return this.getThreadActiveTurnId(args);
+  }
+
   markThreadActive(
     environmentId: string,
     threadId: string,
@@ -661,7 +697,7 @@ export class RuntimeManager {
     };
   }
 
-  private markThreadTurnStarted(
+  markThreadTurnStarted(
     environmentId: string,
     threadId: string,
     providerThreadId: string,

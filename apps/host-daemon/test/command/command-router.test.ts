@@ -22,6 +22,7 @@ type EnvironmentDestroyCommand = Extract<
 >;
 type RouterHarness = ReturnType<typeof createHarness>;
 type TextPromptInput = Extract<PromptInput, { type: "text" }>;
+type ThreadStartCommand = Extract<HostDaemonCommand, { type: "thread.start" }>;
 type TurnSubmitCommand = Extract<HostDaemonCommand, { type: "turn.submit" }>;
 
 interface Deferred<T> {
@@ -34,6 +35,10 @@ interface RunRouterCommandArgs {
   command: HostDaemonCommand;
   requestId: string;
   router: CommandRouter;
+}
+
+interface ThreadStartProviderResult {
+  providerThreadId: string;
 }
 
 let nextClientRequestIdValue = 1;
@@ -111,6 +116,34 @@ function createTurnSubmitCommand(): TurnSubmitCommand {
   };
 }
 
+function createThreadStartCommand(): ThreadStartCommand {
+  return {
+    type: "thread.start",
+    environmentId: "env-router",
+    threadId: "thread-router-start",
+    workspaceContext: {
+      workspacePath: "/tmp/env-router",
+      workspaceProvisionType: "unmanaged",
+    },
+    projectId: "project-router",
+    providerId: "fake",
+    requestId: createClientRequestId(),
+    input: [textPromptInput("start")],
+    options: {
+      model: "gpt-5",
+      serviceTier: "default",
+      reasoningLevel: "medium",
+      workflowsEnabled: false,
+      permissionMode: "full",
+      permissionEscalation: null,
+    },
+    instructions: "Be a helpful coding agent.",
+    dynamicTools: [],
+    injectedSkillSources: [],
+    instructionMode: "append",
+  };
+}
+
 function textPromptInput(text: string): TextPromptInput {
   return { type: "text", text, mentions: [] };
 }
@@ -182,5 +215,64 @@ describe("CommandRouter", () => {
     const turnResponse = await turnTask;
     expect(turnResponse.ok).toBe(true);
     expect(harness.runtimeState.ranTurnText).toBe("after destroy");
+  });
+
+  it("orders thread.stop after an in-flight thread.start handoff", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/env-router" });
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-router",
+      workspacePath: "/tmp/env-router",
+    });
+    const startEntered = createDeferred<void>();
+    const releaseStart = createDeferred<ThreadStartProviderResult>();
+    harness.runtime.startThread = async (args) => {
+      harness.runtimeState.startedThreadId = args.threadId;
+      startEntered.resolve();
+      return releaseStart.promise;
+    };
+
+    const router = createRouter(harness);
+    const startTask = runRouterCommand({
+      command: createThreadStartCommand(),
+      requestId: "start-env-router",
+      router,
+    });
+    await startEntered.promise;
+
+    let stopResolved = false;
+    const stopTask = runRouterCommand({
+      command: {
+        type: "thread.stop",
+        environmentId: "env-router",
+        threadId: "thread-router-start",
+      },
+      requestId: "stop-env-router",
+      router,
+    }).then((response) => {
+      stopResolved = true;
+      return response;
+    });
+    await flushAsyncWork();
+
+    expect(harness.runtimeState.stoppedThreadId).toBeUndefined();
+    expect(stopResolved).toBe(false);
+
+    releaseStart.resolve({ providerThreadId: "provider-thread-router-start" });
+    const startResponse = await startTask;
+    expect(startResponse.ok).toBe(true);
+    await flushAsyncWork();
+    expect(harness.runtimeState.stoppedThreadId).toBeUndefined();
+    expect(stopResolved).toBe(false);
+
+    harness.manager.markThreadTurnStarted(
+      "env-router",
+      "thread-router-start",
+      "provider-thread-router-start",
+      "turn-router-start",
+    );
+    const stopResponse = await stopTask;
+
+    expect(stopResponse.ok).toBe(true);
+    expect(harness.runtimeState.stoppedThreadId).toBe("thread-router-start");
   });
 });

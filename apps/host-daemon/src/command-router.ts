@@ -34,8 +34,10 @@ interface CommandRouterLogger extends Pick<HostDaemonLogger, "warn"> {
 }
 
 type EnvironmentLaneMode = "read" | "write";
+type ThreadStartCommand = Extract<HostDaemonCommand, { type: "thread.start" }>;
 type ThreadStopCommand = Extract<HostDaemonCommand, { type: "thread.stop" }>;
 type TurnSubmitCommand = Extract<HostDaemonCommand, { type: "turn.submit" }>;
+type ThreadStartOrTurnSubmitCommand = ThreadStartCommand | TurnSubmitCommand;
 
 interface ReadWriteLaneState {
   /** All admitted read and write work. Writes wait on this tail. */
@@ -584,9 +586,21 @@ export class CommandRouter {
     return this.createThreadProviderExecutionLane(session, "write");
   }
 
-  private createInFlightTurnSubmitStopLane(
-    command: TurnSubmitCommand,
+  private createInFlightThreadStopLane(
+    command: ThreadStartOrTurnSubmitCommand,
   ): ProviderExecutionLane {
+    if (command.type === "thread.start") {
+      return this.createThreadProviderExecutionLane(
+        {
+          environmentId: command.environmentId,
+          providerId: command.providerId,
+          providerThreadId: null,
+          threadId: command.threadId,
+        },
+        "write",
+      );
+    }
+
     return this.createThreadProviderExecutionLane(
       {
         environmentId: command.environmentId,
@@ -611,7 +625,7 @@ export class CommandRouter {
     command: HostDaemonCommand,
     task: CommandRouterTask,
   ): void {
-    if (command.type !== "turn.submit") {
+    if (command.type !== "thread.start" && command.type !== "turn.submit") {
       return;
     }
 
@@ -622,7 +636,7 @@ export class CommandRouter {
     } else {
       this.inFlightThreadProviderLanes.set(key, {
         count: 1,
-        lane: this.createInFlightTurnSubmitStopLane(command),
+        lane: this.createInFlightThreadStopLane(command),
       });
     }
 

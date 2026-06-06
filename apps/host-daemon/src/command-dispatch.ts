@@ -59,6 +59,8 @@ import {
   workspaceResolutionFailureFromError,
 } from "./workspace-resolution.js";
 
+const THREAD_STOP_ACTIVE_TURN_WAIT_MS = 5_000;
+
 export {
   CommandDispatchError,
   getErrorCode,
@@ -247,6 +249,18 @@ const commandHandlers: CommandHandlerMap = {
       command.environmentId,
       options.runtimeManager,
     );
+    if (
+      options.runtimeManager.getThreadActiveTurnId({
+        environmentId: command.environmentId,
+        threadId: command.threadId,
+      }) === null
+    ) {
+      await options.runtimeManager.waitForThreadActiveTurn({
+        environmentId: command.environmentId,
+        threadId: command.threadId,
+        timeoutMs: THREAD_STOP_ACTIVE_TURN_WAIT_MS,
+      });
+    }
     await entry.runtime.stopThread({ threadId: command.threadId });
     // Stop completion finalizes server-side thread state. Flush provider
     // events first so buffered lifecycle events cannot arrive after that.

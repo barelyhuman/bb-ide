@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
 import {
   appendDaemonEventsInTransaction,
   archiveThread,
@@ -116,6 +116,11 @@ interface HasThreadCommandFailureSystemErrorForTurnDeps {
 }
 
 interface HasThreadCommandFailureSystemErrorForTurnArgs {
+  threadId: string;
+  turnId: string;
+}
+
+interface HasThreadStopBeforeTurnStartedArgs {
   threadId: string;
   turnId: string;
 }
@@ -299,6 +304,18 @@ async function applyEventEffects(
         if (!thread) {
           continue;
         }
+        const turnId = requireThreadEventScopeTurnId({
+          type: event.type,
+          scope: event.scope,
+        });
+        if (
+          hasThreadStopBeforeTurnStarted(deps, {
+            threadId: entry.threadId,
+            turnId,
+          })
+        ) {
+          continue;
+        }
         if (thread.stopRequestedAt !== null) {
           continue;
         }
@@ -313,6 +330,19 @@ async function applyEventEffects(
       }
 
       if (event.type === "turn/completed") {
+        const turnId = requireThreadEventScopeTurnId({
+          type: event.type,
+          scope: event.scope,
+        });
+        if (
+          event.status !== "interrupted" &&
+          hasThreadStopBeforeTurnStarted(deps, {
+            threadId: entry.threadId,
+            turnId,
+          })
+        ) {
+          continue;
+        }
         const turnCompleted = applyTurnCompletedEvent(deps, {
           ...event,
           threadId: entry.threadId,
@@ -324,10 +354,7 @@ async function applyEventEffects(
             event.status === "failed" &&
             hasThreadCommandFailureSystemErrorForTurn(deps, {
               threadId: turnCompleted.thread.id,
-              turnId: requireThreadEventScopeTurnId({
-                type: event.type,
-                scope: event.scope,
-              }),
+              turnId,
             });
           if (!alreadyHandledByCommandFailure) {
             followUps.push({
@@ -489,6 +516,58 @@ function hasThreadCommandFailureSystemErrorForTurn(
           eq(storedEvents.scopeKind, "turn"),
           eq(storedEvents.type, "system/error"),
           sql`json_extract(${storedEvents.data}, '$.code') = 'thread_command_failed'`,
+        ),
+      )
+      .limit(1)
+      .get() !== undefined
+  );
+}
+
+function hasThreadStopBeforeTurnStarted(
+  deps: Pick<AppDeps, "db">,
+  args: HasThreadStopBeforeTurnStartedArgs,
+): boolean {
+  const turnStarted = deps.db
+    .select({ sequence: storedEvents.sequence })
+    .from(storedEvents)
+    .where(
+      and(
+        eq(storedEvents.threadId, args.threadId),
+        eq(storedEvents.turnId, args.turnId),
+        eq(storedEvents.type, "turn/started"),
+      ),
+    )
+    .limit(1)
+    .get();
+  if (!turnStarted) {
+    return false;
+  }
+
+  const latestTurnRequest = deps.db
+    .select({ sequence: storedEvents.sequence })
+    .from(storedEvents)
+    .where(
+      and(
+        eq(storedEvents.threadId, args.threadId),
+        eq(storedEvents.type, "client/turn/requested"),
+        lt(storedEvents.sequence, turnStarted.sequence),
+      ),
+    )
+    .orderBy(desc(storedEvents.sequence))
+    .limit(1)
+    .get();
+  const lowerSequence = latestTurnRequest?.sequence ?? 0;
+
+  return (
+    deps.db
+      .select({ id: storedEvents.id })
+      .from(storedEvents)
+      .where(
+        and(
+          eq(storedEvents.threadId, args.threadId),
+          eq(storedEvents.type, "system/thread/interrupted"),
+          gt(storedEvents.sequence, lowerSequence),
+          lt(storedEvents.sequence, turnStarted.sequence),
         ),
       )
       .limit(1)
