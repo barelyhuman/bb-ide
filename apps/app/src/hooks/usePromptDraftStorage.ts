@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
+import type { PromptTextMention } from "@bb/domain";
 import type {
   PromptDraftAttachment,
   PromptDraftState,
@@ -261,35 +262,17 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     return readPromptDraft(storageKey);
   }, [storageKey]);
 
-  const setText = useCallback(
-    (nextText: string) => {
+  const setTextAndMentions = useCallback(
+    (nextText: string, nextMentions: PromptTextMention[]) => {
       writePromptDraft(
         storageKey,
         {
           ...readPromptDraft(storageKey),
           text: nextText,
+          mentions: nextMentions,
         },
         { persist: "deferred" },
       );
-    },
-    [storageKey],
-  );
-
-  const appendText = useCallback(
-    (chunk: string) => {
-      const normalizedChunk = chunk.replace(/\s+/g, " ").trim();
-      if (normalizedChunk.length === 0) return;
-
-      const currentDraft = readPromptDraft(storageKey);
-      const trimmedCurrent = currentDraft.text.trimEnd();
-      const nextText =
-        trimmedCurrent.length === 0
-          ? normalizedChunk
-          : `${trimmedCurrent} ${normalizedChunk}`;
-      writePromptDraft(storageKey, {
-        ...currentDraft,
-        text: nextText,
-      });
     },
     [storageKey],
   );
@@ -369,12 +352,11 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
       getCurrent,
       value: draft.text,
       text: draft.text,
+      mentions: draft.mentions,
       attachments: draft.attachments,
       setDraft: setDraftAndPersist,
-      setValue: setText,
-      setText,
+      setTextAndMentions,
       setAttachments,
-      appendText,
       addAttachment,
       removeAttachment,
       clear,
@@ -383,17 +365,17 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     }),
     [
       addAttachment,
-      appendText,
       clear,
       clearIfCurrentMatches,
       draft.attachments,
+      draft.mentions,
       draft.text,
       getCurrent,
       removeAttachment,
       restoreIfEmpty,
       setAttachments,
       setDraftAndPersist,
-      setText,
+      setTextAndMentions,
       storageKey,
     ],
   );

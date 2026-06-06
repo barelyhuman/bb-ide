@@ -50,10 +50,63 @@ const promptInputVisibilityFields = {
   visibility: promptInputVisibilitySchema.optional(),
 };
 
+export const promptMentionPathSourceValues = [
+  "workspace",
+  "thread-storage",
+] as const;
+export const promptMentionPathSourceSchema = z.enum(
+  promptMentionPathSourceValues,
+);
+export type PromptMentionPathSource = z.infer<
+  typeof promptMentionPathSourceSchema
+>;
+
+export const promptMentionPathEntryKindValues = ["file", "directory"] as const;
+export const promptMentionPathEntryKindSchema = z.enum(
+  promptMentionPathEntryKindValues,
+);
+export type PromptMentionPathEntryKind = z.infer<
+  typeof promptMentionPathEntryKindSchema
+>;
+
+export const promptMentionThreadTypeValues = ["standard", "manager"] as const;
+export const promptMentionThreadTypeSchema = z.enum(
+  promptMentionThreadTypeValues,
+);
+export type PromptMentionThreadType = z.infer<
+  typeof promptMentionThreadTypeSchema
+>;
+
+export const promptMentionResourceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("thread"),
+    threadId: z.string(),
+    projectId: z.string().optional(),
+    threadType: promptMentionThreadTypeSchema,
+    label: z.string(),
+  }),
+  z.object({
+    kind: z.literal("path"),
+    source: promptMentionPathSourceSchema,
+    entryKind: promptMentionPathEntryKindSchema,
+    path: z.string(),
+    label: z.string(),
+  }),
+]);
+export type PromptMentionResource = z.infer<typeof promptMentionResourceSchema>;
+
+export const promptTextMentionSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+  resource: promptMentionResourceSchema,
+});
+export type PromptTextMention = z.infer<typeof promptTextMentionSchema>;
+
 export const promptInputSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("text"),
     text: z.string(),
+    mentions: z.array(promptTextMentionSchema).default([]),
     ...promptInputVisibilityFields,
   }),
   z.object({

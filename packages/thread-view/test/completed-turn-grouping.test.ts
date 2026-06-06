@@ -1,9 +1,7 @@
 import { turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { groupCompletedTurnMessages } from "../src/completed-turn-grouping.js";
-import type {
-  CompletedTurnMessageGroups,
-} from "../src/completed-turn-grouping.js";
+import type { CompletedTurnMessageGroups } from "../src/completed-turn-grouping.js";
 import type {
   EventProjectionAssistantTextMessage,
   EventProjectionMessage,
@@ -50,6 +48,7 @@ function userMessage(args: MessageBaseArgs): EventProjectionUserMessage {
       status: "accepted",
     },
     text: args.id,
+    mentions: [],
   };
 }
 
@@ -72,7 +71,9 @@ function completedTurn(
   };
 }
 
-function summarySourceMessageIds(groups: CompletedTurnMessageGroups): string[][] {
+function summarySourceMessageIds(
+  groups: CompletedTurnMessageGroups,
+): string[][] {
   return groups.summaryItems.flatMap((item) =>
     item.kind === "summary"
       ? [item.sourceMessages.map((message) => message.id)]
@@ -86,7 +87,9 @@ describe("groupCompletedTurnMessages", () => {
       assistantMessage({ id: "assistant-1", seq: 1 }),
       assistantMessage({ id: "assistant-2", seq: 2 }),
     ];
-    const groups = groupCompletedTurnMessages(completedTurn(messages, undefined));
+    const groups = groupCompletedTurnMessages(
+      completedTurn(messages, undefined),
+    );
 
     expect(groups.summaryItems).toMatchObject([
       {

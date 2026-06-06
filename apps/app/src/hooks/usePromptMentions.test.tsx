@@ -168,7 +168,6 @@ describe("usePromptMentions", () => {
     const { result } = renderHook(
       () =>
         usePromptMentions(projectId, {
-          threadSuggestionMode: "all",
           environmentId: null,
         }),
       { wrapper },
@@ -255,7 +254,6 @@ describe("usePromptMentions", () => {
     const { result } = renderHook(
       () =>
         usePromptMentions(projectId, {
-          threadSuggestionMode: "all",
           environmentId: null,
         }),
       { wrapper },
@@ -334,7 +332,6 @@ describe("usePromptMentions", () => {
     const { result } = renderHook(
       () =>
         usePromptMentions(projectId, {
-          threadSuggestionMode: "all",
           environmentId: null,
         }),
       { wrapper },
@@ -354,5 +351,81 @@ describe("usePromptMentions", () => {
     });
 
     resolveThreadRequest(jsonResponse(cachedThreads));
+  });
+
+  it("does not carry stale thread-query errors after the mention session closes", async () => {
+    const projectId = "proj_code";
+    let shouldFailThreadRequest = true;
+    let threadRequestCount = 0;
+    let resolveThreadRequest: (response: Response) => void = () => {};
+    const pendingThreadResponse = new Promise<Response>((resolve) => {
+      resolveThreadRequest = resolve;
+    });
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads",
+        handler: () => {
+          threadRequestCount += 1;
+          return shouldFailThreadRequest
+            ? jsonResponse(
+                { error: "thread candidates failed" },
+                { status: 500 },
+              )
+            : pendingThreadResponse;
+        },
+      },
+      {
+        pathname: `/api/v1/projects/${projectId}/paths`,
+        handler: () => jsonResponse({ paths: [], truncated: false }),
+      },
+      {
+        pathname: "/api/v1/sidebar-bootstrap",
+        handler: () =>
+          jsonResponse(
+            makeSidebarBootstrapResponse([
+              makeProjectFixture({ id: projectId, name: "Code" }),
+            ]),
+          ),
+      },
+    ]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () =>
+        usePromptMentions(projectId, {
+          environmentId: null,
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.setQuery("frontend");
+    });
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+
+    act(() => {
+      result.current.setQuery(null);
+    });
+
+    await waitFor(() => {
+      expect(result.current.query).toBeNull();
+      expect(result.current.isError).toBe(false);
+      expect(result.current.suggestions).toEqual([]);
+    });
+
+    shouldFailThreadRequest = false;
+    act(() => {
+      result.current.setQuery("backend");
+    });
+
+    await waitFor(() => {
+      expect(threadRequestCount).toBe(2);
+      expect(result.current.isError).toBe(false);
+    });
+
+    resolveThreadRequest(jsonResponse([]));
   });
 });

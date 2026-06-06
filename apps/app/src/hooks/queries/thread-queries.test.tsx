@@ -501,7 +501,7 @@ describe("thread query bootstraps", () => {
     const queuedMessages = [
       {
         id: "qmsg-1",
-        content: [{ type: "text", text: "queued message" }],
+        content: [{ type: "text", text: "queued message", mentions: [] }],
         createdAt: 1,
         model: "gpt-5.5",
         permissionMode: "workspace-write",
@@ -514,7 +514,7 @@ describe("thread query bootstraps", () => {
       {
         id: "event-1",
         createdAt: 2,
-        input: [{ type: "text", text: "accepted prompt" }],
+        input: [{ type: "text", text: "accepted prompt", mentions: [] }],
       },
     ];
     const executionOptions = {
@@ -738,7 +738,7 @@ describe("thread query bootstraps", () => {
       [
         {
           id: "qmsg-stale",
-          content: [{ type: "text", text: "already sent" }],
+          content: [{ type: "text", text: "already sent", mentions: [] }],
           createdAt: 1,
           model: "gpt-5.5",
           permissionMode: "workspace-write",

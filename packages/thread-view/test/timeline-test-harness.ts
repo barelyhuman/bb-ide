@@ -581,7 +581,9 @@ export function createTimelineEventFactory(
           source: args.source ?? "tell",
           initiator,
           senderThreadId,
-          input: args.input ?? [{ type: "text", text: args.text }],
+          input: args.input ?? [
+            { type: "text", text: args.text, mentions: [] },
+          ],
           target: args.target ?? { kind: "new-turn" },
           request: {
             method: args.requestMethod ?? "turn/start",

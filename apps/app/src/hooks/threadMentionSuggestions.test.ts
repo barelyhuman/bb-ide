@@ -1,9 +1,6 @@
 import type { Thread } from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import {
-  buildThreadMentionSuggestions,
-  type ThreadSuggestionMode,
-} from "./threadMentionSuggestions";
+import { buildThreadMentionSuggestions } from "./threadMentionSuggestions";
 
 interface ThreadFixtureOptions {
   id: string;
@@ -17,7 +14,6 @@ interface ThreadFixtureOptions {
 interface BuildSuggestionFixtureArgs {
   threads: readonly Thread[];
   query: string;
-  mode: ThreadSuggestionMode;
   currentProjectId?: string;
   currentThreadId?: string;
   limit?: number;
@@ -52,7 +48,6 @@ function getSuggestionThreadIds(
   return buildThreadMentionSuggestions({
     threads: args.threads,
     query: args.query,
-    mode: args.mode,
     currentProjectId: args.currentProjectId,
     currentThreadId: args.currentThreadId,
     projectNamesById: new Map([
@@ -87,7 +82,6 @@ describe("buildThreadMentionSuggestions", () => {
       getSuggestionThreadIds({
         threads,
         query: "pmi",
-        mode: "all",
       }),
     ).toEqual(["thr_prompt"]);
   });
@@ -110,7 +104,6 @@ describe("buildThreadMentionSuggestions", () => {
       getSuggestionThreadIds({
         threads,
         query: "beta",
-        mode: "all",
       }),
     ).toEqual(["thr_beta"]);
   });
@@ -133,13 +126,12 @@ describe("buildThreadMentionSuggestions", () => {
       getSuggestionThreadIds({
         threads,
         query: "prompt",
-        mode: "all",
         currentThreadId: "thr_current",
       }),
     ).toEqual(["thr_other"]);
   });
 
-  it("returns managers and standard threads in all mode with deterministic ties", () => {
+  it("returns managers and standard threads with deterministic ties", () => {
     const threads = [
       makeThread({
         id: "thr_standard",
@@ -157,7 +149,6 @@ describe("buildThreadMentionSuggestions", () => {
       getSuggestionThreadIds({
         threads,
         query: "shared",
-        mode: "all",
       }),
     ).toEqual(["thr_manager", "thr_standard"]);
   });
@@ -198,7 +189,6 @@ describe("buildThreadMentionSuggestions", () => {
       getSuggestionThreadIds({
         threads,
         query: "shared",
-        mode: "all",
         currentProjectId: "proj-1",
         currentThreadId: "thr_current",
       }),
@@ -240,7 +230,6 @@ describe("buildThreadMentionSuggestions", () => {
       getSuggestionThreadIds({
         threads,
         query: "shared",
-        mode: "all",
         currentProjectId: "proj-1",
         currentThreadId: "thr_manager",
       }),
@@ -268,7 +257,6 @@ describe("buildThreadMentionSuggestions", () => {
         }),
       ],
       query: "shared",
-      mode: "all",
       currentProjectId: "proj-1",
       projectNamesById: new Map([
         ["proj-1", "Core App"],
@@ -314,7 +302,6 @@ describe("buildThreadMentionSuggestions", () => {
         }),
       ],
       query: "shared",
-      mode: "all",
       projectNamesById: new Map([
         ["proj-1", "Core App"],
         ["proj-2", "Docs Site"],

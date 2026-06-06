@@ -13,12 +13,13 @@ function makeFollowUpPromptBoxProps(): FollowUpPromptBoxProps {
     stack: null,
     composer: {
       history: {
-        currentDraft: { text: "", attachments: [] },
+        currentDraft: { text: "", mentions: [], attachments: [] },
         entries: [],
         onSelectEntry: vi.fn(),
       },
       isFollowUpSubmitting: false,
       message: "Please continue",
+      mentionRanges: [],
       onChangeMessage: vi.fn(),
       onModifierSubmit: vi.fn(),
       onSubmit: vi.fn(),

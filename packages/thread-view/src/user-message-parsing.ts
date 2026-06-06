@@ -1,5 +1,6 @@
 import {
   type PromptInput,
+  type PromptTextMention,
   type ThreadEvent,
   type ThreadType,
 } from "@bb/domain";
@@ -26,6 +27,7 @@ export function parsePromptInput(
   imageUrls: string[];
   localImagePaths: string[];
   localFilePaths: string[];
+  mentions: PromptTextMention[];
 } | null {
   if (!Array.isArray(input) || input.length === 0) return null;
 
@@ -36,6 +38,8 @@ export function parsePromptInput(
   const imageUrls: string[] = [];
   const localImagePaths: string[] = [];
   const localFilePaths: string[] = [];
+  const mentions: PromptTextMention[] = [];
+  let textOffset = 0;
 
   for (const part of input) {
     if (part.visibility === "agent-only") {
@@ -45,7 +49,21 @@ export function parsePromptInput(
     switch (part.type) {
       case "text":
         if (part.text.length > 0) {
+          for (const mention of part.mentions) {
+            if (
+              mention.start >= 0 &&
+              mention.end > mention.start &&
+              mention.end <= part.text.length
+            ) {
+              mentions.push({
+                ...mention,
+                start: textOffset + mention.start,
+                end: textOffset + mention.end,
+              });
+            }
+          }
           textParts.push(part.text);
+          textOffset += part.text.length;
         }
         break;
       case "image":
@@ -82,6 +100,7 @@ export function parsePromptInput(
     imageUrls,
     localImagePaths,
     localFilePaths,
+    mentions,
   };
 }
 
@@ -304,6 +323,7 @@ function buildClientUserMessage({
     senderThreadId: decoded.senderThreadId,
     turnRequest,
     text: parsedInput.text,
+    mentions: parsedInput.mentions,
     attachments: buildAttachments(parsedInput),
   };
 }

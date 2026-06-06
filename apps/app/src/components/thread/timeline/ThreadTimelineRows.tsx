@@ -645,6 +645,7 @@ function ConversationRow({ row }: ConversationRowProps) {
       <ConversationMessageContent
         attachments={row.attachments}
         initiator={row.initiator}
+        mentions={row.mentions}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}

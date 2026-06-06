@@ -48,9 +48,7 @@ interface AskAgentToFixGitActionParams {
   threadId: string;
 }
 
-type AskAgentToFixGitAction = (
-  params: AskAgentToFixGitActionParams,
-) => void;
+type AskAgentToFixGitAction = (params: AskAgentToFixGitActionParams) => void;
 
 type GitActionKind = "commit" | "squash_merge";
 
@@ -143,6 +141,7 @@ function buildAskAgentInputForGitOperation({
           text: buildCommitFailureFollowUpInstruction({
             errorMessage: details.errorMessage,
           }),
+          mentions: [],
         },
       ];
     case "squash_merge_conflict":
@@ -161,6 +160,7 @@ function buildAskAgentInputForGitOperation({
             },
             { conflictFiles: details.conflictFiles },
           ),
+          mentions: [],
         },
       ];
     case "squash_merge_commit_failed":
@@ -182,6 +182,7 @@ function buildAskAgentInputForGitOperation({
               errorMessage: details.errorMessage,
             },
           ),
+          mentions: [],
         },
       ];
     default:

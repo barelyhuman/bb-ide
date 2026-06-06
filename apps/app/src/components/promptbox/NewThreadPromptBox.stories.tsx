@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { PermissionMode } from "@bb/domain";
+import type { PermissionMode, PromptTextMention } from "@bb/domain";
 import {
   NewThreadPromptBoxUI,
   type NewThreadBranchConfig,
@@ -95,17 +95,22 @@ const basePermission = {
 };
 
 const baseHistory: HistoryConfig = {
-  currentDraft: { text: "", attachments: [] },
+  currentDraft: { text: "", mentions: [], attachments: [] },
   entries: [
-    { text: "review thread workspace", attachments: [] },
-    { text: "investigate timeline pagination", attachments: [] },
+    { text: "review thread workspace", mentions: [], attachments: [] },
+    { text: "investigate timeline pagination", mentions: [], attachments: [] },
   ],
   onSelectEntry: noop,
 };
 
 function useControlledValue(initial: string) {
   const [value, setValue] = useState(initial);
-  return { value, onChange: setValue };
+  const [mentionRanges, setMentionRanges] = useState<PromptTextMention[]>([]);
+  const onChange = (nextValue: string, nextMentions: PromptTextMention[]) => {
+    setValue(nextValue);
+    setMentionRanges(nextMentions);
+  };
+  return { value, mentionRanges, onChange };
 }
 
 interface ControlledMode {
@@ -149,12 +154,13 @@ function PromptStage({ children }: PromptStageProps) {
 
 function DefaultRow() {
   const { modeConfig, onModeChange } = useControlledMode();
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptStage>
       <NewThreadPromptBoxUI
         id="story-new-thread-default"
         value={value}
+        mentionRanges={mentionRanges}
         onChange={onChange}
         onSubmit={noop}
         isSubmitting={false}
@@ -174,7 +180,7 @@ function DefaultRow() {
 
 function SubmittingRow() {
   const { modeConfig, onModeChange } = useControlledMode();
-  const { value, onChange } = useControlledValue(
+  const { value, mentionRanges, onChange } = useControlledValue(
     "Investigate the timeline pagination flicker.",
   );
   return (
@@ -182,6 +188,7 @@ function SubmittingRow() {
       <NewThreadPromptBoxUI
         id="story-new-thread-submitting"
         value={value}
+        mentionRanges={mentionRanges}
         onChange={onChange}
         onSubmit={noop}
         isSubmitting
@@ -201,12 +208,13 @@ function SubmittingRow() {
 
 function ClaudeProviderRow() {
   const { modeConfig, onModeChange } = useControlledMode();
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptStage>
       <NewThreadPromptBoxUI
         id="story-new-thread-claude"
         value={value}
+        mentionRanges={mentionRanges}
         onChange={onChange}
         onSubmit={noop}
         isSubmitting={false}
@@ -240,7 +248,7 @@ function ClaudeProviderRow() {
 
 function FullAccessRow() {
   const [current, setCurrent] = useState<ThreadCreationMode>("thread");
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   const modeConfig: NewThreadModeConfig =
     current === "manager"
       ? {
@@ -259,6 +267,7 @@ function FullAccessRow() {
       <NewThreadPromptBoxUI
         id="story-new-thread-full-access"
         value={value}
+        mentionRanges={mentionRanges}
         onChange={onChange}
         onSubmit={noop}
         isSubmitting={false}
@@ -277,12 +286,13 @@ function FullAccessRow() {
 }
 
 function ProjectlessThreadRow() {
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptStage>
       <NewThreadPromptBoxUI
         id="story-new-thread-projectless"
         value={value}
+        mentionRanges={mentionRanges}
         onChange={onChange}
         onSubmit={noop}
         isSubmitting={false}

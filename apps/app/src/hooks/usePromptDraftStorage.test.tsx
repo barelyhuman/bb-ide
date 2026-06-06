@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook } from "@testing-library/react";
+import type { PromptTextMention } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePromptDraftStorage } from "./usePromptDraftStorage";
 
@@ -34,7 +35,7 @@ describe("usePromptDraftStorage", () => {
     );
 
     act(() => {
-      result.current.setText("Investigate the outage");
+      result.current.setTextAndMentions("Investigate the outage", []);
     });
 
     const submittedDraft = result.current.getCurrent();
@@ -47,6 +48,7 @@ describe("usePromptDraftStorage", () => {
     expect(didClear).toBe(true);
     expect(result.current.getCurrent()).toEqual({
       attachments: [],
+      mentions: [],
       text: "",
     });
   });
@@ -57,13 +59,16 @@ describe("usePromptDraftStorage", () => {
     );
 
     act(() => {
-      result.current.setText("Investigate the outage");
+      result.current.setTextAndMentions("Investigate the outage", []);
     });
 
     const submittedDraft = result.current.getCurrent();
 
     act(() => {
-      result.current.setText("Investigate the outage and summarize root cause");
+      result.current.setTextAndMentions(
+        "Investigate the outage and summarize root cause",
+        [],
+      );
     });
 
     let didClear = false;
@@ -75,6 +80,7 @@ describe("usePromptDraftStorage", () => {
     expect(didClear).toBe(false);
     expect(result.current.getCurrent()).toEqual({
       attachments: [],
+      mentions: [],
       text: "Investigate the outage and summarize root cause",
     });
   });
@@ -87,11 +93,12 @@ describe("usePromptDraftStorage", () => {
     const storageKey = requireStorageKey(result.current.storageKey);
 
     act(() => {
-      result.current.setText("Investigate the outage");
+      result.current.setTextAndMentions("Investigate the outage", []);
     });
 
     expect(result.current.getCurrent()).toEqual({
       attachments: [],
+      mentions: [],
       text: "Investigate the outage",
     });
     expect(window.localStorage.getItem(storageKey)).toBeNull();
@@ -105,6 +112,55 @@ describe("usePromptDraftStorage", () => {
     );
   });
 
+  it("serializes and hydrates non-empty mention ranges", () => {
+    vi.useFakeTimers();
+    const mention: PromptTextMention = {
+      start: 4,
+      end: 22,
+      resource: {
+        kind: "thread",
+        threadId: "thr_prompt",
+        projectId: "proj-1",
+        threadType: "standard",
+        label: "Prompt review",
+      },
+    };
+    const text = "Ask @thread:thr_prompt to review";
+    const { result, unmount } = renderHook(() =>
+      usePromptDraftStorage(PROJECT_DRAFT_SCOPE),
+    );
+    const storageKey = requireStorageKey(result.current.storageKey);
+
+    act(() => {
+      result.current.setTextAndMentions(text, [mention]);
+    });
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(window.localStorage.getItem(storageKey)).toBe(
+      JSON.stringify({
+        text,
+        mentions: [mention],
+        attachments: [],
+      }),
+    );
+
+    unmount();
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: storageKey }));
+    });
+    const hydrated = renderHook(() =>
+      usePromptDraftStorage(PROJECT_DRAFT_SCOPE),
+    );
+
+    expect(hydrated.result.current.getCurrent()).toEqual({
+      text,
+      mentions: [mention],
+      attachments: [],
+    });
+  });
+
   it("flushes pending text persistence on pagehide", () => {
     vi.useFakeTimers();
     const { result } = renderHook(() =>
@@ -113,7 +169,7 @@ describe("usePromptDraftStorage", () => {
     const storageKey = requireStorageKey(result.current.storageKey);
 
     act(() => {
-      result.current.setText("Investigate the outage");
+      result.current.setTextAndMentions("Investigate the outage", []);
     });
 
     expect(window.localStorage.getItem(storageKey)).toBeNull();
@@ -135,7 +191,7 @@ describe("usePromptDraftStorage", () => {
     const storageKey = requireStorageKey(result.current.storageKey);
 
     act(() => {
-      result.current.setText("Investigate the outage");
+      result.current.setTextAndMentions("Investigate the outage", []);
     });
 
     expect(window.localStorage.getItem(storageKey)).toBeNull();
@@ -161,12 +217,13 @@ describe("usePromptDraftStorage", () => {
     const storageKey = requireStorageKey(result.current.storageKey);
 
     act(() => {
-      result.current.setText("Investigate the outage");
+      result.current.setTextAndMentions("Investigate the outage", []);
       result.current.clear();
     });
 
     expect(result.current.getCurrent()).toEqual({
       attachments: [],
+      mentions: [],
       text: "",
     });
     expect(window.localStorage.getItem(storageKey)).toBeNull();

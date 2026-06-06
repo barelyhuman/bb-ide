@@ -112,9 +112,10 @@ describe("user message parsing", () => {
       {
         type: "text",
         text: "[bb system]\n\nCurrent PREFERENCES.md contents:\n\nsecret",
+        mentions: [],
         visibility: "agent-only",
       },
-      { type: "text", text: "Visible request" },
+      { type: "text", text: "Visible request", mentions: [] },
       {
         type: "localFile",
         path: "/tmp/hidden.md",
@@ -125,6 +126,7 @@ describe("user message parsing", () => {
 
     expect(parsed).toEqual({
       text: "Visible request",
+      mentions: [],
       webImages: 0,
       localImages: 0,
       localFiles: 1,
@@ -139,6 +141,7 @@ describe("user message parsing", () => {
       {
         type: "text",
         text: "[bb system]\n\nPREFERENCES.md was removed.",
+        mentions: [],
         visibility: "agent-only",
       },
     ]);
@@ -166,8 +169,7 @@ describe("user message parsing", () => {
 
   it("populates initiator, senderThreadId, and turnRequest for agent-initiated messages", () => {
     const factory = createTimelineEventFactory({ threadId: "thread-1" });
-    const agentText =
-      "[bb message from thread:thr_sender; reply with …]\n\nHi";
+    const agentText = "[bb message from thread:thr_sender; reply with …]\n\nHi";
     const row = factory.clientTurnRequested({
       initiator: "agent",
       senderThreadId: SENDER_THREAD_ID,
@@ -221,7 +223,7 @@ describe("user message parsing", () => {
         throw new Error("Expected client/turn/requested event");
       }
       const visibilityOptions =
-      event.initiator === "system"
+        event.initiator === "system"
           ? managerVisibilityOptions
           : standardVisibilityOptions;
       const expectedText = event.input

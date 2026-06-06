@@ -8,7 +8,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import { type ThreadRuntimeDisplayStatus } from "@bb/domain";
+import type { PromptTextMention, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import {
   PromptBoxInternal,
   type AttachmentsConfig,
@@ -103,7 +103,8 @@ export interface FollowUpComposerProps {
   /** True while the send/queue mutation is in flight. Orthogonal to submitMode. */
   isFollowUpSubmitting: boolean;
   message: string;
-  onChangeMessage: (value: string) => void;
+  mentionRanges: readonly PromptTextMention[];
+  onChangeMessage: (value: string, mentionRanges: PromptTextMention[]) => void;
   onModifierSubmit: () => void;
   onSubmit: () => void;
   promptPlaceholder: string;
@@ -231,6 +232,7 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
           voice={voice}
           minHeight={elasticTextareaMinHeight}
           value={composer.message}
+          mentionRanges={composer.mentionRanges}
           onChange={composer.onChangeMessage}
           onSubmit={composer.onSubmit}
           history={composer.history}
@@ -248,7 +250,6 @@ export const FollowUpPromptBox = memo(function FollowUpPromptBox({
                 ? "Stopping run..."
                 : "Submit (Enter)",
             isRunning: canStopRuntime,
-            mode: "enter",
           }}
           mentions={mentions}
           attachments={attachments}

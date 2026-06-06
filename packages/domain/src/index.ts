@@ -9,6 +9,14 @@ export {
   permissionModeValues,
   promptInputVisibilitySchema,
   promptInputVisibilityValues,
+  promptMentionPathEntryKindSchema,
+  promptMentionPathEntryKindValues,
+  promptMentionPathSourceSchema,
+  promptMentionPathSourceValues,
+  promptMentionResourceSchema,
+  promptMentionThreadTypeSchema,
+  promptMentionThreadTypeValues,
+  promptTextMentionSchema,
   reasoningLevelSchema,
   reasoningLevelValues,
   serviceTierSchema,
@@ -27,6 +35,11 @@ export type {
   PermissionMode,
   ProjectExecutionDefaults,
   PromptInput,
+  PromptMentionPathEntryKind,
+  PromptMentionPathSource,
+  PromptMentionResource,
+  PromptMentionThreadType,
+  PromptTextMention,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
   RuntimeThreadExecutionOptions,
@@ -97,7 +110,6 @@ export type {
   TerminalSessionCloseReason,
   TerminalSessionStatus,
 } from "./terminal.js";
-
 
 export {
   PROMPT_HISTORY_ENTRY_LIMIT,

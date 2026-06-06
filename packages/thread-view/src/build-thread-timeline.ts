@@ -477,6 +477,7 @@ function convertMessage(
           kind: "conversation",
           role: "user",
           text: message.text,
+          mentions: message.mentions,
           attachments: toConversationAttachments(message.attachments),
           initiator: message.initiator,
           senderThreadId: message.senderThreadId,
@@ -748,6 +749,7 @@ function convertPendingSteerMessage(
     kind: "conversation",
     role: "user",
     text: message.text,
+    mentions: message.mentions,
     attachments: toConversationAttachments(message.attachments),
     initiator: message.initiator,
     senderThreadId: message.senderThreadId,
@@ -960,7 +962,11 @@ function buildTurnRows({
 
   if (!isCompletedTurn) {
     return messages.flatMap((message) =>
-      convertMessage(message, { includeNestedRows, rowIdPrefix, workspaceRoot }),
+      convertMessage(message, {
+        includeNestedRows,
+        rowIdPrefix,
+        workspaceRoot,
+      }),
     );
   }
 
@@ -1066,13 +1072,12 @@ export function buildThreadTimelineFromEvents(
     contextWindowUsage: extractThreadContextWindowUsage(
       args.contextWindowEvents,
     ),
-    pendingTodos:
-      !args.options.isLatestPage
-        ? null
-        : extractThreadTimelinePendingTodos(
-            args.options.threadStatus,
-            args.events,
-          ),
+    pendingTodos: !args.options.isLatestPage
+      ? null
+      : extractThreadTimelinePendingTodos(
+          args.options.threadStatus,
+          args.events,
+        ),
     rows,
   };
 }

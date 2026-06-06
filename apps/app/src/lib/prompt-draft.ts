@@ -1,4 +1,8 @@
-import type { PromptInput } from "@bb/domain";
+import {
+  promptTextMentionSchema,
+  type PromptInput,
+  type PromptTextMention,
+} from "@bb/domain";
 import {
   uploadedPromptAttachmentSchema,
   type UploadedPromptAttachment,
@@ -9,11 +13,21 @@ export type PromptDraftAttachment = UploadedPromptAttachment;
 
 export interface PromptDraftState {
   text: string;
+  mentions: PromptTextMention[];
   attachments: PromptDraftAttachment[];
 }
 
 const promptDraftStorageSchema = z.object({
   text: z.string().default(""),
+  mentions: z
+    .array(z.unknown())
+    .default([])
+    .transform((items) =>
+      items.flatMap((item) => {
+        const result = promptTextMentionSchema.safeParse(item);
+        return result.success ? [result.data] : [];
+      }),
+    ),
   attachments: z
     .array(z.unknown())
     .default([])
@@ -28,12 +42,17 @@ const promptDraftStorageSchema = z.object({
 export function emptyPromptDraftState(): PromptDraftState {
   return {
     text: "",
+    mentions: [],
     attachments: [],
   };
 }
 
 export function isPromptDraftEmpty(draft: PromptDraftState): boolean {
-  return draft.text.length === 0 && draft.attachments.length === 0;
+  return (
+    draft.text.length === 0 &&
+    draft.mentions.length === 0 &&
+    draft.attachments.length === 0
+  );
 }
 
 export function parsePromptDraftStorage(
@@ -54,12 +73,14 @@ export function serializePromptDraftStorage(
   draft: PromptDraftState,
 ): string | null {
   const text = draft.text;
+  const mentions = draft.mentions;
   const attachments = draft.attachments;
   if (isPromptDraftEmpty(draft)) {
     return null;
   }
   return JSON.stringify({
     text,
+    ...(mentions.length > 0 ? { mentions } : {}),
     attachments,
   });
 }
@@ -84,11 +105,47 @@ function getFileNameFromPath(path: string): string {
   return lastSegment && lastSegment.length > 0 ? lastSegment : trimmedPath;
 }
 
+function normalizePromptTextMentions(
+  mentions: readonly PromptTextMention[],
+  textLength: number,
+): PromptTextMention[] {
+  return mentions
+    .filter(
+      (mention) =>
+        mention.start >= 0 &&
+        mention.end > mention.start &&
+        mention.end <= textLength,
+    )
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+}
+
 export function promptDraftToInput(draft: PromptDraftState): PromptInput[] {
   const input: PromptInput[] = [];
-  const text = draft.text.trim();
+  const trimStartLength = draft.text.length - draft.text.trimStart().length;
+  const trimEndIndex = draft.text.trimEnd().length;
+  const text = draft.text.slice(trimStartLength, trimEndIndex);
   if (text.length > 0) {
-    input.push({ type: "text", text });
+    const mentions = normalizePromptTextMentions(
+      draft.mentions.flatMap((mention) => {
+        const visibleStart = Math.max(mention.start, trimStartLength);
+        const visibleEnd = Math.min(mention.end, trimEndIndex);
+        return visibleStart < visibleEnd
+          ? [
+              {
+                ...mention,
+                start: visibleStart - trimStartLength,
+                end: visibleEnd - trimStartLength,
+              },
+            ]
+          : [];
+      }),
+      text.length,
+    );
+    input.push({
+      type: "text",
+      text,
+      mentions,
+    });
   }
 
   for (const attachment of draft.attachments) {
@@ -116,12 +173,31 @@ export function promptInputToDraft(
   input: readonly PromptInput[],
 ): PromptDraftState {
   const textSegments: string[] = [];
+  const mentions: PromptTextMention[] = [];
   const attachments: PromptDraftState["attachments"] = [];
+  let textOffset = 0;
 
   for (const chunk of input) {
     if (chunk.type === "text") {
       if (chunk.text.trim().length > 0) {
+        if (textSegments.length > 0) {
+          textOffset += 2;
+        }
+        for (const mention of chunk.mentions) {
+          if (
+            mention.start >= 0 &&
+            mention.end > mention.start &&
+            mention.end <= chunk.text.length
+          ) {
+            mentions.push({
+              ...mention,
+              start: textOffset + mention.start,
+              end: textOffset + mention.end,
+            });
+          }
+        }
         textSegments.push(chunk.text);
+        textOffset += chunk.text.length;
       }
       continue;
     }
@@ -149,6 +225,7 @@ export function promptInputToDraft(
 
   return {
     text: textSegments.join("\n\n"),
+    mentions,
     attachments,
   };
 }

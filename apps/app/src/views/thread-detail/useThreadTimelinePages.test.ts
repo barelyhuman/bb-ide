@@ -41,6 +41,7 @@ function userRow(args: TimelineTestRowArgs): TimelineUserConversationRow {
     initiator: "user",
     senderThreadId: null,
     text: args.id,
+    mentions: [],
     attachments: null,
     turnRequest: { kind: "message", status: "accepted" },
   };

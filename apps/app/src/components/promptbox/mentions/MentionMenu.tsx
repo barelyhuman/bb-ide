@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
+import { promptMentionResourceFromSuggestion } from "@/components/promptbox/editor/prompt-editor-serialization";
+import { promptMentionIconName } from "@/components/promptbox/mentions/prompt-mention-display";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { cn } from "@/lib/utils";
@@ -105,10 +107,7 @@ function getPathSectionLabel(kind: PathMentionSectionKind): string {
 }
 
 function getMentionIconName(item: PromptMentionSuggestion): IconName {
-  if (item.kind === "thread") {
-    return item.threadType === "manager" ? "UserRound" : "MessageSquare";
-  }
-  return item.entryKind === "directory" ? "Folder" : "File";
+  return promptMentionIconName(promptMentionResourceFromSuggestion(item));
 }
 
 function getMentionTitle(item: PromptMentionSuggestion): string {

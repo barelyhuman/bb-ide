@@ -100,13 +100,14 @@ function renderNewThreadPrompt(modeConfig: NewThreadModeConfig): void {
   render(
     <NewThreadPromptBoxUI
       value=""
+      mentionRanges={[]}
       onChange={noop}
       onSubmit={noop}
       isSubmitting={false}
       disabled={false}
       zenModeStorageKey="bb.test.new-thread"
       history={{
-        currentDraft: { text: "", attachments: [] },
+        currentDraft: { text: "", mentions: [], attachments: [] },
         entries: [],
         onSelectEntry: noop,
       }}
@@ -152,7 +153,7 @@ describe("NewThreadPromptBoxUI", () => {
   it("omits file mention copy from the projectless thread placeholder", () => {
     renderNewThreadPrompt(buildThreadModeConfig());
 
-    expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(
+    expect(screen.getByRole("textbox").getAttribute("data-placeholder")).toBe(
       "Ask anything.",
     );
   });
@@ -160,7 +161,7 @@ describe("NewThreadPromptBoxUI", () => {
   it("omits file mention copy from the projectless manager placeholder", () => {
     renderNewThreadPrompt(buildManagerModeConfig());
 
-    expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe(
+    expect(screen.getByRole("textbox").getAttribute("data-placeholder")).toBe(
       "Optional — instructions for the manager: what to work on, or how you like things done.",
     );
   });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PromptMentionResource } from "@bb/domain";
 import {
   emptyPromptDraftState,
   isPromptDraftEmpty,
@@ -12,6 +13,7 @@ describe("prompt draft helpers", () => {
     const parsed = parsePromptDraftStorage("Investigate flaky login redirect");
     expect(parsed).toEqual({
       text: "",
+      mentions: [],
       attachments: [],
     });
   });
@@ -34,6 +36,7 @@ describe("prompt draft helpers", () => {
 
     expect(parsed).toEqual({
       text: "Review",
+      mentions: [],
       attachments: [
         {
           type: "localImage",
@@ -51,6 +54,7 @@ describe("prompt draft helpers", () => {
     expect(
       isPromptDraftEmpty({
         text: "",
+        mentions: [],
         attachments: [
           {
             type: "localFile",
@@ -67,6 +71,7 @@ describe("prompt draft helpers", () => {
   it("maps draft text and attachments to prompt input list", () => {
     const input = promptDraftToInput({
       text: "  Ship this patch  ",
+      mentions: [],
       attachments: [
         {
           type: "localImage",
@@ -86,7 +91,7 @@ describe("prompt draft helpers", () => {
     });
 
     expect(input).toEqual([
-      { type: "text", text: "Ship this patch" },
+      { type: "text", text: "Ship this patch", mentions: [] },
       { type: "localImage", path: "/tmp/image.png" },
       {
         type: "localFile",
@@ -98,9 +103,50 @@ describe("prompt draft helpers", () => {
     ]);
   });
 
+  it("keeps visible mention ranges when trailing trim clips mention whitespace", () => {
+    const resource: PromptMentionResource = {
+      kind: "thread",
+      threadId: "thr_manager",
+      threadType: "manager",
+      label: "Prompt UX manager",
+    };
+    const text = "  Ask @manager   ";
+    const token = "@manager";
+    const start = text.indexOf(token);
+    if (start < 0) {
+      throw new Error("Expected mention token in test text");
+    }
+
+    const input = promptDraftToInput({
+      text,
+      mentions: [
+        {
+          start,
+          end: text.length,
+          resource,
+        },
+      ],
+      attachments: [],
+    });
+
+    expect(input).toEqual([
+      {
+        type: "text",
+        text: "Ask @manager",
+        mentions: [
+          {
+            start: "Ask ".length,
+            end: "Ask @manager".length,
+            resource,
+          },
+        ],
+      },
+    ]);
+  });
+
   it("maps prompt input back to an editable draft", () => {
     const draft = promptInputToDraft([
-      { type: "text", text: "Investigate" },
+      { type: "text", text: "Investigate", mentions: [] },
       { type: "image", url: "https://example.com/image.png" },
       { type: "localImage", path: "/tmp/screenshot.png" },
       {
@@ -114,6 +160,7 @@ describe("prompt draft helpers", () => {
 
     expect(draft).toEqual({
       text: "Investigate",
+      mentions: [],
       attachments: [
         {
           type: "localImage",

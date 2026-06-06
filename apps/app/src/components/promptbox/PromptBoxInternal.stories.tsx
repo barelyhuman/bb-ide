@@ -1,6 +1,8 @@
 import { useState } from "react";
+import type { PromptMentionResource, PromptTextMention } from "@bb/domain";
 import type { UploadedPromptAttachment } from "@bb/server-contract";
 import { ExecutionControls } from "@/components/promptbox/ExecutionControls";
+import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 import {
   PromptBoxInternal,
   type HistoryConfig,
@@ -77,23 +79,151 @@ const mockAttachments: UploadedPromptAttachment[] = [
 // ---------------------------------------------------------------------------
 
 const historyEntries = [
-  { text: "fix the timeline pagination bug", attachments: [] },
-  { text: "review thread workspace", attachments: [] },
+  { text: "fix the timeline pagination bug", mentions: [], attachments: [] },
+  { text: "review thread workspace", mentions: [], attachments: [] },
 ];
 
 const baseHistory: HistoryConfig = {
-  currentDraft: { text: "", attachments: [] },
+  currentDraft: { text: "", mentions: [], attachments: [] },
   entries: historyEntries,
   onSelectEntry: noop,
 };
 
 // ---------------------------------------------------------------------------
+// Live @-mention corpus. The WithLiveMentions row holds the active query in
+// state (fed by `onQueryChange`) and filters this corpus back into the
+// `suggestions` prop — mirroring production's usePromptMentions: threads
+// first, then paths, capped at PROMPT_MENTION_LIMIT.
+// ---------------------------------------------------------------------------
+
+const PROMPT_MENTION_LIMIT = 8;
+
+function workspaceFile(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "workspace",
+    entryKind: "file",
+    path,
+    name: path.split("/").at(-1) ?? path,
+    replacement: path,
+  };
+}
+
+function workspaceFolder(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "workspace",
+    entryKind: "directory",
+    path,
+    name: path.split("/").at(-1) ?? path,
+    replacement: `${path}/`,
+  };
+}
+
+function storageFile(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "thread-storage",
+    entryKind: "file",
+    path,
+    name: path.split("/").at(-1) ?? path,
+    replacement: `thread-storage:${path}`,
+  };
+}
+
+const liveMentionThreads: PromptMentionSuggestion[] = [
+  {
+    kind: "thread",
+    path: "thread:thr_qfk8ksbxkk",
+    replacement: "thread:thr_qfk8ksbxkk",
+    projectId: "proj_promptbox",
+    threadId: "thr_qfk8ksbxkk",
+    title: "Wire up promptbox stories",
+    threadType: "standard",
+  },
+  {
+    kind: "thread",
+    path: "thread:thr_mgr_kj4n2x",
+    replacement: "thread:thr_mgr_kj4n2x",
+    projectId: "proj_promptbox",
+    threadId: "thr_mgr_kj4n2x",
+    title: "Manager: app/timeline cleanup sprint",
+    threadType: "manager",
+  },
+  {
+    kind: "thread",
+    path: "thread:thr_4hge9xn14m",
+    replacement: "thread:thr_4hge9xn14m",
+    projectId: "proj_promptbox",
+    threadId: "thr_4hge9xn14m",
+    title: "Review flow cleanup",
+    threadType: "standard",
+  },
+];
+
+const liveMentionPaths: PromptMentionSuggestion[] = [
+  workspaceFile("apps/app/src/components/promptbox/PromptBoxInternal.tsx"),
+  workspaceFile("apps/app/src/components/promptbox/FollowUpPromptBox.tsx"),
+  workspaceFile("apps/app/src/components/promptbox/NewThreadPromptBox.tsx"),
+  workspaceFile("apps/app/src/hooks/usePromptMentions.ts"),
+  workspaceFolder("apps/app/src/components/promptbox/mentions"),
+  storageFile("notes/status.md"),
+];
+
+function suggestionHaystack(suggestion: PromptMentionSuggestion): string {
+  return suggestion.kind === "thread"
+    ? `${suggestion.title ?? ""} ${suggestion.threadId}`.toLowerCase()
+    : `${suggestion.path} ${suggestion.name}`.toLowerCase();
+}
+
+function filterLiveMentions(query: string): PromptMentionSuggestion[] {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return [];
+  const matches = (suggestion: PromptMentionSuggestion) =>
+    suggestionHaystack(suggestion).includes(needle);
+  return [
+    ...liveMentionThreads.filter(matches),
+    ...liveMentionPaths.filter(matches),
+  ].slice(0, PROMPT_MENTION_LIMIT);
+}
+
+// ---------------------------------------------------------------------------
 // Per-row controlled value + helpers
 // ---------------------------------------------------------------------------
 
-function useControlledValue(initial: string) {
+interface StoryMentionArgs {
+  resource: PromptMentionResource;
+  text: string;
+  token: string;
+}
+
+function storyMention({
+  resource,
+  text,
+  token,
+}: StoryMentionArgs): PromptTextMention {
+  const start = text.indexOf(token);
+  if (start < 0) {
+    throw new Error(`Missing story mention token: ${token}`);
+  }
+  return {
+    start,
+    end: start + token.length,
+    resource,
+  };
+}
+
+function useControlledValue(
+  initial: string,
+  initialMentions: PromptTextMention[] = [],
+) {
   const [value, setValue] = useState(initial);
-  return { value, onChange: setValue };
+  const [mentionRanges, setMentionRanges] = useState(initialMentions);
+  const onChange = (nextValue: string, nextMentions: PromptTextMention[]) => {
+    setValue(nextValue);
+    setMentionRanges(nextMentions);
+  };
+  return { value, mentionRanges, onChange };
 }
 
 function makeSubmission(
@@ -103,7 +233,6 @@ function makeSubmission(
     isSubmitting: false,
     disabled: false,
     title: "Submit (Enter)",
-    mode: "enter",
     ...overrides,
   };
 }
@@ -113,10 +242,11 @@ function makeSubmission(
 // ---------------------------------------------------------------------------
 
 function DefaultRow() {
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptBoxInternal
       value={value}
+      mentionRanges={mentionRanges}
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
@@ -131,12 +261,13 @@ function DefaultRow() {
 }
 
 function WithAttachmentsRow() {
-  const { value, onChange } = useControlledValue(
+  const { value, mentionRanges, onChange } = useControlledValue(
     "Take a look at this screenshot and the diff.",
   );
   return (
     <PromptBoxInternal
       value={value}
+      mentionRanges={mentionRanges}
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
@@ -150,11 +281,82 @@ function WithAttachmentsRow() {
   );
 }
 
-function SubmittingRow() {
-  const { value, onChange } = useControlledValue("Review thread workspace.");
+function WithMentionsRow() {
+  const initialValue =
+    "Ask @thread:thr_manager to inspect @apps/app/src/components/promptbox/PromptBoxInternal.tsx.";
+  const { value, mentionRanges, onChange } = useControlledValue(initialValue, [
+    storyMention({
+      text: initialValue,
+      token: "@thread:thr_manager",
+      resource: {
+        kind: "thread",
+        threadId: "thr_manager",
+        threadType: "manager",
+        label: "Prompt UX manager",
+      },
+    }),
+    storyMention({
+      text: initialValue,
+      token: "@apps/app/src/components/promptbox/PromptBoxInternal.tsx",
+      resource: {
+        kind: "path",
+        source: "workspace",
+        entryKind: "file",
+        path: "apps/app/src/components/promptbox/PromptBoxInternal.tsx",
+        label: "PromptBoxInternal.tsx",
+      },
+    }),
+  ]);
   return (
     <PromptBoxInternal
       value={value}
+      mentionRanges={mentionRanges}
+      onChange={onChange}
+      onSubmit={noop}
+      mentions={makeMentions()}
+      mentionMenuPlacement="bottom"
+      attachments={makeAttachments()}
+      history={baseHistory}
+      submission={makeSubmission()}
+      voice={idleVoice}
+      footerStart={<ExecutionControls {...mockExecution} />}
+    />
+  );
+}
+
+function WithLiveMentionsRow() {
+  const { value, mentionRanges, onChange } = useControlledValue("");
+  const [query, setQuery] = useState<string | null>(null);
+  const suggestions = filterLiveMentions(query ?? "");
+  return (
+    <PromptBoxInternal
+      value={value}
+      mentionRanges={mentionRanges}
+      onChange={onChange}
+      onSubmit={noop}
+      placeholder="Type @ to mention a file, folder, or thread"
+      mentions={makeMentions({
+        suggestions,
+        onQueryChange: setQuery,
+      })}
+      mentionMenuPlacement="bottom"
+      attachments={makeAttachments()}
+      history={baseHistory}
+      submission={makeSubmission()}
+      voice={idleVoice}
+      footerStart={<ExecutionControls {...mockExecution} />}
+    />
+  );
+}
+
+function SubmittingRow() {
+  const { value, mentionRanges, onChange } = useControlledValue(
+    "Review thread workspace.",
+  );
+  return (
+    <PromptBoxInternal
+      value={value}
+      mentionRanges={mentionRanges}
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
@@ -173,10 +375,11 @@ function SubmittingRow() {
 }
 
 function RunningWithStopRow() {
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptBoxInternal
       value={value}
+      mentionRanges={mentionRanges}
       onChange={onChange}
       onSubmit={noop}
       placeholder="Ask for a follow-up. @ to mention files or folders"
@@ -196,10 +399,11 @@ function RunningWithStopRow() {
 }
 
 function RecordingActiveRow() {
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptBoxInternal
       value={value}
+      mentionRanges={mentionRanges}
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
@@ -214,10 +418,11 @@ function RecordingActiveRow() {
 }
 
 function RecordingProcessingRow() {
-  const { value, onChange } = useControlledValue("");
+  const { value, mentionRanges, onChange } = useControlledValue("");
   return (
     <PromptBoxInternal
       value={value}
+      mentionRanges={mentionRanges}
       onChange={onChange}
       onSubmit={noop}
       mentions={makeMentions()}
@@ -242,6 +447,18 @@ export function Overview() {
         hint="image + file attached to the draft"
       >
         <WithAttachmentsRow />
+      </StoryRow>
+      <StoryRow
+        label="with mentions"
+        hint="thread and file mentions render as editor pills"
+      >
+        <WithMentionsRow />
+      </StoryRow>
+      <StoryRow
+        label="live mentions"
+        hint="type @ then a query (e.g. @prompt, @timeline) — menu filters live"
+      >
+        <WithLiveMentionsRow />
       </StoryRow>
       <StoryRow label="submitting" hint="mutation in flight">
         <SubmittingRow />

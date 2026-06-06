@@ -5,6 +5,7 @@ import {
   jsonValueSchema,
   pendingInteractionUserAnswerSchema,
   pendingInteractionUserQuestionQuestionSchema,
+  promptTextMentionSchema,
   threadTurnInitiatorSchema,
   workflowProgressSnapshotSchema,
   type JsonObject,
@@ -108,6 +109,7 @@ export const timelineUserConversationRowSchema =
     initiator: threadTurnInitiatorSchema,
     senderThreadId: z.string().nullable(),
     turnRequest: timelineConversationTurnRequestSchema,
+    mentions: z.array(promptTextMentionSchema),
   });
 export type TimelineUserConversationRow = z.infer<
   typeof timelineUserConversationRowSchema

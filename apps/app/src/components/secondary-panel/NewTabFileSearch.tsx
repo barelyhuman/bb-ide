@@ -64,6 +64,7 @@ What I want:
 
 const CREATE_APP_PROMPT_DRAFT = {
   text: CREATE_APP_PROMPT_TEMPLATE,
+  mentions: [],
   attachments: [],
 } satisfies PromptDraftState;
 

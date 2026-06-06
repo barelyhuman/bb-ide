@@ -3,7 +3,6 @@ import type { Thread } from "@bb/domain";
 import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 import { compareCodepoint } from "@/lib/codepoint-compare";
 
-export type ThreadSuggestionMode = "none" | "all";
 export type ThreadMentionSuggestion = Extract<
   PromptMentionSuggestion,
   { kind: "thread" }
@@ -12,7 +11,6 @@ export type ThreadMentionSuggestion = Extract<
 export interface BuildThreadMentionSuggestionsArgs {
   threads: readonly Thread[];
   query: string;
-  mode: ThreadSuggestionMode;
   currentProjectId?: string;
   currentThreadId?: string;
   projectNamesById: ReadonlyMap<string, string>;
@@ -160,7 +158,7 @@ export function buildThreadMentionSuggestions(
   args: BuildThreadMentionSuggestionsArgs,
 ): ThreadMentionSuggestion[] {
   const trimmedQuery = args.query.trim();
-  if (args.mode === "none" || trimmedQuery.length === 0 || args.limit <= 0) {
+  if (trimmedQuery.length === 0 || args.limit <= 0) {
     return [];
   }
 

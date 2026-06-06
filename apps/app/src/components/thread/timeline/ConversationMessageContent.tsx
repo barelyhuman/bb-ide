@@ -9,6 +9,7 @@ import type {
   TimelineConversationAttachments,
   TimelineUserConversationRow,
 } from "@bb/server-contract";
+import type { PromptTextMention } from "@bb/domain";
 import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
@@ -28,8 +29,13 @@ import {
 } from "./ConversationAttachments.js";
 import {
   GeneratedConversationMessage,
-  generatedConversationBodyText,
+  generatedConversationBodySlice,
 } from "./GeneratedConversationMessage.js";
+import {
+  clipMentionTextToVisibleRange,
+  renderMentionTextSegments,
+  shiftMentionsToTextRange,
+} from "./ConversationMessageMentions.js";
 import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
 import { turnRequestLabel } from "./conversation-turn-request-label.js";
 
@@ -41,18 +47,17 @@ interface ConversationMessageContentBaseProps {
   text: string;
 }
 
-export interface ConversationMessageContentUserProps
-  extends ConversationMessageContentBaseProps {
+export interface ConversationMessageContentUserProps extends ConversationMessageContentBaseProps {
   role: "user";
   initiator: TimelineUserConversationRow["initiator"];
+  mentions: readonly PromptTextMention[];
   resolveSegmentLinkHref?: TimelineTitleLinkResolver;
   senderThreadId: TimelineUserConversationRow["senderThreadId"];
   senderThreadTitle: string | null;
   turnRequest: TimelineUserConversationRow["turnRequest"];
 }
 
-export interface ConversationMessageContentAssistantProps
-  extends ConversationMessageContentBaseProps {
+export interface ConversationMessageContentAssistantProps extends ConversationMessageContentBaseProps {
   role: "assistant";
   // Assistant content renders through MarkdownPreview, which is the only
   // surface with clickable links. User messages render as plain text
@@ -76,6 +81,7 @@ export type ConversationMessageContentProps =
 interface UserConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
   initiator: TimelineUserConversationRow["initiator"];
+  mentions: readonly PromptTextMention[];
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   resolveSegmentLinkHref?: TimelineTitleLinkResolver;
@@ -94,6 +100,7 @@ interface AssistantConversationMessageProps {
 }
 
 interface CollapsibleMessageTextProps {
+  mentions: readonly PromptTextMention[];
   text: string;
   /**
    * When set, the first `mutePrefixLength` characters of `text` are rendered
@@ -148,6 +155,7 @@ function useIsOverflowing(
 }
 
 function CollapsibleMessageText({
+  mentions,
   text,
   mutePrefixLength,
 }: CollapsibleMessageTextProps) {
@@ -160,6 +168,7 @@ function CollapsibleMessageText({
     mutePrefixLength < text.length;
   const prefixText = showMutedPrefix ? text.slice(0, mutePrefixLength) : null;
   const bodyText = showMutedPrefix ? text.slice(mutePrefixLength) : text;
+  const bodyOffset = showMutedPrefix ? mutePrefixLength : 0;
 
   const [isExpanded, setIsExpanded] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -177,8 +186,12 @@ function CollapsibleMessageText({
       ? cappedBody
       : lines.slice(0, 15).join("\n");
   const isOverflowing = useIsOverflowing(textRef, !isExpanded, renderedBody);
-  const showToggle =
-    isExpanded || exceedsCollapsedLineCount || isOverflowing;
+  const showToggle = isExpanded || exceedsCollapsedLineCount || isOverflowing;
+  const safeRenderedBody = clipMentionTextToVisibleRange({
+    mentions,
+    rangeStart: bodyOffset,
+    text: renderedBody,
+  });
 
   return (
     <>
@@ -197,7 +210,10 @@ function CollapsibleMessageText({
           !isExpanded && "line-clamp-[15]",
         )}
       >
-        {renderedBody}
+        {renderMentionTextSegments({
+          mentions: safeRenderedBody.mentions,
+          text: safeRenderedBody.text,
+        })}
         {isExpanded && isTruncated ? (
           <span className="text-muted-foreground"> [truncated]</span>
         ) : null}
@@ -221,6 +237,7 @@ function CollapsibleMessageText({
 function UserConversationMessage({
   attachmentItems,
   initiator,
+  mentions,
   onOpenLocalFileLink,
   projectId,
   resolveSegmentLinkHref,
@@ -230,34 +247,46 @@ function UserConversationMessage({
   turnRequest,
 }: UserConversationMessageProps) {
   if (initiator === "agent" && senderThreadId !== null) {
-    const bodyText = generatedConversationBodyText({ initiator, text });
+    const body = generatedConversationBodySlice({ initiator, text });
+    const bodyMentions = shiftMentionsToTextRange({
+      mentions,
+      rangeStart: body.startOffset,
+      rangeEnd: body.startOffset + body.text.length,
+    });
     return (
       <GeneratedConversationMessage
         attachmentItems={attachmentItems}
+        mentions={bodyMentions}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
         resolveSegmentLinkHref={resolveSegmentLinkHref}
         sourceKind="agent"
         sourceName={senderThreadTitle ?? "Agent"}
         sourceThreadId={senderThreadId}
-        text={bodyText}
+        text={body.text}
         turnRequest={turnRequest}
       />
     );
   }
 
   if (initiator === "system") {
-    const bodyText = generatedConversationBodyText({ initiator, text });
+    const body = generatedConversationBodySlice({ initiator, text });
+    const bodyMentions = shiftMentionsToTextRange({
+      mentions,
+      rangeStart: body.startOffset,
+      rangeEnd: body.startOffset + body.text.length,
+    });
     return (
       <GeneratedConversationMessage
         attachmentItems={attachmentItems}
+        mentions={bodyMentions}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
         resolveSegmentLinkHref={resolveSegmentLinkHref}
         sourceKind="system"
         sourceName="BB"
         sourceThreadId={null}
-        text={bodyText}
+        text={body.text}
         turnRequest={turnRequest}
       />
     );
@@ -276,6 +305,7 @@ function UserConversationMessage({
         <div className="rounded-md bg-surface-selected p-2 text-sm leading-relaxed text-foreground">
           {messageText ? (
             <CollapsibleMessageText
+              mentions={mentions}
               text={text}
               mutePrefixLength={mutePrefixLength || undefined}
             />
@@ -299,7 +329,10 @@ function UserConversationMessage({
                   isPendingSteer && "animate-shine",
                 )}
               >
-                <Icon name="CornerDownRight" className="mr-1 inline-block size-3 align-middle" />
+                <Icon
+                  name="CornerDownRight"
+                  className="mr-1 inline-block size-3 align-middle"
+                />
                 {requestLabel}
               </span>
             ) : null}
@@ -342,10 +375,7 @@ function AssistantConversationMessage({
 
   return (
     <div className="group w-full px-2 text-sm leading-relaxed">
-      <MarkdownPreview
-        content={text}
-        linkRouting={linkRouting}
-      />
+      <MarkdownPreview content={text} linkRouting={linkRouting} />
       <ConversationAttachments
         filePaths={attachmentItems.filePaths}
         imageItems={attachmentItems.imageItems}
@@ -381,6 +411,7 @@ export function ConversationMessageContent(
       <UserConversationMessage
         attachmentItems={attachmentItems}
         initiator={props.initiator}
+        mentions={props.mentions}
         onOpenLocalFileLink={onOpenLocalFileLink}
         projectId={projectId}
         resolveSegmentLinkHref={props.resolveSegmentLinkHref}

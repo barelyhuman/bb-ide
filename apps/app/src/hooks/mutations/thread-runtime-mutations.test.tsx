@@ -2,7 +2,11 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type {
+  PromptInput,
+  ThreadListEntry,
+  ThreadWithRuntime,
+} from "@bb/domain";
 import type {
   PromptHistoryResponse,
   SendQueuedMessageResponse,
@@ -44,9 +48,17 @@ vi.mock("@/lib/ws", () => ({
   },
 }));
 
+interface TextInputArgs {
+  text: string;
+}
+
+function textInput({ text }: TextInputArgs): PromptInput[] {
+  return [{ type: "text", text, mentions: [] }];
+}
+
 const queuedMessage = {
   id: "queued-1",
-  content: [{ type: "text", text: "Continue" }],
+  content: textInput({ text: "Continue" }),
   model: "gpt-5",
   reasoningLevel: "medium",
   permissionMode: "full",
@@ -58,7 +70,7 @@ const queuedMessage = {
 const secondQueuedMessage = {
   ...queuedMessage,
   id: "queued-2",
-  content: [{ type: "text", text: "Second queued message" }],
+  content: textInput({ text: "Second queued message" }),
   createdAt: 2,
   updatedAt: 2,
 } satisfies SendQueuedMessageResponse["queuedMessage"];
@@ -160,7 +172,7 @@ describe("thread runtime mutations", () => {
 
     await act(async () => {
       await result.current.mutateAsync({
-        input: [{ type: "text", text: "Open a debugging thread" }],
+        input: textInput({ text: "Open a debugging thread" }),
         projectId: "project-1",
         providerId: "codex",
         environment: {
@@ -182,7 +194,7 @@ describe("thread runtime mutations", () => {
       {
         id: expect.stringMatching(/^optimistic-prompt-history:/u),
         createdAt: 10,
-        input: [{ type: "text", text: "Open a debugging thread" }],
+        input: textInput({ text: "Open a debugging thread" }),
       },
     ]);
     expect(
@@ -213,7 +225,7 @@ describe("thread runtime mutations", () => {
 
     await act(async () => {
       await result.current.mutateAsync({
-        input: [{ type: "text", text: "Open a release thread" }],
+        input: textInput({ text: "Open a release thread" }),
         projectId: "project-1",
         providerId: "codex",
         environment: {
@@ -252,7 +264,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Hello there" }],
+        input: textInput({ text: "Hello there" }),
         mode: "auto",
       });
     });
@@ -301,7 +313,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Hello there" }],
+        input: textInput({ text: "Hello there" }),
         mode: "auto",
       });
     });
@@ -343,7 +355,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Hello there" }],
+        input: textInput({ text: "Hello there" }),
         mode: "auto",
       });
     });
@@ -380,7 +392,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Hello there" }],
+        input: textInput({ text: "Hello there" }),
         mode: "auto",
       });
     });
@@ -421,7 +433,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Keep this in mind" }],
+        input: textInput({ text: "Keep this in mind" }),
         mode: "auto",
       });
     });
@@ -474,7 +486,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Keep this in mind" }],
+        input: textInput({ text: "Keep this in mind" }),
         mode: "auto",
       });
     });
@@ -511,7 +523,7 @@ describe("thread runtime mutations", () => {
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Keep this in mind" }],
+        input: textInput({ text: "Keep this in mind" }),
         mode: "steer",
       });
     });
@@ -543,7 +555,7 @@ describe("thread runtime mutations", () => {
       await expect(
         result.current.mutateAsync({
           id: "thread-1",
-          input: [{ type: "text", text: "Hello there" }],
+          input: textInput({ text: "Hello there" }),
           mode: "auto",
         }),
       ).rejects.toThrow("boom");
@@ -572,7 +584,7 @@ describe("thread runtime mutations", () => {
       await expect(
         result.current.mutateAsync({
           id: "thread-1",
-          input: [{ type: "text", text: "Keep this in mind" }],
+          input: textInput({ text: "Keep this in mind" }),
           mode: "auto",
         }),
       ).rejects.toThrow("boom");
@@ -592,7 +604,7 @@ describe("thread runtime mutations", () => {
     await act(async () => {
       await result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Continue" }],
+        input: textInput({ text: "Continue" }),
         mode: "auto",
       });
     });
@@ -605,7 +617,7 @@ describe("thread runtime mutations", () => {
       {
         id: expect.stringMatching(/^optimistic-prompt-history:/u),
         createdAt: expect.any(Number),
-        input: [{ type: "text", text: "Continue" }],
+        input: textInput({ text: "Continue" }),
       },
     ]);
   });
@@ -619,7 +631,7 @@ describe("thread runtime mutations", () => {
       await expect(
         result.current.mutateAsync({
           id: "thread-1",
-          input: [{ type: "text", text: "Continue" }],
+          input: textInput({ text: "Continue" }),
           mode: "auto",
         }),
       ).rejects.toThrow("boom");
@@ -729,7 +741,7 @@ describe("thread runtime mutations", () => {
     await act(async () => {
       await result.current.mutateAsync({
         id: "thread-1",
-        input: [{ type: "text", text: "Continue" }],
+        input: textInput({ text: "Continue" }),
       });
     });
 
@@ -741,7 +753,7 @@ describe("thread runtime mutations", () => {
       {
         id: "queued-message:queued-1",
         createdAt: 1,
-        input: [{ type: "text", text: "Continue" }],
+        input: textInput({ text: "Continue" }),
       },
     ]);
   });

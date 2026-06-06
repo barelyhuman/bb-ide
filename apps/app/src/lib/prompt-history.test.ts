@@ -16,13 +16,14 @@ describe("prompt history helpers", () => {
       {
         id: "entry-2",
         createdAt: 1,
-        input: [{ type: "text", text: "Ship it" }],
+        input: [{ type: "text", text: "Ship it", mentions: [] }],
       },
     ]);
 
     expect(drafts).toEqual([
       {
         text: "Ship it",
+        mentions: [],
         attachments: [],
       },
     ]);
@@ -34,20 +35,21 @@ describe("prompt history helpers", () => {
         id: "entry-2",
         createdAt: 2,
         input: [
-          { type: "text", text: "Ship it" },
+          { type: "text", text: "Ship it", mentions: [] },
           { type: "image", url: "https://example.com/image.png" },
         ],
       },
       {
         id: "entry-1",
         createdAt: 1,
-        input: [{ type: "text", text: "Ship it" }],
+        input: [{ type: "text", text: "Ship it", mentions: [] }],
       },
     ]);
 
     expect(drafts).toEqual([
       {
         text: "Ship it",
+        mentions: [],
         attachments: [],
       },
     ]);
@@ -58,31 +60,31 @@ describe("prompt history helpers", () => {
       {
         id: "entry-1",
         createdAt: 2,
-        input: [{ type: "text", text: "Latest" }],
+        input: [{ type: "text", text: "Latest", mentions: [] }],
       },
       {
         id: "entry-2",
         createdAt: 1,
-        input: [{ type: "text", text: "Older" }],
+        input: [{ type: "text", text: "Older", mentions: [] }],
       },
     ];
 
     const nextEntries = prependPromptHistoryEntry(entries, {
       id: "entry-3",
       createdAt: 3,
-      input: [{ type: "text", text: "Latest" }],
+      input: [{ type: "text", text: "Latest", mentions: [] }],
     });
 
     expect(nextEntries).toEqual([
       {
         id: "entry-3",
         createdAt: 3,
-        input: [{ type: "text", text: "Latest" }],
+        input: [{ type: "text", text: "Latest", mentions: [] }],
       },
       {
         id: "entry-2",
         createdAt: 1,
-        input: [{ type: "text", text: "Older" }],
+        input: [{ type: "text", text: "Older", mentions: [] }],
       },
     ]);
   });

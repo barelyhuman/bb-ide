@@ -431,6 +431,7 @@ export function conversationRow({
       kind: "conversation",
       role,
       text,
+      mentions: [],
       attachments,
       initiator: resolvedInitiator,
       senderThreadId:

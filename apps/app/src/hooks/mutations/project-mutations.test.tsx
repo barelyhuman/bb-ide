@@ -67,7 +67,7 @@ describe("project mutations", () => {
           reasoningLevel: "explicit",
         },
         environment: { type: "host", hostId: "host-1" },
-        input: [{ type: "text", text: "Start here" }],
+        input: [{ type: "text", text: "Start here", mentions: [] }],
       });
     });
 
@@ -84,7 +84,7 @@ describe("project mutations", () => {
         reasoningLevel: "explicit",
       },
       environment: { type: "host", hostId: "host-1" },
-      input: [{ type: "text", text: "Start here" }],
+      input: [{ type: "text", text: "Start here", mentions: [] }],
     });
   });
 });

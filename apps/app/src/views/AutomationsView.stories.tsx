@@ -66,6 +66,7 @@ function makeAutomation(overrides: Partial<Automation> = {}): Automation {
           {
             type: "text",
             text: "Review project health and summarize risks.",
+            mentions: [],
           },
         ],
         environment: {

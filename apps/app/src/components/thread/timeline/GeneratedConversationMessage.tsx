@@ -3,6 +3,7 @@ import type {
   TimelineConversationTurnRequest,
   TimelineUserConversationRow,
 } from "@bb/server-contract";
+import type { PromptTextMention } from "@bb/domain";
 import type { TimelineTitle, TimelineTitleSegment } from "@bb/thread-view";
 import type { IconName } from "@/components/ui/icon.js";
 import {
@@ -10,6 +11,11 @@ import {
   type ConversationAttachmentItems,
 } from "./ConversationAttachments.js";
 import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
+import {
+  clipMentionTextToVisibleRange,
+  renderMentionTextSegments,
+  shiftMentionsToTextRange,
+} from "./ConversationMessageMentions.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { NESTED_TIMELINE_GROUP_LINE_CLASS_NAME } from "./timeline-nested-group-line.js";
 import type { TimelineTitleLinkResolver } from "./TimelineTitleView.js";
@@ -19,6 +25,7 @@ import { turnRequestLabel } from "./conversation-turn-request-label.js";
 
 interface GeneratedConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
+  mentions: readonly PromptTextMention[];
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   resolveSegmentLinkHref?: TimelineTitleLinkResolver;
@@ -33,6 +40,11 @@ type GeneratedConversationSourceKind = "agent" | "system";
 
 interface GeneratedConversationBodyTextArgs {
   initiator: TimelineUserConversationRow["initiator"];
+  text: string;
+}
+
+interface GeneratedConversationBodySlice {
+  startOffset: number;
   text: string;
 }
 
@@ -51,12 +63,29 @@ interface GeneratedConversationTitleArgs {
   turnRequest: TimelineConversationTurnRequest;
 }
 
+export function generatedConversationBodySlice({
+  initiator,
+  text,
+}: GeneratedConversationBodyTextArgs): GeneratedConversationBodySlice {
+  const prefixLength = computeMutedPrefixLength(initiator, text);
+  if (prefixLength <= 0) {
+    return { startOffset: 0, text };
+  }
+
+  const textAfterPrefix = text.slice(prefixLength);
+  const trimStartLength =
+    textAfterPrefix.length - textAfterPrefix.trimStart().length;
+  return {
+    startOffset: prefixLength + trimStartLength,
+    text: textAfterPrefix.slice(trimStartLength),
+  };
+}
+
 export function generatedConversationBodyText({
   initiator,
   text,
 }: GeneratedConversationBodyTextArgs): string {
-  const prefixLength = computeMutedPrefixLength(initiator, text);
-  return prefixLength > 0 ? text.slice(prefixLength).trimStart() : text;
+  return generatedConversationBodySlice({ initiator, text }).text;
 }
 
 function timelineTitleSegment({
@@ -165,6 +194,7 @@ function generatedConversationIconName(
 export const GeneratedConversationMessage = memo(
   function GeneratedConversationMessage({
     attachmentItems,
+    mentions,
     onOpenLocalFileLink,
     projectId,
     resolveSegmentLinkHref,
@@ -174,11 +204,30 @@ export const GeneratedConversationMessage = memo(
     text,
     turnRequest,
   }: GeneratedConversationMessageProps) {
+    const trimStartLength = text.length - text.trimStart().length;
     const messageText = text.trim();
+    const messageMentions = useMemo(
+      () =>
+        shiftMentionsToTextRange({
+          mentions,
+          rangeStart: trimStartLength,
+          rangeEnd: trimStartLength + messageText.length,
+        }),
+      [mentions, messageText.length, trimStartLength],
+    );
     const visibleText =
       messageText.length > USER_MESSAGE_CHAR_CAP
         ? messageText.slice(0, USER_MESSAGE_CHAR_CAP)
         : messageText;
+    const visibleMessage = useMemo(
+      () =>
+        clipMentionTextToVisibleRange({
+          mentions: messageMentions,
+          rangeStart: 0,
+          text: visibleText,
+        }),
+      [messageMentions, visibleText],
+    );
     const isTruncated = messageText.length > USER_MESSAGE_CHAR_CAP;
     const title = useMemo(
       () =>
@@ -197,7 +246,10 @@ export const GeneratedConversationMessage = memo(
           <div className="pl-2 text-sm leading-relaxed text-foreground">
             {messageText ? (
               <p className="whitespace-pre-wrap break-words">
-                {visibleText}
+                {renderMentionTextSegments({
+                  mentions: visibleMessage.mentions,
+                  text: visibleMessage.text,
+                })}
                 {isTruncated ? (
                   <span className="text-muted-foreground"> [truncated]</span>
                 ) : null}
@@ -225,7 +277,7 @@ export const GeneratedConversationMessage = memo(
         onOpenLocalFileLink,
         projectId,
         sourceKind,
-        visibleText,
+        visibleMessage,
       ],
     );
 

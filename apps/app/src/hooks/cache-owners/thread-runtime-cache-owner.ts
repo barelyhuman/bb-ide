@@ -277,6 +277,7 @@ function buildOptimisticUserMessageRow({
     startedAt: createdAt,
     createdAt,
     text,
+    mentions: [],
     attachments: timelineAttachments,
     initiator: "user",
     senderThreadId: null,

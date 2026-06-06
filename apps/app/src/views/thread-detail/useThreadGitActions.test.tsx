@@ -150,7 +150,13 @@ describe("useThreadGitActions", () => {
 
     await act(async () => {
       await result.current.handleAskAgentToFixGitAction({
-        input: [{ type: "text", text: "Please fix the commit failure." }],
+        input: [
+          {
+            type: "text",
+            text: "Please fix the commit failure.",
+            mentions: [],
+          },
+        ],
         threadId: "thread-1",
       });
     });

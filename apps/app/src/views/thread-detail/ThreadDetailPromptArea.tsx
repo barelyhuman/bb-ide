@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
+import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { getFollowUpPromptPlaceholder } from "@/components/promptbox/follow-up-placeholder";
 import type {
   PendingInteraction,
@@ -83,6 +84,8 @@ interface ThreadDetailPromptAreaProps {
   onChangedFileClick: (selection: WorkspaceChangedFileSelection) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
+  /** Click handler for inserted mention pills (navigate to threads, open file previews). */
+  resolveMentionLink: PromptMentionLinkResolver;
   /**
    * Resolved changed-files section for the thread's workspace. Null hides the
    * banner. Production passes null when the thread is a manager
@@ -134,6 +137,7 @@ export function ThreadDetailPromptArea({
   onChangedFileClick,
   openThreadDiffPanel,
   projectId,
+  resolveMentionLink,
   workspaceChangedFilesSection,
   workspaceStatusPending,
   contextBannerMergeBase,
@@ -202,7 +206,6 @@ export function ThreadDetailPromptArea({
     threadId: thread.id,
   });
   const promptMentions = usePromptMentions(projectId, {
-    threadSuggestionMode: "all",
     currentThreadId: thread.id,
     currentThreadType: thread.type,
     environmentId: thread.environmentId ?? null,
@@ -302,9 +305,10 @@ export function ThreadDetailPromptArea({
   const currentPromptDraft = useMemo(
     () => ({
       text: promptDraft.text,
+      mentions: promptDraft.mentions,
       attachments: promptDraft.attachments,
     }),
-    [promptDraft.attachments, promptDraft.text],
+    [promptDraft.attachments, promptDraft.mentions, promptDraft.text],
   );
   const currentPromptDraftInput = useMemo(
     () => promptDraftToInput(currentPromptDraft),
@@ -660,7 +664,8 @@ export function ThreadDetailPromptArea({
       },
       isFollowUpSubmitting,
       message: promptDraft.text,
-      onChangeMessage: promptDraft.setText,
+      mentionRanges: promptDraft.mentions,
+      onChangeMessage: promptDraft.setTextAndMentions,
       onModifierSubmit: handleModifierSubmit,
       onSubmit: handleSend,
       promptPlaceholder,
@@ -675,7 +680,8 @@ export function ThreadDetailPromptArea({
       handleModifierSubmit,
       isFollowUpSubmitting,
       promptDraft.setDraft,
-      promptDraft.setText,
+      promptDraft.setTextAndMentions,
+      promptDraft.mentions,
       promptDraft.text,
       promptHistoryDrafts,
       promptPlaceholder,
@@ -755,12 +761,14 @@ export function ThreadDetailPromptArea({
       isLoading: promptMentions.isLoading,
       isError: promptMentions.isError,
       onQueryChange: promptMentions.setQuery,
+      resolveLink: resolveMentionLink,
     }),
     [
       promptMentions.isError,
       promptMentions.isLoading,
       promptMentions.setQuery,
       promptMentions.suggestions,
+      resolveMentionLink,
     ],
   );
 

@@ -15,7 +15,7 @@ import {
 function makeQueuedMessage(id: string, text: string): ThreadQueuedMessage {
   return {
     id,
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text, mentions: [] }],
     model: "gpt-5",
     reasoningLevel: "medium",
     permissionMode: "full",

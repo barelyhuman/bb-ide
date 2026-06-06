@@ -29,6 +29,7 @@ import {
 } from "./NewTabFileSearch";
 import { createNoopDesktopBrowserApi } from "@/test/bb-desktop-test-utils";
 import { CHROME_SECTION_LABEL_CLASS } from "@/components/ui/chromeStyleTokens";
+import type { PromptDraftState } from "@/lib/prompt-draft";
 
 interface ProviderWrapperProps {
   children: ReactNode;
@@ -60,6 +61,11 @@ interface AppsQueryMockState {
   isError: boolean;
 }
 
+interface PromptDraftMockState {
+  currentDraft: PromptDraftState;
+  setDrafts: PromptDraftState[];
+}
+
 const fileSearchMockState = vi.hoisted<FileSearchMockState>(() => ({
   suggestions: [],
   isLoading: false,
@@ -75,6 +81,11 @@ const appsQueryMockState = vi.hoisted<AppsQueryMockState>(() => ({
   isError: false,
 }));
 
+const promptDraftMockState = vi.hoisted<PromptDraftMockState>(() => ({
+  currentDraft: { text: "", mentions: [], attachments: [] },
+  setDrafts: [],
+}));
+
 // The launcher's data sources are the only external boundary here; stub them so
 // the test focuses on the menu/search split and desktop Browser gating.
 vi.mock("@/hooks/useFileSearchSuggestions", () => ({
@@ -88,8 +99,10 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
 vi.mock("@/hooks/usePromptDraftStorage", () => ({
   usePromptDraftStorage: () => ({
     storageKey: "draft-key",
-    getCurrent: () => ({ text: "", attachments: [] }),
-    setDraft: () => {},
+    getCurrent: () => promptDraftMockState.currentDraft,
+    setDraft: (draft: PromptDraftState) => {
+      promptDraftMockState.setDrafts.push(draft);
+    },
   }),
 }));
 
@@ -128,6 +141,20 @@ const FILE_SUGGESTION = {
   positions: [],
 } satisfies FilePathSearchSuggestion;
 
+const DRAFT_WITH_ATTACHMENT = {
+  text: "Keep this draft",
+  mentions: [],
+  attachments: [
+    {
+      type: "localFile",
+      path: "/tmp/spec.md",
+      name: "spec.md",
+      sizeBytes: 42,
+      mimeType: "text/markdown",
+    },
+  ],
+} satisfies PromptDraftState;
+
 function resetFileSearchMockState(): void {
   fileSearchMockState.suggestions = [];
   fileSearchMockState.isLoading = false;
@@ -141,6 +168,15 @@ function resetAppsQueryMockState(): void {
   appsQueryMockState.data = [];
   appsQueryMockState.isLoading = false;
   appsQueryMockState.isError = false;
+}
+
+function resetPromptDraftMockState(): void {
+  promptDraftMockState.currentDraft = {
+    text: "",
+    mentions: [],
+    attachments: [],
+  };
+  promptDraftMockState.setDrafts = [];
 }
 
 function setAppSummaries(apps: readonly AppSummary[]): void {
@@ -216,6 +252,7 @@ afterEach(() => {
   delete window.bbDesktop;
   resetFileSearchMockState();
   resetAppsQueryMockState();
+  resetPromptDraftMockState();
 });
 
 describe("NewTabActionMenu", () => {
@@ -421,6 +458,26 @@ describe("NewTabActionMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create App..." }));
 
     expect(calls).toEqual(["close", "create-app"]);
+    expect(promptDraftMockState.setDrafts).toEqual([
+      {
+        text: expect.stringContaining("You are creating a new global bb app."),
+        mentions: [],
+        attachments: [],
+      },
+    ]);
+  });
+
+  it("leaves a non-empty composer draft unchanged when Create App replacement is canceled", () => {
+    promptDraftMockState.currentDraft = DRAFT_WITH_ATTACHMENT;
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onCreateAppPromptPrefill = vi.fn();
+
+    renderActionMenu({ onCreateAppPromptPrefill });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create App..." }));
+
+    expect(promptDraftMockState.setDrafts).toEqual([]);
+    expect(onCreateAppPromptPrefill).not.toHaveBeenCalled();
   });
 });
 

@@ -5,17 +5,13 @@ import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { buildPathMentionSuggestions } from "./pathMentionSuggestions";
 import { useSidebarNavigation } from "./queries/project-queries";
 import { useThreadMentionCandidates } from "./queries/thread-queries";
-import {
-  buildThreadMentionSuggestions,
-  type ThreadSuggestionMode,
-} from "./threadMentionSuggestions";
+import { buildThreadMentionSuggestions } from "./threadMentionSuggestions";
 import { usePathSuggestions } from "./usePathSuggestions";
 import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 
 const PROMPT_MENTION_LIMIT = 8;
 
 export interface UsePromptMentionsOptions {
-  threadSuggestionMode?: ThreadSuggestionMode;
   currentThreadId?: string;
   currentThreadType?: ThreadType;
   environmentId: string | null;
@@ -80,12 +76,11 @@ export function usePromptMentions(
     currentThreadType: options.currentThreadType,
     includeDirectories: true,
   });
-  const threadSuggestionMode = options.threadSuggestionMode ?? "none";
   const projectNamesQuery = useSidebarNavigation({
-    enabled: threadSuggestionMode === "all" && hasQuery,
+    enabled: hasQuery,
   });
   const threadsQuery = useThreadMentionCandidates({
-    enabled: threadSuggestionMode === "all" && hasQuery,
+    enabled: hasQuery,
   });
   const projectNamesById = useMemo(
     () => buildProjectNamesById(projectNamesQuery.data),
@@ -104,7 +99,6 @@ export function usePromptMentions(
     return buildThreadMentionSuggestions({
       threads: threadsQuery.data ?? [],
       query: trimmedQuery,
-      mode: threadSuggestionMode,
       currentProjectId: projectId,
       currentThreadId,
       projectNamesById,
@@ -114,7 +108,6 @@ export function usePromptMentions(
     currentThreadId,
     projectId,
     projectNamesById,
-    threadSuggestionMode,
     threadsQuery.data,
     trimmedQuery,
   ]);
@@ -141,7 +134,12 @@ export function usePromptMentions(
       pathSearch.isLoading ||
       threadsQuery.isLoading ||
       threadsQuery.isFetching);
-  const isError = pathSearch.isError || threadsQuery.isError;
+  const isThreadError =
+    hasQuery &&
+    threadsQuery.isError &&
+    !threadsQuery.isLoading &&
+    !threadsQuery.isFetching;
+  const isError = pathSearch.isError || isThreadError;
 
   return {
     query,

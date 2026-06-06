@@ -8,8 +8,8 @@ import {
 describe("threadQueuedMessages", () => {
   it("formats queued-message previews from text or attachment-only inputs", () => {
     const input: PromptInput[] = [
-      { type: "text", text: "  First line  " },
-      { type: "text", text: "Second line" },
+      { type: "text", text: "  First line  ", mentions: [] },
+      { type: "text", text: "Second line", mentions: [] },
     ];
 
     expect(formatQueuedMessagePreview(input)).toBe("First line\n\nSecond line");
@@ -35,7 +35,7 @@ describe("threadQueuedMessages", () => {
 
   it("restores editable drafts from queued messages", () => {
     const draft = queuedInputToDraft([
-      { type: "text", text: "Follow up" },
+      { type: "text", text: "Follow up", mentions: [] },
       {
         type: "localImage",
         path: "/tmp/image.png",
@@ -50,6 +50,7 @@ describe("threadQueuedMessages", () => {
 
     expect(draft).toEqual({
       text: "Follow up",
+      mentions: [],
       attachments: [
         {
           type: "localImage",

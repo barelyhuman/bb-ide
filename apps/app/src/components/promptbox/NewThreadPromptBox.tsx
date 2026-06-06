@@ -1,5 +1,12 @@
-import { memo, useMemo, useRef, type ReactNode } from "react";
-import type { Host, ProjectSource } from "@bb/domain";
+import {
+  memo,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type Ref,
+} from "react";
+import type { Host, ProjectSource, PromptTextMention } from "@bb/domain";
 import {
   ExecutionControls,
   type ExecutionControlsProps,
@@ -163,8 +170,10 @@ export interface NewThreadPromptBoxUIProps {
 
   // PromptBox passthrough
   value: string;
-  onChange: (value: string) => void;
+  mentionRanges: readonly PromptTextMention[];
+  onChange: (value: string, mentionRanges: PromptTextMention[]) => void;
   onSubmit: () => void;
+  promptBoxRef?: Ref<PromptBoxHandle>;
   isSubmitting: boolean;
   disabled: boolean;
   /** zenMode storage key used for the root-compose zen-mode atom. */
@@ -225,8 +234,10 @@ function getNewThreadPromptPlaceholder({
 export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   id,
   value,
+  mentionRanges,
   onChange,
   onSubmit,
+  promptBoxRef: externalPromptBoxRef,
   isSubmitting,
   disabled,
   zenModeStorageKey,
@@ -239,6 +250,19 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
   execution,
 }: NewThreadPromptBoxUIProps) {
   const promptBoxRef = useRef<PromptBoxHandle>(null);
+  useImperativeHandle(
+    externalPromptBoxRef,
+    () => ({
+      focusEnd: () => {
+        promptBoxRef.current?.focusEnd();
+      },
+      insertTextAtCursor: (text) => {
+        promptBoxRef.current?.insertTextAtCursor(text);
+      },
+      getTextBeforeCursor: () => promptBoxRef.current?.getTextBeforeCursor(),
+    }),
+    [],
+  );
   const voice = usePromptVoice(promptBoxRef);
   const isProjectlessPrompt = project?.value === null;
   const placeholder = getNewThreadPromptPlaceholder({
@@ -257,6 +281,7 @@ export const NewThreadPromptBoxUI = memo(function NewThreadPromptBoxUI({
         id={id}
         promptBoxRef={promptBoxRef}
         value={value}
+        mentionRanges={mentionRanges}
         onChange={onChange}
         onSubmit={onSubmit}
         autoFocus

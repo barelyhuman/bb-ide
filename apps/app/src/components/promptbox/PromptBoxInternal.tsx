@@ -1,5 +1,14 @@
 import { atom, useAtom } from "jotai";
 import { RESET, atomWithStorage } from "jotai/utils";
+import type { PromptTextMention } from "@bb/domain";
+import Placeholder from "@tiptap/extension-placeholder";
+import {
+  EditorContent,
+  useEditor,
+  type Editor,
+  type JSONContent,
+} from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import {
   useCallback,
   useEffect,
@@ -10,7 +19,6 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
-  type KeyboardEvent,
   type ReactNode,
   type Ref,
 } from "react";
@@ -26,7 +34,6 @@ import {
   COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS,
   COARSE_POINTER_TEXT_BASE_CLASS,
 } from "@/components/ui/coarse-pointer-sizing.js";
-import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 import {
   arePromptDraftStatesEqual,
@@ -36,17 +43,63 @@ import {
 } from "@/lib/prompt-draft";
 import { cn } from "@/lib/utils";
 import { AttachmentPreview } from "./AttachmentPreview";
-import { MentionMenu } from "./mentions/MentionMenu";
 import {
-  findActiveFileMention,
-  insertFileMention,
-  type ActiveFileMention,
-} from "./mentions/file-mention";
+  PromptMentionLinkContext,
+  type PromptMentionLinkResolver,
+} from "./editor/prompt-mention-link";
+import { PromptMentionExtension } from "./editor/prompt-mention-extension";
+import {
+  promptEditorContentFromValue,
+  promptEditorValueFromDoc,
+  promptMentionResourceFromSuggestion,
+} from "./editor/prompt-editor-serialization";
+import { MentionMenu } from "./mentions/MentionMenu";
 
 const PROMPTBOX_MIN_HEIGHT = 68;
 const PROMPTBOX_MAX_HEIGHT = 158;
+const RICH_PASTE_BLOCK_TAGS = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "BLOCKQUOTE",
+  "DIV",
+  "DD",
+  "DL",
+  "DT",
+  "FIGCAPTION",
+  "FIGURE",
+  "FOOTER",
+  "FORM",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HEADER",
+  "HR",
+  "MAIN",
+  "NAV",
+  "P",
+  "SECTION",
+  "TABLE",
+  "TBODY",
+  "TD",
+  "TFOOT",
+  "TH",
+  "THEAD",
+  "TR",
+]);
+const RICH_PASTE_IGNORED_TAGS = new Set([
+  "HEAD",
+  "LINK",
+  "META",
+  "NOSCRIPT",
+  "SCRIPT",
+  "STYLE",
+  "TITLE",
+]);
 
-type SubmitMode = "enter" | "mod-enter";
 type ZenModeLayout = "thread" | "root-compose";
 
 const ZEN_MODE_STORAGE_KEY: Record<ZenModeLayout, string> = {
@@ -63,7 +116,6 @@ export interface PromptBoxSubmissionConfig {
   isSubmitting?: boolean;
   disabled?: boolean;
   title?: string;
-  mode?: SubmitMode;
   isRunning?: boolean;
   onStop?: () => void;
   onModifierSubmit?: () => void;
@@ -80,6 +132,12 @@ export interface MentionsConfig {
   isError: boolean;
   /** Called whenever the active @-mention query changes; null when no mention is active. */
   onQueryChange: (query: string | null) => void;
+  /**
+   * Resolves the click action for an inserted mention pill (navigate to a
+   * thread, open a file preview). Omit to render pills as non-interactive
+   * text; returns null per-resource when that mention isn't openable here.
+   */
+  resolveLink?: PromptMentionLinkResolver;
 }
 
 export interface AttachmentsConfig {
@@ -118,7 +176,9 @@ export interface PromptVoiceConfig {
 }
 
 export interface PromptBoxHandle {
-  /** Insert text at the textarea's current cursor position, with smart spacing. */
+  /** Focus the editor and move the caret to the end. */
+  focusEnd: () => void;
+  /** Insert text at the editor's current cursor position, with smart spacing. */
   insertTextAtCursor: (text: string) => void;
   /** Return the trimmed text before the cursor, used as voice transcript context. */
   getTextBeforeCursor: () => string | undefined;
@@ -129,7 +189,8 @@ export type MentionMenuPlacement = "top" | "bottom";
 export interface PromptBoxInternalProps {
   id?: string;
   value: string;
-  onChange: (value: string) => void;
+  mentionRanges: readonly PromptTextMention[];
+  onChange: (value: string, mentionRanges: PromptTextMention[]) => void;
   onSubmit: () => void;
   placeholder?: string;
   className?: string;
@@ -169,6 +230,19 @@ interface DismissedMentionRange {
   hasLeftRange: boolean;
 }
 
+interface ActiveEditorMention {
+  query: string;
+  from: number;
+  to: number;
+}
+
+interface PromptEditorValueKey {
+  text: string;
+  mentions: readonly PromptTextMention[];
+}
+
+const EDITOR_MENTION_PATTERN = /(^|[\s([{])@([^\s@]*)$/u;
+
 type ZenModeUpdate =
   | boolean
   | typeof RESET
@@ -188,9 +262,160 @@ function createTransientZenModeAtom() {
   );
 }
 
+function promptEditorValueKey(value: PromptEditorValueKey): string {
+  return JSON.stringify(value);
+}
+
+function normalizePastedPlainText(text: string): string {
+  return text.replace(/\r\n?/gu, "\n");
+}
+
+function promptEditorPasteContentFromText(text: string): JSONContent[] {
+  if (text.length === 0) {
+    return [];
+  }
+
+  const content: JSONContent[] = [];
+  const parts = text.split("\n");
+  for (const [index, part] of parts.entries()) {
+    if (index > 0) {
+      content.push({ type: "hardBreak" });
+    }
+    if (part.length > 0) {
+      content.push({ type: "text", text: part });
+    }
+  }
+  return content;
+}
+
+function plainTextFromRichHtml(html: string): string {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  let text = "";
+
+  const appendNewline = () => {
+    text = text.replace(/[ \t]+$/u, "");
+    if (text.length > 0 && !text.endsWith("\n")) {
+      text += "\n";
+    }
+  };
+
+  const appendCollapsedText = (rawText: string) => {
+    const collapsedText = rawText.replace(/\s+/gu, " ");
+    if (collapsedText.trim().length === 0) {
+      if (text.length > 0 && !/[\s]$/u.test(text)) {
+        text += " ";
+      }
+      return;
+    }
+    text += collapsedText;
+  };
+
+  const visitChildren = (node: Node, preserveWhitespace: boolean) => {
+    for (const childNode of node.childNodes) {
+      visitNode(childNode, preserveWhitespace);
+    }
+  };
+
+  const visitNode = (node: Node, preserveWhitespace: boolean) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const rawText = node.textContent ?? "";
+      if (preserveWhitespace) {
+        text += normalizePastedPlainText(rawText);
+        return;
+      }
+      appendCollapsedText(rawText);
+      return;
+    }
+
+    if (!(node instanceof Element)) {
+      visitChildren(node, preserveWhitespace);
+      return;
+    }
+
+    const tagName = node.tagName.toUpperCase();
+    if (RICH_PASTE_IGNORED_TAGS.has(tagName)) {
+      return;
+    }
+    if (tagName === "BR") {
+      appendNewline();
+      return;
+    }
+    if (tagName === "PRE") {
+      appendNewline();
+      text += normalizePastedPlainText(node.textContent ?? "");
+      appendNewline();
+      return;
+    }
+    if (tagName === "LI") {
+      appendNewline();
+      text += "- ";
+      visitChildren(node, preserveWhitespace);
+      appendNewline();
+      return;
+    }
+    if (RICH_PASTE_BLOCK_TAGS.has(tagName)) {
+      appendNewline();
+      visitChildren(node, preserveWhitespace);
+      appendNewline();
+      return;
+    }
+
+    visitChildren(node, preserveWhitespace);
+  };
+
+  visitChildren(document.body, false);
+
+  return text
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .replace(/^\n+/u, "")
+    .replace(/\n+$/u, "");
+}
+
+function plainTextFromClipboardPaste(
+  clipboardData: DataTransfer | null,
+): string | null {
+  const plainText = clipboardData?.getData("text/plain") ?? "";
+  if (plainText.length > 0) {
+    return normalizePastedPlainText(plainText);
+  }
+
+  const html = clipboardData?.getData("text/html") ?? "";
+  if (html.trim().length === 0) {
+    return null;
+  }
+
+  return plainTextFromRichHtml(html);
+}
+
+function findActiveEditorMention(editor: Editor): ActiveEditorMention | null {
+  const selection = editor.state.selection;
+  if (!selection.empty) return null;
+
+  const textBeforeCursor = editor.state.doc.textBetween(
+    0,
+    selection.from,
+    "\n",
+    "\n",
+  );
+  const match = EDITOR_MENTION_PATTERN.exec(textBeforeCursor);
+  if (!match) return null;
+
+  const query = match[2] ?? "";
+  const from = selection.from - query.length - 1;
+  if (from < 0) return null;
+
+  return {
+    query,
+    from,
+    to: selection.from,
+  };
+}
+
 export function PromptBoxInternal({
   id,
   value,
+  mentionRanges,
   onChange,
   onSubmit,
   placeholder = "Ask anything. @ to mention files or folders",
@@ -212,7 +437,6 @@ export function PromptBoxInternal({
     isSubmitting = false,
     disabled: submitDisabled = false,
     title: submitTitle = "Submit (Enter)",
-    mode: submitMode = "enter",
     isRunning = false,
     onStop,
     onModifierSubmit,
@@ -223,6 +447,7 @@ export function PromptBoxInternal({
     isLoading: mentionLoading,
     isError: mentionError,
     onQueryChange: onMentionQueryChange,
+    resolveLink: mentionResolveLink,
   } = mentions;
   const {
     items: attachments = [],
@@ -240,19 +465,21 @@ export function PromptBoxInternal({
   } = zenMode;
   const formRef = useRef<HTMLFormElement>(null);
   const heightAnimationFromRef = useRef<number | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<Editor | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef(value);
-  const resizeTextarea = useAutoGrow(textareaRef, {
-    minHeight,
-    maxHeight: PROMPTBOX_MAX_HEIGHT,
-  });
+  const mentionRangesRef = useRef<readonly PromptTextMention[]>(mentionRanges);
+  const skipEditorChangeRef = useRef(false);
+  const editorValueKeyRef = useRef("");
   const mentionKeyRef = useRef("");
+  const handleEditorKeyDownRef = useRef<(event: KeyboardEvent) => boolean>(
+    () => false,
+  );
+  const onAttachFilesRef = useRef(onAttachFiles);
   const dismissedMentionRef = useRef<DismissedMentionRange | null>(null);
   const isRestoringAppliedMentionRef = useRef(false);
-  const [activeMention, setActiveMention] = useState<ActiveFileMention | null>(
-    null,
-  );
+  const [activeMention, setActiveMention] =
+    useState<ActiveEditorMention | null>(null);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
     null,
@@ -282,29 +509,215 @@ export function PromptBoxInternal({
   );
   const [isZenMode, setIsZenMode] = useAtom(zenModeAtom);
   const autoFocusScopeKey = history?.resetKey;
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    onAttachFilesRef.current = onAttachFiles;
+  }, [onAttachFiles]);
+
+  const syncMentionState = useCallback(
+    (editor: Editor) => {
+      const caretPosition = editor.state.selection.from;
+      const dismissedMention = dismissedMentionRef.current;
+      const isRestoringAppliedMention =
+        isRestoringAppliedMentionRef.current && dismissedMention !== null;
+
+      if (dismissedMention && !isRestoringAppliedMention) {
+        const isWithinDismissedRange =
+          caretPosition >= dismissedMention.start &&
+          caretPosition <= dismissedMention.end;
+
+        if (!isWithinDismissedRange) {
+          dismissedMentionRef.current = {
+            ...dismissedMention,
+            hasLeftRange: true,
+          };
+        } else if (dismissedMention.hasLeftRange) {
+          dismissedMentionRef.current = null;
+        }
+      }
+
+      const shouldSuppressMention = Boolean(
+        dismissedMentionRef.current &&
+        !dismissedMentionRef.current.hasLeftRange &&
+        (isRestoringAppliedMention ||
+          (caretPosition >= dismissedMentionRef.current.start &&
+            caretPosition <= dismissedMentionRef.current.end)),
+      );
+
+      const nextMention = shouldSuppressMention
+        ? null
+        : findActiveEditorMention(editor);
+      const nextKey = nextMention
+        ? `${nextMention.from}:${nextMention.to}:${nextMention.query}`
+        : "";
+      if (nextKey !== mentionKeyRef.current) {
+        mentionKeyRef.current = nextKey;
+        setSelectedMentionIndex(0);
+      }
+      setActiveMention(nextMention);
+
+      onMentionQueryChange(nextMention ? nextMention.query : null);
+    },
+    [onMentionQueryChange],
+  );
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        blockquote: false,
+        bold: false,
+        bulletList: false,
+        code: false,
+        codeBlock: false,
+        dropcursor: false,
+        gapcursor: false,
+        heading: false,
+        horizontalRule: false,
+        italic: false,
+        listItem: false,
+        orderedList: false,
+        strike: false,
+      }),
+      Placeholder.configure({
+        placeholder,
+      }),
+      PromptMentionExtension,
+    ],
+    content: promptEditorContentFromValue({
+      text: value,
+      mentions: mentionRanges,
+    }),
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        "aria-label": placeholder,
+        "data-placeholder": placeholder,
+        ...(onModifierSubmit ? { "aria-keyshortcuts": "Meta+Enter" } : {}),
+        autocomplete: "off",
+        class: cn(
+          "min-h-full whitespace-pre-wrap break-words outline-none",
+          "placeholder:select-none placeholder:text-subtle-foreground",
+        ),
+        enterkeyhint: "send",
+        ...(id ? { id } : {}),
+        role: "textbox",
+      },
+      handleDOMEvents: {
+        blur: () => {
+          mentionKeyRef.current = "";
+          if (dismissedMentionRef.current) {
+            dismissedMentionRef.current = {
+              ...dismissedMentionRef.current,
+              hasLeftRange: true,
+            };
+          }
+          setActiveMention(null);
+          onMentionQueryChange(null);
+          return false;
+        },
+      },
+      handleClick: () => {
+        const currentEditor = editorRef.current;
+        if (!currentEditor) return false;
+        syncMentionState(currentEditor);
+        return false;
+      },
+      handleKeyDown: (_view, event) => {
+        return handleEditorKeyDownRef.current(event);
+      },
+      handlePaste: (_view, event) => {
+        const attachFiles = onAttachFilesRef.current;
+        const clipboardItems = Array.from(event.clipboardData?.items ?? []);
+        const pastedFiles = clipboardItems
+          .filter((item) => item.kind === "file")
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null);
+
+        if (attachFiles && pastedFiles.length > 0) {
+          event.preventDefault();
+          void attachFiles(pastedFiles);
+          return true;
+        }
+
+        const pastedText = plainTextFromClipboardPaste(
+          event.clipboardData ?? null,
+        );
+        if (pastedText === null) return false;
+
+        event.preventDefault();
+        if (pastedText.length === 0) return true;
+
+        editorRef.current
+          ?.chain()
+          .focus()
+          .insertContent(promptEditorPasteContentFromText(pastedText))
+          .run();
+        return true;
+      },
+    },
+    onCreate({ editor: createdEditor }) {
+      editorRef.current = createdEditor;
+      editorValueKeyRef.current = promptEditorValueKey({
+        text: value,
+        mentions: mentionRanges,
+      });
+    },
+    onSelectionUpdate({ editor: updatedEditor }) {
+      syncMentionState(updatedEditor);
+    },
+    onUpdate({ editor: updatedEditor }) {
+      if (skipEditorChangeRef.current) return;
+      const nextValue = promptEditorValueFromDoc(updatedEditor.state.doc);
+      editorValueKeyRef.current = promptEditorValueKey(nextValue);
+      onChangeRef.current(nextValue.text, nextValue.mentions);
+      syncMentionState(updatedEditor);
+    },
+  });
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   useLayoutEffect(() => {
     if (!autoFocus) return;
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    if (!editor) return;
 
-    textarea.focus();
-    const caretPosition = textarea.value.length;
-    textarea.setSelectionRange(caretPosition, caretPosition);
-  }, [autoFocus, autoFocusScopeKey]);
+    editor.commands.focus("end");
+  }, [autoFocus, autoFocusScopeKey, editor]);
 
   useEffect(() => {
-    if (!textareaRef.current) return;
-    if (isZenMode) {
-      textareaRef.current.style.height = "100%";
-      return;
-    }
-    resizeTextarea(textareaRef.current);
-  }, [isZenMode, resizeTextarea, value]);
+    mentionRangesRef.current = mentionRanges;
+  }, [mentionRanges]);
 
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const nextValue = {
+      text: value,
+      mentions: mentionRanges,
+    };
+    const nextKey = promptEditorValueKey(nextValue);
+    if (nextKey === editorValueKeyRef.current) {
+      return;
+    }
+
+    try {
+      skipEditorChangeRef.current = true;
+      editor.commands.setContent(promptEditorContentFromValue(nextValue));
+      editorValueKeyRef.current = nextKey;
+    } finally {
+      skipEditorChangeRef.current = false;
+    }
+    syncMentionState(editor);
+  }, [editor, mentionRanges, syncMentionState, value]);
 
   useEffect(() => {
     if (zenModeResetKey === undefined) return;
@@ -366,19 +779,6 @@ export function PromptBoxInternal({
     if (fromHeight === null || !formElement) return;
     heightAnimationFromRef.current = null;
 
-    // Size the textarea for the new mode before measuring the form's target
-    // height. Otherwise the textarea is still at min-height when we measure,
-    // toHeight undershoots, and the textarea visually overflows the form
-    // bounds once the post-paint resize grows it past the target height.
-    const textarea = textareaRef.current;
-    if (textarea) {
-      if (isZenMode) {
-        textarea.style.height = "100%";
-      } else {
-        resizeTextarea(textarea);
-      }
-    }
-
     const previousTransition = formElement.style.transition;
     const previousWillChange = formElement.style.willChange;
 
@@ -410,59 +810,7 @@ export function PromptBoxInternal({
     formElement.addEventListener("transitionend", handleTransitionEnd);
 
     return cleanup;
-  }, [isZenMode, resizeTextarea, zenModeLayout]);
-
-  const syncMentionState = useCallback(
-    (textarea: HTMLTextAreaElement) => {
-      const caretPosition = textarea.selectionStart ?? textarea.value.length;
-      const dismissedMention = dismissedMentionRef.current;
-      const isRestoringAppliedMention =
-        isRestoringAppliedMentionRef.current && dismissedMention !== null;
-
-      if (dismissedMention && !isRestoringAppliedMention) {
-        const isWithinDismissedRange =
-          caretPosition >= dismissedMention.start &&
-          caretPosition <= dismissedMention.end;
-
-        if (!isWithinDismissedRange) {
-          dismissedMentionRef.current = {
-            ...dismissedMention,
-            hasLeftRange: true,
-          };
-        } else if (dismissedMention.hasLeftRange) {
-          dismissedMentionRef.current = null;
-        }
-      }
-
-      const shouldSuppressMention = Boolean(
-        dismissedMentionRef.current &&
-        !dismissedMentionRef.current.hasLeftRange &&
-        (isRestoringAppliedMention ||
-          (caretPosition >= dismissedMentionRef.current.start &&
-            caretPosition <= dismissedMentionRef.current.end)),
-      );
-
-      const nextMention = shouldSuppressMention
-        ? null
-        : findActiveFileMention(textarea.value, caretPosition);
-      const nextKey = nextMention
-        ? `${nextMention.start}:${nextMention.end}:${nextMention.query}`
-        : "";
-      if (nextKey !== mentionKeyRef.current) {
-        mentionKeyRef.current = nextKey;
-        setSelectedMentionIndex(0);
-      }
-      setActiveMention(nextMention);
-
-      onMentionQueryChange(nextMention ? nextMention.query : null);
-    },
-    [onMentionQueryChange],
-  );
-
-  useEffect(() => {
-    if (!textareaRef.current) return;
-    syncMentionState(textareaRef.current);
-  }, [syncMentionState, value]);
+  }, [zenModeLayout]);
 
   const trimmedValue = value.trim();
   const hasAttachments = attachments.length > 0;
@@ -493,120 +841,129 @@ export function PromptBoxInternal({
 
   const applyMention = useCallback(
     (item: PromptMentionSuggestion) => {
-      const textarea = textareaRef.current;
-      if (!textarea || !activeMention) return;
+      const currentEditor = editorRef.current;
+      if (!currentEditor || !activeMention) return;
 
-      const mentionStart = activeMention.start;
-      const replacement = insertFileMention(
-        value,
-        activeMention,
-        item.replacement,
+      const serializedText = `@${item.replacement.trim()}`;
+      const resource = promptMentionResourceFromSuggestion(item);
+      const followingText = currentEditor.state.doc.textBetween(
+        activeMention.to,
+        Math.min(activeMention.to + 1, currentEditor.state.doc.content.size),
+        "\n",
+        "\n",
       );
+      const trailingText = /^\s/u.test(followingText) ? "" : " ";
       mentionKeyRef.current = "";
       dismissedMentionRef.current = {
-        start: mentionStart,
-        end: mentionStart + replacement.insertedLength,
+        start: activeMention.from,
+        end: activeMention.from + 2,
         hasLeftRange: false,
       };
       isRestoringAppliedMentionRef.current = true;
-      onChange(replacement.value);
       setActiveMention(null);
       setSelectedMentionIndex(0);
       onMentionQueryChange(null);
 
+      try {
+        skipEditorChangeRef.current = true;
+        currentEditor
+          .chain()
+          .focus()
+          .deleteRange({ from: activeMention.from, to: activeMention.to })
+          .insertContent([
+            {
+              type: "mention",
+              attrs: {
+                resource,
+                serializedText,
+              },
+            },
+            ...(trailingText ? [{ type: "text", text: trailingText }] : []),
+          ])
+          .run();
+      } finally {
+        skipEditorChangeRef.current = false;
+      }
+      const nextValue = promptEditorValueFromDoc(currentEditor.state.doc);
+      editorValueKeyRef.current = promptEditorValueKey(nextValue);
+      onChangeRef.current(nextValue.text, nextValue.mentions);
+
       requestAnimationFrame(() => {
-        const nextTextarea = textareaRef.current;
-        if (!nextTextarea) {
+        const nextEditor = editorRef.current;
+        if (!nextEditor || nextEditor.isDestroyed) {
           isRestoringAppliedMentionRef.current = false;
           return;
         }
-        nextTextarea.focus();
-        nextTextarea.setSelectionRange(
-          replacement.caretPosition,
-          replacement.caretPosition,
-        );
-        if (isZenMode) {
-          nextTextarea.style.height = "100%";
-        } else {
-          resizeTextarea(nextTextarea);
-        }
-        syncMentionState(nextTextarea);
+        nextEditor.commands.focus();
+        syncMentionState(nextEditor);
         isRestoringAppliedMentionRef.current = false;
       });
     },
-    [
-      activeMention,
-      isZenMode,
-      onChange,
-      onMentionQueryChange,
-      resizeTextarea,
-      syncMentionState,
-      value,
-    ],
+    [activeMention, onMentionQueryChange, syncMentionState],
   );
 
-  const insertTextAtCursor = useCallback(
-    (rawText: string) => {
-      const normalizedText = rawText.replace(/\s+/g, " ").trim();
-      if (normalizedText.length === 0) return;
+  const focusEnd = useCallback(() => {
+    const currentEditor = editorRef.current;
+    if (!currentEditor || currentEditor.isDestroyed) return;
+    currentEditor.commands.focus("end");
+  }, []);
 
-      const textarea = textareaRef.current;
-      const currentValue = valueRef.current;
-      if (!textarea) {
-        const nextValue =
-          currentValue.length === 0 || /\s$/.test(currentValue)
-            ? `${currentValue}${normalizedText}`
-            : `${currentValue} ${normalizedText}`;
-        onChange(nextValue);
-        return;
-      }
+  const insertTextAtCursor = useCallback((rawText: string) => {
+    const normalizedText = rawText.replace(/\s+/g, " ").trim();
+    if (normalizedText.length === 0) return;
 
-      const selectionStart = textarea.selectionStart ?? currentValue.length;
-      const selectionEnd = textarea.selectionEnd ?? selectionStart;
-      const before = currentValue.slice(0, selectionStart);
-      const after = currentValue.slice(selectionEnd);
-      const needsLeadingWhitespace = before.length > 0 && !/\s$/.test(before);
-      const needsTrailingWhitespace = after.length > 0 && !/^\s/.test(after);
-      const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedText}${needsTrailingWhitespace ? " " : ""}`;
-      const nextValue = `${before}${insertedText}${after}`;
-      const nextCursor = before.length + insertedText.length;
+    const currentEditor = editorRef.current;
+    const currentValue = valueRef.current;
+    if (!currentEditor) {
+      const nextValue =
+        currentValue.length === 0 || /\s$/.test(currentValue)
+          ? `${currentValue}${normalizedText}`
+          : `${currentValue} ${normalizedText}`;
+      onChangeRef.current(nextValue, [...mentionRangesRef.current]);
+      return;
+    }
 
-      onChange(nextValue);
-      requestAnimationFrame(() => {
-        const nextTextarea = textareaRef.current;
-        if (!nextTextarea) return;
-        nextTextarea.focus();
-        nextTextarea.setSelectionRange(nextCursor, nextCursor);
-        if (isZenMode) {
-          nextTextarea.style.height = "100%";
-        } else {
-          resizeTextarea(nextTextarea);
-        }
-        syncMentionState(nextTextarea);
-      });
-    },
-    [isZenMode, onChange, resizeTextarea, syncMentionState],
-  );
+    const selection = currentEditor.state.selection;
+    const before = currentEditor.state.doc.textBetween(
+      0,
+      selection.from,
+      "\n",
+      "\n",
+    );
+    const after = currentEditor.state.doc.textBetween(
+      selection.to,
+      currentEditor.state.doc.content.size,
+      "\n",
+      "\n",
+    );
+    const needsLeadingWhitespace = before.length > 0 && !/\s$/.test(before);
+    const needsTrailingWhitespace = after.length > 0 && !/^\s/.test(after);
+    const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedText}${needsTrailingWhitespace ? " " : ""}`;
+
+    currentEditor.chain().focus().insertContent(insertedText).run();
+  }, []);
 
   const getTextBeforeCursor = useCallback((): string | undefined => {
     const currentValue = valueRef.current;
-    const textarea = textareaRef.current;
-    if (!textarea) {
+    const currentEditor = editorRef.current;
+    if (!currentEditor) {
       const trimmed = currentValue.trim();
       return trimmed.length > 0 ? trimmed : undefined;
     }
-    const selectionStart = textarea.selectionStart ?? currentValue.length;
-    const beforeCursor = currentValue.slice(0, selectionStart).trim();
+    const beforeCursor = currentEditor.state.doc
+      .textBetween(0, currentEditor.state.selection.from, "\n", "\n")
+      .trim();
     return beforeCursor.length > 0 ? beforeCursor : undefined;
   }, []);
 
   useImperativeHandle(
     promptBoxRef,
     () => ({
+      focusEnd,
       insertTextAtCursor,
       getTextBeforeCursor,
     }),
-    [insertTextAtCursor, getTextBeforeCursor],
+    [focusEnd, insertTextAtCursor, getTextBeforeCursor],
   );
 
   const isVoiceRecording = voice?.state === "recording";
@@ -630,7 +987,6 @@ export function PromptBoxInternal({
   const showStop = Boolean(isRunning && onStop && !canSubmit && !isVoiceBusy);
   const canStartVoiceInput =
     voice !== undefined && voice.isSupported && !isSubmitting;
-  const effectiveSubmitMode: SubmitMode = submitMode;
   const effectiveSubmitTitle = isZenMode
     ? submitTitle.replace(/^Submit\s+/, "")
     : submitTitle;
@@ -677,46 +1033,27 @@ export function PromptBoxInternal({
 
       history.onSelectEntry(draft);
       requestAnimationFrame(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) {
+        const currentEditor = editorRef.current;
+        if (!currentEditor || currentEditor.isDestroyed) {
           return;
         }
 
-        textarea.focus();
-        const caretPosition = textarea.value.length;
-        textarea.setSelectionRange(caretPosition, caretPosition);
-        if (isZenMode) {
-          textarea.style.height = "100%";
-        } else {
-          resizeTextarea(textarea);
-        }
-        syncMentionState(textarea);
+        currentEditor.commands.focus("end");
+        syncMentionState(currentEditor);
       });
     },
-    [history, isZenMode, resizeTextarea, syncMentionState],
+    [history, syncMentionState],
   );
 
   const toggleZenMode = useCallback(() => {
-    const textarea = textareaRef.current;
     const formElement = formRef.current;
-    const selectionStart = textarea?.selectionStart ?? null;
-    const selectionEnd = textarea?.selectionEnd ?? null;
-    const scrollTop = textarea?.scrollTop ?? null;
     heightAnimationFromRef.current =
       formElement?.getBoundingClientRect().height ?? null;
 
     setIsZenMode((previous) => !previous);
 
     requestAnimationFrame(() => {
-      const nextTextarea = textareaRef.current;
-      if (!nextTextarea) return;
-      nextTextarea.focus();
-      if (selectionStart !== null && selectionEnd !== null) {
-        nextTextarea.setSelectionRange(selectionStart, selectionEnd);
-      }
-      if (scrollTop !== null) {
-        nextTextarea.scrollTop = scrollTop;
-      }
+      editorRef.current?.commands.focus();
     });
   }, [setIsZenMode]);
 
@@ -735,148 +1072,176 @@ export function PromptBoxInternal({
     submitPrompt();
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    const selectionStart = event.currentTarget.selectionStart;
-    const selectionEnd = event.currentTarget.selectionEnd;
-    const hasCollapsedSelection =
-      selectionStart !== null &&
-      selectionEnd !== null &&
-      selectionStart === selectionEnd;
-    const hasArrowNavigationModifier =
-      event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
-    const hasCursorAtEnd =
-      hasCollapsedSelection &&
-      selectionStart === event.currentTarget.value.length;
-    const activeHistoryEntry =
-      history && activeHistoryIndex !== null
-        ? history.entries[activeHistoryIndex]
-        : null;
-    const hasSelectedHistoryEntry = Boolean(
-      history &&
-      activeHistoryEntry !== null &&
-      activeHistoryEntry !== undefined &&
-      arePromptDraftStatesEqual(history.currentDraft, activeHistoryEntry),
-    );
-    const canNavigateHistory =
-      history !== undefined &&
-      !hasArrowNavigationModifier &&
-      hasCursorAtEnd &&
-      (isPromptDraftEmpty(history.currentDraft) || hasSelectedHistoryEntry);
-    const canNavigateMentions =
-      showMentionMenu && !hasArrowNavigationModifier && !canNavigateHistory;
+  const handleEditorKeyDown = useCallback(
+    (event: KeyboardEvent): boolean => {
+      const currentEditor = editorRef.current;
+      const selection = currentEditor?.state.selection;
+      const hasCollapsedSelection = Boolean(selection?.empty);
+      const hasArrowNavigationModifier =
+        event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
+      const hasCursorAtEnd =
+        hasCollapsedSelection &&
+        currentEditor !== null &&
+        currentEditor !== undefined &&
+        selection !== undefined &&
+        selection.from >= currentEditor.state.doc.content.size - 1;
+      const activeHistoryEntry =
+        history && activeHistoryIndex !== null
+          ? history.entries[activeHistoryIndex]
+          : null;
+      const hasSelectedHistoryEntry = Boolean(
+        history &&
+        activeHistoryEntry !== null &&
+        activeHistoryEntry !== undefined &&
+        arePromptDraftStatesEqual(history.currentDraft, activeHistoryEntry),
+      );
+      const canNavigateHistory =
+        history !== undefined &&
+        !hasArrowNavigationModifier &&
+        hasCursorAtEnd &&
+        (isPromptDraftEmpty(history.currentDraft) || hasSelectedHistoryEntry);
+      const canNavigateMentions =
+        showMentionMenu && !hasArrowNavigationModifier && !canNavigateHistory;
 
-    if (showMentionMenu) {
-      if (
-        event.key === "ArrowDown" &&
-        canNavigateMentions &&
-        mentionSuggestions.length > 0
-      ) {
-        event.preventDefault();
-        setSelectedMentionIndex(
-          (prev) => (prev + 1) % mentionSuggestions.length,
-        );
-        return;
-      }
-      if (
-        event.key === "ArrowUp" &&
-        canNavigateMentions &&
-        mentionSuggestions.length > 0
-      ) {
-        event.preventDefault();
-        setSelectedMentionIndex(
-          (prev) =>
-            (prev + mentionSuggestions.length - 1) % mentionSuggestions.length,
-        );
-        return;
-      }
-      if (
-        (event.key === "Enter" || event.key === "Tab") &&
-        mentionSuggestions.length > 0
-      ) {
-        event.preventDefault();
-        const selected =
-          mentionSuggestions[selectedMentionIndex] ?? mentionSuggestions[0];
-        if (selected) {
-          applyMention(selected);
+      if (showMentionMenu) {
+        if (
+          event.key === "ArrowDown" &&
+          canNavigateMentions &&
+          mentionSuggestions.length > 0
+        ) {
+          event.preventDefault();
+          setSelectedMentionIndex(
+            (prev) => (prev + 1) % mentionSuggestions.length,
+          );
+          return true;
         }
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        mentionKeyRef.current = "";
-        setActiveMention(null);
-        onMentionQueryChange(null);
-        return;
-      }
-    }
-
-    if (history) {
-      if (
-        event.key === "ArrowUp" &&
-        canNavigateHistory &&
-        history.entries.length > 0
-      ) {
-        event.preventDefault();
-        const nextHistoryIndex =
-          activeHistoryIndex === null
-            ? 0
-            : Math.min(activeHistoryIndex + 1, history.entries.length - 1);
-        if (activeHistoryIndex === null) {
-          setTemporaryHistoryDraft(history.currentDraft);
+        if (
+          event.key === "ArrowUp" &&
+          canNavigateMentions &&
+          mentionSuggestions.length > 0
+        ) {
+          event.preventDefault();
+          setSelectedMentionIndex(
+            (prev) =>
+              (prev + mentionSuggestions.length - 1) %
+              mentionSuggestions.length,
+          );
+          return true;
         }
-        setActiveHistoryIndex(nextHistoryIndex);
-        const nextDraft = history.entries[nextHistoryIndex];
-        setRecalledHistoryDraft(nextDraft);
-        applyHistoryDraft(nextDraft);
-        return;
-      }
-
-      if (
-        event.key === "ArrowDown" &&
-        canNavigateHistory &&
-        activeHistoryIndex !== null
-      ) {
-        event.preventDefault();
-        if (activeHistoryIndex === 0) {
-          if (temporaryHistoryDraft) {
-            applyHistoryDraft(temporaryHistoryDraft);
+        if (
+          (event.key === "Enter" || event.key === "Tab") &&
+          mentionSuggestions.length > 0
+        ) {
+          event.preventDefault();
+          const selected =
+            mentionSuggestions[selectedMentionIndex] ?? mentionSuggestions[0];
+          if (selected) {
+            applyMention(selected);
           }
-          resetHistorySession();
-          return;
+          return true;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          mentionKeyRef.current = "";
+          if (activeMention) {
+            dismissedMentionRef.current = {
+              start: activeMention.from,
+              end: activeMention.to,
+              hasLeftRange: false,
+            };
+          }
+          setActiveMention(null);
+          onMentionQueryChange(null);
+          return true;
+        }
+      }
+
+      if (history) {
+        if (
+          event.key === "ArrowUp" &&
+          canNavigateHistory &&
+          history.entries.length > 0
+        ) {
+          event.preventDefault();
+          const nextHistoryIndex =
+            activeHistoryIndex === null
+              ? 0
+              : Math.min(activeHistoryIndex + 1, history.entries.length - 1);
+          if (activeHistoryIndex === null) {
+            setTemporaryHistoryDraft(history.currentDraft);
+          }
+          setActiveHistoryIndex(nextHistoryIndex);
+          const nextDraft = history.entries[nextHistoryIndex];
+          setRecalledHistoryDraft(nextDraft);
+          applyHistoryDraft(nextDraft);
+          return true;
         }
 
-        const nextHistoryIndex = activeHistoryIndex - 1;
-        setActiveHistoryIndex(nextHistoryIndex);
-        const nextDraft = history.entries[nextHistoryIndex];
-        setRecalledHistoryDraft(nextDraft);
-        applyHistoryDraft(nextDraft);
-        return;
+        if (
+          event.key === "ArrowDown" &&
+          canNavigateHistory &&
+          activeHistoryIndex !== null
+        ) {
+          event.preventDefault();
+          if (activeHistoryIndex === 0) {
+            if (temporaryHistoryDraft) {
+              applyHistoryDraft(temporaryHistoryDraft);
+            }
+            resetHistorySession();
+            return true;
+          }
+
+          const nextHistoryIndex = activeHistoryIndex - 1;
+          setActiveHistoryIndex(nextHistoryIndex);
+          const nextDraft = history.entries[nextHistoryIndex];
+          setRecalledHistoryDraft(nextDraft);
+          applyHistoryDraft(nextDraft);
+          return true;
+        }
       }
-    }
 
-    const isModifierSubmitKey =
-      event.key === "Enter" &&
-      event.metaKey &&
-      !event.shiftKey &&
-      !event.altKey &&
-      !event.ctrlKey;
-    if (isModifierSubmitKey && onModifierSubmit) {
+      const isModifierSubmitKey =
+        event.key === "Enter" &&
+        event.metaKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey;
+      if (isModifierSubmitKey && onModifierSubmit) {
+        event.preventDefault();
+        submitModifierPrompt();
+        return true;
+      }
+
+      if (isZenMode) return false;
+      const isSubmitKey = event.key === "Enter" && !event.shiftKey;
+
+      if (!isSubmitKey) return false;
       event.preventDefault();
-      submitModifierPrompt();
-      return;
-    }
+      submitPrompt();
+      return true;
+    },
+    [
+      activeHistoryIndex,
+      activeMention,
+      applyHistoryDraft,
+      applyMention,
+      history,
+      isZenMode,
+      mentionSuggestions,
+      onMentionQueryChange,
+      onModifierSubmit,
+      resetHistorySession,
+      selectedMentionIndex,
+      showMentionMenu,
+      submitModifierPrompt,
+      submitPrompt,
+      temporaryHistoryDraft,
+    ],
+  );
 
-    const withModifier = event.metaKey || event.ctrlKey;
-    if (isZenMode) return;
-    const isSubmitKey =
-      effectiveSubmitMode === "mod-enter"
-        ? withModifier && event.key === "Enter"
-        : event.key === "Enter" && !event.shiftKey;
-
-    if (!isSubmitKey) return;
-    event.preventDefault();
-    submitPrompt();
-  };
+  useEffect(() => {
+    handleEditorKeyDownRef.current = handleEditorKeyDown;
+  }, [handleEditorKeyDown]);
 
   return (
     <form
@@ -898,7 +1263,7 @@ export function PromptBoxInternal({
         "relative w-full rounded-lg border border-border bg-background pb-2",
         // Zen toggles only the *height* of the box; the inset padding stays
         // identical so the placeholder/text doesn't jump when toggling.
-        // `flex flex-col` lets the textarea's `flex-1` fill the dvh height.
+        // `flex flex-col` lets the editor's `flex-1` fill the dvh height.
         isZenMode && "flex flex-col",
         isZenMode && ZEN_MODE_HEIGHT_CLASS[zenModeLayout],
         className,
@@ -912,8 +1277,8 @@ export function PromptBoxInternal({
         onChange={handleAttachmentInputChange}
       />
       {header ? (
-        // Left padding matches the textarea's so the header content aligns
-        // with the placeholder column in both normal and zen modes (textarea
+        // Left padding matches the editor's so the header content aligns
+        // with the placeholder column in both normal and zen modes (editor
         // shifts from px-4 to px-6 when entering zen). Right padding leaves
         // room for the zen-mode toggle button in the top-right corner. Zen
         // mode also gets more top room since the card fills the viewport.
@@ -942,59 +1307,11 @@ export function PromptBoxInternal({
             <Icon name="Maximize2" className="size-3" />
           )}
         </Button>
-        <textarea
-          ref={textareaRef}
-          id={id}
-          value={value}
-          onChange={(event) => {
-            onChange(event.target.value);
-            if (isZenMode) {
-              event.target.style.height = "100%";
-            } else {
-              resizeTextarea(event.target);
-            }
-            syncMentionState(event.target);
-          }}
-          onClick={(event) => {
-            syncMentionState(event.currentTarget);
-          }}
-          onSelect={(event) => {
-            syncMentionState(event.currentTarget);
-          }}
-          onBlur={() => {
-            mentionKeyRef.current = "";
-            if (dismissedMentionRef.current) {
-              dismissedMentionRef.current = {
-                ...dismissedMentionRef.current,
-                hasLeftRange: true,
-              };
-            }
-            setActiveMention(null);
-            onMentionQueryChange(null);
-          }}
-          onPaste={(event) => {
-            if (!onAttachFiles) return;
-            const clipboardItems = Array.from(event.clipboardData?.items ?? []);
-            const pastedFiles = clipboardItems
-              .filter((item) => item.kind === "file")
-              .map((item) => item.getAsFile())
-              .filter((file): file is File => file !== null);
-
-            if (pastedFiles.length === 0) return;
-            event.preventDefault();
-            emitAttachmentFiles(pastedFiles);
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          rows={1}
-          autoFocus={autoFocus}
-          autoComplete="off"
-          aria-keyshortcuts={onModifierSubmit ? "Meta+Enter" : undefined}
-          enterKeyHint="send"
+        <div
           className={cn(
-            "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-subtle-foreground",
+            "w-full overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none",
             COARSE_POINTER_TEXT_BASE_CLASS,
-            // Zen mode only adds the flex-fill behavior so the textarea
+            // Zen mode only adds the flex-fill behavior so the editor
             // stretches to the dvh-sized form. Inset padding (px / pt / pb)
             // is identical between modes — toggling shouldn't shift the
             // placeholder position.
@@ -1005,7 +1322,23 @@ export function PromptBoxInternal({
             height: isZenMode ? "100%" : undefined,
             maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
           }}
-        />
+        >
+          <PromptMentionLinkContext.Provider value={mentionResolveLink ?? null}>
+            <EditorContent
+              editor={editor}
+              className={cn(
+                "h-full min-h-full",
+                "[&_.ProseMirror]:min-h-full [&_.ProseMirror]:outline-none",
+                "[&_.ProseMirror_p]:m-0",
+                "[&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none",
+                "[&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left",
+                "[&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0",
+                "[&_.ProseMirror_p.is-editor-empty:first-child::before]:text-subtle-foreground",
+                "[&_.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
+              )}
+            />
+          </PromptMentionLinkContext.Provider>
+        </div>
       </div>
 
       {showMentionMenu ? (

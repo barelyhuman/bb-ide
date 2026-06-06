@@ -46,6 +46,7 @@ function userRow(args: {
     initiator: "user",
     senderThreadId: null,
     text: args.text,
+    mentions: [],
     attachments: null,
     turnRequest: { kind: "message", status: "accepted" },
   };

@@ -56,6 +56,16 @@
 }
 
 @layer components {
+  /*
+   * Tint the prompt editor's text selection with the app's selected-surface
+   * color so it matches the background that mention pills paint on themselves
+   * when selected (mention icons are SVG and never take the native highlight,
+   * so pills can't rely on `::selection` — see PromptMentionPillNodeView).
+   */
+  .ProseMirror ::selection {
+    background-color: var(--surface-selected);
+  }
+
   [data-promptbox] {
     container: promptbox / inline-size;
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   findLocalPathProjectSourceForHost,
@@ -10,6 +10,7 @@ import {
   type NewThreadProjectConfig,
   type ThreadCreationMode,
 } from "@/components/promptbox/NewThreadPromptBox";
+import type { PromptBoxHandle } from "@/components/promptbox/PromptBoxInternal";
 import {
   encodeHostValue,
   encodeReuseValue,
@@ -35,6 +36,7 @@ import { useThreads } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
+import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
@@ -180,6 +182,7 @@ export function RootComposeView() {
     useRootComposeProjectId();
   const location = useLocation();
   const navigate = useNavigate();
+  const promptBoxRef = useRef<PromptBoxHandle>(null);
   const quickCreateProject = useQuickCreateProjectController();
   const sidebarNavigationQuery = useSidebarNavigation();
   const hasSidebarNavigationSettled =
@@ -216,7 +219,6 @@ export function RootComposeView() {
   const promptMentions = usePromptMentions(
     isProjectless ? undefined : projectId,
     {
-      threadSuggestionMode: "all",
       environmentId: null,
     },
   );
@@ -226,9 +228,10 @@ export function RootComposeView() {
     () =>
       promptDraftToInput({
         text: promptDraft.text,
+        mentions: promptDraft.mentions,
         attachments: promptDraft.attachments,
       }),
-    [promptDraft.attachments, promptDraft.text],
+    [promptDraft.attachments, promptDraft.mentions, promptDraft.text],
   );
   const rootComposeZenModeStorageKey = useMemo(
     () =>
@@ -521,11 +524,7 @@ export function RootComposeView() {
   useEffect(() => {
     if (!shouldFocusPrompt) return;
     const handle = window.requestAnimationFrame(() => {
-      const promptEl = document.getElementById("root-compose-prompt");
-      if (!(promptEl instanceof HTMLTextAreaElement)) return;
-      promptEl.focus();
-      const caretIndex = promptEl.value.length;
-      promptEl.setSelectionRange(caretIndex, caretIndex);
+      promptBoxRef.current?.focusEnd();
     });
     return () => window.cancelAnimationFrame(handle);
   }, [location.key, shouldFocusPrompt]);
@@ -559,6 +558,7 @@ export function RootComposeView() {
   const submitPrompt = useCallback(async () => {
     const submittedDraft = {
       text: promptDraft.text,
+      mentions: promptDraft.mentions,
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
@@ -677,9 +677,10 @@ export function RootComposeView() {
   const currentPromptDraft = useMemo(
     () => ({
       text: promptDraft.text,
+      mentions: promptDraft.mentions,
       attachments: promptDraft.attachments,
     }),
-    [promptDraft.attachments, promptDraft.text],
+    [promptDraft.attachments, promptDraft.mentions, promptDraft.text],
   );
   const historyConfig = useMemo(
     () => ({
@@ -690,18 +691,35 @@ export function RootComposeView() {
     }),
     [currentPromptDraft, projectId, promptDraft.setDraft, promptHistoryDrafts],
   );
+  // The new-thread composer has no environment yet, so only thread mentions are
+  // openable here (they navigate). File pills stay non-interactive.
+  const resolveMentionLink = useCallback<PromptMentionLinkResolver>(
+    (resource) =>
+      resource.kind === "thread"
+        ? () =>
+            navigate(
+              getThreadRoutePath({
+                projectId: resource.projectId ?? projectId,
+                threadId: resource.threadId,
+              }),
+            )
+        : null,
+    [navigate, projectId],
+  );
   const mentionsConfig = useMemo(
     () => ({
       suggestions: promptMentions.suggestions,
       isLoading: promptMentions.isLoading,
       isError: promptMentions.isError,
       onQueryChange: promptMentions.setQuery,
+      resolveLink: resolveMentionLink,
     }),
     [
       promptMentions.isError,
       promptMentions.isLoading,
       promptMentions.setQuery,
       promptMentions.suggestions,
+      resolveMentionLink,
     ],
   );
   const attachmentsConfig = useMemo(
@@ -924,8 +942,10 @@ export function RootComposeView() {
     >
       <NewThreadPromptBox
         id="root-compose-prompt"
+        promptBoxRef={promptBoxRef}
         value={prompt}
-        onChange={promptDraft.setText}
+        mentionRanges={promptDraft.mentions}
+        onChange={promptDraft.setTextAndMentions}
         onSubmit={submitPrompt}
         isSubmitting={
           mode === "manager"

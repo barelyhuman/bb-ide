@@ -6,6 +6,7 @@ import type {
   PendingInteractionUserAnswer,
   PendingInteractionUserQuestionQuestion,
   ProviderErrorInfo,
+  PromptTextMention,
   Thread,
   ThreadEventRow,
   ThreadEventScope,
@@ -92,6 +93,7 @@ export interface EventProjectionUserMessage extends EventProjectionMessageBase {
   senderThreadId: string | null;
   turnRequest: EventProjectionTurnRequest;
   text: string;
+  mentions: PromptTextMention[];
   attachments?: {
     webImages: number;
     localImages: number;
@@ -360,8 +362,7 @@ export interface EventProjectionDelegationMessage
  * the whole thread: the turn-scoped item/started anchors placement and
  * later thread-scoped progress/completed events replace its payload in place.
  */
-export interface EventProjectionWorkflowMessage
-  extends EventProjectionMessageBase {
+export interface EventProjectionWorkflowMessage extends EventProjectionMessageBase {
   kind: "workflow";
   itemId: string;
   workflowName: string | null;

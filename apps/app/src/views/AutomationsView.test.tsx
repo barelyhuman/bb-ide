@@ -51,6 +51,7 @@ function makeAutomation(
           {
             type: "text",
             text: "Review project health and summarize risks.",
+            mentions: [],
           },
         ],
         environment: {

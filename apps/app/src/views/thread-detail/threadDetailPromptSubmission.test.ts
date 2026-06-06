@@ -10,7 +10,9 @@ import {
   shouldQueueFollowUpMessage,
 } from "./threadDetailPromptSubmission";
 
-const textInput: PromptInput[] = [{ type: "text", text: "Follow up" }];
+const textInput: PromptInput[] = [
+  { type: "text", text: "Follow up", mentions: [] },
+];
 
 describe("threadDetailPromptSubmission", () => {
   it("prioritizes current prompt input over queued messages for the follow-up shortcut", () => {

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type {
   Environment,
   PermissionMode,
+  PromptTextMention,
   ThreadQueuedMessage,
   WorkspaceStatus,
 } from "@bb/domain";
@@ -191,8 +192,8 @@ const attachmentsBase: AttachmentsConfig = {
 };
 
 const historyEntries = [
-  { text: "review thread workspace", attachments: [] },
-  { text: "investigate timeline pagination", attachments: [] },
+  { text: "review thread workspace", mentions: [], attachments: [] },
+  { text: "investigate timeline pagination", mentions: [], attachments: [] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -261,7 +262,13 @@ const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
 const queuedMessages: readonly ThreadQueuedMessage[] = [
   {
     id: "q_1",
-    content: [{ type: "text", text: "Also check the timeline error overlay." }],
+    content: [
+      {
+        type: "text",
+        text: "Also check the timeline error overlay.",
+        mentions: [],
+      },
+    ],
     model: "gpt-5.5",
     reasoningLevel: "medium",
     permissionMode: "workspace-write",
@@ -275,6 +282,7 @@ const queuedMessages: readonly ThreadQueuedMessage[] = [
       {
         type: "text",
         text: "And confirm the new env summary renders without the branch button on unmanaged environments.",
+        mentions: [],
       },
     ],
     model: "gpt-5.5",
@@ -342,6 +350,14 @@ function Row({
   zenModeResetKey = "thr_demo",
 }: RowConfig) {
   const [message, setMessage] = useState(initialMessage);
+  const [mentionRanges, setMentionRanges] = useState<PromptTextMention[]>([]);
+  const handleChangeMessage = (
+    nextMessage: string,
+    nextMentions: PromptTextMention[],
+  ) => {
+    setMessage(nextMessage);
+    setMentionRanges(nextMentions);
+  };
   const resolvedPlaceholder =
     promptPlaceholder ??
     getFollowUpPromptPlaceholder(threadRuntimeDisplayStatus, false);
@@ -352,13 +368,18 @@ function Row({
         stack={stack}
         composer={{
           history: {
-            currentDraft: { text: message, attachments: [] },
+            currentDraft: {
+              text: message,
+              mentions: mentionRanges,
+              attachments: [],
+            },
             entries: historyEntries,
             onSelectEntry: noop,
           },
           isFollowUpSubmitting,
           message,
-          onChangeMessage: setMessage,
+          mentionRanges,
+          onChangeMessage: handleChangeMessage,
           onModifierSubmit: noop,
           onSubmit: noop,
           promptPlaceholder: resolvedPlaceholder,

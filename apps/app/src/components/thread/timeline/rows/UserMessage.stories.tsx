@@ -1,5 +1,8 @@
 import type { TimelineConversationAttachments } from "@bb/server-contract";
+import type { PromptMentionResource, PromptTextMention } from "@bb/domain";
 import type { TimelineTitleLink } from "@bb/thread-view";
+import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { ConversationMessageContent } from "@/components/thread/timeline/ConversationMessageContent";
 import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
 
@@ -10,7 +13,11 @@ export default {
 // Match production: ThreadTimelinePane's PageShell content area caps at
 // 760px. Without it the message bubble stretches the full row width and
 // doesn't reflect what users see.
-function TimelineStage({ children }: { children: React.ReactNode }) {
+interface TimelineStageProps {
+  children: ReactNode;
+}
+
+function TimelineStage({ children }: TimelineStageProps) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
 
@@ -31,6 +38,28 @@ const acceptedMessage = {
 };
 const pendingSteer = { kind: "steer" as const, status: "pending" as const };
 const acceptedSteer = { kind: "steer" as const, status: "accepted" as const };
+
+interface StoryMentionArgs {
+  resource: PromptMentionResource;
+  text: string;
+  token: string;
+}
+
+function storyMention({
+  resource,
+  text,
+  token,
+}: StoryMentionArgs): PromptTextMention {
+  const start = text.indexOf(token);
+  if (start < 0) {
+    throw new Error(`Missing story mention token: ${token}`);
+  }
+  return {
+    start,
+    end: start + token.length,
+    resource,
+  };
+}
 
 // CollapsibleMessageText kicks in at > 15 pre-wrapped lines, so this fixture
 // crosses that threshold to exercise the Show more / Show less affordance.
@@ -78,152 +107,211 @@ const mixedAttachments: TimelineConversationAttachments = {
   localFilePaths: ["docs/refactor-notes.md"],
 };
 
+const mentionedMessageText =
+  "Ask @thread:thr_manager and @apps/app/src/components/promptbox/PromptBoxInternal.tsx to review the prompt mention flow.";
+const mentionedMessageMentions: PromptTextMention[] = [
+  storyMention({
+    text: mentionedMessageText,
+    token: "@thread:thr_manager",
+    resource: {
+      kind: "thread",
+      threadId: "thr_manager",
+      projectId: "proj_bb",
+      threadType: "manager",
+      label: "Prompt UX manager",
+    },
+  }),
+  storyMention({
+    text: mentionedMessageText,
+    token: "@apps/app/src/components/promptbox/PromptBoxInternal.tsx",
+    resource: {
+      kind: "path",
+      source: "workspace",
+      entryKind: "file",
+      path: "apps/app/src/components/promptbox/PromptBoxInternal.tsx",
+      label: "PromptBoxInternal.tsx",
+    },
+  }),
+];
+
 export function Overview() {
   return (
-    <StoryCard>
-      <StoryRow label="short">
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="user"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text="Walk me through how ThreadDetailView wires the prompt context banner."
-            attachments={null}
-            turnRequest={acceptedMessage}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow label="long" hint="multi-line markdown with code fence + bullets">
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="user"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text={longMarkdownText}
-            attachments={null}
-            turnRequest={acceptedMessage}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="pending"
-        hint="turnRequest.kind = steer, status = pending — interruption mid-turn"
-      >
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="user"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text="Hold on — also include the queue API in that audit, please."
-            attachments={null}
-            turnRequest={pendingSteer}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="accepted steer"
-        hint="steer that the runtime has acknowledged and folded into the turn"
-      >
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="user"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text="Hold on — also include the queue API in that audit, please."
-            attachments={null}
-            turnRequest={acceptedSteer}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow label="with image" hint="single localImage attachment">
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="user"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text="Repro of the layout regression in the prompt context banner."
-            attachments={singleImageAttachments}
-            turnRequest={acceptedMessage}
-            resolveUserAttachmentImageSrc={resolveImageSrc}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="with images and mixed attachments"
-        hint="2 local images + 1 web image + 1 local file"
-      >
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="user"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text="Three screenshots from the design review and the spec doc."
-            attachments={mixedAttachments}
-            turnRequest={acceptedMessage}
-            resolveUserAttachmentImageSrc={resolveImageSrc}
-            onOpenLocalFileLink={() => false}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="agent-initiated"
-        hint="collapsed activity row: Message from Frontend manager"
-      >
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="agent"
-            resolveSegmentLinkHref={resolveThreadLink}
-            senderThreadId="thr_sender123"
-            senderThreadTitle="Frontend manager"
-            text={
-              '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union.'
-            }
-            attachments={null}
-            turnRequest={acceptedMessage}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="system-initiated (scheduled turn)"
-        hint="collapsed activity row: System Message"
-      >
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="system"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text={"[bb system]\n\nScheduled turn: daily-recap."}
-            attachments={null}
-            turnRequest={acceptedMessage}
-          />
-        </TimelineStage>
-      </StoryRow>
-      <StoryRow
-        label="system-initiated (welcome)"
-        hint="system message body is hidden until the row is expanded"
-      >
-        <TimelineStage>
-          <ConversationMessageContent
-            role="user"
-            initiator="system"
-            senderThreadId={null}
-            senderThreadTitle={null}
-            text={
-              "[bb system]\n\nWelcome!\nStart with a short meet-and-greet via `message_user`."
-            }
-            attachments={null}
-            turnRequest={acceptedMessage}
-          />
-        </TimelineStage>
-      </StoryRow>
-    </StoryCard>
+    <MemoryRouter>
+      <StoryCard>
+        <StoryRow label="short">
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text="Walk me through how ThreadDetailView wires the prompt context banner."
+              attachments={null}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="mentions"
+          hint="thread mentions link; file mentions are display-only pills with full-path hover"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text={mentionedMessageText}
+              attachments={null}
+              mentions={mentionedMessageMentions}
+              projectId="proj_bb"
+              turnRequest={acceptedMessage}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="long"
+          hint="multi-line markdown with code fence + bullets"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text={longMarkdownText}
+              attachments={null}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="pending"
+          hint="turnRequest.kind = steer, status = pending — interruption mid-turn"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text="Hold on — also include the queue API in that audit, please."
+              attachments={null}
+              mentions={[]}
+              turnRequest={pendingSteer}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="accepted steer"
+          hint="steer that the runtime has acknowledged and folded into the turn"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text="Hold on — also include the queue API in that audit, please."
+              attachments={null}
+              mentions={[]}
+              turnRequest={acceptedSteer}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow label="with image" hint="single localImage attachment">
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text="Repro of the layout regression in the prompt context banner."
+              attachments={singleImageAttachments}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+              resolveUserAttachmentImageSrc={resolveImageSrc}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="with images and mixed attachments"
+          hint="2 local images + 1 web image + 1 local file"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="user"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text="Three screenshots from the design review and the spec doc."
+              attachments={mixedAttachments}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+              resolveUserAttachmentImageSrc={resolveImageSrc}
+              onOpenLocalFileLink={() => false}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="agent-initiated"
+          hint="collapsed activity row: Message from Frontend manager"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="agent"
+              resolveSegmentLinkHref={resolveThreadLink}
+              senderThreadId="thr_sender123"
+              senderThreadTitle="Frontend manager"
+              text={
+                '[bb message from thread:thr_sender123; reply with `bb thread tell thr_sender123 "<your response>"`]\n\nHey — I finished the audit you asked for. Punch list is in `notes/audit-2026-05.md`; the highest-value trim is collapsing the picker-shape options into a discriminated union.'
+              }
+              attachments={null}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="system-initiated (scheduled turn)"
+          hint="collapsed activity row: System Message"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="system"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text={"[bb system]\n\nScheduled turn: daily-recap."}
+              attachments={null}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+            />
+          </TimelineStage>
+        </StoryRow>
+        <StoryRow
+          label="system-initiated (welcome)"
+          hint="system message body is hidden until the row is expanded"
+        >
+          <TimelineStage>
+            <ConversationMessageContent
+              role="user"
+              initiator="system"
+              senderThreadId={null}
+              senderThreadTitle={null}
+              text={
+                "[bb system]\n\nWelcome!\nStart with a short meet-and-greet via `message_user`."
+              }
+              attachments={null}
+              mentions={[]}
+              turnRequest={acceptedMessage}
+            />
+          </TimelineStage>
+        </StoryRow>
+      </StoryCard>
+    </MemoryRouter>
   );
 }

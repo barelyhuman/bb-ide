@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import {
   cleanup,
   fireEvent,
@@ -137,6 +137,21 @@ function RootComposeWithLocation() {
     <>
       <RootComposeRoute />
       <LocationCapture />
+    </>
+  );
+}
+
+function RootComposeWithFocusButton() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <RootComposeWithLocation />
+      <button
+        type="button"
+        onClick={() => navigate("/", { state: { focusPrompt: true } })}
+      >
+        Sidebar new thread
+      </button>
     </>
   );
 }
@@ -361,6 +376,7 @@ function installRootComposeFetchRoutes(
 
 interface RenderRootComposeRouteOptions {
   initialEntry?: string | { pathname: string; state?: unknown };
+  rootRouteElement?: ReactNode;
 }
 
 function renderRootComposeRoute(
@@ -368,6 +384,9 @@ function renderRootComposeRoute(
 ): void {
   const { wrapper: QueryClientWrapper } = createQueryClientTestHarness();
   const initialEntry = options.initialEntry ?? "/";
+  const rootRouteElement = options.rootRouteElement ?? (
+    <RootComposeWithLocation />
+  );
 
   render(
     <QueryClientWrapper>
@@ -375,7 +394,7 @@ function renderRootComposeRoute(
         <MemoryRouter initialEntries={[initialEntry]}>
           <QuickCreateProjectProvider>
             <Routes>
-              <Route path="/" element={<RootComposeWithLocation />} />
+              <Route path="/" element={rootRouteElement} />
               <Route
                 path="/threads/:threadId"
                 element={<ThreadRouteWithReturnToCompose />}
@@ -443,6 +462,27 @@ describe("RootComposeRoute", () => {
     });
   });
 
+  it("focuses the rich prompt editor when root compose navigation requests focus", async () => {
+    installRootComposeFetchRoutes();
+    seedRootComposeDraft("Continue this draft");
+    renderRootComposeRoute({
+      rootRouteElement: <RootComposeWithFocusButton />,
+    });
+
+    const textbox = await screen.findByRole("textbox");
+    const sidebarButton = screen.getByRole("button", {
+      name: "Sidebar new thread",
+    });
+    sidebarButton.focus();
+    expect(document.activeElement).toBe(sidebarButton);
+
+    fireEvent.click(sidebarButton);
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(textbox);
+    });
+  });
+
   it("does not keep reuse-environment selection after creating a thread", async () => {
     const standardProject = makeStandardProjectWithThreadsResponse();
     const createdThread = makeThread({
@@ -492,12 +532,13 @@ describe("RootComposeRoute", () => {
       environmentId: "env_reuse",
     });
 
+    seedProjectRootComposeDraft(
+      STANDARD_PROJECT_ID,
+      "Start a regular new thread",
+    );
     fireEvent.click(screen.getByRole("button", { name: "New thread" }));
 
-    const textbox = await screen.findByRole("textbox");
-    fireEvent.change(textbox, {
-      target: { value: "Start a regular new thread" },
-    });
+    await screen.findByRole("textbox");
     const secondSubmitButton = screen.getByTitle("Submit (Enter)");
     await waitFor(() => {
       expect(isEnabledButton(secondSubmitButton)).toBe(true);

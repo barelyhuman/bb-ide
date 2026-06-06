@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAtom, useAtomValue } from "jotai";
 import type {
   ThreadTimelineLinkHandler,
@@ -109,6 +110,7 @@ import { getBrowserUrlHost } from "@/lib/browser-url";
 import { ResolvedAppIcon } from "@/components/secondary-panel/AppIcon";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
+import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import type {
   NewTabMenuRenderer,
   SecondaryPanelFileTab,
@@ -280,6 +282,7 @@ export function resolveHostFilePreviewLinkRootPath({
 
 export function ThreadDetailView() {
   const { projectId, threadId } = useAppRoute();
+  const navigate = useNavigate();
   useFixedPanelTabsStorageMaintenance(threadId);
   useThreadTerminalPanelStorageMaintenance(threadId);
   const fixedPanelTabsState = useFixedPanelTabsState(threadId);
@@ -434,6 +437,46 @@ export function ThreadDetailView() {
     threadType: thread?.type,
     storageFiles: threadStorageFiles?.files,
   });
+  // Click handler for inserted mention pills in the follow-up composer: threads
+  // navigate, files open an in-app preview (workspace files need an
+  // environment; thread-storage files need a manager thread). Returning null
+  // leaves the pill non-interactive.
+  const resolveMentionLink = useCallback<PromptMentionLinkResolver>(
+    (resource) => {
+      if (resource.kind === "thread") {
+        const targetProjectId = resource.projectId ?? projectId;
+        if (!targetProjectId) return null;
+        return () =>
+          navigate(
+            getThreadRoutePath({
+              projectId: targetProjectId,
+              threadId: resource.threadId,
+            }),
+          );
+      }
+      if (resource.entryKind !== "file") return null;
+      if (resource.source === "thread-storage") {
+        if (thread?.type !== "manager") return null;
+        return () => openStorageFile(resource.path);
+      }
+      if (!thread?.environmentId) return null;
+      return () =>
+        openWorkspaceFile({
+          lineNumber: null,
+          path: resource.path,
+          source: { kind: "working-tree" },
+          statusLabel: null,
+        });
+    },
+    [
+      navigate,
+      openStorageFile,
+      openWorkspaceFile,
+      projectId,
+      thread?.environmentId,
+      thread?.type,
+    ],
+  );
   const [openLinksInAppBrowser] = useOpenLinksInAppBrowserPreference();
   // The in-app browser surface only exists on desktop; on web this stays false
   // and chat links keep their external-open behavior.
@@ -1205,6 +1248,7 @@ export function ThreadDetailView() {
       onChangedFileClick={handleChangedFileClick}
       openThreadDiffPanel={openSecondaryPanelDiffPanel}
       projectId={projectId}
+      resolveMentionLink={resolveMentionLink}
       workspaceChangedFilesSection={
         canUseGitUi ? workspaceChangedFilesSection : null
       }

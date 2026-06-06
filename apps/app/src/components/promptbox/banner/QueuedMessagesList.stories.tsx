@@ -4,9 +4,7 @@ import {
   applyQueuedMessageReorder,
   type QueuedMessageReorderRequest,
 } from "@/lib/queued-message-reorder";
-import {
-  QueuedMessagesList,
-} from "@/components/promptbox/banner/QueuedMessagesList";
+import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
@@ -47,7 +45,7 @@ function makeQueuedMessage({
   }));
   return {
     id,
-    content: [{ type: "text", text }, ...attachmentChunks],
+    content: [{ type: "text", text, mentions: [] }, ...attachmentChunks],
     model: "gpt-5.5",
     reasoningLevel: "medium",
     permissionMode: "workspace-write",
